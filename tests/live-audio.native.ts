@@ -14,6 +14,7 @@ import { createMarkerSignal, createPcmAnalyzer } from "./audio-lab/pcm";
 import { writeEvidence, writeLiveAudioEvidence } from "./evidence";
 import { assessGraphCalibration } from "./audio-lab/calibration";
 import { assessPlaybackCoverage } from "./audio-lab/playback-telemetry";
+import { remainingTime, requestBeforeDeadline, waitUntil } from "./audio-lab/deadline";
 
 const root = resolve(import.meta.dirname, "..");
 assert.equal(process.platform, "linux", "The common-graph audio lab currently requires Linux");
@@ -112,15 +113,11 @@ const launch = (name: string, args: string[], extra: NodeJS.ProcessEnv = {}, nod
   if (name !== "graph" && !name.startsWith("browser-")) child.stdout!.on("data", log);
   return child;
 };
-const until = async (test: () => boolean | Promise<boolean>, label: string, timeout = 15000) => {
-  const deadline = Date.now() + timeout;
-  while (true) {
+const until = (test: (deadline: number) => boolean | Promise<boolean>, label: string, timeout = 15000,
+  deadline = performance.now() + timeout) => waitUntil(() => {
     if (fatal) throw fatal;
-    if (await test()) return;
-    if (Date.now() > deadline) throw new Error(`Timed out: ${label}`);
-    await Bun.sleep(50);
-  }
-};
+    return test(deadline);
+  }, label, deadline);
 const command = (args: string[], timeout = 15_000, input?: string) => {
   const result = spawnSync(args[0]!, args.slice(1), { env, encoding: "utf8", timeout, killSignal: "SIGKILL", maxBuffer: 1_048_576, input });
   assert.equal(result.status, 0, `${args.join(" ")}: ${result.stderr || result.error}`);
@@ -241,11 +238,12 @@ try {
   }
   let browserState: unknown = null;
   let ingressBefore: any = null, ingressAfter: any = null, rendererAfterDrain: any = null;
+  let rendererDrainError: string | null = null;
   const jitterPreferences: unknown[] = [];
-  let snapshotIngress: (() => Promise<unknown>) | undefined;
+  let snapshotIngress: ((deadline?: number) => Promise<any>) | undefined;
   const browserDiagnostics: unknown[] = [];
   let rtcBefore: any[] = [], rtcAfter: any[] = [];
-  const workers: { child: ChildProcess; js: (code: string, gesture?: boolean) => Promise<any>; id: string }[] = [];
+  const workers: { child: ChildProcess; js: (code: string, gesture?: boolean, deadline?: number) => Promise<any>; id: string }[] = [];
   if (mode !== "calibration") {
     const moduleDir = process.env.COUCH_LAB_PULSE_MODULES ?? (prefix ? join(prefix, "lib/pulse-17.0+dfsg1/modules") : undefined);
     const pulseConfig = [
@@ -316,9 +314,9 @@ try {
       const child = launch(`browser-${index}`, [electron as unknown as string, ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []), join(directory, "live-audio-worker.mjs"), config],
         { PULSE_SOURCE: "capture", PULSE_SINK: index === -1 ? "source_clock" : `receiver_${index}` }, index === -1 ? "server" : `client-${index + 1}`);
       let ready = false, sequence = 0;
-      const requests = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+      const requests = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
       const rejectRequests = (reason: string) => {
-        for (const request of requests.values()) { clearTimeout(request.timer); request.reject(new Error(reason)); }
+        for (const request of requests.values()) request.reject(new Error(reason));
         requests.clear();
       };
       child.once("exit", () => rejectRequests(`${name} exited during browser command`));
@@ -333,19 +331,20 @@ try {
             writeFileSync(join(directory, "browser-diagnostics.json"), JSON.stringify(browserDiagnostics, null, 2));
           }
           const request = requests.get(message.id);
-          if (request) { requests.delete(message.id); clearTimeout(request.timer); if (message.error) request.reject(new Error(message.error)); else request.resolve(message.value); }
+          if (request) { requests.delete(message.id); if (message.error) request.reject(new Error(message.error)); else request.resolve(message.value); }
         } catch (error) { fatal ??= new Error(`${name}: invalid worker reply: ${error}`); rejectRequests(String(fatal)); }
       });
-      const js = (code: string, gesture = false) => new Promise<any>((resolve, reject) => {
-        if (fatal || child.exitCode !== null || child.signalCode !== null) { reject(fatal ?? new Error(`${name} is not running`)); return; }
-        const id = ++sequence;
-        const timer = setTimeout(() => { if (requests.delete(id)) reject(new Error(`Browser command timed out: ${code}`)); }, 15000);
-        timer.unref();
-        requests.set(id, { resolve, reject, timer });
-        child.stdin!.write(JSON.stringify({ id, code, gesture }) + "\n");
-      });
+      const js = (code: string, gesture = false, deadline = performance.now() + 15000) =>
+        requestBeforeDeadline<any>(deadline, `Browser command: ${code}`, (resolve, reject) => {
+          if (fatal || child.exitCode !== null || child.signalCode !== null) { reject(fatal ?? new Error(`${name} is not running`)); return () => {}; }
+          const id = ++sequence;
+          requests.set(id, { resolve, reject });
+          try { child.stdin!.write(JSON.stringify({ id, code, gesture }) + "\n"); }
+          catch (error) { reject(error as Error); }
+          return () => { requests.delete(id); };
+        });
       await until(() => ready, name);
-      await until(() => js("!!window.__labSession()?.connected"), `${name} authenticated`);
+      await until(deadline => js("!!window.__labSession()?.connected", false, deadline), `${name} authenticated`);
       workers.push({ child, js, id: key.peerId });
     }
     const publisher = workers[0]!;
@@ -371,12 +370,14 @@ try {
       const browserCode = await browserBundle.outputs[0]!.text();
       for (const worker of workers) await worker.js(browserCode + "\n;true;");
       for (const worker of workers.slice(1)) await worker.js(`__ingressLab.receive({origin:${JSON.stringify(ingressOrigin)},requiredLeadTimeMs:10,minBufferMs:10,outputCompensation:${outputCompensation}}).then(value => {window.__ingressReceiver=value;return true;})`, true);
-      await until(async () => (await Promise.all(workers.slice(1).map(worker => worker.js("__ingressReceiver.snapshot().timeSync.synced")))).every(Boolean), "both PCM receiver clocks synchronized");
+      await until(async deadline => (await Promise.all(workers.slice(1).map(worker => worker.js("__ingressReceiver.snapshot().timeSync.synced", false, deadline)))).every(Boolean), "both PCM receiver clocks synchronized");
       await publisher.js(`__ingressLab.publish({origin:${JSON.stringify(ingressOrigin)},packetMs:${packetMs}}).then(value => {window.__ingressPublisher=value;return true;})`, true);
-      snapshotIngress = async () => {
+      snapshotIngress = async (deadline = performance.now() + 15000) => {
+        remainingTime(deadline, "PCM prototype snapshot");
         const id = ++snapshotId; ingress.stdin!.write(JSON.stringify({ id }) + "\n");
-        await until(() => response?.id === id, "PCM prototype snapshot");
-        return { server: response!.value, browsers: await Promise.all(workers.map(worker => worker.js("(window.__ingressPublisher ?? window.__ingressReceiver).snapshot()"))) };
+        await until(() => response?.id === id, "PCM prototype snapshot", undefined, deadline);
+        return { server: response!.value, browsers: await Promise.all(workers.map(worker =>
+          worker.js("(window.__ingressPublisher ?? window.__ingressReceiver).snapshot()", false, deadline))) };
       };
     } else {
     const source = await publisher.js("__labSession().startLive({ kind: 'microphone' }).then(source => ({ id: source.id }))", true);
@@ -386,7 +387,7 @@ try {
     for (const worker of workers.slice(1)) await worker.js("(() => { for (const button of document.querySelectorAll('button')) if (/tap.*(play|sound)|enable.*sound/i.test(button.textContent)) button.click(); return true; })()", true);
     }
     if (jitterBufferTargetMs !== null) for (const worker of workers.slice(1)) {
-      await until(() => worker.js("__labPeers.some(peer => peer.getReceivers().some(receiver => receiver.track?.kind === 'audio'))"), "WebRTC receiver before buffer preference");
+      await until(deadline => worker.js("__labPeers.some(peer => peer.getReceivers().some(receiver => receiver.track?.kind === 'audio'))", false, deadline), "WebRTC receiver before buffer preference");
       jitterPreferences.push(await worker.js(`__labPeers.flatMap(peer => peer.getReceivers()).filter(receiver => receiver.track?.kind === 'audio').map(receiver => {
         if (!('jitterBufferTarget' in receiver)) throw new Error('jitterBufferTarget is unavailable');
         const previous = receiver.jitterBufferTarget; receiver.jitterBufferTarget = ${jitterBufferTargetMs};
@@ -398,32 +399,48 @@ try {
     for (const kind of ["sinks", "sources", "sink-inputs", "source-outputs"]) {
       writeFileSync(join(directory, `pulse-${kind}.json`), command([bin("pactl"), "--format=json", "list", kind]));
     }
+    browserState = await Promise.all(workers.map(worker => worker.js("({ state: __labSession().state, peers: __labPeers.map(peer => ({connectionState:peer.connectionState,iceConnectionState:peer.iceConnectionState})), media: [...document.querySelectorAll('audio,video')].map(element=>({paused:element.paused,readyState:element.readyState,muted:element.muted})) })")));
+    rtcBefore = await Promise.all(workers.map(worker => worker.js("__labRTCStats()")));
     if (snapshotIngress) {
       ingressBefore = await snapshotIngress();
       writeFileSync(join(directory, "ingress-startup.json"), JSON.stringify(ingressBefore, null, 2));
       const startup = ingressBefore as { server: { publisherConnected: boolean; timeline: unknown } };
       assert(startup.server.publisherConnected && startup.server.timeline, "PCM source stopped or never established its timeline during setup; inspect ingress-startup.json");
     }
-    browserState = await Promise.all(workers.map(worker => worker.js("({ state: __labSession().state, peers: __labPeers.map(peer => ({connectionState:peer.connectionState,iceConnectionState:peer.iceConnectionState})), media: [...document.querySelectorAll('audio,video')].map(element=>({paused:element.paused,readyState:element.readyState,muted:element.muted})) })")));
-    rtcBefore = await Promise.all(workers.map(worker => worker.js("__labRTCStats()")));
   }
   graph.kill("SIGUSR1");
   await until(() => graph.exitCode !== null, "audio measurement", (seconds + tailFrames / rate + 15) * 1000);
   if (pending.length) { assert.equal(pending.length % stride, 0); consume(pending); }
   if (workers.length) rtcAfter = await Promise.all(workers.map(worker => worker.js("__labRTCStats()")));
   if (snapshotIngress) ingressAfter = await snapshotIngress();
-  // Chromium can transfer playback counters late. Preserve the original end
-  // snapshot; a bounded drain only supplies renderer coverage, never new PCM.
-  if (snapshotIngress && ingressBefore.browsers.slice(1).some((browser: any) => browser.renderer?.playback.status === "available")) {
-    const end = performance.now() + 1500;
-    rendererAfterDrain = ingressAfter;
-    while (performance.now() < end && ingressBefore.browsers.slice(1).some((browser: any, index: number) =>
-      assessPlaybackCoverage(browser.renderer.playback, rendererAfterDrain.browsers[index + 1].renderer.playback, seconds * 1000).status !== "measured")) {
-      await Bun.sleep(100); rendererAfterDrain = await snapshotIngress();
+  // These per-context boundaries span the complete graph recording, including
+  // its tail. A late counter transfer must never move the original end.
+  const rendererWindows = ingressBefore?.browsers.slice(1).map((browser: any, index: number) => {
+    const before = browser.renderer.playback, originalEnd = ingressAfter.browsers[index + 1].renderer.playback;
+    const interval = { startContextTimeSeconds: before.contextTimeSeconds, endContextTimeSeconds: originalEnd.contextTimeSeconds };
+    return { id: ids[index], before, interval, coverage: assessPlaybackCoverage(before, originalEnd, interval) };
+  }) ?? [];
+  // Only incomplete coverage can improve: unsupported, invalid or reset
+  // observations have a null duration and must retain unknown loss.
+  const needsDrain = (window: { coverage: ReturnType<typeof assessPlaybackCoverage> }) =>
+    window.coverage.status === "inconclusive" && window.coverage.observedDurationMs !== null;
+  if (snapshotIngress && rendererWindows.some(needsDrain)) {
+    const drainDeadline = performance.now() + 1500;
+    try {
+      while (rendererWindows.some(needsDrain)) {
+        await Bun.sleep(Math.min(100, remainingTime(drainDeadline, "Renderer coverage drain")));
+        rendererAfterDrain = await snapshotIngress(drainDeadline);
+        rendererWindows.forEach((window: any, index: number) => {
+          if (needsDrain(window)) window.coverage = assessPlaybackCoverage(window.before,
+            rendererAfterDrain.browsers[index + 1].renderer.playback, window.interval);
+        });
+      }
+    } catch (error) {
+      // Preserve the last complete observation and still write result.json.
+      rendererDrainError = String(error);
     }
   }
-  const rendererCoverage = ingressBefore?.browsers.slice(1).map((browser: any, index: number) => ({ id: ids[index],
-    ...assessPlaybackCoverage(browser.renderer.playback, (rendererAfterDrain ?? ingressAfter).browsers[index + 1].renderer.playback, seconds * 1000) })) ?? [];
+  const rendererCoverage = rendererWindows.map((window: any) => ({ id: window.id, ...window.coverage }));
   sampleResources();
   const analysis = analyzer.finish();
   const health = /RESULT frames=(\d+) overflow=(\d+) xruns=(\d+) graphDeviationUs=([\d.]+)/.exec(logs.get(graph)!);
@@ -456,7 +473,7 @@ try {
     backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true,
       requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },
     ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter,
-      rendererAfterDrain, rendererCoverage, mediaPath, publisherHop: "Publisher and ingress share the server namespace; only receiver links are shaped" } : null,
+      rendererAfterDrain, rendererDrainError, rendererCoverage, mediaPath, publisherHop: "Publisher and ingress share the server namespace; only receiver links are shaped" } : null,
     exploratory: true, graph: logs.get(graph), graphHealth, resources, ipc, network: network?.profile ?? null,
     browserSandboxDisabled: process.getuid?.() === 0,
     browserSandboxReason: process.getuid?.() === 0 ? "Electron native fixture running as root in the disposable user namespace" : null,
