@@ -627,3 +627,41 @@ test("media rejected after yt-dlp's output was read, such as a live stream's fal
   await checkHelper("yt-dlp");
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.10.01"], "the copy that played is the previous one");
 });
+
+test("renewing a hold keeps the held copy while it runs, even when an older copy has worked since", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.07.01", true);
+  f.release("2026.08.01", true);
+  startHelpers(f.helpers);
+  await helper("yt-dlp");
+  await helpersCommand(f.helpers, ["previous"]);
+  assert.equal(await helper("yt-dlp"), f.path("2026.07.01"));
+
+  // A playback on July is still running when the operator returns to the latest and an update brings September.
+  f.block(true);
+  const older = f.play();
+  await until(() => f.runs().length === 1, "the playback started on 2026.07.01");
+  f.release("2026.09.01", true);
+  await helpersCommand(f.helpers, ["latest"]);
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.09.01"));
+  assert.deepEqual(f.copies(), ["2026.07.01", "2026.08.01", "2026.09.01"], "August is the previous copy; July is in use");
+  assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.08\.01 from/);
+  f.block(false);
+  assert.equal(await older, "extractor 2026.07.01");
+  assert.ok((await f.status()).managed["yt-dlp"]?.["2026.07.01"]?.worked.youtube, "July has worked, August hasn't");
+
+  // Renewed before Core applies the hold, and again after.
+  assert.match(await helpersCommand(f.helpers, ["previous", "2"]), /^Couch uses yt-dlp 2026\.08\.01 from/);
+  assert.equal(await helper("yt-dlp"), f.path("2026.08.01"));
+  assert.equal((await f.status()).selected["yt-dlp"]?.held, true);
+  assert.match(await helpersCommand(f.helpers, ["previous", "3"]), /^Couch uses yt-dlp 2026\.08\.01 from/);
+  const { hold } = await f.status();
+  assert.equal(hold?.version, "2026.08.01");
+  assert.equal((Date.parse(hold!.until) - Date.parse(hold!.since)) / 86_400_000, 3);
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.08.01"));
+  assert.deepEqual(f.copies(), ["2026.07.01", "2026.08.01"], "the held copy, and July as the previous copy that worked");
+
+  // A held copy that no longer runs isn't renewed; the earlier copy that worked is held instead.
+  writeFileSync(f.path("2026.08.01"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.07\.01, which worked before,/);
+});

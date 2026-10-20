@@ -346,7 +346,8 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   restarts, without checking for releases, then returns to the latest;
   `--helpers latest` returns sooner and `--helpers status` prints the record and
   the hold. Run during a hold, `previous` renews it, with the held copy while it
-  still runs. A held copy that has gone missing is replaced by the latest as usual.
+  still runs, even before Core has applied the hold or once an older copy has
+  worked since. A held copy that has gone missing is replaced by the latest as usual.
   Couch never changes a system yt-dlp; its package manager does.
 - SoundCloud runs use yt-dlp's cache at `<data>/yt-dlp-cache`, so the extractor
   retains its public client ID between searches and playback. yt-dlp refreshes
