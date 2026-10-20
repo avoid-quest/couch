@@ -3,7 +3,6 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { Arch, type AfterPackContext } from "electron-builder";
 
 const exec = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -36,11 +35,6 @@ export async function buildRelay(platform: string, arch: string, destination: st
   }
   await writeFile(join(destination, "THIRD-PARTY-NOTICES.txt"), notices.join("\n\n--------------------\n\n"));
   console.log(`Built bundled live relay for ${platform}/${arch}`);
-}
-
-// afterPack runs before signing, and once for each platform/architecture.
-export default async function afterPack(context: AfterPackContext) {
-  await buildRelay(context.electronPlatformName, Arch[context.arch], join(context.packager.getResourcesDir(context.appOutDir), "live-relay"));
 }
 
 if (import.meta.main) await buildRelay(process.platform, process.arch, join(root, "build/live-relay"));

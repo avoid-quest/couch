@@ -1,4 +1,5 @@
 import type { LiveRelaySettings, LocalRelayState } from "../../shared/live-relay";
+import type { AirPlayState } from "../../shared/airplay";
 import { queryOptions } from "@tanstack/react-query";
 import type { BluetoothState } from "../../shared/bluetooth";
 import type { DisplayState } from "../../shared/display";
@@ -97,6 +98,10 @@ export const lanHttpQuery = (credentials: ApiCredentials) =>
 
 export const liveRelayQuery = (credentials: ApiCredentials) =>
   queryOptions({ queryKey: ["live-relay"], queryFn: () => apiJson<LiveRelaySettings>(credentials, "/api/settings/live-relay"), retry: false });
+
+// The receiver starts and senders come and go on their own.
+export const airplayQuery = (credentials: ApiCredentials) =>
+  queryOptions({ queryKey: ["airplay"], queryFn: () => apiJson<AirPlayState>(credentials, "/api/settings/airplay"), refetchInterval: query => query.state.data?.enabled ? 2000 : false, retry: false });
 
 export const localRelayQuery = (credentials: ApiCredentials) =>
   queryOptions({ queryKey: ["local-relay"], queryFn: () => apiJson<LocalRelayState>(credentials, "/api/settings/live-relay/local"), refetchInterval: query => query.state.data?.enabled ? 1000 : false, retry: false });

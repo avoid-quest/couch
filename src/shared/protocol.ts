@@ -5,6 +5,7 @@ import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
 import type { DeviceSharing } from "./device-sharing";
 import type { LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
+import type { CaptureKind } from "./capture";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
@@ -97,7 +98,7 @@ export type SessionState = {
 };
 
 export type Action =
-  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: LiveSource["kind"]; audio: boolean; video: boolean; name?: string }
+  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: CaptureKind; audio: boolean; video: boolean; name?: string }
   | { type: "endLive"; sourceId: string }
   | { type: "playLive"; sourceId: string; deviceId?: string; playNow?: boolean; placement?: "next" }
   // The controlled Playback's live inputs play in sync on its devices, buffered, or directly on each.

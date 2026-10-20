@@ -86,6 +86,23 @@ host admitted by the relay's subnet policy (for example, a /32 is ineligible).
 They log interface eligibility and the TCP client source to diagnose runner
 network differences. A skipped test is not relay runtime validation.
 
+## Bundled AirPlay receiver
+
+On Linux, the same `afterPack` hook builds the pinned UxPlay with CMake
+(`scripts/build-airplay.ts`) with Couch's patch
+(`native/airplay/uxplay-sender-address.patch`), and puts it, its license,
+`NOTICE.txt`, the unmodified pinned source and the patch in `Resources/airplay`. Package installs its build packages on the Linux
+runner; a local Linux package needs `cmake pkg-config libssl-dev libplist-dev
+libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev` and git, and fetches the
+pinned commit once into `.artifacts/uxplay`. macOS and Windows packages have no
+receiver. Build it for a development Core and run its tests as
+[Receive AirPlay](airplay.md#develop-and-test) describes; prove changes to it in a
+Package run under `act` as for any packaging change.
+
+electron-builder loads `scripts/after-pack.ts` with Node, not Bun, so its imports
+name their `.ts` extension; `bun test tests/package-hooks.test.ts` loads the hook
+as electron-builder does.
+
 ## Releases
 
 Couch ships on two channels, both published in

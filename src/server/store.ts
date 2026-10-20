@@ -2,7 +2,7 @@ import type { LiveRelay } from "../shared/live-relay";
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
 import { Database } from "./sqlite";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
@@ -94,6 +94,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_live_chooser (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
+    CREATE TABLE IF NOT EXISTS installation_airplay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)), code TEXT NOT NULL, deviceId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_http (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
@@ -159,6 +160,20 @@ export function openStore(path: string, remoteControlEnabled = false) {
     return profile;
   };
 
+  // AirPlay's password, entered once on each device: about 59 random bits, in three groups of letters
+  // and digits that can't be mistaken for one another (no i, l, o, 0 or 1). UxPlay checks it with MD5
+  // Digest, so it must be too long to guess over the network and slow to recover from a captured exchange.
+  const airPlayAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  const airPlayCode = () => Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => airPlayAlphabet[randomInt(airPlayAlphabet.length)]).join("")).join("-");
+  const airplayIdentity = () => {
+    // A random, locally administered unicast MAC address, as UxPlay's -m takes it.
+    const address = randomBytes(6);
+    address[0] = address[0]! & 0xfc | 0x02;
+    db.query("INSERT OR IGNORE INTO installation_airplay VALUES (1, 0, ?, ?)").run(airPlayCode(), [...address].map(byte => byte.toString(16).padStart(2, "0")).join(":"));
+    // A four-digit code from before AirPlay used a password is too short to be one.
+    db.query("UPDATE installation_airplay SET code = ? WHERE id = 1 AND length(code) < 14").run(airPlayCode());
+    return db.query<{ code: string; deviceId: string }, []>("SELECT code, deviceId FROM installation_airplay WHERE id = 1").get()!;
+  };
   return {
     installationId() { return db.query<{ installationId: string }, []>("SELECT installationId FROM installation_identity WHERE id = 1").get()!.installationId; },
     // Core's Sendspin server key (#644 ticket 10): clients know this Couch by it.
@@ -170,6 +185,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
     saveAskEveryDevice(enabled: boolean) { db.query("INSERT INTO installation_live_chooser VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     localRelayEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_local_relay WHERE id = 1").get()?.enabled; },
     saveLocalRelayEnabled(enabled: boolean) { db.query("INSERT INTO installation_local_relay VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
+    // The AirPlay receiver's switch, the code a new sender enters, and the address that keeps it the same receiver to senders.
+    airplayEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_airplay WHERE id = 1").get()?.enabled; },
+    saveAirPlayEnabled(enabled: boolean) { airplayIdentity(); db.query("UPDATE installation_airplay SET enabled = ? WHERE id = 1").run(Number(enabled)); },
+    airplayIdentity,
+    newAirPlayCode() { airplayIdentity(); db.query("UPDATE installation_airplay SET code = ? WHERE id = 1").run(airPlayCode()); },
     liveRelay(): LiveRelay | null | undefined { const row = db.query<{ relay: string | null }, []>("SELECT relay FROM installation_live_relay WHERE id = 1").get(); return row ? row.relay ? JSON.parse(row.relay) : null : undefined; },
     saveLiveRelay(relay: LiveRelay | null) { db.query("INSERT INTO installation_live_relay VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET relay = excluded.relay").run(relay ? JSON.stringify(relay) : null); },
     allowLanHttp() { const row = db.query<{ enabled: number }, []>("SELECT enabled FROM installation_http WHERE id = 1").get(); return row ? !!row.enabled : null; },

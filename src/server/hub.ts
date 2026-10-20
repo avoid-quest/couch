@@ -21,6 +21,8 @@ import { createAppearance } from "./appearance";
 import { openStore } from "./store";
 import { parseCommand, parseLiveFailed, parseLiveSignal, parseLiveUploadFailed, parsePlayer } from "./validation";
 import { createLiveInputs } from "./live-input";
+import { createAirPlay } from "./airplay";
+import { AIRPLAY_PUBLISHER } from "../shared/live-input";
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
@@ -80,6 +82,7 @@ type HubOptions = {
   advertisedUrls?: string[];
   liveTurn?: RTCIceServer;
   relayExecutable?: string;
+  airplayExecutable?: string;
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -218,7 +221,7 @@ export async function createHub(options: HubOptions) {
   const hostId = () => store.hostDevice()?.id ?? "host";
   const deviceOf = (socket: Socket<SocketData>) => socket.data.deviceId ?? hostId();
   const newest = (deviceId: string) => [...sockets].findLast(socket => deviceOf(socket) === deviceId);
-  const nameOf = (deviceId: string) => playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
+  const nameOf = (deviceId: string) => deviceId === AIRPLAY_PUBLISHER ? "AirPlay" : playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
   // A failed buffered stream ends only buffered delivery: direct receivers and capture continue. Each
   // receiver relayed this source stops waiting and says why; Core waits for Play to retry it or the next item.
   const liveStreams = createLiveStreams({ ffmpeg: () => helper("ffmpeg"), failed: (sourceId, error) => {
@@ -257,6 +260,15 @@ export async function createHub(options: HubOptions) {
         if (affected) settle(playback);
       }
     }, changed: () => broadcast() });
+  // An admitted AirPlay sender's sound is a live source Core publishes while it plays here
+  // (docs/airplay.md). Every receiver plays Core's buffered stream of it.
+  const airplay = createAirPlay({ executable: options.airplayExecutable, directory: join(dirname(options.databasePath), "airplay"), enabled: store.airplayEnabled(), network: () => store.remoteControlEnabled(),
+    name: () => store.installationName(), identity: () => store.airplayIdentity(), log: line => log(line), changed: () => broadcast(),
+    sessions: {
+      started: (id, sender) => live.host({ id, deviceId: AIRPLAY_PUBLISHER, name: `AirPlay · ${sender}`, kind: "airplay", audio: true, video: false }),
+      audio: (id, pcm) => { liveStreams.write(id, pcm); },
+      ended: id => live.unhost(id),
+    } });
   const liveKey = randomBytes(32);
   // A live media link names who it was made for: a Device's screen, or "core", Core's own decoder,
   // which no Device ID can equal and no Device is sent. The endpoint checks that one's current right.
@@ -377,7 +389,7 @@ export async function createHub(options: HubOptions) {
   const unavailable = (playback: Playback, error: string) => { const { player } = stateOf(playback); if (active(player.status)) playback.session.observe({ ...player, status: "error", buffering: false, error }); };
   const buffer = (source: { id: string; audio: boolean; video: boolean }, signal?: AbortSignal) => {
     // Demand may disappear during startup, before the pending broadcast cleans up.
-    if (!liveStreams.has(source.id)) void liveStreams.start(source.id, source).then(() => {
+    if (!liveStreams.has(source.id)) void liveStreams.start(source.id, source, live.hosted(source.id) ? "pcm" : "upload").then(() => {
       if (!liveStreams.has(source.id)) return;
       if (!buffered(source.id)) return liveStreams.end(source.id);
       live.upload(source.id, true);
@@ -916,11 +928,12 @@ export async function createHub(options: HubOptions) {
       // A live source plays only where an output uses it. Once consent leaves none, the shared
       // outputs it cannot use leave too, and it waits in Where it plays; private ones stay. As when
       // consent ends entirely, their controllers follow its publisher, where the choice resumes it.
+      // Core's own source (AirPlay) has no publishing Device: they keep the playback that waits.
       const source = changed && live.source(sourceOf(playback) ?? "");
       if (source && !playback.outputs.some(output => output.picture && source.video || output.sound && source.audio)) {
         const left = playback.outputs.filter(output => !output.local).map(output => output.deviceId);
         for (const deviceId of left) leave(playback, deviceId);
-        follow([changed!, ...left], source.deviceId);
+        if (!live.hosted(source.id)) follow([changed!, ...left], source.deviceId);
         choose(playback, changed!, `${nameOf(changed!)} is not sharing an output this source uses. Choose where it plays.`);
       }
       const trimChanged = refreshTrims(playback);
@@ -971,7 +984,7 @@ export async function createHub(options: HubOptions) {
     };
     const views = new Map<string, string>();
     // A speaker's delay is its player's own, as it last reported it; it applies while the speaker is in sync.
-    const delays = (playback: Playback | undefined) => (playback?.outputs ?? []).map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback!); return { ...output, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
+    const delays = (playback: Playback | undefined) => (playback?.outputs ?? []).map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback!); return { ...output, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
       const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket)), moves = controlled(playback, deviceOf(socket));
@@ -1019,6 +1032,7 @@ export async function createHub(options: HubOptions) {
     if (domains.includes("devices")) {
       Object.assign(common, { installationName: store.installationName(), setupStep: store.setupStep(), administratorClaimed: store.administratorExists() });
       for (const playback of all()) playback.session.renamed();
+      void airplay.refresh();
     }
     broadcast();
   };
@@ -1342,8 +1356,9 @@ export async function createHub(options: HubOptions) {
     return response;
   };
 
-  // Whether this Couch plays anything, for the app and health checks.
-  const status = () => all().map(playback => stateOf(playback).player.status).find(value => ["loading", "playing", "paused"].includes(value)) ?? "idle";
+  // Whether this Couch plays anything, for the app, health checks and unattended updates. An
+  // admitted AirPlay sender counts even before anyone plays its source.
+  const status = () => all().map(playback => stateOf(playback).player.status).find(value => ["loading", "playing", "paused"].includes(value)) ?? (airplay.active() ? "playing" : "idle");
   const frontend = createFrontend();
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
@@ -1409,6 +1424,28 @@ export async function createHub(options: HubOptions) {
         return cors(request, json(localRelay.state()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the local relay setting." }, error instanceof ControllerError ? error.status : 500)); }
     }
+    if (url.pathname === "/api/settings/airplay" || url.pathname === "/api/settings/airplay/code") {
+      const refused = administrator();
+      if (refused) return refused;
+      if (request.method === "GET" && url.pathname === "/api/settings/airplay") return cors(request, json(airplay.state()));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: url.pathname.endsWith("/code") ? "POST" : "GET, POST" } }));
+      try {
+        if (url.pathname.endsWith("/code")) {
+          stillAdministrator();
+          store.newAirPlayCode();
+          await airplay.renew();
+          return cors(request, json(airplay.state()));
+        }
+        const enabled = await settingField(request, "enabled");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to receive AirPlay.");
+        const { status, error } = airplay.state();
+        if (enabled && (status === "unsupported" || status === "unavailable")) throw new ControllerError(error!, 409);
+        stillAdministrator();
+        store.saveAirPlayEnabled(enabled);
+        await airplay.setEnabled(enabled);
+        return cors(request, json(airplay.state()));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the AirPlay setting." }, error instanceof ControllerError ? error.status : 500)); }
+    }
     if (url.pathname === "/api/settings/live-relay") {
       const refused = administrator();
       if (refused) return refused;
@@ -1444,6 +1481,7 @@ export async function createHub(options: HubOptions) {
         // listener would let it overwrite an Off accepted meanwhile.
         if (enabled ? !store.remoteControlEnabled() : loopbackPeer(requestPeer(request))) await lan?.setEnabled(enabled);
         store.saveRemoteControlEnabled(enabled);
+        void airplay.refresh();
         // The listener queues that stop now, so a host enabling sharing again restarts it afterwards.
         if (!enabled && lan && !loopbackPeer(requestPeer(request))) void lan.setEnabled(false, new Promise<void>(resolve => afterResponse(request, resolve))).catch(error => console.error("Couch: couldn't stop the LAN listener.", error));
         if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
@@ -1987,7 +2025,7 @@ export async function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([lan?.close(), localRelay.close(), passThrough.close(), server.stop()]);
+    const results = await Promise.allSettled([lan?.close(), localRelay.close(), airplay.close(), passThrough.close(), server.stop()]);
     store.close();
     if (progressError) throw progressError;
     const failed = results.find(result => result.status === "rejected");
