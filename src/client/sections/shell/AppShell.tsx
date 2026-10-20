@@ -292,16 +292,17 @@ export function ShellChrome({ children }: PropsWithChildren) {
   // This computer's Couch has started once its Core answered with a connection; until
   // then the shell shows Starting… or Couldn't start Couch (PairingPage).
   useShellReady(!localHost || paired);
-  // The URL moves before a view transition captures its old frame. Match the
-  // presented route so the shell swaps its bar together with the player.
+  // The URL can move before the presented route. Keep the shell's bar in
+  // step with the page, including view-transition snapshots.
   const playerVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/now") });
+  const remoteVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/remote") });
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
   const localName = useLocalDeviceName();
   const tvName = localName ?? state?.devices?.find(device => device.id === deviceId())?.name ?? installationName;
   useRememberCouchName(installationName);
-  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && !playerVisible && section !== "Remote";
+  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && !playerVisible && !remoteVisible;
   // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
   useBottomBar(footer, paired && !setupPending);
