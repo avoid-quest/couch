@@ -29,7 +29,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   let receiver: Receiver | undefined;
   const publishers = new Map<string, Peer>();
   const waiting = new Map<string, LivePeer>();
-  const negotiating = new Set<LivePeer>();
+  // Closing a peer need not settle its pending browser operation. Count it
+  // until settlement, including across publication stop/start in this session.
+  let negotiating = 0;
   let negotiationTimer: ReturnType<typeof setTimeout> | undefined;
   const closeReceiver = () => {
     const current = receiver;
@@ -113,12 +115,12 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   const negotiate = () => {
     negotiationTimer = undefined;
     for (const [id, target] of waiting) {
-      if (negotiating.size >= 4) break;
+      if (negotiating >= 4) break;
       waiting.delete(id);
-      negotiating.add(target);
-      void startPublisher(target).finally(() => negotiating.delete(target));
+      negotiating++;
+      void startPublisher(target).finally(() => { negotiating--; });
     }
-    if (waiting.size || negotiating.size) negotiationTimer = setTimeout(negotiate, 100);
+    if (waiting.size || negotiating) negotiationTimer = setTimeout(negotiate, 100);
   };
   const closePublication = () => {
     generation++;
@@ -127,7 +129,6 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     clearTimeout(negotiationTimer);
     negotiationTimer = undefined;
     waiting.clear();
-    negotiating.clear();
     for (const peer of publishers.values()) peer.connection.close();
     publishers.clear();
     if (current) { stopUpload(current); stopTracks(current.capture); }
@@ -207,7 +208,6 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       const wanted = new Set(message.peers.map(peer => peer.peerId));
       for (const [id, peer] of publishers) if (!wanted.has(id)) { publishers.delete(id); peer.connection.close(); }
       for (const id of waiting.keys()) if (!wanted.has(id)) waiting.delete(id);
-      for (const target of negotiating) if (!wanted.has(target.peerId)) negotiating.delete(target);
       for (const target of message.peers) if (!publishers.has(target.peerId)) waiting.set(target.peerId, target);
       if (negotiationTimer === undefined && waiting.size) negotiate();
     },
