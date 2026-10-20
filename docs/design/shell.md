@@ -40,7 +40,8 @@ tabs (Home, Discover, Saved, then Remote while the Couch has a TV, then
 Settings); at the right, Stop sharing while this device shares its screen or
 sound (the player's top band keeps it:
 [Player](player.md#stop-sharing-stays-on-screen)), then the search field,
-then the clock. The current tab names the page, so section roots carry no
+then the clock, set light at `text-2xl` ([Scale](../design.md#scale)). The
+current tab names the page, so section roots carry no
 visible title of their own. The current tab is underlined; a focused tab
 inverts, as every control does.
 
@@ -90,7 +91,8 @@ Input exceptions:
   bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
   Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,
   Tv, Settings) over its label. Five equal-width tabs fit 390px; without a TV
-  there are four. The top bar is a row: the Couch switch at the left, then
+  there are four. The current tab's rule sits at the bar's top edge, where
+  the bar meets the page. The top bar is a row: the Couch switch at the left, then
   the search field, which takes the room left (it fits 390px with a long
   name, which truncates); phones show no clock. A narrow TV has no touch, so
   `tv:` undoes `touch:` and it keeps its grid, tabs and clock.

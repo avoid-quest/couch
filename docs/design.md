@@ -24,7 +24,11 @@ right. Desktop icons use the black tile in `packaging/icons/icon.svg`. The macOS
 tray uses a transparent template silhouette so the system can tint it. The PWA
 maskable icon uses a full black background and keeps the mark inside the safe
 circle. The website uses a custom SVG for this product mark because the shadcn
-catalog provides interface icons, not brand identities.
+catalog provides interface icons, not brand identities. In the app, `CouchMark`
+sets the mark in the current ink at the text's size: it stands before the
+Couch's name in the header (filled while connected, hollow while not, as the
+status dot it replaced), before the TV's own name, and opens the pairing and
+first-run screens.
 
 ## Principles
 
@@ -89,11 +93,17 @@ inversion.
 `html` font size is `clamp(16px, 1.25vw, 24px)`. Use Tailwind's rem sizes so
 the same typography and controls scale across screens.
 
+**Names are heavy, times are light.** Titles and names are set semibold and
+tight; the clock and every departures line are set light in tabular figures,
+so the board's two voices come from one family without colour.
+
 | Role | Classes |
 | --- | --- |
-| Display (a source's search field, Home's hero, Details and Now playing titles) | `text-3xl font-semibold tracking-tight` |
+| Board (Home's hero and Now playing titles) | `text-4xl font-semibold tracking-tight md:text-5xl` |
+| Display (Details and Search's closest match titles) | `text-3xl font-semibold tracking-tight` (`text-2xl` for the closest match) |
 | Title over a video (the player's top band) | `text-2xl font-semibold tracking-tight` |
-| Departures line (the hero's and Now playing's end time) | `text-2xl tabular-nums` |
+| Departures line (the hero's and Now playing's end time) | `text-3xl font-light tabular-nums md:text-4xl` (`text-xl` in the player's top band and Search's closest match) |
+| Clock (the header's) | `text-2xl font-light tabular-nums` (`text-xl` in the player's top band) |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
 | Section title | `text-base font-medium` |
 | Row title, settings label | `text-base` |

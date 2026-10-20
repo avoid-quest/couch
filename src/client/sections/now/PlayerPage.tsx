@@ -237,8 +237,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>}
       {/* Two rows, each sizing itself, so a narrow screen gives the title all but the clock. */}
       {osd && <div data-player-heading className="drag-region window-controls-inset grid px-(--gutter)">
-        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><div className="flex shrink-0 items-baseline gap-4"><LiveSharingStatus /><DigitalClock className="text-sm text-muted-foreground" /></div></div>
-        {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl">{ends}</p>}</div>}
+        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><div className="flex shrink-0 items-baseline gap-4"><LiveSharingStatus /><DigitalClock className="text-xl font-light" /></div></div>
+        {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl font-light">{ends}</p>}</div>}
       </div>}
     </div>
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
@@ -251,9 +251,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         {/* Home's hero, in its order: the title at display size, one muted meta line, then the departures board's line. */}
         <div data-player-audio-copy className="grid min-w-0 gap-2">
-          <h1 className="min-w-0 line-clamp-2 text-3xl font-semibold tracking-tight break-words" title={title}>{title}</h1>
+          <h1 className="min-w-0 line-clamp-2 text-4xl font-semibold tracking-tight break-words md:text-5xl" title={title}>{title}</h1>
           <p role="status" className="truncate text-sm text-muted-foreground">{meta}</p>
-          {ends && <p data-player-ends className="text-2xl tabular-nums">{ends}</p>}
+          {ends && <p data-player-ends className="text-3xl font-light tabular-nums md:text-4xl">{ends}</p>}
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
         </div>
       </div>}
@@ -280,7 +280,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         picture, unless the click opened something. A keyboard's click (detail 0) keeps focus where the keyboard put it. */}
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={event => {
       if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
-    }} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
+    }} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "border-t bg-background" : "player-video-controls", !shown && "opacity-0")}>
       {/* Gutter to gutter like the now-playing bar, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
           A timeline takes its own row above (index.css), without the end time or "Live" the top band or Now playing says. Every tool is an icon. */}
       <div className="grid gap-1">

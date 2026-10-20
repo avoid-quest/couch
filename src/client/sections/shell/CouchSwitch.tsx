@@ -7,7 +7,7 @@ import { useSessionGate } from "@/session/session-context";
 import { CouchChoice } from "@/sections/settings/this-device/CouchChoice";
 import { deviceName } from "@/copy";
 import type { Credentials } from "@/session/session";
-import { StatusDot } from "./StatusLine";
+import { CouchMark } from "@/components/CouchMark";
 
 /**
  * The header switches the Couch this window shows, from where the TV names itself and muted like that name. Playback
@@ -25,7 +25,7 @@ export function CouchSwitch({ credentials, connected, status, installationName }
   return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
       <Button ref={trigger} variant="ghost" className="-ml-2.5 min-w-0 shrink gap-2 text-base font-normal text-muted-foreground touch:min-w-11" aria-label={`${name}: ${status}`}>
-        <StatusDot connected={connected} />
+        <CouchMark connected={connected} />
         <span className="max-w-48 truncate max-sm:max-w-32">{name}</span>
       </Button>
     </PopoverTrigger>

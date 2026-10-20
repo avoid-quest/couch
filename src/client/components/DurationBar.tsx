@@ -29,7 +29,7 @@ export function useDurationClock() { return useSyncExternalStore(subscribe, snap
 export function DurationRuler({ className }: { className?: string }) {
   const now = useDurationClock();
   return <div className={cn("relative h-6 w-[var(--duration-width,8rem)] text-xs text-muted-foreground tabular-nums", className)} aria-hidden="true">
-    {[0, 600, 3600, 10800].map(seconds => <span key={seconds} className="absolute bottom-0 border-l pb-1 pl-1 whitespace-nowrap" style={{ left: seconds ? horizon(seconds) : 0 }}>{seconds ? formatEndTime(seconds, now) : `Now ${formatEndTime(0, now)}`}</span>)}
+    {[0, 600, 3600, 10800].map(seconds => <span key={seconds} className={cn("absolute bottom-0 border-l pb-1 pl-1 whitespace-nowrap", !seconds && "border-foreground text-foreground")} style={{ left: seconds ? horizon(seconds) : 0 }}>{seconds ? formatEndTime(seconds, now) : `Now ${formatEndTime(0, now)}`}</span>)}
   </div>;
 }
 
