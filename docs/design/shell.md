@@ -95,8 +95,10 @@ them, Up returns to the field, a press searches at once. A source without a
 home of its own (Discover's YouTube, Bandcamp and SoundCloud) scopes the field
 to itself (`scopeSearch`): its placeholder reads "Search YouTube" and the
 next query carries that source, so there is one search field, never two. On
-a results page, Enter plays the closest match when its press plays (a station,
-a live stream); otherwise it moves focus to it. The first search from another page opens
+a results page, Enter in the field plays the closest match when its press plays (a station,
+a live stream); otherwise it moves focus to it. Search with an unchanged query
+only moves focus to the result, including when the button is activated with a keyboard.
+The first search from another page opens
 `/search?q=…`, later ones replace it, and focus stays in the field while
 typing (Enter or Search goes on to the results; Down reaches the page's first result).
 Off the TV, Esc clears the field, which is Discover, then leaves it; the TV's

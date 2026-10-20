@@ -46,21 +46,21 @@ export function HeaderSearch({ className }: { className?: string }) {
   const [recents, setRecents] = useState<string[]>([]);
   useEffect(() => { setRecents(installationId ? readSearchRecents(installationId) : []); }, [installationId]);
   const [focused, setFocused] = useState(false);
-  const search = (query: string, submit = false) => {
+  const search = (query: string, action: "clear" | "submit" | "enter" = "clear") => {
     if (!query && !results) return;
     const href = query ? searchLocation({ ...route ?? { source: scope }, query, ...isLink(query) ? { source: "All" } : {} }) : "/discover";
     if (query && !isLink(query) && installationId) setRecents(rememberSearch(installationId, query));
     // Submission goes on to the results; clearing keeps focus here (on the TV too).
-    if (href !== pathname + searchStr) void router.navigate({ href, replace: results, ...submit ? {} : { state: { detailFocus: { selector: "#media-search", index: 0 } } } });
-    else if (submit) {
+    if (href !== pathname + searchStr) void router.navigate({ href, replace: results, ...action !== "clear" ? {} : { state: { detailFocus: { selector: "#media-search", index: 0 } } } });
+    else if (action !== "clear") {
       // Enter on results plays the closest match when its press plays (a station, a live stream); otherwise it goes to it.
       const first = document.querySelector<HTMLElement>("[data-page] [data-page-first]");
-      if (first?.closest("[data-search-top]") && first.textContent?.startsWith("Play")) first.click();
+      if (action === "enter" && first?.closest("[data-search-top]") && first.textContent?.startsWith("Play")) first.click();
       else first?.focus();
     }
   };
   const busy = connected && results && fetching > 0;
-  const pick = (query: string) => { type(query); search(query, true); };
+  const pick = (query: string) => { type(query); search(query, "submit"); };
   // On the results page, typing anywhere outside a control goes on with the query.
   const typeToSearch = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1 || event.key === " " || document.querySelector('[role="dialog"][data-state="open"]')) return;
@@ -77,7 +77,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   }, [results]);
   const clear = () => { type(""); shell.setSearchScope(null); search(""); input.current?.focus(); };
   const recentsShown = focused && !value && recents.length > 0;
-  return <form role="search" aria-label="Search" aria-busy={busy} className={cn("relative", className)} onSubmit={event => { event.preventDefault(); if (!composing.current) search(value.trim(), true); }}
+  return <form role="search" aria-label="Search" aria-busy={busy} className={cn("relative", className)} onSubmit={event => { event.preventDefault(); if (!composing.current) search(value.trim(), (event.nativeEvent as SubmitEvent).submitter ? "submit" : "enter"); }}
     onFocus={() => setFocused(true)} onBlur={event => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setFocused(false); }}>
     {/* InputGroup keeps its input/addon behavior; the header needs a hairline and Clock inversion instead of a box. */}
     <InputGroup className="h-11 rounded-none border-x-0 border-t-0 border-b bg-transparent transition-colors dark:bg-transparent has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0 has-[[data-slot=input-group-control]:focus-visible]:ring-0">
@@ -86,7 +86,11 @@ export function HeaderSearch({ className }: { className?: string }) {
         onChange={event => type(event.target.value)}
         onCompositionStart={() => { composing.current = true; }} onCompositionEnd={event => { composing.current = false; type(event.currentTarget.value); }}
         onKeyDown={event => {
-          if (event.key === "Enter" && (event.nativeEvent.isComposing || composing.current || event.nativeEvent.keyCode === 229)) event.preventDefault();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            // Enter submits without the Search button, as Type on TV does.
+            if (!(event.nativeEvent.isComposing || composing.current || event.nativeEvent.keyCode === 229)) event.currentTarget.form?.requestSubmit();
+          }
           // Off the TV, Esc clears the field, then leaves it; the TV's Back stays Back.
           else if (event.key === "Escape" && !isTvPresentation()) { event.preventDefault(); if (value) clear(); else { shell.setSearchScope(null); input.current?.blur(); } }
           // Down reaches the recent searches while they show, else goes on to the page, as it does from the header's tabs.

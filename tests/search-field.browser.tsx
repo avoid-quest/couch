@@ -24,10 +24,12 @@ export async function runSearchFieldRegression() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const originalFetch = window.fetch;
   const requests: string[] = [];
+  let plays = 0;
   window.fetch = async (input, init) => {
     const url = new URL(String(input), location.href);
     if (!url.pathname.startsWith("/api/")) return originalFetch(input, init);
     requests.push(url.href);
+    if (url.pathname === "/api/radio/avoid") return Response.json({ stations: [{ id: "old", name: "Old radio", url: "https://radio.example/stream" }] });
     return Response.json({ items: [], favorites: [], stations: [], playlists: [], programmes: {} });
   };
   let remote: ReturnType<typeof connectRemoteText> | undefined;
@@ -35,7 +37,7 @@ export async function runSearchFieldRegression() {
   const savedRecents = localStorage.getItem(recentKey);
   localStorage.setItem(recentKey, JSON.stringify(["Recent query"]));
   let setScope: (value: string | null) => void = () => {};
-  const gate = { connected: true, run: async () => true, state: { devices: [], liveSources: [] }, credentials: { installationId: "search-regression", origin: location.origin, token: "fixture" } } as unknown as SessionGateValue;
+  const gate = { connected: true, run: async () => { plays++; return true; }, state: { devices: [], liveSources: [] }, credentials: { installationId: "search-regression", origin: location.origin, token: "fixture" } } as unknown as SessionGateValue;
   function Fixture() {
     const [searchScope, setSearchScope] = useState<string | null>(null);
     setScope = setSearchScope;
@@ -59,6 +61,25 @@ export async function runSearchFieldRegression() {
     await wait(900);
     const initialRequests = requests.length;
     assert(initialRequests > 0, "Fixture did not exercise provider requests");
+    const closest = host.querySelector<HTMLButtonElement>("[data-search-top] [data-page-first]")!;
+    assert(closest?.textContent?.startsWith("Play") && !closest.disabled, "Fixture did not render a playable closest match");
+    const searchButton = host.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    field().focus();
+    searchButton.click();
+    await wait();
+    assert(plays === 0 && query() === "old", "Unchanged-query Search button played the closest match");
+    searchButton.focus();
+    // Keyboard activation submits with the button as submitter too.
+    field().form!.requestSubmit(searchButton);
+    await wait();
+    assert(plays === 0 && query() === "old", "Unchanged-query button submission played the closest match");
+    field().focus();
+    const repeatEnter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    field().dispatchEvent(repeatEnter);
+    if (!repeatEnter.defaultPrevented) field().form!.requestSubmit(searchButton);
+    await wait();
+    assert(plays === 1 && query() === "old", "Repeat Enter in the field did not play the closest match once");
+    assert(requests.length === initialRequests, "Unchanged-query submission repeated provider requests");
     await input("draft before composition");
     await wait(650);
     assert(query() === "old", `Unsubmitted edit changed the route: ${router.state.location.href}`);
@@ -80,8 +101,7 @@ export async function runSearchFieldRegression() {
     await input("ordinary enter");
     const enter = new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true });
     field().dispatchEvent(enter);
-    assert(!enter.defaultPrevented, "Ordinary Enter was blocked");
-    field().form!.requestSubmit();
+    if (!enter.defaultPrevented) field().form!.requestSubmit(searchButton);
     await wait();
     assert(query() === "ordinary enter", "Ordinary Enter did not submit immediately");
     await input("");
@@ -177,8 +197,14 @@ export async function runSearchFieldRegression() {
       assert(await send("", true), "Remote empty Enter was rejected");
       await wait();
       assert(router.state.location.pathname === "/discover", "Remote empty Enter did not open Discover");
+      assert(await send("old", true), "Remote search was rejected");
+      await wait(650);
+      const beforeRepeat = plays;
+      assert(await send("old", true), "Remote repeat Enter was rejected");
+      await wait();
+      assert(plays === beforeRepeat + 1, "Remote repeat Enter did not play the closest match once");
     }
-    return { passed: true, remote: isTvPresentation(), checks: ["drafts cause no routes or requests", "Search submits IME completion", "IME confirmation Enter suppressed", "ordinary Enter submits", "recents never submit", "section navigation cancels", "query navigation cancels", "scope changes cancel", "busy indicator settles", "type-to-search stays local", "scoped submission", "back and forward", "pasted links", "empty submission and Clear", "recents keyboard focus"] };
+    return { passed: true, remote: isTvPresentation(), checks: ["unchanged-query button never plays", "repeat Enter plays once", "drafts cause no routes or requests", "Search submits IME completion", "IME confirmation Enter suppressed", "ordinary Enter submits", "recents never submit", "section navigation cancels", "query navigation cancels", "scope changes cancel", "busy indicator settles", "type-to-search stays local", "scoped submission", "back and forward", "pasted links", "empty submission and Clear", "recents keyboard focus"] };
   } finally {
     remote?.close(); root.unmount(); client.clear(); window.fetch = originalFetch;
     if (savedRecents === null) localStorage.removeItem(recentKey); else localStorage.setItem(recentKey, savedRecents);
