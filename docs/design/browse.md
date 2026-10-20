@@ -339,7 +339,9 @@ and Up from its neighbour would pick it before the tab bar.
 
 Collection and radio lists keep count and Filter in fixed
 slots. Filter uses the shared Input's immediate Clock focus inversion, with dark
-text and placeholder on white, as the header's Search does. Remote or multiple-page collections show Previous, "Page N of M" and
+text and placeholder on white, as the header's Search does. Focused inputs use
+the light colour scheme so native controls, including the search clear glyph,
+stay visible on white. Remote or multiple-page collections show Previous, "Page N of M" and
 Next, disabled when they can't move. A complete local collection on one page
 omits the inert pager, including a single season's episodes and a short list
 of seasons; its count still identifies the content. The page Select's trigger is
