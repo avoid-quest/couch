@@ -98,7 +98,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
 // sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string };
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; signaling?: { window: number; count: number; bytes: number; peers: Map<string, { descriptions: number; candidates: number }> } };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -1232,7 +1232,9 @@ export async function createHub(options: HubOptions) {
   const metadata = createProviderMetadata({ store, cachedItem: providers.cachedItem, onChange: () => invalidate("progress") });
   const catalog = createCatalog({ radio, viewing: { store, session: viewing, refreshHistory: metadata.refreshHistory } });
   let pairWindow = Date.now();
-  let pairAttempts = 0;
+  let pairFailures = 0;
+  let pairAdmissions = 0;
+  const pairDevices = new Map<string, number>();
 
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
     if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
@@ -1367,18 +1369,32 @@ export async function createHub(options: HubOptions) {
       if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
       const respond = (body: unknown, status = 200) => cors(request, json(body, status));
       if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
-      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
-      if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
-      if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
+      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairFailures = pairAdmissions = 0; pairDevices.clear(); }
+      // The existing code invites an event-sized burst, with one retry per identity.
+      // Keep the 20-failure guessing lockout; successes no longer spend that budget.
+      const limited = () => pairFailures >= 20 || pairAdmissions >= 128;
+      const throttled = () => respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
+      const invalid = (error: string, status: number) => { pairFailures++; return respond({ error }, status); };
+      if (limited()) return throttled();
+      if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return invalid("Send a JSON pairing request.", 415);
       let body: unknown;
-      try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
+      const text = await request.text();
+      // Recheck after reading: simultaneous invalid requests share the same lockout.
+      if (limited()) return throttled();
+      if (text.length > 2048) return invalid("The pairing request is too large.", 413);
+      try { body = JSON.parse(text); } catch { return invalid("Invalid pairing request.", 400); }
       if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
-      if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
+      if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return invalid("The pairing code is incorrect.", 401);
+      const id = "id" in body && typeof body.id === "string" ? body.id : "";
+      if ((pairDevices.get(id) ?? 0) >= 2) return throttled();
       try {
-        const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
+        const token = store.pair(id, "name" in body ? body.name : undefined);
+        pairAdmissions++;
+        pairDevices.set(id, (pairDevices.get(id) ?? 0) + 1);
         invalidate("devices");
         return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
       } catch (error) {
+        if (error instanceof ControllerError) pairFailures++;
         return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500);
       }
     },
@@ -1658,11 +1674,25 @@ export async function createHub(options: HubOptions) {
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
       },
       async message(socket: Socket<SocketData>, message: string | null) {
+        if (socket.readyState !== 1) return;
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         if (socket.data.deviceId) store.touchDevice(socket.data.deviceId);
+        if (message === null) { socket.close(1003, "JSON text messages required."); return; }
+        const signal = parseLiveSignal(message);
+        if (signal) {
+          // Fanout is authenticated by live.receive's exact publisher/receiver grant.
+          // Signaling has its own bounded budget; it cannot spend the command allowance.
+          if (!socket.data.signaling || Date.now() - socket.data.signaling.window >= 1000) socket.data.signaling = { window: Date.now(), count: 0, bytes: 0, peers: new Map() };
+          const budget = socket.data.signaling;
+          let peer = budget.peers.get(signal.peerId);
+          if (!peer) { peer = { descriptions: 0, candidates: 0 }; budget.peers.set(signal.peerId, peer); }
+          const excess = signal.signal.description ? ++peer.descriptions > 4 : ++peer.candidates > 64;
+          if (++budget.count > 8192 || (budget.bytes += Buffer.byteLength(message)) > 8 * 1024 * 1024 || budget.peers.size > 256 || excess) { socket.close(1008, "Too much live signaling."); return; }
+          try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
+          return;
+        }
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
-        if (message === null) { socket.close(1003, "JSON text messages required."); return; }
         if (clientUpdates.has(socket)) {
           try {
             const reply = JSON.parse(message);
@@ -1670,11 +1700,6 @@ export async function createHub(options: HubOptions) {
           } catch { /* The normal command parser rejects invalid JSON. */ }
         }
         if (remote.receive(socket, message)) return;
-        const signal = parseLiveSignal(message);
-        if (signal) {
-          try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
-          return;
-        }
         const uploadFailure = parseLiveUploadFailed(message);
         if (uploadFailure) {
           let accepted;

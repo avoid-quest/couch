@@ -241,6 +241,72 @@ test("the capture can publish to another tab on the same device", () => check(`
   assert.equal(signals[0].peerId, "other-tab");
 `));
 
+test("a hundred requested peers negotiate in paced batches and repeated announcements do not duplicate offers", () => check(`
+  const source = await session.start({ kind: "microphone" });
+  const targets = Array.from({ length: 100 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: false, sound: true }));
+  const announcement = { type: "livePeers", sourceId: source.id, peers: targets };
+  session.receive(announcement);
+  session.receive(announcement);
+  await flush();
+  assert.equal(peers.length, 4, "the burst cannot create every browser connection at once");
+  assert.equal(signals.length, 4);
+  advance(99); await flush();
+  assert.equal(peers.length, 4, "a completed offer still observes the pacing interval");
+  advance(1); await flush();
+  assert.equal(signals.length, 8);
+  for (let i = 0; i < 24; i++) { advance(100); await flush(); }
+  assert.equal(signals.length, 100);
+  assert.equal(new Set(signals.map(message => message.peerId)).size, 100);
+  assert.ok(peers.every(peer => peer.tracks.length === 1 && peer.tracks[0].kind === "audio"));
+  assert.equal(unreachable().length, 0);
+  // These are mocked browser operations, not evidence of 100 negotiated media paths.
+`));
+
+test("stalled offer creation stays bounded, removed peers release slots, and stopping retires queued negotiations", () => check(`
+  const source = await session.start({ kind: "microphone" });
+  const pending = [];
+  RTCPeerConnection.prototype.createOffer = () => new Promise(resolve => pending.push(resolve));
+  const targets = Array.from({ length: 100 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: false, sound: true }));
+  session.receive({ type: "livePeers", sourceId: source.id, peers: targets });
+  advance(5000); await flush();
+  assert.equal(peers.length, 4, "a stalled browser cannot accumulate offer work");
+  session.receive({ type: "livePeers", sourceId: source.id, peers: targets.slice(4) });
+  advance(100); await flush();
+  assert.equal(peers.length, 8, "removed offers cannot hold the next recipients hostage");
+  assert.ok(peers.slice(0, 4).every(peer => peer.connectionState === "closed"));
+  await session.end();
+  for (const resolve of pending) resolve({ type: "offer", sdp: "stale" });
+  advance(10000); await flush();
+  assert.equal(peers.length, 8);
+  assert.equal(signals.length, 0, "late offers cannot revive an ended publication");
+  assert.ok(peers.every(peer => peer.connectionState === "closed"));
+  assert.equal(timers.size, 0);
+`));
+
+test("excess signaling fails only that peer even when a browser operation is stalled", () => check(`
+  const source = await session.start({ kind: "microphone" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "healthy", deviceId: "other", picture: false, sound: true }] });
+  await flush();
+  session.play(direct());
+  let release;
+  peers[1].setRemoteDescription = () => new Promise(resolve => { release = resolve; });
+  session.receive({ type: "liveSignal", peerId: "peer", signal: { description: { type: "offer", sdp: "slow" } } });
+  await flush();
+  for (let i = 0; i < 1000; i++) session.receive({ type: "liveSignal", peerId: "peer", signal: { candidate: { candidate: "candidate" } } });
+  assert.equal(unreachable().length, 1, "a flood reports one bounded failure");
+  assert.equal(unreachable()[0].peerId, "peer");
+  assert.equal(peers[1].connectionState, "closed");
+  assert.notEqual(peers[0].connectionState, "closed", "the independent publication remains alive");
+  release();
+  for (let i = 0; i < 100; i++) await flush();
+  assert.equal(peers[1].candidates.length, 0, "closed peers discard pending browser work");
+  assert.equal(unreachable().length, 1);
+  session.play(direct({ livePeerId: "reconnected" }));
+  session.receive({ type: "liveSignal", peerId: "reconnected", signal: { description: { type: "offer", sdp: "valid" } } });
+  await flush();
+  assert.equal(signals.at(-1).signal.description.type, "answer");
+`));
+
 test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () => check(`
   const source = await session.start({ kind: "screen" });
   assert.equal(uploads.length, 0, "Publish starts no recording");
