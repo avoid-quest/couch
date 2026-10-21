@@ -114,7 +114,7 @@ window.runDiscoverCustomizationRegression = async () => {
   }
   assert(rows()[0]?.id === "sources", "Sources did not move to the first slot");
   await discover(); await wait(800);
-  assert(document.activeElement?.getAttribute("aria-label") === "Search YouTube", "Reordered page entry ignored Sources");
+  assert(document.activeElement?.getAttribute("aria-label") === "Open Twitch", "Reordered page entry ignored Sources");
   assert(!empty(), "Empty message appeared beside content");
   checks.push("Reset, reordered page-first and content empty-state suppression");
 
@@ -129,13 +129,13 @@ window.runDiscoverCustomizationRegression = async () => {
   localStorage.setItem("couch.discover-rows", JSON.stringify(rows().map(row => ({ ...row, shown: row.id === "sources" }))));
   window.dispatchEvent(new Event("couch.discover-rows"));
   await remote("back"); await wait(400);
-  assert(document.activeElement === first() && document.activeElement?.getAttribute("aria-label") === "Search YouTube", "Removed opener did not fall back to the visible first section");
+  assert(document.activeElement === first() && document.activeElement?.getAttribute("aria-label") === "Open Twitch", "Removed opener did not fall back to the visible first section");
   checks.push("Return focus after reorder and hiding the opener");
   assert(localStorage.getItem("couch.home-rows") === home, "Discover changed Home preferences");
   return { passed: true, checks, saved: rows() };
 };
 
-// Reload before each run to clear the catalogue query cache. Source responses are local fixtures;
+// Reload before each run to clear the saved channels' query cache. Saved channels are a local fixture;
 // the real Discover components still decide visibility, placement and focus.
 type AvailabilityOptions = { delayMs?: number; cancel?: "keyboard" | "pointer" | "navigation" };
 declare global { interface Window { runDiscoverAvailabilityRegression: (options?: AvailabilityOptions) => Promise<unknown> } }
@@ -149,12 +149,11 @@ window.runDiscoverAvailabilityRegression = async ({ delayMs = 16_000, cancel }: 
   const ready = new Promise<void>(resolve => { release = resolve; });
   window.fetch = async (...args) => {
     const path = new URL(String(args[0]), location.href).pathname;
-    if (path === "/api/providers/streamingcommunity/items") return Response.json({ items: [] });
-    if (path === "/api/providers/twitch/items") {
+    if (path === "/api/providers/favorites") {
       requestedAt = performance.now();
       requestSignal = args[1]?.signal;
       await ready;
-      return Response.json({ items: [{ id: "fixture-channel", provider: "twitch", kind: "channel", title: "Discovery focus fixture", url: "https://www.twitch.tv/fixture", live: true }] });
+      return Response.json({ favorites: [{ id: "fixture-channel", provider: "twitch", kind: "channel", title: "Discovery focus fixture", url: "https://www.twitch.tv/fixture", live: true }] });
     }
     return originalFetch(...args);
   };
@@ -163,11 +162,11 @@ window.runDiscoverAvailabilityRegression = async ({ delayMs = 16_000, cancel }: 
     await click('[data-app-nav] a[href="/"]');
     save([{ id: "streamingcommunity", shown: true }, { id: "twitch", shown: true }, ...readDiscoverRows(localStorage).filter(row => !["streamingcommunity", "twitch"].includes(row.id)).map(row => ({ ...row, shown: row.id === "sources" }))]);
     await discover(); await wait(350);
-    assert(!document.querySelector('#shelf-streamingcommunity'), "Empty catalogue kept its shelf");
-    assert(document.activeElement?.getAttribute("aria-label") === "Search YouTube", "Pending first source left no usable page entry");
-    assert(requestedAt > 0, "Reload before running to clear the catalogue cache");
-    if (cancel === "navigation") await customize();
-    // Provider pages may take 30 seconds; arrive after the old 15-second focus cutoff.
+    assert(!document.querySelector('#shelf-streamingcommunity'), "A source with nothing saved kept its shelf");
+    assert(document.activeElement?.getAttribute("aria-label") === "Open Twitch", "Pending first source left no usable page entry");
+    assert(requestedAt > 0, "Reload before running to clear the saved channels' cache");
+    if (cancel === "navigation") await click('[data-app-nav] a[href^="/settings"]');
+    // A slow Core may answer late; arrive after the old 15-second focus cutoff.
     await wait(delayMs);
     const elapsedMs = Math.round(performance.now() - requestedAt);
     if (cancel === "keyboard") control('[aria-label="Search YouTube"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
@@ -175,7 +174,7 @@ window.runDiscoverAvailabilityRegression = async ({ delayMs = 16_000, cancel }: 
     if (cancel !== "navigation") assert(requestSignal && !requestSignal.aborted, "Delayed provider request was aborted before arrival");
     release(); await wait(700);
     if (cancel === "navigation") {
-      assert(location.pathname === "/settings/device/discover" && requestSignal?.aborted, "Navigation did not cancel the catalogue request");
+      assert(location.pathname.startsWith("/settings") && requestSignal?.aborted, "Navigation did not cancel the catalogue request");
       // Settings retains its 15-second observer cutoff. After that, a DOM change must
       // not let the old Discover effect focus the new page (no input stopped it).
       assert(delayMs > 15_000, "Navigation cleanup check needs the other page's timeout to expire");
@@ -187,14 +186,14 @@ window.runDiscoverAvailabilityRegression = async ({ delayMs = 16_000, cancel }: 
       return { passed: true, elapsedMs, checks: ["Navigation cancels the request and focus observer; other pages retain their cutoff"] };
     }
     assert(document.querySelector('[aria-label="Open Discovery focus fixture"]'), "Delayed provider tile did not render");
-    assert(document.activeElement?.getAttribute("aria-label") === (cancel ? "Search YouTube" : "Open Discovery focus fixture"), cancel ? `${cancel} did not stop delayed focus takeover` : "Earlier source did not take page entry when it loaded");
-    assert(rows()[0]?.id === "streamingcommunity", "Empty source lost its saved position");
-    checks.push(cancel ? `${cancel} stops delayed focus takeover` : "Empty source retains order; delayed earlier source becomes page-first");
-    // With only an empty source enabled, the page still offers a next step.
+    assert(document.activeElement?.getAttribute("aria-label") === (cancel ? "Open Twitch" : "Open Discovery focus fixture"), cancel ? `${cancel} did not stop delayed focus takeover` : "Earlier source did not take page entry when it loaded");
+    assert(rows()[0]?.id === "streamingcommunity", "Source with nothing saved lost its position");
+    checks.push(cancel ? `${cancel} stops delayed focus takeover` : "Source with nothing saved retains order; delayed earlier source becomes page-first");
+    // With only a source with nothing saved enabled, the page still offers a next step.
     save(rows().map(row => ({ ...row, shown: row.id === "streamingcommunity" })));
     await wait();
-    assert(empty() && document.body.innerText.includes("Nothing to discover here yet"), "Empty-only source left a blank page");
-    checks.push("Empty-only source explains recovery");
+    assert(empty() && document.body.innerText.includes("No saved channels or series"), "Source with nothing saved left a blank page");
+    checks.push("Nothing saved explains what to do");
     return { passed: true, elapsedMs, checks };
   } finally {
     release(); window.fetch = originalFetch;

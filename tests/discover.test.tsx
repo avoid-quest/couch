@@ -1,12 +1,15 @@
 import { expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { LiveSource } from "../src/shared/live-input";
+import type { ProviderItem } from "../src/shared/providers";
 
 let liveSources: LiveSource[] = [];
 const gate = () => ({ connected: true, videoQualityPreference: { quality: "auto" }, state: { liveSources }, run: async () => true });
 mock.module("../src/client/session/session-context", () => ({ useSessionGate: gate, useOptionalSessionGate: gate }));
 mock.module("../src/client/sections/shell/shell-context", () => ({ useShell: () => ({ credentials: { origin: "http://localhost", token: "test" }, available: true }) }));
-mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) => options, useQuery: () => ({ data: { sources: [] } }) }));
+let favorites: ProviderItem[] = [];
+mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) => options, infiniteQueryOptions: (options: unknown) => options,
+  useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.join("/") === "providers/favorites" ? { favorites } : { sources: [] } }) }));
 mock.module("../src/client/components/PlayOn", () => ({ PlayOnGroup: () => null, usePlayOn: () => ({ devices: [], on: (label: string) => label }) }));
 mock.module("../src/client/detail-navigation", () => ({
   collectionLocation: ({ provider }: { provider: string }) => `/collection?provider=${provider}`,
@@ -32,15 +35,38 @@ mock.module("../src/client/sections/discover/discover-rows", () => ({ useDiscove
 const { DiscoverPage } = await import("../src/client/sections/discover/DiscoverPage");
 const source = (id: string, name: string, kind: LiveSource["kind"] = "screen"): LiveSource => ({ id, deviceId: id, name, kind, audio: true, video: kind === "screen" });
 const view = () => renderToStaticMarkup(<DiscoverPage />);
-const first = (html: string) => [...html.matchAll(/<button\b[^>]*>/g)].filter(([tag]) => tag.includes("data-page-first"));
+const first = (html: string) => [...html.matchAll(/<(?:button|a)\b[^>]*>/g)].filter(([tag]) => tag.includes("data-page-first"));
 
-test("without shared inputs Discover starts on Radio and keeps the search-only Sources row", () => {
+test("without shared inputs Discover starts on Radio and keeps a Sources row of every source", () => {
   liveSources = [];
   const html = view();
   expect(html).not.toContain('aria-label="Shared sources"');
   expect(first(html).length).toBeGreaterThan(0);
   expect(first(html)[0]![0]).toContain('aria-label="Play Station"');
-  for (const provider of ["YouTube", "Bandcamp", "SoundCloud"]) expect(html).toContain(`aria-label="Search ${provider}"`);
+  const sources = html.split('aria-label="Sources"')[1]!;
+  for (const provider of ["YouTube", "Bandcamp", "SoundCloud"]) expect(sources).toContain(`aria-label="Search ${provider}"`);
+  for (const provider of ["twitch", "raiplay", "streamingcommunity"]) expect(sources).toContain(`href="/collection?provider=${provider}"`);
+});
+
+test("source shelves hold only what's saved from each source, never the source's own home", () => {
+  liveSources = [];
+  let html = view();
+  expect(html).not.toContain('aria-label="Twitch"');
+  expect(html).toContain("No saved channels or series");
+  favorites = [
+    { id: "a", provider: "twitch", kind: "channel", title: "Followed streamer", url: "https://www.twitch.tv/followed" },
+    { id: "b", provider: "raiplay", kind: "collection", title: "A saved programme", url: "https://www.raiplay.it/programmi/saved" },
+  ];
+  try {
+    html = view();
+    expect(html).not.toContain("No saved channels or series");
+    const twitch = html.split('<section aria-label="Twitch"')[1]!.split("</section>")[0]!;
+    expect(twitch).toContain('href="/collection?provider=twitch"');
+    expect(twitch).toContain('aria-label="Open Followed streamer"');
+    expect(twitch).not.toContain("A saved programme");
+    expect(html).toContain('aria-label="RaiPlay"');
+    expect(html).not.toContain('aria-label="StreamingCommunity"');
+  } finally { favorites = []; }
 });
 
 test("one shared input leads Discover with the first page-entry Play control and its menu", () => {
@@ -66,13 +92,13 @@ test("saved order and visibility choose Discover's first available section witho
   preferences = [{ id: "sources", shown: true }, ...defaultDiscoverRows.filter(row => row.id !== "sources").map(row => ({ ...row, shown: row.id !== "radio" }))];
   liveSources = [];
   let html = view();
-  expect(first(html)[0]![0]).toContain('aria-label="Search YouTube"');
+  expect(first(html)[0]![0]).toContain('href="/collection?provider=twitch"');
   expect(html).not.toContain('aria-label="Radio"');
   expect(html).not.toContain('aria-label="Shared sources"');
   liveSources = [source("studio", "Studio")];
   html = view();
   expect(html.indexOf('aria-label="Sources"')).toBeLessThan(html.indexOf('aria-label="Shared sources"'));
-  expect(first(html)[0]![0]).toContain('aria-label="Search YouTube"');
+  expect(first(html)[0]![0]).toContain('href="/collection?provider=twitch"');
   preferences = defaultDiscoverRows;
 });
 
@@ -84,7 +110,9 @@ test("all hidden leaves customization reachable and does not render source queri
   expect(html).not.toContain('aria-label="Shared sources"');
   expect(html).not.toContain('aria-label="Radio"');
   expect(html).not.toContain('aria-label="Sources"');
-  expect(first(html)).toHaveLength(0);
+  // Only the Settings link takes page entry.
+  expect(first(html)).toHaveLength(1);
+  expect(first(html)[0]![0]).toContain('id="customize-discover"');
   preferences = defaultDiscoverRows;
 });
 

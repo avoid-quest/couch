@@ -156,8 +156,6 @@ const discoverNavigation = async () => {
     assert(document.activeElement === heading, "Up from the first row did not reach its heading");
     await key("ArrowUp");
   }
-  assert(document.activeElement?.id === "customize-discover", "Up from the first section skipped Customize Discover");
-  await key("ArrowUp");
   assert(document.activeElement?.matches('.app-header a[aria-current="page"][href="/discover"]'), "Up did not reach the current tab");
   await key("ArrowDown");
   assert(document.activeElement === first, "Down from the header did not return to the page's first control");

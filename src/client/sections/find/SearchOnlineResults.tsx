@@ -9,6 +9,7 @@ import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/pro
 import { providerShape } from "../../../shared/providers";
 import { providerBrowseQuery, providerPageQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
 import { forLaterQuery } from "@/api/for-later";
+import { useHidden } from "@/api/hidden";
 import { apiFetch } from "@/api/client";
 import { historyQuery } from "@/api/progress";
 import { usePlayOn } from "@/components/PlayOn";
@@ -105,6 +106,8 @@ function OnlineResults(props: Props) {
   const kept = useQuery({ ...providerFavoritesQuery(props), enabled: props.connected, retry: false });
   const favorites = kept.error ? null : kept.data?.favorites ?? null;
   const later = useQuery({ ...forLaterQuery(props), enabled: props.connected, retry: false });
+  // The one place provider items become hits, so Hide reaches Search, source pages and Discover alike.
+  const { isHidden, hide } = useHidden(props, props.connected);
   const history = useQuery({ ...historyQuery(props, provider), enabled: props.connected && !!props.url && !!props.onPlayHistory });
   const savedWeb = (item: ProviderItem) => later.data?.items.find(entry => entry.url === item.url);
   const [busy, setBusy] = useState(false);
@@ -161,7 +164,7 @@ function OnlineResults(props: Props) {
     });
   }
   useLayoutEffect(() => {
-    const hits: SearchHit[] = (page?.items ?? []).slice(0, props.paged ? undefined : visible).map(item => {
+    const hits: SearchHit[] = (page?.items ?? []).filter(item => !isHidden(item)).slice(0, props.paged ? undefined : visible).map(item => {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: !props.connected || busy || saveUnavailable, run: () => save(item, saved) };
@@ -173,7 +176,7 @@ function OnlineResults(props: Props) {
           { label: "Play next", disabled: busy || !props.onCommand, run: () => play(item, false, "next") },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(item, false) },
           saveAction,
-        ] : [saveAction]), ...browserActions(item.url)],
+        ] : [saveAction]), ...browserActions(item.url), { label: "Hide", disabled: !props.connected, run: () => void hide(item) }],
       };
     });
     const known = props.url ? [
@@ -210,6 +213,6 @@ function OnlineResults(props: Props) {
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
+  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, isHidden, later.data, history.data, history.isLoading, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }

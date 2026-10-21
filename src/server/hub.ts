@@ -38,6 +38,7 @@ import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createPassThrough } from "./pass-through";
 import { createForLater } from "./for-later";
+import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createDevices, settingField } from "./devices";
 import type { DeviceIdentity } from "../shared/devices";
@@ -1187,6 +1188,7 @@ export async function createHub(options: HubOptions) {
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => invalidate("providers"), streamingCommunityOrigin: healStreamingCommunity });
+  const hidden = createHidden({ databasePath: options.databasePath, onChange: () => invalidate("hidden") });
   const forLater = createForLater({
     webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
     databasePath: options.databasePath, onChange: () => invalidate("for-later"),
@@ -1591,6 +1593,7 @@ export async function createHub(options: HubOptions) {
       if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
+      if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
       if (!websocket && url.pathname === "/api/subtitles") return cors(request, await subtitles.handle(request, () => {
         authorize();
         const playback = playing(url.searchParams.get("playbackId") ?? "");
@@ -2037,6 +2040,7 @@ export async function createHub(options: HubOptions) {
     subtitles.close();
     playlists.close();
     forLater.close();
+    hidden.close();
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.

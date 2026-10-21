@@ -15,6 +15,7 @@ import { RadioSettings } from "./sources/RadioSettings";
 import { StreamingCommunitySettings } from "./sources/StreamingCommunitySettings";
 import { DeviceInputSettings } from "./sources/DeviceInputSettings";
 import { AirPlaySettings } from "./sources/AirPlaySettings";
+import { HiddenSettings } from "./sources/HiddenSettings";
 import { useSettingsScope } from "./settings-scope";
 import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
@@ -57,5 +58,6 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
       {failed.length > 0 && <Alert variant="destructive"><AlertDescription>Couldn't load sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => failed.forEach(query => void query.refetch())}>Try again</Button></AlertAction></Alert>}
     </SettingsSection>
     <AirPlaySettings credentials={credentials} connected={available} administrator={canManage} couch={couch} />
+    <HiddenSettings credentials={credentials} connected={available} />
   </>;
 }
