@@ -23,6 +23,7 @@ import { discoverPaths, pathForSection, sectionForPath } from "../../../shared/p
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { knownTvs } from "@/known-tvs";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
@@ -405,7 +406,9 @@ function useTopBar(ref: RefObject<HTMLElement | null>, shown: boolean) {
 function SectionTabs({ bar = false, className }: { bar?: boolean; className?: string }) {
   const { section, sectionUrl } = useShell();
   const { tvPresentation, state } = useSessionGate();
-  const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
+  // A TV that's off, or that Core hasn't seen since it restarted, still has its Remote (knownTvs).
+  const tvs = knownTvs(state?.devices);
+  const remote = !tvPresentation && !!state?.devices?.some(device => tvs.has(device.id));
   return <nav data-app-nav aria-label="Main navigation" className={className}>
     {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 border-t-2 border-b-0 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs" : "min-h-11 min-w-11 border-t-0 border-b-2 px-3 text-base")}>
       <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
