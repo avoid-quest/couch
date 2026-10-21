@@ -64,8 +64,9 @@ and Down on the timeline, Left and Right seek 10 s. Back hides them; with them
 hidden it leaves the player for its opener. A paused picture keeps them up.
 Stop is OK, Right, OK for pausable media and OK, OK for radio and live. Details
 is in the Playback gear's menu. The gear sits at the top line's right, after
-the end time and the clock (the TV has no fullscreen): Up from the timeline
-reaches it, as Up on Prime Video's remote reaches its top-right controls, OK
-drops its menu, Back returns to the gear, and Down reaches Where it plays under
-it. Beside artwork, the top line holds just the gear. A Remote's Info key opens
+the end time and the clock, over the band's last slot, which the TV leaves
+empty: it has no fullscreen, and an empty slot is no stop for the remote. Up
+from the timeline reaches the gear, as Up on Prime Video's remote reaches its
+top-right controls, OK drops its menu, Back returns to the gear, and Down
+reaches Where it plays. Beside artwork, the top line holds just the gear. A Remote's Info key opens
 the player from any page.
