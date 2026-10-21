@@ -19,7 +19,9 @@ import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality }
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { SearchOnlineResults, providerNames, type SearchHit, type SearchResultSummary } from "./SearchOnlineResults";
 import { Shelf } from "@/components/Shelf";
-import { MediaTile, tileAspect, type TileShape } from "@/components/MediaTile";
+import { MediaTile } from "@/components/MediaTile";
+import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
+import { metaLine } from "@/media-caption";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
@@ -49,7 +51,7 @@ const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twi
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
 type GroupId = SearchKind | "channels";
-type Group = { id: GroupId; title: string; shape: TileShape | "rows"; noun: [one: string, many: string] };
+type Group = { id: GroupId; title: string; shape: ArtShape | "rows"; noun: [one: string, many: string] };
 // What's on the board first, then what you'd listen to, then the long tail of videos and channels. Each heading counts
 // what it holds by name, as Home's shelves say "3 unfinished" or "2 saved".
 const groups: Group[] = [
@@ -68,10 +70,12 @@ const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "Anime
 // RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
 const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List" || hit.source === "RaiPlay" && !!hit.collection ? "films"
   : hit.kind === "Radio" ? "radio" : hit.kind === "Live" ? "live" : hit.kind === "Music" ? "music" : hit.collection ? "channels" : "videos";
-const shapeOf = (hit: SearchHit): TileShape => { const shape = groups.find(group => group.id === groupOf(hit))!.shape; return shape === "rows" || hit.source === "RaiPlay" ? "video" : shape; };
+/** A hit's own artwork shape (art-shape.ts). */
+export const hitShape = (hit: SearchHit): ArtShape => artShape(hit.source, hit.kind === "Radio" ? "station" : hit.collection === "Channel" ? "channel" : hit.collection ? "collection" : hit.context ? "episode" : "media");
+const shapeOf = hitShape;
 // One kind's tiles wrap as ProviderPage's posters do, each as wide as its column.
-const gridColumns = { poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]", square: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]", video: "grid-cols-[repeat(auto-fill,minmax(14rem,1fr))]" } as const;
-const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]", video: "[--tile-art:56.25cqi]" } as const;
+const gridColumns = { poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]", square: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]", round: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]", video: "grid-cols-[repeat(auto-fill,minmax(14rem,1fr))]" } as const satisfies Record<ArtShape, string>;
+const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]", round: "[--tile-art:100cqi]", video: "[--tile-art:56.25cqi]" } as const satisfies Record<ArtShape, string>;
 
 /**
  * The results of the header's search (`searchState`, the route's): the kinds it found, then that kind's sources, then the
@@ -170,11 +174,11 @@ export function SearchPanel(props: Props) {
           {kind !== group.id && <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{heading(group) ? <KindLink href={heading(group)!} title={group.title} /> : group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{count(group, group.hits.length)}</p></header>}
           <HitList pageFirst={!top && index === 0} hits={group.hits} label={group.title} />
         </section>
-        : kind ? <ul key={group.id} aria-label={group.title} className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[group.shape])}>
-          {group.hits.map((hit, position) => <li key={hit.id} className="@container min-w-0"><HitTile hit={hit} now={now} shape={shapeOf(hit)} pageFirst={!top && position === 0} className={cn("w-full [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full", fluidTile[shapeOf(hit)])} /></li>)}
+        : kind ? <ul key={group.id} aria-label={group.title} className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[majorityShape(group.hits.map(shapeOf))])}>
+          {group.hits.map((hit, position) => <li key={hit.id} className="@container min-w-0"><HitTile hit={hit} now={now} shape={majorityShape(group.hits.map(shapeOf))} pageFirst={!top && position === 0} className={cn("w-full [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full", fluidTile[majorityShape(group.hits.map(shapeOf))])} /></li>)}
         </ul>
         : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)} href={heading(group)}>
-          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} now={now} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
+          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} now={now} shape={majorityShape(group.hits.slice(0, 12).map(shapeOf))} pageFirst={!top && index === 0 && position === 0} /></li>)}
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
@@ -205,11 +209,11 @@ function KindLink({ href, title }: { href: string; title: string }) {
   </Button>;
 }
 
-const hitContext = (hit: SearchHit) => hit.meta.split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })).join(" · ");
+const hitContext = (hit: SearchHit) => metaLine(...hit.meta.split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })));
 
 /** Sources stay readable even when a long artist or programme name fills the context line. */
-function HitSource({ hit, showSource = true }: { hit: SearchHit; showSource?: boolean }) {
-  return <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />{hit.collection && <span>{hit.collection}</span>}</div>;
+function HitSource({ hit, showSource = true, showCollection = true }: { hit: SearchHit; showSource?: boolean; showCollection?: boolean }) {
+  return <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />{showCollection && hit.collection && <span>{hit.collection}</span>}</div>;
 }
 
 /** The closest match, laid out like Home's hero at a smaller size: artwork, title, meta, when it ends, then its verbs. */
@@ -222,7 +226,7 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
   const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action !== save && action.label !== hit.primary.label));
   const time = !hit.live && !hit.collection && hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
   return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid gap-x-8 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
-    <div aria-hidden="true" className="h-40 min-w-0 md:h-48 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shapeOf(hit)])} /></div>
+    <div aria-hidden="true" className="h-40 min-w-0 md:h-48 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className={cn("h-full w-auto max-w-full object-contain", artAspect[shapeOf(hit)])} /></div>
     <div className="grid min-w-0 gap-1">
       <h2 className="break-words text-2xl font-semibold tracking-tight">{hit.primary.href ? <ContentLink href={hit.primary.href} className="no-underline hover:underline">{hit.title}</ContentLink> : hit.title}</h2>
       {hitContext(hit) && <p className="text-sm text-muted-foreground break-words">{hitContext(hit)}</p>}
@@ -245,10 +249,10 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
 }
 
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
-function HitTile({ hit, now, shape, pageFirst, className }: { hit: SearchHit; now: number; shape: TileShape; pageFirst: boolean; className?: string }) {
+function HitTile({ hit, now, shape, pageFirst, className }: { hit: SearchHit; now: number; shape: ArtShape; pageFirst: boolean; className?: string }) {
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
-  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} title={hit.title} meta={hitContext(hit)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
+  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} plays={primary.label === "Play" || primary.label === "Resume"} title={hit.title} meta={hitContext(hit)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
     href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]}>
     {!hit.live && !hit.collection && hit.duration != null && <span className="text-sm font-light tabular-nums">{formatDuration(hit.duration)}, ends {formatEndTime(hit.duration - (hit.position ?? 0), now)}</span>}
   </MediaTile>;
@@ -258,11 +262,14 @@ function HitTile({ hit, now, shape, pageFirst, className }: { hit: SearchHit; no
 export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean }) {
   const session = useOptionalSessionGate();
   if (!hits.length) return null;
+  // The list takes its majority shape; a word every row shares ("Programme") says nothing, so it goes.
+  const shape = majorityShape(hits.map(shapeOf), compact ? "square" : "video");
+  const sameKind = hits.length > 1 && hits.every(hit => hit.collection && hit.collection === hits[0]!.collection);
   return <div className="min-w-0">
     <MediaList aria-label={label}>{hits.map((hit, index) => {
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
-      return <MediaRow context={<HitSource hit={hit} showSource={showSource} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={!compact ? hitContext(hit) : [hitContext(hit), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={!compact ? hit.description : undefined} artFit={hit.kind === "Music" || ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"].includes(hit.source) ? "contain" : "cover"}
+      return <MediaRow context={<HitSource hit={hit} showSource={showSource} showCollection={!sameKind} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={!compact ? hitContext(hit) : metaLine(hitContext(hit), !hit.live && hit.duration != null && formatDuration(hit.duration))} description={!compact ? hit.description : undefined} shape={shape} own={shapeOf(hit)}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       // A press that plays keeps the hit's own destination (a station's page) in the menu as Open.

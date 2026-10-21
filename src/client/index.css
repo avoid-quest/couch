@@ -120,6 +120,16 @@ body { min-width: 0; }
 [data-tile-art] { outline: 0 solid var(--foreground); outline-offset: .125rem; @apply motion-safe:transition-[outline-width]; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-art] { outline-width: .125rem; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-caption] { background: var(--foreground); color: var(--background); }
+/* A pointer over a tile dims its artwork (with Play on a tile whose press plays) and shows its "…"; touch keeps the
+   "…" shown, and the TV, which has no pointer to answer, shows the "…" and never the dim. */
+[data-tile-hover] { opacity: 0; background: color-mix(in srgb, var(--background) 45%, transparent); @apply motion-safe:transition-opacity; }
+@media (hover: hover) {
+  [data-media-tile]:where(:not(.tv-presentation *)):not(:disabled):hover [data-tile-hover] { opacity: 1; }
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-tile-menu]:where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
+  [data-tile]:is(:hover, :focus-within) [data-tile-menu] { opacity: 1; }
+}
 /* Inversion (focus, a menu's highlight) arrives at once and fades only as it leaves: easing it in would pass through a
    grey nobody can read, which a held arrow would show at every step, and a remote would feel slow. */
 :is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role^="menuitem"]):is(:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus), [data-highlighted], [cmdk-item][data-selected="true"]),
