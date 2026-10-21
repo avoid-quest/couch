@@ -120,6 +120,14 @@ body { min-width: 0; }
 [data-tile-art] { outline: 0 solid var(--foreground); outline-offset: .125rem; @apply motion-safe:transition-[outline-width]; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-art] { outline-width: .125rem; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-caption] { background: var(--foreground); color: var(--background); }
+/* From the sofa a thin outline is too faint: the TV lifts the focused tile, "…" and links with it, and thickens its outline. */
+.tv-presentation [data-tile] { @apply motion-safe:transition-[scale]; }
+.tv-presentation [data-media-tile] { scroll-margin-block: 1rem; }
+.tv-presentation [data-tile]:has(> [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)) { scale: 1.05; z-index: 1; }
+.tv-presentation [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-art] { outline-width: .25rem; }
+/* A text link's inversion reaches a little past its words, so a short one ("Blender") reads as a chip. A shadow, not
+   padding, so nothing moves. */
+[data-text-link]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { box-shadow: -.25rem 0 0 .125rem var(--foreground), .25rem 0 0 .125rem var(--foreground); box-decoration-break: clone; }
 /* A pointer over a tile dims its artwork (with Play on a tile whose press plays) and shows its "…"; touch keeps the
    "…" shown, and the TV, which has no pointer to answer, shows the "…" and never the dim. */
 [data-tile-hover] { opacity: 0; background: color-mix(in srgb, var(--background) 45%, transparent); @apply motion-safe:transition-opacity; }

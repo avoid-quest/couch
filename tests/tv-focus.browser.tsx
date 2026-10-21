@@ -29,6 +29,20 @@ export async function runTvFocusRegression() {
       const style = getComputedStyle(document.activeElement!);
       assert(style.backgroundColor === 'rgb(255, 255, 255)' && style.color === 'rgb(0, 0, 0)', "Remote focus has no visible inversion");
     });
+    await check("A focused text link inverts past its words, and a focused tile lifts, without moving the layout", async () => {
+      await audit.go('/');
+      control('.app-header a[href="/"]').focus(); await remote('right');
+      const link = control('[aria-label="For later"] [data-media-context] a');
+      const before = link.getBoundingClientRect();
+      link.focus(); await wait(200);
+      const after = link.getBoundingClientRect();
+      assert(getComputedStyle(link).boxShadow.includes('rgb(255, 255, 255)'), "A focused text link has no room around its words");
+      assert(before.left === after.left && before.width === after.width, "Focusing a text link moved it");
+      const tile = control('[aria-label="For later"] [data-media-tile]');
+      tile.focus(); await wait(300);
+      assert(getComputedStyle(tile.closest('[data-tile]')!).scale === '1.05', "A focused tile did not lift");
+      assert(parseFloat(getComputedStyle(tile.querySelector('[data-tile-art]')!).outlineWidth) >= 4, "A focused tile's outline stayed thin");
+    });
     await check("Horizontal boundaries do not jump to unrelated rows", async () => {
       await audit.go('/');
       const home = control('.app-header a[href="/"]');

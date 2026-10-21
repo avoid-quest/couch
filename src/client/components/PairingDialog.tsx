@@ -26,7 +26,7 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
       {connected && urls[0] ? <SetupQr url={urls[0]} credentials={credentials} /> : <p role="status" className="text-sm text-muted-foreground">{connected ? `No network. Connect ${deviceName(name)} to Wi-Fi or Ethernet.` : offline(name)}</p>}
       {!!urls.length && <section className="grid min-w-0 gap-2" aria-label="Pairing addresses">
         <h3 className="text-base font-medium">Open on your device</h3>
-        <ul className="grid gap-1">{urls.map(url => <li key={url}><a className="text-sm break-all underline underline-offset-4 hover:text-muted-foreground" href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
+        <ul className="grid gap-1">{urls.map(url => <li key={url}><a data-text-link className="text-sm break-all underline underline-offset-4 hover:text-muted-foreground" href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
         <p className="text-sm text-muted-foreground">HTTPS uses Couch's own certificate. If the browser shows a privacy warning, continue only for your Couch's address.</p>
         {urls.some(url => url.startsWith("https:")) && urls.some(url => url.startsWith("http:")) && <p className="text-sm text-muted-foreground">If your TV refuses HTTPS, use an HTTP address. HTTP is unencrypted: use it only on a network you trust.</p>}
       </section>}

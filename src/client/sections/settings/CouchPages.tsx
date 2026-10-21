@@ -65,7 +65,7 @@ export function SourcesPage({ section }: { section: SettingsPage }) {
   const source = section.startsWith("source-") ? section.slice(7) as SourceKind : undefined;
   return <SettingsLayout section={section}>
     <SettingsSources canManage={administrator} connected={connected} credentials={credentials} source={source} />
-    {!source && <p className="text-sm text-muted-foreground">Share this device's screen or sound from <Link className="underline underline-offset-4" to={settingsPages.device.path}>This device › General</Link>.</p>}
+    {!source && <p className="text-sm text-muted-foreground">Share this device's screen or sound from <Link data-text-link className="underline underline-offset-4" to={settingsPages.device.path}>This device › General</Link>.</p>}
   </SettingsLayout>;
 }
 
