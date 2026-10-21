@@ -134,7 +134,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
           <DialogFooter><DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose><Button type="submit" disabled={!connected || keeping || !upNext.length || !listName.trim()}>{keeping ? "Saving…" : "Save list"}</Button></DialogFooter>
         </form>
       </DialogContent>
-    {current && showCurrent && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
+    {current && showCurrent && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={!current.live && currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {upNext.length || autoplayUpcoming.length || autoplayFinding ? <div className="grid gap-2">
       {/* The list's status line, with the verb that saves it. */}

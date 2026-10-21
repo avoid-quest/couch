@@ -18,6 +18,9 @@ test("status vocabulary covers failures, stalls, retry countdowns, and the end o
   expect(playbackStatus(state("ended", {autoplay: {enabled: true, pending: true}}), true).label).toBe("Finding the next item…");
   expect(playbackStatus(state("ended"), true).label).toBe("Finished");
   expect(playbackStatus(state("paused"), true).label).toBe("Paused");
+  // The plain states are the transport's to say; status lines stay quiet for them.
+  expect(playbackStatus(state("playing"), true).quiet).toBe(true);
+  expect(playbackStatus(state("ended"), true).quiet).toBeUndefined();
 });
 
 test("Next can recover from loading or failure, but never acts while offline or unavailable", () => {

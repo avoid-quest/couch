@@ -14,7 +14,7 @@ mock.module("../src/client/sections/settings/SettingsLayout", () => ({
 mock.module("../src/client/sections/settings/settings-scope", () => ({
   useSettingsScope: () => ({ device: "Phone", couch: "Living room TV", host: false, administrator: true, role: "You're an admin" }),
 }));
-const { CouchUpdatesPage: UpdatesPage } = await import("../src/client/sections/settings/app/UpdatesPage");
+const { UpdatesPage } = await import("../src/client/sections/settings/app/UpdatesPage");
 
 function renderState(state: UpdateState) {
   const client = new QueryClient();

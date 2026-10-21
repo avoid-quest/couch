@@ -209,7 +209,7 @@ const hitContext = (hit: SearchHit) => hit.meta.split(" · ").filter(part => par
 
 /** Sources stay readable even when a long artist or programme name fills the context line. */
 function HitSource({ hit, showSource = true }: { hit: SearchHit; showSource?: boolean }) {
-  return <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><MediaContext radio={hit.radio && { ...hit.radio, title: hit.radio.title === hit.title ? "Station details" : hit.radio.title }} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />{hit.collection && <span>{hit.collection}</span>}</div>;
+  return <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />{hit.collection && <span>{hit.collection}</span>}</div>;
 }
 
 /** The closest match, laid out like Home's hero at a smaller size: artwork, title, meta, when it ends, then its verbs. */
@@ -220,7 +220,7 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
   const queue = hit.actions.find(action => action.label === "Queue");
   const save = hit.actions.find(action => action.label === "Save" || action.label === "Saved");
   const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action !== save && action.label !== hit.primary.label));
-  const time = hit.live ? "Live" : !hit.collection && hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
+  const time = !hit.live && !hit.collection && hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
   return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid gap-x-8 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
     <div aria-hidden="true" className="h-40 min-w-0 md:h-48 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shapeOf(hit)])} /></div>
     <div className="grid min-w-0 gap-1">

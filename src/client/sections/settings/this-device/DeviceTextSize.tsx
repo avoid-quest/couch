@@ -7,13 +7,13 @@ import { saveRemoteInterfaceSize, useRemoteInterfaceSize } from "../../../interf
 
 const sizeChoices = interfaceSizes.map(size => ({ value: String(size.value), label: size.label }));
 
-/** Text size on this device only. A TV's text size is the Couch's, in Display. */
+/** Text size on this device only. A TV's text size is the Couch's, in Settings → TV. */
 export function DeviceTextSize() {
   const size = useRemoteInterfaceSize();
   const [unsaved, setUnsaved] = useState(false);
   const change = async (value: InterfaceSize) => setUnsaved(!await saveRemoteInterfaceSize(value));
   return <>
-    <SettingsRow label="Text size" description="On this device only. Doesn't affect video or subtitles.">
+    <SettingsRow label="Text size" description="Not video or subtitles.">
       <ChoiceGroup label="Text size on this device" value={String(size)} options={sizeChoices} onValueChange={value => void change(Number(value) as InterfaceSize)} />
     </SettingsRow>
     {unsaved && <Alert><AlertDescription>Applied, but couldn't save on this device.</AlertDescription></Alert>}

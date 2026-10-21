@@ -106,7 +106,7 @@ test("all hidden leaves customization reachable and does not render source queri
   preferences = defaultDiscoverRows.map(row => ({ ...row, shown: false }));
   const html = view();
   expect(html).toContain("All sections are hidden");
-  expect(html).toContain('href="/settings/device/discover"');
+  expect(html).toContain('href="/settings/home"');
   expect(html).not.toContain('aria-label="Shared sources"');
   expect(html).not.toContain('aria-label="Radio"');
   expect(html).not.toContain('aria-label="Sources"');

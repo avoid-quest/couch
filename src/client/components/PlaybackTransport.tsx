@@ -37,15 +37,15 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
 }
 
 /**
- * Secondary timing for what plays: "ends 21:42" in clock time, or "Live" for live media; nothing without
- * a length or once it has ended. The duration clock keeps a paused item's end time moving.
+ * Secondary timing for what plays: "ends 21:42" in clock time; nothing for live media, without a length or once
+ * it has ended. The duration clock keeps a paused item's end time moving.
  */
 export function useEndTime(state: ClientSessionState | null | undefined) {
   const playbackClock = usePlaybackClock();
   useDurationClock();
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   if (!state || !current || !["playing", "paused"].includes(state.player.status) && !(state.player.status === "loading" && state.player.buffering)) return undefined;
-  if (current.live || isRadio(current)) return "Live";
+  if (current.live || isRadio(current)) return undefined;
   const length = playbackClock.duration || current.duration || 0;
   return length ? `ends ${formatEndTime((length - playbackClock.position) / (state.player.speed || 1))}` : undefined;
 }
@@ -53,7 +53,7 @@ export function useEndTime(state: ClientSessionState | null | undefined) {
 /**
  * Position, the timeline and "−3:24 ends 20:59", only where a timeline means something: media that seeks,
  * or has a length to seek through once loaded (the slider stays, disabled, meanwhile). Live media that
- * can't seek reads "Live" alone: no bar, no position, no total. A hovering pointer reads the time under it.
+ * can't seek shows nothing: no bar, no position, no total. A hovering pointer reads the time under it.
  */
 export function PlaybackTimeline({ state, connected, run, pageFirst = false, compact = false, className }: Props & { pageFirst?: boolean; compact?: boolean; className?: string }) {
   const playbackClock = usePlaybackClock();
@@ -67,7 +67,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   const length = playbackClock.duration || current.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
   const canSeek = seekable && !!playbackClock.duration;
-  if (!canSeek && (live || !length)) return live ? <span data-live className={cn("text-sm text-muted-foreground", className)}>Live</span> : null;
+  if (!canSeek && (live || !length)) return null;
   const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0)) ?? [];
   const chapter = player.chapters?.findLast(item => item.position <= playbackClock.position);
   const max = canSeek ? playbackClock.duration! : length;
@@ -83,7 +83,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
     </div>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
-      <span className="shrink-0">{live ? <span data-live>Live</span> : length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
+      <span className="shrink-0">{!live && length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
     </div>
   </div>;
 }

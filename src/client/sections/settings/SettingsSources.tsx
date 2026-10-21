@@ -19,7 +19,7 @@ import { HiddenSettings } from "./sources/HiddenSettings";
 import { useSettingsScope } from "./settings-scope";
 import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
-// Capturing this device is in This device → Sharing; these are the Couch's own sources.
+// Sharing this device is on This device; these are the Couch's own sources.
 const sourcePages = ["iptv", "radio", "streaming-community"] as const;
 const plural = (count: number, one: string) => `${count.toLocaleString()} ${one}${count === 1 ? "" : "s"}`;
 

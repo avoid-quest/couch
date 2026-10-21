@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { savedSourceLabel } from "@/saved-source";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
+import { ContentBack } from "@/components/ContentBack";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { RelatedRadio } from "@/components/RelatedRadio";
 import { useSessionGate } from "@/session/session-context";
@@ -62,7 +62,7 @@ export function ItemPage() {
   const { search } = useLocation();
   const { kind, id } = readItemSearch(search);
   return <section data-page="Item" className="min-w-0 space-y-6">
-    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <><ContentBreadcrumb title="Item not found" /><PageHeader title="Item not found" /></>}
+    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <PageHeader back={<ContentBack />} title="Item not found" />}
   </section>;
 }
 
@@ -84,8 +84,7 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
   if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
-    <ContentBreadcrumb title="Details" />
-    {connected && !query.error ? <DetailSkeleton shape={kind === "radio" ? "square" : "video"} /> : <PageHeader title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />}
+    {connected && !query.error ? <><ContentBack radio={kind === "radio"} /><DetailSkeleton shape={kind === "radio" ? "square" : "video"} /></> : <PageHeader back={<ContentBack />} title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />}
     {query.error ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
       : !connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this item.</p>}
   </>;
@@ -98,10 +97,10 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
 }
 
 function DetailLayout({ collection, radio, ...header }: ComponentProps<typeof DetailHeader> & { collection?: PlaybackCollection; radio?: boolean }) {
-  return <>
-    <ContentBreadcrumb title={header.title} collection={collection} radio={radio} />
+  return <div className="grid gap-3">
+    <ContentBack title={header.title} collection={collection} radio={radio} />
     <DetailHeader {...header} />
-  </>;
+  </div>;
 }
 
 // Core says why a verb failed; without its answer, Couch wasn't reached.
@@ -116,7 +115,7 @@ function QueueDetails({ id }: { id: string }) {
   const action = useDetailAction();
   const item = state?.queue.find(entry => entry.id === id);
   const save = useForLaterToggle(item?.source.startsWith("web:") ? item.source.slice(4) : undefined, () => ({ kind: "queue", id }), action);
-  if (!item) return <><ContentBreadcrumb title="Details" /><PageHeader title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
+  if (!item) return <><PageHeader back={<ContentBack />} title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
   const radio = isRadio(item);
   return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} more={browserActions(queuePageUrl(item))} />

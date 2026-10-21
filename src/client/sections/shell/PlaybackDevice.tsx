@@ -144,7 +144,7 @@ export function useRememberCouchName(installationName?: string) {
   }, [device?.mode, device?.address, installationName]);
 }
 
-/** Settings → Couch connection in the app: This computer, the Couches it knows, or another Couch's address. */
+/** Settings → This device in the app: This computer, the Couches it knows, or another Couch's address. */
 export function AppCouchChoice({ installationName }: { installationName?: string }) {
   const device = usePlaybackDevice();
   const [dialog, setDialog] = useState<"confirmation" | "forget" | null>(null);

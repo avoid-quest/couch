@@ -271,7 +271,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           fullscreen at the right (including phones, where group gaps collapse). Up next shows only where it has something to open, and fullscreen only over a
           picture. Every tool is an icon. */}
       <div className="grid gap-1">
-        {current && <div data-player-status data-player-paused={player?.status === "paused" || undefined} className="flex min-h-10 items-start gap-2 pb-2 text-sm">
+        {/* Only what the transport can't say: work in progress, a problem, the end. */}
+        {current && !status.quiet && <div data-player-status className="flex min-h-10 items-start gap-2 pb-2 text-sm">
           {status.busy && <Spinner className="mt-0.5 shrink-0" role="presentation" aria-hidden="true" />}
           <div className="min-w-0 flex-1"><p role="status" className="font-medium">{status.label}</p>{status.detail && <p aria-live={player?.status === "loading" && state?.radioRetry ? "off" : "polite"} className="max-w-prose break-words text-muted-foreground">{status.detail}</p>}</div>
           {connected && player?.status === "unavailable" && state?.playback && <WhereItPlays state={state} connected={connected} run={run} label="Choose device" />}
@@ -283,11 +284,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           <div className="player-controls-scroll" onFocusCapture={event => event.target.scrollIntoView({ block: "nearest", inline: "nearest" })}>
             <div className="player-control-row [&_[data-size=icon-lg]]:size-11">
               {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst className="player-transport" />}
-              <div data-player-tools="sound" className="-ml-2.5 flex shrink-0 items-center gap-0.5">
+              {/* The now-playing bar's tools in its order (Volume, Where it plays, Up next), then the player's own. */}
+              <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
                 {state && <VolumeButton state={state} connected={connected} run={run} />}
                 {state && <WhereItPlays state={state} connected={connected} run={run} />}
-              </div>
-              <div data-player-tools="more" className="-mr-2.5 flex shrink-0 items-center gap-0.5">
                 {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
                 <Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" aria-expanded={panel !== null} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
                 {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}

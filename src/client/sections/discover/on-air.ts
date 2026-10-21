@@ -26,7 +26,7 @@ export function useOnAir(enabled = true, first: RadioStation[] = []) {
   const stations = [...first, ...favorites.data?.favorites ?? [], ...builtIn.data?.stations ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index);
   const programmesShown = connected && enabled;
   const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: programmesShown, refetchInterval: 60_000 });
-  // A show's expiresAt is when its data refreshes (about every 15 minutes), not when it ends, so on air reads "Live".
+  // A show's expiresAt is when its data refreshes (about every 15 minutes), not when it ends, so a show shows no end time.
   const show = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
   const playing = (station: RadioStation) => current?.kind === "radio" && (current.source === `radio:${station.id}` || current.source === station.url);
   return {

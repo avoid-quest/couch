@@ -87,7 +87,7 @@ window.runSavedBackRegression = async () => {
 // this device's capture, while the TV's own keyboard and pointer still can.
 const sharingLocalOnly = async () => {
   await click('[data-app-nav] a[href="/settings"]');
-  await click('[data-settings-page="sharing"]');
+  await click('[data-settings-page="device"]');
   const choice = (label: string) => [...document.querySelectorAll<HTMLElement>('[aria-label="What to share"] [role="radio"]')].find(item => item.textContent === label);
   const microphone = choice("Microphone or audio input"), screen = choice("Screen");
   assert(microphone && screen && !microphone.matches(":disabled"), "Sharing has no enabled capture choices; stop any existing capture first");
@@ -270,7 +270,7 @@ window.runTvNavigationRegression = async () => {
     assert(document.querySelector('[role="dialog"][data-state="open"]'), "Pairing overlay did not open");
     await key("Escape"); await wait(350);
     assert(!document.querySelector('[role="dialog"][data-state="open"]'), "Back did not close pairing overlay");
-    assert(location.pathname === "/settings/couch/devices" && document.activeElement?.textContent === "Pair a device", "Overlay Back did not return to its opener");
+    assert(location.pathname === "/settings/devices" && document.activeElement?.textContent === "Pair a device", "Overlay Back did not return to its opener");
     await key("Escape");
     assert(document.activeElement?.matches('[data-settings-page="devices"]'), "Back did not restore rail");
     await key("Escape");
@@ -306,7 +306,6 @@ window.runTvNavigationRegression = async () => {
     const pause = document.querySelector<HTMLButtonElement>('.player-page [data-play-button][aria-label="Pause"]');
     if (pause && !pause.disabled) { pause.click(); await until(() => video.paused); }
     assert(video.paused && video.duration > 20, "Pause a seekable video fixture before running");
-    assert(document.querySelector('[data-player-paused]'), "No large paused state");
     assert(!document.querySelector('[data-player-header], .player-page button[aria-label="Enter fullscreen"]'), "TV still has desktop chrome");
     await key("Escape");
     assert(control('[data-player-band]').getAttribute('data-player-band') === "hidden", "Back left instead of hiding HUD");

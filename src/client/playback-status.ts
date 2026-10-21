@@ -1,7 +1,10 @@
 import type { ClientSessionState } from "./session/session";
 import { offline } from "./copy";
 
-/** One vocabulary for the player, its compact bar, Home and Up next. */
+/**
+ * One vocabulary for the player, its compact bar, Home and Up next. `quiet` marks the plain states (Playing, Paused,
+ * Ready to play) that the Play/Pause glyph already says, so status lines show only what the transport can't.
+ */
 export function playbackStatus(state: ClientSessionState | null | undefined, connected: boolean, now = Date.now()) {
   if (!connected) return { label: "Offline", detail: offline(state?.installationName), busy: true };
   const player = state?.player;
@@ -16,5 +19,5 @@ export function playbackStatus(state: ClientSessionState | null | undefined, con
   if (player.status === "ended") return state?.autoplay?.enabled && state.autoplay.pending
     ? { label: "Finding the next item…", detail: "", busy: true }
     : { label: "Finished", detail: "Replay to play it again.", busy: false };
-  return { label: player.status === "paused" ? "Paused" : player.status === "playing" ? "Playing" : "Ready to play", detail: "", busy: false };
+  return { label: player.status === "paused" ? "Paused" : player.status === "playing" ? "Playing" : "Ready to play", detail: "", busy: false, quiet: true };
 }

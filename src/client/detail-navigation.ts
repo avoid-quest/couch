@@ -62,7 +62,7 @@ export function useDetailNavigation() {
         router.history.replace(location.href, { ...location.state, detailFocus: focus });
         router.history.flush();
       }
-      // An item or collection page keeps the section it was opened from: its tab, breadcrumb and Back's fallback.
+      // An item or collection page keeps the section it was opened from: its tab, back link and Back's fallback.
       void router.navigate({ href: keepSection(href, sectionForPath(location.pathname, location.searchStr)), viewTransition, state: { pageOpener: { href: location.href, index: location.state.__TSR_index } } });
     },
     back(fallback = "/search") {

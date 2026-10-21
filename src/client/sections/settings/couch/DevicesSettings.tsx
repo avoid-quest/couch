@@ -55,7 +55,7 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
   // an untitled section of its own would leave a gap that reads as an empty row.
   return <>
     <SettingsSection data-devices>
-      <SettingsRow label="New device" description={!manager ? "Only an admin can pair devices." : !remoteControlEnabled ? "Turn on Share on network in Network first."
+      <SettingsRow label="New device" description={!manager ? "Only an admin can pair devices." : !remoteControlEnabled ? "Turn on Share on network below first."
         : `Show a code to scan or type on the new device.${host && !administratorClaimed && paired === false ? " The first device you pair becomes the admin." : ""}`}>
         {manager && <Button ref={pairingRef} data-page-first variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
       </SettingsRow>
@@ -89,7 +89,7 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
     )}
     {identity.authority === "controller" && identity.claimAvailable && (
       <SettingsSection data-admin-claim>
-        <SettingsRow label="Admin code" htmlFor="administrator-code" description={`Shown on ${hostName} in Settings → Devices.`}>
+        <SettingsRow label="Admin code" htmlFor="administrator-code" description={`Shown on ${hostName} in Settings → Devices & network.`}>
           <form className="flex w-full flex-wrap items-center gap-2" onSubmit={claim}>
             <Input id="administrator-code" className="min-w-0 flex-1" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming.isPending} />
             <Button type="submit" disabled={claiming.isPending || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming.isPending ? "Checking…" : "Become admin"}</Button>

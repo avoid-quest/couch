@@ -8,7 +8,7 @@ import { apiSend } from "@/api/client";
 import { iptvGuideQuery, iptvLogoQuery } from "@/api/iptv";
 import { collectionPageSize } from "@/collection-pagination";
 import { BrowsePagination } from "@/components/BrowsePagination";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
+import { ContentBack } from "@/components/ContentBack";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PageHeader } from "@/components/PageHeader";
@@ -94,8 +94,7 @@ export function LiveTvPage() {
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
   return <section data-page="Live TV" className="min-w-0 space-y-6">
-    <ContentBreadcrumb title="Live TV" />
-    <PageHeader title="Live TV" />
+    <PageHeader back={<ContentBack />} title="Live TV" className="mb-0" />
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
     <FilterBar label="Live TV filters">
       <FilterSelect label="Group" value={group || allGroups} onChange={value => go({ page: 1, group: value === allGroups ? "" : value }, true)} options={[{ value: allGroups, label: "All groups" }, ...[...new Set([...(guide.data?.groups ?? []), ...group ? [group] : []])].map(name => ({ value: name, label: name }))]} />

@@ -35,12 +35,13 @@ export function RemotePage() {
   const ready = connected && allowed && !!target?.online && binding === targetId && state?.controlling === targetId;
   const send = (action: Action) => ready && targetId ? run(action, targetId) : Promise.resolve(false);
   const current = ready ? state?.queue.find(entry => entry.id === state.currentEntryId) : undefined;
+  const status = playbackStatus(state, ready);
   const volumeState = state && target ? { ...state, outputs: [{ deviceId: target.id, sound: true, picture: false }], systemAudio: undefined, player: { ...state.player, volume: target.volume } } : null;
-  if (tvPresentation) return <><PageHeader title="Remote" /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
+  if (tvPresentation) return <><PageHeader title="Remote" hidden /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
   // Laid out like the remote it stands in for: the TV, the pad, what plays, then text.
   return <div data-remote-page className="mx-auto grid w-full max-w-sm gap-8">
     {/* The current tab names the page, as Home's and Discover's do. */}
-    <PageHeader title="Remote" description="Control playback and browse on your TV." className="mb-0" />
+    <PageHeader title="Remote" hidden />
     <div className="grid gap-1">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>
         <SelectTrigger aria-label="TV to control" className="min-h-11 w-full"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
@@ -53,7 +54,7 @@ export function RemotePage() {
       <RemotePad connected={ready} onNavigate={key => send({ type: "navigate", deviceId: target.id, key })} />
       <section className="grid gap-4 border-t pt-6 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current ? <ContentLink href={queueItemLocation(current)} className="no-underline hover:underline">{current.title}</ContentLink> : ready ? "Nothing playing" : `Playback on ${target.name}`}</h2>{current && <p className="text-sm text-muted-foreground">{playbackStatus(state, ready).label}</p>}</div>
+          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current ? <ContentLink href={queueItemLocation(current)} className="no-underline hover:underline">{current.title}</ContentLink> : ready ? "Nothing playing" : `Playback on ${target.name}`}</h2>{current && !status.quiet && <p className="text-sm text-muted-foreground">{status.label}</p>}</div>
           <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
         </div>
         {current && <MediaContext creator={current.creator} collection={current.collection} radio={current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />}
@@ -65,7 +66,7 @@ export function RemotePage() {
       </section>
       <RemoteText key={target.id} field={ready ? state?.textField ?? null : null} connected={ready} send={(token, text, submit) => send({ type: "text", deviceId: target.id, token, text, submit })} />
     </>}
-    {!target && <Button variant="outline" className="justify-self-start" asChild><Link to="/settings/couch/devices">Open Devices</Link></Button>}
+    {!target && <Button variant="outline" className="justify-self-start" asChild><Link to="/settings/devices">Open Devices</Link></Button>}
   </div>;
 }
 

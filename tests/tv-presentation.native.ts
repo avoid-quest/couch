@@ -63,10 +63,10 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
     evidence.unpaired = await tvMode({ enabled: true }, false);
     assert.ok([401, 503].includes(evidence.unpaired.status), String(evidence.unpaired.status));
     await js('couchApp.deviceName("Test Couch")');
-    await loadURL.call(this, new URL('/settings/couch/general', url).href, options);
+    await loadURL.call(this, new URL('/settings/display', url).href, options);
     // The switch is enabled once this window is connected to its Core.
     for (let attempts = 0; await js('Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode")?.disabled ?? "missing"') !== ${override}; attempts++) {
-      assert(attempts < 50, 'Couch General settings must expose TV mode');
+      assert(attempts < 50, 'TV settings must expose TV mode');
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     evidence.setting = await js('({ checked: Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode").getAttribute("aria-checked"), disabled: Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode").disabled, text: document.body.innerText })');

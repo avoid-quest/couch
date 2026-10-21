@@ -1,18 +1,30 @@
-import type { ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Page or sub-page title with an optional back button and trailing actions. */
-export function PageHeader({ title, description, back, actions, as: Heading = "h1", id, className }: { title: ReactNode; description?: ReactNode; back?: { label: string; onClick: () => void }; actions?: ReactNode; as?: "h1" | "h2"; id?: string; className?: string }) {
+const backClassName = "-ml-2.5 justify-self-start text-muted-foreground";
+
+/** A quiet link to the page above this one ("‹ Discover"), over the page's own title. */
+export function BackLink({ label, to }: { label: string; to: string }) {
+  return <Button variant="ghost" asChild className={backClassName}><Link to={to}><ChevronLeft aria-hidden="true" />{label}</Link></Button>;
+}
+
+/**
+ * A page's h1, with an optional way back above it (a button, or a BackLink to the page above) and trailing actions. `hidden` keeps the h1 for screen readers
+ * and focus only: a tab or a rail item that is selected already names the page.
+ */
+export function PageHeader({ title, back, actions, hidden = false, as: Heading = "h1", id, className }: { title: ReactNode; back?: { label: string; onClick: () => void } | ReactElement; actions?: ReactNode; hidden?: boolean; as?: "h1" | "h2"; id?: string; className?: string }) {
+  const heading = <Heading id={id} tabIndex={-1} className={hidden ? "sr-only" : "min-w-0 flex-1 basis-48 text-3xl font-semibold tracking-tight break-words outline-none"}>{title}</Heading>;
+  if (hidden && !back && !actions) return heading;
   return (
-    <header className={cn("mb-8 flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3", back && "max-sm:grid max-sm:grid-cols-1", className)}>
-      {back && <Button variant="ghost" data-back className="-ml-2.5 justify-self-start text-muted-foreground" onClick={back.onClick}><ChevronLeft aria-hidden="true" />{back.label}</Button>}
-      <div className="min-w-0 flex-1 basis-48">
-        <Heading id={id} tabIndex={-1} className="text-3xl font-semibold tracking-tight break-words outline-none">{title}</Heading>
-        {description && <div className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">{description}</div>}
+    <header className={cn("mb-8 grid min-w-0 gap-2", className)}>
+      {isValidElement(back) ? back : back && <Button variant="ghost" data-back className={backClassName} onClick={back.onClick}><ChevronLeft aria-hidden="true" />{back.label}</Button>}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3">
+        {heading}
+        {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

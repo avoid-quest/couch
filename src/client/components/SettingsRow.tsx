@@ -24,7 +24,8 @@ export function SettingsSection({ title, description, children, className, ...pr
     <FieldSet className={cn("min-w-0 gap-2", className)} {...props}>
       {title && <FieldLegend className="mb-0 data-[variant=legend]:text-base font-medium">{title}</FieldLegend>}
       {description && <FieldDescription className="nth-last-2:mt-0 [[data-variant=legend]+&]:mt-0">{description}</FieldDescription>}
-      {Children.toArray(children).length > 0 && <div className="@container flex min-w-0 flex-col border-t [&>:not([data-slot=field])]:mt-4">{children}</div>}
+      {/* Only a heading needs a rule under it; an untitled section starts with its first row. */}
+      {Children.toArray(children).length > 0 && <div className={cn("@container flex min-w-0 flex-col [&>:not([data-slot=field])]:mt-4", (title || description) && "border-t")}>{children}</div>}
     </FieldSet>
   );
 }

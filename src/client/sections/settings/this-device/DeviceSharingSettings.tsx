@@ -13,7 +13,7 @@ export function DeviceSharingSettings() {
     { capability: "video", label: "Screen", description: "Other devices can show video on this device's screen." },
   ];
   // Consent belongs to this device: Core accepts it only from this device's own connection, never from an admin.
-  return <SettingsSection title="Let other devices use" description="Off by default when you join another Couch. Only this device can change these; admins can't. Playing here yourself and sharing from this device don't need them." data-tv-local-only>
+  return <SettingsSection title="Let other devices use" description="Only this device can change these." data-tv-local-only>
     {choices.map(({ capability, label, description }) => <SettingsRow key={capability} label={label} description={description}>
       <Switch aria-label={`Let other devices use ${label.toLowerCase()}`} checked={sharing[capability]} disabled={saving.isPending} onCheckedChange={enabled => saving.mutate({ capability: capability, enabled })} />
     </SettingsRow>)}

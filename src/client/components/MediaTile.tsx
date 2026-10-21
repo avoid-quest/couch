@@ -9,7 +9,7 @@ import { ItemMenu, useItemMenu, type MenuAction } from "./RowMenu";
 export const tileAspect = { poster: "aspect-[2/3]", square: "aspect-square", video: "aspect-video" } as const;
 export type TileShape = keyof typeof tileAspect;
 
-/** Films and series are posters, stations and albums squares, videos and episodes 16:9 frames. */
+/** Films and series are posters, stations and albums squares (their art cropped to fill), videos and episodes 16:9 frames. */
 export function tileShape(source: string | undefined, episode: boolean): TileShape {
   return source === "Radio" || source === "Bandcamp" ? "square" : ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"].includes(source ?? "") && !episode ? "poster" : "video";
 }
@@ -35,7 +35,7 @@ export function MediaTile({ title, meta, context, thumbnail, shape, children, cl
 } & Omit<ComponentProps<typeof Button>, "title" | "children" | "asChild" | "onClick">) {
   const options = useItemMenu(menu);
   const body = <>
-    <span data-tile-art className={cn("block h-(--tile-art) overflow-hidden bg-background", tileAspect[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className="aspect-auto size-full bg-background object-contain" /></span>
+    <span data-tile-art className={cn("block h-(--tile-art) overflow-hidden bg-background", tileAspect[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "square" ? "object-cover" : "object-contain")} /></span>
     {/* The caption takes the artwork's width; two title lines keep metadata aligned across the shelf. */}
     <span data-tile-caption className="grid w-0 min-w-full gap-0.5 px-1 pb-1">
       <span className={cn("line-clamp-2 min-h-[2.75em] text-base leading-snug font-medium break-words", options.shown.length && "pr-8 touch:pr-11")}>{title}</span>

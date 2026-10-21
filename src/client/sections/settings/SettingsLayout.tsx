@@ -4,19 +4,13 @@ import { PageHeader } from "@/components/PageHeader";
 import { useSessionGate } from "@/session/session-context";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { SettingsNav } from "./SettingsNav";
-import { useSettingsScope } from "./settings-scope";
 
-/** Settings rail and page title, under the scope it belongs to: this device or the shared Couch. */
-export function SettingsLayout({ section, title, children }: { section: SettingsPage; title?: string; children: ReactNode }) {
+/** Settings rail and page. The selected rail item names the page; a source's own page names itself under ‹ Sources. */
+export function SettingsLayout({ section, children }: { section: SettingsPage; children: ReactNode }) {
   const navigate = useNavigate();
-  const { tvPresentation, state } = useSessionGate();
-  const scope = useSettingsScope();
+  const { tvPresentation } = useSessionGate();
   const page = settingsPages[section];
   const source = section.startsWith("source-");
-  const owner = page.scope === "device" ? `Only on ${scope.device}`
-    : "group" in page && page.group === "Hardware" ? `Shared hardware on ${scope.couch}`
-    : section === "playback" ? `For ${state?.activeProfile?.name ?? "the active watching profile"}, on every device`
-    : `Shared by everyone on ${scope.couch}`;
   return (
     <section aria-label="Settings" data-page="Settings" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
       <SettingsNav active={section} />
@@ -29,7 +23,7 @@ export function SettingsLayout({ section, title, children }: { section: Settings
         if (document.activeElement !== navigation) return;
         event.preventDefault(); event.stopPropagation();
       }}>
-        <PageHeader title={title ?? page.label} description={<p data-settings-scope={page.scope}>{owner}</p>} back={source ? { label: "Sources", onClick: () => void navigate({ to: settingsPages.sources.path }) } : undefined} />
+        <PageHeader title={page.label} hidden={!source} back={source ? { label: "Sources", onClick: () => void navigate({ to: settingsPages.sources.path }) } : undefined} />
         <div className="flex min-w-0 flex-col gap-8">{children}</div>
       </div>
     </section>

@@ -62,7 +62,7 @@ function useShellValue() {
   const location = useLocation();
   const section = sectionForPath(location.pathname, location.searchStr) ?? "Home";
   const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
-  const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "general" : null);
+  const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "device" : null);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
   if (location.pathname === "/search") rememberedSearch.current = readSearchState(location.searchStr);
   const lastBrowsePath = useRef("/");
@@ -295,6 +295,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   // step with the page, including view-transition snapshots.
   const playerVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/now") });
   const remoteVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/remote") });
+  // Home's top item is what plays, with its own transport, whenever something does.
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
@@ -322,7 +323,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           <header ref={header} hidden={onPlayer} className="app-header group/header drag-region window-controls-inset sticky top-0 z-30 grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_minmax(14rem,22rem)] items-center gap-x-8 border-b bg-background px-(--gutter) py-3 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
             {/* On a phone the open search takes the whole row. */}
             <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
-              {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
+              {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
               {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep

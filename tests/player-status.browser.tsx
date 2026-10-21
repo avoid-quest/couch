@@ -71,7 +71,9 @@ export async function runPlayerStatusRegression() {
       });
       if (positions) assert(JSON.stringify(current) === JSON.stringify(positions), `${status}: transport moved`);
       positions = current;
-      assert(document.querySelector('[data-player-band] [data-player-status]'), `${status}: status moved outside band`);
+      // Playing and Paused are the transport's to say; every other status reads in the band.
+      if (status === "playing" || status === "paused") assert(!document.querySelector('[data-player-status]'), `${status}: plain status repeats the transport`);
+      else assert(document.querySelector('[data-player-band] [data-player-status]'), `${status}: status moved outside band`);
       assert(document.querySelector('[data-player-summary]'), `${status}: artwork summary disappeared`);
     }
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {

@@ -11,6 +11,7 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
+import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
@@ -45,6 +46,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   // The session invalidates ["providers"] and ["radio"] whenever any remote
   // changes favorites. Enqueue and play stay on the WebSocket session.
   const session = useOptionalSessionGate();
+  const details = useDetailNavigation();
   const queryClient = useQueryClient();
   const credentials = { origin, token };
   const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
@@ -101,8 +103,8 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
     const blocked = !connected || pending || reorder.isPending;
     const move = (offset: number) => { const plan = moveFavorite(favorites, favorite, offset); if (plan && !blocked) reorder.mutate(plan); };
-    // A station's page holds no Remove or ordering, so the row keeps its "…".
-    return <MediaRow context={favorite.kind === "provider" ? <MediaContext creator={favorite.item.creator} collection={favorite.item.collection} /> : <MediaContext radio={{id: favorite.item.id, title: "Station details"}} />} key={key(favorite)}
+    // A station's page holds no Remove or ordering, so the row keeps its "…", which opens its Details too.
+    return <MediaRow context={favorite.kind === "provider" ? <MediaContext creator={favorite.item.creator} collection={favorite.item.collection} /> : undefined} key={key(favorite)}
       artFit="contain"
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
@@ -111,6 +113,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         ? { label: "Open", onClick: () => onOpenProvider(favorite.item as ProviderItem), disabled: !connected || pending }
         : { label: "Play", onClick: () => void enqueue(favorite, true), disabled: !connected || !canPlay || pending }}
       menu={[
+        ...(favorite.kind === "radio" ? [{ label: "Details", run: () => details.open(itemLocation("radio", favorite.item.id)) }] : []),
         ...(browse ? [{ label: "Play", disabled: !connected || !canPlay || pending, run: () => void enqueue(favorite, true) }] : []),
         { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => void enqueue(favorite, true, deviceId) },
         { label: "Queue", disabled: !connected || pending, run: () => void enqueue(favorite, false) },
@@ -119,7 +122,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         { label: "Move down", disabled: blocked || !moveFavorite(favorites, favorite, 1), run: () => move(1) },
         { label: "Remove", disabled: !connected || pending, run: () => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); } },
       ]}>
-      {favorite.kind === "radio" ? <DurationBar live /> : favorite.item.kind === "media" && (favorite.item.duration != null || favorite.item.live) && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}
+      {favorite.kind === "provider" && favorite.item.kind === "media" && favorite.item.duration != null && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}
     </MediaRow>;
   };
 

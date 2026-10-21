@@ -97,7 +97,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
 
   return <section ref={section} aria-label="Lists">
     {!openId ? <>
-      <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
+      <PageHeader title="Lists" hidden actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
       {connected && cannotSave && <p className="mb-4 text-sm text-muted-foreground">{cannotSave}</p>}
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
@@ -148,7 +148,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
         <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
           <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow context={<MediaContext collection={entry.collection} creator={entry.creator} />} ref={drag.setNodeRef} style={drag.style}
             title={entry.title}
-            meta={entry.live ? "Live" : entry.duration != null ? formatDuration(entry.duration) : undefined}
+            meta={!entry.live && entry.duration != null ? formatDuration(entry.duration) : undefined}
             actions={<>
               <Button variant="ghost" aria-label={`Remove ${entry.title} from list`} disabled={disabled} onClick={() => void write(listPath(playlist.id), { revision: playlist.revision, operation: "remove", entryId: entry.id }).then(ok => {
                 // Focus the row that took this one's place, or Back.

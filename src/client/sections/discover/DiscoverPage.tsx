@@ -68,7 +68,7 @@ export function DiscoverPage() {
     {rows.filter(row => row.shown).map(row => <Fragment key={row.id}>{sections[row.id]}</Fragment>)}
     <Empty className="group-has-[section]/discover:hidden group-has-[[role=alert]]/discover:hidden group-has-[[data-nothing-saved]]/discover:hidden">
       <EmptyHeader><EmptyTitle>{rows.every(row => !row.shown) ? "All sections are hidden" : "Nothing to discover here yet"}</EmptyTitle>
-        <EmptyDescription>Choose sections in <ContentLink id="customize-discover" data-page-first href="/settings/device/discover">Settings</ContentLink>, or search for something to play.</EmptyDescription></EmptyHeader>
+        <EmptyDescription>Choose sections in <ContentLink id="customize-discover" data-page-first href="/settings/home">Settings</ContentLink>, or search for something to play.</EmptyDescription></EmptyHeader>
     </Empty>
   </section>;
 }
@@ -87,7 +87,7 @@ function OnAir() {
   return <Shelf loading={onAir.pending} title="Radio" label="Radio stations" href="/discover/radio">
     {onAir.pending ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-      <MediaTile context={<MediaContext radio={{id: station.id, title: "Station details"}} />} data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
+      <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
     </li>)}
   </Shelf>;

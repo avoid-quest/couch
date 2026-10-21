@@ -65,6 +65,7 @@ function RadioResults(props: Props) {
       return { id: `${title}:${station.id}`, source: title, radio: {id: station.id, title: station.name}, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
         primary: props.browse ? { label: "Open", href: itemLocation("radio", station.id), run: () => navigation.open(itemLocation("radio", station.id)) } : { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
+          ...(props.browse ? [] : [{ label: "Details", run: () => navigation.open(itemLocation("radio", station.id)) }]),
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
           { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(station, true, deviceId) },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },

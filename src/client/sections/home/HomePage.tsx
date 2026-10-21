@@ -14,6 +14,7 @@ import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/comp
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaTile, tileAspect, tileShape, type TileShape } from "@/components/MediaTile";
 import { Shelf } from "@/components/Shelf";
+import { PageHeader } from "@/components/PageHeader";
 import { DurationBar, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { PlaybackTransport } from "@/components/PlaybackTransport";
@@ -45,7 +46,6 @@ export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean
 // A shelf scrolls, so it holds more than fits; its heading opens the rest in Discover or Saved.
 const shelfLength = 12;
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const entryShape = (entry: QueueEntry): TileShape => isRadio(entry) ? "square" : tileShape(sourceLabel(entry.source), !!entry.collection);
 const historyMeta = (item: HistoryItem) => item.creator?.title === item.subtitle ? item.sourceLabel : [item.subtitle, item.sourceLabel].filter(Boolean).join(" · ");
 const recentMeta = (item: HistoryItem) => [historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ");
@@ -141,7 +141,7 @@ export function HomePage() {
   const recent = useKeptOrder(past.filter(item => !(item.position > 0 && !item.watched)), item => item.mediaId, historyReady, playingMedia).slice(0, shelfLength);
   const listed = useKeptOrder(allStations, station => station.id, hero !== undefined && !radioPending, hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id).slice(0, shelfLength);
   const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [], item => item.id, hero !== undefined && !later.isPending);
-  const stationMeta = (station: RadioStation) => showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode);
+  const stationMeta = (station: RadioStation) => showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode);
   const queries = [...(historyShown ? [history] : []), ...(hasRow("later") ? [later] : []), ...(hasRow("radio") ? [favorites] : [])];
   const filled: Record<HomeRowId, boolean> = { upNext: !!upcoming.length, continue: !!continued.length, radio: !!listed.length, later: !!savedMedia.length, recent: !!recent.length };
   const empty = hero === null && !builtIn.isLoading && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
@@ -151,10 +151,11 @@ export function HomePage() {
   const show = programme?.playbackId === player?.playbackId ? programme : null;
   // Where it plays reads "on {name}" here too, as in the now-playing bar and the player. A station without its show
   // reads Radio, as the player does, never its stream's host.
-  const playingMeta = [current?.subtitle, playbackStatus(state, connected).label, at?.elsewhere && `on ${at.name}`].filter(Boolean).join(", ");
+  const status = playbackStatus(state, connected);
+  const playingMeta = [current?.subtitle, !status.quiet && status.label, at?.elsewhere && `on ${at.name}`].filter(Boolean).join(", ");
 
-  const lead = !hero ? null : hero.kind === "playing" ? current && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={show?.title || current.title} meta={playingMeta}
-      time={live ? "Live" : remaining != null && length ? `ends ${formatEndTime(remaining, now)}` : undefined}>
+  const lead = !hero ? null : hero.kind === "playing" ? current && <HomeHero playing context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={show?.title || current.title} meta={playingMeta}
+      time={!live && remaining != null && length ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Button data-page-first size="lg" onClick={() => shell.changeSection("Now")}>Open player</Button>
       {/* Below md the transport starts its own line under the full-width verb, so it pulls back to the text's edge. */}
       {state && <PlaybackTransport state={state} connected={connected} run={run} className="max-md:-ml-2.5" />}
@@ -166,12 +167,12 @@ export function HomePage() {
       {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
       <Button variant="ghost" size="lg" aria-label={`Details ${hero.item.title}`} onClick={() => details.open(itemLocation("history", hero.item.mediaId))}>Details</Button>
     </HomeHero>
-    : <HomeHero context={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={hero.show.genre} time="Live">
+    : <HomeHero context={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={hero.show.genre}>
       <Button data-page-first size="lg" aria-label={on(`Play ${hero.station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(hero.station, true)}><Play aria-hidden="true" />{on("Play")}</Button>
     </HomeHero>;
 
   const shelves: Record<HomeRowId, ReactNode> = {
-    continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played" time={`${unfinished.length} unfinished`}>
+    continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played">
       {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="flex shrink-0 flex-col items-start gap-1">
         <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={historyMeta(item)} thumbnail={item.thumbnail}
           aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)}>
@@ -181,29 +182,29 @@ export function HomePage() {
       </li>)}
     </Shelf>,
 
-    upNext: !!upcoming.length && <Shelf title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}>
+    upNext: !!upcoming.length && <Shelf title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : undefined}>
       {plan.slice(0, shelfLength).map(({ entry, starts, seconds }, index) => <li key={entry.id} className="shrink-0">
-        <UpNextTile entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? entry.live ? "Live" : undefined : [formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`].filter(Boolean).join(", ")}
+        <UpNextTile entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? undefined : [formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`].filter(Boolean).join(", ")}
           verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />
       </li>)}
       {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
     </Shelf>,
 
-    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio" time={allStations.some(station => onAir(station.id)) ? "On air now" : plural(listed.length, "station")}>
+    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio">
       {listed.map(station => <li key={station.id} className="shrink-0">
-        <MediaTile context={<MediaContext radio={{id: station.id, title: "Station details"}} />} shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl}
+        <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl}
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>,
 
-    later: !!savedMedia.length && <Shelf title="For later" href="/saved" time={`${savedMedia.length} saved`}>
+    later: !!savedMedia.length && <Shelf title="For later" href="/saved">
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
           href={itemLocation("saved", item.id)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,
 
-    recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played" time={plural(recent.length, "title")}>
+    recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played">
       {recent.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
         <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={recentMeta(item)} thumbnail={item.thumbnail}
           href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
@@ -212,7 +213,7 @@ export function HomePage() {
   };
 
   return <section data-page="Home" aria-label="Home" className="grid gap-12">
-    <h1 className="sr-only">Home</h1>
+    <PageHeader title="Home" hidden />
     {historyShown && history.error && <Alert variant="destructive"><AlertDescription>{hasRow("continue") ? "Couldn't load Continue." : "Couldn't load Played recently."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("radio") && favorites.error && <Alert variant="destructive"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
@@ -245,15 +246,24 @@ function UpNextTile({ entry, meta, disabled, onPlay, verbs }: { entry: QueueEntr
  * muted meta line, the time it ends (the largest text after the title), then its verbs. Narrow screens stack it,
  * with the primary verb full-width. Its verbs are a row, so Up and Down pass between it and the shelves.
  */
-function HomeHero({ thumbnail, shape, title, meta, context, time, children }: { thumbnail?: string; shape: TileShape; title: string; meta?: string; context?: ReactNode; time?: string; children: ReactNode }) {
-  return <section data-home-hero aria-label={title} className="grid gap-x-12 gap-y-6 border-b pb-8 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:items-center md:pb-12">
+function HomeHero({ thumbnail, shape, title, meta, context, time, playing = false, children }: { thumbnail?: string; shape: TileShape; title: string; meta?: string; context?: ReactNode; time?: string; playing?: boolean; children: ReactNode }) {
+  // While it shows what plays, on screen, it stands in for the now-playing bar, which hides (index.css) until it scrolls away.
+  const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!playing || !root.current) return;
+    const html = document.documentElement;
+    const observer = new IntersectionObserver(([entry]) => html.toggleAttribute("data-hero-playing", !!entry?.isIntersecting));
+    observer.observe(root.current);
+    return () => { observer.disconnect(); html.removeAttribute("data-hero-playing"); };
+  }, [playing]);
+  return <section ref={root} data-home-hero aria-label={title} className="grid gap-x-12 gap-y-6 border-b pb-8 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:items-center md:pb-12">
     {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
     <div aria-hidden="true" className="flex h-56 min-w-0 justify-center md:h-80 md:justify-start [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain object-left", tileAspect[shape])} /></div>
     <div className="grid min-w-0 gap-4">
       {meta && <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>}
       <h2 title={title} className="line-clamp-4 text-3xl leading-[1.08] font-semibold tracking-tight break-words md:text-5xl">{title}</h2>
       {context}
-      {time && <p className="text-sm text-muted-foreground tabular-nums">{time === "Live" ? "Live now" : time}</p>}
+      {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}
       <div data-nav-row className="mt-2 flex flex-wrap items-center gap-2 max-md:[&>[data-page-first]]:w-full">{children}</div>
     </div>
   </section>;

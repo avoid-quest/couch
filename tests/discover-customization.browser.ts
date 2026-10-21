@@ -1,4 +1,4 @@
-// Run in a paired scratch TV at /settings/device/discover. Build like tv-navigation.browser.ts.
+// Run in a paired scratch TV at /settings/home. Build like tv-navigation.browser.ts.
 // Uses the real settings, local storage, routes and Remote's navigation entry point; no playback starts.
 import { applyTvNavigation } from "../src/client/navigation";
 import { readDiscoverRows } from "../src/client/sections/discover/discover-rows";
@@ -13,7 +13,7 @@ const control = (selector: string) => {
 const click = async (selector: string) => { const element = control(selector); element.focus(); element.click(); await wait(); };
 const remote = async (key: Parameters<typeof applyTvNavigation>[0]) => { applyTvNavigation(key); await wait(); };
 const rows = () => JSON.parse(localStorage.getItem("couch.discover-rows") ?? "[]") as { id: string; shown: boolean }[];
-const settings = '[data-settings-content]';
+const settings = '[data-section-rows="discover"]';
 const switches = () => [...document.querySelectorAll<HTMLButtonElement>(`${settings} [role="switch"]`)];
 const reset = async () => { const button = [...document.querySelectorAll<HTMLButtonElement>(`${settings} button`)].find(button => button.textContent === "Reset to default")!; button.click(); await wait(); };
 const discover = async () => click('[data-app-nav] a[href="/discover"]');
@@ -85,9 +85,10 @@ window.runDiscoverCustomizationRegression = async () => {
   const home = localStorage.getItem("couch.home-rows");
   const checks: string[] = [];
   await reset();
-  control('[data-settings-page="discover"]').focus();
+  control('[data-settings-page="home"]').focus();
   await remote("select");
-  assert(document.activeElement === switches()[0], "Settings OK did not enter Discover controls");
+  assert(document.activeElement?.closest("[data-settings-content]"), "Settings OK did not enter its controls");
+  switches()[0]!.focus();
   await remote("select");
   assert(rows()[0]?.shown === false, "Remote OK did not hide Shared sources");
   await remote("right");

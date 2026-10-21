@@ -4,7 +4,7 @@ import { useSessionGate } from "@/session/session-context";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useCallback, useState } from "react";
 import { FilterBar, FilterChoice, FilterInput } from "@/components/ContentFilters";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
+import { ContentBack } from "@/components/ContentBack";
 import { PageHeader } from "@/components/PageHeader";
 import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
 import { SearchRadioResults } from "@/sections/find/SearchRadioResults";
@@ -34,8 +34,7 @@ export function RadioPage() {
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
   return <section data-page="Radio" className="min-w-0 space-y-6">
-    <ContentBreadcrumb title="Radio" />
-    <PageHeader title="Radio" />
+    <PageHeader back={<ContentBack />} title="Radio" className="mb-0" />
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
     <FilterBar label="Radio filters">
       <FilterChoice label="Source" value={source} onChange={source => void navigate({ href: radioBrowseLocation(source, 1, filter), resetScroll: false })} options={radioBrowseSources.map(value => ({ value, label: value }))} />
