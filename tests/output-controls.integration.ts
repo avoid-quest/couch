@@ -124,11 +124,14 @@ test("output controls agree with Core for own moves and foreign private replacem
     await until(() => f.actor.state.player.status === "playing");
     await check("Actor picture", { type: "output", deviceId: f.actorId, picture: true }, true);
     await check("Actor sound", { type: "output", deviceId: f.actorId, level: level(f.actorId) }, true);
-    await check("Move here: Actor", { type: "solo", deviceId: f.actorId }, true);
+    // Its row plays now, so it offers no Move here; Core still moves the whole destination here.
+    assert.equal(control(render(), "Move here: Actor"), undefined);
+    const solo = await f.actor.command({ type: "solo", deviceId: f.actorId });
+    assert.equal(solo.ok, true, solo.error);
     assert.deepEqual(f.actor.state.outputs, [{ deviceId: f.actorId, picture: true, sound: true, local: true }]);
 
     await f.actor.command({ type: "sharing", sharing: { audio: false, video: false } });
-    // The only output: Move here would change nothing, so it isn't offered.
+    // Private and the only output, its row still offers no Move here, and its own controls stay enabled.
     assert.equal(control(render(), "Move here: Actor"), undefined);
     for (const label of ["Actor volume", "Actor picture", "Actor sound"]) {
       const props = control(render(), label); assert.ok(props, label); assert.equal(!!props.disabled, false, label);
@@ -153,13 +156,18 @@ test("output controls agree with Core for own moves and foreign private replacem
     await f.other.command({ type: "output", deviceId: otherId, picture: true });
     await until(() => f.actor.state.outputs?.some(output => output.deviceId === otherId && output.picture) === true);
     await check("Other volume", { type: "output", deviceId: otherId, level: 35 }, true);
-    await check("Move here: Other", { type: "solo", deviceId: otherId }, false);
+    // Other plays here, so its row offers no Move here; Core refuses the move anyway.
+    assert.equal(control(render(), "Move here: Other"), undefined);
+    const replaced = await f.actor.command({ type: "solo", deviceId: otherId });
+    assert.equal(replaced.ok, false);
     await f.other.command({ type: "sharing", sharing: { audio: false, video: false } });
     await until(() => f.actor.state.devices?.find(device => device.id === otherId)?.sharing?.audio === false);
     await check("Other volume", { type: "output", deviceId: otherId, level: 45 }, false);
     f.other.socket.terminate();
     await until(() => f.actor.state.devices?.find(device => device.id === otherId)?.online === false);
-    for (const label of ["Other volume", "Other picture", "Other sound", "Move here: Other"]) assert.equal(control(render(), label)?.disabled, true, label);
+    for (const label of ["Other volume", "Other picture", "Other sound"]) assert.equal(control(render(), label)?.disabled, true, label);
+    // Offline, it still holds its output here, so its row offers no Move here.
+    assert.equal(control(render(), "Move here: Other"), undefined);
   } finally { await f.close(); }
 });
 
