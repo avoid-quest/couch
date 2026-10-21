@@ -76,11 +76,18 @@ export async function runPlayerStatusRegression() {
       else assert(document.querySelector('[data-player-audio-copy] [data-player-status]') && !document.querySelector('[data-player-band] [data-player-status]'), `${status}: status left the artwork's copy`);
       assert(document.querySelector('[data-player-summary]'), `${status}: artwork summary disappeared`);
     }
-    // Beside artwork the gear keeps its place at the top line's right, with no fullscreen, and the band keeps the bar's tools.
-    const labels = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(button => button.getClientRects().length).map(button => button.getAttribute("aria-label"));
-    const barTools = [...innerWidth < 640 ? [] : ["Volume"], "Up next", "Where it plays"];
-    assert(JSON.stringify(labels("[data-player-top] [data-player-picture-tools] button")) === JSON.stringify(["Playback"]), `Artwork top line tools: ${labels("[data-player-top] [data-player-picture-tools] button").join(", ")}`);
-    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    // The band's tools, left to right as shown, and the centre of what is shown in a slot.
+    const phone = innerWidth < 640;
+    const labels = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(button => button.getClientRects().length)
+      .toSorted((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(button => button.getAttribute("aria-label"));
+    const centre = (selector: string) => { const element = [...document.querySelectorAll(selector)].find(item => item.getClientRects().length); if (!element) return NaN; const rect = element.getBoundingClientRect(); return Math.round(rect.left + rect.width / 2); };
+    const topTools = () => labels('[data-player-top] button:not([aria-label^="Back"])');
+    // Beside artwork the gear is the top line's only tool and there is no fullscreen. Wide screens keep the bar's tools
+    // and leave fullscreen's slot empty under the gear; phones give that slot to Up next, after Where it plays.
+    assert(JSON.stringify(topTools()) === JSON.stringify(["Playback"]), `Artwork top line tools: ${topTools().join(", ")}`);
+    const artworkTools = phone ? ["Where it plays", "Up next"] : ["Volume", "Up next", "Where it plays"];
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(artworkTools), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    assert(centre('[data-player-top] [aria-label="Playback"]') === centre(phone ? '[data-player-tools] [aria-label="Up next"]' : "[data-player-tools] [data-player-last]"), "Artwork gear is not over the band's last slot");
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {
       const rect = button.getBoundingClientRect();
       assert(rect.left >= 0 && rect.right <= innerWidth, "A player tool requires horizontal scrolling");
@@ -92,13 +99,13 @@ export async function runPlayerStatusRegression() {
     assert(controls.every(rect => rect.left >= 0 && rect.right <= innerWidth && rect.width >= 44), "Video controls overflow or shrink touch targets");
     const ordered = controls.toSorted((a, b) => a.left - b.left);
     assert(ordered.every((rect, index) => index === 0 || rect.left >= ordered[index - 1]!.right), "Player touch targets overlap");
-    // Over a video the band's tools are exactly the now-playing bar's, Where it plays last; the gear and fullscreen are the
-    // top line's, at its right over the band's last two. Subtitles and Audio live in the gear's menu, not a button of their own.
-    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Player tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
-    assert(JSON.stringify(labels("[data-player-top] [data-player-picture-tools] button")) === JSON.stringify(["Playback", "Enter fullscreen"]), "Gear and fullscreen left the top line");
-    const centre = (selector: string) => { const rect = document.querySelector(selector)!.getBoundingClientRect(); return Math.round(rect.left + rect.width / 2); };
-    assert(centre('[data-player-top] button[aria-label="Enter fullscreen"]') === centre('[data-player-tools] button[aria-label="Where it plays"]')
-      && centre('[data-player-top] button[aria-label="Playback"]') === centre('[data-player-tools] button[aria-label="Up next"]'), "Top line tools don't line up with the band's last two");
+    // Over a video the band's tools are the now-playing bar's, then fullscreen last, in the slot where the bar has Open
+    // player (phones keep Where it plays and fullscreen beside the centred transport); the gear is the top line's, over
+    // fullscreen. Subtitles and Audio live in the gear's menu, not a button of their own.
+    const videoTools = [...phone ? [] : ["Volume", "Up next"], "Where it plays", "Enter fullscreen"];
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(videoTools), `Player tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    assert(JSON.stringify(topTools()) === JSON.stringify(["Playback"]), `Top line tools: ${topTools().join(", ")}`);
+    assert(centre('[data-player-top] [aria-label="Playback"]') === centre('[data-player-tools] [aria-label="Enter fullscreen"]'), "Gear is not over fullscreen");
     const transport = [...document.querySelectorAll<HTMLElement>('[aria-label="Playback controls"] button')].map(button => button.getBoundingClientRect());
     assert(Math.abs((transport[0]!.left + transport.at(-1)!.right) / 2 - innerWidth / 2) < 1, "Band transport is not centred");
     // Over a picture buffering is a spinner centred on it, its words for screen readers only.

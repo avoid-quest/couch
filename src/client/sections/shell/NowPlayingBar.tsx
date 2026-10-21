@@ -2,7 +2,7 @@ import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, type RefObject } from "react";
-import { ListMusic } from "lucide-react";
+import { ChevronUp, ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
@@ -48,10 +48,10 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
-  // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Up next, Where it plays at
-  // the band's right edge, each at the band's target (--player-target) and x; the timeline is the line along its top
-  // edge. Where it plays ends both everywhere. Phones (below sm, where the band drops Volume too) keep Play/Pause right
-  // beside it, where the band's Up next sits, so the right end reads the same; the player keeps the rest.
+  // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Up next, Where it plays,
+  // then Open player in the slot where the band has fullscreen, each at the band's target (--player-target) and x; the
+  // timeline is the line along its top edge. Phones (below sm, where the band drops Volume and Up next too) keep
+  // Play/Pause, Where it plays and, from 360px, Open player.
   const desktop = "max-sm:hidden";
   return <footer data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
     <PlaybackTimeline state={state} connected={connected} run={run} className="absolute inset-x-0 top-0 -translate-y-1/2 [&_[data-time-labels]]:hidden [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-transparent [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100" />
@@ -69,10 +69,13 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
       </div>
     </div>
     <PlaybackTransport state={state} connected={connected} run={run} moreClassName={desktop} />
-    <div className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5">
+    <div className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5 max-sm:gap-0">
       <VolumeButton state={state} connected={connected} run={run} className={desktop} />
       <Button data-panel="queue" variant="ghost" size="icon-lg" className={desktop} aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" /></Button>
       <WhereItPlays state={state} connected={connected} run={run} />
+      {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. Below 360px
+          it would leave the title under 90px and cut "on {device}", and the artwork and title open the player anyway. */}
+      <Button data-player-last variant="ghost" size="icon-lg" className="max-[360px]:hidden" aria-label="Open player" title="Open player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
     </div>
   </footer>;
 }

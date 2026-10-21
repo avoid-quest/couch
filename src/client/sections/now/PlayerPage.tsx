@@ -225,16 +225,14 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     const zone = event.currentTarget;
     if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && zone.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
   };
-  // The gear and fullscreen act on the picture, so they sit at the top line's right, as Prime Video's do and YouTube's
-  // fullscreen top line; the band keeps the now-playing bar's tools. Subtitles and Audio lead the gear's menu, then
-  // speed, quality, chapters and delay, as YouTube's; C still turns subtitles on and off. Its menu opens downward.
-  // Fullscreen: the window can leave it; the TV's never does, and artwork has nothing to fill.
-  const pictureTools = current && <div data-player-picture-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5 max-sm:gap-0 [&_[data-size=icon-lg]]:size-(--player-target)">
+  // The gear acts on the picture, so it sits at the top line's right, as Prime Video's settings do; the band keeps the
+  // now-playing bar's tools and fullscreen. Subtitles and Audio lead the gear's menu, then speed, quality, chapters and
+  // delay, as YouTube's; C still turns subtitles on and off. Its menu opens downward.
+  const gear = current && <div className="-mr-2.5 flex shrink-0 [&_[data-size=icon-lg]]:size-(--player-target)">
     <Popover open={panel === "settings"} onOpenChange={open => setPanel(open ? "settings" : null)}>
       <PopoverTrigger asChild><Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
       {settings && <PlaybackMenu {...settings} tracks={!audioOnly} clearBottom={bandHeight} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
     </Popover>
-    {!tvPresentation && (!artworkStage || fullscreen.fullscreen) && <Button variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
   </div>;
   const endsLine = ends && <p data-player-ends>{ends}</p>;
 
@@ -259,21 +257,21 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     {osd && statusView}
     {/* The top line shows and hides with the band. Over a video it is one line, as in YouTube's and Netflix's fullscreen:
         Back, the title (opening Details) with its relationship links under it, and at the right the end time, on the TV
-        the clock, then the gear and fullscreen. Phones move the end time under the title, which keeps its room. Beside
+        the clock, then the gear. Phones move the end time under the title, which keeps its room. Beside
         artwork it holds Back, a Remote's TV status and the gear, and every screen shows it while this device shares,
         for Stop sharing (docs/live-inputs.md). */}
     <div ref={topBand} data-player-top={shown ? "shown" : "hidden"} inert={!shown} hidden={!osd && !back && !sharing && !current} onClick={returnToPicture} className={cn("player-top absolute inset-x-0 top-0 z-20 grid pt-4 transition-opacity duration-200 motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
       {!osd && <div data-player-header className={cn("player-header drag-region window-controls-inset flex min-h-11 items-center gap-3 px-(--gutter)", playerTarget && "max-sm:flex-wrap max-sm:gap-y-0")}>
         {back}
         {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
-        <div className="ml-auto flex shrink-0 items-center gap-4"><LiveSharingStatus />{pictureTools}</div>
+        <div className="ml-auto flex shrink-0 items-center gap-4"><LiveSharingStatus />{gear}</div>
       </div>}
       {osd && <div data-player-heading className={cn("drag-region window-controls-inset grid items-center gap-x-3 px-(--gutter)", back ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]")}>
         {back}
         <h1 title={title} className="min-w-0 truncate text-lg font-semibold tracking-tight">{linkedTitle}</h1>
         <div className="flex shrink-0 items-center gap-4">
           <div className="flex items-baseline gap-4 text-sm text-muted-foreground tabular-nums empty:hidden">{sharing && <LiveSharingStatus />}{ends && <span className="contents max-sm:hidden">{endsLine}</span>}{tvPresentation && <DigitalClock />}</div>
-          {pictureTools}
+          {gear}
         </div>
         {(byline || context || ends) && <div className={cn("-mt-1.5 flex min-w-0 items-baseline gap-x-3 text-sm text-muted-foreground", back ? "col-start-2 col-end-4" : "col-span-full")}>{byline && <p className="min-w-0 truncate">{byline}</p>}{context}{ends && <span className="contents tabular-nums sm:hidden">{endsLine}</span>}</div>}
       </div>}
@@ -304,9 +302,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     {osd && state && !queueOpen && !panel && <NextUp state={state} run={run} />}
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={returnToPicture} className={cn("player-band z-20 pt-1 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", osd ? "player-video-controls" : "bg-background", !shown && "opacity-0")}>
       {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
-          bar's Volume, Up next and Where it plays, which ends both, so each sits at the bar's x. Every control is a ghost
-          icon (icon-lg) at the band's target (--player-target); the last pulls back (-2.5) so its glyph lines up with
-          the time left. */}
+          bar's Volume, Up next and Where it plays, then the last slot: fullscreen here, as on every player, where the bar
+          has Open player. So each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target
+          (--player-target); the last pulls back (-2.5) so its glyph lines up with the time left. */}
       <div className="grid gap-1">
         {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-controls-scroll" onFocusCapture={event => event.target.scrollIntoView({ block: "nearest", inline: "nearest" })}>
@@ -319,6 +317,12 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
               {/* Beside artwork, on wide screens, Up next is already on screen, so its button takes focus into it. */}
               <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
               {state && <WhereItPlays state={state} connected={connected} run={run} sideOffset={sideOffset} />}
+              {/* The window can leave fullscreen. Where nothing can fill the screen (artwork, the TV, which is always
+                  full) the slot stays empty, not a control that can never act, so the tools keep their x and the TV
+                  has no stop for it. */}
+              {!tvPresentation && (!artworkStage || fullscreen.fullscreen)
+                ? <Button data-player-last variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>
+                : <span data-player-last aria-hidden="true" className="size-(--player-target) shrink-0" />}
             </div>
           </div>
         </div>

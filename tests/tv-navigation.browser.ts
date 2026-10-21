@@ -307,14 +307,16 @@ window.runTvNavigationRegression = async () => {
     if (pause && !pause.disabled) { pause.click(); await until(() => video.paused); }
     assert(video.paused && video.duration > 20, "Pause a seekable video fixture before running");
     assert(!document.querySelector('[data-player-header], .player-page button[aria-label="Enter fullscreen"]'), "TV still has desktop chrome");
+    assert(document.querySelector('[data-player-tools] span[data-player-last]'), "TV lost fullscreen's empty slot");
     await key("Escape");
     assert(control('[data-player-band]').getAttribute('data-player-band') === "hidden", "Back left instead of hiding HUD");
     const before = video.currentTime;
     await key("ArrowRight"); await wait(500);
     assert(video.currentTime >= before + 8 && video.currentTime <= before + 12, "Hidden Right did not seek ten seconds");
     assert(document.activeElement?.getAttribute('aria-label') === "Playback position", "Hidden Right did not focus timeline");
-    // The gear sits at the top line's right: Up from the timeline reaches it, its menu opens downward, Back returns
-    // to it, and Down reaches the tool under it.
+    // The gear sits at the top line's right, over the band's last slot, which the TV leaves empty (it has no
+    // fullscreen): Up from the timeline reaches it, its menu opens downward, Back returns to it, and Down reaches the
+    // nearest tool, Where it plays.
     await key("ArrowUp");
     const gear = document.activeElement as HTMLElement;
     assert(gear?.matches('[data-player-top] button[aria-label="Playback"]'), "Up from the timeline did not reach the top line's gear");
@@ -324,7 +326,7 @@ window.runTvNavigationRegression = async () => {
     await key("Escape"); await wait(350);
     assert(document.activeElement === gear, "Playback Back lost the gear");
     await key("ArrowDown");
-    assert(document.activeElement?.getAttribute('aria-label') === "Where it plays", "Down from the gear did not reach the tool under it");
+    assert(document.activeElement?.getAttribute('aria-label') === "Where it plays", "Down from the gear did not reach Where it plays");
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/discover", "Player did not return to its opener");
     await key("Escape"); await key("Escape"); await key("Escape");
