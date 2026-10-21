@@ -80,6 +80,23 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (description) {
         await peer.connection.setRemoteDescription(description);
         if (!active()) return;
+        // Request the fullband music budgets from RFC 7587 section 3.1.1 after
+        // negotiation identifies the encodings: 64 kb/s mono, 128 kb/s stereo.
+        // Optional tuning must not block ICE or break a working older browser.
+        if (description.type === "answer") for (const sender of peer.connection.getSenders()) {
+          if (sender.track?.kind !== "audio") continue;
+          try {
+            const parameters = sender.getParameters();
+            if (!parameters.encodings.length) continue;
+            const opus = parameters.codecs.find(codec => codec.mimeType.toLowerCase() === "audio/opus");
+            if (!opus) continue;
+            // Opus defaults to mono when stereo is omitted, even if the input
+            // track has two channels (RFC 7587 section 6.1).
+            const bitrate = /(?:^|;)\s*stereo\s*=\s*1\s*(?:;|$)/i.test(opus.sdpFmtpLine ?? "") ? 128_000 : 64_000;
+            for (const encoding of parameters.encodings) encoding.maxBitrate = bitrate;
+            void sender.setParameters(parameters).catch(() => {});
+          } catch {}
+        }
         for (const queued of peer.candidates.splice(0)) { await peer.connection.addIceCandidate(queued); if (!active()) return; }
         if (description.type === "offer") {
           const answer = await peer.connection.createAnswer();

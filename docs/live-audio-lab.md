@@ -56,6 +56,14 @@ and 150 ms inserted delays. `COUCH_LAB_QUANTUM` selects 128, 256, 512 or 1024
 frames at 48 kHz. Changing it changes the simulated output environment; record
 it and recalibrate, rather than comparing unlike runs as an application fix.
 
+`COUCH_LAB_AUDIO_CPUS=10,11` optionally places JACK, PulseAudio, the source/
+recorder and witness on those CPUs. The browser, harness and other children use
+the remaining CPUs in the inherited allocation. All requested CPUs must already
+belong to that allocation, with at least one left for other work. The runner
+uses `taskset` and records this split in the backend and route identity. It does
+not reserve CPUs against unrelated processes or enable realtime scheduling.
+Use the same split for controls and candidates, and retain every xrun failure.
+
 The private Pulse daemon is explicitly configured for 48 kHz, matching JACK;
 system defaults must not silently introduce a 44.1 kHz conversion. The publisher
 has its own silent output sink so receiver startup does not share its sink.
@@ -70,6 +78,12 @@ source clock after changing its buffer. This is an Electron backend experiment,
 not a setting available to a phone website. The pinned Chromium
 [Pulse backend](https://github.com/chromium/chromium/blob/152.0.7977.130/media/audio/pulse/audio_manager_pulse.cc)
 honors this switch for both input and output buffer requests.
+
+`COUCH_LAB_APP_AUDIO_DEFAULTS=1` applies the application's shared Linux audio
+buffer policy in the browser workers. Explicit lab buffer settings take
+precedence. Without this option, workers retain Chromium's original defaults
+unless one of the explicit buffer settings is supplied. Each worker reports
+the effective switch, which is a request rather than a measured device buffer.
 
 For a bounded WebRTC buffering experiment, `COUCH_LAB_JITTER_MS=0` requests
 `RTCRtpReceiver.jitterBufferTarget=0` in `direct` mode before the fixed startup

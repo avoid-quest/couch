@@ -28,6 +28,10 @@ xvfb-run -a scripts/live-audio-network.sh run --profile control --clients 50 \
 Preflight with two clients and five steady seconds before scaling. For a soak,
 set `COUCH_SCALE_SECONDS=1800` and increase the wrapper's wall limit to include
 sequential admission, warmup, faults and cleanup. Runs must remain sequential.
+`COUCH_LAB_APP_AUDIO_DEFAULTS=1` applies the same Linux buffer policy as Main
+and records each browser's effective switch. Leave it unset for the original
+Chromium defaults. The fake microphone has its own capture timing, so this
+comparison cannot establish the application's real input latency.
 Alternatively, `COUCH_SCALE_TAIL_SECONDS=1800` keeps the same initial comparison
 and reconnect rounds, then adds a 15-second warmup and a 30-minute soak on those
 receivers before stopping capture. This tests sustained playback after churn;

@@ -36,9 +36,21 @@ const check = (source: string, couchApp = "undefined") => {
       streamChanged: (id, stream, error) => streamReports.push({ id, stream, error }),
     }));
     globalThis.RTCPeerConnection = class {
-      connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = [];
+      connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = []; senders = [];
       constructor(config) { this.config = config; peers.push(this); }
-      addTrack(track) { this.tracks.push(track); }
+      addTrack(track) {
+        this.tracks.push(track);
+        const peer = this;
+        const sender = { track, applied: [], parameters: { transactionId: "negotiation", encodings: [{ active: true }], codecs: [{ mimeType: "audio/opus", sdpFmtpLine: "minptime=10;useinbandfec=1" }], rtcp: { cname: "unchanged" } },
+          getParameters() { return structuredClone(this.parameters); },
+          async setParameters(parameters) {
+            assert.equal(peer.remoteDescription?.type, "answer", "configure only a negotiated sender");
+            this.applied.push(parameters); this.parameters = structuredClone(parameters);
+          },
+        };
+        this.senders.push(sender); return sender;
+      }
+      getSenders() { return this.senders; }
       async createOffer() { return { type: "offer", sdp: "offer" }; }
       async createAnswer() { return { type: "answer", sdp: "answer" }; }
       async setLocalDescription(description) { this.localDescription = description; }
@@ -69,7 +81,8 @@ const check = (source: string, couchApp = "undefined") => {
       getVideoTracks() { return this.tracks.filter(track => track.kind === "video"); }
       addTrack(track) { this.tracks.push(track); }
     };
-    const track = kind => ({ kind, stopped: false, stop() { this.stopped = true; }, addEventListener() {} });
+    let audioChannels = 1;
+    const track = kind => ({ kind, stopped: false, getSettings() { return kind === "audio" ? { channelCount: audioChannels } : {}; }, stop() { this.stopped = true; }, addEventListener() {} });
     const captureRequests = [], captures = [];
     const capture = async request => {
       captureRequests.push(request);
@@ -239,6 +252,62 @@ test("the capture can publish to another tab on the same device", () => check(`
   assert.equal(peers.length, 1);
   assert.deepEqual(peers[0].tracks.map(track => track.kind), ["video"]);
   assert.equal(signals[0].peerId, "other-tab");
+`));
+
+test("negotiated live audio requests 64 kb/s without changing video or other RTP parameters", () => check(`
+  const source = await session.start({ kind: "screen" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
+  await flush();
+  const audio = peers[0].senders.find(sender => sender.track.kind === "audio");
+  const video = peers[0].senders.find(sender => sender.track.kind === "video");
+  assert.equal(audio.applied.length, 0, "the offer does not yet identify negotiated encodings");
+  const original = audio.getParameters();
+  session.receive({ type: "liveSignal", peerId: "remote", signal: { description: { type: "answer", sdp: "answer" } } });
+  await flush();
+  assert.deepEqual(audio.applied, [{ ...original, encodings: [{ active: true, maxBitrate: 64000 }] }]);
+  assert.equal(video.applied.length, 0);
+  assert.equal(unreachable().length, 0);
+`));
+
+for (const behavior of ["reject", "throw", "stall", "no encodings"])
+  test(`optional audio tuning that can ${behavior} cannot interrupt signaling`, () => check(`
+  const source = await session.start({ kind: "microphone" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: false, sound: true }] });
+  await flush();
+  const sender = peers[0].senders[0]; let reads = 0, writes = 0;
+  sender.getParameters = () => { reads++; return { codecs: [{ mimeType: "audio/opus" }], encodings: ${behavior === "no encodings" ? "[]" : "[{ active: true }]"} }; };
+  sender.setParameters = () => {
+    writes++;
+    ${behavior === "throw" ? "throw new Error('Unsupported setting');" : behavior === "stall" ? "return new Promise(() => {});" : "return Promise.reject(new Error('Unsupported setting'));"}
+  };
+  session.receive({ type: "liveSignal", peerId: "remote", signal: { description: { type: "answer", sdp: "answer" } } });
+  session.receive({ type: "liveSignal", peerId: "remote", signal: { candidate: { candidate: "later ICE" } } });
+  await flush(); await flush();
+  assert.equal(reads, 1);
+  assert.equal(writes, ${behavior === "no encodings" ? 0 : 1});
+  assert.equal(peers[0].candidates.length, 1, "optional tuning does not hold the signaling queue");
+  assert.notEqual(peers[0].connectionState, "closed");
+  assert.equal(unreachable().length, 0);
+`));
+
+for (const { name, channels, codec, bitrate } of [
+  { name: "mono Opus with a two-channel capture", channels: 2, codec: { mimeType: "audio/opus", sdpFmtpLine: "minptime=10;useinbandfec=1" }, bitrate: 64000 },
+  { name: "a stereo source offered to a mono decoder", channels: 2, codec: { mimeType: "audio/opus", sdpFmtpLine: "sprop-stereo=1; stereo=0" }, bitrate: 64000 },
+  { name: "explicit Opus stereo", channels: 1, codec: { mimeType: "audio/opus", sdpFmtpLine: "minptime=10; stereo=1;useinbandfec=1" }, bitrate: 128000 },
+  { name: "Opus without fmtp", channels: undefined, codec: { mimeType: "audio/opus" }, bitrate: 64000 },
+  { name: "another codec", channels: 1, codec: { mimeType: "audio/PCMU" }, bitrate: undefined },
+]) test(`live audio uses the negotiated format for ${name}`, () => check(`
+  audioChannels = ${channels};
+  const source = await session.start({ kind: "microphone" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: false, sound: true }] });
+  await flush();
+  const sender = peers[0].senders[0];
+  sender.parameters.codecs = [${JSON.stringify(codec)}];
+  session.receive({ type: "liveSignal", peerId: "remote", signal: { description: { type: "answer", sdp: "answer" } } });
+  await flush();
+  assert.equal(sender.getParameters().encodings[0].maxBitrate, ${bitrate});
+  assert.equal(sender.applied.length, ${bitrate === undefined ? 0 : 1});
+  assert.equal(unreachable().length, 0);
 `));
 
 test("a hundred requested peers negotiate in paced batches and repeated announcements do not duplicate offers", () => check(`

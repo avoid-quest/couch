@@ -17,6 +17,9 @@ import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
+import { configureAudioBuffers } from "./audio";
+
+configureAudioBuffers(app.commandLine);
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.

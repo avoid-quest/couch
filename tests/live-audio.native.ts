@@ -66,6 +66,7 @@ const captureMaxFrames = durationFrames + tailFrames + 5 * rate;
 assert(captureMaxFrames * ((receivers + 1) * 4 + 64 / quantum) < 256 * 1024 * 1024,
   "Bounded presentation recordings exceed 256 MiB per stream; use fewer receivers or a shorter run");
 const packetMs = Number(process.env.COUCH_LAB_PACKET_MS ?? 10), leadMs = Number(process.env.COUCH_LAB_LEAD_MS ?? 40);
+const applicationAudioDefaults = process.env.COUCH_LAB_APP_AUDIO_DEFAULTS === "1";
 const outputCompensation = process.env.COUCH_LAB_OUTPUT_COMPENSATION !== "0";
 const jitterBufferTargetMs = process.env.COUCH_LAB_JITTER_MS === undefined ? null : Number(process.env.COUCH_LAB_JITTER_MS);
 const sourceBufferFrames = process.env.COUCH_LAB_SOURCE_BUFFER_FRAMES === undefined ? null : Number(process.env.COUCH_LAB_SOURCE_BUFFER_FRAMES);
@@ -100,6 +101,24 @@ const env = { ...inherited, JACK_DEFAULT_SERVER: `couch-lab-${process.pid}`, PUL
   XDG_CACHE_HOME: join(directory, "cache"), XDG_RUNTIME_DIR: join(directory, "runtime"),
   ...(prefix ? { JACK_DRIVER_DIR: join(prefix, "lib/x86_64-linux-gnu/jack"), LD_LIBRARY_PATH: [join(prefix, "lib/x86_64-linux-gnu"), join(prefix, "lib/x86_64-linux-gnu/pulseaudio"), join(prefix, "lib/pulse-17.0+dfsg1/modules"), process.env.LD_LIBRARY_PATH].filter(Boolean).join(":") } : {}),
 };
+// Optional placement within the caller's CPU allocation. Non-realtime JACK
+// can miss deadlines on a busy CPU even when other assigned cores are idle.
+const cpuPlacement = (() => {
+  const requested = process.env.COUCH_LAB_AUDIO_CPUS;
+  if (requested === undefined) return null;
+  assert(/^\d+(,\d+)*$/.test(requested), "Audio CPUs must be a comma-separated list");
+  const audio = requested.split(",").map(Number);
+  const allowed = /^Cpus_allowed_list:\s*(.+)$/m.exec(readFileSync("/proc/self/status", "utf8"))![1]!.trim().split(",").flatMap(range => {
+    const [first, last = first] = range.split("-").map(Number) as [number, number?];
+    return Array.from({ length: last - first + 1 }, (_, index) => first + index);
+  });
+  assert(new Set(audio).size === audio.length && audio.every(cpu => allowed.includes(cpu)), "Audio CPUs must be unique and within the inherited allocation");
+  const other = allowed.filter(cpu => !audio.includes(cpu));
+  assert(other.length, "Leave CPUs for the browser and harness");
+  const result = spawnSync("taskset", ["-apc", other.join(","), String(process.pid)], { stdio: "ignore", timeout: 2000 });
+  assert.equal(result.status, 0, "Could not place the harness threads on their declared CPUs");
+  return { allowed, audio, other };
+})();
 const processes: ChildProcess[] = [], logs = new Map<ChildProcess, string>();
 const closedProcesses = new Set<ChildProcess>();
 const processNames = new Map<ChildProcess, string>();
@@ -111,6 +130,7 @@ const appendLog = (name: string, value: string) => {
   writeFileSync(path, (previous + value).slice(-128_000));
 };
 const launch = (name: string, args: string[], extra: NodeJS.ProcessEnv = {}, node?: string) => {
+  if (cpuPlacement) args = ["taskset", "-c", (["jack", "pulse", "graph", "witness"].includes(name) ? cpuPlacement.audio : cpuPlacement.other).join(","), ...args];
   const command = node ? inNode(node, args) : args;
   const child = spawn(command[0]!, command.slice(1), { cwd: root, env: { ...env, ...extra }, detached: true, stdio: ["pipe", "pipe", "pipe"] });
   processes.push(child); logs.set(child, "");
@@ -273,7 +293,7 @@ try {
   let rendererDrainError: string | null = null;
   const jitterPreferences: unknown[] = [];
   let snapshotIngress: ((deadline?: number) => Promise<any>) | undefined;
-  const browserDiagnostics: unknown[] = [];
+  const browserDiagnostics: { name: string; audioBufferFrames: string | null; versions: unknown; context: unknown; certificatePin: unknown }[] = [];
   let rtcBefore: any[] = [], rtcAfter: any[] = [];
   const workers: { child: ChildProcess; js: (code: string, gesture?: boolean, deadline?: number) => Promise<any>; id: string }[] = [];
   if (mode !== "calibration") {
@@ -369,7 +389,7 @@ try {
           const message = JSON.parse(line.slice(10));
           if (message.ready) {
             ready = true;
-            browserDiagnostics.push({ name, versions: message.versions, context: message.context, certificatePin });
+            browserDiagnostics.push({ name, audioBufferFrames: message.audioBufferFrames, versions: message.versions, context: message.context, certificatePin });
             writeFileSync(join(directory, "browser-diagnostics.json"), JSON.stringify(browserDiagnostics, null, 2));
           }
           const request = requests.get(message.id);
@@ -494,7 +514,8 @@ try {
         verified: ownerMatches && sink?.properties?.["jack.client_name"] === port.split(":")[0] };
     });
   })();
-  const routeId = JSON.stringify({ mode, rate, quantum, packetMs, leadMs, outputCompensation, jitterBufferTargetMs, sourceBufferFrames, receiverBufferFrames,
+  const browserAudioBuffers = browserDiagnostics.map(({ name, audioBufferFrames }) => ({ name, frames: audioBufferFrames }));
+  const routeId = JSON.stringify({ mode, rate, quantum, cpuPlacement, packetMs, leadMs, outputCompensation, jitterBufferTargetMs, sourceBufferFrames, receiverBufferFrames, applicationAudioDefaults, browserAudioBuffers,
     network: network?.profile ?? null, recorderDelayFrames, audioBackend, applicationBuild,
     electron: JSON.parse(readFileSync(join(root, "node_modules/electron/package.json"), "utf8")).version, sendspin: "5.0.0", pulseRate: rate });
   const continuous = fixture === "continuous" ? createContinuousAnalyzer({ sampleRate: rate, seed, receiverIds: ids, durationFrames,
@@ -616,7 +637,7 @@ try {
     presentation, presentationScope, completePresentation, recording, evaluation, continuous: continuousAnalysis,
     jitterBufferPreference: { requestedMs: jitterBufferTargetMs, receivers: jitterPreferences, scope: "Browser preference only; readback does not prove actual occupancy or a maximum delay" },
     backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true, implementations: audioBackend,
-      requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },
+      requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames, applicationAudioDefaults, browserAudioBuffers, cpuPlacement },
     ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter,
       rendererAfterDrain, rendererDrainError, rendererCoverage, mediaPath, publisherHop: "Publisher and ingress share the server namespace; only receiver links are shaped" } : null,
     exploratory: true, applicationBuild, graph: logs.get(graph), graphHealth, witnessHealth, resources, ipc, network: network?.profile ?? null,

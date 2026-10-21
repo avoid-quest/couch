@@ -73,9 +73,9 @@ let activityMeasurements: ReturnType<typeof createActivityMeasurement>[] | null 
 const results: any = { schema: "couch-live-performance/2", startedAt: new Date().toISOString(), head: command(["git", "rev-parse", "HEAD"]).trim(),
   contract: { count, seconds, rounds, faultCounts, tailSeconds, warmupMs: 15000, observationMs: 5000, outputWindowFrames: 48000, minimumRms: .001, activityDrainMs: 1500,
     timing: "Harness monotonic observation time; PCM monitors have no source timestamps",
-    recoveryAllocationMs: 5000, hardRecoveryTimeoutMs: 45000, fullOutagePlayAtMs: 8000, capture: "looping 30-second 440+997 Hz fake microphone", route: "production direct WebRTC", qualified: false },
-  hashes: Object.fromEntries(["tests/live-audio-scale.native.ts", "tests/live-audio-scale-worker.ts", "build/core.mjs", "dist/index.html"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])),
-  admissions: [], faults: [], stages: [], functionalPassed: false, telemetryComplete: false, qualified: false };
+    recoveryAllocationMs: 5000, hardRecoveryTimeoutMs: 45000, fullOutagePlayAtMs: 8000, capture: "looping 30-second 440+997 Hz fake microphone", route: "production direct WebRTC", applicationAudioDefaults: process.env.COUCH_LAB_APP_AUDIO_DEFAULTS === "1", qualified: false },
+  hashes: Object.fromEntries(["tests/live-audio-scale.native.ts", "tests/live-audio-scale-worker.ts", "app/audio.ts", "build/core.mjs", "dist/index.html"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])),
+  admissions: [], faults: [], stages: [], browserAudioBuffers: [], functionalPassed: false, telemetryComplete: false, qualified: false };
 const resources: any[] = [];
 let lastResourceAt = performance.now(), lastTicks = new Map<string, number>(), highCpuSince = 0;
 const ticksPerSecond = Number(command(["getconf", "CLK_TCK"]));
@@ -213,7 +213,7 @@ try {
     createInterface({ input: child.stdout! }).on("line", line => {
       if (!line.startsWith("COUCH_SCALE ")) return;
       const value = JSON.parse(line.slice(12));
-      if (value.ready) { ready = true; results.browserVersions = value.versions; }
+      if (value.ready) { ready = true; results.browserVersions = value.versions; results.browserAudioBuffers.push({ index, frames: value.audioBufferFrames }); }
       const callback = pending.get(value.id); if (callback) { pending.delete(value.id); value.error ? callback.reject(new Error(value.error)) : callback.resolve(value.value); }
     });
     const request = (value: object) => new Promise<any>((resolve, reject) => {

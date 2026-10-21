@@ -3,9 +3,11 @@ import { app, BrowserWindow, session } from "electron";
 import { readFileSync } from "node:fs";
 import { X509Certificate } from "node:crypto";
 import { createInterface } from "node:readline";
+import { configureAudioBuffers } from "../app/audio";
 
 const config = JSON.parse(readFileSync(process.argv.at(-1)!, "utf8"));
 app.setPath("userData", config.profile);
+if (process.env.COUCH_LAB_APP_AUDIO_DEFAULTS === "1") configureAudioBuffers(app.commandLine);
 for (const flag of ["disable-background-timer-throttling", "disable-renderer-backgrounding", "use-fake-ui-for-media-stream"]) app.commandLine.appendSwitch(flag);
 if (config.capture) {
   app.commandLine.appendSwitch("use-fake-device-for-media-stream");
@@ -89,12 +91,14 @@ void app.whenReady().then(async () => {
         player:__scaleSession()?.state?.player, events:events.splice(0),omitted,errors,longTasks,longTaskMs,maxLongTaskMs,
         media:[...document.querySelectorAll('audio,video')].map(e=>({paused:e.paused,readyState:e.readyState,muted:e.muted,currentTime:e.currentTime})),
         sockets:sockets.map(s=>({path:new URL(s.url).pathname,readyState:s.readyState})),
-        peers:await Promise.all(peers.map(async(peer,index)=>({index,state:peer.connectionState,stats:peer.connectionState==='closed'?[]:[...(await peer.getStats()).values()].filter(s=>['inbound-rtp','outbound-rtp','media-source','candidate-pair'].includes(s.type))})))
+        peers:await Promise.all(peers.map(async(peer,index)=>({index,state:peer.connectionState,
+          senders:peer.connectionState==='closed'?[]:peer.getSenders().map(sender=>({kind:sender.track?.kind??null,encodings:sender.getParameters().encodings})),
+          stats:peer.connectionState==='closed'?[]:[...(await peer.getStats()).values()].filter(s=>['inbound-rtp','outbound-rtp','media-source','candidate-pair'].includes(s.type))})))
       })
     };
   })();` });
   await win.loadURL(config.origin + "/settings/device/sharing");
-  reply({ ready: true, versions: process.versions });
+  reply({ ready: true, versions: process.versions, audioBufferFrames: app.commandLine.getSwitchValue("audio-buffer-size") || null });
   createInterface({ input: process.stdin }).on("line", async line => {
     let request: { id: number; code?: string; close?: boolean; profile?: "start" | "stop" } | undefined;
     try {

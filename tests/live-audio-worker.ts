@@ -3,6 +3,7 @@ import { app, BrowserWindow, session } from "electron";
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { X509Certificate } from "node:crypto";
+import { configureAudioBuffers } from "../app/audio";
 
 const config = (() => {
   try { return JSON.parse(readFileSync(process.argv.at(-1)!, "utf8")); }
@@ -15,6 +16,7 @@ if (config.audioBufferFrames !== null && config.audioBufferFrames !== undefined)
   if (![128, 256, 512, 1024].includes(config.audioBufferFrames)) throw new Error("Invalid lab audio buffer size");
   app.commandLine.appendSwitch("audio-buffer-size", String(config.audioBufferFrames));
 }
+if (process.env.COUCH_LAB_APP_AUDIO_DEFAULTS === "1") configureAudioBuffers(app.commandLine);
 // Electron must finish evaluating the main ESM before it emits ready.
 void app.whenReady().then(async () => {
 if (config.certificatePin) session.defaultSession.setCertificateVerifyProc(({ hostname, certificate }, callback) => {
@@ -63,18 +65,20 @@ await win.webContents.executeJavaScript(`(() => {
     const candidate = id => pick(report.get(id), ['id', 'address', 'port', 'protocol', 'candidateType', 'relayProtocol', 'networkType']);
     return {
       connectionState: peer.connectionState, iceConnectionState: peer.iceConnectionState,
+      senders: peer.connectionState === 'closed' ? [] : peer.getSenders().map(sender => ({ kind: sender.track?.kind ?? null, encodings: sender.getParameters().encodings })),
       selectedPairs: pairs.map(pair => ({ ...pick(pair, ['id', 'state', 'nominated', 'bytesSent', 'bytesReceived', 'currentRoundTripTime']),
         selectedBy: selectedIds.includes(pair.id) ? 'transport.selectedCandidatePairId' : 'nominated-succeeded',
         local: candidate(pair.localCandidateId), remote: candidate(pair.remoteCandidateId) })),
       codecs: stats.filter(item => item.type === 'codec').map(item => pick(item, ['id', 'mimeType', 'clockRate', 'channels', 'sdpFmtpLine'])),
       media: stats.filter(item => item.type === 'inbound-rtp' || item.type === 'outbound-rtp').map(item => pick(item,
-        ['id', 'type', 'kind', 'codecId', 'bytesReceived', 'bytesSent', 'packetsReceived', 'packetsSent', 'packetsLost', 'jitter',
-         'totalSamplesReceived', 'concealedSamples', 'silentConcealedSamples', 'concealmentEvents', 'jitterBufferDelay', 'jitterBufferEmittedCount', 'totalAudioEnergy'])),
+        ['id', 'timestamp', 'ssrc', 'type', 'kind', 'codecId', 'bytesReceived', 'bytesSent', 'packetsReceived', 'packetsSent', 'packetsLost', 'jitter',
+         'totalSamplesReceived', 'concealedSamples', 'silentConcealedSamples', 'concealmentEvents', 'jitterBufferDelay', 'jitterBufferEmittedCount',
+         'insertedSamplesForDeceleration', 'removedSamplesForAcceleration', 'totalAudioEnergy'])),
     };
   }));
 })()`);
 const reply = (value: unknown) => process.stdout.write(`COUCH_LAB ${JSON.stringify(value)}\n`);
-reply({ ready: true, versions: process.versions, context: await win.webContents.executeJavaScript("({ origin: location.origin, isSecureContext, cryptoSubtle: !!globalThis.crypto?.subtle })") });
+reply({ ready: true, versions: process.versions, audioBufferFrames: app.commandLine.getSwitchValue("audio-buffer-size") || null, context: await win.webContents.executeJavaScript("({ origin: location.origin, isSecureContext, cryptoSubtle: !!globalThis.crypto?.subtle })") });
 win.webContents.on("render-process-gone", (_event, details) => { console.error("Renderer exited", details); app.exit(1); });
 win.webContents.on("unresponsive", () => { console.error("Renderer unresponsive"); app.exit(1); });
 createInterface({ input: process.stdin }).on("line", async line => {
