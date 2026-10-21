@@ -92,6 +92,11 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></SessionGateContext>);
     await wait(500);
     if (!host.querySelector("[data-now-playing]")) throw new Error(`No fixture bar: ${host.textContent}`);
+    // The bar is as tall as its tallest item (the artwork or a 44px control) plus its padding: two tight text lines.
+    const bar = host.querySelector<HTMLElement>("[data-now-playing]")!;
+    const padding = parseFloat(getComputedStyle(bar).paddingTop) + parseFloat(getComputedStyle(bar).paddingBottom) + parseFloat(getComputedStyle(bar).borderTopWidth);
+    const tallest = Math.max(...[...bar.querySelectorAll<HTMLElement>('button[aria-hidden="true"], [data-size="icon-lg"]')].filter(item => item.checkVisibility()).map(item => item.getBoundingClientRect().height));
+    if (bar.getBoundingClientRect().height > tallest + padding + 1) failures.push(`The bar is ${bar.getBoundingClientRect().height}px, taller than its ${tallest}px items`);
     for (let i = 0; i < 3; i++) {
       if (i === 0) barNames = shared("[data-now-playing]");
       // The title and the bar's last slot open the player alike.

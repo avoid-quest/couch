@@ -71,15 +71,18 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const desktop = "max-sm:hidden";
   return <footer ref={bar} data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
     <PlaybackTimeline state={state} connected={connected} run={run} className="absolute inset-x-0 top-0 -translate-y-1/2 [&_[data-time-labels]]:hidden [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-transparent [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100" />
+    {/* Two tight lines beside a 2.5rem artwork, as a mini-player's: the bar is as tall as its 44px controls. The title
+        is the control, across the whole line, and the artwork a pointer target for it; the line under it keeps its own
+        links, so they sit outside the title's button. Those links drop their row height here and keep a 24px hit
+        area that doesn't push the line apart. */}
     <div className="flex min-w-0 items-center gap-3 max-sm:pr-4">
-      {/* The title is the control; the artwork is a larger pointer target for it. */}
-      <button type="button" tabIndex={-1} aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted hover:opacity-80 sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full" onClick={() => onOpen()}>{artwork}</button>
-      <div className="min-w-0">
-        <Button variant="link" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
+      <button type="button" tabIndex={-1} aria-hidden="true" className="size-10 shrink-0 overflow-hidden bg-muted hover:opacity-80 [&_img]:size-full [&_img]:object-contain [&>*]:size-full" onClick={() => onOpen()}>{artwork}</button>
+      <div className="grid min-w-0 flex-1">
+        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start p-0 text-left text-sm leading-5 font-medium touch:min-h-0" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-xs leading-4 text-muted-foreground">
           {at?.elsewhere && <PlaysOn at={at} />}
-          <MediaContext creator={current.creator} collection={current.collection} radio={radio && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} className="min-w-0 shrink text-xs" />
+          <MediaContext creator={current.creator} collection={current.collection} radio={radio && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} className="min-w-0 shrink flex-nowrap overflow-x-clip text-xs whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1" />
           <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
         </div>
       </div>
