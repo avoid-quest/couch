@@ -74,7 +74,8 @@ keeps the tint.
 
 `html` font size is `clamp(16px, 1.25vw, 24px)`, so rem sizes scale every
 screen alike. Inter Tight throughout; titles semibold with tight tracking,
-metadata small, muted and tabular.
+metadata small, muted and tabular. `index.html` preloads its latin file, so the
+first paint is already in it.
 
 | Role | Classes |
 | --- | --- |
@@ -128,7 +129,8 @@ custom.
 ([Shell](design/shell.md#search-field)): a field that scopes a search and
 suggests as you type needs a listbox the focus never leaves, which a menu or a
 Popover over a field can't give a remote typing into it. Couch's copy has no
-surface of its own (the header draws it), `h-8 text-sm` rows (44px on touch),
+surface of its own (the header search gives it the menus' ground under the
+field, or the screen's), `h-8 text-sm` rows (44px on touch),
 headings as the menus' labels, and a selected row that inverts like a menu's
 highlight, at once. The field is Couch's own input as the combobox, not
 `CommandInput`, so the TV's Type on TV and the `#media-search` hooks keep it.

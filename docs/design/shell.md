@@ -34,6 +34,19 @@ shortcuts at the right; the TV adds a small clock. The current tab is
 underlined. The header publishes its height as `--top-bar` so scroll padding
 keeps focus clear of it. Below `lg` a TV centres its tabs on a second row.
 
+Its geometry holds from page to page: the search field fills the right column
+(up to 22rem with Keyboard shortcuts), tokens or not, and on Remote, whose keys
+drive the TV, Keyboard shortcuts keeps its slot unseen. Remote shows while the
+Couch has a TV, counting the TVs this browser has seen (`knownTvs`), since Core
+forgets which devices are TVs when it restarts.
+
+**Offline**, the mark is hollow, and the right cluster says "Reconnecting…"
+with a Spinner before the search, as sharing does (the Spinner alone on a
+phone); the shell's `sr-only` status and the Couch switch's name carry it for
+screen readers. Nothing pushes the page down. Only the app pointed at another
+Couch keeps a line under the header, for its Try again and Use this computer.
+An updated Couch and a player error keep their line too.
+
 **Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Discover, Saved,
 Remote while the Couch has a TV, Settings; lucide icons over labels), and the
 top bar is the Couch switch then the search field. A narrow TV undoes
@@ -48,34 +61,38 @@ publishing device: another device's Remote can't use it.
 
 ## Search field
 
-`HeaderSearch`: a shadcn `InputGroup` with a Search button, up to 16rem (22rem
-while it holds tokens), and a shadcn `Command` (cmdk) palette under it. `/`
+`HeaderSearch`: a shadcn `InputGroup` with a Search button, filling the
+header's right column, and a shadcn `Command` (cmdk) palette under it. `/`
 focuses it from any page; a fine pointer sees a `/` hint. Focused, it inverts;
 while the palette is open the field keeps a white edge instead and the
 palette's selected row is the one white thing (focus stays in the field; the
 row is its `aria-activedescendant`).
 
-**Where it opens.** On a desktop the palette drops under the field, joined to
-the header's line (`border-x border-b`, no shadow). On a phone it fills the
-screen under the header, the field takes the whole row and Cancel closes it.
+**Where it opens.** On a desktop the palette is the field's own list: 4px
+under it, at its left edge and width, on the menus' ground (`bg-popover`,
+rounded, no border or shadow), so the eye stays where the typing is. On a phone
+it fills the screen under the header, the field takes the whole row and Cancel
+closes it.
 On the TV it fills the screen too: OK on the field opens it (arrows pass a
 closed field, which is a plain field to the remote), a phone's Remote types
 into it ([Type on TV](remote.md#type-on-tv)), and the typed query reads large
 in its first row.
 
-**Empty**, it lists columns the arrows cross (Up/Down within, Left/Right
-between): Search in (the kinds), Sources (the providers; the radio lists and
-shared sources answer when typed), Recent searches (the last six of eight,
-`search-recents.ts`) and Continue (recently played). On a phone the kinds and
-sources are a wrapping line of chips. Nothing is selected until an arrow, so
-Enter still submits.
+**Empty**, it lists Search in (the kinds, as a wrapping line of chips that
+Left and Right move along), Recent searches (the last six of eight,
+`search-recents.ts`) and Continue (recently played, with artwork). The sources
+aren't listed, since Discover has them; typing a source's name offers it. On
+the TV they are columns the arrows cross (Up/Down within, Left/Right between).
+Nothing is selected until an arrow, so Enter still submits.
 
 **Typing** selects the query row ("jazz in Music"), then suggests only what
 the client already holds, once typing pauses (`useDebouncedValue`, 120 ms):
-the scopes the text names, matching recent searches, Saved and played titles
-from the react-query caches, and cached stations. It never asks a source; the
-full search runs on the results page. A scope narrows the suggestions
-(stations only for radio, a source only its own titles).
+the scopes the text names, matching recent searches, then up to three each of
+Saved, Played and Stations, each with its artwork over where it comes from,
+read from the react-query caches (for later, saved channels and series,
+history, favourite and recent stations, the avoid radio list). It never asks a
+source or Core; the full search runs on the results page. A scope narrows the
+suggestions (stations only for radio, a source only its own titles).
 
 **Tokens.** A kind and a source become tokens in the field: choose one in the
 palette (choosing it again removes it), or type its name or short form (`film`,
@@ -90,14 +107,18 @@ without a home (YouTube, Bandcamp, SoundCloud) scopes the field to itself
 **Enter** does the selected row: the query opens `/search?q=…` with its scope
 (the first search pushes, later ones replace); a recent search runs again; a
 saved or played title opens its Details; a station plays; a pasted link's
-first row plays it ("Open page" and "Choose how to play" follow). A Spinner
-replaces the Search icon while sources answer.
+first row plays it ("Open page" and "Choose how to play" follow), then the
+field empties and lets go. Until the page's title resolves, a played link is
+named by its address ("youtube.com/watch?v=…"). Every submission closes the
+palette, and a page that changes under it (a played link opening the player)
+closes it too. A Spinner replaces the Search icon while sources answer.
 
 - On results, Enter on the unchanged query plays the closest match when its
   press plays, else focuses it. Keys typed outside a control on the results
   page continue the query.
-- Off the TV, Esc clears the field, then closes the palette and leaves it. On
-  the TV, Back closes the palette, then stays Back.
+- Off the TV, Esc in the open palette clears the field, then closes the
+  palette and leaves it; after a search, with the palette closed, it just
+  leaves the field. On the TV, Back closes the palette, then stays Back.
 
 ## Couch switch
 

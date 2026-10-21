@@ -162,8 +162,12 @@ press is disabled.
 row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll
 work natively. Search kinds and Discover's shelves use it too.
 
-**`MediaArtwork`** keeps artwork contained; without any it draws a hairline
-frame with the title set in muted type (a folder for collections).
+**`MediaArtwork`** keeps artwork contained. Without any it is a cover set in
+type: the muted fill with the title large (semibold, 13% of the frame's width,
+three lines at most) at its top left, so a poster, a square and a frame each
+read as the item's own cover; a frame under 8rem (a row's, the bar's or a
+suggestion's thumbnail) holds the title's first letter instead, and a
+collection a folder.
 
 Every named relationship with a known destination (channel, artist, album,
 series, station, source) is an internal link (`ContentLink`, `MediaContext`),
@@ -199,8 +203,8 @@ Turning a page moves focus to the list's top.
 
 `ContentBreadcrumb` (shadcn's Breadcrumb) puts a sub-page's ancestors above its
 h1, each a link: the section it opened in, Radio or the source's home, then
-the collections holding it ("Discover › StreamingCommunity › Series ›"), the
-last separator leading into the h1, which names the page. One line of small
+the collections holding it ("Discover › StreamingCommunity › Series"), then
+the h1, which names the page; no separator follows the last crumb. One line of small
 muted text; out of room, the longest crumbs truncate first. Esc and the TV's Back
 still go back in history, restoring focus.
 
