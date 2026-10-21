@@ -13,8 +13,9 @@ function Slider({
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   "aria-valuetext": ariaValueText,
+  buffered,
   ...props
-}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+}: React.ComponentProps<typeof SliderPrimitive.Root> & { buffered?: number | null }) {
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -42,6 +43,7 @@ function Slider({
         data-slot="slider-track"
         className="relative grow overflow-hidden rounded-md bg-muted data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
       >
+        {buffered != null && <div data-slot="slider-buffered" className="absolute inset-y-0 left-0 bg-foreground/35" style={{ width: `${Math.min(100, Math.max(0, (buffered - min) / (max - min) * 100))}%` }} />}
         <SliderPrimitive.Range
           data-slot="slider-range"
           className="absolute bg-primary select-none data-horizontal:h-full data-vertical:w-full"

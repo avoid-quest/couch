@@ -72,6 +72,9 @@ band.
 The timeline row:
 - Position, a thin line, and the time remaining.
 - The unplayed part is translucent white.
+- As on YouTube, a lighter segment ahead of the playhead shows what this
+  device has already loaded (35% white, here and on the now-playing bar's
+  line). It shows only while this device plays media that seeks.
 - As on YouTube, the line thickens under a pointer, and its thumb shows only
   while a pointer or focus is on it.
 - A hovering pointer reads the time under it, on the panel surface.

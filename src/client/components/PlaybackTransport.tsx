@@ -11,6 +11,7 @@ import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { RangeControl } from "./RangeControl";
 import { useDurationClock } from "./DurationBar";
+import { useBufferedEnd } from "@/session/buffered";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
@@ -60,6 +61,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   // Where a hovering pointer is along the bar, from 0 to 1; a drag keeps reporting it through the slider's pointer capture.
   const [hover, setHover] = useState<number | null>(null);
   const player = state.player;
+  const buffered = useBufferedEnd(player.playbackId);
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current) return null;
@@ -75,7 +77,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   // Touch has no hover; the TV's remote has none either (tv:hidden).
   const track = (event: PointerEvent<HTMLDivElement>) => { const { left, width } = event.currentTarget.getBoundingClientRect(); if (event.pointerType === "touch" || !width) return; setHover(Math.min(1, Math.max(0, (event.clientX - left) / width))); };
   return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
-    <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled}
+    <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled} buffered={canSeek ? buffered : null}
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
       {/* The time under the pointer, just clear of the thumb at any target height, centred over the pointer and held
           inside the bar at either end (100cqw is the bar's width). */}
