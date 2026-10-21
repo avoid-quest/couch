@@ -20,7 +20,7 @@ bar for thumb reach.
 
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
   panels, shadows, gradients or blur; only the player's bands shade a picture,
-  with a scrim.
+  with a scrim, and what opens over a picture is one translucent black.
 - **One primary target per item, one menu.** Pressing a row or tile does its
   main verb; its other verbs are its one menu ([Menus](#menus)). Related
   channels, albums, series and stations are separate visible links, never
@@ -67,7 +67,8 @@ Checkbox, RadioGroupItem) take a 2px foreground outline instead; a tile's
 caption inverts and its artwork takes a thin outline.
 
 **Hover** is a white tint, never on the TV. A ghost button whose panel is open
-(`aria-expanded`: Volume, Where it plays, Up next, Playback) keeps the tint.
+(`aria-expanded`: Volume, Where it plays, Up next, Audio & subtitles, Playback)
+keeps the tint.
 
 ## Scale
 
@@ -89,8 +90,8 @@ The page gutter is `px-(--gutter)` (`clamp(1rem, 4vw, 3rem)`); the shell gives
 the one top offset (`pt-8`). Two-column pages (Saved, Settings) use a `12rem`
 rail and `gap-12`. Controls are `h-8 text-sm`; `touch:` (phones and windows
 narrower than 960px) raises them to 44px. Playback icon controls (transport,
-Volume, Where it plays, Up next, Playback, fullscreen, Back, a Sheet's Close)
-are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target; at a
+Volume, Where it plays, Up next, Audio & subtitles, Playback, fullscreen, Back,
+a Sheet's Close) are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target; at a
 row's end they pull back (`-ml-2.5`/`-mr-2.5`) so the glyph lines up with the
 text.
 
@@ -182,8 +183,9 @@ its results hold, as it finds them).
   in `AlertAction`); **Empty** for empty states; a `Spinner` status line for
   work in progress.
 - **Dialog** for short tasks (pairing, source setup), **AlertDialog** for
-  confirmations, **Sheet** for player panels, **Popover** for the Couch switch
-  and Where it plays on desktop.
+  confirmations, **Popover** for the player's menus and panels over the picture,
+  the Couch switch and Where it plays on desktop, **Sheet** for longer panels
+  (Where it plays on phones and the TV).
 
 ## Menus
 
@@ -219,7 +221,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Home](design/home.md): the hero and shelves.
 - [Browse](design/browse.md): Search, Discover, Hide, Details, Saved, rows and
   tiles, filters and pages, breadcrumbs.
-- [Player](design/player.md): the band, transport, timeline, Up next.
+- [Player](design/player.md): the picture, scrims, the band, settings, Up next,
+  status.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.
 - [TV](design/tv.md): what the TV adds for its remote.
 - [Remote](design/remote.md): the Remote section and Type on TV.

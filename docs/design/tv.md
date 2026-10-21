@@ -63,4 +63,4 @@ A TV receiving Play starts focused on the picture, so the bands hide after
 and Down on the timeline, Left and Right seek 10 s. Back hides them; with them
 hidden it leaves the player for its opener. A paused picture keeps them up.
 Stop is OK, Right, OK for pausable media and OK, OK for radio and live. Details
-is in the Playback Sheet. A Remote's Info key opens the player from any page.
+is in the Playback gear's menu. A Remote's Info key opens the player from any page.

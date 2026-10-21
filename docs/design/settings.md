@@ -20,7 +20,7 @@ hand, and the Couch everyone shares, its hardware included:
 Wide screens and the TV open Settings on General. The stack's flat paths
 (`/settings/home`, `/settings/devices`, `/settings/sound`, …) and main's older
 ones redirect through `settingsAliases`. The player's gear opens the player's
-own Playback Sheet, not this page.
+own Playback menu, not this page.
 
 Home & Discover lists each section with a Switch and Move up/down (no drag),
 saved per device, each list with Reset to default. A Move that reaches an end

@@ -114,7 +114,7 @@ OK, OK and pausable Stop is OK, Right, OK.
 Use an isolated Core and data directory, a paired TV renderer (the TV app's
 window, or a browser tab using the [TV override](design/tv.md#see-the-tv-in-a-browser)), a 1920×1080
 viewport and a paused finite direct-media video that supports byte-range seeking (a
-provider's video opens `/collection`, and the Details check wants the Playback sheet's `/item` link). Network
+provider's video opens `/collection`, and the Details check wants the Playback menu's `/item` link). Network
 sharing must be enabled for the pairing-dialog check. Save two direct-media videos
 with only titles (no metadata or known duration yet) as the first two items in For later
 to exercise the Home tile and asynchronous Details check. Their compact controls

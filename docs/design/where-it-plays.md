@@ -22,7 +22,10 @@ desktop it opens a Popover above the button, so the bar and the transport stay
 usable, while the list fits (10 rows); a longer list opens a right-side Sheet
 from the same button. Phones and the TV open a bottom Sheet sized to its
 content. The kind is chosen as it opens and kept until it closes. A Sheet's
-Close sits at the end of its first line.
+Close sits at the end of its first line. From the player's band its Popover
+opens above the whole band, clear of the timeline, on the player's translucent
+surface, as the player's own menus do; its Sheet is unchanged
+([Player](player.md#settings)).
 
 ```
 [mute] ──────────────●──  72
