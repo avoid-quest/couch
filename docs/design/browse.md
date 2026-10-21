@@ -2,34 +2,48 @@
 
 ## Search
 
-The header's field ([Shell](shell.md#search-field)) submits to `/search?q=…`;
-an empty query is Discover. Every source is asked at once and answers
-independently; failures, with Try again, sit above the results. Counts and
-"still asking" are a screen-reader status; on screen the header's Spinner and
-skeleton rows show the wait.
+The header's palette ([Shell](shell.md#search-field)) submits to
+`/search?q=…&kind=…&source=…`; an empty query is Discover. Every source is asked
+at once and answers independently. Counts and "still asking" are a
+screen-reader status; on screen the header's Spinner and skeleton rows show the
+wait.
 
-Search narrows its results with filters made from them (`SearchFilters`),
-never a fixed list: a combination with nothing in it can't be chosen.
-
-- **Kinds**: one line of type above the results, All then each kind with
-  hits in the shelves' order (Films & series, Radio, Live, Music, Videos):
-  `text-lg` medium, muted, the chosen kind in white. A kind appears once a
-  source returns a hit of it, fading in (200 ms, `motion-safe`) where that
-  order puts it; none leaves while the query's sources answer.
-- **Sources**: only once a kind is chosen, a lighter `text-sm` line under it
-  of the sources with hits of that kind, each with its count. It shows only
-  when there are two or more; pressing one narrows to it (white, with ×) and
-  pressing it again shows every source. Its height is held while the kind is
-  chosen, so a second source arriving moves nothing.
-
-Choosing a kind keeps the source when it has hits of that kind, otherwise
-every source. Both live in the URL
+**The scope is the field's token.** A kind and a source live in the URL
 (`/search?q=jazz&kind=music&source=Bandcamp`, kind one of
-`films|live|radio|music|videos`), and a new query from the header keeps them.
-A kind or source the URL asks for applies while sources answer (its skeleton
-shows) and, if it has nothing once they have, the results show everything; a
-source from an artist link shows pressed under All. On a phone each line
-scrolls sideways, keeping the chosen option in view. On the TV each line is a
+`films|live|radio|music|videos`) and show as the header field's tokens: choosing
+one on the page changes the token, and changing the token in the palette
+re-scopes the page in place, without asking the sources again. A scope chosen
+in the palette applies before any result arrives (its skeleton shows); if it
+holds nothing once the sources have answered, the page says "Nothing in Music
+on Bandcamp for “jazz”" with "Show all N results", which clears it.
+
+Each source declares the kinds it can return (`sourceKinds` in `search.ts`:
+Bandcamp and SoundCloud music, the catalogues films and series, the radio lists
+radio, and so on). Under a kind, only those sources are waited on, counted as
+still asking, or reported: a failure from a source that never returns the kind
+isn't shown. Failures, with Try again, sit above the results.
+
+**Filters from the results** (`SearchFilters`). The token already names the
+scope, so the page doesn't repeat it as a heading: its two lines are a quiet
+index of what was found, for moving sideways (Music to Videos in one press,
+which the token can't do) and for the TV, whose header is far from the results.
+A combination with nothing in it can't be chosen here.
+
+- **Kinds**: one `text-sm` medium line above the results, All then each kind
+  with hits in the shelves' order (Films & series, Radio, Live, Music, Videos),
+  each with its count; muted, the chosen kind in white. A kind appears once a
+  source returns a hit of it, fading in (200 ms, `motion-safe`) where that
+  order puts it; none leaves while the query's sources answer. A kind the
+  token chose shows too, while the query found anything.
+- **Sources**: once a kind or a source is chosen, a lighter line under it of
+  the sources with hits of that kind, each with its count. It shows when there
+  are two or more, or one is chosen; pressing one narrows to it (white, with ×)
+  and pressing it again shows every source. Its height is held while the kind
+  is chosen, so a second source arriving moves nothing.
+
+Choosing a kind keeps the source when it can return that kind and has hits of
+it, otherwise every source. On a phone each line scrolls sideways, keeping the
+chosen option in view as others arrive before it. On the TV each line is a
 `data-nav-row`: Left and Right move, Down goes from the kinds to the sources,
 OK chooses and the focus stays; the page still starts on the closest match.
 
@@ -42,8 +56,9 @@ Radio and Music (squares), Live now (frames), Videos and Channels and lists
 (rows). One kind fills the page without its heading or the twelve-tile cap, as
 a wrapping grid or, for Videos, a list with Channels and lists under it. Hits
 that mention no query word wait behind "Show N results that don't mention …".
-The only empty state is nothing at all for the query: "Nothing found", with
-Add a source. A pasted link opens as a page or as direct media.
+Nothing at all for the query is "Nothing found", with Add a source and no
+filters. A pasted link opens here as a page or as direct media ("Choose how to
+play" in the palette); Enter in the palette plays it at once.
 
 Twitch results refresh every 20 s while visible and connected.
 

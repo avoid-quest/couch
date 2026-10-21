@@ -52,8 +52,9 @@ that Remote in another browser profile.
   closed select move on. A fader takes Left/Right only after OK, until OK or
   Back (5 per press). Where it plays' rows are the exception: Left/Right move
   their level at once ([Where it plays](where-it-plays.md#on-a-tv)).
-- **Text.** The header's search field is a stop like any other; the TV has no
-  keyboard, so a phone's Remote types ([Type on TV](remote.md#type-on-tv)).
+- **Text.** The header's search field is a stop like any other; OK opens its
+  palette full screen and Back closes it ([Shell](shell.md#search-field)). The
+  TV has no keyboard, so a phone's Remote types ([Type on TV](remote.md#type-on-tv)).
 
 ## The TV player
 

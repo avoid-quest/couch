@@ -47,21 +47,56 @@ publishing device: another device's Remote can't use it.
 
 ## Search field
 
-`HeaderSearch`: a shadcn `InputGroup` with a Search button, up to 16rem,
-inverting on focus. `/` focuses it from any page; a fine pointer sees a `/`
-hint. Typing stays local until Enter or Search submits; the first search opens
-`/search?q=…`, later ones replace it. A Spinner replaces the Search icon while
-sources answer.
+`HeaderSearch`: a shadcn `InputGroup` with a Search button, up to 16rem (22rem
+while it holds tokens), and a shadcn `Command` (cmdk) palette under it. `/`
+focuses it from any page; a fine pointer sees a `/` hint. Focused, it inverts;
+while the palette is open the field keeps a white edge instead and the
+palette's selected row is the one white thing (focus stays in the field; the
+row is its `aria-activedescendant`).
 
-- Empty and focused, it lists the last eight queries (`search-recents.ts`) as
-  rows a remote can reach with Down.
-- A source without a home (YouTube, Bandcamp, SoundCloud) scopes it to itself
-  (`scopeSearch`): "Search YouTube", and the next query carries that source.
-- On results, Enter plays the closest match when its press plays, else
-  focuses it; Down reaches the first result. Keys typed outside a control on
-  the results page continue the query.
-- Off the TV, Esc clears it, then leaves it. On the TV a phone's Remote types
-  into it ([Type on TV](remote.md#type-on-tv)).
+**Where it opens.** On a desktop the palette drops under the field, joined to
+the header's line (`border-x border-b`, no shadow). On a phone it fills the
+screen under the header, the field takes the whole row and Cancel closes it.
+On the TV it fills the screen too: OK on the field opens it (arrows pass a
+closed field, which is a plain field to the remote), a phone's Remote types
+into it ([Type on TV](remote.md#type-on-tv)), and the typed query reads large
+in its first row.
+
+**Empty**, it lists columns the arrows cross (Up/Down within, Left/Right
+between): Search in (the kinds), Sources (the providers; the radio lists and
+shared sources answer when typed), Recent searches (the last six of eight,
+`search-recents.ts`) and Continue (recently played). On a phone the kinds and
+sources are a wrapping line of chips. Nothing is selected until an arrow, so
+Enter still submits.
+
+**Typing** selects the query row ("jazz in Music"), then suggests only what
+the client already holds, once typing pauses (`useDebouncedValue`, 120 ms):
+the scopes the text names, matching recent searches, Saved and played titles
+from the react-query caches, and cached stations. It never asks a source; the
+full search runs on the results page. A scope narrows the suggestions
+(stations only for radio, a source only its own titles).
+
+**Tokens.** A kind and a source become tokens in the field: choose one in the
+palette (choosing it again removes it), or type its name or short form (`film`,
+`live`, `yt`, `bc`) and press Tab; Backspace in an empty field removes the
+last; a press on a token removes it. Choices never combine into something
+impossible (`chooseScope`: a kind keeps a source only if that source can return
+it). On the results page the tokens are the URL's kind and source, both ways
+([Browse](browse.md#search)); elsewhere they wait for the next query. A source
+without a home (YouTube, Bandcamp, SoundCloud) scopes the field to itself
+(`scopeSearch`) and opens it.
+
+**Enter** does the selected row: the query opens `/search?q=…` with its scope
+(the first search pushes, later ones replace); a recent search runs again; a
+saved or played title opens its Details; a station plays; a pasted link's
+first row plays it ("Open page" and "Choose how to play" follow). A Spinner
+replaces the Search icon while sources answer.
+
+- On results, Enter on the unchanged query plays the closest match when its
+  press plays, else focuses it. Keys typed outside a control on the results
+  page continue the query.
+- Off the TV, Esc clears the field, then closes the palette and leaves it. On
+  the TV, Back closes the palette, then stays Back.
 
 ## Couch switch
 

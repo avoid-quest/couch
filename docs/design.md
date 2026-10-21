@@ -122,6 +122,15 @@ hover tint on ghost buttons. Check the
 [catalog](https://ui.shadcn.com/docs/components) before building anything
 custom.
 
+`Command` (cmdk) was added for the header search's palette
+([Shell](design/shell.md#search-field)): a field that scopes a search and
+suggests as you type needs a listbox the focus never leaves, which a menu or a
+Popover over a field can't give a remote typing into it. Couch's copy has no
+surface of its own (the header draws it), `h-8 text-sm` rows (44px on touch),
+headings as the menus' labels, and a selected row that inverts like a menu's
+highlight, at once. The field is Couch's own input as the combobox, not
+`CommandInput`, so the TV's Type on TV and the `#media-search` hooks keep it.
+
 Shared building blocks in `src/client/components`:
 
 - `PageHeader`: a page's h1 with an optional back button or breadcrumb and

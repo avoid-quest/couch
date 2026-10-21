@@ -91,10 +91,13 @@ a Mac.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
    device you pair becomes the admin. The dialog closes when the phone pairs,
    and a message names it, ending in "· admin" for the first.
-3. Type in the header's search field, or paste a link, and press Enter. Results
-   are grouped by kind; **Music** holds Bandcamp and SoundCloud. **Play** starts an item now; **Queue** in
-   its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,
-   StreamingCommunity, 123MoviesFree, AnimeSaturn or AnimeUnity link opens its page.
+3. Type in the header's search field and press Enter. To search one kind or
+   source, pick it from the list under the field first, or type its name (`film`,
+   `music`, `yt`) and press Tab. Results are grouped by kind; **Music** holds
+   Bandcamp and SoundCloud. **Play** starts an item now; **Queue** in its **…**
+   menu adds it to Up next. Paste a link and press Enter to play it; a YouTube,
+   Twitch, RaiPlay, Bandcamp, StreamingCommunity, 123MoviesFree, AnimeSaturn or
+   AnimeUnity link can also open its page.
 
 **Settings → This device → Online video quality** saves this
 browser's default quality for online video it starts, wherever it plays (Auto is up to 1080p).
