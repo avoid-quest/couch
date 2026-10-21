@@ -326,8 +326,8 @@ window.runTvNavigationRegression = async () => {
     await key("Escape");
     assert(!location.search.includes("queue=true") && document.activeElement?.getAttribute("aria-label") === "Up next", "Queue Back lost trigger focus");
     await click('.player-page button[aria-label="Playback"]');
-    const entryHref = control('[data-player-sheet] a[href^="/item"]').getAttribute("href");
-    await click('[data-player-sheet] a[href^="/item"]');
+    const entryHref = control('[data-player-menu] a[href^="/item"]').getAttribute("href");
+    await click('[data-player-menu] a[href^="/item"]');
     assert(location.pathname === "/item", "Details did not open");
     assert(document.activeElement?.closest('[data-page="Item"]'), "Details lost page-entry focus");
     await key("Escape");
@@ -336,8 +336,8 @@ window.runTvNavigationRegression = async () => {
     assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Details Back lost Playback opener focus");
     assert(document.querySelector('video')?.paused && document.querySelector('.player-page [data-play-button][aria-label="Play"]'), "Details Back changed paused playback");
     (document.activeElement as HTMLElement).click(); await wait(350);
-    assert(document.querySelector('[data-player-sheet]') && document.querySelector('video')?.paused, "Immediate OK resumed instead of opening Playback");
-    assert(control('[data-player-sheet] a[href^="/item"]').getAttribute("href") === entryHref, "Details Back changed the played entry");
+    assert(document.querySelector('[data-player-menu]') && document.querySelector('video')?.paused, "Immediate OK resumed instead of opening Playback");
+    assert(control('[data-player-menu] a[href^="/item"]').getAttribute("href") === entryHref, "Details Back changed the played entry");
     await key("Escape"); await wait(350);
     assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Playback Back lost opener focus");
     await key("Escape"); await key("Escape");

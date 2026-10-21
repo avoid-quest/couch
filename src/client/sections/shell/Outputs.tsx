@@ -35,12 +35,13 @@ const popoverRows = 10;
  * Where it plays: the mixer for one Couch's devices, its own button in the now-playing bar and the player band.
  * The Volume, the counts, then every device's row, the playback's first. The rules are the model's (session/where-it-plays.ts).
  */
-export function WhereItPlays(props: Props & { className?: string; label?: string }) {
+export function WhereItPlays(props: Props & { className?: string; label?: string; sideOffset?: number }) {
   // A new playback starts closed, with its own order.
   return <Panel key={props.state.playback} {...props} />;
 }
 
-function Panel({ state, connected, run, className, label }: Props & { className?: string; label?: string }) {
+// The player's band passes a sideOffset so its Popover opens above the whole band, clear of the timeline, as its menus do.
+function Panel({ state, connected, run, className, label, sideOffset }: Props & { className?: string; label?: string; sideOffset?: number }) {
   const tv = isTvPresentation();
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
   // Radix's controlled open state: a changed defaultOpen would not open a mounted panel. The session remembers the
@@ -73,7 +74,7 @@ function Panel({ state, connected, run, className, label }: Props & { className?
   };
   if (side === "popover") return <Popover open={open} onOpenChange={change}>
     <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-    <PopoverContent side="top" align="end" aria-label="Where it plays" onOpenAutoFocus={focusFirst}
+    <PopoverContent side="top" align="end" sideOffset={sideOffset} aria-label="Where it plays" onOpenAutoFocus={focusFirst}
       className="max-h-[min(40rem,calc(var(--radix-popover-content-available-height)-1rem))] w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-y-auto px-4 pt-2 pb-3"><SyncScope>{body()}</SyncScope></PopoverContent>
   </Popover>;
   return <Sheet open={open} onOpenChange={change}>

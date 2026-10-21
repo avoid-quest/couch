@@ -107,21 +107,21 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
       ?? (focused.element.matches("[data-row-options]") ? adjacent?.querySelector<HTMLElement>("[data-row-options]") : null) ?? adjacent?.querySelector<HTMLElement>("[data-play]:not(:disabled)")
       ?? panelRef.current?.querySelector<HTMLElement>("button:not(:disabled)")
-      ?? panelRef.current?.closest("[data-player-sheet]")?.querySelector<HTMLElement>("button:not(:disabled)")
+      ?? panelRef.current?.closest('[data-slot="sheet-content"]')?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-idle]")?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)")
       ?? panelRef.current?.querySelector<HTMLElement>("#queue-title");
     focusedEntry.current = null;
     replacement?.focus({ preventScroll: true });
   });
 
-  return <Dialog open={saveOpen} onOpenChange={setSaveOpen}><section ref={panelRef} data-queue-panel className="grid gap-6" aria-labelledby="queue-title" onFocusCapture={event => {
+  return <Dialog open={saveOpen} onOpenChange={setSaveOpen}><section ref={panelRef} data-queue-panel className="flex min-h-0 flex-col gap-4" aria-labelledby="queue-title" onFocusCapture={event => {
     const element = event.target;
     if (!panelRef.current?.contains(element)) return;
     const row = element.closest<HTMLElement>("[data-queue-entry-id]");
     focusedEntry.current = row ? { element, id: row.dataset.queueEntryId!, index: [...panelRef.current.querySelectorAll("[data-queue-entry-id]")].indexOf(row), label: element.getAttribute("aria-label") } : null;
   }}>
-    {/* The heading row is a sheet's header: the title, Autoplay's switch, then its Close. Under a sheet's own header only the switch shows. */}
-    <div className={cn("flex min-h-11 items-center justify-between gap-4 bg-background", titled ? "sticky top-0 z-10" : !autoplay?.upcoming.length && "sr-only")}>
+    {/* The heading row stays while the list scrolls under it: the title, Autoplay's switch, then its Close. Under a sheet's own header only the switch shows. */}
+    <div className={cn("flex min-h-11 shrink-0 items-center justify-between gap-4", !titled && !autoplay?.upcoming.length && "sr-only")}>
       <h2 id="queue-title" tabIndex={-1} className={cn("text-base font-medium", !titled && "sr-only")}>Up next</h2>
       {autoplay && autoplay.upcoming.length > 0 && <div className="ml-auto flex items-center gap-3"><Label htmlFor={autoplayId} className="touch:min-h-11 text-sm font-normal text-muted-foreground">Autoplay</Label><Switch id={autoplayId} checked={autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>}
       {onClose && <Button ref={closeRef} variant="ghost" size="icon-lg" className="-mr-2.5 size-11" aria-label="Close Up next" title="Close Up next" onClick={onClose}><X aria-hidden="true" /></Button>}
@@ -134,6 +134,9 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
           <DialogFooter><DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose><Button type="submit" disabled={!connected || keeping || !upNext.length || !listName.trim()}>{keeping ? "Saving…" : "Save list"}</Button></DialogFooter>
         </form>
       </DialogContent>
+    {/* Its rows' controls pull back past the text (Save as list, Played, a row's "…"), so the scroller pads for them, with a
+        little to spare: a vertical scroller with a stray pixel of overflow shifts its text when one takes focus. */}
+    <div className="-mx-3 grid min-h-0 content-start gap-6 overflow-y-auto overscroll-contain px-3 pb-1">
     {current && showCurrent && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={!current.live && currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {upNext.length || autoplayUpcoming.length || autoplayFinding ? <div className="grid gap-2">
@@ -157,6 +160,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="-mx-2.5 justify-between text-base">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
       <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} verbs={{ credentials, entry, index: queue.indexOf(entry), queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />)}</ul>
     </CollapsibleContent></Collapsible>}
+    </div>
   </section></Dialog>;
 }
 

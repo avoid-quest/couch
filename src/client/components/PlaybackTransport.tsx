@@ -141,9 +141,9 @@ export function PlaybackVolume({ state, connected, run, showSlider = true, showV
 }
 
 /** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
-export function VolumeButton({ state, connected, run, className }: Props & { className?: string }) {
+export function VolumeButton({ state, connected, run, className, sideOffset }: Props & { className?: string; sideOffset?: number }) {
   return <Popover>
     <PopoverTrigger asChild><Button variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
-    <PopoverContent side="top" align="end" aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
+    <PopoverContent side="top" align="end" sideOffset={sideOffset} aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
   </Popover>;
 }

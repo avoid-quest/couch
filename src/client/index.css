@@ -150,27 +150,47 @@ html { view-transition-name: none; }
 .app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
-.player-band { padding-bottom: max(.75rem, env(safe-area-inset-bottom)); position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
-/* Video controls are an overlay on the picture: one ramp, eased so it has no edge that reads as a crop, rises over
-   --fade to 55% where their text starts (white text keeps 5:1 on a white picture) and to 72% at the screen's edge, so
-   the picture shows through the whole band. The top band mirrors the band. Their muted ink is the white ink made
-   translucent, 85% white: 4.5:1 over the scrim on a white frame, and still a step below the white ink. */
-.player-video-controls { --fade: 2.5rem; --scrim: transparent, rgb(0 0 0 / 7%) calc(var(--fade) * .2), rgb(0 0 0 / 21%) calc(var(--fade) * .4), rgb(0 0 0 / 39%) calc(var(--fade) * .6), rgb(0 0 0 / 53%) calc(var(--fade) * .8), rgb(0 0 0 / 60%) var(--fade), rgb(0 0 0 / 72%); --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; }
+.player-band { padding-bottom: max(.5rem, env(safe-area-inset-bottom)); position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
+/* Over a picture the controls sit on scrims only, as YouTube's, Netflix's and Apple's do: a soft black ramp drawn
+   behind each band and past its edge (::before), never a solid bar, so the band's own box is just its controls, and
+   --bottom-bar, which subtitles and panels clear, is their height. The ramp eases from 70% at the screen's edge to 50%
+   where the controls start (white text keeps 4:1 on a white frame) and out to nothing over 4rem. Their muted ink is
+   the white ink made translucent, 85% white. Everything that opens over the picture (menus, Up next, the mixer's
+   Popover, the Next card) is one translucent black, --player-surface, as YouTube's gear menu is (60%): the picture shows through,
+   a little darker than YouTube's so subtitles behind a panel don't fight its text. */
+:root { --player-surface: rgb(0 0 0 / 75%); }
+/* The player's icon targets are 44px and grow with the interface only to 2.25rem (54px at 1920 wide), the size of
+   YouTube's fullscreen controls, so the band stays as small as the references' on a large window. */
+.player-page { --player-target: max(44px, 2.25rem); }
+.player-video-controls { --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; isolation: isolate; }
+.player-video-controls::before { content: ""; position: absolute; inset-inline: 0; z-index: -1; pointer-events: none; --ramp: rgb(0 0 0 / 70%), rgb(0 0 0 / 50%) calc(100% - 4rem), rgb(0 0 0 / 30%) calc(100% - 3rem), rgb(0 0 0 / 13%) calc(100% - 1.75rem), rgb(0 0 0 / 3%) calc(100% - .75rem), transparent; }
+.player-band.player-video-controls::before { bottom: 0; height: calc(100% + 4rem); background: linear-gradient(to top, var(--ramp)); }
+.player-top.player-video-controls::before { top: 0; height: calc(100% + 4rem); background: linear-gradient(to bottom, var(--ramp)); }
+.player-video-controls > * { pointer-events: auto; }
+.player-band[data-player-band="hidden"], .player-top[data-player-top="hidden"] { pointer-events: none; }
 /* The video's own subtitles rise clear of the band while it shows, and settle back as it hides. Chromium and WebKit
    expose the cue box; Firefox doesn't and drops these rules, so there they stay put. */
 .player-video video::-webkit-media-text-track-container { transition: translate .2s var(--ease-out); }
 .player-page:has(> [data-player-band="shown"]) video::-webkit-media-text-track-container { translate: 0 calc(-1 * var(--bottom-bar, 0px)); }
 @media (prefers-reduced-motion: reduce) { .player-video video::-webkit-media-text-track-container { transition: none; } }
-.player-band.player-video-controls { padding-top: var(--fade); background: linear-gradient(to bottom, var(--scrim)); }
-.player-top.player-video-controls { padding-bottom: var(--fade); background: linear-gradient(to top, var(--scrim)); }
-.player-video-controls > * { pointer-events: auto; }
-.player-band[data-player-band="hidden"], .player-top[data-player-top="hidden"] { pointer-events: none; }
-/* The top band or Now playing says when it ends, so the band's timeline doesn't repeat it. */
+/* The timeline over a picture is a thin line, as YouTube's: its unplayed part is translucent white, it thickens under a
+   pointer, and its thumb shows only while a pointer or focus is on it. The hover time sits on the panel surface. */
+.player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); @apply motion-safe:transition-[height]; }
+.player-video-controls .player-timeline:hover [data-slot="slider-track"] { height: .375rem; }
+.player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
+.player-video-controls [data-hover-time] { background: var(--player-surface); border-radius: calc(var(--radius) - 2px); }
+/* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
+   show through a translucent one. */
+html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[data-osd] :is(.player-queue, .player-next-up) { background: var(--player-surface); box-shadow: none; }
+/* The top line or Now playing says when it ends, so the band's timeline doesn't repeat it. */
 .player-band [data-end-time] { display: none; }
-/* A playing picture never moves or resizes for a panel: Up next, the Sheet and the popovers lie over it. Up next over a video
-   starts below the top band, which turns solid. */
-.player-page[data-queue-open]:not([data-artwork-stage]) .player-top { padding-bottom: .75rem; background: var(--background); }
+/* Status over a picture is the picture's: centred on it, above the scrims and below the panels. */
+.player-status { position: absolute; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: .75rem; padding: var(--gutter); text-align: center; pointer-events: none; }
+/* A playing picture never moves or resizes for a panel. Up next over it is a panel at the right above the band, as
+   Netflix's episodes panel (full width on phones); the Next card waits above the band at the right. */
 .player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
+.player-page[data-osd][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + .75rem); width: min(28rem, calc(100% - 2 * var(--gutter))); max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem); padding: .5rem 1.25rem 1rem; }
+.player-next-up { position: absolute; z-index: 20; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + .75rem); @apply motion-safe:transition-[bottom]; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
 [data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
 .player-summary { display: flex; flex-direction: column; gap: 1.5rem; width: min(32rem, 100%); min-height: 0; flex: 0 1 auto; pointer-events: auto; }
@@ -188,7 +208,7 @@ html { view-transition-name: none; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
 /* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it the transport sits
    in the middle and the tools at the right in the now-playing bar's order (Volume, Where it plays, Up next), then
-   Playback and fullscreen, so nothing changes side as the bar grows into the band. */
+   Audio & subtitles, Playback and fullscreen, so nothing changes side as the bar grows into the band. */
 .player-control-row { display: grid; grid-template-columns: 1fr auto 1fr; grid-auto-flow: dense; align-items: center; gap: .5rem 1rem; }
 /* Keep one control row. Insets preserve focus outlines; narrow screens can scroll the row without moving the timeline. */
 .player-controls-scroll { overflow-x: auto; margin: -.125rem -.625rem; padding: .125rem .625rem; scrollbar-width: thin; }
@@ -197,17 +217,12 @@ html { view-transition-name: none; }
 @media (min-width: 960px) {
   [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
   [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: var(--player-top, 3.5rem); bottom: var(--bottom-bar, 10rem); grid-template-columns: minmax(0, 1fr) 24rem; }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-queue { display: flex; border-left: 1px solid var(--border); padding: 1.5rem; }
 }
 @media (max-width: 959px) {
-  [data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1rem); }
-  /* On phones Up next covers the picture, edge to edge between the bands. */
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { inset: var(--player-top, 3.5rem) 0 var(--bottom-bar, 10rem); }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-queue { padding: 1rem var(--gutter) 0; }
-  [data-queue-open] .player-main { display: none; }
-  [data-queue-open] .player-summary { display: none; }
-  [data-queue-open] .player-queue { display: flex; grid-row: 1; }
+  /* On phones audio's Up next replaces the artwork. */
+  [data-artwork-stage][data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1rem); }
+  [data-artwork-stage][data-queue-open] .player-main { display: none; }
+  [data-artwork-stage][data-queue-open] .player-queue { display: flex; grid-row: 1; }
   .player-control-row { column-gap: .5rem; }
 }
 @media (max-width: 599px) {
@@ -221,11 +236,9 @@ html { view-transition-name: none; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 @media (max-height: 500px) {
-  [data-artwork-stage] .player-workspace, [data-queue-open] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
+  [data-artwork-stage] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
   .player-header { padding-block: .25rem; }
-  [data-player-band] { padding-block: .25rem; }
-  .player-video-controls { --fade: 1.25rem; }
   .player-control-row { column-gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
   [data-player-audio-copy] :is(h1, [data-player-ends]) { font-size: 1.125rem; -webkit-line-clamp: 1; }
@@ -241,4 +254,3 @@ html[data-hero-playing] [data-now-playing] { display: none; }
 /* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
 html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }
 
-@media (max-width: 959px) { [data-queue-open] .player-band.player-video-controls { padding-top: 0; background: var(--background); } }

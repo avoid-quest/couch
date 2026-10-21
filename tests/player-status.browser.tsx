@@ -71,9 +71,9 @@ export async function runPlayerStatusRegression() {
       });
       if (positions) assert(JSON.stringify(current) === JSON.stringify(positions), `${status}: transport moved`);
       positions = current;
-      // Playing and Paused are the transport's to say; every other status reads in the band.
+      // Playing and Paused are the transport's to say; every other status follows the artwork's title, never in the band.
       if (status === "playing" || status === "paused") assert(!document.querySelector('[data-player-status]'), `${status}: plain status repeats the transport`);
-      else assert(document.querySelector('[data-player-band] [data-player-status]'), `${status}: status moved outside band`);
+      else assert(document.querySelector('[data-player-audio-copy] [data-player-status]') && !document.querySelector('[data-player-band] [data-player-status]'), `${status}: status left the artwork's copy`);
       assert(document.querySelector('[data-player-summary]'), `${status}: artwork summary disappeared`);
     }
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {
@@ -81,12 +81,14 @@ export async function runPlayerStatusRegression() {
       assert(rect.left >= 0 && rect.right <= innerWidth, "A player tool requires horizontal scrolling");
     }
     await review.state("loading", {buffering: true, video: true});
-    const controls = [...document.querySelectorAll<HTMLElement>('.player-control-row button')].map(button => button.getBoundingClientRect());
+    // Phones leave Volume out of the row (display: none), so only the shown controls are measured.
+    const controls = [...document.querySelectorAll<HTMLElement>('.player-control-row button')].filter(button => button.getClientRects().length).map(button => button.getBoundingClientRect());
     assert(controls.every(rect => Math.abs(rect.y - controls[0]!.y) < 1), "Player controls wrap onto another row");
     assert(controls.every(rect => rect.left >= 0 && rect.right <= innerWidth && rect.width >= 44), "Video controls overflow or shrink touch targets");
     const ordered = controls.toSorted((a, b) => a.left - b.left);
     assert(ordered.every((rect, index) => index === 0 || rect.left >= ordered[index - 1]!.right), "Player touch targets overlap");
-    assert(document.querySelector('[data-player-status]')?.textContent?.includes("Buffering"), "Buffering not announced");
+    // Over a picture buffering is a spinner centred on it, its words for screen readers only.
+    assert(document.querySelector('.player-page > [data-player-status] [role="status"]')?.textContent?.includes("Buffering") && !document.querySelector('[data-player-band] [data-player-status]'), "Buffering not announced over the picture");
     await review.state("loading", {retry: true});
     assert(document.querySelector('[aria-label="Try again"]:not(:disabled)'), "Scheduled retry has no immediate remedy");
     const status = document.querySelector('[data-player-status]')!;
