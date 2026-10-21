@@ -27,8 +27,6 @@ bar for thumb reach.
   nested in the target.
 - **Real content only.** Browse pages show what a source returns; Couch picks
   nothing. Discover is built from what the Couch saved.
-- **Sources are peers.** Every provider uses the same Search, Details, Saved
-  and Discover surfaces.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress
   and end times are small muted metadata. Live media shows no time and no
   label.
