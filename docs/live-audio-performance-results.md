@@ -1,5 +1,10 @@
 # Fifty-browser direct playback performance
 
+These are historical `couch-live-performance/1` observations. The subsequent
+[evaluation audit](live-audio-evaluation-audit.md) corrected counter validity and
+steady-stage sample coverage. Their activity verdicts do not retroactively
+satisfy the new `/2` contract; retain the original measurements and limits below.
+
 Measured on 2026-10-21. The final local implementation reduced the median of
 three 49-receiver output-recovery maxima from **9.274 s to 5.968 s (35.6%)**.
 One receiver stayed online during those faults. The previously working comparison
