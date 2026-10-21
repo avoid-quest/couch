@@ -26,6 +26,9 @@ export type ProviderItem = {
 export type ProviderPage = { item?: ProviderItem; items: ProviderItem[]; nextCursor?: string; title?: string; thumbnail?: string; description?: string; subtitle?: string; parent?: CollectionLink };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
 
+/** A section of a page (RaiPlay's "In Diretta" on its front page): that page's row, not a programme to save. */
+export const pageSection = (item: Pick<ProviderItem, "provider" | "url">) => item.provider === "raiplay" && /#block=/.test(item.url);
+
 export const providerShape = (item: Pick<ProviderItem, "kind">): MediaShape =>
   item.kind === "media" ? "atom" : "playlist";
 // Lightweight title refresh from StreamingCommunity's preview endpoint. The

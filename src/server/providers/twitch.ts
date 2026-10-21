@@ -150,3 +150,23 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
   const page: ProviderPage = { title: "Live on Twitch", items: items(data.streams, streamItem) };
   return request.url ? withProviderItem("twitch", "https://www.twitch.tv/directory/all", "collection", page) : page;
 }
+
+const savedLogin = (item: ProviderItem) => item.provider === "twitch" && item.kind === "channel" ? /^https:\/\/www\.twitch\.tv\/([a-z\d_]{1,25})$/.exec(item.url)?.[1] : undefined;
+
+/**
+ * Whether saved channels are live now, in one public query: a saved channel keeps the "Offline" it was saved with
+ * otherwise. Returns each answered channel's live state and subtitle by URL.
+ */
+export async function liveTwitchChannels(items: ProviderItem[], signal?: AbortSignal): Promise<Map<string, Pick<ProviderItem, "live" | "subtitle">>> {
+  const logins = [...new Set(items.flatMap(item => savedLogin(item) ?? []))].slice(0, 100);
+  const now = new Map<string, Pick<ProviderItem, "live" | "subtitle">>();
+  if (!logins.length) return now;
+  const data = await query("query Live($logins:[String!]) { users(logins:$logins) { login stream { id viewersCount game { name } } } }", { logins }, signal);
+  for (const user of Array.isArray(data.users) ? data.users : []) {
+    if (!object(user) || typeof user.login !== "string" || !loginPattern.test(user.login)) continue;
+    const stream = object(user.stream) ? user.stream : null;
+    const game = stream && object(stream.game) ? text(stream.game.name) : "";
+    now.set(`https://www.twitch.tv/${user.login.toLowerCase()}`, { live: !!stream, subtitle: stream ? [game, viewers(stream.viewersCount)].filter(Boolean).join(" · ") : "Offline" });
+  }
+  return now;
+}

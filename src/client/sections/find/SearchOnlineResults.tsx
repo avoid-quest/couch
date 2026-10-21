@@ -6,7 +6,7 @@ import { providerCollectionCursor } from "@/collection-pagination";
 import type { Action } from "../../../shared/protocol";
 import type { MediaCollection } from "../../../shared/media";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
-import { providerShape } from "../../../shared/providers";
+import { pageSection, providerShape } from "../../../shared/providers";
 import { providerBrowseQuery, providerPageQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
 import { forLaterQuery } from "@/api/for-later";
 import { useHidden } from "@/api/hidden";
@@ -170,7 +170,7 @@ function OnlineResults(props: Props) {
           { label: "Play next", disabled: busy || !props.onCommand, run: () => play(item, false, "next") },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(item, false) },
           saveAction,
-        ] : [saveAction]), ...browserActions(item.url), { label: "Hide", disabled: !props.connected, run: () => void hide(item) }],
+        ] : pageSection(item) && !saved ? [] : [saveAction]), ...browserActions(item.url), { label: "Hide", disabled: !props.connected, run: () => void hide(item) }],
       };
     });
     const known = props.url ? [
@@ -204,7 +204,8 @@ function OnlineResults(props: Props) {
         single: selected?.kind === "media", playAll: start || resume ? () => startItem() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
         playNext: selected?.kind === "media" && props.onCommand ? () => play(selected, false, "next") : undefined,
         playLabel: resume ? "Resume" : start ? "Play" : undefined, position: resume?.position, duration: resume?.duration, fromStart: resume ? () => startItem(true) : undefined,
-        save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
+        // A page's section opens from that page; it isn't something to keep (one saved before can still go).
+        save: selected && (!pageSection(selected) || selectedSaved) ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
   }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, isHidden, later.data, history.data, history.isLoading, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);

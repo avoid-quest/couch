@@ -7,7 +7,7 @@ import { isStreamingCommunityHost, streamingCommunityOrigin as defaultStreamingC
 import { streamingCommunityPreview } from "../streamingcommunity";
 import { browseStreamingCommunity } from "./streamingcommunity";
 import { browseYouTube } from "./youtube";
-import { browseTwitch } from "./twitch";
+import { browseTwitch, liveTwitchChannels } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
 import { browseBandcamp } from "./bandcamp";
 import { browseSoundCloud } from "./soundcloud";
@@ -82,7 +82,7 @@ export async function loadProviderList(provider: ProviderId, url: string, signal
   return { ...page, items };
 }
 
-export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = async () => defaultStreamingCommunityOrigin, browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => Promise<string>; browse?: Record<ProviderId, Adapter> }) {
+export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = async () => defaultStreamingCommunityOrigin, browse = adapters(streamingCommunityOrigin), liveChannels = liveTwitchChannels }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => Promise<string>; browse?: Record<ProviderId, Adapter>; liveChannels?: typeof liveTwitchChannels }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath);
   db.exec("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
@@ -96,6 +96,18 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
     })();
   }
   const cache = new Map<string, { page: ProviderPage; expires: number }>();
+  // Saved Twitch channels say whether they are live now, asked at most every 20 s and for at most 3 s; unanswered,
+  // they keep what they were saved with.
+  let live: { key: string; expires: number; channels: Map<string, Pick<ProviderItem, "live" | "subtitle">> } | null = null;
+  async function liveNow(items: ProviderItem[]) {
+    const key = JSON.stringify(items.filter(item => item.provider === "twitch" && item.kind === "channel").map(item => item.url).sort());
+    if (key === "[]") return items;
+    if (live?.key !== key || live.expires < Date.now()) {
+      try { live = { key, expires: Date.now() + 20_000, channels: await liveChannels(items, AbortSignal.any([AbortSignal.timeout(3_000), shutdown.signal])) }; }
+      catch { return items; }
+    }
+    return items.map(item => item.provider === "twitch" && live!.channels.has(item.url) ? { ...item, ...live!.channels.get(item.url) } : item);
+  }
   const pending = new Map<string, { promise: Promise<ProviderPage>; controller: AbortController; waiters: number }>();
   const shutdown = new AbortController();
   let active = 0;
@@ -114,7 +126,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
       try {
         if (closed) throw new ProviderError("The provider catalog is closing.", 503);
         if (pathname === "/api/providers/favorites") {
-          if (request.method === "GET") return Response.json({ favorites: db.query<{ item: string }, []>("SELECT item FROM provider_favorites ORDER BY position, rowid").all().flatMap(row => { try { return [savedItem(JSON.parse(row.item))]; } catch { return []; } }) });
+          if (request.method === "GET") return Response.json({ favorites: await liveNow(db.query<{ item: string }, []>("SELECT item FROM provider_favorites ORDER BY position, rowid").all().flatMap(row => { try { return [savedItem(JSON.parse(row.item))]; } catch { return []; } })) });
           if (request.method !== "POST") return wrongMethod("GET, POST");
           if (request.headers.get("Content-Type")?.split(";")[0]?.trim() !== "application/json") throw new ProviderError("Send a JSON object.", 400);
           const body: unknown = await request.json().catch(() => { throw new ProviderError("Invalid JSON body.", 400); });

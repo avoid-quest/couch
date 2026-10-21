@@ -1,14 +1,16 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaContext } from "@/components/MediaContext";
-import { type ComponentProps, type MouseEvent, type ReactNode, Fragment } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { type ComponentProps, type MouseEvent, type ReactNode, Fragment, useSyncExternalStore } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery, iptvSourcesQuery } from "@/api/iptv";
 import { providerFavoritesQuery } from "@/api/providers";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { ContentLink } from "@/components/ContentLink";
-import { MediaTile, tileShape } from "@/components/MediaTile";
+import { MediaTile } from "@/components/MediaTile";
+import { artShape, majorityShape } from "@/art-shape";
+import { metaLine } from "@/media-caption";
 import { usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { Shelf } from "@/components/Shelf";
@@ -17,13 +19,14 @@ import { browserActions } from "@/original-page";
 import { cn } from "@/lib/utils";
 import { providerNames, type SearchHit } from "@/sections/find/SearchOnlineResults";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
-import { useKeptOrder } from "@/sections/home/home-rows";
+import { useHomeRows, useKeptOrder } from "@/sections/home/home-rows";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { TRY_AGAIN } from "@/copy";
 import type { GuideRow } from "../../../shared/iptv";
-import type { ProviderId, ProviderItem } from "../../../shared/providers";
-import { useOnAir, useStationMenu } from "./on-air";
+import { avoidRadioPlaylistId } from "../../../shared/radio";
+import { pageSection, type ProviderId, type ProviderItem } from "../../../shared/providers";
+import { discoverStations, useOnAir, useStationMenu } from "./on-air";
 import { useDiscoverRows } from "./discover-rows";
 import { channelMeta, useChannelActions, useChannelLogo } from "./LiveTvPage";
 
@@ -73,21 +76,22 @@ export function DiscoverPage() {
   </section>;
 }
 
-/** The stations on air (Home's Radio shelf, without its recents); the heading opens every station. */
+/** The stations on air that Home's Radio shelf doesn't hold (discoverStations); the heading opens every station. */
 function OnAir() {
-  const { available, enqueueRadio } = useShell();
+  const { available, enqueueRadio, recentRadio } = useShell();
   const { on } = usePlayOn();
-  const onAir = useOnAir();
+  const onAir = useOnAir(true, recentRadio);
+  const homeRadio = useHomeRows().rows.some(row => row.id === "radio" && row.shown);
   const stationMenu = useStationMenu();
   // As on Home, the shelf keeps the order it opened with, so a refetch or a new favourite never moves a tile under the focus.
-  const stations = useKeptOrder(onAir.stations, station => station.id, !onAir.pending);
+  const stations = useKeptOrder(discoverStations(onAir, homeRadio), station => station.id, !onAir.pending);
   if (!stations.length && !onAir.favorites.isPending && !onAir.builtIn.isPending && (onAir.favorites.error || onAir.builtIn.error)) return <Failed what="Radio" retry={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])} />;
   if (!onAir.pending && !stations.length) return null;
   // It waits for the shows, so its tiles don't grow a line under the focus.
   return <Shelf loading={onAir.pending} title="Radio" label="Radio stations" href="/discover/radio">
     {onAir.pending ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-      <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
+      <MediaTile data-page-first={index === 0 || undefined} shape="square" plays title={station.name} meta={onAir.meta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : metaLine(station.groupTitle || station.countryCode)) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
     </li>)}
   </Shelf>;
@@ -109,17 +113,24 @@ function LiveTv() {
 
 function ChannelTile({ channel, disabled, play, menu, first }: { first: boolean; channel: GuideRow; disabled: boolean; play: () => void; menu: MenuAction[] }) {
   const { on } = usePlayOn();
-  return <MediaTile data-page-first={first || undefined} shape="video" title={channel.name} meta={channelMeta(channel) || undefined} thumbnail={useChannelLogo(channel)} aria-label={on(`Play ${channel.name}`)} disabled={disabled} onClick={play} menu={menu} />;
+  return <MediaTile data-page-first={first || undefined} shape="video" fit="contain" plays title={channel.name} meta={channelMeta(channel) || undefined} thumbnail={useChannelLogo(channel)} aria-label={on(`Play ${channel.name}`)} disabled={disabled} onClick={play} menu={menu} />;
 }
 
-/** What's saved from a source, in Saved's order; each tile opens its page, and the heading the source's own home. */
-function SavedShelf({ provider, items }: { provider: ProviderId; items: ProviderItem[] }) {
+/**
+ * What's saved from a source, in Saved's order, live channels first and offline ones dimmed; each tile opens its page,
+ * and the heading the source's own home.
+ */
+function SavedShelf({ provider, items: saved }: { provider: ProviderId; items: ProviderItem[] }) {
   const { openProvider } = useShell();
   const name = providerNames[provider];
+  // A section of a source's front page (RaiPlay's "In Diretta") is that page's, which the heading opens; Save no longer offers it.
+  const items = saved.filter(item => !pageSection(item)).sort((a, b) => Number(!!b.live) - Number(!!a.live));
   if (!items.length) return null;
+  const shape = (item: ProviderItem) => artShape(name, item.kind === "channel" ? "channel" : item.kind === "collection" ? "collection" : item.collection ? "episode" : "media");
+  const frame = majorityShape(items.map(shape));
   return <Shelf title={name} href={collectionLocation({ provider, url: "" })}>
     {items.map((item, index) => <li key={item.id} className="shrink-0">
-      <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} data-page-first={index === 0 || undefined} shape={tileShape(name, false)} title={item.title} meta={item.subtitle} thumbnail={item.thumbnail} aria-label={`Open ${item.title}`}
+      <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} data-page-first={index === 0 || undefined} shape={frame} own={shape(item)} dim={item.kind === "channel" && item.live === false} title={item.title} meta={metaLine(item.subtitle)} thumbnail={item.thumbnail} aria-label={`Open ${item.title}`}
         menu={browserActions(item.url)} href={collectionLocation(item)} onClick={() => openProvider(item)} />
     </li>)}
   </Shelf>;
@@ -136,23 +147,48 @@ function SharedSources({ hits }: { hits: SearchHit[] }) {
   </section>;
 }
 
+/**
+ * The sources whose latest answer here was a failure (their home, a page or a search), by their catalogue queries'
+ * state, so the Sources row can say so before it is opened again.
+ */
+function useFailingSources() {
+  const client = useQueryClient();
+  const read = () => {
+    const latest = new Map<string, { at: number; failed: boolean }>();
+    for (const query of client.getQueryCache().findAll({ queryKey: ["search"] })) {
+      const [, kind, provider] = query.queryKey as [string, string, string];
+      if (kind !== "provider-page" && kind !== "providers" || typeof provider !== "string") continue;
+      const { dataUpdatedAt, errorUpdatedAt, status } = query.state;
+      const at = Math.max(dataUpdatedAt, errorUpdatedAt);
+      if (at && at >= (latest.get(provider)?.at ?? 0)) latest.set(provider, { at, failed: status === "error" });
+    }
+    return [...latest].filter(([, answer]) => answer.failed).map(([provider]) => provider).sort().join(" ");
+  };
+  const failing = useSyncExternalStore(listener => client.getQueryCache().subscribe(listener), read, read);
+  return (provider: ProviderId) => failing.split(" ").includes(provider);
+}
+
 /** Every source, one quiet row: one with a home opens it, one without (YouTube, Bandcamp, SoundCloud) scopes the header's field to itself. */
 function Sources() {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
+  const failing = useFailingSources();
   return <section aria-labelledby="discover-sources" className="grid min-w-0 gap-3">
     <h2 id="discover-sources" className="flex min-h-11 items-center text-xl font-semibold tracking-tight">Sources</h2>
     <ul data-nav-row aria-label="Sources" className="-ml-2.5 flex flex-wrap gap-x-2 gap-y-1">
-      {homes.map((provider, index) => <SourceButton data-page-first={index === 0 || undefined} key={provider} title={providerNames[provider]} aria-label={`Open ${providerNames[provider]}`} href={collectionLocation({ provider, url: "" })} onClick={() => details.open(collectionLocation({ provider, url: "" }))} />)}
-      {searches.map(provider => <SourceButton key={provider} title={providerNames[provider]} aria-label={`Search ${providerNames[provider]}`} onClick={() => scopeSearch(providerNames[provider])} />)}
+      {homes.map((provider, index) => <SourceButton data-page-first={index === 0 || undefined} key={provider} title={providerNames[provider]} failing={failing(provider)} aria-label={`Open ${providerNames[provider]}`} href={collectionLocation({ provider, url: "" })} onClick={() => details.open(collectionLocation({ provider, url: "" }))} />)}
+      {searches.map(provider => <SourceButton key={provider} title={providerNames[provider]} failing={failing(provider)} aria-label={`Search ${providerNames[provider]}`} onClick={() => scopeSearch(providerNames[provider])} />)}
     </ul>
   </section>;
 }
 
-/** A source as its name (over a muted line, where it has one), one target; a shared input's other verbs are its menu, as a tile's are. */
-function SourceButton({ title, meta, href, onClick, menu = [], ...props }: { title: string; meta?: string; href?: string; onClick: () => void; menu?: MenuAction[] } & Omit<ComponentProps<typeof Button>, "title" | "onClick" | "children">) {
+/**
+ * A source as its name (over a muted line, where it has one), one target; a shared input's other verbs are its menu, as
+ * a tile's are. A source that didn't load last time is muted and says so; it still opens, to try again.
+ */
+function SourceButton({ title, meta, failing = false, href, onClick, menu = [], ...props }: { title: string; meta?: string; failing?: boolean; href?: string; onClick: () => void; menu?: MenuAction[] } & Omit<ComponentProps<typeof Button>, "title" | "onClick" | "children">) {
   const options = useItemMenu(menu);
-  const body = <><span className="text-base">{title}</span>{meta && <span className="text-sm text-muted-foreground">{meta}</span>}</>;
+  const body = <><span className={cn("text-base", failing && "text-muted-foreground")}>{title}</span>{(failing || meta) && <span className="text-sm text-muted-foreground">{failing ? "Couldn't load" : meta}</span>}</>;
   return <li {...options.item} className={cn("relative flex", options.item.className)}>
     <Button variant="ghost" {...options.target} {...props} asChild={!!href} className={cn("h-auto flex-col items-start gap-0.5 px-2.5 py-2 text-left font-normal", options.shown.length && "pr-10")} onClick={(event: MouseEvent<HTMLElement>) => {
       if (href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;

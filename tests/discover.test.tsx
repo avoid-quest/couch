@@ -8,8 +8,10 @@ const gate = () => ({ connected: true, videoQualityPreference: { quality: "auto"
 mock.module("../src/client/session/session-context", () => ({ useSessionGate: gate, useOptionalSessionGate: gate }));
 mock.module("../src/client/sections/shell/shell-context", () => ({ useShell: () => ({ credentials: { origin: "http://localhost", token: "test" }, available: true }) }));
 let favorites: ProviderItem[] = [];
+let failedQueries: { queryKey: unknown[]; state: { status: string; dataUpdatedAt: number; errorUpdatedAt: number } }[] = [];
 mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) => options, infiniteQueryOptions: (options: unknown) => options,
-  useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.join("/") === "providers/favorites" ? { favorites } : { sources: [] } }) }));
+  useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.join("/") === "providers/favorites" ? { favorites } : { sources: [] } }),
+  useQueryClient: () => ({ getQueryCache: () => ({ findAll: () => failedQueries, subscribe: () => () => {} }) }) }));
 mock.module("../src/client/components/PlayOn", () => ({ PlayOnGroup: () => null, usePlayOn: () => ({ devices: [], on: (label: string) => label }) }));
 mock.module("../src/client/detail-navigation", () => ({
   collectionLocation: ({ provider }: { provider: string }) => `/collection?provider=${provider}`,
@@ -26,7 +28,8 @@ let radioPending = false;
 let radioError = false;
 let radioStations = [{ id: "radio", name: "Station" }];
 mock.module("../src/client/sections/discover/on-air", () => ({
-  useOnAir: () => ({ stations: radioStations, favorites: { isPending: false, error: radioError ? new Error("Unavailable") : null }, builtIn: { isPending: radioPending }, pending: radioPending, show: () => undefined, meta: () => "" }),
+  useOnAir: () => ({ stations: radioStations, mine: [], favorites: { isPending: false, error: radioError ? new Error("Unavailable") : null }, builtIn: { isPending: radioPending }, pending: radioPending, show: () => undefined, meta: () => "" }),
+  discoverStations: ({ stations }: { stations: unknown[] }) => stations,
   useStationMenu: () => () => [],
 }));
 const { defaultDiscoverRows } = await import("../src/client/sections/discover/discover-rows");
@@ -67,6 +70,37 @@ test("source shelves hold only what's saved from each source, never the source's
     expect(html).toContain('aria-label="RaiPlay"');
     expect(html).not.toContain('aria-label="StreamingCommunity"');
   } finally { favorites = []; }
+});
+
+test("a source shelf puts live channels first, dims offline ones, and leaves out a page's saved sections", () => {
+  liveSources = [];
+  favorites = [
+    { id: "off", provider: "twitch", kind: "channel", title: "Asleep", url: "https://www.twitch.tv/asleep", subtitle: "Offline", live: false },
+    { id: "on", provider: "twitch", kind: "channel", title: "Streaming", url: "https://www.twitch.tv/streaming", subtitle: "Just Chatting · 1,204 viewers", live: true },
+    { id: "section", provider: "raiplay", kind: "collection", title: "In Diretta", url: "https://www.raiplay.it/#block=PublishingBlock-1" },
+  ];
+  try {
+    const html = view();
+    const twitch = html.split('<section aria-label="Twitch"')[1]!.split("</section>")[0]!;
+    expect(twitch.indexOf("Open Streaming")).toBeLessThan(twitch.indexOf("Open Asleep"));
+    expect(twitch).toContain("Just Chatting, 1,204 viewers");
+    expect(twitch).toContain("rounded-full");
+    expect(twitch.split("Open Asleep")[1]).toContain("grayscale");
+    expect(html).not.toContain("In Diretta");
+    expect(html).not.toContain('aria-label="RaiPlay"');
+  } finally { favorites = []; }
+});
+
+test("a source whose last answer failed is muted in the Sources row", () => {
+  liveSources = [];
+  failedQueries = [{ queryKey: ["search", "provider-page", "streamingcommunity", {}], state: { status: "error", dataUpdatedAt: 0, errorUpdatedAt: 2 } },
+    { queryKey: ["search", "providers", "raiplay", {}], state: { status: "error", dataUpdatedAt: 0, errorUpdatedAt: 1 } },
+    { queryKey: ["search", "provider-page", "raiplay", {}], state: { status: "success", dataUpdatedAt: 3, errorUpdatedAt: 0 } }];
+  try {
+    const sources = view().split('aria-label="Sources"')[1]!;
+    expect(sources.split('aria-label="Open StreamingCommunity"')[1]!.split("</li>")[0]).toContain("Couldn&#x27;t load");
+    expect(sources.split('aria-label="Open RaiPlay"')[1]!.split("</li>")[0]).not.toContain("Couldn&#x27;t load");
+  } finally { failedQueries = []; }
 });
 
 test("one shared input leads Discover with the first page-entry Play control and its menu", () => {
