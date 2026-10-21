@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { FilterBar, FilterChoice, FilterSelect } from "@/components/ContentFilters";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
@@ -24,6 +23,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 import { SearchRadioResults } from "./SearchRadioResults";
+import { SearchKinds, SearchSources } from "./SearchFilters";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
 import { createId } from "../../session/session";
 import type { SourceKind } from "@/components/sourceTypes";
@@ -59,10 +59,9 @@ const groups: Group[] = [
   { id: "videos", title: "Videos", shape: "rows", noun: ["video", "videos"] },
   { id: "channels", title: "Channels and lists", shape: "rows", noun: ["result", "results"] },
 ];
-// The row of kinds above the results. Every source is searched on every query, so the row never changes while they answer.
-const kinds: { value: SearchKind | "all"; label: string; none: string }[] = [
-  { value: "all", label: "All", none: "results" }, { value: "films", label: "Films & series", none: "films or series" }, { value: "live", label: "Live", none: "live streams" },
-  { value: "radio", label: "Radio", none: "stations" }, { value: "music", label: "Music", none: "music" }, { value: "videos", label: "Videos", none: "videos" },
+// The kinds above the results, in the shelves' order; only those the query found are offered.
+const kinds: { value: SearchKind; label: string }[] = [
+  { value: "films", label: "Films & series" }, { value: "radio", label: "Radio" }, { value: "live", label: "Live" }, { value: "music", label: "Music" }, { value: "videos", label: "Videos" },
 ];
 const kindOf = (group: GroupId): SearchKind => group === "channels" ? "videos" : group;
 const count = (group: Group, n: number) => `${n} ${group.noun[n === 1 ? 0 : 1]}`;
@@ -76,7 +75,7 @@ const gridColumns = { poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]", 
 const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]", video: "[--tile-art:56.25cqi]" } as const;
 
 /**
- * The results of the header's search (`searchState`, the route's): a row of kinds and a source above them, then the
+ * The results of the header's search (`searchState`, the route's): the kinds it found, then that kind's sources, then the
  * closest match, then every source's hits by kind, each kind in the shape it reads best in (posters, squares, frames,
  * or rows under the time ruler); one kind fills the page as a grid or a list. Or a pasted link.
  */
@@ -92,20 +91,28 @@ export function SearchPanel(props: Props) {
   const [seenResults, setSeenResults] = useState(resultsKey);
   if (resultsKey !== seenResults) { setSeenResults(resultsKey); setSummaries({}); }
   const reportResults = useCallback((source: string, summary: SearchResultSummary) => setSummaries(current => ({ ...current, [source]: summary })), []);
-  const filter = searchState.source;
-  const kind = searchState.kind;
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(query) ? query : undefined;
   const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[];
-  const inScope = (source: string) => filter === "All" || filter === source;
-  const inKind = (hit: SearchHit, of = kind) => !of || kindOf(groupOf(hit)) === of;
-  const asking = sourceOrder.filter(source => inScope(source) && (!summaries[source] || summaries[source].loading));
+  const pending = (source: string) => !summaries[source] || summaries[source].loading;
   const now = useDurationClock();
   // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
   // strong when its title holds every word.
   const { close, strong } = searchRelevance(query);
   const merged = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), query), [summaries, query]);
+  // The filters come from what was found, so no choice can come up empty: a kind is offered once it has a hit, and
+  // inside a kind, a source once it has a hit of it. A kind or source the route asks for counts while it may still
+  // answer; once it can't, the results show everything.
+  const found = merged.filter(close);
+  const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
+  const foundKinds = kinds.filter(option => found.some(hit => kindOfHit(hit) === option.value));
+  const kind = searchState.kind && (foundKinds.some(option => option.value === searchState.kind) || sourceOrder.some(pending)) ? searchState.kind : undefined;
+  const inKind = (hit: SearchHit, of = kind) => !of || kindOfHit(hit) === of;
+  const foundSources = sourceOrder.map(source => ({ value: source, count: found.filter(hit => hit.source === source && inKind(hit)).length })).filter(source => source.count);
+  const filter = foundSources.some(source => source.value === searchState.source) || searchState.source !== "All" && pending(searchState.source) ? searchState.source : "All";
+  const inScope = (source: string) => filter === "All" || filter === source;
+  const asking = sourceOrder.filter(source => inScope(source) && pending(source));
   const scoped = merged.filter(hit => inScope(hit.source) && inKind(hit));
   const relevant = scoped.filter(close);
   const loose = scoped.filter(hit => !close(hit));
@@ -128,34 +135,27 @@ export function SearchPanel(props: Props) {
       ?? panel.current?.querySelector<HTMLElement>("[data-play], [data-media-tile]");
     row?.focus({ preventScroll: true });
   }, [relevant, props.active]);
-  // A heading or All results that changed the kind left with its control; the focus goes to the chosen kind.
-  const shownKind = useRef(kind);
+  // A heading that changed the kind, or a source that took its line away, left with its control; the focus goes to the chosen kind.
+  const shownFilters = useRef(`${kind}:${filter}`);
   useLayoutEffect(() => {
-    if (shownKind.current === kind) return;
-    shownKind.current = kind;
+    if (shownFilters.current === `${kind}:${filter}`) return;
+    shownFilters.current = `${kind}:${filter}`;
     if (document.activeElement === document.body) panel.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
-  }, [kind]);
+  }, [kind, filter]);
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
-  const kindHits = merged.filter(hit => inKind(hit) && close(hit));
-  const sourceHits = (source: string) => kindHits.filter(hit => hit.source === source).length;
-  // A source with no hits of a newly chosen kind would empty it, so the choice falls back to every source.
-  const chooseKind = (value: SearchKind | "all") => {
-    const next = value === "all" ? undefined : value;
-    props.onSearchChange({ ...searchState, kind: next, source: filter === "All" || merged.some(hit => hit.source === filter && close(hit) && inKind(hit, next)) ? filter : "All" });
-  };
-  const allResults = () => props.onSearchChange({ query, source: "All" });
+  // A kind keeps the chosen source when the source has hits of it; otherwise every source.
+  const withKind = (next?: SearchKind): SearchRouteState => ({ ...searchState, kind: next, source: found.some(hit => hit.source === filter && inKind(hit, next)) ? filter : "All" });
   const [looseOpen, setLooseOpen] = useState(false);
   const one = kind && groups.find(group => group.id === kind)!;
-  const heading = (group: Group) => kind ? undefined : searchLocation({ ...searchState, kind: kindOf(group.id) });
+  const heading = (group: Group) => kind ? undefined : searchLocation(withKind(kindOf(group.id)));
   return <section ref={panel} className="min-w-0 space-y-8" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && <>
-      <FilterBar label="Search filters" data-nav-row>
-        <FilterChoice label="Kind" value={kind ?? "all"} onChange={chooseKind} options={kinds} className="max-sm:w-full" />
-        <FilterSelect label="Source" value={filter} onChange={source => props.onSearchChange({ ...searchState, source })} className="sm:ml-auto" options={[
-          { value: "All", label: "All sources", detail: kindHits.length },
-          ...sourceOrder.filter(source => source === filter || sourceHits(source)).map(source => ({ value: source, label: source, detail: sourceHits(source) })),
-        ]} />
-      </FilterBar>
+      {/* The lines hold their height while sources answer, so nothing below moves as options arrive. A chosen kind
+          always keeps its source line, empty while it has one source. */}
+      {(foundKinds.length > 0 || asking.length > 0) && <div role="group" aria-label="Search filters" className="flex flex-col gap-1">
+        <div className="min-h-10 touch:min-h-11">{foundKinds.length > 0 && <SearchKinds query={resultsKey} value={kind ?? "all"} onChange={next => props.onSearchChange(withKind(next === "all" ? undefined : next))} options={[{ value: "all", label: "All" }, ...foundKinds]} />}</div>
+        {(kind || filter !== "All") && <div className="min-h-8 touch:min-h-11">{(foundSources.length > 1 || filter !== "All") && <SearchSources query={`${resultsKey}:${kind}`} value={filter} onChange={source => props.onSearchChange({ ...searchState, kind, source })} options={foundSources} />}</div>}
+      </div>}
       <p role="status" className="sr-only">
         {!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”.`}
         {asking.length > 0 && ` ${asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}`}
@@ -177,9 +177,7 @@ export function SearchPanel(props: Props) {
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
-      {props.connected && !asking.length && !relevant.length && !shown.some(([, summary]) => summary.error) && (kind || filter !== "All"
-        ? <Empty role="status"><EmptyHeader><EmptyTitle><h2>No {kinds.find(option => option.value === (kind ?? "all"))!.none}{filter !== "All" && ` on ${filter}`} for “{query}”</h2></EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={allResults}>All results</Button></EmptyContent></Empty>
-        : <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>)}
+      {props.connected && !asking.length && !found.length && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
       {loose.length > 0 && <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">
         <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 h-auto min-h-8 max-w-full justify-self-start text-left whitespace-normal text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} {loose.length === 1 ? "result that doesn't" : "results that don't"} mention “{query}”</Button></CollapsibleTrigger>

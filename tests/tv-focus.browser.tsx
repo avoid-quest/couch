@@ -157,7 +157,7 @@ export async function runTvFocusRegression() {
         assert(document.activeElement === deliberate, "Late catalogue stole deliberate focus");
       } finally { release(); window.fetch = originalFetch; }
     });
-    await check("Search's kinds take Left, Right and OK, and keep the focus", async () => {
+    await check("Search's kinds and sources take the arrows and OK, and keep the focus", async () => {
       await audit.go('/search?q=concert', { fresh: true });
       (document.activeElement as HTMLElement | null)?.blur(); await remote('down');
       assert(document.activeElement?.matches('[data-search-top] [data-page-first]'), "Search did not start on its top result");
@@ -168,6 +168,11 @@ export async function runTvFocusRegression() {
       await remote('right'); await remote('select');
       const films = document.activeElement as HTMLElement;
       assert(films.textContent === "Films & series" && films.getAttribute("aria-checked") === "true" && audit.router.state.location.searchStr.includes("kind=films"), "OK did not choose the focused kind, or lost the focus");
+      await remote('down');
+      const source = document.activeElement as HTMLElement;
+      assert(source.closest('[aria-label="Source"]'), "Down from a kind missed its sources");
+      await remote('select');
+      assert(document.activeElement === source && source.getAttribute("aria-pressed") === "true" && audit.router.state.location.searchStr.includes("source="), "OK did not press the focused source, or lost the focus");
     });
   } finally { audit.close(); }
   return results;

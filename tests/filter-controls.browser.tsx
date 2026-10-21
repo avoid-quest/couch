@@ -19,6 +19,13 @@ async function pick(label: string, text: string) {
   await wait();
   assert(choice!.getAttribute("aria-checked") === "true" && document.activeElement === choice, `${label} did not keep its choice focused`);
 }
+async function press(text: string) {
+  const source = [...document.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Source"] button')].find(source => source.textContent?.startsWith(text));
+  assert(source, `Missing source: ${text}`);
+  source!.focus(); source!.click();
+  await wait();
+  assert(source!.getAttribute("aria-pressed") === "true" && document.activeElement === source, `${text} was not pressed, or lost focus`);
+}
 async function choose(label: string, text: string) {
   const trigger = button(label);
   trigger.focus();
@@ -54,21 +61,29 @@ export async function runFilterControlsRegression() {
   const searched = () => readSearchState(audit.router.state.location.searchStr);
   try {
     await audit.go('/search?q=missing&kind=music&source=Bandcamp', { mode: "empty", fresh: true });
-    assert(button("Source") && document.querySelector('[role="radiogroup"][aria-label="Kind"]'), "Empty search hid its filters");
-    assert(!button("Ends by") && !document.body.textContent?.includes("Clear filters"), "Search kept a removed filter");
-    assert(document.body.textContent?.includes("No music on Bandcamp for “missing”"), "Empty filtered search does not say what it looked for");
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "All results")!.click(); await wait();
-    assert(!searched().kind && searched().source === "All", "All results kept a kind or a source");
+    assert(!document.querySelector('[aria-label="Kind"]') && !document.querySelector('[aria-label="Source"]'), "A search that found nothing offered filters");
+    assert(document.body.textContent?.includes("Nothing found for “missing”") && !document.body.textContent?.includes("No music"), "An empty search named a kind or a source instead of saying nothing was found");
     await audit.go('/search?q=concert', { mode: "loaded", fresh: true });
     const searchReads = audit.calls.length;
-    await choose("Source", "StreamingCommunity");
-    assert(searched().source === "StreamingCommunity", "Source selection did not reach the URL");
+    const kinds = () => [...document.querySelectorAll('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].map(radio => radio.textContent).join();
+    const sources = () => [...document.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Source"] button')];
+    assert(kinds() === "All,Films & series,Live,Music,Videos", `Search offered kinds it did not find, or out of order: ${kinds()}`);
+    assert(!sources().length, "All offered sources before a kind was chosen");
     await pick("Kind", "Music");
-    assert(searched().kind === "music" && searched().source === "All", "A source without hits of the chosen kind stayed chosen");
-    await choose("Source", "Bandcamp");
+    assert(sources().map(source => source.textContent).join() === "Bandcamp 2,SoundCloud 2", `Music offered sources without music: ${sources().map(source => source.textContent)}`);
+    await press("Bandcamp");
+    assert(searched().kind === "music" && searched().source === "Bandcamp", "Source selection did not reach the URL");
+    await pick("Kind", "Live");
+    assert(searched().kind === "live" && searched().source === "All", "A source without hits of the chosen kind stayed chosen");
+    assert(!sources().length, "A kind with one source offered it");
+    await pick("Kind", "Music");
+    await press("Bandcamp");
     await pick("Kind", "All");
-    assert(searched().source === "Bandcamp", "A source with hits of the chosen kind was dropped");
-    await choose("Source", "All sources");
+    assert(searched().source === "Bandcamp" && sources().some(source => source.getAttribute("aria-pressed") === "true"), "A source with hits of the chosen kind was dropped, or hidden");
+    const bandcamp = sources().find(source => source.getAttribute("aria-pressed") === "true")!;
+    bandcamp.focus(); bandcamp.click(); await wait();
+    assert(searched().source === "All" && !sources().length, "Pressing the chosen source again did not show every source");
+    assert(document.activeElement?.getAttribute("aria-checked") === "true" && document.activeElement.textContent === "All", "Focus was lost with the source line");
     assert(audit.calls.length === searchReads, "Filtering unnecessarily refetched cached results");
 
     await audit.go('/discover/radio');
@@ -124,7 +139,7 @@ export async function runFilterControlsRegression() {
     button("Clear filter").click(); await wait(500);
     assert(field("Filter channels").value === "" && button("Group").textContent?.includes("Culture"), "Clearing text changed the selected group");
     assert(document.activeElement === field("Filter channels"), "Clearing text lost focus");
-    return { passed: true, checks: ["empty search keeps all filters", "source selection preserves focus and cache", "radio source preserves text", "clear restores input focus", "local filtering makes no reads", "Back restores collection filters", "Live TV debounces typing", "pending requests retain channels", "group and text filters compose"] };
+    return { passed: true, checks: ["an empty search offers no filters", "only found kinds and sources are offered", "source selection preserves focus and cache", "radio source preserves text", "clear restores input focus", "local filtering makes no reads", "Back restores collection filters", "Live TV debounces typing", "pending requests retain channels", "group and text filters compose"] };
   } finally {
     releaseGuide?.();
     window.fetch = fixtureFetch;

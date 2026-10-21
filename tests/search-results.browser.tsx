@@ -31,8 +31,11 @@ export async function runSearchResultsRegression() {
   let state: SearchRouteState = { query: "x", source: "All" };
   const render = () => root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><SearchPanel origin={location.origin} token="fixture" connected canPlay active searchState={state} onSearchChange={next => { state = next; render(); }} onCommand={gate.run} onOpenCollection={item => { opened = item.id; }} /></QueryClientProvider></SessionGateContext>);
   try {
+    const kinds = () => [...host.querySelectorAll('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].map(radio => radio.textContent).join();
     render();
     await wait(900);
+    assert(kinds() === "All,Live", `Kinds offered before their sources answered: ${kinds()}`);
+    const filtersTop = host.querySelector('[data-search-top]')!.getBoundingClientRect().top;
     const hero = host.querySelector<HTMLElement>('[data-search-top] [data-play]')!;
     assert(hero?.tagName === "A" && hero.getAttribute("href")?.includes("twitch"), "Hero Open lost its href");
     assert(host.querySelector('[data-search-top]')?.textContent?.includes("Play on Living room"), "Hero Play lost its controlled device");
@@ -49,6 +52,7 @@ export async function runSearchResultsRegression() {
     releaseFilms!();
     await wait(900);
     assert(document.activeElement === hero && host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "twitch:live-0", "A late source replaced the leading result or moved focus");
+    assert(kinds() === "All,Films & series,Live" && host.querySelector('[data-search-top]')!.getBoundingClientRect().top === filtersTop, `A late kind was out of order or moved the results: ${kinds()}`);
     const more = [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => /^\d+ more$/.test(button.textContent ?? ""))!;
     assert(more && host.querySelectorAll('[data-hit-id^="twitch:"] [data-media-tile], [data-media-tile][data-hit-id^="twitch:"]').length === 12, "Expected twelve initial live shelf hits");
     more.click();
@@ -66,15 +70,21 @@ export async function runSearchResultsRegression() {
     await wait();
     assert(host.querySelectorAll("[data-media-tile]").length === 14 && !host.querySelector('section[aria-label="Live now"]') && ![...host.querySelectorAll("button")].some(button => /^\d+ more$/.test(button.textContent ?? "")), "One kind kept its heading or its cap");
     assert(host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "twitch:live-0", "One kind lost its leading result");
+    assert(!host.querySelector('[aria-label="Source"]'), "A kind from one source offered it");
     state = { ...state, source: "Twitch" }; render();
     await wait();
+    const twitch = host.querySelector<HTMLButtonElement>('[aria-label="Source"] button[aria-pressed="true"]');
+    assert(twitch?.textContent?.startsWith("Twitch"), "The chosen source was not shown pressed");
     [...host.querySelectorAll<HTMLElement>('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].find(radio => radio.textContent === "Films & series")!.click();
     await wait();
     assert(state.kind === "films" && state.source === "All", "A source without films stayed chosen");
+    state = { query: "x", source: "Bandcamp", kind: "music" }; render();
+    await wait();
+    assert(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent === "All" && host.querySelectorAll("[data-media-tile]").length && !host.textContent?.includes("No music"), "A kind and source the query has no hits for emptied the page");
     state = { query: "x stream", source: "All" }; render();
     await wait(900);
     assert(host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "streamingcommunity:film", "Previous query's snapshot pinned the wrong hero");
-    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "one kind fills the page", "kind change resets an empty source", "query change retires the old hero hold"] };
+    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "one kind fills the page", "kinds arrive in order without moving results", "kind change resets an empty source", "impossible route filters show everything", "query change retires the old hero hold"] };
   } finally {
     releaseFilms!(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }
@@ -126,14 +136,13 @@ export async function runSearchResultStatesRegression() {
     assert(host.querySelector('[data-hit-id="youtube:space"]') && host.querySelector('[data-hit-id="twitch:stream"]'), "Retry replaced successful results");
     state = { query: "space", source: "Bandcamp", kind: "music" }; render();
     await wait();
-    assert(host.textContent?.includes("No music on Bandcamp for “space”"), "Empty source scope had no explanation");
-    [...host.querySelectorAll("button")].find(button => button.textContent === "All results")!.click();
-    await wait();
-    assert(state.source === "All" && !state.kind && host.querySelector("[data-search-top]"), "All results did not restore results");
+    const offered = [...host.querySelectorAll('[role="radio"]')].map(radio => radio.textContent).join();
+    assert(offered === "All,Live,Videos" && !host.querySelector('[aria-label="Source"]'), `Search offered a kind or a source without hits: ${offered}`);
+    assert(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent === "All" && host.querySelector("[data-search-top]") && !host.textContent?.includes("No music"), "A kind and source without hits emptied the results");
     state = { query: "no matches", source: "All" }; render();
     await wait(900);
     assert(host.textContent?.includes("Nothing found for “no matches”") && !host.querySelector("[data-hit-id]"), "Empty search retained stale results");
-    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "retry retains successes", "filtered empty and All results", "empty search retires results"] };
+    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "retry retains successes", "no empty kind or source", "empty search retires results"] };
   } finally {
     release(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }
