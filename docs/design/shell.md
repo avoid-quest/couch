@@ -108,14 +108,27 @@ device. It reuses Settings → This device's choice. After a switch:
 
 ## Now-playing bar
 
-`NowPlayingBar`, one row above the page (and the phone tab bar), shares the
-player band's grid so nothing changes side as it grows into the band
-([Player](player.md#the-band)): what plays at the left (artwork and title open
-the player; below them its collection or station link, a status only when it
-isn't plain playing or paused, and "on {device}" when it plays elsewhere),
-Play/Pause, Stop and Next centred, and Volume, Where it plays and Up next at
-the right. Its timeline is a slim line along its top edge, none for live media.
-Phones keep Play/Pause and Where it plays.
+`NowPlayingBar`, one row above the page (and the phone tab bar), is the
+player's band made small: it shares the band's grid, controls and sizes, so
+nothing changes side as it grows into the band
+([Player](player.md#the-band-and-the-now-playing-bar)).
+
+- **At the left, what plays.** Artwork and title open the player. Under the
+  title, one line: "on {device}" in the ink when it plays elsewhere, then its
+  collection or station link, then a status only when it isn't plain playing
+  or paused. The player says where it plays the same way (`PlaysOn`).
+- **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
+- **At the right, Volume, Where it plays and Up next,** at the band's right
+  edge and in its order. The player adds the gear and fullscreen after them.
+- Every control is the band's ghost icon at `--player-target` (44px, 54px at
+  1920 wide) with the same 1.25rem glyph.
+- Its timeline is a slim line along its top edge, none for live media.
+- Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause and
+  Where it plays.
+
+Opening the player is a view transition: the bar grows into the band
+(`couch-player-band`), and each shared control glides to its place in the band
+under its own name rather than cross-fading.
 
 It hides on the player, on Remote, and while Home's playing hero is on screen
 (`html[data-hero-playing]`). With the phone tab bar it forms the footer, whose

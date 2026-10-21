@@ -28,8 +28,7 @@ A video fills the window and never shrinks, moves or resizes. All four
 references keep the picture full-bleed and float their controls and panels
 over it. Everything that opens lies over the picture:
 
-- the gear's menu
-- Audio & subtitles
+- the gear's menu, with Subtitles and Audio
 - Volume
 - Where it plays
 - Up next
@@ -81,15 +80,43 @@ The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the
   now-playing bar grows into the band without anything changing side.
   Apple's controls and Prime's centre transport are centred too.
-- The tools at the right: Volume, Where it plays, Up next, Audio &
-  subtitles, the Playback gear and fullscreen.
+- The tools at the right: Volume, Where it plays and Up next, then the
+  Playback gear and fullscreen.
 - Every control is a ghost icon (`icon-lg`), each with an `aria-label` and
   a matching `title`. Its target is 44px and grows with the interface only to
   2.25rem: 54px at 1920 wide, the size of YouTube's fullscreen controls
   (`--player-target`).
-- Narrow phones lead with the transport and leave Volume out. A phone has
-  volume keys, as YouTube's and Netflix's phone players assume, and Where it
-  plays leads with the same Volume. That keeps the row to one line.
+- Phones (below `sm`, the bar's breakpoint) lead with the transport, its glyph
+  under the position, and leave Volume out. A phone has volume keys, as
+  YouTube's and Netflix's phone players assume, and Where it plays leads with
+  the same Volume. That keeps the row to one line.
+
+### The band and the now-playing bar
+
+The band is the now-playing bar grown up ([Shell](shell.md#now-playing-bar)).
+They share one set of controls:
+
+- **The same icons, glyphs and targets** at every width: the transport, the
+  lucide Volume, Where it plays (SlidersVertical) and Up next (ListMusic), at
+  `--player-target` with a 1.25rem glyph.
+- **The transport at the same x.** Both centre it in a
+  `1fr auto 1fr` grid inside the same gutter.
+- **The tools at the same right edge, in the same order.** The bar's Volume,
+  Where it plays and Up next come first. The player adds its own two after
+  them: the Playback gear and fullscreen, which only mean something over the
+  picture. So in the band the shared three sit two targets further left.
+- **They move, not cross-fade.** Each shared control has its own view
+  transition name (`couch-play`, `couch-stop`, `couch-next`, `couch-volume`,
+  `couch-where`, `couch-queue`), so it glides from its place in the bar to its
+  place in the band while the band itself grows (`couch-player-band`).
+
+The differences are deliberate:
+
+| Where | Bar | Band | Why |
+|---|---|---|---|
+| Wide screens | Volume, Where it plays, Up next | the same, then the gear and fullscreen | The gear's settings and fullscreen apply to the picture. |
+| Beside artwork (audio, or playing elsewhere), from 960px | Up next | no Up next | Up next is already on screen beside the artwork. |
+| Phones | Play/Pause and Where it plays, after the title | the whole transport at the left, then Where it plays, Up next, the gear and fullscreen | The bar's left is what plays. The band has no room to centre the transport. |
 
 Over a playing video, the bands hide 4 s after the last key while focus is on
 the picture. They stay up:
@@ -100,30 +127,33 @@ the picture. They stay up:
 
 ## Settings
 
-Each feature is placed where the reference that does it best places it:
+Every setting is in **the Playback gear**, which opens YouTube's menu: a
+small menu above the whole band, aligned to the gear (`PlaybackMenu`,
+`data-player-menu`). There is no separate subtitles button, so the band keeps
+to the transport and five tools. C still turns subtitles on and off, as on
+YouTube.
 
-- **Audio & subtitles** has its own button (`Captions`), as Netflix's Audio &
-  Subtitles and YouTube's CC do. It opens one panel over the picture, above
-  its button (`TracksPanel`, `data-player-tracks`):
-  - Audio and Subtitles sit side by side, as on Netflix, and stack on a
-    phone. Each column scrolls on its own.
-  - Subtitles also hold Add subtitles (SRT or VTT), Save as default and a
-    Subtitle delay stepper.
-  - It shows over video only.
-- **The Playback gear** opens YouTube's menu: a small menu above the whole
-  band, aligned to the gear (`PlaybackMenu`, `data-player-menu`).
-  - Each row is a setting with its current value and "›": Speed, Quality,
-    Chapters and Audio delay. Each shows only where it applies.
-  - A Details link ends the menu.
-  - A row opens its submenu in place, under a Back row (YouTube's submenus).
-    Focus lands on the chosen value.
-  - Back or Esc in a submenu returns to the menu, on the row that opened it.
-    Back or Esc on the menu closes it and returns to the gear.
-  - Speed offers 0.5× to 2×, with Save as default. YouTube puts speed in
-    the gear menu. Netflix has a separate speed button, but on web and
-    mobile only.
-  - Quality lists Couch's labels.
-  - Audio delay steps by 0.1 s.
+- Each row is a setting with its current value and "›": Subtitles, Audio,
+  Speed, Quality, Chapters and Audio delay. Each shows only where it
+  applies. A Details link ends the menu.
+- **Subtitles** leads the menu, as YouTube's Subtitles/CC row does, and
+  reads "Off" or the chosen track. It shows over video only. Its submenu has:
+  - Off and the tracks, the current one checked
+  - Save subtitles as default, while there are tracks
+  - under a hairline, Add subtitles (SRT or VTT) and the Subtitle delay
+    stepper
+- **Audio** shows only with more than one audio track, as YouTube's Audio
+  track row does. It reads the chosen track. Its submenu has the tracks and
+  Save audio language as default.
+- Speed offers 0.5× to 2×, with Save as default. YouTube puts speed in the
+  gear menu. Netflix has a separate speed button, but on web and mobile only.
+- Quality lists Couch's labels.
+- Audio delay steps by 0.1 s.
+- A row opens its submenu in place, under a Back row (YouTube's submenus).
+  Focus lands on the chosen value. The Back row stays while a long list
+  (subtitle languages, chapters) scrolls under it.
+- Back or Esc in a submenu returns to the menu, on the row that opened it.
+  Back or Esc on the menu closes it and returns to the gear.
 - Volume and Where it plays open their Popovers above the whole band too, so
   nothing covers the timeline.
 
@@ -219,9 +249,13 @@ Audio, and media playing elsewhere, show **Now playing** as Home's hero does:
 
 - contained artwork
 - the title
-- the relationship links
-- a meta line: the station, else the subtitle, else the source, then
-  "on Kitchen +1"
+- where it plays, when that isn't only this device: "on Kitchen +1", in the
+  ink rather than the muted metadata. It leads the line under the title, so it
+  reads on from the title. The now-playing bar says it the same way, in the
+  same place (`PlaysOn`).
+- the relationship links, on the same line
+- a meta line: the station, else the subtitle, else the source, then "in a
+  separate window" for a channel that plays in mpv's window
 - the end time
 - a station's current programme or track
 
@@ -255,8 +289,8 @@ band, the now-playing bar, Home's hero and Remote (`PlaybackTransport`).
 | Gradient scrims, no bars | YouTube's bottom gradient; Netflix's and Apple's floating controls |
 | Thin timeline that thickens on hover, thumb on hover, hover time | YouTube |
 | Title top-left with Back | YouTube and Netflix fullscreen |
-| Gear menu with in-place submenus (Speed, Quality, Chapters, Audio delay) | YouTube |
-| Audio & subtitles button with a two-column panel | Netflix (Prime's "Subtitles and Audio" is one menu too) |
+| Gear menu with in-place submenus (Subtitles, Audio, Speed, Quality, Chapters, Audio delay) | YouTube, whose gear holds Subtitles/CC and Audio track |
+| No separate subtitles button; C toggles subtitles | YouTube's C key; the owner asked for fewer buttons |
 | Up next as a panel over the picture from its own button | Netflix's episodes panel |
 | Autoplay switch | YouTube |
 | Next card near the end | Prime Video's "Next up"; Netflix's Next Episode |
