@@ -28,7 +28,7 @@ let radioPending = false;
 let radioError = false;
 let radioStations = [{ id: "radio", name: "Station" }];
 mock.module("../src/client/sections/discover/on-air", () => ({
-  useOnAir: () => ({ stations: radioStations, mine: [], favorites: { isPending: false, error: radioError ? new Error("Unavailable") : null }, builtIn: { isPending: radioPending }, pending: radioPending, show: () => undefined, meta: () => "" }),
+  useOnAir: () => ({ stations: radioStations, mine: [], favorites: { isPending: false, error: radioError ? new Error("Unavailable") : null }, builtIn: { isPending: radioPending }, pending: radioPending, loading: radioPending, show: () => undefined, meta: () => "" }),
   discoverStations: ({ stations }: { stations: unknown[] }) => stations,
   useStationMenu: () => () => [],
 }));

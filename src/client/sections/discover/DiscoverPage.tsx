@@ -84,12 +84,12 @@ function OnAir() {
   const homeRadio = useHomeRows().rows.some(row => row.id === "radio" && row.shown);
   const stationMenu = useStationMenu();
   // As on Home, the shelf keeps the order it opened with, so a refetch or a new favourite never moves a tile under the focus.
-  const stations = useKeptOrder(discoverStations(onAir, homeRadio), station => station.id, !onAir.pending);
+  const stations = useKeptOrder(discoverStations(onAir, homeRadio), station => station.id, !onAir.loading);
   if (!stations.length && !onAir.favorites.isPending && !onAir.builtIn.isPending && (onAir.favorites.error || onAir.builtIn.error)) return <Failed what="Radio" retry={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])} />;
-  if (!onAir.pending && !stations.length) return null;
-  // It waits for the shows, so its tiles don't grow a line under the focus.
-  return <Shelf loading={onAir.pending} title="Radio" label="Radio stations" href="/discover/radio">
-    {onAir.pending ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
+  if (!onAir.loading && !stations.length) return null;
+  // Stations Home already loaded show at once: a tile keeps room for its show's line, which arrives without moving it.
+  return <Shelf loading={onAir.loading} title="Radio" label="Radio stations" href="/discover/radio">
+    {onAir.loading ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
       <MediaTile data-page-first={index === 0 || undefined} shape="square" plays title={station.name} meta={onAir.meta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : metaLine(station.groupTitle || station.countryCode)) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />

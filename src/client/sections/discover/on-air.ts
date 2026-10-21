@@ -36,6 +36,8 @@ export function useOnAir(enabled = true, first: RadioStation[] = []) {
   return {
     stations, mine, show, playing, favorites, builtIn,
     pending: enabled && (favorites.isPending || builtIn.isPending || programmesShown && programmes.isPending),
+    /** The stations themselves are still loading; their shows may follow (a tile keeps room for one). */
+    loading: enabled && (favorites.isPending || builtIn.isPending),
     /** Playing, then the show and its genre. */
     meta: (station: RadioStation) => metaLine(playing(station) && playbackStatus(state, connected).label, show(station.id)?.title, show(station.id)?.genre),
   };

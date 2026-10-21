@@ -236,7 +236,7 @@ export function HomePage() {
 
     {hero === undefined && <DetailSkeleton home />}
     {lead}
-    {hero !== undefined && onHome.map(row => <Fragment key={row.id}>{shelves[row.id] || (connected && (row.id === "later" ? later.isPending : row.id === "radio" ? radioPending : ["continue", "recent"].includes(row.id) && history.isPending) && <Shelf title={row.id === "later" ? "For later" : row.id === "radio" ? "Radio" : row.id === "continue" ? "Continue" : "Played recently"} loading><MediaTilesSkeleton shape={row.id === "radio" ? "square" : "video"} /></Shelf>)}</Fragment>)}
+    {hero !== undefined && onHome.map(row => <Fragment key={row.id}>{shelves[row.id] || (connected && (row.id === "later" ? later.isPending : row.id === "radio" ? favorites.isPending : ["continue", "recent"].includes(row.id) && history.isPending) && <Shelf title={row.id === "later" ? "For later" : row.id === "radio" ? "Radio" : row.id === "continue" ? "Continue" : "Played recently"} loading><MediaTilesSkeleton shape={row.id === "radio" ? "square" : "video"} /></Shelf>)}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">
       <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
