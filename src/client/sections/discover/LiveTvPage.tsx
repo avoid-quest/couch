@@ -104,7 +104,7 @@ export function LiveTvPage() {
         <FilterInput label="Filter channels" value={filter} maxLength={100} onChange={filter => go({ page: 1, filter }, true)} />
       </div>
       <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p id="live-tv-channels" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{guide.isLoading || updating ? <><Spinner className="size-3.5" /><span role="status">{guide.data ? "Updating channels…" : "Loading channels…"}</span></> : <span role="status">{total} {total === 1 ? "channel" : "channels"}</span>}</p>
+        <p id="live-tv-channels" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{guide.isLoading || updating ? <><Spinner aria-hidden="true" className="size-3.5" /><span role="status">{guide.data ? "Updating channels…" : "Loading channels…"}</span></> : <span role="status">{total} {total === 1 ? "channel" : "channels"}</span>}</p>
         <BrowsePagination page={requested} pages={pages} previous={requested > 1 ? liveTvLocation({ page: requested - 1, filter, group }) : undefined} next={requested < pages ? liveTvLocation({ page: requested + 1, filter, group }) : undefined} disabled={!connected || guide.isFetching || updating} onSelectPage={page => go({ page })}
           onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ page: Number(new URL(href, location.origin).searchParams.get("page") ?? 1) }); }} />
       </div>

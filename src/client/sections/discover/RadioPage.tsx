@@ -44,7 +44,7 @@ export function RadioPage() {
         <FilterInput label="Filter stations" value={filter} onChange={filter => void navigate({ href: radioBrowseLocation(source, 1, filter), replace: true, resetScroll: false })} />
       </div>
       <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{connected && (!summary || summary.loading) && !summary?.hits?.length ? <><Spinner className="size-3.5" /><span role="status">Loading stations…</span></> : <span role="status">{hits.length} {hits.length === 1 ? "station" : "stations"}</span>}</p>
+        <p id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{connected && (!summary || summary.loading) && !summary?.hits?.length ? <><Spinner aria-hidden="true" className="size-3.5" /><span role="status">Loading stations…</span></> : <span role="status">{hits.length} {hits.length === 1 ? "station" : "stations"}</span>}</p>
         <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? radioBrowseLocation(source, paging.page - 1, filter) : undefined} next={paging.next ? radioBrowseLocation(source, paging.page + 1, filter) : undefined} disabled={!connected || !!summary?.loading} onSelectPage={goToPage}
           onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); goToPage(Number(new URL(href, location.origin).searchParams.get("page") ?? 1)); }} />
       </div>

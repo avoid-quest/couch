@@ -106,7 +106,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
           </>}
         </div>
         <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{cold && !hits.length ? <><Spinner className="size-3.5" /><span role="status">Loading items…</span></> : <span role="status">{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</span>}</h2>
+          <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{cold && !hits.length ? <><Spinner aria-hidden="true" className="size-3.5" /><span role="status">Loading items…</span></> : <span role="status">{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</span>}</h2>
           {pager}
         </div>
       </div>
