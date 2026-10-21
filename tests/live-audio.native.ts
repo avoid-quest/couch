@@ -21,6 +21,7 @@ import { verifyJackBindings, type JackTopology } from "./audio-lab/topology";
 import { assessRecording } from "./audio-lab/recording";
 
 const root = resolve(import.meta.dirname, "..");
+const analysisBudgetMs = 600_000;
 assert.equal(process.platform, "linux", "The common-graph audio lab currently requires Linux");
 // JACK's server registry is shared even when server names differ. Enter a
 // disposable IPC/mount/PID namespace before creating any audio resources.
@@ -29,7 +30,7 @@ if (!process.env.COUCH_LAB_IPC) {
   const child = spawn("bash", [join(root, "scripts/live-audio-lab.sh"), "--", process.execPath, ...process.argv.slice(1)], { stdio: "inherit" });
   process.once("SIGINT", () => child.kill("SIGINT"));
   process.once("SIGTERM", () => child.kill("SIGTERM"));
-  const timer = setTimeout(() => child.kill("SIGTERM"), 300_000);
+  const timer = setTimeout(() => child.kill("SIGTERM"), (120 + 150 + 15) * 1000 + analysisBudgetMs);
   const code = await new Promise<number>((resolve, reject) => { child.once("error", reject); child.once("exit", (code, signal) => resolve(code ?? (signal === "SIGINT" ? 130 : 143))); });
   clearTimeout(timer);
   process.exit(code);
@@ -550,12 +551,18 @@ try {
   }
   const rendererCoverage = rendererWindows.map((window: any) => ({ id: window.id, ...window.coverage }));
   sampleResources();
+  // Capture has its original wall deadline. Stop the owned audio/browser
+  // processes before spending a separate, explicitly bounded offline budget.
+  clearTimeout(deadline);
+  await cleanup();
+  const analysisStarted = performance.now(), analysisDeadline = analysisStarted + analysisBudgetMs;
   // Heavy correlation runs after capture so analysis load cannot create audio
   // underruns. Both parsers and retained artifacts have explicit byte ceilings.
   assert.notEqual(recorderCapture.end.sourceFirstFrame, null, "Recorder must retain the exact source start frame");
   for (const block of recorderCapture.blocks) {
     const startFrame = (block.firstFrame - recorderCapture.end.sourceFirstFrame!) | 0;
     for (let channel = 0; channel <= receivers; channel++) {
+      remainingTime(analysisDeadline, "Offline PCM analysis");
       const samples = new Float32Array(block.frameCount);
       for (let at = 0; at < block.frameCount; at++) samples[at] = block.samples[at * (receivers + 1) + channel]!;
       const id = channel === 0 ? "reference" : ids[channel - 1]!;
@@ -574,6 +581,8 @@ try {
     receiverPorts, expectedReceiverDelayFrames: recorderDelayFrames, startFrame: mode === "calibration" ? 0 : 2 * rate,
     endFrame: durationFrames + outputTailFrames,
     topologyVerified: topologyCheckBefore.verified && topologyCheckAfter.verified && pulseRoutes.every(route => route.verified) });
+  remainingTime(analysisDeadline, "Offline PCM analysis");
+  const evaluation = { mode: "offline", elapsedMs: performance.now() - analysisStarted, budgetMs: analysisBudgetMs };
   const presentationScope = mode === "calibration" ? "Known-delay fixture JACK ports; no browser or Pulse output boundary qualification"
     : "Actual receiver module-jack-sink PCM ports after browser/Pulse rendering; nominal JACK sample time only";
   const recording = assessRecording({ analysis, presentation, recorderExitCode: graph.exitCode, witnessExitCode: witness.exitCode });
@@ -604,7 +613,7 @@ try {
     peer.media.filter((media: any) => media.type === "inbound-rtp" && media.kind === "audio")
       .map((media: any) => peer.codecs.find((codec: any) => codec.id === media.codecId)?.mimeType).filter(Boolean))))] as string[];
   const result = { mode, seed, runId, fixture, recorderDelayFrames, receivers, seconds, sampleRate: rate, graphQuantumFrames: quantum, graphExit: graph.exitCode, calibration,
-    presentation, presentationScope, completePresentation, recording, continuous: continuousAnalysis,
+    presentation, presentationScope, completePresentation, recording, evaluation, continuous: continuousAnalysis,
     jitterBufferPreference: { requestedMs: jitterBufferTargetMs, receivers: jitterPreferences, scope: "Browser preference only; readback does not prove actual occupancy or a maximum delay" },
     backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true, implementations: audioBackend,
       requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },

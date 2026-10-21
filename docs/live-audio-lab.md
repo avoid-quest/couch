@@ -175,6 +175,11 @@ its absolute JACK frame address; both are aligned to the source's declared first
 frame. Analysis runs after capture so correlation work cannot disturb playback.
 Retention is capped at 256 MiB per stream, including headers, with an additional
 decoded copy in memory. This short-run recorder is not the later soak recorder.
+Capture retains its `seconds + 150` wall deadline. Once streams and telemetry
+are drained, owned audio/browser processes close before offline scoring starts.
+Scoring has a separate ten-minute budget, checked synchronously between channel
+blocks; its actual elapsed time is recorded. Include that budget in any outer
+network-wrapper wall limit. This changes neither playback nor acceptance limits.
 
 Replay retained samples with the current evaluators, without starting audio:
 
