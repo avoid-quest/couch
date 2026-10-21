@@ -161,9 +161,12 @@ Shared building blocks in `src/client/components`:
   a shelf or a list takes its majority shape
   ([Artwork shapes](design/browse.md#artwork-shapes)). `mediaCaption` and
   `metaLine` give captions one rhythm: an episode leads with its series, and
-  meta parts are joined by commas.
+  meta parts are joined by commas; `withoutUrls` takes bare addresses out of
+  descriptions.
 - `DetailHeader`: an item or collection page's header
-  ([Browse](design/browse.md#details)).
+  ([Browse](design/browse.md#details)), with `SaveToggle` (Save as a bookmark
+  that fills, fixed width) and `Description` (three lines, then More), which
+  Search's closest match uses too.
 - `ContentFilters` (`FilterBar`, `FilterChoice`, `FilterSelect`, `FilterInput`)
   and `BrowsePagination` ([Browse](design/browse.md#filters-and-pages));
   Search's own `SearchFilters` ([Browse](design/browse.md#search)).
@@ -204,7 +207,9 @@ its results hold, as it finds them).
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
-  in `AlertAction`); **Empty** for empty states; a `Spinner` status line for
+  in `AlertAction`), when the problem is the page (a source's own home);
+  sources that didn't answer beside others that did (Search, a Details page's
+  neighbours) are one muted line at the end, `SourcesUnanswered`; **Empty** for empty states; a `Spinner` status line for
   work in progress.
 - **Dialog** for short tasks (pairing, source setup), **AlertDialog** for
   confirmations, **Popover** for the player's menus and panels over the picture,
