@@ -94,7 +94,7 @@ export async function runFilterControlsRegression() {
     assert(document.activeElement === field("Filter stations"), "Station filtering stole focus");
     assert(audit.calls.length === radioReads, "Local station filtering sent a request");
     assert(!document.querySelector('[aria-label="Browse pages"]'), "A single page of stations showed a pager");
-    await pick("Source", "Radio directory");
+    await pick("Source", "Directory");
     assert(field("Filter stations").value === "  NTS  ", "Switching source discarded the station filter");
     type("Filter stations", "no match"); await wait();
     assert(document.body.textContent?.includes("No stations match"), "Radio empty filter has no explanation");

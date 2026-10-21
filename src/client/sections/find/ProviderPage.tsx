@@ -19,6 +19,11 @@ import { HitList, SourceProblems } from "./SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchCollection, type SearchResultSummary } from "./SearchOnlineResults";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape, type TileShape } from "@/components/MediaTile";
+import { artShape } from "@/art-shape";
+import { metaLine } from "@/media-caption";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { TRY_AGAIN } from "@/copy";
+import { useSettingsScope } from "@/sections/settings/settings-scope";
 import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 
@@ -95,7 +100,8 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
-      <FilterBar label="Collection filters">
+      {/* Filter waits for something to filter. */}
+      {(!!summary?.hits?.length || !!search.filter) && <FilterBar label="Collection filters">
         <FilterInput label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} value={search.filter}
           onChange={filter => void navigate({ href: locationFor({ page: 1, filter }), replace: true, resetScroll: false })} />
         {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
@@ -103,16 +109,17 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
           <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
           <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
         </>}
-      </FilterBar>
+      </FilterBar>}
       <h2 id="collection-items" tabIndex={-1} className="sr-only"><span role="status">{cold ? "" : `${hits.length} ${noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}${paging.remote ? " on this page" : ""}`}</span></h2>
       {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
-      {cold && !posterCatalogue && <MediaRowsSkeleton compact />}
+      {/* The rows it loads into: a source's music as squares, everything else as frames. */}
+      {cold && !posterCatalogue && <MediaRowsSkeleton compact shape={artShape(providerNames[provider]) === "square" ? "square" : "video"} />}
       {posterCatalogue ? <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6 p-0">
         {cold && <MediaTilesSkeleton shape="poster" fluid />}
         {hits.slice(paging.start, paging.end).map((hit, index) => {
           const item = page?.items.find(item => item.url === hit.url);
           return item && <li key={hit.id} className="@container min-w-0">
-            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={mediaSubtitle(item)} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
+            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={metaLine(mediaSubtitle(item))} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
               href={collectionLocation(item)} onClick={() => openProvider(item)} />
           </li>;
         })}
@@ -120,7 +127,8 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: locationFor({ page: 1, filter: "" }), replace: true, resetScroll: false })}>Clear filter</Button>}</Empty>}
       {pager}
     </>}
-    <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
+    {summary?.error && moved.test(summary.errorMessage ?? "") ? <MovedSource name={providerNames[provider]} message={summary.errorMessage!.replace(moved, "")} retry={summary.retry} />
+      : <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />}
     {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}
   </section>;
 }
@@ -134,6 +142,20 @@ function CollectionHeader({ collection: c, canPlay, shape }: { collection: Searc
     save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
     playOn={c.playOn && { run: c.playOn, disabled }}
     more={[...browserActions(c.url), ...c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []]} />;
+}
+
+// Core ends a moved source's error with where to fix it, which an admin gets as a button instead.
+const moved = / Set it in Settings → Sources\.$/;
+function MovedSource({ name, message, retry }: { name: string; message: string; retry?: () => void }) {
+  const { administrator } = useSettingsScope();
+  return <Alert variant="destructive">
+    <AlertTitle>Couldn't load {name}.</AlertTitle>
+    <AlertDescription>{message}</AlertDescription>
+    <AlertAction className="flex gap-2">
+      {administrator && <Button data-page-first variant="ghost" size="sm" asChild><Link to="/settings/couch/sources/streaming-community">Set site address</Link></Button>}
+      <Button variant="ghost" size="sm" onClick={() => retry?.()}>{TRY_AGAIN}</Button>
+    </AlertAction>
+  </Alert>;
 }
 
 // Sources without a home page of their own start from the header's field, scoped to them.

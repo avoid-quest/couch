@@ -3,7 +3,7 @@ import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
@@ -62,8 +62,21 @@ export function ItemPage() {
   const { search } = useLocation();
   const { kind, id } = readItemSearch(search);
   return <section data-page="Item" className="min-w-0 space-y-6">
-    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <PageHeader breadcrumb={<ContentBreadcrumb />} title="Item not found" />}
+    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <ItemNotFound />}
   </section>;
+}
+
+/** An item that is gone: its title, then the ways on, Search (the header's field) and Back. */
+function ItemNotFound() {
+  const { focusSearch, section, sectionUrl } = useShell();
+  const { history } = useRouter();
+  return <>
+    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Item not found" className="mb-6" />
+    <div data-nav-row className="flex flex-wrap gap-2">
+      <Button data-page-first size="lg" onClick={focusSearch}>Search</Button>
+      <Button variant="ghost" size="lg" onClick={() => history.canGoBack() ? history.back() : history.push(sectionUrl(section))}>Back</Button>
+    </div>
+  </>;
 }
 
 function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) {
@@ -84,8 +97,9 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
   if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
-    {connected && !query.error ? <><ContentBreadcrumb radio={kind === "radio"} /><DetailSkeleton shape={kind === "radio" ? "square" : "video"} /></> : <PageHeader breadcrumb={<ContentBreadcrumb />} title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />}
-    {query.error ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
+    {query.error instanceof ApiError && query.error.status === 404 ? <ItemNotFound />
+      : connected && !query.error ? <><ContentBreadcrumb radio={kind === "radio"} /><DetailSkeleton shape={kind === "radio" ? "square" : "video"} /></> : <PageHeader breadcrumb={<ContentBreadcrumb />} title="Details" />}
+    {query.error && !(query.error instanceof ApiError && query.error.status === 404) ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
       : !connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this item.</p>}
   </>;
   const detail = query.data;
