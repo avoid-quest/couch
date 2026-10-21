@@ -21,7 +21,8 @@ export function keptOrder<T>(order: readonly string[], items: readonly T[], key:
 
 /**
  * A row's order, taken once its data is ready, so nothing moves under the focus while Home stays open.
- * It leaves out the item that led Home then (`except`, the hero's) for as long: a later hero stays where it is.
+ * It leaves out the item that led Home then and the one that leads it now (`except`, the hero's): the hero's item is
+ * never in a shelf too, so a hero that changes (after Stop) takes its item out of the shelf below.
  */
 export function useKeptOrder<T>(items: T[], key: (item: T) => string, ready = true, except?: string): T[] {
   // State set while rendering, as React suggests for remembering a render: an abandoned render takes its snapshot with it.
@@ -29,6 +30,6 @@ export function useKeptOrder<T>(items: T[], key: (item: T) => string, ready = tr
   // An empty first answer takes no order, or the items that arrive later would never be kept.
   const taken = kept ?? (ready && items.some(item => key(item) !== except) ? { order: items.map(key).filter(id => id !== except), except } : null);
   if (taken && !kept) setKept(taken);
-  const shown = items.filter(item => key(item) !== (taken ? taken.except : except));
+  const shown = items.filter(item => key(item) !== except && (!taken || key(item) !== taken.except));
   return taken ? keptOrder(taken.order, shown, key) : shown;
 }
