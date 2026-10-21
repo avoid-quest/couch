@@ -67,7 +67,7 @@ Checkbox, RadioGroupItem) take a 2px foreground outline instead; a tile's
 caption inverts and its artwork takes a thin outline.
 
 **Hover** is a white tint, never on the TV. A ghost button whose panel is open
-(`aria-expanded`: Volume, Where it plays, Up next, Playback)
+(`aria-expanded`: Volume, Up next, Where it plays, Playback)
 keeps the tint.
 
 ## Scale
@@ -90,7 +90,7 @@ The page gutter is `px-(--gutter)` (`clamp(1rem, 4vw, 3rem)`); the shell gives
 the one top offset (`pt-8`). Two-column pages (Saved, Settings) use a `12rem`
 rail and `gap-12`. Controls are `h-8 text-sm`; `touch:` (phones and windows
 narrower than 960px) raises them to 44px. Playback icon controls (transport,
-Volume, Where it plays, Up next, Playback, fullscreen, Back, a Sheet's Close)
+Volume, Up next, Where it plays, Playback, fullscreen, Back, a Sheet's Close)
 are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target. The
 player's band and the now-playing bar share `--player-target`, which grows to
 2.25rem. At a row's end they pull back (`-ml-2.5`/`-mr-2.5`) so the glyph lines

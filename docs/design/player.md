@@ -18,6 +18,8 @@ YouTube's web player was observed in October 2026. The other sources are:
   and the HIG's [Playing video](https://developer.apple.com/design/human-interface-guidelines/playing-video)
 - Prime Video's "Next up" card, from
   [Amazon's customer Q&A](https://www.amazon.com/ask/questions/Tx2MVM96BJT371B)
+- Prime Video's top-right player icons, from
+  [Online Tech Tips](https://www.online-tech-tips.com/fix-prime-video-subtitles-not-working/)
 
 The table at the end of this page sums up which reference each pattern
 follows.
@@ -65,6 +67,14 @@ band.
   the links already name is not repeated (`mediaSubtitle`).
 - At the right, small: the end time ("ends 21:42"), Stop sharing while this
   device shares, and the clock on the TV.
+- After them, at the right edge: **the Playback gear and fullscreen**. Prime
+  Video keeps its settings and fullscreen at the top right, and YouTube's
+  fullscreen title line is where Couch's sits. They act on the picture, so the
+  band keeps only the now-playing bar's tools. Each sits straight above one of
+  the band's last two tools: the gear over Up next, fullscreen over Where it
+  plays. The TV has no fullscreen, so its gear takes the corner.
+- Phones move the end time to the end of the line under the title, so the
+  title keeps its room beside the gear and fullscreen.
 - The top line publishes `--player-top`. Toasts and Up next stay below it.
 
 **The band** has two rows.
@@ -77,19 +87,21 @@ The timeline row:
 - A hovering pointer reads the time under it, on the panel surface.
 
 The control row:
-- Play/Pause, Stop and Next in the middle. They stay centred so the
-  now-playing bar grows into the band without anything changing side.
+- Play/Pause, Stop and Next in the middle, at every width. They stay centred
+  so the now-playing bar grows into the band without anything changing side.
   Apple's controls and Prime's centre transport are centred too.
-- The tools at the right: Volume, Where it plays and Up next, then the
-  Playback gear and fullscreen.
+- The tools at the right: Volume, Up next and Where it plays, exactly the
+  now-playing bar's. **Where it plays ends both rows everywhere**, so it is the
+  one control that never moves.
 - Every control is a ghost icon (`icon-lg`), each with an `aria-label` and
   a matching `title`. Its target is 44px and grows with the interface only to
   2.25rem: 54px at 1920 wide, the size of YouTube's fullscreen controls
   (`--player-target`).
-- Phones (below `sm`, the bar's breakpoint) lead with the transport, its glyph
-  under the position, and leave Volume out. A phone has volume keys, as
-  YouTube's and Netflix's phone players assume, and Where it plays leads with
-  the same Volume. That keeps the row to one line.
+- Phones (below `sm`, the bar's breakpoint) leave Volume out and drop the
+  gaps. A phone has volume keys, as YouTube's and Netflix's phone players
+  assume, and Where it plays leads with the same Volume. The transport stays
+  centred: at 390 wide 35px separate Next from Up next; at 320 wide they touch,
+  44px targets side by side with no overlap. Anything narrower scrolls the row.
 
 ### The band and the now-playing bar
 
@@ -101,10 +113,10 @@ They share one set of controls:
   `--player-target` with a 1.25rem glyph.
 - **The transport at the same x.** Both centre it in a
   `1fr auto 1fr` grid inside the same gutter.
-- **The tools at the same right edge, in the same order.** The bar's Volume,
-  Where it plays and Up next come first. The player adds its own two after
-  them: the Playback gear and fullscreen, which only mean something over the
-  picture. So in the band the shared three sit two targets further left.
+- **The same tools at the same x, in the same order:** Volume, Up next, Where
+  it plays, with Where it plays last. The gear and fullscreen, which only mean
+  something over the picture, are the top line's, so nothing else shares the
+  band's row.
 - **They move, not cross-fade.** Each shared control has its own view
   transition name (`couch-play`, `couch-stop`, `couch-next`, `couch-volume`,
   `couch-where`, `couch-queue`), so it glides from its place in the bar to its
@@ -114,24 +126,26 @@ The differences are deliberate:
 
 | Where | Bar | Band | Why |
 |---|---|---|---|
-| Wide screens | Volume, Where it plays, Up next | the same, then the gear and fullscreen | The gear's settings and fullscreen apply to the picture. |
-| Beside artwork (audio, or playing elsewhere), from 960px | Up next | no Up next | Up next is already on screen beside the artwork. |
-| Phones | Play/Pause and Where it plays, after the title | the whole transport at the left, then Where it plays, Up next, the gear and fullscreen | The bar's left is what plays. The band has no room to centre the transport. |
+| Wide screens | Volume, Up next, Where it plays | the same, at the same x; the gear and fullscreen are above, in the top line | The gear's settings and fullscreen apply to the picture. |
+| Beside artwork (audio, or playing elsewhere), from 960px | Up next opens the player's Up next | Up next takes focus into the list beside the artwork, and Close returns | The list is already on screen; the button keeps its place. |
+| Phones | Play/Pause right beside Where it plays, after the title | the centred transport, then Up next and Where it plays | The bar's left is what plays. Its Play/Pause sits where the band's Up next does, so both right ends read as two targets ending on Where it plays. |
 
 Over a playing video, the bands hide 4 s after the last key while focus is on
-the picture. They stay up:
-- while a panel is open
+the picture. They show and hide together, so the gear's menu, which drops from
+the top line, keeps both up. They stay up:
+- while a panel or menu is open
 - during recovery
 - while the keyboard is in them
 - while this device shares
 
 ## Settings
 
-Every setting is in **the Playback gear**, which opens YouTube's menu: a
-small menu above the whole band, aligned to the gear (`PlaybackMenu`,
+Every setting is in **the Playback gear** at the top line's right, which
+opens YouTube's menu: a small menu that drops from the gear, aligned to its
+right edge and stopping short of the band (`PlaybackMenu`,
 `data-player-menu`). There is no separate subtitles button, so the band keeps
-to the transport and five tools. C still turns subtitles on and off, as on
-YouTube.
+to the transport and the bar's three tools. C still turns subtitles on and
+off, as on YouTube.
 
 - Each row is a setting with its current value and "›": Subtitles, Audio,
   Speed, Quality, Chapters and Audio delay. Each shows only where it
@@ -154,7 +168,7 @@ YouTube.
   (subtitle languages, chapters) scrolls under it.
 - Back or Esc in a submenu returns to the menu, on the row that opened it.
   Back or Esc on the menu closes it and returns to the gear.
-- Volume and Where it plays open their Popovers above the whole band too, so
+- Volume and Where it plays open their Popovers above the whole band, so
   nothing covers the timeline.
 
 ## Up next
@@ -167,8 +181,9 @@ picture stays visible and keeps playing.
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
 - A click on the picture while Up next is open closes it, without pausing.
-- Beside artwork, on wide screens, Up next stays on screen. On phones it
-  replaces the artwork.
+- Beside artwork, on wide screens, Up next stays on screen, and the band's Up
+  next takes focus into it, with Close to return. On phones it replaces the
+  artwork.
 - **Playing** heads the list only where the player's title is off screen.
 - **Upcoming rows** are board lines:
   - The title is heavy. The start time is light, at the same size, at the
@@ -259,7 +274,9 @@ Audio, and media playing elsewhere, show **Now playing** as Home's hero does:
 - the end time
 - a station's current programme or track
 
-The band sits on black with no rule, and nothing over a picture. Live media
+The band sits on black with no rule, and nothing over a picture. The top line
+keeps Back and, at its right, the gear; there is nothing to fill, so there is
+no fullscreen (a window already in fullscreen keeps its Exit fullscreen). Live media
 that can't seek has no timeline, no time and no label, and its Pause stays
 disabled. On wide screens, the queue sits beside the stage. The band includes
 the phone's safe-area inset.
@@ -289,6 +306,7 @@ band, the now-playing bar, Home's hero and Remote (`PlaybackTransport`).
 | Gradient scrims, no bars | YouTube's bottom gradient; Netflix's and Apple's floating controls |
 | Thin timeline that thickens on hover, thumb on hover, hover time | YouTube |
 | Title top-left with Back | YouTube and Netflix fullscreen |
+| Gear and fullscreen at the top right, over the band's last two tools | Prime Video's top-right icons; YouTube's fullscreen top line |
 | Gear menu with in-place submenus (Subtitles, Audio, Speed, Quality, Chapters, Audio delay) | YouTube, whose gear holds Subtitles/CC and Audio track |
 | No separate subtitles button; C toggles subtitles | YouTube's C key; the owner asked for fewer buttons |
 | Up next as a panel over the picture from its own button | Netflix's episodes panel |

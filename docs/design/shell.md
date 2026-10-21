@@ -118,17 +118,20 @@ nothing changes side as it grows into the band
   collection or station link, then a status only when it isn't plain playing
   or paused. The player says where it plays the same way (`PlaysOn`).
 - **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
-- **At the right, Volume, Where it plays and Up next,** at the band's right
-  edge and in its order. The player adds the gear and fullscreen after them.
+- **At the right, Volume, Up next and Where it plays,** the band's own tools
+  at the band's x. Where it plays ends both at every width. The gear and
+  fullscreen are the player's top line's.
 - Every control is the band's ghost icon at `--player-target` (44px, 54px at
   1920 wide) with the same 1.25rem glyph.
 - Its timeline is a slim line along its top edge, none for live media.
-- Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause and
-  Where it plays.
+- Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause right
+  beside Where it plays, where the band's Up next sits, so the right end reads
+  as the band's does: two targets ending on Where it plays.
 
 Opening the player is a view transition: the bar grows into the band
 (`couch-player-band`), and each shared control glides to its place in the band
-under its own name rather than cross-fading.
+under its own name rather than cross-fading. On wide screens they are already
+in place; on phones Play/Pause glides to the band's centre.
 
 It hides on the player, on Remote, and while Home's playing hero is on screen
 (`html[data-hero-playing]`). With the phone tab bar it forms the footer, whose
