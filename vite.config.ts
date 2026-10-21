@@ -32,7 +32,7 @@ export default defineConfig(({ command }) => ({
     tanstackRouter({ autoCodeSplitting: true, routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
     react(),
     tailwindcss(),
-    { name: "couch-font-preload", apply: "serve", transformIndexHtml: html => html.replace(`../../${interTight}`, `/@fs${realpathSync(interTight)}`) },
+    { name: "couch-font-preload", apply: "serve", transformIndexHtml: { order: "pre", handler: html => html.replace(`../../${interTight}`, `/@fs${realpathSync(interTight)}`) } },
     // App-shell precache only (#338): the generated worker precaches the build's
     // static assets and leaves every API and WebSocket request on the network.
     // Registration is manual in the client entry so the app window never
