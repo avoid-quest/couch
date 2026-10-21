@@ -1,8 +1,15 @@
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
-import { useLayoutEffect, type RefObject } from "react";
-import { ChevronUp, ListMusic } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { ChevronRight, ChevronUp, ListMusic, Settings } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
+import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
+import { playbackCapabilities } from "@/components/PlaybackTransport";
+import { isAudioOnly } from "@/sections/now/player-presentation";
+import { queueItemLocation } from "@/detail-navigation";
+import { useShell } from "./shell-context";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
@@ -36,9 +43,18 @@ export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true) {
 
 /** What plays, one row above the page (and the phone tab bar): its artwork and title open the player. */
 export function NowPlayingBar({ state, connected, run, onOpen }: { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean>; onOpen: (panel?: "queue") => void }) {
+  const { credentials } = useShell();
+  const [menu, setMenu] = useState(false);
+  const bar = useRef<HTMLElement>(null);
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   if (!current) return null;
+  const playback = state.playbacks?.find(item => item.id === state.playback);
+  const settings = state.preferences ? { entry: current, player, ready: playbackCapabilities(state, connected).transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
+  const detailHref = current.liveSourceId ? undefined : queueItemLocation(current);
+  // Its menus open above the whole bar, clear of the timeline along its top edge, as the band's do.
+  const tools = bar.current?.querySelector("[data-bar-tools]")?.getBoundingClientRect().top, top = bar.current?.getBoundingClientRect().top;
+  const sideOffset = tools != null && top != null ? Math.max(8, tools - top + 8) : 8;
   const radio = isRadio(current);
   // The player's words, less the title shown right above them and the plain states the transport already shows.
   // The status line says where it reconnects.
@@ -48,12 +64,12 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
-  // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Up next, Where it plays,
-  // then Open player in the slot where the band has fullscreen, each at the band's target (--player-target) and x; the
-  // timeline is the line along its top edge. Phones (below sm, where the band drops Volume and Up next too) keep
-  // Play/Pause, Where it plays and, from 360px, Open player.
+  // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Where it plays, Up next,
+  // the Playback gear, then Open player in the slot where the band has fullscreen, each at the band's target
+  // (--player-target) and x; the timeline is the line along its top edge. Phones (below sm) keep Play/Pause and Open
+  // player: a minimized player needs no mixer, and the player has the rest.
   const desktop = "max-sm:hidden";
-  return <footer data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
+  return <footer ref={bar} data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
     <PlaybackTimeline state={state} connected={connected} run={run} className="absolute inset-x-0 top-0 -translate-y-1/2 [&_[data-time-labels]]:hidden [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-transparent [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100" />
     <div className="flex min-w-0 items-center gap-3 max-sm:pr-4">
       {/* The title is the control; the artwork is a larger pointer target for it. */}
@@ -69,13 +85,17 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
       </div>
     </div>
     <PlaybackTransport state={state} connected={connected} run={run} moreClassName={desktop} />
-    <div className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5 max-sm:gap-0">
-      <VolumeButton state={state} connected={connected} run={run} className={desktop} />
+    <div data-bar-tools className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5 max-sm:gap-0">
+      <VolumeButton state={state} connected={connected} run={run} sideOffset={sideOffset} className={desktop} />
+      <WhereItPlays state={state} connected={connected} run={run} sideOffset={sideOffset} className={desktop} />
       <Button data-panel="queue" variant="ghost" size="icon-lg" className={desktop} aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" /></Button>
-      <WhereItPlays state={state} connected={connected} run={run} />
-      {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. Below 360px
-          it would leave the title under 90px and cut "on {device}", and the artwork and title open the player anyway. */}
-      <Button data-player-last variant="ghost" size="icon-lg" className="max-[360px]:hidden" aria-label="Open player" title="Open player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
+      {/* The player's own Playback menu, for whatever plays, here or on another device. */}
+      <Popover open={menu} onOpenChange={setMenu}>
+        <PopoverTrigger asChild><Button data-panel="settings" variant="ghost" size="icon-lg" className={desktop} aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
+        {settings && <PlaybackMenu {...settings} sideOffset={sideOffset} tracks={!isAudioOnly(playback, current, player.tracks)} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={() => setMenu(false)}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
+      </Popover>
+      {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. */}
+      <Button data-player-last variant="ghost" size="icon-lg" aria-label="Open player" title="Open player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
     </div>
   </footer>;
 }

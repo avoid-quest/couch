@@ -76,8 +76,8 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     element: element.hasAttribute("data-player-band") ? "player" : "bar", name: getComputedStyle(element).viewTransitionName,
     rendered: element.checkVisibility(),
   }));
-  // Each shared control's own transition name, so it glides from the bar to its place in the band: the bar's Open player
-  // into fullscreen's slot (couch-last).
+  // Each shared control's own transition name, so it glides from the bar to its place in the band: the gear (couch-gear),
+  // and the bar's Open player into fullscreen's slot (couch-last).
   const shared = (selector: string) => [...host.querySelectorAll<HTMLElement>(`${selector} button, ${selector} [data-player-last]`)]
     .filter(element => element.checkVisibility()).map(element => getComputedStyle(element).viewTransitionName).filter(name => name !== "none");
   let barNames: string[] = [];
@@ -94,15 +94,15 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     if (!host.querySelector("[data-now-playing]")) throw new Error(`No fixture bar: ${host.textContent}`);
     for (let i = 0; i < 3; i++) {
       if (i === 0) barNames = shared("[data-now-playing]");
-      // The title and the bar's last slot open the player alike; below 360px the bar leaves the slot out for the title.
-      const expand = host.querySelector<HTMLButtonElement>('[data-now-playing] [data-player-last]');
-      (i === 1 && expand?.checkVisibility() ? expand : host.querySelector<HTMLButtonElement>('[aria-label="Open player: Transition fixture"]')!).click();
+      // The title and the bar's last slot open the player alike.
+      host.querySelector<HTMLButtonElement>(i === 1 ? '[data-now-playing] [data-player-last]' : '[aria-label="Open player: Transition fixture"]')!.click();
       await wait();
       await finished(transitions.at(-1));
       if (!host.querySelector("[data-player-band]")) throw new Error(`No fixture player: ${host.textContent}`);
       if (i === 0) {
         const bandNames = shared("[data-player-band]");
-        if (!bandNames.includes("couch-last") || innerWidth >= 360 && !barNames.includes("couch-last")) failures.push("The bar's Open player and the band's last slot must share couch-last");
+        if (!bandNames.includes("couch-last") || !barNames.includes("couch-last")) failures.push("The bar's Open player and the band's last slot must share couch-last");
+        if (innerWidth >= 640 && !(barNames.includes("couch-gear") && bandNames.includes("couch-gear"))) failures.push("The bar's gear and the band's must share couch-gear");
         const missing = barNames.filter(name => !bandNames.includes(name));
         if (missing.length) failures.push(`Bar controls with no place in the band: ${missing.join(", ")}`);
         await inspect?.("player");

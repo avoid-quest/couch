@@ -131,14 +131,15 @@ html { view-transition-name: none; }
 /* The now-playing bar grows into the player band and back: the one longer move, as it crosses the screen. */
 ::view-transition-group(couch-player-band), ::view-transition-group(*.couch-control) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 /* The bar's controls are the band's: each glides to its own place in the band rather than cross-fading with the band
-   (on phones Play/Pause moves from beside Where it plays to the band's centre). */
-:is([data-now-playing], .player-band) :is(button:is([data-play-button], [aria-label="Stop"], [aria-label="Next"], [aria-label="Volume"], [aria-label="Where it plays"], [data-panel="queue"]), [data-player-last]) { view-transition-class: couch-control; }
+   (on phones Play/Pause moves from beside Open player to the band's left). */
+:is([data-now-playing], .player-band) :is(button:is([data-play-button], [aria-label="Stop"], [aria-label="Next"], [aria-label="Volume"], [aria-label="Where it plays"], [data-panel="queue"], [data-panel="settings"]), [data-player-last]) { view-transition-class: couch-control; }
 :is([data-now-playing], .player-band) button[data-play-button] { view-transition-name: couch-play; }
 :is([data-now-playing], .player-band) button[aria-label="Stop"] { view-transition-name: couch-stop; }
 :is([data-now-playing], .player-band) button[aria-label="Next"] { view-transition-name: couch-next; }
 :is([data-now-playing], .player-band) button[aria-label="Volume"] { view-transition-name: couch-volume; }
 :is([data-now-playing], .player-band) button[aria-label="Where it plays"] { view-transition-name: couch-where; }
 :is([data-now-playing], .player-band) button[data-panel="queue"] { view-transition-name: couch-queue; }
+:is([data-now-playing], .player-band) button[data-panel="settings"] { view-transition-name: couch-gear; }
 /* The last slot: the bar's Open player glides into the band's fullscreen (or its empty slot) and back. */
 :is([data-now-playing], .player-band) [data-player-last] { view-transition-name: couch-last; }
 /* Toasts arrive like the other surfaces, over 200 ms, not sonner's 400 ms, so a leaving one has faded by the time sonner
@@ -219,8 +220,8 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-timeline:has([role="slider"]) [data-time-labels] > span:first-child { grid-column: 1; grid-row: 1; max-width: 9rem; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
 /* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it the transport sits
-   in the middle and the tools at the right exactly as the now-playing bar's (Volume, Up next, Where it plays, then the
-   last slot: fullscreen here, Open player there), so nothing moves as the bar grows into the band. */
+   in the middle and the tools at the right exactly as the now-playing bar's (Volume, Where it plays, Up next, the gear,
+   then the last slot: fullscreen here, Open player there), so nothing moves as the bar grows into the band. */
 .player-control-row { display: grid; grid-template-columns: 1fr auto 1fr; grid-auto-flow: dense; align-items: center; gap: .5rem 1rem; }
 /* Keep one control row. Insets preserve focus outlines; narrow screens can scroll the row without moving the timeline. */
 .player-controls-scroll { overflow-x: auto; margin: -.125rem -.625rem; padding: .125rem .625rem; scrollbar-width: thin; }
@@ -237,16 +238,14 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
   [data-artwork-stage][data-queue-open] .player-queue { display: flex; grid-row: 1; }
   .player-control-row { column-gap: .5rem; }
 }
-/* Phones, at the bar's breakpoint (sm): the centred transport leaves room for two tools at 320px (three miss by 9px
-   even at 390), so Where it plays and the last slot: fullscreen over a picture; beside artwork, where nothing fills
-   the screen, Up next takes the slot, since a phone opens the list there in place of the artwork. Where it plays never
-   moves. Without gaps they fit 320px; anything narrower scrolls the row. */
+/* Phones, at the bar's breakpoint (sm): a centred transport leaves room for two tools, so the transport leads, its glyph
+   under the position as the last tool's is under the time left, and every tool stays. Without gaps the seven 44px
+   targets fill 320px exactly, touching but never overlapping; anything narrower scrolls the row. */
 @media (width < 40rem) {
-  .player-control-row { min-width: max-content; column-gap: 0; }
+  .player-control-row { min-width: max-content; grid-template-columns: auto minmax(0, 1fr); column-gap: 0; }
   .player-control-row > div { gap: 0; }
-  .player-page:not([data-artwork-stage]) [data-player-tools] [data-panel="queue"] { display: none; }
-  [data-artwork-stage] [data-player-tools] [data-panel="queue"] { order: 1; }
-  [data-artwork-stage] [data-player-tools] span[data-player-last] { display: none; }
+  .player-control-row > .player-transport { grid-column: 1; justify-self: start; margin-left: -.625rem; }
+  .player-control-row > [data-player-tools] { grid-column: 2; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 @media (max-height: 500px) {
