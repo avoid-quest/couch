@@ -42,7 +42,7 @@ function BrowserCouchChoice({ credentials, installationName }: Props) {
     if (next !== origin) setTarget(next);
   };
   return <>
-    <SettingsSection title="Couch" description="The Couch this browser shows.">
+    <SettingsSection title="Connection" description="The Couch this browser shows.">
       {[{ origin, name }, ...others].map(item => <SettingsRow key={item.origin} label={item.name} description={new URL(item.origin).host}>
         {item.origin === origin ? <span className="text-sm text-muted-foreground">In use</span> : <Button variant="outline" onClick={() => choose(item.origin)}>Switch</Button>}
         {(item.origin !== origin || credentials && gate) && <Button variant="ghost" aria-label={`Forget ${item.name}`} onClick={() => setForgetting(item)}>Forget</Button>}

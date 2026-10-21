@@ -168,7 +168,7 @@ export function AppCouchChoice({ installationName }: { installationName?: string
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   const inUse = <span className="text-sm text-muted-foreground">In use</span>;
   return <>
-    <SettingsSection title="Couch" description="The Couch this window shows." data-tv-local-only>
+    <SettingsSection title="Connection" description="The Couch this window shows." data-tv-local-only>
       <SettingsRow label="This computer" description="Host Couch here. Phones, browsers and other computers on your network join it.">
         {device.mode === "local" ? inUse : <Button variant="outline" disabled={device.pending} onClick={() => void select("local")}>Switch</Button>}
       </SettingsRow>

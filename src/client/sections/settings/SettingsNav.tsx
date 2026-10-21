@@ -18,7 +18,7 @@ export function SettingsNav({ active, index = false }: { active?: SettingsPage; 
   const { tvPresentation } = useSessionGate();
   const groups = useSettingsGroups();
   const current = active?.startsWith("source-") ? "sources" : active;
-  return <nav data-nav-rail={index ? undefined : ""} aria-label="Settings pages" className={index ? "grid gap-10" : "hidden min-w-0 flex-col gap-8 md:flex"}>
+  return <nav data-nav-rail={index ? undefined : ""} aria-label="Settings pages" className={index ? "grid gap-10" : "hidden min-w-0 flex-col gap-8 md:sticky md:top-[calc(var(--top-bar,4rem)+2rem)] md:flex"}>
     {groups.map((group, position) => <Group key={group.title} group={group} index={index}>
       {group.pages.map(({ id, locked }, row) => (
         <Button key={id} variant="ghost" asChild className={index
