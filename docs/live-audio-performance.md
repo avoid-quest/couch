@@ -61,6 +61,14 @@ invalidates measurement. Publisher CPU profiles cover fault intervals; Core's
 Node CPU profile covers its process lifetime. These are diagnostic runs with
 instrumentation overhead, not uninstrumented capacity qualification.
 
+Sender parameter readbacks run once, after admission and before the initial
+warmup (`sender-parameters` in `observations.jsonl`). They describe that setup,
+not later replacement peers. Regular snapshots leave `senders` null and retain
+`observationDurationMs`. Chromium's `getParameters()` synchronously waits on its
+signaling thread. A 50-peer diagnostic caught an 8.7-second stall while polling
+these readbacks ([measurements](live-audio-latency-results.md)). Counter snapshots
+continue to use asynchronous `getStats()` at the same cadence and deadlines.
+
 Output activity uses contiguous 48,000-sample cells at 48 kHz, with RMS above
 0.001. `output-windows.jsonl` retains every cell, including startup and faults.
 Recovery requires a new connected peer with received media and an active complete

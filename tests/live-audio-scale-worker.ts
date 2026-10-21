@@ -87,14 +87,20 @@ void app.whenReady().then(async () => {
     const control = () => sockets.findLast(socket=>new URL(socket.url).pathname==='/api/ws' && socket.readyState===1);
     window.__scale = {
       disconnect:()=>{const socket=control();if(!socket)throw Error('No control socket');record('fault');socket.close(4000,'scale benchmark');return {at:performance.timeOrigin+performance.now(),sockets:sockets.length,peers:peers.length};},
-      snapshot:async()=>({at:performance.timeOrigin+performance.now(),connected:!!__scaleSession()?.connected,
+      snapshot:async(includeSenderParameters=false)=>{
+        const startedAt=performance.now();
+        const value={at:performance.timeOrigin+startedAt,connected:!!__scaleSession()?.connected,
         player:__scaleSession()?.state?.player, events:events.splice(0),omitted,errors,longTasks,longTaskMs,maxLongTaskMs,
         media:[...document.querySelectorAll('audio,video')].map(e=>({paused:e.paused,readyState:e.readyState,muted:e.muted,currentTime:e.currentTime})),
         sockets:sockets.map(s=>({path:new URL(s.url).pathname,readyState:s.readyState})),
         peers:await Promise.all(peers.map(async(peer,index)=>({index,state:peer.connectionState,
-          senders:peer.connectionState==='closed'?[]:peer.getSenders().map(sender=>({kind:sender.track?.kind??null,encodings:sender.getParameters().encodings})),
+          // getParameters synchronously waits on Chromium's signaling thread.
+          // Read configuration before warmup, never during measured intervals.
+          senders:!includeSenderParameters?null:peer.connectionState==='closed'?[]:peer.getSenders().map(sender=>({kind:sender.track?.kind??null,encodings:sender.getParameters().encodings})),
           stats:peer.connectionState==='closed'?[]:[...(await peer.getStats()).values()].filter(s=>['inbound-rtp','outbound-rtp','media-source','candidate-pair'].includes(s.type))})))
-      })
+        };
+        return {...value,observationDurationMs:performance.now()-startedAt};
+      }
     };
   })();` });
   await win.loadURL(config.origin + "/settings/device/sharing");

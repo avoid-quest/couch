@@ -73,7 +73,7 @@ let activityMeasurements: ReturnType<typeof createActivityMeasurement>[] | null 
 const results: any = { schema: "couch-live-performance/2", startedAt: new Date().toISOString(), head: command(["git", "rev-parse", "HEAD"]).trim(),
   contract: { count, seconds, rounds, faultCounts, tailSeconds, warmupMs: 15000, observationMs: 5000, outputWindowFrames: 48000, minimumRms: .001, activityDrainMs: 1500,
     timing: "Harness monotonic observation time; PCM monitors have no source timestamps",
-    recoveryAllocationMs: 5000, hardRecoveryTimeoutMs: 45000, fullOutagePlayAtMs: 8000, capture: "looping 30-second 440+997 Hz fake microphone", route: "production direct WebRTC", applicationAudioDefaults: process.env.COUCH_LAB_APP_AUDIO_DEFAULTS === "1", qualified: false },
+    recoveryAllocationMs: 5000, hardRecoveryTimeoutMs: 45000, fullOutagePlayAtMs: 8000, capture: "looping 30-second 440+997 Hz fake microphone", route: "production direct WebRTC", applicationAudioDefaults: process.env.COUCH_LAB_APP_AUDIO_DEFAULTS === "1", senderParameterReadback: "before-initial-warmup-only", qualified: false },
   hashes: Object.fromEntries(["tests/live-audio-scale.native.ts", "tests/live-audio-scale-worker.ts", "app/audio.ts", "build/core.mjs", "dist/index.html"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])),
   admissions: [], faults: [], stages: [], browserAudioBuffers: [], functionalPassed: false, telemetryComplete: false, qualified: false };
 const resources: any[] = [];
@@ -99,8 +99,8 @@ const sampleResources = () => {
   if (available < 8 * 1024 ** 3 || highCpuSince && now - highCpuSince > 30000) fatal ??= new Error("Worker resource guard: inconclusive");
 };
 const resourceTimer = setInterval(sampleResources, 2000);
-const snapshot = async (label: string) => {
-  const values = await Promise.all(workers.map(async worker => ({ index: worker.index, value: await worker.js("__scale.snapshot()") })));
+const snapshot = async (label: string, includeSenderParameters = false) => {
+  const values = await Promise.all(workers.map(async worker => ({ index: worker.index, value: await worker.js(`__scale.snapshot(${includeSenderParameters})`) })));
   log("observations.jsonl", { at: Date.now(), label, values });
   for (const { index, value } of values) {
     assert.equal(value.omitted, 0, `receiver ${index}: telemetry truncation`);
@@ -261,6 +261,7 @@ try {
       assert.equal(pid, worker.child.pid, "Output must belong to this receiver's browser");
     }
   }
+  await snapshot("sender-parameters", true);
   await Bun.sleep(15000); await steady("initial", seconds);
   for (let round = 0; round < rounds; round++) for (const faultCount of faultCounts) {
     const before = await snapshot("before-fault"), faultStart = performance.now();
