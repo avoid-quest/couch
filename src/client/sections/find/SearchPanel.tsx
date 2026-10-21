@@ -8,9 +8,8 @@ import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useStat
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { FilterSelect } from "@/components/ContentFilters";
+import { FilterBar, FilterSelect } from "@/components/ContentFilters";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
@@ -136,24 +135,17 @@ export function SearchPanel(props: Props) {
   const filtered = filter !== "All" || !!until;
   return <section ref={panel} className="min-w-0 space-y-8" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && <>
-      <div className="grid gap-3">
-        <div role="group" aria-label="Search filters" className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-end gap-3 sm:flex sm:flex-wrap">
-          <FilterSelect label="Source" value={filter} onChange={setFilter} className="sm:w-56" options={searchSources.map(source => ({ value: source, label: source === "All" ? "All sources" : source,
-            detail: source === "All" ? sourceCount(source) : !summaries[source] || summaries[source].loading ? "Loading…" : summaries[source].error ? "Unavailable" : sourceCount(source),
-          }))} />
-          <FilterSelect label="Ends by" value={until ?? "any"} onChange={setUntil} className="sm:w-40" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value }))]} />
-        </div>
-        <div className="flex min-h-11 items-start justify-between gap-3">
-        <p role="status" className="flex min-h-10 items-start gap-2 text-sm text-muted-foreground">
-          {asking.length > 0 && <Spinner aria-hidden="true" className="mt-1 size-3.5 shrink-0" />}
-          <span className="min-w-0 break-words">
-            <span className="block text-foreground">{!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”`}</span>
-            {asking.length > 0 && <span className="block">{asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}</span>}
-          </span>
-        </p>
-        <Button variant="ghost" disabled={!filtered} onClick={clearFilters} className="-mr-2.5 shrink-0">Clear filters</Button>
-        </div>
-      </div>
+      <FilterBar label="Search filters">
+        <FilterSelect label="Source" value={filter} onChange={setFilter} options={searchSources.map(source => ({ value: source, label: source === "All" ? "All sources" : source,
+          detail: source === "All" ? sourceCount(source) : !summaries[source] || summaries[source].loading ? "Loading…" : summaries[source].error ? "Unavailable" : sourceCount(source),
+        }))} />
+        <FilterSelect label="Ends by" value={until ?? "any"} onChange={setUntil} options={[{ value: "any", label: "Any end time" }, ...bounds.map(bound => ({ value: bound.value, label: `Ends by ${bound.value}` }))]} />
+        {filtered && <Button variant="ghost" onClick={() => { clearFilters(); panel.current?.querySelector<HTMLElement>('button[aria-label="Source"]')?.focus(); }}>Clear filters</Button>}
+      </FilterBar>
+      <p role="status" className="sr-only">
+        {!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”.`}
+        {asking.length > 0 && ` ${asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}`}
+      </p>
       <SourceProblems summaries={shown} />
       {!scoped.length && asking.length > 0 && <MediaRowsSkeleton label="Loading search results…" />}
       {top && <TopResult key={top.id} hit={top} now={now} />}

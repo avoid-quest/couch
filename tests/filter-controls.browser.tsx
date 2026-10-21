@@ -11,6 +11,13 @@ const type = (label: string, value: string) => {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 const button = (label: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+async function pick(label: string, text: string) {
+  const choice = [...document.querySelectorAll<HTMLElement>(`[role="radiogroup"][aria-label="${label}"] [role="radio"]`)].find(choice => choice.textContent === text);
+  assert(choice, `Missing ${label} choice: ${text}`);
+  choice!.focus(); choice!.click();
+  await wait();
+  assert(choice!.getAttribute("aria-checked") === "true" && document.activeElement === choice, `${label} did not keep its choice focused`);
+}
 async function choose(label: string, text: string) {
   const trigger = button(label);
   trigger.focus();
@@ -57,17 +64,19 @@ export async function runFilterControlsRegression() {
     assert(audit.calls.length === searchReads, "Source filtering unnecessarily refetched cached results");
 
     await audit.go('/discover/radio');
+    assert(!button("Clear filter"), "An empty filter offered to clear itself");
     const radioReads = audit.calls.length;
     type("Filter stations", "  NTS  "); await wait();
     assert(document.querySelector('[aria-label="Radio stations"]'), "Whitespace prevented a matching station");
     assert(document.activeElement === field("Filter stations"), "Station filtering stole focus");
     assert(audit.calls.length === radioReads, "Local station filtering sent a request");
-    await choose("Source", "Radio directory");
+    assert(!document.querySelector('[aria-label="Browse pages"]'), "A single page of stations showed a pager");
+    await pick("Source", "Radio directory");
     assert(field("Filter stations").value === "  NTS  ", "Switching source discarded the station filter");
     type("Filter stations", "no match"); await wait();
     assert(document.body.textContent?.includes("No stations match"), "Radio empty filter has no explanation");
     button("Clear filter").click(); await wait();
-    assert(field("Filter stations").value === "" && document.activeElement === field("Filter stations"), "Clear station filter lost focus or value");
+    assert(field("Filter stations").value === "" && document.activeElement === field("Filter stations") && !button("Clear filter"), "Clear station filter lost focus or value, or kept its button");
 
     const collection = '/collection?provider=youtube&url=' + encodeURIComponent('https://www.youtube.com/playlist?list=PL1B627337ED6F55F0');
     const context = { title: "NPR Music", url: "https://www.youtube.com/@nprmusic" };

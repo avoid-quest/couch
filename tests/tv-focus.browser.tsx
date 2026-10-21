@@ -54,14 +54,14 @@ export async function runTvFocusRegression() {
       }
     });
     await check("The TV BrowserBack key closes a picker without leaving its page", async () => {
-      await audit.go('/discover/radio');
-      const source = control('button[aria-label="Source"]');
+      await audit.go('/discover/live-tv');
+      const source = control('button[aria-label="Group"]');
       source.focus(); await remote('select');
-      assert(document.querySelector('[role="listbox"]'), "Source did not open");
+      assert(document.querySelector('[role="listbox"]'), "Group did not open");
       document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'BrowserBack', bubbles: true, cancelable: true }));
       await wait();
       assert(!document.querySelector('[role="listbox"]') && document.activeElement === source, "BrowserBack trapped focus in the picker");
-      assert(audit.router.state.location.pathname === '/discover/radio', "Closing the picker also left its page");
+      assert(audit.router.state.location.pathname === '/discover/live-tv', "Closing the picker also left its page");
     });
     await check("Saved rails enter content and return to the selected section", async () => {
       for (const tab of ['later', 'channels', 'lists', 'played']) {

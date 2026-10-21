@@ -10,12 +10,11 @@ import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { PageHeader } from "@/components/PageHeader";
-import { FilterInput } from "@/components/ContentFilters";
+import { FilterBar, FilterInput } from "@/components/ContentFilters";
 import { Button } from "@/components/ui/button";
 import { BrowsePagination } from "@/components/BrowsePagination";
 import { MediaTile } from "@/components/MediaTile";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
 import { HitList, SourceProblems } from "./SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchCollection, type SearchResultSummary } from "./SearchOnlineResults";
 import { DetailHeader } from "@/components/DetailHeader";
@@ -95,21 +94,16 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
-      <div className="grid gap-3">
-        <div role="group" aria-label="Collection filters" className="flex flex-wrap items-end gap-3">
-          <FilterInput label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} className="w-full sm:max-w-sm" value={search.filter}
-            onChange={filter => void navigate({ href: locationFor({ page: 1, filter }), replace: true, resetScroll: false })} />
-          {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
-          {provider === "movies123" && posterCatalogue && <>
-            <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
-            <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
-          </>}
-        </div>
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{cold && !hits.length ? <><Spinner aria-hidden="true" className="size-3.5" /><span role="status">Loading items…</span></> : <span role="status">{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</span>}</h2>
-          {pager}
-        </div>
-      </div>
+      <FilterBar label="Collection filters">
+        <FilterInput label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} value={search.filter}
+          onChange={filter => void navigate({ href: locationFor({ page: 1, filter }), replace: true, resetScroll: false })} />
+        {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
+        {provider === "movies123" && posterCatalogue && <>
+          <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
+          <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
+        </>}
+      </FilterBar>
+      <h2 id="collection-items" tabIndex={-1} className="sr-only"><span role="status">{cold ? "" : `${hits.length} ${noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}${paging.remote ? " on this page" : ""}`}</span></h2>
       {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
       {cold && !posterCatalogue && <MediaRowsSkeleton compact />}
       {posterCatalogue ? <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6 p-0">
@@ -123,6 +117,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
         })}
       </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: locationFor({ page: 1, filter: "" }), replace: true, resetScroll: false })}>Clear filter</Button>}</Empty>}
+      {pager}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
     {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}
