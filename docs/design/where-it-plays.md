@@ -75,7 +75,7 @@ This device needs no consent.
 
 **Move here** (Core's `solo`): the Playback plays only on that device, with
 its picture when it has one. A device not playing this shows it where the
-level would be; one playing it has it in "…". It isn't offered for the only
+level would be; a device already playing it never offers it. It isn't offered for the only
 output, where it would change nothing, unless a publisher held out for its
 own capture would return after it. It is unavailable while another device's
 private output plays in the Playback, or such a publisher waits to return.
@@ -113,9 +113,8 @@ panel, hides a line still at 0.
 
 ## The "…" menu
 
-**Move here** where it changes something, then **Sync…** while Sync applies.
-A row shows "…" only when it holds one of them, so out of the Playback it has
-none. A row has no Mute: its Sound and fader are its sound, the Volume mutes.
+It holds only **Sync…** (or **Lip sync…**), so a row shows "…" only while Sync
+applies. A row has no Mute: its Sound and fader are its sound, the Volume mutes.
 
 ## Volume
 
@@ -149,8 +148,7 @@ dismissal.
 
 Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
 between rows, Left and Right change its level by 5 at once, with no OK to
-take the arrows. OK opens its options: Picture, Sound, Move here and
-Sync…. Back closes the panel with focus back on its button. It opens on the
+take the arrows. OK opens its options: Picture, Sound and Sync…. Back closes the panel with focus back on its button. It opens on the
 first row. A revealed Sync line is a stop of its own whose slider Left and
 Right move directly.
 
