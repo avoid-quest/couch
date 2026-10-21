@@ -20,9 +20,13 @@ type Wire = "opus" | "pcm";
 // offset and duration are microseconds of audio from where this FFmpeg started.
 type Chunk = { offset: number; duration: number; data: Buffer };
 // start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
-type Run = { child: ChildProcess; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
+// sent: chunks speakers hold that have not played yet, at their play times, so a speaker that joins late gets them too.
+type Run = { child: ChildProcess; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
 
-const leadUs = 1_000_000; // Chunks go out this far ahead of their play time.
+const leadUs = 1_000_000; // A run's first chunk plays this long after Core has it.
+// Chunks go out this far ahead of their play time. Players schedule what they hold, so a page whose
+// timers stall or a radio that dozes (a locked Android phone) keeps playing instead of dropping late chunks.
+const sendUs = 8_000_000;
 const aheadUs = 8_000_000; // Decoded audio that may wait in Core before FFmpeg is held back.
 const pcmBytes = 19_200; // 100 ms of 48 kHz 16-bit stereo.
 const wireFormat = (wire: Wire) => ({ codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM, sampleRate: 48_000, channels: 2, bitDepth: 16 });
@@ -166,6 +170,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
       if (!run.wires.has(wire)) { void restart(); return; }
       session.sendStreamStart(wireFormat(wire));
       session.sendGroupUpdate(PlaybackStateType.PLAYING, id, options.name);
+      const now = serverNowUs();
+      for (const chunk of run.sent[wire]) if (chunk.at > now) session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
     };
     const each = (action: (session: SendspinSession) => void) => { for (const member of members) { const session = listening(member.deviceId); if (session) action(session); } };
     // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
@@ -212,7 +218,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
           ...wires.has("opus") ? [...shape(true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
           ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
         if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
-        const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
+        const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
         run = next;
         state = { ...state, status: "loading", buffering: false, error: null };
         report();
@@ -289,10 +295,12 @@ export function createSendspin(options: { identity: string; name: string; admit:
         report();
       }
       for (const wire of current.wires) {
-        const list = current.queues[wire];
-        while (list[0] && current.base + list[0].offset - leadUs <= now) {
-          const chunk = list.shift()!;
-          each(session => { if (wireOf(session) === wire) session.sendPcmAudioFrame({ data: chunk.data, timestampUs: current.base! + chunk.offset }); });
+        const list = current.queues[wire], sent = current.sent[wire];
+        while (sent[0] && sent[0].end <= now) sent.shift();
+        while (list[0] && current.base + list[0].offset - sendUs <= now) {
+          const chunk = list.shift()!, at = current.base + chunk.offset;
+          each(session => { if (wireOf(session) === wire) session.sendPcmAudioFrame({ data: chunk.data, timestampUs: at }); });
+          sent.push({ at, end: at + chunk.duration, data: chunk.data });
           current.released = Math.max(current.released, chunk.offset + chunk.duration);
         }
         if (current.pipes[wire]?.isPaused() && (!list.length || list.at(-1)!.offset - list[0]!.offset < aheadUs / 2)) current.pipes[wire]!.resume();
