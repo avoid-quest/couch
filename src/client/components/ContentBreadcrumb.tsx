@@ -10,8 +10,8 @@ import { providerNames } from "@/sections/find/SearchOnlineResults";
 
 /**
  * A content page's ancestors above its h1, each a link: the section it opened in (the shell's tab), Radio or its source's home,
- * then the collections holding it. The h1 names the page, so the trail stops before it. One quiet line: when it runs out of
- * room the middle gives way first. Esc and the TV's Back go back in history (navigation.ts), not up the trail.
+ * then the collections holding it. The h1 names the page, so the trail stops before it. One quiet line: out of room, the
+ * longest crumbs truncate first (grid tracks share the room evenly up to each one's width), usually the middle ones. Esc and the TV's Back go back in history (navigation.ts), not up the trail.
  */
 export function ContentBreadcrumb({ title, collection, provider, radio = false }: { title?: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean }) {
   const { section, sectionUrl } = useShell();
@@ -23,12 +23,13 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
     ...collectionLinks(collection).map(item => ({ label: item.title, to: keepSection(collectionLocation(item), section) })),
   ];
   return <Breadcrumb aria-label="Content path" className="min-w-0">
-    <BreadcrumbList className="flex-nowrap text-sm">
-      {trail.map((crumb, index) => <Fragment key={crumb.to}>
-        {index > 0 && <BreadcrumbSeparator />}
-        <BreadcrumbItem className={index === 0 ? "shrink-0" : index < trail.length - 1 ? "min-w-0 shrink-[8]" : "min-w-0"}>
-          <BreadcrumbLink asChild><Link to={crumb.to} title={crumb.label} className="block truncate leading-8 touch:leading-11">{crumb.label}</Link></BreadcrumbLink>
+    <BreadcrumbList className="grid auto-cols-[minmax(0,max-content)] grid-flow-col justify-start text-sm">
+      {/* Each crumb leads on to the next, the last to the h1; none is the page itself, so none is current. */}
+      {trail.map(crumb => <Fragment key={crumb.to}>
+        <BreadcrumbItem className="min-w-0">
+          <BreadcrumbLink asChild><Link to={crumb.to} activeOptions={{ exact: true }} title={crumb.label} className="block truncate leading-8 touch:leading-11">{crumb.label}</Link></BreadcrumbLink>
         </BreadcrumbItem>
+        <BreadcrumbSeparator />
       </Fragment>)}
     </BreadcrumbList>
   </Breadcrumb>;
