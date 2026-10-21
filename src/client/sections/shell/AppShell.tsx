@@ -36,6 +36,7 @@ import { deviceName, offline, TRY_AGAIN } from "@/copy";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 import { PairForm } from "./PairForm";
+import { TvPairing } from "./TvPairing";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { LiveSharingStatus } from "./LiveSharingStatus";
@@ -270,6 +271,7 @@ function ConnectionStatus({ paired }: { paired: boolean }) {
 function PairingPage({ status }: { status: ReactNode }) {
   const { nativeHost, localHost, tvPresentation, credentials, details, booting, retryHost, connected } = useSessionGate();
   const { statusLabel } = useShell();
+  const [typing, setTyping] = useState(false);
   const device = usePlaybackDevice();
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const switchable = !tvPresentation && (nativeHost || !!credentials || knownConnections().some(item => item.origin !== origin));
@@ -280,10 +282,14 @@ function PairingPage({ status }: { status: ReactNode }) {
   </Onboarding>;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
+  const lost = credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This device was removed. Pair again."}</AlertDescription></Alert>;
+  // A TV shows a code a phone approves; typing the host's code with a remote stays one press away.
+  if (tvPresentation && !typing) return <TvPairing status={<>{status}{lost}</>} onEnterCode={() => setTyping(true)} />;
   return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={<>On {name}, choose Pair a device, then enter the code it shows.{couch}</>}>
     {status}
-    {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This device was removed. Pair again."}</AlertDescription></Alert>}
+    {lost}
     <PairForm />
+    {tvPresentation && <Button variant="ghost" className="-ml-3 self-start" onClick={() => setTyping(false)}>Scan with a phone instead</Button>}
   </Onboarding>;
 }
 

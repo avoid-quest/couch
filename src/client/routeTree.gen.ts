@@ -25,6 +25,7 @@ import { Route as WhereItPlaysRouteImport } from './routes/where-it-plays'
 import { Route as DiscoverIndexRouteImport } from './routes/discover/index'
 import { Route as DiscoverLiveTvRouteImport } from './routes/discover/live-tv'
 import { Route as DiscoverRadioRouteImport } from './routes/discover/radio'
+import { Route as PairTvRouteImport } from './routes/pair/tv'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsSplatRouteImport } from './routes/settings/$'
 import { Route as SettingsDeviceRouteImport } from './routes/settings/device'
@@ -120,6 +121,11 @@ const DiscoverLiveTvRoute = DiscoverLiveTvRouteImport.update({
 const DiscoverRadioRoute = DiscoverRadioRouteImport.update({
   id: '/discover/radio',
   path: '/discover/radio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PairTvRoute = PairTvRouteImport.update({
+  id: '/pair/tv',
+  path: '/pair/tv',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/where-it-plays': typeof WhereItPlaysRoute
   '/discover/live-tv': typeof DiscoverLiveTvRoute
   '/discover/radio': typeof DiscoverRadioRoute
+  '/pair/tv': typeof PairTvRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings/device': typeof SettingsDeviceRouteWithChildren
   '/discover/': typeof DiscoverIndexRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/where-it-plays': typeof WhereItPlaysRoute
   '/discover/live-tv': typeof DiscoverLiveTvRoute
   '/discover/radio': typeof DiscoverRadioRoute
+  '/pair/tv': typeof PairTvRoute
   '/settings/$': typeof SettingsSplatRoute
   '/discover': typeof DiscoverIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -289,6 +297,7 @@ export interface FileRoutesById {
   '/where-it-plays': typeof WhereItPlaysRoute
   '/discover/live-tv': typeof DiscoverLiveTvRoute
   '/discover/radio': typeof DiscoverRadioRoute
+  '/pair/tv': typeof PairTvRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings/device': typeof SettingsDeviceRouteWithChildren
   '/discover/': typeof DiscoverIndexRoute
@@ -325,6 +334,7 @@ export interface FileRouteTypes {
     | '/where-it-plays'
     | '/discover/live-tv'
     | '/discover/radio'
+    | '/pair/tv'
     | '/settings/$'
     | '/settings/device'
     | '/discover/'
@@ -358,6 +368,7 @@ export interface FileRouteTypes {
     | '/where-it-plays'
     | '/discover/live-tv'
     | '/discover/radio'
+    | '/pair/tv'
     | '/settings/$'
     | '/discover'
     | '/settings'
@@ -390,6 +401,7 @@ export interface FileRouteTypes {
     | '/where-it-plays'
     | '/discover/live-tv'
     | '/discover/radio'
+    | '/pair/tv'
     | '/settings/$'
     | '/settings/device'
     | '/discover/'
@@ -425,6 +437,7 @@ export interface RootRouteChildren {
   WhereItPlaysRoute: typeof WhereItPlaysRoute
   DiscoverLiveTvRoute: typeof DiscoverLiveTvRoute
   DiscoverRadioRoute: typeof DiscoverRadioRoute
+  PairTvRoute: typeof PairTvRoute
   DiscoverIndexRoute: typeof DiscoverIndexRoute
 }
 
@@ -540,6 +553,13 @@ declare module '@tanstack/react-router' {
       path: '/discover/radio'
       fullPath: '/discover/radio'
       preLoaderRoute: typeof DiscoverRadioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pair/tv': {
+      id: '/pair/tv'
+      path: '/pair/tv'
+      fullPath: '/pair/tv'
+      preLoaderRoute: typeof PairTvRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -735,6 +755,7 @@ const rootRouteChildren: RootRouteChildren = {
   WhereItPlaysRoute: WhereItPlaysRoute,
   DiscoverLiveTvRoute: DiscoverLiveTvRoute,
   DiscoverRadioRoute: DiscoverRadioRoute,
+  PairTvRoute: PairTvRoute,
   DiscoverIndexRoute: DiscoverIndexRoute,
 }
 export const routeTree = rootRouteImport
