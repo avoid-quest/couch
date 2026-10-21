@@ -1,5 +1,5 @@
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
+import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
@@ -15,7 +15,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaTile } from "@/components/MediaTile";
 import { Progress } from "@/components/ui/progress";
 import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
-import { mediaCaption, metaLine } from "@/media-caption";
+import { historyCaption, mediaCaption, metaLine, savedCaption } from "@/media-caption";
 import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
 import { DurationBar, useDurationClock } from "@/components/DurationBar";
@@ -52,10 +52,7 @@ const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null 
 const entryShape = (entry: QueueEntry): ArtShape => isRadio(entry) ? "square" : artShape(sourceLabel(entry.source), entry.collection ? "episode" : "media");
 const historyShape = (item: HistoryItem) => artShape(item.sourceLabel, item.collection ? "episode" : "media");
 const savedShape = (item: ForLaterItem) => artShape(savedSourceLabel(item), item.collection ? "episode" : "media");
-// A caption leads with the series for an episode ("Phony", then "S1 E1, Episodio 1"), then its subtitle and source.
-const historyCaption = (item: HistoryItem) => { const caption = mediaCaption(item); return { title: caption.title, meta: metaLine(caption.lead, item.creator?.title === caption.subtitle ? undefined : caption.subtitle, item.sourceLabel) }; };
 const recentCaption = (item: HistoryItem) => { const caption = historyCaption(item); return { ...caption, meta: metaLine(caption.meta, item.duration ? formatDuration(item.duration) : null) }; };
-const savedCaption = (item: ForLaterItem) => { const caption = mediaCaption(item); return { title: caption.title, meta: metaLine(caption.lead, mediaSubtitle({ ...item, subtitle: caption.subtitle }), savedSourceLabel(item)) }; };
 
 type Hero = { kind: "playing" } | { kind: "continue"; item: HistoryItem } | { kind: "radio"; station: RadioStation; show: RadioProgrammeDetails };
 
@@ -213,7 +210,7 @@ export function HomePage() {
       </li>)}
     </Shelf>,
 
-    later: !!savedMedia.length && <Shelf title="For later" href="/saved">
+    later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later">
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail}
           href={itemLocation("saved", item.id)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />

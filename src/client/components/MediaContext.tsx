@@ -28,8 +28,10 @@ export function MediaContext({ collection, creator, radio, source, className }: 
   </span>;
 }
 
+// Providers space and case one name differently ("DISCOS REDONDOS  ( FULL ALBUMS )" as the link, with one space as the byline).
+const sameName = (value?: string) => value?.replace(/\s+/g, " ").trim().toLocaleLowerCase();
 /** A linked creator or collection already supplies this byline. Keep other subtitle information. */
 export function mediaSubtitle({ subtitle, creator, collection }: { subtitle?: string; creator?: CollectionLink; collection?: MediaCollection }) {
-  const linked = [creator && providerForUrl(creator.url) ? creator.title : undefined, ...collectionLinks(collection).map(item => item.title)];
-  return linked.includes(subtitle) ? undefined : subtitle;
+  const linked = [creator && providerForUrl(creator.url) ? creator.title : undefined, ...collectionLinks(collection).map(item => item.title)].map(sameName);
+  return subtitle && linked.includes(sameName(subtitle)) ? undefined : subtitle;
 }

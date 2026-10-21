@@ -8,6 +8,15 @@ export type ArtKind = "media" | "episode" | "collection" | "channel" | "station"
 
 export const artAspect = { poster: "aspect-[2/3]", square: "aspect-square", video: "aspect-video", round: "aspect-square rounded-full" } as const satisfies Record<ArtShape, string>;
 
+// One geometry per shape, sized by height (`--detail-art`) so a poster, a square, a frame and a channel carry about the
+// same weight; the width follows the shape, and the header's column caps it.
+export const detailArt = {
+  poster: "[--detail-art:15rem] md:[--detail-art:20rem] w-[calc(var(--detail-art)*2/3)]",
+  square: "[--detail-art:13rem] md:[--detail-art:16rem] w-(--detail-art)",
+  round: "[--detail-art:12rem] md:[--detail-art:14rem] w-(--detail-art)",
+  video: "[--detail-art:12rem] md:[--detail-art:13.5rem] w-[calc(var(--detail-art)*16/9)]",
+} as const satisfies Record<ArtShape, string>;
+
 // The catalogues' films and series come as posters; their episodes are frames from the episode.
 const catalogues = new Set(["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"]);
 const music = new Set(["Bandcamp", "SoundCloud"]);

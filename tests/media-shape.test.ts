@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { artShape, fillsFrame, majorityShape } from "../src/client/art-shape";
-import { mediaCaption, metaLine } from "../src/client/media-caption";
+import { episodeLabel, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
 
 test("each kind of item has one artwork shape", () => {
   expect(artShape("StreamingCommunity")).toBe("poster");
@@ -35,4 +35,23 @@ test("an episode leads with its series, then its number and name", () => {
 test("a meta line has one separator", () => {
   expect(metaLine("Phony · StreamingCommunity", "35:30")).toBe("Phony, StreamingCommunity, 35:30");
   expect(metaLine(undefined, false, "", "YouTube")).toBe("YouTube");
+});
+
+test("descriptions drop bare addresses and the lines that only carried one", () => {
+  expect(withoutUrls("Official video for “So What”\nListen to Miles Davis: https://MilesDavis.lnk.to/listenYD\nWatch more at www.example.com and see the whole archive of concerts")).toBe("Official video for “So What”\nWatch more at and see the whole archive of concerts");
+  expect(withoutUrls("► Subscribe: https://youtube.com/x\n\n\n\nThanks")).toBe("Thanks");
+  expect(withoutUrls(undefined)).toBe("");
+});
+
+test("a channel's tab is the channel, and an episode is named by its season and number", () => {
+  expect(pageTitle("Stanford - Videos")).toBe("Stanford");
+  expect(isChannelTab("Stanford - Shorts")).toBe(true);
+  expect(pageTitle("Before - After")).toBe("Before - After");
+  expect(episodeLabel({ title: "S01E02 · Episodio 2" })).toBe("S1 E2");
+  expect(episodeLabel({ title: "Pilot", collection: { title: "The Office - Season 3", url: "https://example.test/s3", index: 0 } })).toBe("S3 E1");
+  expect(episodeLabel({ title: "Pilot" })).toBeUndefined();
+});
+
+test("a snippet's link list keeps only what it said before its first address", () => {
+  expect(withoutUrls("Official music video for “So What” by Miles Davis Listen to Miles Davis: https://MilesDavis.lnk.to/listenYD Watch more Miles Davis videos: https://lnk.to/x Facebook: https://fb.com/x")).toBe("Official music video for “So What” by Miles Davis");
 });
