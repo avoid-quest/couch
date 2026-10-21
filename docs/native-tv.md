@@ -1,6 +1,6 @@
 # Native Debian TV setup
 
-**Settings > Updates** shows whether the automatic timer is active. A stopped
+**Settings → Updates** shows whether the automatic timer is active. A stopped
 or masked timer appears as off; administrators can still use **Update and
 restart** from their paired remote.
 
@@ -9,11 +9,11 @@ the current login, display manager and power policy unchanged.
 
 ## Use an existing desktop installation as a TV
 
-On that computer, choose **This computer**, then open the Couch's **General**
-in Settings and turn on **TV mode**; a paired admin can do the same from its own
+On that computer, choose **This computer**, then open **Settings → TV** and
+turn on **TV mode**; a paired admin can do the same from its own
 device. Confirm **Restart Couch** to save the choice and open fullscreen.
 Playback stops during the restart; the library and paired devices stay saved.
-Turn on **Share on network** in **Settings > Network** to let paired phones use
+Turn on **Share on network** in **Settings → Devices & network** to let paired phones use
 **Remote**. Turn TV mode off in the same place to return to the desktop window.
 A TV launcher's TV mode stays on and shows as set by the launcher.
 
@@ -67,15 +67,15 @@ with the TV's database open and a healthy loopback listener; Another Couch runs
 no Core. The check uses Core's open files and sockets rather than
 `/proc/<pid>/environ`, which Electron can clear when setting process titles. Select this
 computer for TV playback. To pair a phone, turn on **Share on network** in
-**Settings > Network** if the TV is still private, then open **Settings > Devices** and choose **Pair a device**
+**Settings → Devices & network** if the TV is still private, then choose **Pair a device** there
 for the pairing QR and six-digit code. The first device you pair becomes the
 admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
-phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
-**Home** shows what plays now and Up next, **Discover** holds what's on air,
-Live TV and each source's own home, **Saved** holds For later, lists and
+phone's **Settings → Devices & network** under **Admin code** and choose **Become admin**.
+**Home** shows what plays now and what to continue, **Discover** holds what's on air,
+Live TV and what you saved from each source, **Saved** holds For later, lists and
 favorites, the header's search field searches every source, and **Settings**
-the rest. TV **Settings > Display > Text size** offers Default,
+the rest. TV **Settings → TV → Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
@@ -95,8 +95,8 @@ or narrow Settings page selector,
 then returns Home. A source page first returns to Sources.
 
 The TV player has the same controls as every screen, without the Back arrow
-and fullscreen button a pointer and a window need. Details lives in Playback. A paused picture shows
-a large Pause glyph and “Paused”. Back hides the controls, then returns to the
+and fullscreen button a pointer and a window need. Details lives in Playback. A paused picture keeps
+the controls up, its transport showing Play. Back hides the controls, then returns to the
 page that opened the player; Back on Home does nothing. Up next and Details
 preserve this route even after the queue changes the player URL. Playback
 continues when browsing.
@@ -127,7 +127,7 @@ favorites, configure a local Live TV channel the second output can play (serve i
 stream with CORS), and pair a second online shared output for the favorite ordering/Undo
 and Live TV Queue/Play on checks. Queue skips a channel already anywhere in the queue,
 and Play on leaves the TV controlling that output, so before another run remove the
-channel from Up next's Played and bring the video back with Only here. Don't be sharing this device's screen or sound.
+channel from Up next's Played and bring the video back with Move here. Don't be sharing this device's screen or sound.
 Build the browser checks, minified so the bundle fits one preview evaluation:
 
 ```sh
@@ -170,7 +170,7 @@ preview's evaluation timeout is shorter than the check. Use native preview key
 input as well to verify local keyboard entry and the focus highlight.
 
 For Discover, `runDiscoverNavigationRegression()` checks entry in the saved
-section order, the first section's heading, Customize Discover, the tab bar
+section order, the first section's heading, the tab bar
 and Back. Run with Radio and Sources enabled, then Sources first, and with an
 existing shared source. Build `tests/discover-customization.browser.ts` the
 same way for `runDiscoverSharingFocusRegression()`: on a paired scratch Couch

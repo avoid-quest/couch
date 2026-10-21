@@ -7,14 +7,14 @@ Docker or a native Couch package on the controller computer.
 ## Connect
 
 1. Connect your computer to the playback computer's network. On the TV, choose
-   **This computer**, open **Settings > Network**, turn on **Share on network**
-   if it is off, then choose **Pair a device** in **Settings > Devices**. Scan its QR or type the shown
+   **This computer**, open **Settings → Devices & network**, turn on **Share on network**
+   if it is off, then choose **Pair a device**. Scan its QR or type the shown
    address into your browser, including any port.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
    and enter the TV's six-digit pairing code. The first device you pair becomes
    the admin.
-3. **Home** shows current playback and **Up next**. **Discover** shows what's on
-   air, Live TV and each source's own home; the header's **Search** finds a
+3. **Home** shows what plays and what to continue. **Discover** shows what's on
+   air, Live TV and what you saved from each source; the header's **Search** finds a
    title or opens a link. **Play** starts now; **Queue**
    in its **…** menu adds to Up next. **Saved** holds For later, lists and
    favorites, and **Settings** the rest. Closing your browser leaves playback running on the
@@ -25,10 +25,10 @@ website. A loopback address such as `127.0.0.1` reaches your own computer. For
 another computer, use the advertised LAN address or the configured hostname.
 
 Pairing grants Controller access, except for the first device, which becomes
-the admin. If no paired device is admin later, the TV's **Settings > Devices**
+the admin. If no paired device is admin later, the TV's **Settings → Devices & network**
 shows a one-use code; enter it under **Admin code** in this browser's
-**Settings > Devices** and choose **Become admin**. An admin can make later
-devices admin with **Make admin** in **Settings > Devices**, and manages the
+**Settings → Devices & network** and choose **Become admin**. An admin can make later
+devices admin with **Make admin** there, and manages the
 whole Couch from its own device: network sharing, HTTP, the relay, TV mode,
 sources, hardware and updates. A browser does not become another player.
 
@@ -43,14 +43,14 @@ The app remembers the chosen mode and addresses. If the other Couch is
 unreachable, the app keeps trying and offers **Try again** or **Use this
 computer**; it never switches on its own. Closing the window keeps Couch running
 (minimized on Linux); reopen it from the tray, the Dock or by starting it again.
-**Quit Couch** in **Settings → This device → General**, the tray or the app menu stops the app
+**Quit Couch** in **Settings → This device**, the tray or the app menu stops the app
 and its Core. On Linux and Windows, **File → Quit Couch** and **Ctrl+Q** also work
 when the system tray is unavailable or the page cannot load. See the
 [current architecture](architecture.md).
 
 ## Keep a shortcut
 
-**Settings → This device → Viewing → Keep screen awake** is on by default in browsers. It
+**Settings → This device → Keep screen awake** is on by default in browsers. It
 keeps the screen on while picture or sound plays on that device and Couch is
 visible, including buffering. Pausing, stopping or moving playback elsewhere
 releases it; controlling playback on the TV does not keep your phone awake.
@@ -84,7 +84,7 @@ a changed address can require pairing again.
 The client retries when the TV or network returns; the header shows connection
 status and the playback computer's address. If Couch rejects the saved pairing,
 the pairing form appears. Get a current QR or code from the TV and pair again.
-An Administrator can remove an old device in **Settings > Devices**.
+An Administrator can remove an old device in **Settings → Devices & network**.
 Pairing again does not delete the TV's media or queue.
 
 Couch serves the LAN over HTTPS with its own self-signed certificate, so a

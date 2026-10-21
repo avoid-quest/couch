@@ -12,8 +12,8 @@ with Apple devices (see [Validation](#validation)).
 
 ## Turn it on
 
-On the hosting computer or a paired admin's device, open **Settings**, then
-**Sources** under the Couch's name, and turn on **Receive AirPlay**. It starts
+On the hosting computer or a paired admin's device, open **Settings →
+Sources** and turn on **Receive AirPlay**. It starts
 off, and only an admin changes it. AirPlay runs only while **Share on network**
 is on; until then it says it is waiting.
 

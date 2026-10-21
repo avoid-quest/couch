@@ -2,412 +2,166 @@
 
 ## Search
 
-Search is the header's field on every page ([Shell](shell.md#header-and-section-nav)),
-and its results are `/search?q=…`. Enter or the Search button submits the
-field; edits leave the current results and route in place until then.
-The submitted query stays in the field; the page's
-"Search results" heading is for screen readers. It asks every source at once;
-the result count names the submitted query, with the sources still being asked
-on a separate muted line. Before any hit arrives it says "Searching for …",
-while the header's Spinner stays busy. Source failures and their Try again
-action sit above the results, so partial failures remain visible. Sources answer
-independently. Cached summaries publish before paint; background refreshes keep the current results visible.
+The header's field ([Shell](shell.md#search-field)) submits to `/search?q=…`;
+an empty query is Discover. Every source is asked at once and answers
+independently; failures, with Try again, sit above the results. Counts and
+"still asking" are a screen-reader status; on screen the header's Spinner and
+skeleton rows show the wait.
 
-Twitch results and opened channels refresh every 20 seconds while their view
-is active, connected and in the foreground. Hidden source results still
-contribute counts but do not poll. Refreshing a paginated search rereads its
-retained pages in cursor order so changes do not duplicate or skip results.
+One filter row ([Filters](#filters-and-pages)) holds two compact Selects,
+Source ("All sources", each source with its count, loading or unavailable) and
+Ends by ("Any end time", or three half-hour clock times ahead, `?until=HH:MM`;
+live media fits, collections don't), plus Clear filters while one is set.
 
-The existing Source and Ends by filters sit above the count, so asynchronous
-status messages never move the controls. Both use shadcn Select with visible
-labels. Source keeps every source in a fixed order, including zero-result and
-unavailable sources; counts reflect the current time filter. Loading and
-unavailable states are named inside the menu. Changing a source filters the
-cached results immediately; pending and error feedback follows the selected
-source. Controls and Clear filters remain present in empty and error states.
-Clear filters sits beside the count, disabled when nothing is selected.
-On phones, Source gets three fifths of the row and Ends by two fifths.
+A query word matches the start of a word in a hit. The **closest match** leads,
+laid out like Home's hero at a smaller size with its verbs (Save among them)
+and `data-page-first`; it holds still once shown. Then each kind as a shelf of
+twelve (More reveals the rest) or a list: Films and series (posters), Radio and
+Music (squares), Live now (frames), Videos and Channels and lists (rows). Hits
+that mention no query word wait behind "Show N results that don't mention …".
+A pasted link opens as a page or as direct media.
 
-Ends by offers three clock times ahead on the half hour, the first at least
-twenty minutes out (`?until=HH:MM`). The selected time stays visible and keeps
-its deadline as the clock advances; an expired deadline allows no remaining
-duration. Choices can cross midnight. A hit fits when it would end by then;
-live media and radio always fit, and collections (including albums, series,
-seasons and programmes) never do. There is no What or Length filter: the kinds
-are headings, and runtime stays secondary.
-
-A word of the query matches a word of a hit, or the start of one, never its
-middle ("nts" finds NTS Radio, not Quints). The closest match leads: the first
-hit whose title holds every word, from the first kind below that has one, laid
-out like Home's hero at a smaller size (artwork, title, meta, when it ends, its
-verbs) and carrying `data-page-first`; it holds still from its first appearance for the query, so nothing moves under the focus. Then each kind in the
-shape it reads best in, each a [Shelf](#mediatile) starting with twelve (More
-reveals the rest in place) or a
-[MediaList](#mediarow--medialist):
-
-- **Films and series**: the catalogues' titles as posters, RaiPlay's programmes
-  as frames;
-- **Radio** and **Music**: squares;
-- **Live now**: frames;
-- **Videos**: divided rows with runtime or watched progress;
-- **Channels and lists**: divided rows.
-
-Across the closest match, tiles and rows, source names have their own wrapping
-line beside the collection type (Album, Series, Channel and so on); artist,
-programme, year and quality keep the context line above. Long context must not
-hide which source will open. Music tiles show a known track length and end time;
-albums retain their Album label. In narrow rows metadata wraps without crowding the title or actions. Music and Channels and
-lists count "results" because each contains more than one content type. The closest match wraps its
-full title and context and shows up to three lines of the available synopsis.
-Its action row exposes Save/Saved beside Queue, using the same toggle as its
-item menu and Details. Save stays disabled while disconnected, pending, or
-waiting for saved state; a failed save leaves the item unsaved and reports the error.
-These reuse MediaTile, the shadcn Item-based MediaRow, Alert and Empty; the
-catalog needs no additional component for this hierarchy. Artwork, menu
-behavior and the single responsive tree stay shared with other browse pages.
-
-Hits that mention no word of the query wait behind one line ("Show N results
-that don't mention …", wrapping on narrow screens), so "Nothing found" is
-reachable even when a source answers anything. A pasted link opens as a webpage or as direct media, with
-Open page for a source's own link. The first result starts the page, which
-Down from the header's field reaches. An empty query has no results page: it
-is Discover.
+Twitch results refresh every 20 s while visible and connected.
 
 ## Discover
 
-Discover (`/discover`) is Home's sibling: shelves of `MediaTile`s under their
-headings, with no hero, since Couch picks nothing for it. Each shelf's heading names
-what it samples and is a link that opens the rest ([MediaTile](#mediatile)).
-The default order puts live sources first and wide frames between catalogues'
-posters:
+`/discover`: shelves of tiles under linked headings, with no hero and no
+visible title. Its sections, in the order and visibility chosen in Settings →
+Home & Discover:
 
-- **Shared sources**, while devices share screen or sound: a compact row of
-  names over their input kind, wrapping like Sources.
-  Pressing a source plays it; its menu holds Play on, Play next and Queue.
-  The first source carries `data-page-first`.
-  Sharing's Start sharing opens Discover directly.
-- **Radio**, "On air now": the saved stations, then the built-in ones (Home's
-  Radio shelf without its recents, `useOnAir`). A tile reads the station and
-  its current show, else where it's from; the heading already says they're on
-  air, so a tile doesn't repeat "Live". A show's `expiresAt` is when its data
-  refreshes, not when it ends, so there is no "until" time. A tile plays its
-  station, and its first carries `data-page-first`.
-  The shelf waits for the shows, so no tile grows a line under the focus, then
-  keeps its order while Discover stays open. Its heading opens every station (`/discover/radio`):
-  its source choice (`radioSource`), count, Filter (`filter`) and pager
-  (`page`), as divided rows.
-- **Live TV**, "N channels", only while a Live TV source has some: the
-  guide's first twelve channels. A channel has no page, so its tile plays it
-  and its menu holds Play on and Queue. Its heading opens every channel
-  (`/discover/live-tv`): the guide's channels with what's on now and next,
-  by group (`group`), Filter (`filter`) and page (`page`).
-- **One shelf per source with a home**: Twitch ("Live now"),
-  StreamingCommunity ("Films and series"), RaiPlay ("Programmes"),
-  123MoviesFree ("Films"), AnimeSaturn and AnimeUnity ("Films and series").
-  Each holds the first twelve of the source's own home, the same query its
-  page makes (`ProviderPage`, `url` ""), so opening
-  the heading shows them at once. A tile opens its Details; its menu holds its
-  search hit's verbs.
-- **Search a source**: the sources that start from a search, YouTube, Bandcamp and
-  SoundCloud, as a compact row of names over a muted line, each scoping the
-  header's field to itself ([Shell](shell.md#header-and-section-nav)). Their
-  root (`/collection?provider=…`, reached from a breadcrumb) says so and offers
-  the same.
+- **Shared sources**, while devices share screen or sound: a row of names;
+  pressing one plays it, its menu holds Play on, Play next and Queue.
+- **Radio**: saved stations, then the built-in ones, each with its current
+  show. A tile plays; its menu holds Details. The heading opens
+  `/discover/radio`.
+- **Live TV**, while a Live TV source has channels: the guide's first twelve.
+  A tile plays its channel; the heading opens `/discover/live-tv`.
+- **One shelf per source with a home** (Twitch, StreamingCommunity, RaiPlay,
+  123MoviesFree, AnimeSaturn, AnimeUnity): the channels and series saved from
+  it, in Saved's order. The heading (the source's name) opens the source's own
+  home. A source with nothing saved has no shelf; with nothing saved anywhere,
+  one line says to save channels or series to see them here.
+- **Sources**: every source as one row of names. A source with a home opens
+  it; YouTube, Bandcamp and SoundCloud scope the header's search to themselves.
 
-Shelves load side by side and hold about a tile's height meanwhile, so the
-ones below don't move under the focus. One that fails says "Couldn't load
-{source}." with Try again, as Home does; an empty one is left out. Discover's
-own pages carry a breadcrumb to it, and Back returns to the heading that
-opened them. As a section root, Discover carries no breadcrumb.
+Shelves load side by side at a fixed height so nothing below moves; one that
+fails says "Couldn't load {source}." with Try again. TV page entry goes to the
+first available section's first control, and moves to an earlier section that
+finishes loading until the user acts. With every section hidden or empty, an
+Empty links to Settings (`#customize-discover`).
 
-**Customize Discover** at the top opens This device → Discover in Settings.
-Like Home, its Switch and Move up/down rows save immediately on this device,
-independently of the Couch or watching profile. Every existing section is on
-by default. Source IDs stay stable across loading, empty responses and source
-availability; hidden or unavailable sections retain their saved position, and
-new sections append in default order. Reset to default restores the original
-order and visibility without onboarding. Hidden catalogue sections do not load.
+**Radio** (`/discover/radio`) and **Live TV** (`/discover/live-tv`) are lists
+with a back link to Discover and the filter row: Radio's source choice
+(`radioSource`) and Filter; Live TV's group (`group`) and Filter, with each
+channel's now and next from the XMLTV guide on its meta line. Filters and page
+live in the URL. A channel has no page: pressing it plays, its menu holds
+Play on and Queue.
 
-The first enabled, available section's primary control takes TV page entry;
-if an earlier section finishes loading, its primary takes over until the user
-presses a key or pointer, or leaves the page; slow catalogues have no focus cutoff.
-Back keeps the original heading or item even after a reorder; if it is hidden,
-focus falls back to the first available section.
-With all sections hidden or empty, an Empty explains how to customize or search,
-and Customize Discover remains reachable. This reuses Home's controls and the
-shadcn Button, Switch and Empty from the official catalog; no new primitive or
-input-specific layout is needed.
+Catalogue homes (StreamingCommunity, 123MoviesFree, AnimeSaturn, AnimeUnity)
+are poster grids sized by the available width.
 
-Shared sources is the exception: its row comes and goes with intentional
-sharing. TV navigation keeps the same Radio tile focused when sharing starts;
-after its focused last source ends, the next arrow reaches the first available
-section in the saved order.
+## Hide
 
-Not yet: a programme grid for Live TV, and any Core endpoint it would need;
-it waits for a source that needs one.
-
-The film and series catalogue homes (StreamingCommunity, 123MoviesFree,
-AnimeSaturn and AnimeUnity) use the same poster-tile grid on TV, desktop
-and phone; the available width sets its column count. Titles, seasons,
-episodes and tracks keep their divided rows.
-
-## Direct content navigation
-
-Every surface uses the same rule: a named relationship with a known destination
-is an internal link. Search, shelves, saved items, lists, details, Up next,
-Home and the player expose channels, artists, albums, series and stations
-without requiring an item menu. Source names link to their source page.
-`MediaContext` composes these links and removes duplicate destinations;
-`ContentLink` preserves the opener for Back and focus restoration. Provider
-creator metadata is independent of the selected playlist, so navigating to a
-channel does not change autoplay order. Unknown display text is never converted
-into a guessed URL. Bandcamp and SoundCloud artist links use the existing
-source-scoped search, since those browsers currently expose tracks and albums
-rather than artist catalogue pages.
-
-The catalog's Button and existing native overflow row are sufficient for shelf
-paging. Replacing the row with shadcn Carousel would add a second focus/scroll
-model without a demonstrated gap. Previous/Next buttons use native scrolling;
-reduced motion makes it immediate. Poster grids size artwork from their cell,
-while shelves retain consistent artwork heights and two caption lines.
+A provider item's menu (a search hit, a source page's row or poster) ends with
+**Hide**: it hides that item at once, with Undo, on every device. Core keeps
+the rules (`/api/hidden`, `src/server/hidden.ts`) as an item (source and
+address) or a word matched in the title, subtitle, creator or collection.
+Rules apply where provider items become hits (`SearchOnlineResults`), so
+Search and source pages drop them; radio stations, Live TV channels and
+Discover's saved shelves are not filtered. Settings → Sources → Hidden lists
+the rules with Remove, under a "Hide a word" field.
 
 ## Details
 
 Item pages (`/item`: History, For later, a station, an Up next entry) and
 collection pages (`/collection`: a source's home, a series, season, album,
-channel, film or episode) open on one header, `DetailHeader`, laid out like
-Home's hero: contained artwork at the left at its own aspect ratio (stacked
-above it below `md`), the title at display size, one muted meta line, a
-`DurationBar` when the length is known (remaining time and proportional progress once partly watched),
-one row of verbs, then the synopsis. Long descriptions preserve paragraph breaks and never push Play below the description. Artwork has a bounded column (28rem for video, 18rem for square/poster); the title column can shrink and wrap. A page without artwork has no artwork
-column. The catalog has no media header and Card breaks Flat, so it is a plain
-composition of Button and DropdownMenu, like Home's hero.
+channel, film or episode) have their own URLs, so refresh and Back restore
+them with scroll and focus.
 
-The row holds, in order: Play (Play all for a list; Resume, with From start
-beside it, once partly watched), Queue (Queue all), Save or Saved, Play on
-while another device can play it, then one "…" menu for the rest. Each verb is
-one focus stop. The primary verb carries `data-page-first`, so the page starts
-on it; while it is disabled, or without one, the first verb you can press does.
-A header without verbs, such as a source's home, leaves the page to its first
-tile or row, or to the scoped search field where a source has no home page of
-its own, never to the breadcrumb. Seasons, episodes, tracks and nearby
-items follow as divided MediaRows.
+They open on `DetailHeader`, laid out like Home's hero: contained artwork at
+its own aspect ratio (stacked below `md`), the title, one meta line, a
+`DurationBar` when the length is known, one row of verbs, then the synopsis.
+The verbs: Play (Play all; Resume with From start once partly watched), Queue,
+Save / Saved, Play on while another device can play it, then "…" for the rest
+(Remove from Continue, Move up/down, Play next, Open in browser…). The primary
+verb carries `data-page-first`. Seasons, episodes, tracks and nearby items
+follow as divided rows; a page ends with its own content.
 
-Details holds every verb for everything Home opens, where the item supports
-them; a Home tile's menu holds the row of verbs, and reaches Details for the
-"…" verbs ([MediaTile](#mediatile)):
-
-- **History:** Resume or Play, From start, Queue, Save and Play on; "…" holds
-  Remove from Continue. Save keeps the item's provider page in For later, and
-  Saved takes it out; an item without a provider page has no Save.
-- **For later:** Play, Queue and Play on; "…" holds Move up, Move down and
-  Remove, with Undo. It is already saved, so it has no Save.
-- **A station:** Play, Queue, Save or Saved (its favourite, the toggle its
-  tiles' menus share) and Play on; "…" holds Open in browser for its show page or homepage.
-- **An Up next entry:** Play and Save.
-- **A source's page:** Play, Play all or Resume, From start, Queue or Queue
-  all, Save and Play on; "…" holds Play next.
-
-## Open in browser
-
-An item's existing menu offers **Open in browser** when its model has an
-original webpage: provider media and collections, History and For later,
-Up next, and stations with a homepage. Details keeps the same action in its
-"…" menu; a station's current show page takes precedence over its homepage.
-Open and Details still navigate within Couch. The action stays usable when
-Couch cannot play the item.
-
-The shared `browserActions` helper uses a native anchor inside the existing
-shadcn Dropdown Menu; the catalog needs no new component. It opens on the
-device invoking it: a browser tab for browser clients, the default system
-browser through Main's existing HTTP(S) window-open handler in the desktop
-app. Modified clicks retain native link behavior. The link is local-only for
-Remote-pad navigation, so a phone cannot unexpectedly launch the TV's browser.
-
-Links use catalogue page references, never playback URLs. Couch-only season
-selectors open their containing public page (RaiPlay, StreamingCommunity and
-123MoviesFree). Local files, shared inputs, direct streams and items with no
-page omit the action. The existing menu typography, touch targets, focus and
-single responsive tree apply on every screen.
-
-## Keep discovery context visible
-
-Opened shows, seasons and albums retain
-a contained cover and a short synopsis above their divided rows; a film or
-episode shows its synopsis under its title, never an empty About. Episode
-rows use their own descriptions when available; a show synopsis stays with
-the collection instead of pretending to describe each episode. A partly
-watched item's primary verb is Resume, with From start beside it. A series
-offers Play or Resume of its next episode, and with one season its episodes
-are on its own page. A detail page ends with its own content and never
-appends the source's catalogue. Posters and album art stay uncropped. This
-extends the existing shadcn Item-based MediaRow; no additional preview panel
-or per-result request is needed.
-
-Source results
-pair artwork with available synopsis and episode metadata; collection
-headers contain their artwork instead of cropping covers. Artwork fades in
-once it has loaded ([Motion](../design.md#motion)). Missing artwork
-keeps its frame as a hairline on the page's ground, with the title set in
-type sized to the frame (a container query) in muted ink, so it keeps a
-shelf's rhythm without reading as a picture; a collection shows a folder
-there instead.
-
-## Details are destinations
-
-Item details and provider collections have
-their own URLs, resolved from stable item IDs or canonical provider URLs.
-Refresh loads the same content; Back restores the previous page, filters,
-scroll and focus. A provider search result's title opens its details; Play is
-a separate, explicit action, including on phones. StreamingCommunity's
-collections say Series or Season rather than List. Reuse PageHeader and existing media rows. Dialogs remain
-reserved for focused tasks such as pairing and source setup.
+**Open in browser** appears in an item's menu when it has an original page
+(provider media and collections, History, For later, Up next, stations with a
+homepage). It opens on the device you hold (a tab, or the system browser from
+the app) and never travels through Remote.
 
 ## Saved
 
-Saved (`/saved`) holds what you keep, one section per `?tab=`: For later,
-Channels & stations (saved channels, playlists, albums and series, then
-favourite stations), Lists, and Played. Each is a list you manage in its own
-way (an order, Remove with Undo, a list's entries, history), which a shelf
-can't hold, and Home already shows For later and Played as shelves, so the
-tabs stay. They sit in the section nav Saved shares with Settings, a rail on
-wide screens and a Select on phones, with a visible page title on both: [Settings](settings.md#section-nav).
-Lists keeps Save as list visible beside its title, and its empty
-state offers the same Discover action as the other tabs. A selected list keeps
-its own visible title and verbs. These reuse PageHeader, Button and SavedEmpty.
+`/saved`, one section per `?tab=`: For later, Channels & stations (saved
+channels, playlists, albums and series, then favourite stations), Lists and
+Played (History, newest first). They share Settings' section nav: a rail on
+wide screens (no heading, counts only when not zero), a Select on phones; the
+rail names the page. Lists keeps Save as list at its top; a list keeps its own
+title and verbs. An empty tab says what goes there and offers Discover.
+Removing says "Removed … from Saved." with Undo.
 
-Played (`?tab=played`) lists History, newest first, as divided MediaRows with
-their length bar (remaining time and proportional progress once partly watched). Each row's one verb opens
-its History Details, which holds the others and Remove from Continue with Undo;
-the rows have no menu.
-Removing from For later or Channels & stations says "Removed … from Saved."
-An empty tab says what goes there and offers Discover. For later points to
-Save in an item's "…" menu or Details and explains that stations and
-collections live in Channels & stations. Playable media keeps the existing
-For later persistence; stations and collections keep their existing favourites.
-Saved channels and collections keep their contained artwork and the same
-Channel, List, Album, Series or Season label as Search.
+## Rows and tiles
 
-## MediaRow / MediaList
+**`MediaRow` / `MediaList`**: thumbnail, title, meta and length bar as one
+target whose press does the main verb (Play for stations, channels and live
+hits, else Open or Details), with the row's menu behind an always-visible "…"
+at the end of the title's line. Relationship links sit under the meta. A row
+whose page already holds every verb shows no "…" (`menuOnPage`: For later's
+and a list's rows) but still opens the menu by right-click, long press or held
+OK. A list's own entries keep Remove and a drag handle.
 
-Thumbnail, title, meta and length bar, as one target on every screen: pressing
-the row (its artwork too, for a pointer) does its main verb, Play for stations,
-channels and live hits, else Open or Details. Search, Saved, Discover's pages, and Up
-next's compact rows. Its other verbs (Play, Play on, Play next, Queue, Save,
-Move up, Move down, Remove, and Open where a live hit's press plays) are one list, `MediaRow`'s `menu`: the
-row's one menu ([Menus](../design.md#menus)), behind an always-visible "…" at the end of the
-main verb's line on every screen, aligned with the title. Artwork aligns with the top of the text column; relationship links sit directly beneath the metadata in that same column. Compact rows reserve 4rem for artwork; regular rows use 6rem, then 8rem in wider lists. Disabled primary actions use the same half ink as tiles and render buttons rather than actionable anchors.
+**`MediaTile`**: one Button around `MediaArtwork` (2:3 films and series, 1:1
+stations and albums, 16:9 videos and episodes; `--tile-art` sets the height),
+a title and one meta line, plus a `DurationBar` on Continue. The "…" sits over
+the end of the title's first line; on the TV it is no focus stop unless the
+press is disabled.
 
-A row whose page holds every verb in its menu shows no "…" (`menuOnPage`),
-though right-click, a long press and a held OK still open the menu from the
-row: For later's rows (Details keeps Remove with Undo and Move up/down), Lists'
-rows (a list's page holds Play, Play on and Queue). Search hits keep their
-"…", including collections, so Save is discoverable without opening Details.
-Every other row keeps its "…": saved
-channels and stations (a station's page holds no ordering or Remove), Live TV
-(a channel has no page), stations, live hits and videos with Play next among
-search hits, shared inputs, and Up next's entries, whose page holds only Play
-and Save. A list's own entries have no main verb, so they keep Remove and
-their drag handle on the row on every screen.
+**`Shelf`**: an optional linked heading (a focus stop) over a plain overflow
+row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll
+work natively. Search kinds and Discover's shelves use it too.
 
-The menu is shadcn's Dropdown Menu, adjusted to Couch: a hairline border and
-no shadow, `text-sm` items at `h-8` (44px under `touch:`) that invert when
-highlighted.
+**`MediaArtwork`** keeps artwork contained; without any it draws a hairline
+frame with the title set in muted type (a folder for collections).
 
-A live hit uses Play only while it is enabled; otherwise it retains its
-original Open destination, including during a pending Save. Busy actions
-keep their existing disabled state.
+Every named relationship with a known destination (channel, artist, album,
+series, station, source) is an internal link (`ContentLink`, `MediaContext`),
+deduplicated, never guessed from text. Bandcamp and SoundCloud artists use the
+source-scoped search.
 
-## MediaTile
+## Filters and pages
 
-One `Button` wrapping `MediaArtwork` (contained; 2:3 for films
-and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
-title and one meta line, plus a `DurationBar` on Continue. It is one focus
-stop whose press does the item's main verb. The catalog has no media tile
-and Card breaks Flat, so a tile is the smallest Button composition. `--tile-art`
-sets its artwork's height (18rem posters, 12rem squares, 11rem video;
-poster grids scale to their cell), so the "…" finds the title's line.
+Radio, Live TV, source pages and Search share one row (`ContentFilters`):
+`FilterBar` with the choices first, then the text field, wrapping on phones.
+Nothing is labelled on screen (each control has an aria-label) and no count
+sits between the filters and the results.
 
-Its other verbs are its one menu ([Menus](../design.md#menus)), behind an always-visible "…"
-over the end of the title's first line, which leaves it room, with its dots
-flush with the text. The "…" can't sit inside the tile's button, so it is a
-sibling laid over the caption, the line's height so the tile grows no taller,
-and it inverts with the focused caption. Two reserved title lines leave room
-for its real 44px touch target without overlapping the next tile. On the TV it is no focus stop, unless the press is disabled (nothing
-can play): then it is the tile's one stop, so its menu stays in reach. A tile's menu holds its Details'
-verbs, with Details first where the press plays:
+- `FilterChoice`: a few choices (Radio's sources) as an underlined Toggle
+  Group; Left and Right move along it and past its ends.
+- `FilterSelect`: many choices (Live TV's groups, Search's sources) as a
+  compact Select whose value names it.
+- `FilterInput`: a search glyph, "Filter", and Clear only while it holds text;
+  up to 18rem. A cursor-paged source names it "Filter this page".
 
-- **Continue** (press resumes): Details, From start, Queue, Play on. Its
-  sibling Details button stays, so a remote reaches History's verbs without a
-  held OK.
-- **Played recently** (press opens Details): Resume or Play, From start,
-  Queue, Play on.
-- **For later** (press opens Details): Play, Queue, Play on.
-- **A station** (Home's and Discover's Radio; press plays): Details, Queue,
-  Save or Saved, Play on. A station played from a link may be in no list, so
-  its tile is where it can be saved.
-- **An Up next entry** (press plays it now): its Up next row's verbs.
-- **A source's tile** (Discover's source shelves and a catalogue's posters; press opens it): its search hit's verbs.
-- **A Live TV channel** (press plays it): Play on, Queue.
+Filters live in the URL; changing one keeps focus where it is. Local filters
+use cached items; Live TV debounces by 200 ms and dims the old channels
+meanwhile.
 
-Shelves
-(`Shelf`: Home's and Discover's) are plain overflow rows (`data-nav-row`):
-Carousel's own arrow handling fights spatial navigation, and focus scrolls a
-plain row into view. A shelf's heading can be a link to the rest of what it
-samples, with a chevron; it is a focus stop between its shelf and the one
-above. Radio's tiles take the shelf's height, so a station
-without a show stays level with the rest: a shorter tile's centre sits higher,
-and Up from its neighbour would pick it before the tab bar.
+`BrowsePagination` sits under the list, only with more than one page:
+Previous, "Page N of M" (a borderless Select) and Next. Cursor-paged sources
+show it while there is a page before or after and never invent a last page.
+Turning a page moves focus to the list's top.
 
-## BrowsePagination
+## Back links
 
-Collection and radio lists keep count and Filter in fixed
-slots. Filter uses the shared Input Group's immediate focus inversion, with dark
-text and placeholder on white, as the header's Search does. Focused inputs use
-the light colour scheme so native controls, including the search clear glyph,
-stay visible on white. Remote or multiple-page collections show Previous, "Page N of M" and
-Next, disabled when they can't move. A complete local collection on one page
-omits the inert pager, including a single season's episodes and a short list
-of seasons; its count still identifies the content. The page Select's trigger is
-borderless and transparent, in muted ink: it reads as the pager's
-"Page N of M" text between two ghost icon buttons, as shadcn Pagination's
-links do, and a bordered field there would be a panel inside the pager.
+`ContentBack` puts one quiet link (`BackLink`) above a sub-page's h1: up to the
+collection holding it, else Radio or the source's home, else the section it
+belongs to: "‹ Season 1", "‹ StreamingCommunity", "‹ Discover". There are no
+breadcrumbs. Esc and the TV's Back still go back in history, restoring focus.
 
-## ContentBreadcrumb
+## Play on in menus
 
-The path above a collection or item: the section the page belongs to (its
-tab: [Shell](shell.md#sections)), then the source, then the collection. It replaces a Back control, so its
-links are `text-sm`, the controls' size, rather than Mira's `text-xs`
-caption size, and each is `min-h-11`, a 44px target on every screen.
-
-## Play on targets in menus
-
-Play on targets sit in a labelled group inside row menus, with device names that can wrap. A nested flyout left too little width on a 320–390px phone at larger interface sizes. Use the menu's standard Group and Label, and bound long menus to the available viewport height so keyboard and touch can reach every target. The separate inline Play on menu uses the same target rows.
-
-What Play on offers and confirms: [Where it plays](where-it-plays.md#play-on).
-
-### Consistency across browse surfaces
-
-Radio, Live TV and provider catalogues share `FilterInput` and `FilterSelect`,
-compositions of the official shadcn [Input Group](https://ui.shadcn.com/docs/components/radix/input-group),
-[Select](https://ui.shadcn.com/docs/components/radix/select) and Label. No custom
-input or picker is needed. Visible labels name what is filtered: stations,
-channels, items, episodes or tracks. A provider with cursor pagination says
-“Filter this page” because its filter only searches that fetched page. Text
-matches names and existing metadata, ignoring surrounding whitespace. All
-text fields use “Type to filter…” and a separate Clear filter button; clearing
-returns focus to the input. The button retains its slot while disabled.
-
-Source or Group and the text field share a row on larger screens, stack on
-phones, and precede a separate count/pagination row. Both rows retain their
-slots when no items match. Radio source changes preserve the text filter;
-Live TV group changes do too. Text filtering resets local pagination and keeps
-scroll position. Provider cursor trails remain intact. Back restores the URL's
-filters and collection context. Filter URL updates preserve the active field or
-picker instead of running page-entry focus again, on TV as on other screens.
-Local filters use cached items without a request. Live TV debounces
-text by 200 ms and keeps previous channels while its query changes, visibly
-marking them as updating; stale counts cannot clamp the new page during that
-interval. A catalogue does not repeat its source as a link on every row; its breadcrumb and source control already provide that context. Station rows expose “Station details” separately from Play. A creator or collection subtitle is omitted only when an existing relationship link already supplies the exact same name; other metadata stays visible.
-
-Saved keeps its page heading visible on phones, matching Settings and Discover. Its section selector chooses the destination; the heading establishes the current page. Related collections and stations use the same section-heading scale as shelves.
+Play on targets are a labelled group inside an item's menu, with wrapping
+device names, bounded to the viewport height. What Play on offers:
+[Where it plays](where-it-plays.md#play-on).

@@ -1,63 +1,49 @@
 # Settings
 
-## Two owners
+## Pages
 
-Settings has two owners, each titled with its real name. **This device** (its name) holds what changes only on the device in hand and what it consents to: General, Couch connection, Viewing, Home, Discover, Sharing and, in an app connected to another Couch, Updates. **The Couch** (its name, "Shared") holds what changes it for everyone: General, Access (Devices, Network), Watching (Playback for the active watching profile, Sources), the Couch's hardware (Sound, Bluetooth, Display, where it has them) and Updates when available. Each page explains its owner in a sentence below the title, rather than a cryptic eyebrow.
+One flat list (`src/shared/settings-pages.ts`):
 
-Settings opens on This device → General; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last. On the TV, entering Devices focuses Pair a device when it is available.
+| Page | Path | Holds |
+| --- | --- | --- |
+| This device | `/settings/device` | name, text size, Keep screen awake, online video quality, which Couch it shows, what it lets other devices use, Share screen or sound, Quit Couch (app) |
+| Home & Discover | `/settings/home` | Home's shelves, then Discover's sections ("Only on this device.") |
+| Devices & network | `/settings/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
+| Playback | `/settings/playback` | the watching profile's preferences (Autoplay among them), Ask every device where a shared source plays |
+| Sources | `/settings/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under ‹ Sources), AirPlay, Hidden |
+| Sound | `/settings/sound` | output, test and delay, Bluetooth (where Couch controls the system's sound) |
+| TV | `/settings/display` | TV mode, Start on boot, Screen, text size (where the Couch is or can be a TV) |
+| Updates | `/settings/updates` | this app's updates, or the Couch apps an admin updates (where there is an updater) |
 
-This device → Home lists Home's shelves, Continue, For later, Radio, Played recently and Up next, each with a Switch and Move up and down: [Home](home.md#shelves).
-This device → Discover uses those same divided rows and Reset to default for
-[Discover's sections](browse.md#discover). Pointer, keyboard and TV remote use
-the same Switch and Move controls; no drag gesture is required. A move to the
-first or last position returns focus to that row's Switch if the pressed Move
-button becomes disabled.
+Settings opens on This device. Earlier paths (`/settings/device/…`,
+`/settings/couch/…` and older) redirect through `settingsAliases`. The player's
+gear opens the player's own Playback Sheet, not this page.
 
-Settings is the last tab in the TV and wide desktop header, and in the bottom bar on phones and narrow desktop windows; every page renders inside the shell on all three. On phones, choose Sharing or Network from the Settings page menu. The player's gear opens Playback, a separate surface for the current media.
-
-The Couch's Sources page lists its source pages, then **AirPlay**: an admin's **Receive AirPlay** switch, its **Code** with **New code** while it is on, and one status line. Receiving says who is sending sound and that playback starts automatically on this Couch; Shared sources still lets other devices join it. New code confirms in an AlertDialog, since it restarts AirPlay and every device must enter the new code. Others see the row with "Only an admin can change this." It uses the page's existing rows, Switch, Button, Alert and AlertDialog; nothing custom.
-
-Settings rows respond to their own container width. Labels and controls stack
-until the content column has enough room for both; the navigation rail never
-squeezes controls into a narrow second column. Rows share generous vertical
-spacing, wrapping labels and consistent descriptions.
-
-## Admin-only rows
-
-Every paired device opens every shared page: rows that need an admin say so ("Only an admin can change this.") instead of disappearing, and the server enforces it. A device's own consent, its capture, Quit Couch and the first-admin code on the host stay local. On the hosting app, Sharing explains that its speakers and screen are shared while Share on network is on; paired devices have their own Speakers and Screen switches.
-
-After Stop sharing releases capture, keep the source's name and disabled
-Stopping… button until Couch acknowledges the stop. Then return to capture
-setup, retaining any error. A pending stop never shows Starting… or Cancel.
+Home & Discover lists each section with a Switch and Move up/down (no drag),
+saved per device, each list with Reset to default. A Move that reaches an end
+returns focus to the row's Switch.
 
 ## Section nav
 
-Saved and Settings share one section nav: a rail with a left rule and quiet selected background on wide screens and a Select on phones. In Settings' rail each owner heads its pages, with its device name or role beneath, wrapping where the rail is too narrow. On the TV, Settings starts on the rail's current entry, as Saved does, and OK on a rail entry opens its page and moves focus to the page's first control.
+Saved and Settings share one section nav: a rail on wide screens (left rule
+and quiet background on the current entry, no heading) and a Select on
+phones. The selected entry names the page, so pages keep only an `sr-only`
+h1; a source's own page shows its title under "‹ Sources". Rows stack label
+and control until their column has room for both.
 
-On the TV, Settings OK enters
-the selected page's first enabled control; Back from its content restores the
-visible rail entry or narrow Settings page selector, then Home (a source's
-own Back first returns to Sources).
+On the TV, Settings starts on the rail's current entry; OK opens a page and
+focuses its first enabled control; Back from the content returns to the rail
+(a source page first returns to Sources), then Home. Entering Devices &
+network focuses Pair a device when available.
 
-## Names, pairings and roles
+## Who can change what
 
-General owns this device's
-name, which is also the name of the server it hosts. An administrator
-connected to another host can rename that host in Devices. The Devices list
-manages pairings and roles; New device heads its rows, since a separate untitled section would leave a gap that reads as an empty row. First run and the pairing dialog: [Shell](shell.md#first-run-names-the-computer).
+Every paired device opens every page. Rows that need an admin stay, saying
+"Only an admin can change this.", and Core enforces it. A device's own name,
+consent and capture, Quit Couch and the host's first-admin code stay local.
+The host's This device says its speakers and screen are shared while Share on
+network is on.
 
-## Shared source prompts
-
-The Couch’s **General** page owns **Ask every device where a shared source
-plays**, off by default and saved by Core across restarts. It changes how the
-Couch asks everyone to choose receivers, so it belongs to the Couch rather than
-This device → Sharing or a watching profile’s Playback preferences. Only admins
-change it; everyone sees the row. Its description is “When someone plays a
-shared source that nothing is playing yet, every device viewing it shows Where
-it plays. Off: only the device that pressed Play.”
-
-It uses the existing divided SettingsRow with its linked Label and shadcn
-Switch, as Autoplay does. One tree serves TV, desktop and phone; the label gets
-the existing touch target treatment. No custom component is needed.
-
-On phones, a subpage’s Back control sits above its title, leaving the full content width for long source names. The shared PageHeader applies this to saved-list details too.
+This device owns its name, which is also the name of a Couch it hosts; an
+admin renames another host from its row in Devices & network. First run and
+pairing: [Shell](shell.md#first-run-and-pairing).
