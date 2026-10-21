@@ -92,9 +92,10 @@ export async function runSaveForLaterRegression() {
     assert(button("Save") && items.length === 1, "Rejected Save falsely showed Saved");
     const before = writes;
     props.connected = false; gate.connected = false; render(); await wait(20);
-    // The closest match still holds its online summary during the 250 ms debounce.
-    assert(button("Save") && !button("Save")!.disabled, "Missed the cached Save interaction window");
-    assert(button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Missed the cached playback interaction window");
+    // Results aren't debounced, so the closest match's Save turns offline with the connection, at once. Play and
+    // Queue stay on the cached result, and a press on any of them in that first moment sends nothing.
+    assert(button("Save")?.disabled, "Cached Save stayed enabled after disconnect");
+    assert(button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Cached Play or Queue left the closest match after disconnect");
     button("Play")!.click(); button("Queue")!.click();
     button("Save")!.click(); await wait();
     assert(writes === before, "Cached Save sent a mutation immediately after disconnect");
@@ -119,7 +120,7 @@ export async function runSaveForLaterRegression() {
     assert(!stationSaved && button("Save"), "Radio Saved did not toggle off");
     const radioWrites = stationsSaved, radioCommands = commands;
     props.connected = false; gate.connected = false; render(); await wait(20);
-    assert(button("Save") && !button("Save")!.disabled && button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Missed the cached radio interaction window");
+    assert(button("Save")?.disabled && button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Cached radio Save stayed enabled, or Play and Queue left, after disconnect");
     button("Play")!.click(); button("Queue")!.click(); button("Save")!.click(); await wait();
     assert(stationsSaved === radioWrites && commands === radioCommands, `Cached radio actions ran after disconnect: ${stationsSaved - radioWrites} Save POSTs, ${commands - radioCommands} commands`);
     assert(button("Save")?.disabled, "Offline radio Save did not become disabled");
