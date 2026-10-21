@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 /**
  * Contained artwork. Without any, the frame is a cover set in type: the muted fill with the title large at its top left,
  * sized to the frame (a container query), so it keeps the shelf's rhythm and reads as the item's own cover. A frame too
- * small for words (a row's or the bar's thumbnail) holds the title's first letter instead, and a collection a folder.
+ * small for words (a row's or the bar's thumbnail) holds the title's first letter instead, and a collection a folder. An
+ * address breaks after its slashes rather than inside a word.
  * Its fill and ink are set by value, not by .bg-muted or .text-muted-foreground, which a focused control changes for its
  * inverted ground (index.css) while artwork keeps its own, and on an inner layer so a caller's ground for the picture
  * doesn't cover it.
@@ -30,7 +31,7 @@ export function MediaArtwork({ thumbnail, title, collection = false, className =
       <span className="absolute inset-0 flex bg-(--muted) text-(--foreground)">
         {collection ? <Folder className="m-auto size-[max(1rem,20cqi)] text-(--muted-foreground)" />
           : <>
-            <span className="m-[6cqi] line-clamp-3 h-fit text-[max(.75rem,13cqi)] leading-[1.05] font-semibold tracking-tight text-balance break-words @max-[8rem]:hidden">{title}</span>
+            <span className="m-[6cqi] line-clamp-3 h-fit text-[max(.75rem,13cqi)] leading-[1.05] font-semibold tracking-tight text-balance break-words @max-[8rem]:hidden">{title.replace(/([/?&])/g, "$1\u200b")}</span>
             <span className="m-auto hidden text-[45cqi] leading-none font-semibold @max-[8rem]:block">{title.match(/[\p{L}\p{N}]/u)?.[0]?.toLocaleUpperCase()}</span>
           </>}
       </span>
