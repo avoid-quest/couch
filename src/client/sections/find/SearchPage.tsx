@@ -14,6 +14,6 @@ export function SearchPage() {
   const searchState = readSearchState(useLocation().searchStr);
   return <section data-page="Search">
     <PageHeader title="Search results" hidden />
-    <SearchPanel onOpenCollection={shell.openProvider} onManageSources={() => void navigate({ to: "/settings/sources" })} searchState={searchState} onSearchChange={changeSearch} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Search"} />
+    <SearchPanel onOpenCollection={shell.openProvider} onManageSources={() => void navigate({ to: "/settings/couch/sources" })} searchState={searchState} onSearchChange={changeSearch} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Search"} />
   </section>;
 }

@@ -62,7 +62,7 @@ function useShellValue() {
   const location = useLocation();
   const section = sectionForPath(location.pathname, location.searchStr) ?? "Home";
   const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
-  const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "device" : null);
+  const settingsSection = settingsPageForPath(location.pathname);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
   if (location.pathname === "/search") rememberedSearch.current = readSearchState(location.searchStr);
   const lastBrowsePath = useRef("/");

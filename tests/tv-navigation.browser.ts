@@ -270,7 +270,7 @@ window.runTvNavigationRegression = async () => {
     assert(document.querySelector('[role="dialog"][data-state="open"]'), "Pairing overlay did not open");
     await key("Escape"); await wait(350);
     assert(!document.querySelector('[role="dialog"][data-state="open"]'), "Back did not close pairing overlay");
-    assert(location.pathname === "/settings/devices" && document.activeElement?.textContent === "Pair a device", "Overlay Back did not return to its opener");
+    assert(location.pathname === "/settings/couch/devices" && document.activeElement?.textContent === "Pair a device", "Overlay Back did not return to its opener");
     await key("Escape");
     assert(document.activeElement?.matches('[data-settings-page="devices"]'), "Back did not restore rail");
     await key("Escape");

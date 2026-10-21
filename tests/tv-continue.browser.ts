@@ -108,18 +108,17 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
 window.runNarrowSettingsRegression = async () => {
   try {
     document.querySelector<HTMLElement>('[data-app-nav] a[href="/settings"]')!.click();
+    await until(() => !!document.querySelector('[data-settings-page="device"]'));
+    const general = () => document.querySelector<HTMLElement>('[data-settings-page="device"]')!;
+    assert(usable(general()) && !document.querySelector('[data-nav-rail]'), "Use a narrow TV viewport, where Settings lists its pages");
+    general().click();
     await until(() => !!document.querySelector('#local-device-name'));
-    const selector = document.querySelector<HTMLElement>('[aria-label="Settings page"]')!;
-    assert(usable(selector), "Use a narrow TV viewport with its visible Settings selector");
     document.querySelector<HTMLElement>('#local-device-name')!.focus();
     await press("Escape");
-    assert(document.activeElement === selector && usable(selector), "Settings Back did not focus visible navigation");
-    await press("Enter");
-    assert(document.querySelector('[role="listbox"]'), "Restored Settings selector could not open");
+    await until(() => location.pathname === "/settings" && document.activeElement === general());
+    assert(usable(general()), "Settings Back did not return to General in the list");
     await press("Escape");
-    assert(document.activeElement === selector, "Settings selector overlay lost its opener");
-    await press("Escape");
-    assert(location.pathname === "/", "Settings navigation Back did not reach Home");
+    assert(location.pathname === "/", "Settings Back did not reach Home");
     return { passed: true };
   } catch (error) { return { passed: false, error: String(error) }; }
 };

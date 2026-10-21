@@ -1,4 +1,4 @@
-// Run in a paired scratch TV at /settings/home. Build like tv-navigation.browser.ts.
+// Run in a paired scratch TV at /settings/device/home. Build like tv-navigation.browser.ts.
 // Uses the real settings, local storage, routes and Remote's navigation entry point; no playback starts.
 import { applyTvNavigation } from "../src/client/navigation";
 import { readDiscoverRows } from "../src/client/sections/discover/discover-rows";

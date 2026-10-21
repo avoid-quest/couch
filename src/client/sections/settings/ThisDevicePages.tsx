@@ -58,7 +58,6 @@ export function HomeDiscoverPage() {
   const home = useHomeRows();
   const discover = useDiscoverRows();
   return <SettingsLayout section="home">
-    <p className="text-sm text-muted-foreground">Only on this device.</p>
     <SectionRowsSettings page="Home" labels={homeRowLabels} layout={home} />
     <SectionRowsSettings page="Discover" labels={discoverRowLabels} layout={discover} />
   </SettingsLayout>;

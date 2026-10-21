@@ -1,4 +1,0 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { HomeDiscoverPage } from "../../sections/settings/ThisDevicePages";
-
-export const Route = createFileRoute("/settings/home")({ component: HomeDiscoverPage });

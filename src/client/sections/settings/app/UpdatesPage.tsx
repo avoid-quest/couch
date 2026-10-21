@@ -89,12 +89,16 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
   </SettingsSection>;
 }
 
-/** This app's own updater and logs (unless it runs the Couch, whose updater is its own), then the Couch apps an admin updates from any paired device. */
+/** This app's own updater and logs, on a device that doesn't run the Couch (the host's is the Couch's). */
+export function DeviceUpdatesPage() {
+  return <SettingsLayout section="device-updates"><UpdateControls name="This app" tv={isTvPresentation()} /></SettingsLayout>;
+}
+
+/** The Couch apps an admin updates from any paired device, the host's among them. */
 export function UpdatesPage() {
   const { credentials, identity, connected } = useSessionGate();
   const { host, couch, administrator } = useSettingsScope();
   const [selected, setSelected] = useState("host");
-  const own = !!couchApp?.updates && !host;
   const query = useQuery({ queryKey: ["updates", "targets"], enabled: administrator && !!credentials && connected, queryFn: ({ signal }) => apiJson<UpdateTarget[]>(credentials!, "/api/updates/targets", { signal }), refetchInterval: 5_000, retry: false });
   // This app's own updater comes first; the Couch's app is "host", this one where it hosts.
   const targets = (query.data ?? []).filter(target => target.id !== identity?.device?.id);
@@ -102,13 +106,12 @@ export function UpdatesPage() {
   const local = host && target?.id === "host" && !!couchApp?.updates;
   const label = (item: UpdateTarget) => item.id === "host" && host ? `${item.name} (this device)` : item.name;
   return <SettingsLayout section="updates">
-    {own && <UpdateControls name="This app" tv={isTvPresentation()} />}
-    {!administrator ? <p className="text-sm text-muted-foreground">Only an admin can update {own ? "other " : ""}Couch apps.</p> : <>
+    {!administrator ? <p className="text-sm text-muted-foreground">Only an admin can update Couch apps.</p> : <>
       {targets.length > 1 && <SettingsSection><SettingsRow label="Couch app" htmlFor="update-target"><Select value={target?.id} onValueChange={setSelected}><SelectTrigger id="update-target" className="w-56"><SelectValue /></SelectTrigger><SelectContent>{targets.map(target => <SelectItem key={target.id} value={target.id}>{label(target)}</SelectItem>)}</SelectContent></Select></SettingsRow></SettingsSection>}
       {local ? <UpdateControls name={`${couch} (this device)`} tv={isTvPresentation()} />
         : target && credentials && <UpdateControls key={target.id} credentials={credentials} target={target.id} name={target.name} tv={target.tv} />}
       {query.error && <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription></Alert>}
-      {!target && !own && !query.isPending && <p className="text-sm text-muted-foreground">Waiting for a Couch app to connect…</p>}
+      {!target && !query.isPending && <p className="text-sm text-muted-foreground">Waiting for a Couch app to connect…</p>}
     </>}
   </SettingsLayout>;
 }

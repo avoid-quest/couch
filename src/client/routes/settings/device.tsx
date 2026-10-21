@@ -1,4 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ThisDevicePage } from "../../sections/settings/ThisDevicePages";
 
-export const Route = createFileRoute("/settings/device")({ component: ThisDevicePage });
+// Layout route for this device's pages; the index is General.
+export const Route = createFileRoute("/settings/device")({});

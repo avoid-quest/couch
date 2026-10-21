@@ -68,7 +68,7 @@ export function DiscoverPage() {
     {rows.filter(row => row.shown).map(row => <Fragment key={row.id}>{sections[row.id]}</Fragment>)}
     <Empty className="group-has-[section]/discover:hidden group-has-[[role=alert]]/discover:hidden group-has-[[data-nothing-saved]]/discover:hidden">
       <EmptyHeader><EmptyTitle>{rows.every(row => !row.shown) ? "All sections are hidden" : "Nothing to discover here yet"}</EmptyTitle>
-        <EmptyDescription>Choose sections in <ContentLink id="customize-discover" data-page-first href="/settings/home">Settings</ContentLink>, or search for something to play.</EmptyDescription></EmptyHeader>
+        <EmptyDescription>Choose sections in <ContentLink id="customize-discover" data-page-first href="/settings/device/home">Settings</ContentLink>, or search for something to play.</EmptyDescription></EmptyHeader>
     </Empty>
   </section>;
 }

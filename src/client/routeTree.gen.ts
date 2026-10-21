@@ -28,17 +28,19 @@ import { Route as DiscoverRadioRouteImport } from './routes/discover/radio'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsSplatRouteImport } from './routes/settings/$'
 import { Route as SettingsDeviceRouteImport } from './routes/settings/device'
-import { Route as SettingsDevicesRouteImport } from './routes/settings/devices'
-import { Route as SettingsDisplayRouteImport } from './routes/settings/display'
-import { Route as SettingsHomeRouteImport } from './routes/settings/home'
-import { Route as SettingsPlaybackRouteImport } from './routes/settings/playback'
-import { Route as SettingsSoundRouteImport } from './routes/settings/sound'
-import { Route as SettingsSourcesRouteImport } from './routes/settings/sources'
-import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
-import { Route as SettingsSourcesIndexRouteImport } from './routes/settings/sources/index'
-import { Route as SettingsSourcesLiveTvRouteImport } from './routes/settings/sources/live-tv'
-import { Route as SettingsSourcesRadioRouteImport } from './routes/settings/sources/radio'
-import { Route as SettingsSourcesStreamingCommunityRouteImport } from './routes/settings/sources/streaming-community'
+import { Route as SettingsCouchDevicesRouteImport } from './routes/settings/couch/devices'
+import { Route as SettingsCouchPlaybackRouteImport } from './routes/settings/couch/playback'
+import { Route as SettingsCouchSoundRouteImport } from './routes/settings/couch/sound'
+import { Route as SettingsCouchSourcesRouteImport } from './routes/settings/couch/sources'
+import { Route as SettingsCouchTvRouteImport } from './routes/settings/couch/tv'
+import { Route as SettingsCouchUpdatesRouteImport } from './routes/settings/couch/updates'
+import { Route as SettingsDeviceIndexRouteImport } from './routes/settings/device/index'
+import { Route as SettingsDeviceHomeRouteImport } from './routes/settings/device/home'
+import { Route as SettingsDeviceUpdatesRouteImport } from './routes/settings/device/updates'
+import { Route as SettingsCouchSourcesIndexRouteImport } from './routes/settings/couch/sources/index'
+import { Route as SettingsCouchSourcesLiveTvRouteImport } from './routes/settings/couch/sources/live-tv'
+import { Route as SettingsCouchSourcesRadioRouteImport } from './routes/settings/couch/sources/radio'
+import { Route as SettingsCouchSourcesStreamingCommunityRouteImport } from './routes/settings/couch/sources/streaming-community'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -135,61 +137,74 @@ const SettingsDeviceRoute = SettingsDeviceRouteImport.update({
   path: '/device',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsDevicesRoute = SettingsDevicesRouteImport.update({
-  id: '/devices',
-  path: '/devices',
+const SettingsCouchDevicesRoute = SettingsCouchDevicesRouteImport.update({
+  id: '/couch/devices',
+  path: '/couch/devices',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsDisplayRoute = SettingsDisplayRouteImport.update({
-  id: '/display',
-  path: '/display',
+const SettingsCouchPlaybackRoute = SettingsCouchPlaybackRouteImport.update({
+  id: '/couch/playback',
+  path: '/couch/playback',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsHomeRoute = SettingsHomeRouteImport.update({
-  id: '/home',
-  path: '/home',
+const SettingsCouchSoundRoute = SettingsCouchSoundRouteImport.update({
+  id: '/couch/sound',
+  path: '/couch/sound',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsPlaybackRoute = SettingsPlaybackRouteImport.update({
-  id: '/playback',
-  path: '/playback',
+const SettingsCouchSourcesRoute = SettingsCouchSourcesRouteImport.update({
+  id: '/couch/sources',
+  path: '/couch/sources',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsSoundRoute = SettingsSoundRouteImport.update({
-  id: '/sound',
-  path: '/sound',
+const SettingsCouchTvRoute = SettingsCouchTvRouteImport.update({
+  id: '/couch/tv',
+  path: '/couch/tv',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsSourcesRoute = SettingsSourcesRouteImport.update({
-  id: '/sources',
-  path: '/sources',
+const SettingsCouchUpdatesRoute = SettingsCouchUpdatesRouteImport.update({
+  id: '/couch/updates',
+  path: '/couch/updates',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsUpdatesRoute = SettingsUpdatesRouteImport.update({
-  id: '/updates',
-  path: '/updates',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsSourcesIndexRoute = SettingsSourcesIndexRouteImport.update({
+const SettingsDeviceIndexRoute = SettingsDeviceIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => SettingsSourcesRoute,
+  getParentRoute: () => SettingsDeviceRoute,
 } as any)
-const SettingsSourcesLiveTvRoute = SettingsSourcesLiveTvRouteImport.update({
-  id: '/live-tv',
-  path: '/live-tv',
-  getParentRoute: () => SettingsSourcesRoute,
+const SettingsDeviceHomeRoute = SettingsDeviceHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => SettingsDeviceRoute,
 } as any)
-const SettingsSourcesRadioRoute = SettingsSourcesRadioRouteImport.update({
-  id: '/radio',
-  path: '/radio',
-  getParentRoute: () => SettingsSourcesRoute,
+const SettingsDeviceUpdatesRoute = SettingsDeviceUpdatesRouteImport.update({
+  id: '/updates',
+  path: '/updates',
+  getParentRoute: () => SettingsDeviceRoute,
 } as any)
-const SettingsSourcesStreamingCommunityRoute =
-  SettingsSourcesStreamingCommunityRouteImport.update({
+const SettingsCouchSourcesIndexRoute =
+  SettingsCouchSourcesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => SettingsCouchSourcesRoute,
+  } as any)
+const SettingsCouchSourcesLiveTvRoute =
+  SettingsCouchSourcesLiveTvRouteImport.update({
+    id: '/live-tv',
+    path: '/live-tv',
+    getParentRoute: () => SettingsCouchSourcesRoute,
+  } as any)
+const SettingsCouchSourcesRadioRoute =
+  SettingsCouchSourcesRadioRouteImport.update({
+    id: '/radio',
+    path: '/radio',
+    getParentRoute: () => SettingsCouchSourcesRoute,
+  } as any)
+const SettingsCouchSourcesStreamingCommunityRoute =
+  SettingsCouchSourcesStreamingCommunityRouteImport.update({
     id: '/streaming-community',
     path: '/streaming-community',
-    getParentRoute: () => SettingsSourcesRoute,
+    getParentRoute: () => SettingsCouchSourcesRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -209,20 +224,22 @@ export interface FileRoutesByFullPath {
   '/discover/live-tv': typeof DiscoverLiveTvRoute
   '/discover/radio': typeof DiscoverRadioRoute
   '/settings/$': typeof SettingsSplatRoute
-  '/settings/device': typeof SettingsDeviceRoute
-  '/settings/devices': typeof SettingsDevicesRoute
-  '/settings/display': typeof SettingsDisplayRoute
-  '/settings/home': typeof SettingsHomeRoute
-  '/settings/playback': typeof SettingsPlaybackRoute
-  '/settings/sound': typeof SettingsSoundRoute
-  '/settings/sources': typeof SettingsSourcesRouteWithChildren
-  '/settings/updates': typeof SettingsUpdatesRoute
+  '/settings/device': typeof SettingsDeviceRouteWithChildren
   '/discover/': typeof DiscoverIndexRoute
   '/settings/': typeof SettingsIndexRoute
-  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
-  '/settings/sources/radio': typeof SettingsSourcesRadioRoute
-  '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
-  '/settings/sources/': typeof SettingsSourcesIndexRoute
+  '/settings/couch/devices': typeof SettingsCouchDevicesRoute
+  '/settings/couch/playback': typeof SettingsCouchPlaybackRoute
+  '/settings/couch/sound': typeof SettingsCouchSoundRoute
+  '/settings/couch/sources': typeof SettingsCouchSourcesRouteWithChildren
+  '/settings/couch/tv': typeof SettingsCouchTvRoute
+  '/settings/couch/updates': typeof SettingsCouchUpdatesRoute
+  '/settings/device/home': typeof SettingsDeviceHomeRoute
+  '/settings/device/updates': typeof SettingsDeviceUpdatesRoute
+  '/settings/device/': typeof SettingsDeviceIndexRoute
+  '/settings/couch/sources/live-tv': typeof SettingsCouchSourcesLiveTvRoute
+  '/settings/couch/sources/radio': typeof SettingsCouchSourcesRadioRoute
+  '/settings/couch/sources/streaming-community': typeof SettingsCouchSourcesStreamingCommunityRoute
+  '/settings/couch/sources/': typeof SettingsCouchSourcesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -240,19 +257,20 @@ export interface FileRoutesByTo {
   '/discover/live-tv': typeof DiscoverLiveTvRoute
   '/discover/radio': typeof DiscoverRadioRoute
   '/settings/$': typeof SettingsSplatRoute
-  '/settings/device': typeof SettingsDeviceRoute
-  '/settings/devices': typeof SettingsDevicesRoute
-  '/settings/display': typeof SettingsDisplayRoute
-  '/settings/home': typeof SettingsHomeRoute
-  '/settings/playback': typeof SettingsPlaybackRoute
-  '/settings/sound': typeof SettingsSoundRoute
-  '/settings/updates': typeof SettingsUpdatesRoute
   '/discover': typeof DiscoverIndexRoute
   '/settings': typeof SettingsIndexRoute
-  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
-  '/settings/sources/radio': typeof SettingsSourcesRadioRoute
-  '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
-  '/settings/sources': typeof SettingsSourcesIndexRoute
+  '/settings/couch/devices': typeof SettingsCouchDevicesRoute
+  '/settings/couch/playback': typeof SettingsCouchPlaybackRoute
+  '/settings/couch/sound': typeof SettingsCouchSoundRoute
+  '/settings/couch/tv': typeof SettingsCouchTvRoute
+  '/settings/couch/updates': typeof SettingsCouchUpdatesRoute
+  '/settings/device/home': typeof SettingsDeviceHomeRoute
+  '/settings/device/updates': typeof SettingsDeviceUpdatesRoute
+  '/settings/device': typeof SettingsDeviceIndexRoute
+  '/settings/couch/sources/live-tv': typeof SettingsCouchSourcesLiveTvRoute
+  '/settings/couch/sources/radio': typeof SettingsCouchSourcesRadioRoute
+  '/settings/couch/sources/streaming-community': typeof SettingsCouchSourcesStreamingCommunityRoute
+  '/settings/couch/sources': typeof SettingsCouchSourcesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -272,20 +290,22 @@ export interface FileRoutesById {
   '/discover/live-tv': typeof DiscoverLiveTvRoute
   '/discover/radio': typeof DiscoverRadioRoute
   '/settings/$': typeof SettingsSplatRoute
-  '/settings/device': typeof SettingsDeviceRoute
-  '/settings/devices': typeof SettingsDevicesRoute
-  '/settings/display': typeof SettingsDisplayRoute
-  '/settings/home': typeof SettingsHomeRoute
-  '/settings/playback': typeof SettingsPlaybackRoute
-  '/settings/sound': typeof SettingsSoundRoute
-  '/settings/sources': typeof SettingsSourcesRouteWithChildren
-  '/settings/updates': typeof SettingsUpdatesRoute
+  '/settings/device': typeof SettingsDeviceRouteWithChildren
   '/discover/': typeof DiscoverIndexRoute
   '/settings/': typeof SettingsIndexRoute
-  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
-  '/settings/sources/radio': typeof SettingsSourcesRadioRoute
-  '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
-  '/settings/sources/': typeof SettingsSourcesIndexRoute
+  '/settings/couch/devices': typeof SettingsCouchDevicesRoute
+  '/settings/couch/playback': typeof SettingsCouchPlaybackRoute
+  '/settings/couch/sound': typeof SettingsCouchSoundRoute
+  '/settings/couch/sources': typeof SettingsCouchSourcesRouteWithChildren
+  '/settings/couch/tv': typeof SettingsCouchTvRoute
+  '/settings/couch/updates': typeof SettingsCouchUpdatesRoute
+  '/settings/device/home': typeof SettingsDeviceHomeRoute
+  '/settings/device/updates': typeof SettingsDeviceUpdatesRoute
+  '/settings/device/': typeof SettingsDeviceIndexRoute
+  '/settings/couch/sources/live-tv': typeof SettingsCouchSourcesLiveTvRoute
+  '/settings/couch/sources/radio': typeof SettingsCouchSourcesRadioRoute
+  '/settings/couch/sources/streaming-community': typeof SettingsCouchSourcesStreamingCommunityRoute
+  '/settings/couch/sources/': typeof SettingsCouchSourcesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -307,19 +327,21 @@ export interface FileRouteTypes {
     | '/discover/radio'
     | '/settings/$'
     | '/settings/device'
-    | '/settings/devices'
-    | '/settings/display'
-    | '/settings/home'
-    | '/settings/playback'
-    | '/settings/sound'
-    | '/settings/sources'
-    | '/settings/updates'
     | '/discover/'
     | '/settings/'
-    | '/settings/sources/live-tv'
-    | '/settings/sources/radio'
-    | '/settings/sources/streaming-community'
-    | '/settings/sources/'
+    | '/settings/couch/devices'
+    | '/settings/couch/playback'
+    | '/settings/couch/sound'
+    | '/settings/couch/sources'
+    | '/settings/couch/tv'
+    | '/settings/couch/updates'
+    | '/settings/device/home'
+    | '/settings/device/updates'
+    | '/settings/device/'
+    | '/settings/couch/sources/live-tv'
+    | '/settings/couch/sources/radio'
+    | '/settings/couch/sources/streaming-community'
+    | '/settings/couch/sources/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -337,19 +359,20 @@ export interface FileRouteTypes {
     | '/discover/live-tv'
     | '/discover/radio'
     | '/settings/$'
-    | '/settings/device'
-    | '/settings/devices'
-    | '/settings/display'
-    | '/settings/home'
-    | '/settings/playback'
-    | '/settings/sound'
-    | '/settings/updates'
     | '/discover'
     | '/settings'
-    | '/settings/sources/live-tv'
-    | '/settings/sources/radio'
-    | '/settings/sources/streaming-community'
-    | '/settings/sources'
+    | '/settings/couch/devices'
+    | '/settings/couch/playback'
+    | '/settings/couch/sound'
+    | '/settings/couch/tv'
+    | '/settings/couch/updates'
+    | '/settings/device/home'
+    | '/settings/device/updates'
+    | '/settings/device'
+    | '/settings/couch/sources/live-tv'
+    | '/settings/couch/sources/radio'
+    | '/settings/couch/sources/streaming-community'
+    | '/settings/couch/sources'
   id:
     | '__root__'
     | '/'
@@ -369,19 +392,21 @@ export interface FileRouteTypes {
     | '/discover/radio'
     | '/settings/$'
     | '/settings/device'
-    | '/settings/devices'
-    | '/settings/display'
-    | '/settings/home'
-    | '/settings/playback'
-    | '/settings/sound'
-    | '/settings/sources'
-    | '/settings/updates'
     | '/discover/'
     | '/settings/'
-    | '/settings/sources/live-tv'
-    | '/settings/sources/radio'
-    | '/settings/sources/streaming-community'
-    | '/settings/sources/'
+    | '/settings/couch/devices'
+    | '/settings/couch/playback'
+    | '/settings/couch/sound'
+    | '/settings/couch/sources'
+    | '/settings/couch/tv'
+    | '/settings/couch/updates'
+    | '/settings/device/home'
+    | '/settings/device/updates'
+    | '/settings/device/'
+    | '/settings/couch/sources/live-tv'
+    | '/settings/couch/sources/radio'
+    | '/settings/couch/sources/streaming-community'
+    | '/settings/couch/sources/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -538,129 +563,156 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsDeviceRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/devices': {
-      id: '/settings/devices'
-      path: '/devices'
-      fullPath: '/settings/devices'
-      preLoaderRoute: typeof SettingsDevicesRouteImport
+    '/settings/couch/devices': {
+      id: '/settings/couch/devices'
+      path: '/couch/devices'
+      fullPath: '/settings/couch/devices'
+      preLoaderRoute: typeof SettingsCouchDevicesRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/display': {
-      id: '/settings/display'
-      path: '/display'
-      fullPath: '/settings/display'
-      preLoaderRoute: typeof SettingsDisplayRouteImport
+    '/settings/couch/playback': {
+      id: '/settings/couch/playback'
+      path: '/couch/playback'
+      fullPath: '/settings/couch/playback'
+      preLoaderRoute: typeof SettingsCouchPlaybackRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/home': {
-      id: '/settings/home'
-      path: '/home'
-      fullPath: '/settings/home'
-      preLoaderRoute: typeof SettingsHomeRouteImport
+    '/settings/couch/sound': {
+      id: '/settings/couch/sound'
+      path: '/couch/sound'
+      fullPath: '/settings/couch/sound'
+      preLoaderRoute: typeof SettingsCouchSoundRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/playback': {
-      id: '/settings/playback'
-      path: '/playback'
-      fullPath: '/settings/playback'
-      preLoaderRoute: typeof SettingsPlaybackRouteImport
+    '/settings/couch/sources': {
+      id: '/settings/couch/sources'
+      path: '/couch/sources'
+      fullPath: '/settings/couch/sources'
+      preLoaderRoute: typeof SettingsCouchSourcesRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/sound': {
-      id: '/settings/sound'
-      path: '/sound'
-      fullPath: '/settings/sound'
-      preLoaderRoute: typeof SettingsSoundRouteImport
+    '/settings/couch/tv': {
+      id: '/settings/couch/tv'
+      path: '/couch/tv'
+      fullPath: '/settings/couch/tv'
+      preLoaderRoute: typeof SettingsCouchTvRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/sources': {
-      id: '/settings/sources'
-      path: '/sources'
-      fullPath: '/settings/sources'
-      preLoaderRoute: typeof SettingsSourcesRouteImport
+    '/settings/couch/updates': {
+      id: '/settings/couch/updates'
+      path: '/couch/updates'
+      fullPath: '/settings/couch/updates'
+      preLoaderRoute: typeof SettingsCouchUpdatesRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/updates': {
-      id: '/settings/updates'
-      path: '/updates'
-      fullPath: '/settings/updates'
-      preLoaderRoute: typeof SettingsUpdatesRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/sources/': {
-      id: '/settings/sources/'
+    '/settings/device/': {
+      id: '/settings/device/'
       path: '/'
-      fullPath: '/settings/sources/'
-      preLoaderRoute: typeof SettingsSourcesIndexRouteImport
-      parentRoute: typeof SettingsSourcesRoute
+      fullPath: '/settings/device/'
+      preLoaderRoute: typeof SettingsDeviceIndexRouteImport
+      parentRoute: typeof SettingsDeviceRoute
     }
-    '/settings/sources/live-tv': {
-      id: '/settings/sources/live-tv'
+    '/settings/device/home': {
+      id: '/settings/device/home'
+      path: '/home'
+      fullPath: '/settings/device/home'
+      preLoaderRoute: typeof SettingsDeviceHomeRouteImport
+      parentRoute: typeof SettingsDeviceRoute
+    }
+    '/settings/device/updates': {
+      id: '/settings/device/updates'
+      path: '/updates'
+      fullPath: '/settings/device/updates'
+      preLoaderRoute: typeof SettingsDeviceUpdatesRouteImport
+      parentRoute: typeof SettingsDeviceRoute
+    }
+    '/settings/couch/sources/': {
+      id: '/settings/couch/sources/'
+      path: '/'
+      fullPath: '/settings/couch/sources/'
+      preLoaderRoute: typeof SettingsCouchSourcesIndexRouteImport
+      parentRoute: typeof SettingsCouchSourcesRoute
+    }
+    '/settings/couch/sources/live-tv': {
+      id: '/settings/couch/sources/live-tv'
       path: '/live-tv'
-      fullPath: '/settings/sources/live-tv'
-      preLoaderRoute: typeof SettingsSourcesLiveTvRouteImport
-      parentRoute: typeof SettingsSourcesRoute
+      fullPath: '/settings/couch/sources/live-tv'
+      preLoaderRoute: typeof SettingsCouchSourcesLiveTvRouteImport
+      parentRoute: typeof SettingsCouchSourcesRoute
     }
-    '/settings/sources/radio': {
-      id: '/settings/sources/radio'
+    '/settings/couch/sources/radio': {
+      id: '/settings/couch/sources/radio'
       path: '/radio'
-      fullPath: '/settings/sources/radio'
-      preLoaderRoute: typeof SettingsSourcesRadioRouteImport
-      parentRoute: typeof SettingsSourcesRoute
+      fullPath: '/settings/couch/sources/radio'
+      preLoaderRoute: typeof SettingsCouchSourcesRadioRouteImport
+      parentRoute: typeof SettingsCouchSourcesRoute
     }
-    '/settings/sources/streaming-community': {
-      id: '/settings/sources/streaming-community'
+    '/settings/couch/sources/streaming-community': {
+      id: '/settings/couch/sources/streaming-community'
       path: '/streaming-community'
-      fullPath: '/settings/sources/streaming-community'
-      preLoaderRoute: typeof SettingsSourcesStreamingCommunityRouteImport
-      parentRoute: typeof SettingsSourcesRoute
+      fullPath: '/settings/couch/sources/streaming-community'
+      preLoaderRoute: typeof SettingsCouchSourcesStreamingCommunityRouteImport
+      parentRoute: typeof SettingsCouchSourcesRoute
     }
   }
 }
 
-interface SettingsSourcesRouteChildren {
-  SettingsSourcesLiveTvRoute: typeof SettingsSourcesLiveTvRoute
-  SettingsSourcesRadioRoute: typeof SettingsSourcesRadioRoute
-  SettingsSourcesStreamingCommunityRoute: typeof SettingsSourcesStreamingCommunityRoute
-  SettingsSourcesIndexRoute: typeof SettingsSourcesIndexRoute
+interface SettingsDeviceRouteChildren {
+  SettingsDeviceHomeRoute: typeof SettingsDeviceHomeRoute
+  SettingsDeviceUpdatesRoute: typeof SettingsDeviceUpdatesRoute
+  SettingsDeviceIndexRoute: typeof SettingsDeviceIndexRoute
 }
 
-const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
-  SettingsSourcesLiveTvRoute: SettingsSourcesLiveTvRoute,
-  SettingsSourcesRadioRoute: SettingsSourcesRadioRoute,
-  SettingsSourcesStreamingCommunityRoute:
-    SettingsSourcesStreamingCommunityRoute,
-  SettingsSourcesIndexRoute: SettingsSourcesIndexRoute,
+const SettingsDeviceRouteChildren: SettingsDeviceRouteChildren = {
+  SettingsDeviceHomeRoute: SettingsDeviceHomeRoute,
+  SettingsDeviceUpdatesRoute: SettingsDeviceUpdatesRoute,
+  SettingsDeviceIndexRoute: SettingsDeviceIndexRoute,
 }
 
-const SettingsSourcesRouteWithChildren = SettingsSourcesRoute._addFileChildren(
-  SettingsSourcesRouteChildren,
+const SettingsDeviceRouteWithChildren = SettingsDeviceRoute._addFileChildren(
+  SettingsDeviceRouteChildren,
 )
+
+interface SettingsCouchSourcesRouteChildren {
+  SettingsCouchSourcesLiveTvRoute: typeof SettingsCouchSourcesLiveTvRoute
+  SettingsCouchSourcesRadioRoute: typeof SettingsCouchSourcesRadioRoute
+  SettingsCouchSourcesStreamingCommunityRoute: typeof SettingsCouchSourcesStreamingCommunityRoute
+  SettingsCouchSourcesIndexRoute: typeof SettingsCouchSourcesIndexRoute
+}
+
+const SettingsCouchSourcesRouteChildren: SettingsCouchSourcesRouteChildren = {
+  SettingsCouchSourcesLiveTvRoute: SettingsCouchSourcesLiveTvRoute,
+  SettingsCouchSourcesRadioRoute: SettingsCouchSourcesRadioRoute,
+  SettingsCouchSourcesStreamingCommunityRoute:
+    SettingsCouchSourcesStreamingCommunityRoute,
+  SettingsCouchSourcesIndexRoute: SettingsCouchSourcesIndexRoute,
+}
+
+const SettingsCouchSourcesRouteWithChildren =
+  SettingsCouchSourcesRoute._addFileChildren(SettingsCouchSourcesRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsSplatRoute: typeof SettingsSplatRoute
-  SettingsDeviceRoute: typeof SettingsDeviceRoute
-  SettingsDevicesRoute: typeof SettingsDevicesRoute
-  SettingsDisplayRoute: typeof SettingsDisplayRoute
-  SettingsHomeRoute: typeof SettingsHomeRoute
-  SettingsPlaybackRoute: typeof SettingsPlaybackRoute
-  SettingsSoundRoute: typeof SettingsSoundRoute
-  SettingsSourcesRoute: typeof SettingsSourcesRouteWithChildren
-  SettingsUpdatesRoute: typeof SettingsUpdatesRoute
+  SettingsDeviceRoute: typeof SettingsDeviceRouteWithChildren
   SettingsIndexRoute: typeof SettingsIndexRoute
+  SettingsCouchDevicesRoute: typeof SettingsCouchDevicesRoute
+  SettingsCouchPlaybackRoute: typeof SettingsCouchPlaybackRoute
+  SettingsCouchSoundRoute: typeof SettingsCouchSoundRoute
+  SettingsCouchSourcesRoute: typeof SettingsCouchSourcesRouteWithChildren
+  SettingsCouchTvRoute: typeof SettingsCouchTvRoute
+  SettingsCouchUpdatesRoute: typeof SettingsCouchUpdatesRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsSplatRoute: SettingsSplatRoute,
-  SettingsDeviceRoute: SettingsDeviceRoute,
-  SettingsDevicesRoute: SettingsDevicesRoute,
-  SettingsDisplayRoute: SettingsDisplayRoute,
-  SettingsHomeRoute: SettingsHomeRoute,
-  SettingsPlaybackRoute: SettingsPlaybackRoute,
-  SettingsSoundRoute: SettingsSoundRoute,
-  SettingsSourcesRoute: SettingsSourcesRouteWithChildren,
-  SettingsUpdatesRoute: SettingsUpdatesRoute,
+  SettingsDeviceRoute: SettingsDeviceRouteWithChildren,
   SettingsIndexRoute: SettingsIndexRoute,
+  SettingsCouchDevicesRoute: SettingsCouchDevicesRoute,
+  SettingsCouchPlaybackRoute: SettingsCouchPlaybackRoute,
+  SettingsCouchSoundRoute: SettingsCouchSoundRoute,
+  SettingsCouchSourcesRoute: SettingsCouchSourcesRouteWithChildren,
+  SettingsCouchTvRoute: SettingsCouchTvRoute,
+  SettingsCouchUpdatesRoute: SettingsCouchUpdatesRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(

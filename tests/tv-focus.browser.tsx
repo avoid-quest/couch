@@ -75,7 +75,7 @@ export async function runTvFocusRegression() {
       }
     });
     await check("Settings OK, dialog Back, content Back and Home preserve focus", async () => {
-      await audit.go('/settings/devices');
+      await audit.go('/settings/couch/devices');
       const rail = control('[data-settings-page="devices"]');
       rail.focus(); await remote('select');
       const pair = document.activeElement;
@@ -90,7 +90,7 @@ export async function runTvFocusRegression() {
       assert(audit.router.state.location.pathname === '/', "Settings Back did not reach Home");
     });
     await check("Settings vertical movement visits recovery actions before the next section", async () => {
-      await audit.go('/settings/devices');
+      await audit.go('/settings/couch/devices');
       control('[aria-label="Share on network"]').focus();
       await remote('down');
       assert(document.activeElement?.textContent === 'Try again', "Down skipped the first relay recovery action");

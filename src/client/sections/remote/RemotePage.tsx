@@ -66,7 +66,7 @@ export function RemotePage() {
       </section>
       <RemoteText key={target.id} field={ready ? state?.textField ?? null : null} connected={ready} send={(token, text, submit) => send({ type: "text", deviceId: target.id, token, text, submit })} />
     </>}
-    {!target && <Button variant="outline" className="justify-self-start" asChild><Link to="/settings/devices">Open Devices</Link></Button>}
+    {!target && <Button variant="outline" className="justify-self-start" asChild><Link to="/settings/couch/devices">Open Devices</Link></Button>}
   </div>;
 }
 

@@ -88,7 +88,7 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
   evidence.ordinaryCloseKeptWindow = !this.isDestroyed();
   assert(evidence.ordinaryCloseKeptWindow);
   this.show();
-  await loadURL.call(this, new URL('/settings/updates', url).href, options);
+  await loadURL.call(this, new URL('/settings/couch/updates', url).href, options);
   await this.webContents.executeJavaScript(
     'new Promise((resolve, reject) => { const deadline = Date.now() + 5000; const check = () => { const button = [...document.querySelectorAll("button")].find(button => button.textContent === "Restart to update"); if (button) resolve(); else if (Date.now() > deadline) reject(new Error("Update button missing")); else setTimeout(check, 50); }; check(); })'
   );
