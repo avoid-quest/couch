@@ -64,7 +64,7 @@ export function SavedSections({ state, credentials, connected, canPlay, tab, onT
         {tabs.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
       </SelectGroup></SelectContent>
     </Select>
-    <nav aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
+    <nav data-nav-rail aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
       <p className="text-base font-semibold">Saved</p>
       <p aria-hidden="true" className="mt-1 mb-3 text-sm text-muted-foreground">{shared}</p>
       {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="h-10 w-full justify-start rounded-none border-y-0 border-r-0 border-l-2 border-transparent pl-3 font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground">
@@ -74,7 +74,7 @@ export function SavedSections({ state, credentials, connected, canPlay, tab, onT
         </Link>
       </Button>)}
     </nav>
-    <div className="min-w-0">
+    <div data-nav-content className="min-w-0">
       {tab === "later" && <><PageHeader title="For later" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
       {tab === "channels" && <><PageHeader title="Channels & stations" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
       {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} onFind={onFind} />}

@@ -37,6 +37,13 @@ Back does nothing. Opening
 Up next changes the player URL without losing its opener. Settings' own OK
 and Back: [Settings](settings.md#section-nav).
 
+Back restores the exact link that opened related content, even when several
+tiles link to the same channel or collection. Escape and a remote's BrowserBack
+key close the same innermost picker, menu or dialog before leaving the page.
+Changing filters keeps focus in the field or picker; it is not a new page entry.
+Remote input makes the focused control visibly invert even after a pointer was
+used. The player keeps that deliberate focus visible until Back returns to the picture.
+
 After every page change, focus is on the page's first control. When that control renders
 after later ones (Home's hero waits for its data, Discover's first Radio tile for the shows, a collection's Play for its source), focus moves
 to it as it appears, unless a key or pointer came first. Saved starts on its rail's current section, and OK on
@@ -86,7 +93,12 @@ enabled so focus stays where it was.
 Spatial navigation places a
 slider by its whole track, not its moving thumb, reaches the header and the
 footer (the now-playing bar) only after the page's own controls, and keeps
-focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
+focus clear of the footer. Left and Right stay on the same visual line; at its
+edge they stop rather than jumping into an unrelated shelf. In Saved and
+Settings, Right from the section rail enters the content's first action, and
+Left from the content's left edge returns to the selected section. Up and Down
+inside that content column visit its rows and recovery actions in order, even
+when successive controls align to opposite sides. Up and Down from a row (`data-nav-row`: a Home
 shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row or
 control first, so Home's and Discover's shelves and their headings are walked
 one by one and never skipped for a farther control that lines up; the header

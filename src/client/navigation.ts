@@ -7,6 +7,7 @@ const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [ro
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
 const localOnly = '[data-tv-local-only]';
 const toaster = "[data-sonner-toaster]";
+const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]';
 let remoteNavigation = false;
 // The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
 let adjusting: HTMLElement | null = null;
@@ -64,11 +65,20 @@ function moveFocus(key: string) {
     const play = scope.querySelector<HTMLElement>(".player-page [data-play-button]");
     if (play && visible(play)) { focus(play); return; }
   }
+  // Rails enter their content regardless of the selected section's height.
+  // Geometric neighbours alone can strand a lower rail item beside a short page.
+  const page = active.closest("[data-page]");
+  const content = page?.querySelector<HTMLElement>("[data-nav-content]");
+  if (key === "ArrowRight" && active.closest("[data-nav-rail]") && content) {
+    focus(entry(controls.filter(element => content.contains(element))));
+    return;
+  }
   const from = box(active);
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
-  const own = active.closest("[data-nav-row]");
+  const own = active.closest(navigationRow);
   const row = key === "ArrowRight" ? own : null;
-  const destinations = row ? controls.filter(element => row.contains(element)) : controls;
+  const destinations = row ? controls.filter(element => row.contains(element))
+    : !horizontal && content?.contains(active) ? controls.filter(element => !element.closest("[data-nav-rail]")) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
   // How far a box starts past the active's top (Up) or bottom (Down) edge.
@@ -90,27 +100,33 @@ function moveFocus(key: string) {
     // Up and Down reach a control in the active's own row only past its edge and in line with it: a wrapped line,
     // Continue's Details under its tile, a device's Sync under its fader. Never one beside it, though a shorter or
     // taller caption moves that one's centre, nor a device's Sync from its check.
-    const beside = !horizontal && !!own?.contains(element) && (past(to) < 0 || penalty > 0);
+    // Left/Right stay on the same visual line. A sideways distance penalty alone
+    // can still choose a completely unrelated shelf when there is no neighbour.
+    const beside = horizontal ? to.bottom <= from.top || to.top >= from.bottom
+      : !!own?.contains(element) && (past(to) < 0 || penalty > 0);
     return { element, forward, beside, score: forward + penalty + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
   // score. The header and the footer still come last: the page scrolls under the sticky header.
-  const reach = !horizontal && own ? candidates.map(candidate => {
-    const row = candidate.element.closest<HTMLElement>("[data-nav-row]");
+  const reach = !horizontal && (own || content?.contains(active)) ? candidates.map(candidate => {
+    const row = candidate.element.closest<HTMLElement>(navigationRow);
     const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
-    return { row: unit, edge: Math.max(0, past(to)) + sideways(to) + (later && candidate.element.closest(later) ? 100_000 : 0) };
+    const sameColumn = content?.contains(active) && content.contains(candidate.element);
+    return { row: unit, edge: Math.max(0, past(to)) + (sameColumn ? 0 : sideways(to)) + (later && candidate.element.closest(later) ? 100_000 : 0) };
   }) : [];
   const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
   const next = reach[nearest]?.row;
   const best = next ? candidates.find(candidate => next.contains(candidate.element)) : candidates[nearest];
+  const rail = key === "ArrowLeft" && content?.contains(active) && !content.contains(best?.element ?? null)
+    ? controls.find(element => element.matches('[data-nav-rail] [aria-current="page"]')) : undefined;
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
   const tab = key === "ArrowUp" && later && best?.element.closest(later)
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
   // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
   // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
   const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(visible) : undefined;
-  focus(tab ?? best?.element ?? toast);
+  focus(rail ?? tab ?? best?.element ?? toast);
 }
 
 /** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */
@@ -189,6 +205,13 @@ export function useNavigation(onBack: () => void) {
   useEffect(() => {
     const keyboard = () => document.documentElement.setAttribute("data-keyboard", "");
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
+    // TV remotes use either key. Normalize before Radix and page handlers so
+    // pickers, menus, dialogs and slider adjustment all receive the same Back.
+    const normalizeBack = (event: KeyboardEvent) => {
+      if (event.key !== "BrowserBack" || !isTvPresentation() || event.defaultPrevented) return;
+      event.preventDefault(); event.stopPropagation();
+      sendKey(event.target instanceof HTMLElement ? event.target : document.body, "Escape");
+    };
     // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
     // the keys past a radio group's first or last radio (Radix loops them), and on the TV Up/Down across a
     // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select or menu button (OK opens it).
@@ -258,6 +281,7 @@ export function useNavigation(onBack: () => void) {
       moveFocus(event.key);
     };
     window.addEventListener("keydown", keyboard, true);
+    window.addEventListener("keydown", normalizeBack, true);
     window.addEventListener("keydown", leave, true);
     window.addEventListener("keydown", okDown, true);
     window.addEventListener("keyup", okUp, true);
@@ -266,6 +290,7 @@ export function useNavigation(onBack: () => void) {
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keyboard, true);
+      window.removeEventListener("keydown", normalizeBack, true);
       window.removeEventListener("keydown", leave, true);
       window.removeEventListener("keydown", okDown, true);
       window.removeEventListener("keyup", okUp, true);

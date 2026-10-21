@@ -10,7 +10,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/u
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FilterSelect } from "@/components/ContentFilters";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
@@ -92,8 +92,7 @@ export function SearchPanel(props: Props) {
   const url = isLink(query) ? query : undefined;
   const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[];
   const inScope = (source: string) => filter === "All" || filter === source;
-  const asking = sourceOrder.filter(source => !summaries[source] || summaries[source].loading);
-  const total = Object.values(summaries).reduce((sum, summary) => sum + summary.count, 0);
+  const asking = sourceOrder.filter(source => inScope(source) && (!summaries[source] || summaries[source].loading));
   // Ends by: three clock times ahead, on the half hour, the first at least twenty minutes out. Live and radio always fit.
   const now = useDurationClock();
   const [selectedDeadline, setSelectedDeadline] = useState(() => until ? { until, deadline: searchDeadline(until, now) } : null);
@@ -133,38 +132,30 @@ export function SearchPanel(props: Props) {
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
   const clearFilters = () => props.onSearchChange({ query, source: "All" });
   const sourceCount = (source: string) => merged.filter(hit => (source === "All" || hit.source === source) && close(hit) && fitsBy(hit, fits)).length;
-  const fromSources = searchSources.filter(source => source !== "All" && (source === filter || summaries[source]?.loading || sourceCount(source) > 0));
   const [looseOpen, setLooseOpen] = useState(false);
   const filtered = filter !== "All" || !!until;
   return <section ref={panel} className="min-w-0 space-y-8" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && <>
-      {(total > 0 || asking.length > 0) && <div className="grid gap-2">
-        <p role="status" className="flex min-h-8 items-start gap-2 text-sm text-muted-foreground">
+      <div className="grid gap-3">
+        <div role="group" aria-label="Search filters" className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-end gap-3 sm:flex sm:flex-wrap">
+          <FilterSelect label="Source" value={filter} onChange={setFilter} className="sm:w-56" options={searchSources.map(source => ({ value: source, label: source === "All" ? "All sources" : source,
+            detail: source === "All" ? sourceCount(source) : !summaries[source] || summaries[source].loading ? "Loading…" : summaries[source].error ? "Unavailable" : sourceCount(source),
+          }))} />
+          <FilterSelect label="Ends by" value={until ?? "any"} onChange={setUntil} className="sm:w-40" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value }))]} />
+        </div>
+        <div className="flex min-h-11 items-start justify-between gap-3">
+        <p role="status" className="flex min-h-10 items-start gap-2 text-sm text-muted-foreground">
           {asking.length > 0 && <Spinner aria-hidden="true" className="mt-1 size-3.5 shrink-0" />}
           <span className="min-w-0 break-words">
             <span className="block text-foreground">{!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”`}</span>
-            {asking.length > 0 && <span className="block">Still asking {asking.join(", ")}.</span>}
+            {asking.length > 0 && <span className="block">{asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}</span>}
           </span>
         </p>
-        {/* Filters stay compact; the results get the space, including on a phone. */}
-        {(relevant.length > 0 || filtered || asking.length > 0) && <div className="flex flex-wrap items-center gap-2">
-          <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger aria-label="From" className="max-w-full"><SelectValue>{filter === "All" ? "All sources" : filter}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value="All">All sources ({sourceCount("All")})</SelectItem>
-              {fromSources.map(source => <SelectItem key={source} value={source}>{source} ({summaries[source]?.loading ? "…" : sourceCount(source)})</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={until ?? "any"} onValueChange={setUntil}>
-            <SelectTrigger aria-label="Ends by" className="max-w-full"><SelectValue>{until ? `Ends by ${until}` : "Any time"}</SelectValue></SelectTrigger>
-            <SelectContent><SelectItem value="any">Any time</SelectItem>
-              {bounds.map(bound => <SelectItem key={bound.value} value={bound.value}>Ends by {bound.value}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {filtered && <Button variant="ghost" onClick={clearFilters}>Clear filters</Button>}
-        </div>}
-      </div>}
+        <Button variant="ghost" disabled={!filtered} onClick={clearFilters} className="-mr-2.5 shrink-0">Clear filters</Button>
+        </div>
+      </div>
       <SourceProblems summaries={shown} />
-      {!merged.length && asking.length > 0 && <MediaRowsSkeleton label="Loading search results…" />}
+      {!scoped.length && asking.length > 0 && <MediaRowsSkeleton label="Loading search results…" />}
       {top && <TopResult key={top.id} hit={top} now={now} />}
       {grouped.map((group, index) => group.shape === "rows"
         ? <section key={group.id} aria-label={group.title} className="grid min-w-0 gap-3">
@@ -176,7 +167,7 @@ export function SearchPanel(props: Props) {
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
-      {total > 0 && !asking.length && !relevant.length && filtered && <Empty><EmptyHeader><EmptyTitle>Nothing matches these filters</EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={clearFilters}>Clear filters</Button></EmptyContent></Empty>}
+      {props.connected && !asking.length && !relevant.length && filtered && !shown.some(([, summary]) => summary.error) && <Empty><EmptyHeader><EmptyTitle>Nothing matches these filters</EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={clearFilters}>Clear filters</Button></EmptyContent></Empty>}
       {props.connected && !asking.length && !relevant.length && !filtered && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
       {loose.length > 0 && <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">

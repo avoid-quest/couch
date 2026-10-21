@@ -183,7 +183,7 @@ Their files are owned by Couch; the Mira defaults were changed only where Couch 
 `text-sm` controls at `h-8`, flat left-rule `Alert`, left-aligned borderless
 `Empty`, no shadows, a 1.25rem glyph in `icon-lg` (the default 1.15em read
 small on the player's icon-only band, and per-use `[&_svg]` overrides lose to
-the variant's own selector) and a ghost button's open state in the hover tint
+the variant's own selector) Select items reserve space for their checkmark, and a ghost button's open state in the hover tint
 ([Hover](#tokens)).
 
 Shared building blocks in `src/client/components`:

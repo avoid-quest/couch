@@ -10,7 +10,7 @@ import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { PageHeader } from "@/components/PageHeader";
-import { Input } from "@/components/ui/input";
+import { FilterInput } from "@/components/ContentFilters";
 import { Button } from "@/components/ui/button";
 import { BrowsePagination } from "@/components/BrowsePagination";
 import { MediaTile } from "@/components/MediaTile";
@@ -61,7 +61,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     return () => cancelAnimationFrame(frame);
   }, [posterCatalogue, summary?.hits]);
   const source = current?.source.replace(/^web:/, "");
-  const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(search.filter.toLocaleLowerCase()));
+  const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(search.filter.trim().toLocaleLowerCase()));
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
   const currentId = hits.find(hit => hit.url === source)?.id;
   const emptyRoot = !url && connected && !!summary && !summary.loading && !summary.error && !summary.hits?.length;
@@ -72,7 +72,8 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   if (provider === "bandcamp") noun = url ? "Tracks" : "Albums";
   else if (episodeList) noun = "Episodes";
   else if (seasonList) noun = "Seasons";
-  const href = (direction: "previous" | "next") => collectionLocation({ provider, url }, { ...search,
+  const locationFor = (changes: { cursors?: string[]; page?: number; filter?: string }) => keepSection(collectionLocation({ provider, url, collection: search.context }, { ...search, ...changes }), search.from ? section : undefined);
+  const href = (direction: "previous" | "next") => locationFor({
     ...(paging.remote ? { cursors: direction === "previous" ? search.cursors.slice(0, -1) : [...search.cursors, page!.nextCursor!], page: 1 } : { page: paging.page + (direction === "previous" ? -1 : 1) }) });
   const goToPage = (href: string) => {
     void navigate({ href, resetScroll: false }).then(() => {
@@ -86,7 +87,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     event.preventDefault(); goToPage(href);
   };
   const pager = <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? href("previous") : undefined} next={paging.next ? href("next") : undefined} disabled={!connected || !!summary?.loading} onNavigate={turnPage}
-    onSelectPage={page => goToPage(collectionLocation({ provider, url }, { ...search, page }))} />;
+    onSelectPage={page => goToPage(locationFor({ page }))} />;
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     <ContentBreadcrumb title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
@@ -94,18 +95,19 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
-      {/* Fixed slots: the count (or loading), Filter and the pager hold their places on every page and in every state. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading ? <><Spinner className="size-3.5" /><span role="status">Loading items…</span></> : <>{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</>}</h2>
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="grid gap-3">
+        <div role="group" aria-label="Collection filters" className="flex flex-wrap items-end gap-3">
+          <FilterInput label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} className="w-full sm:max-w-sm" value={search.filter}
+            onChange={filter => void navigate({ href: locationFor({ page: 1, filter }), replace: true, resetScroll: false })} />
           {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
           {provider === "movies123" && posterCatalogue && <>
             <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
             <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
           </>}
-          <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter by name…" className="w-44 sm:w-52" value={search.filter}
-            onChange={event => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: event.target.value }), replace: true, resetScroll: false })} />
-          {(paging.remote || (paging.pages ?? 1) > 1) && pager}
+        </div>
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{cold && !hits.length ? <><Spinner className="size-3.5" /><span role="status">Loading items…</span></> : <span role="status">{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</span>}</h2>
+          {pager}
         </div>
       </div>
       {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
@@ -120,7 +122,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
           </li>;
         })}
       </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
-      {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: "" }), replace: true })}>Clear filter</Button>}</Empty>}
+      {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: locationFor({ page: 1, filter: "" }), replace: true, resetScroll: false })}>Clear filter</Button>}</Empty>}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
     {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}

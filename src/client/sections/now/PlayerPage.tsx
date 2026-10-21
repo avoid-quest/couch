@@ -111,7 +111,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   // The controls stay up while the keyboard is in them or on a toast's action, which Back returns to them;
   // on the picture they hide when idle.
-  const idle = () => { if (!root.current?.querySelector(":focus-visible:not([data-player-surface])") && !document.activeElement?.closest("[data-sonner-toaster]")) setShown(false); };
+  const idle = () => {
+    const remoteFocus = tvPresentation && document.documentElement.hasAttribute("data-keyboard")
+      && root.current?.contains(document.activeElement) && !document.activeElement?.matches("[data-player-surface]");
+    if (!remoteFocus && !root.current?.querySelector(":focus-visible:not([data-player-surface])") && !document.activeElement?.closest("[data-sonner-toaster]")) setShown(false);
+  };
   const wake = () => {
     setShown(true);
     clearTimeout(timer.current);

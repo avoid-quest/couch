@@ -4,7 +4,7 @@ import { useSessionGate } from "@/session/session-context";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useState } from "react";
-import { ChoiceGroup } from "@/components/ChoiceGroup";
+import { FilterInput, FilterSelect } from "@/components/ContentFilters";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { PageHeader } from "@/components/PageHeader";
 import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
@@ -15,7 +15,6 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { radioBrowseLocation, radioBrowseSources } from "@/radio-navigation";
 import { collectionPagination } from "@/collection-pagination";
 import { BrowsePagination } from "@/components/BrowsePagination";
-import { Input } from "@/components/ui/input";
 
 /** Every station, which Discover's Radio heading opens: its source, count, Filter and pager. */
 export function RadioPage() {
@@ -29,7 +28,7 @@ export function RadioPage() {
   const [reported, setReported] = useState<{ source: string; summary: SearchResultSummary } | null>(null);
   const report = useCallback((name: string, summary: SearchResultSummary) => setReported({ source: name, summary }), []);
   const summary = reported?.source === source ? reported.summary : null;
-  const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase())).map(hit => ({ ...hit, meta: hit.meta.split(" · ").filter(part => part !== source).join(" · ") }));
+  const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())).map(hit => ({ ...hit, meta: hit.meta.split(" · ").filter(part => part !== source).join(" · ") }));
   const paging = collectionPagination(hits.length, requestedPage, []);
   const goToPage = (page: number) => void navigate({ href: radioBrowseLocation(source, page, filter), resetScroll: false }).then(() => {
     const heading = document.getElementById("radio-stations");
@@ -38,11 +37,14 @@ export function RadioPage() {
   return <section data-page="Radio" className="min-w-0 space-y-6">
     <ContentBreadcrumb title="Radio" />
     <PageHeader title="Radio" />
-    <ChoiceGroup label="Radio source" value={source} onValueChange={source => void navigate({ href: radioBrowseLocation(source) })} options={radioBrowseSources.map(value => ({ value, label: value }))} />
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><p id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading && !summary.hits?.length ? <><Spinner className="size-3.5" /><span role="status">Loading stations…</span></> : <>{hits.length} {hits.length === 1 ? "station" : "stations"}</>}</p>
-      <div className="flex flex-wrap items-center gap-4">
-        <Input type="search" aria-label="Filter these stations" placeholder="Filter by name…" className="w-44 sm:w-52" value={filter} onChange={event => void navigate({ href: radioBrowseLocation(source, 1, event.target.value), replace: true, resetScroll: false })} />
+    <div className="grid gap-3">
+      <div role="group" aria-label="Radio filters" className="grid items-end gap-3 sm:grid-cols-[14rem_minmax(0,24rem)]">
+        <FilterSelect label="Source" value={source} onChange={source => void navigate({ href: radioBrowseLocation(source, 1, filter), resetScroll: false })} options={radioBrowseSources.map(value => ({ value, label: value }))} />
+        <FilterInput label="Filter stations" value={filter} onChange={filter => void navigate({ href: radioBrowseLocation(source, 1, filter), replace: true, resetScroll: false })} />
+      </div>
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{connected && (!summary || summary.loading) && !summary?.hits?.length ? <><Spinner className="size-3.5" /><span role="status">Loading stations…</span></> : <span role="status">{hits.length} {hits.length === 1 ? "station" : "stations"}</span>}</p>
         <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? radioBrowseLocation(source, paging.page - 1, filter) : undefined} next={paging.next ? radioBrowseLocation(source, paging.page + 1, filter) : undefined} disabled={!connected || !!summary?.loading} onSelectPage={goToPage}
           onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); goToPage(Number(new URL(href, location.origin).searchParams.get("page") ?? 1)); }} />
       </div>

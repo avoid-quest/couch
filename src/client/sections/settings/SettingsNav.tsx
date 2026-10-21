@@ -37,7 +37,7 @@ export function SettingsNav({ active }: Props) {
         ))}
       </SelectContent>
     </Select>
-    <nav aria-label="Settings pages" className="hidden min-w-0 flex-col gap-8 md:flex">
+    <nav data-nav-rail aria-label="Settings pages" className="hidden min-w-0 flex-col gap-8 md:flex">
       {scopes.map(item => (
         <div key={item.id} role="group" aria-label={`${item.title} · ${item.detail}`} data-settings-scope={item.id} className="flex flex-col">
           <p aria-hidden="true" className="break-words text-base font-semibold">{item.title}</p>

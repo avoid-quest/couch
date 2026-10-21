@@ -18,16 +18,23 @@ is active, connected and in the foreground. Hidden source results still
 contribute counts but do not poll. Refreshing a paginated search rereads its
 retained pages in cursor order so changes do not duplicate or skip results.
 
-Under that line sit compact shadcn Select controls: From, the sources with
-results and their counts, and Ends by, three clock times ahead on the half
-hour, the first at least twenty minutes out (`?until=HH:MM`). Clear filters
-resets both. The controls wrap on phones without consuming rows of chips. The selected
-time stays visible and keeps its deadline as the clock advances; an expired
-deadline allows no remaining duration. Choices can cross midnight. Each kind's
-heading counts what it holds by name ("2 titles", "28 stations"), as Home's
-shelves do. A hit fits when it would end by then; live media and radio
-always fit, and collections (including albums, series, seasons and programmes) never do. There is no What or Length filter:
-the kinds are headings, and runtime stays secondary.
+The existing Source and Ends by filters sit above the count, so asynchronous
+status messages never move the controls. Both use shadcn Select with visible
+labels. Source keeps every source in a fixed order, including zero-result and
+unavailable sources; counts reflect the current time filter. Loading and
+unavailable states are named inside the menu. Changing a source filters the
+cached results immediately; pending and error feedback follows the selected
+source. Controls and Clear filters remain present in empty and error states.
+Clear filters sits beside the count, disabled when nothing is selected.
+On phones, Source gets three fifths of the row and Ends by two fifths.
+
+Ends by offers three clock times ahead on the half hour, the first at least
+twenty minutes out (`?until=HH:MM`). The selected time stays visible and keeps
+its deadline as the clock advances; an expired deadline allows no remaining
+duration. Choices can cross midnight. A hit fits when it would end by then;
+live media and radio always fit, and collections (including albums, series,
+seasons and programmes) never do. There is no What or Length filter: the kinds
+are headings, and runtime stays secondary.
 
 A word of the query matches a word of a hit, or the start of one, never its
 middle ("nts" finds NTS Radio, not Quints). The closest match leads: the first
@@ -355,7 +362,7 @@ and Up from its neighbour would pick it before the tab bar.
 ## BrowsePagination
 
 Collection and radio lists keep count and Filter in fixed
-slots. Filter uses the shared Input's immediate focus inversion, with dark
+slots. Filter uses the shared Input Group's immediate focus inversion, with dark
 text and placeholder on white, as the header's Search does. Focused inputs use
 the light colour scheme so native controls, including the search clear glyph,
 stay visible on white. Remote or multiple-page collections show Previous, "Page N of M" and
@@ -381,6 +388,26 @@ What Play on offers and confirms: [Where it plays](where-it-plays.md#play-on).
 
 ### Consistency across browse surfaces
 
-Radio, Live TV and provider catalogues use the standard shadcn Input for filtering, with a visible field boundary and the same “Filter by name…” prompt. Live TV's group selector uses the standard Select treatment. A catalogue does not repeat its source as a link on every row; its breadcrumb and source control already provide that context. Station rows expose “Station details” separately from Play. A creator or collection subtitle is omitted only when an existing relationship link already supplies the exact same name; other metadata stays visible.
+Radio, Live TV and provider catalogues share `FilterInput` and `FilterSelect`,
+compositions of the official shadcn [Input Group](https://ui.shadcn.com/docs/components/radix/input-group),
+[Select](https://ui.shadcn.com/docs/components/radix/select) and Label. No custom
+input or picker is needed. Visible labels name what is filtered: stations,
+channels, items, episodes or tracks. A provider with cursor pagination says
+“Filter this page” because its filter only searches that fetched page. Text
+matches names and existing metadata, ignoring surrounding whitespace. All
+text fields use “Type to filter…” and a separate Clear filter button; clearing
+returns focus to the input. The button retains its slot while disabled.
+
+Source or Group and the text field share a row on larger screens, stack on
+phones, and precede a separate count/pagination row. Both rows retain their
+slots when no items match. Radio source changes preserve the text filter;
+Live TV group changes do too. Text filtering resets local pagination and keeps
+scroll position. Provider cursor trails remain intact. Back restores the URL's
+filters and collection context. Filter URL updates preserve the active field or
+picker instead of running page-entry focus again, on TV as on other screens.
+Local filters use cached items without a request. Live TV debounces
+text by 200 ms and keeps previous channels while its query changes, visibly
+marking them as updating; stale counts cannot clamp the new page during that
+interval. A catalogue does not repeat its source as a link on every row; its breadcrumb and source control already provide that context. Station rows expose “Station details” separately from Play. A creator or collection subtitle is omitted only when an existing relationship link already supplies the exact same name; other metadata stays visible.
 
 Saved keeps its page heading visible on phones, matching Settings and Discover. Its section selector chooses the destination; the heading establishes the current page. Related collections and stations use the same section-heading scale as shelves.

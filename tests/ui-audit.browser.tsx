@@ -21,6 +21,8 @@ const saved = {...media,kind:"web",source:entry.source,sourceLabel:"YouTube",sav
 const history = {...media,mediaId:"audit-history",sourceLabel:"YouTube",position:120,watched:false,playable:true,queueEntryId:entry.id};
 export type AuditMode = "loaded" | "loading" | "empty" | "error";
 export async function mountUiAudit() {
+  const wasTv = document.body.classList.contains('tv-presentation');
+  document.body.classList.toggle('tv-presentation', isTvPresentation());
   const root = createRoot(document.getElementById("fixture")!);
   const originalFetch = window.fetch;
   const client = new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false,staleTime:30_000}}});
@@ -95,7 +97,7 @@ export async function mountUiAudit() {
     async click(label:string) {const target=[...document.querySelectorAll<HTMLElement>('button,a')].find(e=>e.checkVisibility()&&(e.getAttribute('aria-label')===label||e.textContent===label)); if(!target) throw new Error(`No visible control: ${label}`);target.click();await wait();},
     setReadMode(value: AuditMode) { mode=value; },
     client,router,calls,
-    close(){root.unmount();client.clear();window.fetch=originalFetch;},
+    close(){root.unmount();client.clear();window.fetch=originalFetch;document.body.classList.toggle('tv-presentation',wasTv);},
   };
 }
 
