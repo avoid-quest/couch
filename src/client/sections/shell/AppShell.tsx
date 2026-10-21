@@ -354,7 +354,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
                 phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
             <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
               <LiveSharingStatus header />
-              <HeaderSearch className="min-w-0 max-w-64 flex-1 has-[[data-search-token]]:max-w-88 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64 tv:has-[[data-search-token]]:max-w-88 tv:max-lg:min-w-44" />
+              <HeaderSearch className="min-w-0 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:max-w-64 tv:has-[[data-search-token]]:max-w-88 tv:max-lg:min-w-44" />
               {/* Only a keyboard can use its shortcuts. Remote's keys drive the TV, so there it keeps its place unseen and the field doesn't move. */}
               {!tvPresentation && <Button variant="ghost" size="icon" className={cn("touch:hidden", section === "Remote" && "invisible")} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-3 hidden text-base text-muted-foreground tv:inline" />

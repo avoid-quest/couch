@@ -113,6 +113,11 @@ export async function runSearchFieldRegression() {
     if (!enter.defaultPrevented) field().form!.requestSubmit(searchButton);
     await wait();
     assert(query() === "ordinary enter", "Ordinary Enter did not submit immediately");
+    assert(!host.querySelector("[cmdk-list]"), "A submitted search left the palette open");
+    if (!isTvPresentation()) {
+      await press("Escape");
+      assert(document.activeElement !== field() && field().value === "ordinary enter" && query() === "ordinary enter", "Escape after a search cleared it instead of leaving the field");
+    }
     await input("");
     await wait(650);
     assert(query() === "ordinary enter", "Deleting the draft navigated before submission");
@@ -154,7 +159,10 @@ export async function runSearchFieldRegression() {
     await press("ArrowDown");
     assert(document.activeElement === field() && selected()?.textContent === "Films & series", "Down did not select the palette's first row, or took the focus from the field");
     await press("ArrowRight"); await press("ArrowRight");
-    assert(selected()?.closest("[data-search-recents]") && document.activeElement === field(), "Right did not cross the palette's columns to the recent searches");
+    // The TV's columns: Right crosses to the recent searches. Elsewhere the kinds are a line, and Right moves along it.
+    if (isTvPresentation()) assert(selected()?.closest("[data-search-recents]") && document.activeElement === field(), "Right did not cross the palette's columns to the recent searches");
+    else assert(selected()?.textContent === "Live" && document.activeElement === field(), "Right did not move along the kinds");
+    assert(![...host.querySelectorAll("[cmdk-group-heading]")].some(heading => heading.textContent === "Sources"), "The empty palette still lists the sources");
     await press("ArrowLeft"); await press("ArrowLeft");
     await press("Enter");
     assert(tokens() === "Films & series" && kind() === "films" && query() === "xy", `A scope on the results page did not reach the URL: ${router.state.location.href}`);
@@ -207,6 +215,7 @@ export async function runSearchFieldRegression() {
     if (isTvPresentation() && !host.querySelector("[cmdk-list]")) await press("Enter");
     await press("Enter");
     assert(plays === linkPlays + 1 && query() === "https://example.com/watch", "Enter on a pasted link did not play it in place");
+    assert(!host.querySelector("[cmdk-list]") && field().value === "" && document.activeElement !== field(), "A played link left the palette open or the field focused");
     await input("   ");
     field().form!.requestSubmit();
     await wait();
@@ -239,7 +248,7 @@ export async function runSearchFieldRegression() {
       await wait();
       assert(plays === beforeRepeat + 1, "Remote repeat Enter did not play the closest match once");
     }
-    return { passed: true, remote: isTvPresentation(), checks: ["palette arrows, columns and scope tokens", "Tab completion and Backspace", "pasted link plays", "unchanged-query button never plays", "repeat Enter plays once", "drafts cause no routes or requests", "Search submits IME completion", "IME confirmation Enter suppressed", "ordinary Enter submits", "recents never submit", "section navigation cancels", "query navigation cancels", "scope changes cancel", "busy indicator settles", "type-to-search stays local", "scoped submission", "back and forward", "pasted links", "empty submission and Clear", "recents keyboard focus"] };
+    return { passed: true, remote: isTvPresentation(), checks: ["palette arrows, kinds and scope tokens", "Tab completion and Backspace", "pasted link plays", "unchanged-query button never plays", "repeat Enter plays once", "drafts cause no routes or requests", "Search submits IME completion", "IME confirmation Enter suppressed", "ordinary Enter submits", "recents never submit", "section navigation cancels", "query navigation cancels", "scope changes cancel", "busy indicator settles", "type-to-search stays local", "scoped submission", "back and forward", "pasted links", "empty submission and Clear", "recents keyboard focus"] };
   } finally {
     remote?.close(); root.unmount(); client.clear(); window.fetch = originalFetch;
     if (savedRecents === null) localStorage.removeItem(recentKey); else localStorage.setItem(recentKey, savedRecents);

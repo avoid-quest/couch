@@ -26,8 +26,6 @@ export const scopes: Scope[] = [
   { source: "Radio directory", label: "Radio directory", words: ["directory"] },
   { source: "Shared sources", label: "Shared sources", words: ["shared"] },
 ];
-/** The sources an empty field offers; the radio's own lists and shared sources answer when typed. */
-export const offeredSources = scopes.filter(scope => scope.source && !["avoid radio", "Radio playlists", "Radio directory", "Shared sources"].includes(scope.source));
 
 const squash = (value: string) => value.normalize("NFC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 /** The scopes the typed text names, best first: an exact name or short form, then those it starts. Two letters at least. */
@@ -64,7 +62,7 @@ type Station = { name: string };
  * titles, and stations. Never a source's search. A scope narrows them: stations only for radio, titles never for it,
  * and a source only its own titles.
  */
-export function suggest<T extends Titled, P extends Titled, S extends Station>(text: string, current: SearchScope, held: { recents: string[]; saved: T[]; played: P[]; stations: S[] }, limit = 4) {
+export function suggest<T extends Titled, P extends Titled, S extends Station>(text: string, current: SearchScope, held: { recents: string[]; saved: T[]; played: P[]; stations: S[] }, limit = 3) {
   const { strong } = searchRelevance(text);
   const typed = text.trim().toLocaleLowerCase();
   const radio = !current.kind || current.kind === "radio";

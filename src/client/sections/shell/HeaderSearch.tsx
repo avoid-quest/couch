@@ -10,12 +10,13 @@ import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { focusPageControl } from "@/navigation";
 import { isLink, readSearchState, searchLocation } from "@/search";
-import { chooseScope, completeScope, dropScope, hasScope, isChosen, kindLabels, offeredSources, scopeLabels, scopes, suggest, type Scope, type SearchScope } from "@/search-palette";
+import { chooseScope, completeScope, dropScope, hasScope, isChosen, kindLabels, scopeLabels, scopes, suggest, type Scope, type SearchScope } from "@/search-palette";
 import { isTvPresentation } from "@/session/presentation";
 import { useSessionGate } from "@/session/session-context";
 import { createId } from "@/session/session";
 import { useShell } from "@/sections/shell/shell-context";
 import { Button } from "@/components/ui/button";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import { collectionLocation, itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { forLaterQuery } from "@/api/for-later";
 import { historyQuery } from "@/api/progress";
@@ -31,8 +32,8 @@ const kindScopes = scopes.filter(scope => scope.kind);
 const sourceOf = (url?: string) => { const provider = url ? providerForUrl(url) : undefined; return provider && providerNames[provider]; };
 
 /**
- * The header's search field, on every page, as a command palette (shadcn Command). Focused, it lists where to search
- * (the kinds and the sources), recent searches and what was played; typing suggests only what the client already holds.
+ * The header's search field, on every page, as a command palette (shadcn Command). Focused, it lists the kinds to search
+ * in, recent searches and what was played; typing suggests only what the client already holds.
  * A scope becomes a token in the field (pick it, or type its name and Tab; Backspace removes it), and on the results
  * page the token is the page's kind and source, both ways. Enter on the query opens /search?q=…&kind=…&source=…; Enter on
  * a suggestion opens it, or plays a station or a pasted link. An empty query is Discover. It is the TV's Search field
@@ -71,6 +72,9 @@ export function HeaderSearch({ className }: { className?: string }) {
   useEffect(() => { if (results) shell.setSearchScope(null); }, [results]);
   // A source that scopes the field (Discover's YouTube) opens it, on the TV too.
   useEffect(() => { if (shell.searchScope && !open && document.activeElement === input.current) show(); }, [shell.searchScope]);
+  // The palette belongs to the focused field: a page that changes under it (a played link opens the player, which hides
+  // the header without blurring the field) closes it.
+  useEffect(() => { if (document.activeElement !== input.current) setOpen(false); }, [pathname]);
   const [recents, setRecents] = useState<string[]>([]);
   useEffect(() => { setRecents(installationId ? readSearchRecents(installationId) : []); }, [installationId]);
   const search = (query: string, action: "clear" | "submit" | "enter" = "clear") => {
@@ -107,17 +111,18 @@ export function HeaderSearch({ className }: { className?: string }) {
   }, [results]);
   const clear = () => { type(""); shell.setSearchScope(null); search(""); input.current?.focus(); };
   const close = () => { setOpen(false); input.current?.blur(); };
-  // Left and Right move between the empty palette's columns.
+  // Left and Right move between the TV's columns in the empty palette, and along the kinds elsewhere, where they are a line.
   const list = useRef<HTMLDivElement>(null);
   const across = (step: number) => {
     const columns = [...list.current?.querySelectorAll<HTMLElement>("[data-palette-column]") ?? []].filter(column => column.querySelector("[cmdk-item]"));
     const items = (column?: HTMLElement) => [...column?.querySelectorAll<HTMLElement>('[cmdk-item]:not([aria-disabled="true"])') ?? []];
     const at = columns.findIndex(column => column.querySelector('[cmdk-item][aria-selected="true"]'));
-    const target = items(columns[at + step]);
     const row = items(columns[at]).findIndex(item => item.getAttribute("aria-selected") === "true");
-    const next = target[Math.min(row, target.length - 1)]?.getAttribute("data-value");
+    const next = isTvPresentation()
+      ? items(columns[at + step]).at(Math.min(row, items(columns[at + step]).length - 1))
+      : columns[at]?.hasAttribute("data-palette-kinds") ? items(columns[at])[row + step] : undefined;
     if (at < 0 || !next) return false;
-    setSelected(next);
+    setSelected(next.getAttribute("data-value")!);
     return true;
   };
   // A link plays as itself, outside any scope.
@@ -127,7 +132,7 @@ export function HeaderSearch({ className }: { className?: string }) {
     onSubmit={event => { event.preventDefault(); if (!composing.current) search(text, (event.nativeEvent as SubmitEvent).submitter ? "submit" : "enter"); }}
     onFocus={event => { if ((event.target as Node) === input.current && !open && !isTvPresentation()) show(); }}
     onBlur={event => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setOpen(false); }}>
-    <Command label="Search or paste a link" shouldFilter={false} loop={false} vimBindings={false} value={selected} onValueChange={setSelected} className="min-w-0 flex-1">
+    <Command label="Search or paste a link" shouldFilter={false} loop={false} vimBindings={false} value={selected} onValueChange={setSelected} className="relative min-w-0 flex-1">
       {/* InputGroup keeps its input/addon behavior; the header gives search a quiet filled surface. Focused, it inverts
           at once; while the palette is open its selected row is the one white thing, so the field takes a white edge instead. */}
       <InputGroup className={cn("h-11 rounded-md border-transparent bg-muted transition-colors dark:bg-muted has-[[data-slot=input-group-control]:focus-visible]:ring-0",
@@ -152,9 +157,10 @@ export function HeaderSearch({ className }: { className?: string }) {
               // Open, it does the selected row (the palette's own Enter), or submits while none is.
               if (!open || selected === none) { event.preventDefault(); if (!open && isTvPresentation()) show(); else event.currentTarget.form?.requestSubmit(); }
             }
-            // Off the TV, Esc clears the field, then leaves it; the TV's Back closes the palette, then stays Back.
+            // Off the TV, Esc clears the open palette's field, then closes it and leaves; a closed palette's field (after a
+            // search) it just leaves. The TV's Back closes the palette, then stays Back.
             else if (event.key === "Escape") {
-              if (!isTvPresentation()) { event.preventDefault(); if (value) clear(); else { if (!results) shell.setSearchScope(null); close(); } }
+              if (!isTvPresentation()) { event.preventDefault(); if (open && value) clear(); else { if (!results) shell.setSearchScope(null); close(); } }
               else if (open) { event.preventDefault(); setOpen(false); }
             }
             // Tab turns a scope's name into its token; Backspace in an empty field takes the last token away.
@@ -172,15 +178,16 @@ export function HeaderSearch({ className }: { className?: string }) {
         {!value && !labels.length && <InputGroupAddon align="inline-end" className="hidden pointer-fine:flex touch:hidden group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
         {(value || labels.length > 0) && <InputGroupAddon align="inline-end" className={cn("pr-2.5", !open && "group-has-[input:focus]/input-group:text-background/65")}><InputGroupButton size="icon-xs" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
       </InputGroup>
-      {/* Under the field on a desktop, joined to the header's line; the whole screen under the header on a phone and the
-          TV. A press keeps the field focused (a tap or a Safari click would blur it first and take the list away). */}
+      {/* On a desktop, the field's own list: under it, its width and its left edge, on the menus' ground. On a phone and
+          the TV, the whole screen under the header. A press keeps the field focused (a tap or a Safari click would blur
+          it first and take the list away). */}
       {open && <CommandList ref={list} label="Suggestions" onPointerDown={event => event.preventDefault()}
-        className="absolute right-(--gutter) top-full z-30 max-h-[min(36rem,calc(100dvh-var(--top-bar,4rem)-2rem))] w-[min(46rem,calc(100vw-2*var(--gutter)))] border-x border-b bg-background p-2 pb-3 touch:fixed touch:inset-x-0 touch:top-(--top-bar) touch:bottom-0 touch:max-h-none touch:w-auto touch:border-0 touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:inset-x-0 tv:top-(--top-bar) tv:bottom-0 tv:max-h-none tv:w-auto tv:border-0 tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
+        className="absolute inset-x-0 top-full z-30 mt-1 max-h-[min(36rem,calc(100dvh-var(--top-bar,4rem)-1rem))] rounded-md bg-popover p-1 touch:fixed touch:top-(--top-bar) touch:bottom-0 touch:mt-0 touch:max-h-none touch:rounded-none touch:bg-background touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:top-(--top-bar) tv:bottom-0 tv:mt-0 tv:max-h-none tv:rounded-none tv:bg-background tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
         {text
           ? <Typed text={text} link={link} scope={scope} labels={labels} recents={recents} connected={connected}
             onSearch={() => search(text, "enter")} onScope={next => choose(next)} onRecent={pick}
             onOpen={href => leave(() => details.open(href))} onPlayStation={station => leave(() => void shell.enqueueRadio(station, true))}
-            onPlayLink={() => leave(() => { void run({ type: "enqueueWeb", entryId: createId(), url: text, quality: videoQualityPreference?.quality ?? "auto", playNow: true }); type(""); })} />
+            onPlayLink={() => leave(() => { void run({ type: "enqueueWeb", entryId: createId(), url: text, quality: videoQualityPreference?.quality ?? "auto", playNow: true }); setDraft(current => ({ ...current, value: "" })); input.current?.blur(); })} />
           : <Empty scope={scope} recents={recents} onScope={next => choose(next)} onRecent={pick} onOpen={href => leave(() => details.open(href))} />}
       </CommandList>}
     </Command>
@@ -213,9 +220,12 @@ function ScopeRows({ items, scope, onScope, hint }: { items: Scope[]; scope: Sea
   </CommandItem>);
 }
 
-/** A title the client already holds, with where it comes from. */
-function TitleRow({ value, title, detail, onSelect }: { value: string; title: string; detail?: string; onSelect: () => void }) {
-  return <CommandItem value={value} onSelect={onSelect}><span className="min-w-0 flex-1 truncate">{title}</span>{detail && <span className="max-w-[40%] shrink-0 truncate text-muted-foreground">{detail}</span>}</CommandItem>;
+/** A title the client already holds: its artwork, then the title over where it comes from. */
+function TitleRow({ value, title, detail, thumbnail, onSelect }: { value: string; title: string; detail?: string; thumbnail?: string; onSelect: () => void }) {
+  return <CommandItem value={value} onSelect={onSelect}>
+    <MediaArtwork thumbnail={thumbnail} title={title} className="aspect-square size-8 shrink-0 object-cover tv:size-10" />
+    <span className="grid min-w-0 flex-1"><span className="truncate">{title}</span>{detail && <span className="truncate text-xs text-muted-foreground tv:text-sm">{detail}</span>}</span>
+  </CommandItem>;
 }
 
 // The cached lists the palette draws on; each is read from the client's cache and never fetched from here.
@@ -231,26 +241,27 @@ function useHeld() {
   const catalogue = useQuery({ ...radioSearchQuery(api, "avoid radio", ""), ...held }).data?.stations ?? [];
   return {
     saved: [
-      ...later.map(item => ({ title: item.title, context: [item.collection?.parent?.title, item.collection?.title, item.creator?.title].filter(Boolean).join(" "), source: sourceOf(item.url), href: itemLocation("saved", item.id), key: `saved:${item.id}` })),
-      ...kept.map(item => ({ title: item.title, context: "", source: providerNames[item.provider], href: collectionLocation(item), key: `kept:${item.id}` })),
+      ...later.map(item => ({ title: item.title, context: [item.collection?.parent?.title, item.collection?.title, item.creator?.title].filter(Boolean).join(" "), source: sourceOf(item.url), thumbnail: item.thumbnail, href: itemLocation("saved", item.id), key: `saved:${item.id}` })),
+      ...kept.map(item => ({ title: item.title, context: "", source: providerNames[item.provider], thumbnail: item.thumbnail, href: collectionLocation(item), key: `kept:${item.id}` })),
     ],
-    played: played.map(item => ({ title: item.title, context: [item.collection?.parent?.title, item.collection?.title, item.creator?.title].filter(Boolean).join(" "), source: item.sourceLabel ?? sourceOf(item.url), href: itemLocation("history", item.mediaId), key: `played:${item.mediaId}` })),
+    played: played.map(item => ({ title: item.title, context: [item.collection?.parent?.title, item.collection?.title, item.creator?.title].filter(Boolean).join(" "), source: item.sourceLabel ?? sourceOf(item.url), thumbnail: item.thumbnail, href: itemLocation("history", item.mediaId), key: `played:${item.mediaId}` })),
     stations: [...recentRadio ?? [], ...stations, ...catalogue] as RadioStation[],
   };
 }
 
-/** The empty palette: where to search, then recent searches and what was played, in columns the arrows cross. */
+/**
+ * The empty palette: the kinds to search in, then recent searches and what was played. One column under the field (the
+ * kinds a line of chips); on the TV, columns the arrows cross.
+ */
 function Empty({ scope, recents, onScope, onRecent, onOpen }: { scope: SearchScope; recents: string[]; onScope: (scope: Scope) => void; onRecent: (query: string) => void; onOpen: (href: string) => void }) {
   const { played } = useHeld();
   const recent = recents.slice(0, 6), continuing = played.slice(0, 6);
-  // Columns on a desktop and the TV; on a phone one after another, the scopes as a wrapping line of chips.
-  const chips = "touch:**:[[cmdk-group-items]]:flex touch:**:[[cmdk-group-items]]:flex-wrap touch:**:[[cmdk-group-items]]:gap-2 touch:**:[[cmdk-group-items]]:px-2 tv:**:[[cmdk-group-items]]:px-0 touch:**:[[cmdk-item]]:bg-muted touch:**:[[cmdk-item]]:px-3 touch:**:[[cmdk-item]]:data-[checked=true]:bg-foreground touch:**:[[cmdk-item]]:data-[checked=true]:text-background tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-item]]:data-[selected=false]:bg-transparent tv:**:[[cmdk-item]]:data-[selected=false]:text-foreground";
-  return <div className={cn("grid gap-x-4 gap-y-4 touch:grid-cols-1 tv:gap-x-8", recent.length || continuing.length ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)] tv:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)]" : "grid-cols-2 tv:grid-cols-2")}>
-    <div data-palette-column className={chips}><CommandGroup heading="Search in"><ScopeRows items={kindScopes} scope={scope} onScope={onScope} /></CommandGroup></div>
-    <div data-palette-column className={chips}><CommandGroup heading="Sources"><ScopeRows items={offeredSources} scope={scope} onScope={onScope} /></CommandGroup></div>
-    {(recent.length > 0 || continuing.length > 0) && <div data-palette-column className="grid content-start gap-4">
+  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-1.5 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:bg-muted **:[[cmdk-item]]:px-3 **:[[cmdk-item]]:data-[checked=true]:bg-foreground **:[[cmdk-item]]:data-[checked=true]:text-background tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:data-[selected=false]:bg-transparent tv:**:[[cmdk-item]]:data-[selected=false]:text-foreground";
+  return <div className="grid gap-y-2 tv:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] tv:gap-x-8">
+    <div data-palette-column data-palette-kinds className={chips}><CommandGroup heading="Search in"><ScopeRows items={kindScopes} scope={scope} onScope={onScope} /></CommandGroup></div>
+    {(recent.length > 0 || continuing.length > 0) && <div data-palette-column className="grid content-start gap-2">
       {recent.length > 0 && <CommandGroup heading="Recent searches" data-search-recents>{recent.map(query => <CommandItem key={query} value={`recent:${query}`} onSelect={() => onRecent(query)}><span className="truncate">{query}</span></CommandItem>)}</CommandGroup>}
-      {continuing.length > 0 && <CommandGroup heading="Continue">{continuing.map(item => <TitleRow key={item.key} value={`continue:${item.key}`} title={item.title} detail={item.context || item.source} onSelect={() => onOpen(item.href)} />)}</CommandGroup>}
+      {continuing.length > 0 && <CommandGroup heading="Continue">{continuing.map(item => <TitleRow key={item.key} value={`continue:${item.key}`} title={item.title} detail={item.context || item.source} thumbnail={item.thumbnail} onSelect={() => onOpen(item.href)} />)}</CommandGroup>}
     </div>}
   </div>;
 }
@@ -283,8 +294,8 @@ function Typed({ text, link, scope, labels, recents, connected, onSearch, onScop
     </CommandGroup>
     {found.scopes.length > 0 && <CommandGroup heading="Search in"><ScopeRows items={found.scopes} scope={scope} onScope={onScope} hint={found.scopes[0]} /></CommandGroup>}
     {found.recents.length > 0 && <CommandGroup heading="Recent searches" data-search-recents>{found.recents.map(query => <CommandItem key={query} value={`recent:${query}`} onSelect={() => onRecent(query)}><span className="truncate">{query}</span></CommandItem>)}</CommandGroup>}
-    {found.saved.length > 0 && <CommandGroup heading="Saved">{found.saved.map(item => <TitleRow key={item.key} value={item.key} title={item.title} detail={item.context || item.source} onSelect={() => onOpen(item.href)} />)}</CommandGroup>}
-    {found.played.length > 0 && <CommandGroup heading="Played">{found.played.map(item => <TitleRow key={item.key} value={item.key} title={item.title} detail={item.context || item.source} onSelect={() => onOpen(item.href)} />)}</CommandGroup>}
-    {found.stations.length > 0 && <CommandGroup heading="Stations">{found.stations.map(station => <TitleRow key={station.id} value={`station:${station.id}`} title={station.name} detail={station.groupTitle ?? kindLabels.radio} onSelect={() => onPlayStation(station)} />)}</CommandGroup>}
+    {found.saved.length > 0 && <CommandGroup heading="Saved">{found.saved.map(item => <TitleRow key={item.key} value={item.key} title={item.title} detail={item.context || item.source} thumbnail={item.thumbnail} onSelect={() => onOpen(item.href)} />)}</CommandGroup>}
+    {found.played.length > 0 && <CommandGroup heading="Played">{found.played.map(item => <TitleRow key={item.key} value={item.key} title={item.title} detail={item.context || item.source} thumbnail={item.thumbnail} onSelect={() => onOpen(item.href)} />)}</CommandGroup>}
+    {found.stations.length > 0 && <CommandGroup heading="Stations">{found.stations.map(station => <TitleRow key={station.id} value={`station:${station.id}`} title={station.name} detail={station.groupTitle ?? kindLabels.radio} thumbnail={station.logoUrl} onSelect={() => onPlayStation(station)} />)}</CommandGroup>}
   </>;
 }
