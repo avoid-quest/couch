@@ -9,7 +9,7 @@ type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; so
 // uploadId: Core asks for encoded capture only while something plays it buffered. Each request has its own identity.
 // A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
 type Publication<Socket> = { source: LiveSource; owner?: Socket; uploadToken?: string; relayed: Set<string>; uploadId?: string };
-type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; relay?: string };
+type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; volume: number; relay?: string };
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
 export function createLiveInputs<Socket>(options: {
@@ -95,8 +95,15 @@ export function createLiveInputs<Socket>(options: {
       }
       if (publication && load) for (const receiver of wanted) {
         const existing = [...peers.values()].find(peer => peer.playbackId === playbackId && peer.receiver === receiver.socket);
-        if (existing) { options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } }); continue; }
-        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, relay: receiver.relay };
+        if (existing) {
+          // Routing another output must not make this renderer echo its unchanged level.
+          if (existing.volume !== receiver.volume) {
+            existing.volume = receiver.volume;
+            options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } });
+          }
+          continue;
+        }
+        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, volume: receiver.volume, relay: receiver.relay };
         peers.set(peer.peerId, peer);
         if (peer.relay) {
           // Core's channel-filtered stream in the ordinary player: the publisher sends it nothing.
