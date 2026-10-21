@@ -126,9 +126,9 @@ custom.
 
 Shared building blocks in `src/client/components`:
 
-- `PageHeader`: a page's h1 with an optional back link and actions; `hidden`
-  keeps an `sr-only` h1 where the tab or rail already names the page.
-  `BackLink` is its quiet "‹ Parent" link; `ContentBack` picks the parent.
+- `PageHeader`: a page's h1 with an optional back button or breadcrumb and
+  actions; `hidden` keeps an `sr-only` h1 where the tab or rail already names
+  the page. `ContentBreadcrumb` is a content page's trail of ancestors.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)).
@@ -208,7 +208,7 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
   bars, the Couch switch, the now-playing bar, keyboard, first run.
 - [Home](design/home.md): the hero and shelves.
 - [Browse](design/browse.md): Search, Discover, Hide, Details, Saved, rows and
-  tiles, filters and pages, back links.
+  tiles, filters and pages, breadcrumbs.
 - [Player](design/player.md): the band, transport, timeline, Up next.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.
 - [TV](design/tv.md): what the TV adds for its remote.

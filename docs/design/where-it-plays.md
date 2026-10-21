@@ -85,7 +85,8 @@ private output plays in the Playback, or such a publisher waits to return.
 - "This device", muted, on this device's row, joined by " · " to any other;
 - "Behind" while a live input reaches it through Couch's buffered stream;
 - "Can't play: {Core's reason}" in destructive red when that stream failed;
-- "Muted" while its sound plays here muted;
+- "Muted" while its sound plays here muted (muted elsewhere: turning its
+  Sound on or moving its fader unmutes it);
 - "Private" where its consent leaves you nothing to change;
 - "Playing {title}" while it plays another Playback, which moving it
   interrupts;
@@ -96,7 +97,7 @@ private output plays in the Playback, or such a publisher waits to return.
 **Consent.** Every refusal Core makes shows as a disabled control with its
 reason ("Private", "Offline", "No picture", "No sound", "Sharing this
 source"). A private picture disables Picture for other devices, while its
-shared sound keeps its Sound, fader and Mute. This device keeps its own
+shared sound keeps its Sound and fader. This device keeps its own
 controls while viewing another Playback.
 
 ## Fader and Sync
@@ -112,8 +113,9 @@ panel, hides a line still at 0.
 
 ## The "…" menu
 
-**Move here** where it changes something, **Mute** (the device's own mute),
-then **Sync…** while Sync applies. Out of the Playback a row has no "…".
+**Move here** where it changes something, then **Sync…** while Sync applies.
+A row shows "…" only when it holds one of them, so out of the Playback it has
+none. A row has no Mute: its Sound and fader are its sound, the Volume mutes.
 
 ## Volume
 
@@ -147,7 +149,7 @@ dismissal.
 
 Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
 between rows, Left and Right change its level by 5 at once, with no OK to
-take the arrows. OK opens its options: Picture, Sound, Move here, Mute and
+take the arrows. OK opens its options: Picture, Sound, Move here and
 Sync…. Back closes the panel with focus back on its button. It opens on the
 first row. A revealed Sync line is a stop of its own whose slider Left and
 Right move directly.

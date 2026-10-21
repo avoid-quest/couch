@@ -36,8 +36,10 @@ Popover; across several devices: [Where it plays](where-it-plays.md#volume).
 
 ## Stage
 
-Video fills the viewport; Up next opens beside it (the picture letterboxes),
-or replaces it on phones. Audio and media playing elsewhere show **Now
+Video fills the viewport and never moves or resizes for a panel: Up next, the
+Playback Sheet, Volume and Where it plays lie over it. Up next is a solid
+column at the right under the top band, edge to edge between the bands on
+phones. Audio and media playing elsewhere show **Now
 playing** as Home's hero does: contained artwork, the title, a meta line (the
 station, else subtitle, else source, then "on Kitchen +1"), the end time, and
 a station's current track. On desktop the queue sits beside it; on phones Up

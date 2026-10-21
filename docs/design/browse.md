@@ -51,7 +51,7 @@ finishes loading until the user acts. With every section hidden or empty, an
 Empty links to Settings (`#customize-discover`).
 
 **Radio** (`/discover/radio`) and **Live TV** (`/discover/live-tv`) are lists
-with a back link to Discover and the filter row: Radio's source choice
+with a breadcrumb to Discover and the filter row: Radio's source choice
 (`radioSource`) and Filter; Live TV's group (`group`) and Filter, with each
 channel's now and next from the XMLTV guide on its meta line. Filters and page
 live in the URL. A channel has no page: pressing it plays, its menu holds
@@ -153,12 +153,14 @@ Previous, "Page N of M" (a borderless Select) and Next. Cursor-paged sources
 show it while there is a page before or after and never invent a last page.
 Turning a page moves focus to the list's top.
 
-## Back links
+## Breadcrumbs
 
-`ContentBack` puts one quiet link (`BackLink`) above a sub-page's h1: up to the
-collection holding it, else Radio or the source's home, else the section it
-belongs to: "‹ Season 1", "‹ StreamingCommunity", "‹ Discover". There are no
-breadcrumbs. Esc and the TV's Back still go back in history, restoring focus.
+`ContentBreadcrumb` (shadcn's Breadcrumb) puts a sub-page's ancestors above its
+h1, each a link: the section it opened in, Radio or the source's home, then
+the collections holding it ("Discover › StreamingCommunity › Series"). The h1
+names the page, so the trail stops before it. One line of small muted text;
+when it runs out of room the middle truncates first. Esc and the TV's Back
+still go back in history, restoring focus.
 
 ## Play on in menus
 

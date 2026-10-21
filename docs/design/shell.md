@@ -14,7 +14,7 @@ Search is the header's field; its results are `/search?q=…`, and `/search`
 without a query opens Discover. Discover's own pages are `/discover/radio` and
 `/discover/live-tv`. `/item` and `/collection` keep the section that opened
 them in `from` (`home`, `discover`, `search`, `saved`; Discover by default),
-so the tab, the back link and a refresh keep it. `/now` is the player. Where
+so the tab, the breadcrumb and a refresh keep it. `/now` is the player. Where
 it plays has no page.
 
 Earlier addresses redirect with their query: `/live` → `/discover`,
