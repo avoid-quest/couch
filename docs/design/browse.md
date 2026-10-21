@@ -70,18 +70,29 @@ Home & Discover:
 
 - **Shared sources**, while devices share screen or sound: a row of names;
   pressing one plays it, its menu holds Play on, Play next and Queue.
-- **Radio**: saved stations, then the built-in ones, each with its current
-  show. A tile plays; its menu holds Details. The heading opens
-  `/discover/radio`.
+- **Radio**: the stations Home's Radio doesn't hold (Couch's built-in ones you
+  haven't played here or saved), each with its current show; with every
+  station on Home, or Home's Radio hidden, every station, so the heading stays.
+  A tile plays; its menu holds Details. The heading opens `/discover/radio`.
+  Stations a device has loaded show at once, before their shows: a tile keeps
+  room for its show's line.
 - **Live TV**, while a Live TV source has channels: the guide's first twelve.
   A tile plays its channel; the heading opens `/discover/live-tv`.
 - **One shelf per source with a home** (Twitch, StreamingCommunity, RaiPlay,
   123MoviesFree, AnimeSaturn, AnimeUnity): the channels and series saved from
-  it, in Saved's order. The heading (the source's name) opens the source's own
-  home. A source with nothing saved has no shelf; with nothing saved anywhere,
-  one line says to save channels or series to see them here.
+  it, in Saved's order, live channels first. Core asks Twitch which saved
+  channels are live as it lists them (one query, at most every 20 s); an
+  offline channel stays, its artwork dimmed, reading "Offline". A page's
+  section (RaiPlay's "In Diretta", `#block=`) belongs to that page, which the
+  heading opens: it stays out of the shelf, and Save isn't offered for one
+  (one saved before keeps Saved, to remove it). The heading (the source's
+  name) opens the source's own home. A source with nothing saved has no shelf;
+  with nothing saved anywhere, one line says to save channels or series to see
+  them here.
 - **Sources**: every source as one row of names. A source with a home opens
   it; YouTube, Bandcamp and SoundCloud scope the header's search to themselves.
+  A source whose latest answer here failed (its home, a page or a search) is
+  muted over "Couldn't load"; it still opens, to try again.
 
 Shelves load side by side at a fixed height so nothing below moves; one that
 fails says "Couldn't load {source}." with Try again. TV page entry goes to the
@@ -91,13 +102,20 @@ Empty links to Settings (`#customize-discover`).
 
 **Radio** (`/discover/radio`) and **Live TV** (`/discover/live-tv`) are lists
 with a breadcrumb to Discover and the filter row: Radio's source choice
-(`radioSource`) and Filter; Live TV's group (`group`) and Filter, with each
-channel's now and next from the XMLTV guide on its meta line. Filters and page
-live in the URL. A channel has no page: pressing it plays, its menu holds
-Play on and Queue.
+(`radioSource`: Built-in, Couch's own station list; Playlists; Directory) and
+Filter; Live TV's group (`group`) and Filter, with each channel's now and next
+from the XMLTV guide on its meta line. Filters and page live in the URL. A
+channel has no page: pressing it plays, its menu holds Play on and Queue. Live
+TV shows its filters once the guide answers; with no channels at all, an admin
+gets "No channels yet" with Add a playlist (Settings → Sources → Live TV) and
+anyone else one line, "No channels yet. An admin can add a playlist."; Radio's
+empty Playlists does the same.
 
 Catalogue homes (StreamingCommunity, 123MoviesFree, AnimeSaturn, AnimeUnity)
-are poster grids sized by the available width.
+are poster grids sized by the available width; other source pages are rows.
+A cold load draws the rows or posters it becomes, and Filter waits for
+something to filter. A source that moved (StreamingCommunity) says so in its
+Alert with Set site address for an admin, beside Try again.
 
 ## Hide
 
@@ -111,6 +129,9 @@ Discover's saved shelves are not filtered. Settings → Sources → Hidden lists
 the rules with Remove, under a "Hide a word" field.
 
 ## Details
+
+An item that is gone reads "Item not found" with Search (the header's field)
+and Back.
 
 Item pages (`/item`: History, For later, a station, an Up next entry) and
 collection pages (`/collection`: a source's home, a series, season, album,
@@ -147,27 +168,49 @@ Removing says "Removed … from Saved." with Undo.
 **`MediaRow` / `MediaList`**: thumbnail, title, meta and length bar as one
 target whose press does the main verb (Play for stations, channels and live
 hits, else Open or Details), with the row's menu behind an always-visible "…"
-at the end of the title's line. Relationship links sit under the meta. A row
+at the end of the title's line. A pointer over a row tints all of it, artwork
+and "…" too. The thumbnail takes the list's majority shape at about one height
+(a compact square is 4rem, a compact frame 7rem wide), and a word every row
+shares (RaiPlay's "Programme") is left out. Relationship links sit under the meta. A row
 whose page already holds every verb shows no "…" (`menuOnPage`: For later's
 and a list's rows) but still opens the menu by right-click, long press or held
 OK. A list's own entries keep Remove and a drag handle.
 
-**`MediaTile`**: one Button around `MediaArtwork` (2:3 films and series, 1:1
-stations and albums, 16:9 videos and episodes; `--tile-art` sets the height),
-a title and one meta line, plus a `DurationBar` on Continue. The "…" sits over
-the end of the title's first line; on the TV it is no focus stop unless the
-press is disabled.
+**`MediaTile`**: one Button around `MediaArtwork` at its shelf's shape
+(`--tile-art` sets the height: posters 18rem, frames 11rem, squares 12rem,
+circles 10rem), a title of up to two lines and one meta line, plus a
+`DurationBar` on Continue. The caption always keeps the room of two title
+lines and a meta line, so a shelf's tiles end level while each meta line
+follows its own title. A pointer over a tile dims its artwork, with a white
+Play disc where the press plays or resumes. The "…" sits over the end of the
+title's first line; a pointer sees it over or inside the tile, touch always;
+on the TV it is always shown and no focus stop unless the press is disabled.
+
+**Captions** read as one line of parts joined by commas ("YouTube, 10:34";
+a provider's own "Game · 1,204 viewers" becomes "Game, 1,204 viewers"). An
+episode leads with its series ("Phony") and its meta with "S1 E1, Episodio 1",
+wherever tiles, rows or the hero show it.
 
 **`Shelf`**: an optional linked heading (a focus stop) over a plain overflow
 row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll
 work natively. Search kinds and Discover's shelves use it too.
 
-**`MediaArtwork`** keeps artwork contained. Without any it is a cover set in
-type: the muted fill with the title large (semibold, 13% of the frame's width,
-three lines at most) at its top left, so a poster, a square and a frame each
-read as the item's own cover; a frame under 8rem (a row's, the bar's or a
-suggestion's thumbnail) holds the title's first letter instead, and a
-collection a folder.
+**`MediaArtwork`** fills its frame when the art matches the frame's shape and
+is contained otherwise. Without any it is a cover set in type: the muted fill
+with the title large (semibold, 13% of the frame's width, three lines at most)
+at its top left, so a poster, a square and a frame each read as the item's own
+cover; a frame under 8rem (a row's, the bar's or a suggestion's thumbnail)
+holds the title's first letter instead, and a collection a folder.
+
+### Artwork shapes
+
+`artShape` (`src/client/art-shape.ts`) gives each kind of item one shape:
+posters (2:3) for films and series from the catalogues, and Twitch's
+categories; frames (16:9) for videos, episodes, streams, RaiPlay's programmes
+and Live TV; squares for music (Bandcamp, SoundCloud) and stations; circles for
+channels and artists (YouTube, Twitch). A shelf or a list takes its majority
+shape (`majorityShape`): art of that shape fills it, art of another shape (and
+a channel logo) is contained in it. Details keeps its own sizing for now.
 
 Every named relationship with a known destination (channel, artist, album,
 series, station, source) is an internal link (`ContentLink`, `MediaContext`),

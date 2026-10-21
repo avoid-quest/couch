@@ -66,7 +66,8 @@ focus treatment, and the TV's only highlight. White controls (slider, Switch,
 Checkbox, RadioGroupItem) take a 2px foreground outline instead; a tile's
 caption inverts and its artwork takes a thin outline.
 
-**Hover** is a white tint, never on the TV. A ghost button whose panel is open
+**Hover** is a white tint, never on the TV; over a tile's artwork it is a dim
+instead (with Play where the press plays), and a row tints whole. A ghost button whose panel is open
 (`aria-expanded`: Volume, Where it plays, Up next, Playback)
 keeps the tint.
 
@@ -142,7 +143,13 @@ Shared building blocks in `src/client/components`:
   the page. `ContentBreadcrumb` is a content page's trail of ancestors.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
-  ([Browse](design/browse.md#rows-and-tiles)).
+  ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
+  one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for
+  videos and streams, squares for music and stations, circles for channels);
+  a shelf or a list takes its majority shape
+  ([Artwork shapes](design/browse.md#artwork-shapes)). `mediaCaption` and
+  `metaLine` give captions one rhythm: an episode leads with its series, and
+  meta parts are joined by commas.
 - `DetailHeader`: an item or collection page's header
   ([Browse](design/browse.md#details)).
 - `ContentFilters` (`FilterBar`, `FilterChoice`, `FilterSelect`, `FilterInput`)
@@ -198,7 +205,7 @@ opened it.
 
 | Input | Opens the menu |
 | --- | --- |
-| Pointer | The "…" (always shown); right-click |
+| Pointer | The "…" (a tile's shows over or inside the tile, a row's always); right-click |
 | Touch | The "…"; a 500 ms long press |
 | Keyboard | The "…" (a Tab stop); the menu key or Shift+F10 on the item |
 | TV remote | OK held 500 ms (a short OK acts on release); Right to a row's "…" |
