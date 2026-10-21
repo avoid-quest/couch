@@ -9,12 +9,13 @@ import { useSettingsScope } from "./settings-scope";
 /** Settings rail and page title, under the scope it belongs to: this device or the shared Couch. */
 export function SettingsLayout({ section, title, children }: { section: SettingsPage; title?: string; children: ReactNode }) {
   const navigate = useNavigate();
-  const { tvPresentation } = useSessionGate();
+  const { tvPresentation, state } = useSessionGate();
   const scope = useSettingsScope();
   const page = settingsPages[section];
   const source = section.startsWith("source-");
   const owner = page.scope === "device" ? `Only on ${scope.device}`
     : "group" in page && page.group === "Hardware" ? `Shared hardware on ${scope.couch}`
+    : section === "playback" ? `For ${state?.activeProfile?.name ?? "the active watching profile"}, on every device`
     : `Shared by everyone on ${scope.couch}`;
   return (
     <section aria-label="Settings" data-page="Settings" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">

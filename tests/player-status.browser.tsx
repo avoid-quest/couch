@@ -87,6 +87,10 @@ export async function runPlayerStatusRegression() {
     assert(document.querySelector('[data-player-status]')?.textContent?.includes("Buffering"), "Buffering not announced");
     await review.state("loading", {retry: true});
     assert(document.querySelector('[aria-label="Try again"]:not(:disabled)'), "Scheduled retry has no immediate remedy");
+    const status = document.querySelector('[data-player-status]')!;
+    assert(status.querySelector('[role="status"]')?.textContent === "Reconnecting…", "Retry status is not announced");
+    const countdown = status.querySelector('[aria-live="off"]');
+    assert(countdown?.textContent?.includes("Trying again in") && !countdown.closest('[role="status"]'), "Retry countdown repeats in the live region");
     await review.state("playing", {connected: false});
     assert(document.querySelector('[data-player-status]')?.textContent?.includes("Offline"), "Offline not announced");
     await review.state("paused");

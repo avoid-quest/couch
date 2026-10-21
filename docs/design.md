@@ -233,8 +233,9 @@ Messages:
 ## Menus
 
 One item, one menu. Every media row and tile has one primary target, its
-press, and at most one menu holding everything else, Details included where
-the press doesn't open Details. The menu is a controlled shadcn Dropdown Menu
+press, and at most one menu holding secondary verbs, Details included where
+the press doesn't open Details. Visible Details and relationship links can also
+provide direct navigation beside that primary target. The menu is a controlled shadcn Dropdown Menu
 fed one verb list (`useItemMenu` and `ItemMenu` in `RowMenu.tsx`). It hangs
 from the item's "…" ("Options for {title}"), or from the whole item where a
 row's page holds all its verbs and the row shows no "…", so it opens in one

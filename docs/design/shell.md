@@ -104,8 +104,8 @@ any other header control, and a phone's Remote types into it
 
 Input exceptions:
 
-- **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) just
-  before the clock; the TV, phones and Remote have none.
+- **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) at
+  the end of the header’s right group; the TV, phones and Remote have none.
 - **Touch** (`touch:`, phones and windows below 960px): the tabs move to a
   bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
   Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,

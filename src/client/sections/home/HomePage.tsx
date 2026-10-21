@@ -1,5 +1,5 @@
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext } from "@/components/MediaContext";
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
@@ -198,7 +198,7 @@ export function HomePage() {
 
     later: !!savedMedia.length && <Shelf title="For later" href="/saved" time={`${savedMedia.length} saved`}>
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
-        <MediaTile shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
+        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
           href={itemLocation("saved", item.id)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,

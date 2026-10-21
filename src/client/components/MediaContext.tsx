@@ -1,3 +1,4 @@
+import { radioBrowseLocation, radioBrowseSources } from "@/radio-navigation";
 import { searchLocation } from "@/search";
 import { providerNames } from "../../shared/providers";
 import type { ProviderId } from "../../shared/providers";
@@ -12,7 +13,8 @@ import { cn } from "@/lib/utils";
 export function MediaContext({ collection, creator, radio, source, className }: { source?: string; collection?: MediaCollection; creator?: CollectionLink; radio?: { id: string; title: string }; className?: string }) {
   const creatorProvider = creator && providerForUrl(creator.url);
   const provider = (Object.keys(providerNames) as ProviderId[]).find(id => providerNames[id] === source);
-  const sourceHref = provider ? collectionLocation({ provider, url: "" }) : ["Radio", "avoid radio", "Radio playlists", "Radio directory"].includes(source ?? "") ? "/discover/radio" : source === "Live TV" ? "/discover/live-tv" : undefined;
+  const radioSource = radioBrowseSources.find(value => value === source);
+  const sourceHref = provider ? collectionLocation({ provider, url: "" }) : radioSource || source === "Radio" ? radioBrowseLocation(radioSource) : source === "Live TV" ? "/discover/live-tv" : undefined;
   const links = [
     ...(source && sourceHref ? [{ title: source, href: sourceHref }] : []),
     ...(creator && creatorProvider ? [{ title: creator.title, href: ["bandcamp", "soundcloud"].includes(creatorProvider) ? searchLocation({query: creator.title, source: providerNames[creatorProvider]}) : collectionLocation({ provider: creatorProvider, url: creator.url }) }] : []),

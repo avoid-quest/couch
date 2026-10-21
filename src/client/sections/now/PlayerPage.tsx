@@ -267,9 +267,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           fullscreen at the right (including phones, where group gaps collapse). Up next shows only where it has something to open, and fullscreen only over a
           picture. Every tool is an icon. */}
       <div className="grid gap-1">
-        {current && <div data-player-status data-player-paused={player?.status === "paused" || undefined} role="status" className="flex min-h-10 items-start gap-2 pb-2 text-sm">
+        {current && <div data-player-status data-player-paused={player?.status === "paused" || undefined} className="flex min-h-10 items-start gap-2 pb-2 text-sm">
           {status.busy && <Spinner className="mt-0.5 shrink-0" role="presentation" aria-hidden="true" />}
-          <div className="min-w-0 flex-1"><p className="font-medium">{status.label}</p>{status.detail && <p className="max-w-prose break-words text-muted-foreground">{status.detail}</p>}</div>
+          <div className="min-w-0 flex-1"><p role="status" className="font-medium">{status.label}</p>{status.detail && <p aria-live={player?.status === "loading" && state?.radioRetry ? "off" : "polite"} className="max-w-prose break-words text-muted-foreground">{status.detail}</p>}</div>
           {connected && player?.status === "unavailable" && state?.playback && <WhereItPlays state={state} connected={connected} run={run} label="Choose device" />}
         </div>}
         {/* Every control is a ghost icon (icon-lg) at the band's 44px target, the now-playing bar's too; those at the

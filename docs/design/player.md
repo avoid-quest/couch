@@ -97,10 +97,11 @@ Audio keeps its solid controls visible. Over a video, two bands show and hide
 together, like a media centre's on-screen display: the band at the bottom, and
 a top band. The top band holds, at the left, the title (wrapping to two lines
 before it truncates) and the subtitle (series, episode, channel or source) in
-muted ink, and at the right the clock and the end time, with direct creator and collection links. The title opens Details; Details
-also remains available in the Playback sheet. Each
-of its two rows sizes itself, so a narrow screen gives the title all but the
-clock. Paused reads in the shared status area above the controls.
+muted ink, with direct creator and collection links below the title and byline.
+The right side holds the end time and, on TV only, the clock. The title opens
+Details; Details also remains available in the Playback sheet. Each row sizes
+itself, leaving the title the remaining width on narrow screens. Paused reads
+in the shared status area above the controls.
 
 Both bands are an overlay on the picture: one transparent black scrim,
 mirrored, eased so it has no edge that reads as a crop. It rises over `--fade`

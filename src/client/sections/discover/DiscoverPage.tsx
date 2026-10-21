@@ -85,7 +85,7 @@ function OnAir() {
   const stationMenu = useStationMenu();
   // As on Home, the shelf keeps the order it opened with, so a refetch or a new favourite never moves a tile under the focus.
   const stations = useKeptOrder(onAir.stations, station => station.id, !onAir.pending);
-  if (!stations.length && (onAir.favorites.error || onAir.builtIn.error)) return <Failed what="Radio" retry={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])} />;
+  if (!stations.length && !onAir.favorites.isPending && !onAir.builtIn.isPending && (onAir.favorites.error || onAir.builtIn.error)) return <Failed what="Radio" retry={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])} />;
   if (!onAir.pending && !stations.length) return null;
   // It waits for the shows, so its tiles don't grow a line under the focus.
   return <Shelf loading={onAir.pending} title="Radio" label="Radio stations" href="/discover/radio" time={onAir.pending ? undefined : stations.some(station => onAir.show(station.id)) ? "On air now" : plural(stations.length, "station")}>
