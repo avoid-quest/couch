@@ -1,7 +1,6 @@
 - Follow YAGNI. Prefer small, readable changes and one-liners where sufficient. 
 - Prefer first class solutions. Check official docs.
-- UI work must preserve Couch's design system and follow its rules for changing a surface ([docs/design.md](docs/design.md)), and prefer shadcn. Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
-- Compose UI with open typography, whitespace, and divided rows. Keep content flat rather than wrapping it in Card or card-like bordered panels, especially on the pairing screen.
+- UI: use shadcn components, keep it flat (no Card or bordered panels) and show only what people need: no filler copy, no headers or labels that repeat the screen. [docs/design.md](docs/design.md) describes what's built; update it with the code.
 - Start CI and releases by hand as [docs/ci.md](docs/ci.md) lists; nothing runs on push.
 - Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`.
 - Scratch runs of Couch get their own `COUCH_DATA_DIR` and `COUCH_PORT` and are stopped by PID; the owner's installed Couch and its data (`<platform data dir>/quest.avoid.couch`) stay as they are.
