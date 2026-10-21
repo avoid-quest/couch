@@ -1,12 +1,11 @@
-import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { DurationBar } from "@/components/DurationBar";
+import { metaLine, savedCaption } from "@/media-caption";
+import { formatDuration } from "@/time-format";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
-import { savedSourceLabel } from "@/saved-source";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
@@ -83,15 +82,14 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
         const inspect = () => details.open(itemLocation("saved", item.id));
         const blocked = !connected || pending || reorder.isPending;
         const move = (offset: number) => { const next = order(index, offset); if (next && !blocked) reorder.mutate(next); };
-        return <MediaRow context={<MediaContext collection={item.collection} creator={item.creator} />} key={item.id} data-saved-details={item.id}
-          art={<MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />}
+        const caption = savedCaption(item);
+        // One meta line and a "…", as Saved's other tabs; Details holds the description and the same verbs.
+        return <MediaRow key={item.id} data-saved-details={item.id}
+          art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />}
           artFit="contain"
-          title={item.title}
-          meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")}
-          description={item.description}
+          title={caption.title}
+          meta={metaLine(caption.meta, !item.live && item.duration != null && formatDuration(item.duration))}
           primary={{ label: "Details", onClick: inspect }}
-          // Details holds every verb in its menu, so the row needs no "…".
-          menuOnPage
           menu={[
             { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
             { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },
@@ -100,9 +98,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             { label: "Move up", disabled: blocked || !order(index, -1), run: () => move(-1) },
             { label: "Move down", disabled: blocked || !order(index, 1), run: () => move(1) },
             { label: "Remove", disabled: !connected || pending, run: () => act(item, "remove", index) },
-          ]}>
-          {(item.duration != null || item.live) && <DurationBar duration={item.duration} live={item.live} />}
-        </MediaRow>;
+          ]} />;
       })}
     </MediaList>}
   </section>;

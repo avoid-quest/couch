@@ -18,6 +18,7 @@ import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
+import { metaLine } from "@/media-caption";
 import { collectionLabel, providerNames } from "@/sections/find/SearchOnlineResults";
 
 export type SavedFavoriteActions = {
@@ -29,9 +30,9 @@ type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
-const meta = (favorite: Favorite) => (favorite.kind === "provider"
-  ? [providerNames[favorite.item.provider], collectionLabel(favorite.item), mediaSubtitle(favorite.item)]
-  : ["Radio", favorite.item.groupTitle || favorite.item.countryCode]).filter(Boolean).join(" · ");
+const meta = (favorite: Favorite) => favorite.kind === "provider"
+  ? metaLine(providerNames[favorite.item.provider], collectionLabel(favorite.item), mediaSubtitle(favorite.item))
+  : metaLine("Radio", favorite.item.groupTitle || favorite.item.countryCode);
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.
 export function moveFavorite(favorites: Favorite[], favorite: Favorite, offset: number): { kind: Favorite["kind"]; order: string[] } | null {
