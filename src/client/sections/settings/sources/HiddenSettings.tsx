@@ -32,7 +32,7 @@ export function HiddenSettings({ credentials, connected }: Pick<SourceSettingsPr
   return <SettingsSection title="Hidden" description="Kept out of Search and source pages on every device. Hide an item from its menu, or a word in titles here.">
     <SettingsRow label="Hide a word" htmlFor="hidden-word">
       <form className="flex w-full flex-wrap items-center gap-2" onSubmit={submit}>
-        <Input id="hidden-word" className="min-w-0 flex-1" placeholder="Fiorello" autoComplete="off" maxLength={100} value={word} onChange={event => setWord(event.target.value)} disabled={!available || pending} />
+        <Input id="hidden-word" className="min-w-0 flex-1" placeholder="A word or name" autoComplete="off" maxLength={100} value={word} onChange={event => setWord(event.target.value)} disabled={!available || pending} />
         <Button type="submit" variant="outline" disabled={!available || pending || !word.trim()}>Add</Button>
       </form>
     </SettingsRow>
