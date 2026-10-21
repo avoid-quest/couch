@@ -5,7 +5,6 @@ import { queueItemLocation } from "@/detail-navigation";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { devicesQuery } from "@/api/devices";
-import { knownTvs } from "@/known-tvs";
 import { Link } from "@tanstack/react-router";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/AppShell";
@@ -21,8 +20,7 @@ import type { RemoteTextField } from "../../../shared/remote";
 export function RemotePage() {
   const { state, connected, tvPresentation, credentials, run, error, setError } = useSessionGate();
   const shell = useShell();
-  const known = knownTvs(state?.devices);
-  const tvs = state?.devices?.filter(device => known.has(device.id)) ?? [];
+  const tvs = state?.devices?.filter(device => device.tv) ?? [];
   // With every TV off, the one seen last.
   const seen = useQuery({ ...devicesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && tvs.length > 1 && !tvs.some(tv => tv.online) });
   const lastSeen = (id: string) => seen.data?.find(device => device.id === id)?.lastSeenAt ?? 0;

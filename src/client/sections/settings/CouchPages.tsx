@@ -7,7 +7,6 @@ import { ADMIN_ONLY } from "@/copy";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { knownTvs } from "@/known-tvs";
 import { SettingsLayout } from "./SettingsLayout";
 import { SettingsSources } from "./SettingsSources";
 import { useSettingsScope } from "./settings-scope";
@@ -33,7 +32,7 @@ export function DevicesPage() {
   return <SettingsLayout section="devices">
     {identity && credentials && <DevicesSettings credentials={credentials} connected={connected} urls={urls} identity={identity} remoteControlEnabled={remoteControlEnabled}
       administratorClaimed={state?.administratorClaimed !== false} hostName={scope.couch}
-      online={new Set(state?.devices?.filter(device => device.online).map(device => device.id))} tvs={knownTvs(state?.devices)} hostTv={!!(details?.tvAppliance ?? details?.tvPresentation)} />}
+      online={new Set(state?.devices?.filter(device => device.online).map(device => device.id))} tvs={new Set(state?.devices?.filter(device => device.tv).map(device => device.id))} hostTv={!!(details?.tvAppliance ?? details?.tvPresentation)} />}
     {credentials && <NetworkSettings credentials={credentials} connected={connected} urls={urls} remoteControlEnabled={remoteControlEnabled}
       managedLan={details?.lanError !== undefined} lanError={details?.lanError} device={scope.device} couch={scope.couch} host={scope.host} administrator={scope.administrator} />}
   </SettingsLayout>;

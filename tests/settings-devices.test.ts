@@ -25,14 +25,3 @@ test("Video quality offers 1080p once", () => {
   expect(videoQualityOptions.map(option => option.label)).toEqual(["Best", "1080p", "720p", "480p"]);
   expect(readVideoQuality({ getItem: () => "1080p" })).toBe("auto");
 });
-
-test("A TV seen once still reads as one after Core forgets it", async () => {
-  const store = new Map<string, string>();
-  globalThis.localStorage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value) } as Storage;
-  const { knownTvs } = await import("../src/client/known-tvs");
-  const tv = (id: string, isTv: boolean) => ({ id, name: "Living room TV", online: false, tv: isTv, volume: 0, muted: false });
-  expect([...knownTvs([tv("a", true), tv("b", false)])]).toEqual(["a"]);
-  // Core restarted: no device says it is a TV.
-  expect([...knownTvs([tv("a", false), tv("b", false)])]).toEqual(["a"]);
-  Reflect.deleteProperty(globalThis, "localStorage");
-});
