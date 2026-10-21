@@ -20,8 +20,10 @@ async function until(predicate: () => boolean, message: string) {
 }
 
 // A locked Android phone runs its page's timers late and its Wi-Fi dozes. Speakers must hold
-// seconds of sound, not one, and a speaker that joins late gets that sound too.
-test("synced sound goes out seconds ahead, also to a late speaker", { timeout: 20_000, skip: !available && "Set COUCH_TEST_FFMPEG to run the send-ahead test." }, async t => {
+// seconds of sound, not one, and a speaker that joins late gets that sound too. A speaker never
+// holds more than its buffer_capacity: 512 KiB is under 3 s of PCM.
+const cases = [{ codec: AudioCodec.OPUS, capacity: 2_000_000, lead: 5_000_000, interval: 60_000 }, { codec: AudioCodec.PCM, capacity: 512 * 1024, lead: 2_000_000, interval: 100_000 }];
+for (const { codec, capacity, lead, interval } of cases) test(`synced ${codec} goes out seconds ahead, also to a late speaker`, { timeout: 20_000, skip: !available && "Set COUCH_TEST_FFMPEG to run the send-ahead test." }, async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-ahead-"));
   const clients: SendspinClient[] = [];
   const keys = [Identity.generate(), Identity.generate()];
@@ -44,28 +46,35 @@ test("synced sound goes out seconds ahead, also to a late speaker", { timeout: 2
   const origin = `http://127.0.0.1:${address.port}`;
   async function receiver(index: number) {
     const key = keys[index]!, frames: { timestamp: number; bytes: Buffer }[] = [];
+    let most = 0;
     const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], {
       encryption: { identity: key },
-      playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 2_000_000, supported_commands: [] },
+      playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: capacity, supported_commands: [] },
     });
     clients.push(client);
-    client.addAudioChunkListener((timestamp, bytes) => frames.push({ timestamp, bytes: Buffer.from(bytes) }));
+    client.addAudioChunkListener((timestamp, bytes) => {
+      frames.push({ timestamp, bytes: Buffer.from(bytes) });
+      // Held: chunks not yet played, with their 13-byte headers. A PCM chunk is 100 ms; Opus here is 60 ms.
+      const now = serverNowUs();
+      most = Math.max(most, frames.reduce((sum, frame) => frame.timestamp + interval > now ? sum + frame.bytes.length + 13 : sum, 0));
+    });
     await client.connect(`${origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
-    return { id: key.peerId, frames };
+    return { id: key.peerId, frames, get most() { return most; } };
   }
   const first = await receiver(0);
   group.members([{ deviceId: first.id, level: 100 }]);
   group.send({ type: "load", playbackId: "ahead", source: `${origin}/tone.wav` });
-  await until(() => (first.frames.at(-1)?.timestamp ?? 0) - serverNowUs() > 5_000_000, "Speakers were not sent sound seconds ahead");
+  await until(() => (first.frames.at(-1)?.timestamp ?? 0) - serverNowUs() > lead, "Speakers were not sent sound seconds ahead");
   await until(() => serverNowUs() > first.frames[0]!.timestamp + 1_000_000, "The first speaker never started playing");
 
   const second = await receiver(1);
   const joinedAt = serverNowUs();
   group.members([{ deviceId: first.id, level: 100 }, { deviceId: second.id, level: 100 }]);
-  await until(() => (second.frames.at(-1)?.timestamp ?? 0) - serverNowUs() > 5_000_000, "A late speaker was not sent the sound others hold");
+  await until(() => (second.frames.at(-1)?.timestamp ?? 0) - serverNowUs() > lead, "A late speaker was not sent the sound others hold");
   assert.ok(second.frames[0]!.timestamp - joinedAt < 500_000, "a late speaker must start with the sound that plays next");
   const original = new Map(first.frames.map(frame => [frame.timestamp, frame.bytes]));
   for (const frame of second.frames) assert.deepEqual(original.get(frame.timestamp), frame.bytes, "both speakers must receive identical samples with identical play times");
-  for (let index = 1; index < second.frames.length; index++) assert.equal(second.frames[index]!.timestamp - second.frames[index - 1]!.timestamp, 60_000, "a late speaker's sound must have no gap");
+  for (let index = 1; index < second.frames.length; index++) assert.equal(second.frames[index]!.timestamp - second.frames[index - 1]!.timestamp, interval, "a late speaker's sound must have no gap");
+  for (const speaker of [first, second]) assert.ok(speaker.most <= capacity, `a speaker held ${speaker.most} bytes, over its ${capacity}`);
   t.diagnostic(`lead ${((first.frames.at(-1)!.timestamp - serverNowUs()) / 1e6).toFixed(1)} s; late speaker started ${((second.frames[0]!.timestamp - joinedAt) / 1e3).toFixed(0)} ms after joining`);
 });
