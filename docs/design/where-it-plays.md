@@ -22,10 +22,12 @@ desktop it opens a Popover above the button, so the bar and the transport stay
 usable, while the list fits (10 rows); a longer list opens a right-side Sheet
 from the same button. Phones and the TV open a bottom Sheet sized to its
 content. The kind is chosen as it opens and kept until it closes. A Sheet's
-Close sits at the end of its first line. From the player's band its Popover
-opens above the whole band, clear of the timeline, on the player's translucent
-surface, as the player's own menus do; its Sheet is unchanged
-([Player](player.md#settings)).
+Close sits at the end of its first line. From the band or the bar its Popover
+opens above the whole row, clear of the timeline, 32rem wide and ending at the
+gutter, one of the tools' panels: over a picture on the player's translucent
+surface, as the player's own menus are. Its rows scroll under the first line;
+a Sheet's first line sticks on the Sheet's ground. Its Sheet is unchanged
+([Player](player.md#the-picture)).
 
 ```
 [mute] ──────────────●──  72
@@ -45,8 +47,9 @@ Offline: Garden, Anna's tablet
 - **Counts:** one muted line, zeros left out: Picture n · Sound n · In sync n ·
   Behind n · Can't play n · Offline n, from what Core already sends.
 - **Rows:** the devices playing this, then the rest after a plain hairline.
-  Offline devices outside the Playback fold into one muted line
-  ("Offline: A, B, C").
+  Offline devices outside the Playback fold into one muted line that names
+  each once, counting devices that share a name ("Offline: A, Living room
+  TV ×4").
 - **Many devices:** past 8 rows the counts become a filter (shadcn
   `ToggleGroup`, one at a time, pressed again to clear) and a search field,
   "Find a device", appears. Both stay at the top while the list scrolls.
@@ -66,7 +69,10 @@ The same at every scale: the device's name, then its **Picture** and
 **Sound** toggles (`Monitor`/`MonitorOff`, `Volume2`/`VolumeOff`), its level
 fader and number while its sound is on, and "…". On phones the fader takes a
 second line under the name. A device is in the Playback while either channel
-is on.
+is on. While it is the only device sounding (and its fader would move), the
+Volume above is its level, so its row has no fader of its own and the panel
+doesn't say the same number twice (`soleSound`). The TV's rows keep theirs,
+since each row is its own slider.
 
 **Picture and Sound.** Each turns its own channel on or off. Picture is
 enabled only when the media has a picture and the device shares its screen;

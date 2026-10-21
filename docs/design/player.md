@@ -37,7 +37,22 @@ over it. Everything that opens lies over the picture:
 Over a picture, these surfaces are one translucent black,
 `--player-surface` (75%). YouTube's gear menu is 60%. Couch's is a little
 darker so that subtitles behind a panel don't fight its text. There is no
-blur and no shadow.
+blur, no shadow and no hairline.
+
+The four panels the tools open, Volume, Where it plays, Up next and the gear's
+menu, are one family wherever they open, from the band or the now-playing bar:
+
+- one surface: `--player-surface` over a picture, else the popover black
+  with a hairline, which a black page needs to hold its edge
+- one corner (`rounded-md`) and one inset: text sits .75rem in
+- two widths: 18rem for Volume and the gear's menu, 32rem for Where it plays
+  and Up next
+- one place: 8px above the band (or the bar), ending at the gutter, the
+  tools' right edge, whichever tool opened them (`toolPanel`)
+- each grows from the button that opened it
+
+Where it plays' first line doesn't stick over its rows with a second surface:
+its rows scroll under it. The mixer on phones and the TV stays a Sheet.
 
 ## Controls over the picture
 
@@ -75,8 +90,9 @@ The timeline row:
 - As on YouTube, a lighter segment ahead of the playhead shows what this
   device has already loaded (35% white, here and on the now-playing bar's
   line). It shows only while this device plays media that seeks.
-- As on YouTube, the line thickens under a pointer, and its thumb shows only
-  while a pointer or focus is on it.
+- As on YouTube, the line thickens under a pointer and while it is dragged,
+  here, beside artwork and on the now-playing bar alike. Over a picture its
+  thumb shows only while a pointer or focus is on it.
 - A hovering pointer reads the time under it, on the panel surface.
 
 The control row:
@@ -105,7 +121,8 @@ The control row:
   every tool stays: nothing moves into a menu and nothing is dropped. At 320
   wide the seven 44px targets fill the row exactly, touching with no overlap;
   at 390 70px separate the transport from the tools. Anything narrower scrolls
-  the row.
+  the row. Beside artwork a phone's band drops the empty last slot, since its
+  bar has no tools to line up with, so the tools end at the gutter.
 
 ### The band and the now-playing bar
 
@@ -135,7 +152,9 @@ They share one set of controls:
   slot), so it
   glides from its place in the bar to its place in the band while the band
   itself grows (`couch-player-band`). Open player glides into fullscreen's
-  slot.
+  slot. The bar's thumbnail travels into the player's artwork, or grows into
+  its picture (`couch-art`), and the bar's title and its line fade out at once
+  rather than stretch over the band's timeline ([Design](../design.md#motion)).
 
 The differences are deliberate:
 
@@ -188,9 +207,14 @@ off, as on YouTube.
 ## Up next
 
 `QueuePanel`. Over a picture, Up next is a panel over it, at the right above
-the band. It is 28rem wide, full width on phones, and as tall as its rows up to
-the top line. Netflix's episodes panel works this way. The rest of the
-picture stays visible and keeps playing.
+the band, one of the tools' panels: 32rem wide, full width on phones, and as
+tall as its rows up to the top line. Netflix's episodes panel works this way.
+The rest of the picture stays visible and keeps playing.
+
+With nothing to show (no queued or played row, no Autoplay pick and no
+search for one), Up next isn't offered: its button keeps its slot, disabled,
+with "Nothing queued" as its tooltip, in the band and the bar, and beside
+artwork its column goes, so the artwork has the stage.
 
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
@@ -217,7 +241,7 @@ picture stays visible and keeps playing.
   - The Autoplay switch shows in the heading row only while something can
     continue, as YouTube's autoplay switch does. Settings → Playback always
     holds it.
-- Empty: "Nothing queued."
+- With only played rows: "Nothing queued." above Played.
 - **Played** is collapsed at the end.
 
 ### Next, near the end
@@ -261,7 +285,8 @@ Play/Pause glyph. Nothing is said in the band.
 
 - **Loading and buffering** show a spinner only. The words are for screen
   readers. This follows YouTube and Apple's HIG.
-- **Reconnecting and Offline** add their line under the spinner.
+- **Reconnecting and Offline** add their line under the spinner. Offline says
+  "Offline", then only what happens next: "Reconnecting to {Couch}…".
 - **Can't play, Player unavailable and Finished** are a short centred line
   with its detail and one remedy:
   - Try again for Can't play
@@ -276,17 +301,24 @@ exists.
 
 Audio, and media playing elsewhere, show **Now playing** as Home's hero does:
 
-- contained artwork
+- contained artwork, as wide as the gutters allow on phones
 - the title
 - where it plays, when that isn't only this device: "on Kitchen +1", in the
   ink rather than the muted metadata. It leads the line under the title, so it
   reads on from the title. The now-playing bar says it the same way, in the
   same place (`PlaysOn`).
-- the relationship links, on the same line
-- a meta line: the station, else the subtitle, else the source, then "in a
-  separate window" for a channel that plays in mpv's window
+- the relationship links, on the same line. A station's link shows under its
+  show; without a show the title is the station, and already opens it.
+- a meta line: a show's genre and host ("Bass, Breaks, Goldie B"), as its
+  tile says them, else the subtitle, else the source, then "in a separate
+  window" for a channel that plays in mpv's window
 - the end time
 - a station's current programme or track
+
+**A station's show** is Core's programme for the playback, else the show its
+tile lists (`useStationShow`). The rule is the same on the tile, the
+now-playing bar, Home's hero and the player, loading or playing: the show's
+title and photo while there is a show, else the station's name and logo.
 
 The band sits on black with no rule, and nothing over a picture. There is
 nothing to fill, so the band's fullscreen slot is empty (a window already in

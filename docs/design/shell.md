@@ -140,8 +140,10 @@ nothing changes side as it grows into the band
   phones, 64px at 1440 wide. The title is the control across its whole line,
   with the artwork a pointer target for it. Under the title, one line that
   doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its
-  collection or station link, then a status only when it isn't plain playing
-  or paused. Those links sit outside the title's button and drop their row
+  collection or station link (a station's only under its show, since without
+  one the title is the station), then a status only when it isn't plain
+  playing or paused. A station shows its show's title and photo while it has
+  a show, else its name and logo, as its tile and the player do. Those links sit outside the title's button and drop their row
   height here, keeping a 24px hit area that doesn't push the line apart. The
   player says where it plays the same way (`PlaysOn`).
 - **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
@@ -149,9 +151,13 @@ nothing changes side as it grows into the band
   the band's own tools at the band's x, then **Open player** (ChevronUp, a
   mini-player's expand arrow) in the slot where the band has fullscreen. The
   gear opens the player's Playback menu above the bar, for whatever plays.
+  Their panels open as the band's do: above the bar, ending at the gutter
+  ([Player](player.md#the-picture)). Up next is disabled, "Nothing queued",
+  while it has nothing to show.
 - Every control is the band's ghost icon at `--player-target` (44px, 54px at
   1920 wide) with the same 1.25rem glyph.
-- Its timeline is a slim line along its top edge, none for live media.
+- Its timeline is a slim line along its top edge that thickens under a
+  pointer, none for live media.
 - Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause and
   Open player, at fullscreen's x: a minimized player needs no mixer, and the
   player has it.
@@ -160,11 +166,19 @@ Opening the player is a view transition: the bar grows into the band
 (`couch-player-band`), and each shared control glides to its place in the band
 under its own name rather than cross-fading, and Open player glides into
 fullscreen's slot. On wide screens they are already in place; on phones
-Play/Pause glides to the band's left.
+Play/Pause glides to the band's left. The thumbnail travels into the player's
+artwork or picture (`couch-art`); the title and its line fade out at once
+rather than stretch over the band's timeline, and fade back in once the band
+has shrunk into the bar.
 
 It hides on the player, on Remote, and while Home's playing hero is on screen
 (`html[data-hero-playing]`). With the phone tab bar it forms the footer, whose
-height is `--bottom-bar`.
+height is `--bottom-bar`. The footer is fixed, and the shell keeps that height
+free below the page. It isn't sticky: Chromium centres a focused control that
+sits inside the page's scroll padding, which the footer itself fills, so focus
+on a sticky footer's control (from Tab, or focus moved by script) scrolled
+the page beneath by hundreds of pixels. The page stays still as the bar opens
+a panel and as Stop takes the bar away.
 
 ## A picture you start opens the player
 

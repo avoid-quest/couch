@@ -107,12 +107,22 @@ control, 200 ms for what arrives.
 - Colour changes (hover, selection, the tab underline) ease both ways.
 - Focus inversion arrives at once and fades out, so a held arrow never passes
   through grey.
-- Menus, popovers and dialogs use shadcn's short fade and zoom in, and leave at
-  once so focus is back before the next key. Sheets fade and rise (200 ms).
+- Menus and popovers grow from the button that opened them (a zoom from 90%,
+  its origin at the trigger's centre: an arrow that draws nothing gives Radix
+  the point), and leave at once so focus is back before the next key. Up next
+  over the picture grows from its button the same way. Dialogs use shadcn's
+  short fade and zoom. Sheets fade and rise (200 ms).
 - Routes appear immediately with cached content; artwork fades only on a cold
   load; the player's bands fade together with the subtitles they lift.
-- The now-playing bar grows into the player band with a view transition
-  (`couch-player-band`, 320 ms).
+- One spatial story for what plays: the now-playing bar grows into the player
+  band with a view transition (`couch-player-band`, 320 ms), and the artwork
+  travels with it (`couch-art`, 280 ms, ease-out): the bar's thumbnail becomes
+  the player's artwork or its picture, and after Play on a Details page (the
+  `couch-play` transition type) that page's artwork does. Only one element
+  holds the name at a time. The bar's title and its line fade out at once
+  rather than stretch over the band's timeline (`couch-bar-title`). These
+  are view transitions, so they are composited snapshots, and reduced motion
+  skips them.
 - No scroll entrances, staggers, springs or scaling tiles. New motion is
   `motion-safe:`; reduced motion stills everything.
 
@@ -183,8 +193,10 @@ its results hold, as it finds them).
   and at most one action; a repeat updates the one showing. Routine actions,
   and playback activity from other devices, stay quiet. A new item or
   controlled device retires old Queue and Undo feedback; switching Couch
-  clears all. Toasts are flat rows with Alert's left rule, top right below the
-  header (or the player's top band), two at most. A toast never takes focus:
+  clears all. Toasts are flat rows with Alert's left rule that hug their words,
+  the action beside them, two at most: top right below the header (or the
+  player's top band), and on phones at the bottom, just above the footer or the
+  player's band, so they never cover the artwork at the top. A toast never takes focus:
   Up from the top of the page reaches the newest one's action, and any other
   key returns. The TV ignores pointer hover on them.
 - **System notification**: only the desktop app's "Couch X is ready" when an
