@@ -115,7 +115,7 @@ export function assessPresentation(options: {
 }) {
   const { recorder, witness, source, receiverPorts, expectedReceiverDelayFrames: delay, topologyVerified } = options;
   const start = options.startFrame ?? 0, end = options.endFrame ?? source.length;
-  if (!source.length || source.length > 120 * 48_000 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > source.length || (delay !== 0 && delay !== 128)) throw new Error("Invalid presentation assessment bounds");
+  if (!source.length || source.length > 120 * 48_000 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end + delay > presentationProtocol.maxFrames || (delay !== 0 && delay !== 128)) throw new Error("Invalid presentation assessment bounds");
   const reasons: string[] = [];
   if (!topologyVerified) reasons.push("Exact source/Pulse sink port topology was not verified");
   if (recorder.role !== "graph" || witness.role !== "witness" || recorder.sampleRate !== 48_000 || witness.sampleRate !== 48_000 || recorder.quantum !== witness.quantum || recorder.channels !== witness.channels || recorder.channels !== receiverPorts.length + 1) reasons.push("Capture roles/rate/quantum/channel bindings differ");
@@ -138,8 +138,11 @@ export function assessPresentation(options: {
     };
   };
   const witnessReference = reader(witness, 0), recorderReference = reader(recorder, 0);
-  const sourceVerification = compare(source.length, 0, witnessReference, frame => source[frame]);
-  const reference = compare(source.length, 0, recorderReference, witnessReference);
+  const referenceEnd = Math.max(source.length, end + delay);
+  // The finite fixture is silent after EOF. Verify that declaration too,
+  // including the output tail and the private recorder FIFO displacement.
+  const sourceVerification = compare(referenceEnd, 0, witnessReference, frame => source[frame] ?? 0);
+  const reference = compare(referenceEnd, 0, recorderReference, witnessReference);
   const valid = (result: Comparison) => !result.missingFrames && !result.mismatchedFrames && result.activeFrames > 0;
   if (!valid(sourceVerification)) reasons.push("Witness source does not exactly match the retained file at the declared source frame, or is inactive");
   if (!valid(reference)) reasons.push("Recorder reference does not exactly match witness at the same absolute frames, or is inactive");
@@ -155,6 +158,7 @@ export function assessPresentation(options: {
     status: reasons.length ? "inconclusive" as const : "passed" as const, reasons,
     boundary: "PCM at the named JACK output ports; the runner verifies Pulse module-jack-sink/browser ownership separately",
     timeBasis: "JACK sample frames at nominal 48000 Hz", sourceFirstFrame: rawSource, absoluteSourceFirstFrame: sourceFrame,
+    interval: { startFrame: start, endFrame: end, referenceEndFrame: referenceEnd },
     sourceVerification, reference, outputs, expectedReceiverDelayFrames: delay,
     outputPresentationOffsetMs: !reasons.length && delay === 0 ? 0 : null,
     additionalFrameMappingUncertaintyMs: !reasons.length ? 0 : null,

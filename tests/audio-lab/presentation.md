@@ -99,8 +99,12 @@ the source file at its declared source-first frame, reference identity, exact
 receiver overlap, active audio and all stream health. `source` is the retained
 Float32Array; receiverPorts are exact named Pulse JACK outputs. Optional interval
 bounds are **source-relative**, defaulting to the complete source interval.
-The reference is always checked over the entire source file. With expected delay
-128, receiver comparisons additionally require recorder coverage 128 frames later.
+The native caller declares `endFrame` as source duration plus its full allowed
+output delay (one second, or eight for sync). The reference is checked over the
+entire source file and through that tail, where the finite source must be zero.
+With expected delay 128, both reference checks and recorder coverage extend
+another 128 frames. Missing tail samples remain inconclusive even if every
+scheduled marker was detected. Results retain the exact assessed interval.
 
 The result's `status` is passed/inconclusive with reasons, source verification,
 per-channel mismatch/activity counts and a zero-delay negative-control comparison.

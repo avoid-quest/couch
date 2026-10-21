@@ -18,6 +18,7 @@ import { remainingTime, requestBeforeDeadline, waitUntil } from "./audio-lab/dea
 import { createContinuousAnalyzer, createContinuousSignal } from "./audio-lab/continuous";
 import { assessPresentation, createPresentationParser, type PresentationCapture } from "./audio-lab/presentation";
 import { verifyJackBindings, type JackTopology } from "./audio-lab/topology";
+import { assessRecording } from "./audio-lab/recording";
 
 const root = resolve(import.meta.dirname, "..");
 assert.equal(process.platform, "linux", "The common-graph audio lab currently requires Linux");
@@ -50,7 +51,7 @@ const receivers = mode === "calibration" ? 3 : Number(process.env.COUCH_LAB_RECE
 const seconds = Number(process.env.COUCH_LAB_SECONDS ?? 15), seed = Number(process.env.COUCH_LAB_SEED ?? 20261020);
 assert(Number.isInteger(receivers) && receivers >= 1 && receivers <= 100);
 assert(Number.isInteger(seconds) && seconds >= 5 && seconds <= 120, "Bounded lab run: 5–120 seconds");
-const rate = 48000, durationFrames = seconds * rate, tailFrames = (mode === "sync" ? 8 : 1) * rate;
+const rate = 48000, durationFrames = seconds * rate, maxDelayMs = mode === "sync" ? 8000 : 1000;
 const quantum = Number(process.env.COUCH_LAB_QUANTUM ?? 128);
 assert([128, 256, 512, 1024].includes(quantum));
 const fixture = process.env.COUCH_LAB_FIXTURE ?? "markers";
@@ -58,6 +59,7 @@ assert(fixture === "markers" || fixture === "continuous");
 assert(fixture !== "continuous" || mode === "ingress", "Continuous waveform profile initially supports the PCM ingress experiment only");
 const recorderDelayFrames = Number(process.env.COUCH_LAB_RECORDER_DELAY_FRAMES ?? 0) as 0 | 128;
 assert(recorderDelayFrames === 0 || recorderDelayFrames === 128 && quantum === 128, "The negative control inserts exactly one 128-frame quantum");
+const outputTailFrames = Math.ceil(maxDelayMs * rate / 1000), tailFrames = outputTailFrames + recorderDelayFrames;
 const runId = randomBytes(16).toString("hex");
 const captureMaxFrames = durationFrames + tailFrames + 5 * rate;
 assert(captureMaxFrames * ((receivers + 1) * 4 + 64 / quantum) < 256 * 1024 * 1024,
@@ -243,7 +245,7 @@ try {
     catch (error) { fatal ??= new Error(`Invalid recorder stream: ${error}`); }
   });
   await until(() => logs.get(graph)!.includes("READY"), "graph recorder");
-  const analyzer = createPcmAnalyzer({ sampleRate: rate, seed, receiverIds: ids, durationFrames, maxDelayMs: mode === "sync" ? 8000 : 1000,
+  const analyzer = createPcmAnalyzer({ sampleRate: rate, seed, receiverIds: ids, durationFrames, maxDelayMs,
     clockUncertaintyMs: 0, warmupFrames: mode === "calibration" ? 0 : 2 * rate,
     // At most 1,200 scheduled markers per bounded run; retain the actual sample
     // observations so later investigations need not reconstruct distributions.
@@ -263,6 +265,8 @@ try {
   });
   let audioBackend = mode === "calibration" ? fingerprintBackend() : [];
   const receiverPorts: string[] = [];
+  const applicationBuild: Record<string, string> = {};
+  const hashFile = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
   let browserState: unknown = null;
   let ingressBefore: any = null, ingressAfter: any = null, rendererAfterDrain: any = null;
   let rendererDrainError: string | null = null;
@@ -318,8 +322,14 @@ try {
     const certificatePin = network ? { hostname: new URL(receiverOrigin).hostname,
       fingerprint256: new X509Certificate(readFileSync(join(coreData, "tls/cert.pem"))).fingerprint256 } : null;
     if (network) assert(new X509Certificate(readFileSync(join(coreData, "tls/cert.pem"))).checkIP(certificatePin!.hostname), "Scratch Core certificate must cover the shaped server address");
+    applicationBuild["build/core.mjs"] = hashFile(join(root, "build/core.mjs"));
+    for (const file of readdirSync(join(root, "dist"), { recursive: true, encoding: "utf8" }).sort()) {
+      const path = join(root, "dist", file);
+      if (statSync(path).isFile()) applicationBuild[`dist/${file}`] = hashFile(path);
+    }
     const built = await Bun.build({ entrypoints: ["tests/live-audio-worker.ts"], target: "node", external: ["electron"], outdir: directory, naming: "live-audio-worker.mjs" });
     assert(built.success, String(built.logs));
+    applicationBuild["live-audio-worker.mjs"] = hashFile(join(directory, "live-audio-worker.mjs"));
     for (let index = -1; index < receivers; index++) {
       const key = Identity.generate(), name = index === -1 ? "Lab source" : `Lab receiver ${index}`;
       // Control HTTP lives in the server namespace too; stdin keeps admission
@@ -399,6 +409,8 @@ try {
       });
       await until(() => !!ingressOrigin, "authenticated PCM prototype");
       const browserCode = await browserBundle.outputs[0]!.text();
+      applicationBuild["ingress-cli.mjs"] = hashFile(join(directory, "ingress-cli.mjs"));
+      applicationBuild["ingress-browser.js"] = createHash("sha256").update(browserCode).digest("hex");
       for (const worker of workers) await worker.js(browserCode + "\n;true;");
       for (const worker of workers.slice(1)) await worker.js(`__ingressLab.receive({origin:${JSON.stringify(ingressOrigin)},requiredLeadTimeMs:10,minBufferMs:10,outputCompensation:${outputCompensation}}).then(value => {window.__ingressReceiver=value;return true;})`, true);
       await until(async deadline => (await Promise.all(workers.slice(1).map(worker => worker.js("__ingressReceiver.snapshot().timeSync.synced", false, deadline)))).every(Boolean), "both PCM receiver clocks synchronized");
@@ -481,13 +493,13 @@ try {
         verified: ownerMatches && sink?.properties?.["jack.client_name"] === port.split(":")[0] };
     });
   })();
-  const routeId = JSON.stringify({ mode, rate, quantum, packetMs, leadMs, outputCompensation, sourceBufferFrames, receiverBufferFrames,
-    network: network?.profile ?? null, recorderDelayFrames, audioBackend,
+  const routeId = JSON.stringify({ mode, rate, quantum, packetMs, leadMs, outputCompensation, jitterBufferTargetMs, sourceBufferFrames, receiverBufferFrames,
+    network: network?.profile ?? null, recorderDelayFrames, audioBackend, applicationBuild,
     electron: JSON.parse(readFileSync(join(root, "node_modules/electron/package.json"), "utf8")).version, sendspin: "5.0.0", pulseRate: rate });
   const continuous = fixture === "continuous" ? createContinuousAnalyzer({ sampleRate: rate, seed, receiverIds: ids, durationFrames,
     warmupFrames: 2 * rate, maxDelayMs: 1000, runId, routeId,
     onWindow: window => appendFileSync(join(directory, "continuous.ndjson"), JSON.stringify(window) + "\n") }) : null;
-  writeFileSync(join(directory, "presentation-manifest.json"), JSON.stringify({ runId, bindings, pulseRoutes, topologyBefore, audioBackend,
+  writeFileSync(join(directory, "presentation-manifest.json"), JSON.stringify({ runId, bindings, pulseRoutes, topologyBefore, audioBackend, applicationBuild,
     recorderDelayFrames, frameEncoding: "CLABPCM1", signal: fixture, sampleRate: rate, quantum }, null, 2));
   assert(pulseRoutes.every(route => route.verified), "Each receiver's Pulse stream must belong to its browser and named JACK sink");
   await Bun.sleep(100); // Finish pending setup graph notifications before arming.
@@ -560,11 +572,12 @@ try {
   const graphHealth = captureHealth(recorderCapture, graph.exitCode), witnessHealth = captureHealth(witnessCapture, witness.exitCode);
   const presentation = assessPresentation({ recorder: recorderCapture, witness: witnessCapture, source: sourcePcm,
     receiverPorts, expectedReceiverDelayFrames: recorderDelayFrames, startFrame: mode === "calibration" ? 0 : 2 * rate,
+    endFrame: durationFrames + outputTailFrames,
     topologyVerified: topologyCheckBefore.verified && topologyCheckAfter.verified && pulseRoutes.every(route => route.verified) });
   const presentationScope = mode === "calibration" ? "Known-delay fixture JACK ports; no browser or Pulse output boundary qualification"
     : "Actual receiver module-jack-sink PCM ports after browser/Pulse rendering; nominal JACK sample time only";
-  const completePresentation = presentation.status === "passed" && graph.exitCode === 0 && witness.exitCode === 0 && analysis.measurementValid && analysis.reference.missing === 0
-    && analysis.receivers.every(receiver => receiver.detected === analysis.expectedMarkers && !receiver.missing && !receiver.duplicated && !receiver.outOfOrder);
+  const recording = assessRecording({ analysis, presentation, recorderExitCode: graph.exitCode, witnessExitCode: witness.exitCode });
+  const completePresentation = recording.complete;
   writeFileSync(join(directory, "presentation.json"), JSON.stringify({ runId, presentation, presentationScope, completeMarkers: completePresentation,
     witnessHealth, graphHealth, topologyBefore, topologyAfter, pulseRoutes }, null, 2));
   const mediaPath = mode === "direct" ? ids.map((id, index) => {
@@ -591,13 +604,13 @@ try {
     peer.media.filter((media: any) => media.type === "inbound-rtp" && media.kind === "audio")
       .map((media: any) => peer.codecs.find((codec: any) => codec.id === media.codecId)?.mimeType).filter(Boolean))))] as string[];
   const result = { mode, seed, runId, fixture, recorderDelayFrames, receivers, seconds, sampleRate: rate, graphQuantumFrames: quantum, graphExit: graph.exitCode, calibration,
-    presentation, presentationScope, completePresentation, continuous: continuousAnalysis,
+    presentation, presentationScope, completePresentation, recording, continuous: continuousAnalysis,
     jitterBufferPreference: { requestedMs: jitterBufferTargetMs, receivers: jitterPreferences, scope: "Browser preference only; readback does not prove actual occupancy or a maximum delay" },
     backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true, implementations: audioBackend,
       requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },
     ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter,
       rendererAfterDrain, rendererDrainError, rendererCoverage, mediaPath, publisherHop: "Publisher and ingress share the server namespace; only receiver links are shaped" } : null,
-    exploratory: true, graph: logs.get(graph), graphHealth, witnessHealth, resources, ipc, network: network?.profile ?? null,
+    exploratory: true, applicationBuild, graph: logs.get(graph), graphHealth, witnessHealth, resources, ipc, network: network?.profile ?? null,
     browserSandboxDisabled: process.getuid?.() === 0,
     browserSandboxReason: process.getuid?.() === 0 ? "Electron native fixture running as root in the disposable user namespace" : null,
     rtc: { before: rtcBefore, after: rtcAfter, mediaPath },
@@ -625,6 +638,7 @@ try {
     analysis, recording: { runId, routeId }, continuousAnalysis, fixedWarmupMs: 2000, untested: [...result.untested, "browser-thread headroom; aggregate sampled CPU/RSS does not prove it", "source-to-capture calibration measured separately", "continuous codec/renderer dropout telemetry"],
   });
   console.log(`Audio lab ${mode}: ${join(directory, "result.json")}`);
+  assert(recording.complete, `Incomplete recording: ${recording.reasons.join("; ")}; inspect result.json`);
   assert.equal(graph.exitCode, 0, "Invalid graph measurement: xrun, stalled recorder or overflow; inspect graph.log");
   assert.equal(witness.exitCode, 0, "Invalid independent witness; inspect witness.log");
   if (mode === "direct") assert(mediaPath.every(receiver => "receivedAudioBytes" in receiver && receiver.receivedAudioBytes > 0), "Every WebRTC receiver must receive actual audio bytes during recording");

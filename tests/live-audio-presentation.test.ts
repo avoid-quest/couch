@@ -99,6 +99,20 @@ test("missing source or delayed-tail coverage cannot qualify by comparing a shor
   expect(result.outputs[0]!.missingFrames).toBe(128);
 });
 
+test("verifies the declared output tail after the source ends", () => {
+  const recorder = parse(stream()), witness = parse(stream({ role: 2 }));
+  const options = { recorder, witness, source, receiverPorts, expectedReceiverDelayFrames: 0 as const, topologyVerified: true, endFrame: 1024 };
+  expect(assessPresentation(options).status).toBe("passed");
+  // A wrong sample after the source file ends must still be compared.
+  recorder.blocks[8]!.samples[1] = 0.25; // Relative frame 768, first receiver.
+  const corrupted = assessPresentation(options);
+  expect(corrupted.status).toBe("inconclusive");
+  expect(corrupted.outputs[0]!.firstMismatchFrame).toBe(768);
+  const truncated = assessPresentation({ ...options, recorder: parse(stream({ last: 896 })) });
+  expect(truncated.status).toBe("inconclusive");
+  expect(truncated.outputs[0]!.missingFrames).toBe(128);
+});
+
 test("clock prediction residuals remain diagnostics, distinct from exact sample-frame continuity", () => {
   const capture = parse(stream({ clockResidual: 17 }));
   expect(capture.blocks[1]!.cyclePredictionResidualUs).toBe(17);
