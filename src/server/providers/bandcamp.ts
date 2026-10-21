@@ -39,6 +39,7 @@ function mediaItem(info: Metadata, source: Target): ProviderItem {
   const description = label(info.description, 1_000);
   return {
     id: providerItemId("bandcamp", source.url), provider: "bandcamp", kind: "media", title, url: source.url,
+    ...(subtitle ? {creator: {title: subtitle, url: `https://${source.host}/`}} : {}),
     ...(image ? { thumbnail: image } : {}), ...(subtitle ? { subtitle } : {}), ...(description ? { description } : {}),
     ...(typeof info.duration === "number" && Number.isFinite(info.duration) && info.duration >= 0 && info.duration <= Number.MAX_SAFE_INTEGER ? { duration: info.duration } : {}),
   };
@@ -79,7 +80,7 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request: 
       // at the size album pages give.
       const art = typeof entry.art_id === "number" && Number.isSafeInteger(entry.art_id) && entry.art_id > 0 ? `https://f4.bcbits.com/img/a${String(entry.art_id).padStart(10, "0")}_5.jpg` : entry.img;
       return [{ id: providerItemId("bandcamp", source.url), provider: "bandcamp", kind: source.kind === "album" ? "collection" : "media",
-        title, url: source.url, subtitle: label(entry.band_name), thumbnail: thumbnail({ thumbnail: art }) }];
+        title, url: source.url, subtitle: label(entry.band_name), ...(label(entry.band_name) ? {creator: {title: label(entry.band_name)!, url: `https://${source.host}/`}} : {}), thumbnail: thumbnail({ thumbnail: art }) }];
     });
     return { title: "Bandcamp", items };
   }

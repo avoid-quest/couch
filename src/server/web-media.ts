@@ -1,3 +1,4 @@
+import { mediaCreator } from "./media-creator";
 import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
@@ -14,7 +15,7 @@ import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 
-export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
+export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
 export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
@@ -63,6 +64,8 @@ function parseInfo(output: string): Metadata {
 
 function publicMetadata(info: Metadata): WebMediaMetadata {
   const metadata: WebMediaMetadata = {};
+  const creator = mediaCreator(info);
+  if (creator) metadata.creator = creator;
   if (typeof info.title === "string") {
     const title = info.title.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200);
     if (title) metadata.title = title;

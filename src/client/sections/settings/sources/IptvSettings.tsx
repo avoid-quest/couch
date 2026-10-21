@@ -1,4 +1,4 @@
-import { Spinner } from "@/components/ui/spinner";
+import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -28,7 +28,7 @@ export function IptvSettings({ credentials, connected, canManage }: SourceSettin
   return (
     <div className="flex min-w-0 flex-col gap-8" data-tv-local-only>
       {page.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void page.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
-      {credentials && connected && canManage && page.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
+      {credentials && connected && canManage && page.isPending && <SettingsRowsSkeleton />}
       {credentials && (!canManage || page.data) && <GuideSources connected={connected && canManage} host={false} inline request={request} sources={page.data?.sources ?? []} />}
     </div>
   );

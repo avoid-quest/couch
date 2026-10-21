@@ -1,3 +1,7 @@
+import { MediaContext } from "@/components/MediaContext";
+import { ContentLink } from "@/components/ContentLink";
+import { queueItemLocation } from "@/detail-navigation";
+import { playbackStatus } from "@/playback-status";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useId, useLayoutEffect, useRef, useState, type Ref } from "react";
@@ -17,7 +21,6 @@ import { useOptionalShell } from "@/sections/shell/shell-context";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
-import { offline } from "@/copy";
 import { deviceId } from "@/session/device-id";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
@@ -69,9 +72,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const previous = queue.slice(0, cursorIndex + 1).filter(entry => entry.id !== state?.currentEntryId);
   const upNext = queue.slice(cursorIndex + 1);
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
-  const currentLabel = !connected ? offline(state?.installationName) : state?.player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished"
-    : state?.player.status === "loading" ? "Loading…" : state?.player.status === "error" ? `Can't play ${current?.title ?? "this item"}` : state?.player.status === "unavailable" ? "Player unavailable"
-    : state?.player.status === "idle" ? "Ready to play" : state?.player.status === "paused" ? "Paused" : "Playing";
+  const currentLabel = playbackStatus(state, connected).label;
   const currentLength = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
   let startsIn = currentLength == null ? null : Math.max(0, currentLength - (playbackClock.position ?? 0)) / (state?.player.speed || 1);
   const doneIn = upNext.reduce<number | null>((seconds, entry) => {
@@ -160,8 +161,9 @@ function QueueRow({ entry, meta, time, onPlay, disabled, verbs }: { entry: Queue
   const options = useItemMenu(verbs ? actions : browserActions(queuePageUrl(entry)));
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className="line-clamp-2 text-base font-medium break-words">{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
-  return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 items-center gap-2 py-2", options.item.className)}>
+  return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 flex-wrap items-center gap-2 py-3", options.item.className)}>
     {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}${time ? ` at ${time}` : ""}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
     <ItemMenu menu={options} title={entry.title} />
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 pl-15 text-sm"><ContentLink href={queueItemLocation(entry)}>Details</ContentLink><MediaContext collection={entry.collection} creator={entry.creator} radio={entry.source.startsWith("radio:") ? {id: entry.source.slice(6), title: entry.title} : undefined} /></div>
   </li>;
 }

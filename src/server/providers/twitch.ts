@@ -133,7 +133,7 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
     if (data.user === null) throw new ProviderError("Twitch channel not found.", 404);
     const item = channel(data.user);
     if (!item || !object(data.user)) throw unavailable();
-    const broadcasts = items(data.user.videos, video);
+    const broadcasts = items(data.user.videos, video).map(broadcast => ({...broadcast, creator: {title: item.title, url: item.url}}));
     return withProviderItem("twitch", item.url, "channel", { title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] });
   }
   if (target.kind === "categories") {

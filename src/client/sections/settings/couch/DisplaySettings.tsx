@@ -1,4 +1,4 @@
-import { Spinner } from "@/components/ui/spinner";
+import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
@@ -30,7 +30,7 @@ export function DisplaySettings({ credentials, connected, title }: { credentials
 
   return (
     <SettingsSection title={title} description="Pick a screen. Confirm within 20 seconds or it switches back.">
-      {connected && display.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
+      {connected && display.isPending && <SettingsRowsSkeleton />}
       {state?.outputs.map(output => (
         <SettingsRow key={output.id} label={output.name} description={[
           state.current === output.id && "Current", state.saved === output.id && "Saved",

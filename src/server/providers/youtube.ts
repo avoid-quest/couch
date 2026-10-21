@@ -1,3 +1,4 @@
+import { mediaCreator } from "../media-creator";
 import { isYouTubePlaylistUrl } from "../../shared/providers";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { runYtDlp } from "../yt-dlp";
@@ -65,6 +66,7 @@ function item(info: unknown): ProviderItem | null {
   const description = label(info.description, 1_000);
   const subtitle = label(info.channel, 200) ?? label(info.uploader, 200);
   return {
+    creator: mediaCreator(info),
     id: providerItemId("youtube", source.url), provider: "youtube", kind: source.kind, title, url: source.url,
     ...(image ? { thumbnail: image } : {}), ...(description ? { description } : {}), ...(subtitle ? { subtitle } : {}),
     ...(typeof info.duration === "number" && Number.isFinite(info.duration) && info.duration >= 0 ? { duration: info.duration } : {}),

@@ -1,3 +1,7 @@
+import { playbackStatus } from "@/playback-status";
+import { MediaContext } from "@/components/MediaContext";
+import { ContentLink } from "@/components/ContentLink";
+import { queueItemLocation } from "@/detail-navigation";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useSessionGate } from "@/session/session-context";
@@ -36,7 +40,7 @@ export function RemotePage() {
   // Laid out like the remote it stands in for: the TV, the pad, what plays, then text.
   return <div data-remote-page className="mx-auto grid w-full max-w-sm gap-8">
     {/* The current tab names the page, as Home's and Discover's do. */}
-    <PageHeader title="Remote" className="sr-only" />
+    <PageHeader title="Remote" description="Control playback and browse on your TV." className="mb-0" />
     <div className="grid gap-1">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>
         <SelectTrigger aria-label="TV to control" className="min-h-11 w-full"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
@@ -49,9 +53,10 @@ export function RemotePage() {
       <RemotePad connected={ready} onNavigate={key => send({ type: "navigate", deviceId: target.id, key })} />
       <section className="grid gap-4 border-t pt-6 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current?.title ?? (ready ? "Nothing playing" : `Playback on ${target.name}`)}</h2>{current && <p className="text-sm text-muted-foreground">{state?.player.status === "error" ? state.player.error : state?.player.status === "loading" ? "Loading…" : state?.player.status === "paused" ? "Paused" : state?.player.status === "ended" ? "Finished" : "Playing"}</p>}</div>
+          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current ? <ContentLink href={queueItemLocation(current)} className="no-underline hover:underline">{current.title}</ContentLink> : ready ? "Nothing playing" : `Playback on ${target.name}`}</h2>{current && <p className="text-sm text-muted-foreground">{playbackStatus(state, ready).label}</p>}</div>
           <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
         </div>
+        {current && <MediaContext creator={current.creator} collection={current.collection} radio={current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />}
         {state && credentials && <>
           <PlaybackTransport state={state} connected={ready} run={send} />
           {current && <PlaybackTimeline state={state} connected={ready} run={send} />}

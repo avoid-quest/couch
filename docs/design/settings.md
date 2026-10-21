@@ -2,7 +2,7 @@
 
 ## Two owners
 
-Settings has two owners, each titled with its real name. **This device** (its name) holds what changes only on the device in hand and what it consents to: General, Couch connection, Viewing, Home, Discover, Sharing and, in an app connected to another Couch, Updates. **The Couch** (its name, "Shared") holds what changes it for everyone: General, Access (Devices, Network), Watching (Playback for the active watching profile, Sources), the Couch's hardware (Sound, Bluetooth, Display, where it has them) and Updates when available. Each page's eyebrow repeats its owner; shared pages say "· This device" on the host, except hardware pages, which say "· Shared hardware".
+Settings has two owners, each titled with its real name. **This device** (its name) holds what changes only on the device in hand and what it consents to: General, Couch connection, Viewing, Home, Discover, Sharing and, in an app connected to another Couch, Updates. **The Couch** (its name, "Shared") holds what changes it for everyone: General, Access (Devices, Network), Watching (Playback for the active watching profile, Sources), the Couch's hardware (Sound, Bluetooth, Display, where it has them) and Updates when available. Each page explains its owner in a sentence below the title, rather than a cryptic eyebrow.
 
 Settings opens on This device → General; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last. On the TV, entering Devices focuses Pair a device when it is available.
 
@@ -17,7 +17,10 @@ Settings is the last tab in the TV and wide desktop header, and in the bottom ba
 
 The Couch's Sources page lists its source pages, then **AirPlay**: an admin's **Receive AirPlay** switch, its **Code** with **New code** while it is on, and one status line. Receiving says who is sending sound and that playback starts automatically on this Couch; Shared sources still lets other devices join it. New code confirms in an AlertDialog, since it restarts AirPlay and every device must enter the new code. Others see the row with "Only an admin can change this." It uses the page's existing rows, Switch, Button, Alert and AlertDialog; nothing custom.
 
-Not yet: restructuring Settings beyond fitting the shell. #761 settled its two owners and their pages.
+Settings rows respond to their own container width. Labels and controls stack
+until the content column has enough room for both; the navigation rail never
+squeezes controls into a narrow second column. Rows share generous vertical
+spacing, wrapping labels and consistent descriptions.
 
 ## Admin-only rows
 
@@ -29,7 +32,7 @@ setup, retaining any error. A pending stop never shows Starting… or Cancel.
 
 ## Section nav
 
-Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones. In Settings' rail each owner heads its pages, with its device name or role beneath, wrapping where the rail is too narrow. On the TV, Settings starts on the rail's current entry, as Saved does, and OK on a rail entry opens its page and moves focus to the page's first control.
+Saved and Settings share one section nav: a rail with a left rule and quiet selected background on wide screens and a Select on phones. In Settings' rail each owner heads its pages, with its device name or role beneath, wrapping where the rail is too narrow. On the TV, Settings starts on the rail's current entry, as Saved does, and OK on a rail entry opens its page and moves focus to the page's first control.
 
 On the TV, Settings OK enters
 the selected page's first enabled control; Back from its content restores the
@@ -56,3 +59,5 @@ it plays. Off: only the device that pressed Play.”
 It uses the existing divided SettingsRow with its linked Label and shadcn
 Switch, as Autoplay does. One tree serves TV, desktop and phone; the label gets
 the existing touch target treatment. No custom component is needed.
+
+On phones, a subpage’s Back control sits above its title, leaving the full content width for long source names. The shared PageHeader applies this to saved-list details too.

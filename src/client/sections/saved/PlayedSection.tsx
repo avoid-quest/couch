@@ -1,3 +1,4 @@
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DurationBar } from "@/components/DurationBar";
@@ -18,12 +19,12 @@ export function PlayedSection({ origin, token, connected, onFind }: Credentials 
   return <section aria-label="Played">
     <SavedStatus connected={connected} loading={loading} />
     {connected && history.error && <SavedError message={history.error.message || "Couldn't load Played."} onRetry={() => void history.refetch()} />}
-    {connected && !loading && !history.error && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Nothing played yet. What plays on Couch shows here.</SavedEmpty>}
+    {connected && !loading && !history.error && !items.length && <SavedEmpty title="Nothing played yet" action={onFind && <Button onClick={onFind}>Discover</Button>}>Your watching and listening history will appear here.</SavedEmpty>}
     {!!items.length && <MediaList aria-label="Played">
       {items.map(item => {
         const href = itemLocation("history", item.mediaId);
-        return <MediaRow key={item.mediaId} data-history-details={item.mediaId} art={<MediaArtwork key={item.thumbnail || item.mediaId} thumbnail={item.thumbnail} title={item.title} />} artFit="contain"
-          title={item.title} meta={[item.subtitle, item.sourceLabel].filter(Boolean).join(" · ")} primary={{ label: "Details", href, onClick: () => details.open(href) }}>
+        return <MediaRow context={<MediaContext collection={item.collection} creator={item.creator} />} key={item.mediaId} data-history-details={item.mediaId} art={<MediaArtwork key={item.thumbnail || item.mediaId} thumbnail={item.thumbnail} title={item.title} />} artFit="contain"
+          title={item.title} meta={[mediaSubtitle(item), item.sourceLabel].filter(Boolean).join(" · ")} primary={{ label: "Details", href, onClick: () => details.open(href) }}>
           <DurationBar duration={item.duration} position={item.position} />
         </MediaRow>;
       })}

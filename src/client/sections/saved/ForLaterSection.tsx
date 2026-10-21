@@ -1,3 +1,4 @@
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
@@ -76,17 +77,17 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     <SavedStatus connected={connected} loading={loading} />
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Save something to play later. In Discover or Search, open an item's … menu or its details and choose Save. Stations and collections appear in Channels &amp; stations.</SavedEmpty>}
+    {connected && !loading && !loadError && !items.length && <SavedEmpty title="Nothing saved for later" action={onFind && <Button onClick={onFind}>Discover</Button>}>Choose Save on a film, video or track to find it here.</SavedEmpty>}
     {!!items.length && <MediaList ref={list} aria-label="For later">
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));
         const blocked = !connected || pending || reorder.isPending;
         const move = (offset: number) => { const next = order(index, offset); if (next && !blocked) reorder.mutate(next); };
-        return <MediaRow key={item.id} data-saved-details={item.id}
+        return <MediaRow context={<MediaContext collection={item.collection} creator={item.creator} />} key={item.id} data-saved-details={item.id}
           art={<MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />}
           artFit="contain"
           title={item.title}
-          meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")}
+          meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")}
           description={item.description}
           primary={{ label: "Details", onClick: inspect }}
           // Details holds every verb in its menu, so the row needs no "…".

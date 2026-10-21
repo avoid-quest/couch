@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { deviceId, localDeviceName, useLocalDeviceName } from "@/session/device-id";
 import { suggestedDeviceName } from "@/session/connection";
@@ -25,7 +25,7 @@ export async function requestPairing(origin: string, code: string, name: string,
   return { origin, token: result.token, installationId: result.installationId };
 }
 
-const slot = "h-8 touch:h-11 min-w-0 w-auto flex-1 text-sm";
+const slot = "h-14 min-w-0 w-auto flex-1 text-2xl font-medium tabular-nums";
 
 // The shell remounts per connection, so a pairing that outlives its form never applies.
 export function PairForm() {
@@ -43,18 +43,18 @@ export function PairForm() {
   };
   return (
     <form onSubmit={pair} className="pair-form grid max-w-md gap-6">
-      <FieldGroup>
-        {!savedName && <Field><FieldLabel htmlFor="device-name">Name this device</FieldLabel><Input id="device-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} /></Field>}
+      <FieldGroup className="gap-6">
+        {!savedName && <Field><FieldLabel htmlFor="device-name">Name this device</FieldLabel><Input id="device-name" className="h-11" aria-describedby="device-name-hint" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} /><FieldDescription id="device-name-hint">A name you'll recognize when choosing where to play.</FieldDescription></Field>}
         <Field><FieldLabel htmlFor="pairing-code">Pairing code</FieldLabel>
-          <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!!savedName || !pairingCode} value={pairingCode} onChange={setPairingCode} pushPasswordManagerStrategy="none" containerClassName="w-full justify-start gap-2">
+          <InputOTP id="pairing-code" aria-label="Pairing code" aria-invalid={!!pairing.error} aria-describedby={pairing.error ? "pairing-error" : undefined} disabled={pairing.isPending} maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!!savedName || !pairingCode} value={pairingCode} onChange={code => { setPairingCode(code); if (pairing.error) pairing.reset(); }} pushPasswordManagerStrategy="none" containerClassName="w-full justify-start gap-2">
             <InputOTPGroup className="min-w-0 flex-1">{[0, 1, 2].map(index => <InputOTPSlot key={index} index={index} className={slot} />)}</InputOTPGroup>
             <InputOTPSeparator />
             <InputOTPGroup className="min-w-0 flex-1">{[3, 4, 5].map(index => <InputOTPSlot key={index} index={index} className={slot} />)}</InputOTPGroup>
           </InputOTP>
         </Field>
       </FieldGroup>
-      {pairing.error && <Alert variant="destructive"><AlertDescription>{errorText(pairing.error)}</AlertDescription></Alert>}
-      <Button className="justify-self-start" disabled={pairing.isPending || pairingCode.length !== 6}>{pairing.isPending ? "Pairing…" : "Pair"}</Button>
+      {pairing.error && <Alert id="pairing-error" variant="destructive"><AlertDescription>{errorText(pairing.error)}</AlertDescription></Alert>}
+      <Button size="lg" className="w-full" disabled={pairing.isPending || pairingCode.length !== 6}>{pairing.isPending ? "Pairing…" : "Pair"}</Button>
     </form>
   );
 }

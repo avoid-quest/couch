@@ -16,6 +16,7 @@ export type ProviderItem = {
   thumbnail?: string;
   description?: string;
   subtitle?: string;
+  creator?: CollectionLink;
   /** Canonical containing list, with its zero-based occurrence when known. */
   collection?: MediaCollection;
   duration?: number;
@@ -98,3 +99,5 @@ export function publicProviderMediaUrl(value: string): string | undefined {
     if (provider === "twitch" && ["twitch.tv", "www.twitch.tv"].includes(url.hostname) && /^\/videos\/\d+$/.test(path)) return `https://www.twitch.tv${path}`;
   } catch { /* Optional public metadata. */ }
 }
+
+export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };

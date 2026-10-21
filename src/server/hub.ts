@@ -1318,8 +1318,8 @@ export async function createHub(options: HubOptions) {
       if (!prepared || !authorized()) return;
       for (const entry of "entry" in prepared ? [prepared.entry] : prepared.entries) {
         const mediaId = playbackMediaId(entry);
-        if (mediaId && (entry.subtitle || entry.description || entry.thumbnail)) {
-          const details = { ...(entry.subtitle ? { subtitle: entry.subtitle } : {}), ...(entry.description ? { description: entry.description } : {}), ...(entry.thumbnail ? { thumbnail: entry.thumbnail } : {}), ...(entry.collection ? { collection: entry.collection } : {}) };
+        if (mediaId && (entry.creator || entry.collection || entry.subtitle || entry.description || entry.thumbnail)) {
+          const details = { ...(entry.creator ? { creator: entry.creator } : {}), ...(entry.subtitle ? { subtitle: entry.subtitle } : {}), ...(entry.description ? { description: entry.description } : {}), ...(entry.thumbnail ? { thumbnail: entry.thumbnail } : {}), ...(entry.collection ? { collection: entry.collection } : {}) };
           try { if (store.enrichHistorySource(mediaId, entry.source, details)) invalidate("progress"); } catch { /* Optional catalogue refresh must not prevent playback. */ }
         }
       }

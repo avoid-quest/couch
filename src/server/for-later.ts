@@ -11,7 +11,7 @@ type Options = {
   databasePath: string;
   onChange: () => void;
   lookup: (reference: Extract<ForLaterReference, { kind: "queue" }>) => Promise<QueueEntry>;
-  webMetadata?: (url: string, collection?: Extract<ForLaterReference, { kind: "web" }>["collection"]) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
+  webMetadata?: (url: string, collection?: Extract<ForLaterReference, { kind: "web" }>["collection"]) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection" | "creator">;
   reservePlay: (playedBy?: PlaybackActor) => number;
   prepare: (entry: QueueEntry) => Promise<void>;
   enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;

@@ -1,19 +1,15 @@
+import { playbackStatus } from "@/playback-status";
+import { MediaContext } from "@/components/MediaContext";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, type RefObject } from "react";
 import { ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList } from "@/components/ui/breadcrumb";
-import { collectionTarget } from "@/collection-target";
-import { collectionLocation } from "@/detail-navigation";
-import { Link } from "@tanstack/react-router";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
-import { deviceName } from "@/copy";
-import { sourceLabel } from "@/source-label";
 import { formatDuration } from "@/time-format";
 import { isRadio } from "../../../shared/radio";
 
@@ -51,19 +47,12 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const length = playbackClock.duration ?? current.duration ?? 0;
   const remaining = Math.max(0, length - playbackClock.position) / (player.speed || 1);
   // The player's words, less the title shown right above them. The status line says where it reconnects.
-  const status = !connected ? "Offline"
-    : player.status === "unavailable" ? player.error ?? `Nothing is playing on ${deviceName(state.installationName)}`
-    : player.status === "error" ? "Can't play"
-    : player.status === "loading" ? state.radioRetry?.retryAt != null ? "Reconnecting…" : player.buffering ? "Buffering…" : `Connecting to ${sourceLabel(current.source)}…`
-    : player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished"
-    : player.status === "paused" ? "Paused" : "";
+  const status = playbackStatus(state, connected).label;
   // Below lg the timeline has no room, so its time reads here.
   const time = live ? "Live" : length ? `−${formatDuration(remaining)}` : "";
   const at = playsOn(state);
   const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
-  const context = programme ? current.title : current.subtitle;
-  const collection = collectionTarget(current.collection);
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
   // Fixed slots, in the band's order: Play/Pause, Stop, Next, timeline · volume, Where it plays, Up next.
   // Phones keep Play/Pause and Where it plays; the player keeps the rest (tv: undoes touch: on a narrow TV).
@@ -75,10 +64,10 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
       <div className="min-w-0">
         <Button variant="ghost" className="h-auto min-h-11 min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
         {/* The context gives way first, so the status and the device stay readable. */}
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex min-w-0 shrink-[100] overflow-hidden empty:hidden">{radio && !programme ? <Link to="/discover/radio" className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : collection ? <Breadcrumb aria-label="Browse related content" className="min-w-0"><BreadcrumbList className="flex-nowrap text-xs"><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={collectionLocation(collection)} className="block truncate leading-6 hover:underline">{collection.title}</Link></BreadcrumbLink></BreadcrumbItem></BreadcrumbList></Breadcrumb> : context && <span className="truncate">{context}</span>}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          <MediaContext creator={current.creator} collection={current.collection} radio={radio && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} className="min-w-0 shrink text-xs" />
           <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
-          {!status && time && <span className="shrink-0 tabular-nums lg:hidden">{time}</span>}
+          {status === "Playing" && time && <span className="shrink-0 tabular-nums lg:hidden">{time}</span>}
           {at?.elsewhere && <PlaysOn at={at} />}
         </div>
       </div>

@@ -11,7 +11,7 @@ export function Onboarding({ title, description, back, children, className, ...p
       <div className="grid gap-2">
         <CouchMark className="mb-4 size-10" />
         <PageHeader id={id} title={title} back={back} className="mb-0 [&_h1]:whitespace-normal [&_h1]:break-words" />
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        {description && <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{description}</p>}
       </div>
       {children}
     </section>

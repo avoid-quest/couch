@@ -1,3 +1,4 @@
+import { MediaContext } from "@/components/MediaContext";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext } from "@dnd-kit/core";
@@ -96,12 +97,12 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
 
   return <section ref={section} aria-label="Lists">
     {!openId ? <>
-      <PageHeader title="Lists" className="max-md:[&>h1]:sr-only" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
+      <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
       {connected && cannotSave && <p className="mb-4 text-sm text-muted-foreground">{cannotSave}</p>}
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
       {connected && mutation.error && <SavedError message={mutation.error.message || "Couldn't change this list."} />}
-      {connected && !loading && !loadError && !playlists.length && <SavedEmpty action={<Button variant="outline" onClick={onFind}>Discover</Button>}>No lists yet. Save Up next to play it again later.</SavedEmpty>}
+      {connected && !loading && !loadError && !playlists.length && <SavedEmpty title="No lists yet" action={<Button onClick={onFind}>Discover</Button>}>Queue a few items, then choose Save as list to play them together again.</SavedEmpty>}
       {!!playlists.length && <MediaList>{playlists.map(item => <MediaRow key={item.id} data-playlist-id={item.id}
         title={item.name}
         meta={summary(item)}
@@ -145,7 +146,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
         void write(listPath(playlist.id), { revision: playlist.revision, operation: "move", entryId: String(active.id), beforeEntryId });
       }}>
         <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
-          <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
+          <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow context={<MediaContext collection={entry.collection} creator={entry.creator} />} ref={drag.setNodeRef} style={drag.style}
             title={entry.title}
             meta={entry.live ? "Live" : entry.duration != null ? formatDuration(entry.duration) : undefined}
             actions={<>

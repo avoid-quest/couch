@@ -3,7 +3,9 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 // Links render as anchors; Settings navigation needs no router to show what it offers.
+const router = await import("@tanstack/react-router");
 mock.module("@tanstack/react-router", () => ({
+  ...router,
   Link: ({ to, ...props }: ComponentProps<"a"> & { to: string }) => <a href={to} {...props} />,
   useNavigate: () => () => Promise.resolve(),
 }));

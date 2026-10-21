@@ -9,7 +9,7 @@ import type { WebMediaSource } from "./web-media";
 import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
-type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
+type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"> & { title?: string };
 export type MediaSource = { publicNetwork?: boolean; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
@@ -182,8 +182,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const { title, ...details } = metadata;
     if (details.collection && entry.collection) details.collection = entry.collection;
     const mediaId = playbackMediaId(entry);
-    if (mediaId && (catalogue || details.subtitle || details.description)) persistProgress(() => {
-      if (store.enrichHistorySource(mediaId, source, { ...(details.subtitle ? { subtitle: details.subtitle } : {}), ...(details.description ? { description: details.description } : {}), ...(details.thumbnail ? { thumbnail: details.thumbnail } : {}), ...(catalogue && details.collection ? { collection: details.collection } : {}) })) invalidate("progress");
+    if (mediaId && (catalogue || details.subtitle || details.description || details.creator)) persistProgress(() => {
+      if (store.enrichHistorySource(mediaId, source, { ...(details.creator ? { creator: details.creator } : {}), ...(details.subtitle ? { subtitle: details.subtitle } : {}), ...(details.description ? { description: details.description } : {}), ...(details.thumbnail ? { thumbnail: details.thumbnail } : {}), ...(catalogue && details.collection ? { collection: details.collection } : {}) })) invalidate("progress");
     });
     const next = { ...entry, ...details, ...(!catalogue && entry.thumbnail && (entry.subtitle || entry.description) ? { thumbnail: entry.thumbnail } : {}), ...(entry.automaticTitle && title ? { title } : {}) };
     if (JSON.stringify(next) === JSON.stringify(entry)) return;

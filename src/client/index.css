@@ -30,6 +30,8 @@ body { min-width: 0; }
 @custom-variant touch { @media (max-width: 959px) { @slot; } @media (pointer: coarse) { @slot; } }
 /* The TV presentation (session-context.tsx sets body.tv-presentation). */
 @custom-variant tv (&:is(.tv-presentation *));
+/* Phone Remote commands are synthetic: the browser does not mark them :focus-visible. */
+@custom-variant focus-visible (&:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus));
 /* Tailwind's hover, minus the TV: a stray pointer there must never compete with focus. :where keeps hover's specificity. */
 @custom-variant hover { @media (hover: hover) { &:where(:not(.tv-presentation *)):hover { @slot; } } }
 
@@ -86,7 +88,7 @@ body { min-width: 0; }
     --input: rgb(255 255 255 / 20%);
     --ring: #fff;
     --radius: .25rem;
-    --gutter: 3rem;
+    --gutter: clamp(1rem, 4vw, 3rem);
     color-scheme: dark;
 }
 
@@ -96,34 +98,33 @@ body { min-width: 0; }
   html { @apply font-sans; font-size: clamp(16px, 1.25vw, 24px); font-variant-numeric: tabular-nums; }
   body { @apply bg-background text-foreground; }
   button, [role="button"] { touch-action: manipulation; }
-  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  :is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { outline: 2px solid var(--ring); outline-offset: 2px; }
   /* What hover, a press or leaving focus changes on a control eases over 150 ms, as the shadcn primitives' own
      transition-* utilities do (those win, being utilities). Muted text and a tile's caption ease with it. */
   :is(a, button, [role="tab"], [role="option"], [role^="menuitem"], [data-tile-caption], .text-muted-foreground) { @apply motion-safe:transition-colors; }
 }
-@media (max-width: 700px) { :root { --gutter: 1rem; } }
 
-/* Clock focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
+/* Couch focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
    Unlayered on purpose so it wins over component rings and hover backgrounds. */
-:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
-[data-slot="input"]:focus-visible { color-scheme: light; }
-[data-slot="input"]:focus-visible::placeholder { color: color-mix(in srgb, var(--background) 65%, transparent); }
-[data-slot="button"][data-variant="default"]:focus-visible, [data-sonner-toast] [data-button]:focus-visible,
-:is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
+[data-slot="input"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { color-scheme: light; }
+[data-slot="input"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)::placeholder { color: color-mix(in srgb, var(--background) 65%, transparent); }
+[data-slot="button"][data-variant="default"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus), [data-sonner-toast] [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus),
+:is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { outline: 2px solid var(--foreground); outline-offset: 2px; }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
 [role="slider"][data-adjusting] { scale: 1.75; }
-:is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
+:is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
 /* Artwork stays contained; focus outlines it and inverts only the tile caption. */
-[data-media-tile]:focus-visible { background: none; color: inherit; }
+[data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { background: none; color: inherit; }
 /* The outline grows from nothing rather than fading from transparent, which forced colours would draw on every tile. */
 [data-tile-art] { outline: 0 solid var(--foreground); outline-offset: .125rem; @apply motion-safe:transition-[outline-width]; }
-[data-media-tile]:focus-visible [data-tile-art] { outline-width: .125rem; }
-[data-media-tile]:focus-visible [data-tile-caption] { background: var(--foreground); color: var(--background); }
+[data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-art] { outline-width: .125rem; }
+[data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-caption] { background: var(--foreground); color: var(--background); }
 /* Inversion (focus, a menu's highlight) arrives at once and fades only as it leaves: easing it in would pass through a
    grey nobody can read, which a held arrow would show at every step, and a remote would feel slow. */
-:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role^="menuitem"]):is(:focus-visible, [data-highlighted]),
-:is(button, a, [role="option"]):focus-visible .text-muted-foreground,
-[data-media-tile]:focus-visible :is([data-tile-art], [data-tile-caption], [data-tile-caption] *), [data-media-tile]:focus-visible ~ * { transition-duration: 0s; }
+:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role^="menuitem"]):is(:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus), [data-highlighted]),
+:is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground,
+[data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) :is([data-tile-art], [data-tile-caption], [data-tile-caption] *), [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) ~ * { transition-duration: 0s; }
 html { view-transition-name: none; }
 
 /* The now-playing bar grows into the player band and back: the one longer move, as it crosses the screen. */
@@ -148,7 +149,7 @@ html { view-transition-name: none; }
 .app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
-.player-band { position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
+.player-band { padding-bottom: max(.75rem, env(safe-area-inset-bottom)); position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
 /* Video controls are an overlay on the picture: one ramp, eased so it has no edge that reads as a crop, rises over
    --fade to 55% where their text starts (white text keeps 5:1 on a white picture) and to 72% at the screen's edge, so
    the picture shows through the whole band. The top band mirrors the band. Their muted ink is the white ink made
@@ -187,8 +188,7 @@ html { view-transition-name: none; }
    in the middle, Volume and Where it plays at the left, Up next, Playback and fullscreen at the right, so the band
    reads as one line with its centre of gravity on Play. */
 .player-control-row { display: grid; grid-template-columns: 1fr auto 1fr; grid-auto-flow: dense; align-items: center; gap: .5rem 1rem; }
-/* Below the eight touch targets' minimum width (or with larger text), keep one lane reachable by swipe or focus.
-   The timeline stays outside the scroller; the end insets preserve the controls' existing gutter alignment. */
+/* Keep one control row. Insets preserve focus outlines; narrow screens can scroll the row without moving the timeline. */
 .player-controls-scroll { overflow-x: auto; margin: -.125rem -.625rem; padding: .125rem .625rem; scrollbar-width: thin; }
 .player-control-row > .player-transport { grid-column: 2; justify-self: center; }
 .player-control-row > [data-player-tools="sound"] { grid-column: 1; justify-self: start; }
@@ -211,6 +211,10 @@ html { view-transition-name: none; }
   .player-control-row { column-gap: .5rem; }
 }
 @media (max-width: 599px) {
+  .player-controls-scroll { margin-inline: calc(.25rem - var(--gutter)); padding-inline: 0; }
+  .player-control-row { min-width: 22rem; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 0; }
+  .player-control-row > div { gap: 0; }
+  .player-control-row > [data-player-tools] { margin-inline: 0; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 @media (max-height: 500px) {

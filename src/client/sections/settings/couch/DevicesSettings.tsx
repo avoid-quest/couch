@@ -1,3 +1,4 @@
+import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,7 +10,6 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { TRY_AGAIN } from "@/copy";
 import type { Device, DeviceIdentity } from "../../../../shared/devices";
 import { RenameCouch } from "./RenameCouch";
@@ -63,7 +63,7 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
       {devices.isSuccess && !host && manager && !devices.data.some(device => device.role === "host") && <SettingsRow label={hostName} description="Runs this Couch">
         <RenameCouch credentials={credentials} connected={connected} name={hostName} onRenamed={refreshDevices} />
       </SettingsRow>}
-      {devices.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
+      {devices.isPending ? <SettingsRowsSkeleton />
         : devices.isError ? <Alert variant="destructive"><AlertDescription>Couldn't load devices.</AlertDescription><AlertAction><Button variant="outline" size="sm" onClick={() => void devices.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>
         : !devices.data.length ? <Empty className="py-0"><EmptyHeader><EmptyDescription>No devices yet. Use Pair a device to connect one.</EmptyDescription></EmptyHeader></Empty>
         : devices.data.map(device => (
@@ -81,7 +81,7 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
     {host && remoteControlEnabled && !administratorClaimed && paired && (
       <SettingsSection title="Make a device the admin" description="Enter this one-time code on a paired device." data-administrator-setup>
         <div className="flex min-w-0 flex-col gap-1">
-          {setupCode.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
+          {setupCode.isPending ? <SettingsRowsSkeleton />
             : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || setupCode.isFetching} onClick={() => void setupCode.refetch()}>Try again</Button></AlertAction></Alert>
             : <><p className="font-mono text-3xl tracking-wider" data-administrator-code>{setupCode.data.code}</p><a className="break-all text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" href={pairUrl}>{pairUrl}</a></>}
         </div>

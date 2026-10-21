@@ -1,3 +1,6 @@
+import { DetailSkeleton } from "@/components/LoadingMedia";
+import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
 import { useLocation } from "@tanstack/react-router";
@@ -12,7 +15,6 @@ import { tileShape } from "@/components/MediaTile";
 import { PageHeader } from "@/components/PageHeader";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { savedSourceLabel } from "@/saved-source";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
@@ -67,15 +69,25 @@ export function ItemPage() {
 function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) {
   const { credentials } = useShell();
   const { connected } = useSessionGate();
+  const client = useQueryClient();
+  const cached = kind === "saved" ? client.getQueryState<{ items: ForLaterItem[] }>(forLaterQuery(credentials).queryKey)
+    : kind === "history" ? client.getQueryState<{ items: HistoryItem[] }>(["progress", "history", "all"])
+    : undefined;
+  const initial = kind === "saved" ? (cached?.data as {items: ForLaterItem[]} | undefined)?.items.find(item => item.id === id)
+    : kind === "history" ? (cached?.data as {items: HistoryItem[]} | undefined)?.items.find(item => item.mediaId === id)
+    : client.getQueryData(radioFavoritesListQuery(credentials).queryKey)?.favorites.find(item => item.id === id)
+      ?? client.getQueryData(radioSearchQuery(credentials, "avoid radio", "").queryKey)?.stations.find(item => item.id === id);
   const query = useQuery({
+    initialData: initial ? { kind, item: initial } as ItemDetails : undefined,
+    initialDataUpdatedAt: cached?.dataUpdatedAt ?? 0,
     queryKey: [kind === "saved" ? "for-later" : kind === "history" ? "progress" : kind, "details", id],
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
   if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
     <ContentBreadcrumb title="Details" />
-    <PageHeader title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />
+    {connected && !query.error ? <DetailSkeleton shape={kind === "radio" ? "square" : "video"} /> : <PageHeader title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />}
     {query.error ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
-      : <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">{connected ? <><Spinner className="size-4" />Loading details…</> : "Connect to Couch to load this item."}</p>}
+      : !connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this item.</p>}
   </>;
   const detail = query.data;
   switch (detail.kind) {
@@ -106,7 +118,7 @@ function QueueDetails({ id }: { id: string }) {
   const save = useForLaterToggle(item?.source.startsWith("web:") ? item.source.slice(4) : undefined, () => ({ kind: "queue", id }), action);
   if (!item) return <><ContentBreadcrumb title="Details" /><PageHeader title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
   const radio = isRadio(item);
-  return <><DetailLayout title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[item.subtitle, sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
+  return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} more={browserActions(queuePageUrl(item))} />
     {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
   </>;
@@ -141,7 +153,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     if (result.undoToken && result.expiresAt && result.expiresAt > Date.now()) session.offerUndo(`Removed ${item.title} from Continue.`, async () => { await undoProgressAction(shell.credentials, result.undoToken!); refresh(); }, result.expiresAt - Date.now());
   };
   const start = (on?: string) => shell.playHistory(item, { fromStart: item.position === 0, on });
-  return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(item.sourceLabel, !!item.collection)} duration={item.duration} position={item.position} meta={[item.subtitle, item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
+  return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(item.sourceLabel, !!item.collection)} duration={item.duration} position={item.position} meta={[mediaSubtitle(item), item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: item.position > 0 ? "Resume" : "Play", disabled: blocked || !playable, run: () => action.mutate(() => play(() => start())) }}
     fromStart={item.position ? { label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => play(() => shell.playHistory(item, { fromStart: true }))) } : undefined}
     queue={{ label: "Queue", disabled: blocked, run: () => action.mutate(() => session.queue(item.title, () => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id }))) }}
@@ -183,7 +195,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
   // A saved item has no Save: Remove, with Undo, takes it out of For later.
-  return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(savedSourceLabel(item), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
+  return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(savedSourceLabel(item), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !connected || !shell.available || action.isPending, run: () => action.mutate(() => play(() => load("play"))) }}
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => load("play", on), deviceId)) }}

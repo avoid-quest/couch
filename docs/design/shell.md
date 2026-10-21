@@ -33,16 +33,11 @@ their redirects.
 
 ## Header and section nav
 
-One header on every screen, on a three-column grid: at the left, the Couch
-switch in muted ink (the TV names itself there instead,
-as plain muted text, since it has no switch); in the middle, centred text
-tabs (Home, Discover, Saved, then Remote while the Couch has a TV, then
-Settings); at the right, Stop sharing while this device shares its screen or
-sound (the player's top band keeps it:
-[Player](player.md#stop-sharing-stays-on-screen)), then the search field,
-then the clock, set light at `text-2xl` ([Scale](../design.md#scale)). The
-current tab names the page, so section roots carry no
-visible title of their own. The current tab is underlined; a focused tab
+One header groups the Couch identity and section navigation at the left, with
+search and sharing controls at the right. A quiet bottom divider separates it
+from content. Desktop and phone omit the clock; TV retains a small clock.
+Discover, Saved, Settings and Remote carry clear page titles. Home leads with
+its media hero. The current tab is underlined; a focused tab
 inverts, as every control does.
 
 While sharing, the search keeps at least 11rem and the right column can take
@@ -74,10 +69,9 @@ under it. On the TV, Up from a page's first row still reaches it
 
 **Search** is `HeaderSearch`: shadcn `InputGroup` at the tabs' `text-base`,
 with a muted lucide Search submit button and "Search" placeholder, up to 16rem wide.
-It has only a bottom hairline at rest, so the field belongs with the header's
-open type; focus inverts the field to white with black ink and caret, including
-on the TV. This is a Clock adjustment to InputGroup's default bordered box.
-A fine pointer sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
+It uses a quiet filled background so search is easy to find. Focus inverts
+the field to white with black ink and caret, including on TV.
+A fine pointer on a wide layout sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
 (off the TV). A Spinner replaces the Search button's icon while the submitted
 query's sources answer. The button keeps its accessible name and remains usable.
 The Search and clear buttons have 44px touch targets. The field never changes
@@ -110,8 +104,8 @@ any other header control, and a phone's Remote types into it
 
 Input exceptions:
 
-- **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) just
-  before the clock; the TV, phones and Remote have none.
+- **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) at
+  the end of the header’s right group; the TV, phones and Remote have none.
 - **Touch** (`touch:`, phones and windows below 960px): the tabs move to a
   bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
   Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,
@@ -159,8 +153,7 @@ own. Toasts sit at the top right ([Design](../design.md)). Transport details: [P
 ## Browsing stays grounded
 
 The header and scroll edges share the solid black page background. Native video alone clears
-its full-screen ancestors so the picture can show through. A page fades in under the header as it
-arrives, which the player doesn't: its band grows from the now-playing bar ([Motion](../design.md#motion)).
+its full-screen ancestors so the picture can show through. Pages appear immediately under the header, preserving cached content. The player's band grows from the now-playing bar ([Motion](../design.md#motion)).
 
 ## A picture you start opens the player
 

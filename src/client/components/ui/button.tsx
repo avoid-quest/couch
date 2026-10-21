@@ -24,7 +24,7 @@ const buttonVariants = cva(
           "h-8 gap-1.5 px-2.5 text-sm touch:min-h-11 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-[1.15em]",
         xs: "h-5 gap-1 rounded-sm px-2 text-[0.625rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-2.5",
         sm: "h-7 gap-1 px-2 touch:min-h-11 text-sm has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        lg: "h-10 gap-1.5 px-3 touch:min-h-11 text-sm has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-[1.15em]",
+        lg: "h-11 gap-2 px-5 text-sm has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3 [&_svg:not([class*='size-'])]:size-[1.15em]",
         icon: "size-8 touch:size-11 [&_svg:not([class*='size-'])]:size-[1.15em]",
         "icon-xs": "size-5 rounded-sm [&_svg:not([class*='size-'])]:size-2.5",
         "icon-sm": "size-7 touch:size-11 [&_svg:not([class*='size-'])]:size-3",

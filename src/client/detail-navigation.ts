@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { defaultStringifySearch, useLocation, useRouter } from "@tanstack/react-router";
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { QueueEntry } from "../shared/protocol";
@@ -37,7 +37,9 @@ function opener(selector?: string): FocusTarget | undefined {
   const label = active.getAttribute("aria-label");
   // Radix's generated ids (a menu's "…") change when the page mounts again, so those controls go by their label.
   const id = active.id.startsWith("radix-") ? "" : active.id;
-  selector = id ? `#${CSS.escape(id)}` : label ? `${active.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]` : undefined;
+  const href = active.getAttribute("href");
+  selector = id ? `#${CSS.escape(id)}` : label ? `${active.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]`
+    : href ? `a[href="${CSS.escape(href)}"]` : undefined;
   if (!selector) return;
   return { selector, index: [...document.querySelectorAll(selector)].indexOf(active) };
 }
@@ -80,7 +82,20 @@ export function useDetailNavigation() {
 // Results can arrive after the route mounts, so restore when the target appears.
 export function DetailFocusRestoration() {
   const location = useLocation();
+  const previousPage = useRef<string | null>(null);
   useEffect(() => {
+    const filterable = ["/search", "/collection", "/discover/radio", "/discover/live-tv"].includes(location.pathname);
+    const params = new URLSearchParams(location.searchStr);
+    if (filterable) {
+      for (const name of ["filter", "page", "radioSource", "group", ...location.pathname === "/search" ? ["source", "until", "kind", "length"] : []]) params.delete(name);
+    }
+    params.sort();
+    const pageKey = location.pathname + "?" + params;
+    const samePage = previousPage.current === pageKey;
+    previousPage.current = pageKey;
+    // Filtering updates the URL without entering a new page. Keep the active field/picker;
+    // pagination already moves focus to its count, and Back from Details still restores the opener.
+    if (filterable && samePage) return;
     const tv = isTvPresentation();
     const target = location.state.detailFocus ?? (["/item", "/collection"].includes(location.pathname) ? { selector: "[data-page] h1", index: 0 } : undefined);
     if (location.pathname === "/now" && !target) return;

@@ -1,3 +1,4 @@
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -28,7 +29,7 @@ const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.it
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
 const meta = (favorite: Favorite) => (favorite.kind === "provider"
-  ? [providerNames[favorite.item.provider], collectionLabel(favorite.item), favorite.item.subtitle]
+  ? [providerNames[favorite.item.provider], collectionLabel(favorite.item), mediaSubtitle(favorite.item)]
   : ["Radio", favorite.item.groupTitle || favorite.item.countryCode]).filter(Boolean).join(" · ");
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.
@@ -101,7 +102,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const blocked = !connected || pending || reorder.isPending;
     const move = (offset: number) => { const plan = moveFavorite(favorites, favorite, offset); if (plan && !blocked) reorder.mutate(plan); };
     // A station's page holds no Remove or ordering, so the row keeps its "…".
-    return <MediaRow key={key(favorite)}
+    return <MediaRow context={favorite.kind === "provider" ? <MediaContext creator={favorite.item.creator} collection={favorite.item.collection} /> : <MediaContext radio={{id: favorite.item.id, title: "Station details"}} />} key={key(favorite)}
       artFit="contain"
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
@@ -127,7 +128,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     <SavedStatus connected={connected} loading={loading} />
     {loadError && <SavedError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !favorites.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Nothing saved yet. Save a channel, playlist or station in Discover or Search.</SavedEmpty>}
+    {connected && !loading && !loadError && !favorites.length && <SavedEmpty title="No saved channels or stations" action={onFind && <Button onClick={onFind}>Discover</Button>}>Choose Save on a channel, collection or radio station to find it here.</SavedEmpty>}
     {!!favorites.length && <MediaList ref={list} aria-label="Channels & stations">{favorites.map(row)}</MediaList>}
   </section>;
 }

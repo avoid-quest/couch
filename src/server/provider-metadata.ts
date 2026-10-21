@@ -8,7 +8,7 @@ import { movies123Title } from "./providers/movies123";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 
-export type ProviderMetadata = Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
+export type ProviderMetadata = Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection" | "creator">;
 
 // Only catalogue fields enter history. Extractor transport/auth metadata remains private.
 export function providerMetadata(item?: ProviderItem, selectedCollection = false): ProviderMetadata {
@@ -22,6 +22,7 @@ export function providerMetadata(item?: ProviderItem, selectedCollection = false
     try { const url = new URL(item.thumbnail); if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) result.thumbnail = url.href; } catch { /* Optional artwork. */ }
   }
   if (item.collection && (item.provider !== "youtube" || selectedCollection) && providerForUrl(item.collection.url) === item.provider) result.collection = { ...item.collection };
+  if (item.creator && providerForUrl(item.creator.url) === item.provider) result.creator = { ...item.creator };
   return result;
 }
 

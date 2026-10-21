@@ -15,6 +15,7 @@ export async function iptvRequest(credentials: ApiCredentials, path: string, ini
 
 export const iptvSourcesQuery = (credentials: ApiCredentials) =>
   queryOptions({
+    staleTime: 30_000,
     queryKey: ["iptv", "sources"],
     queryFn: ({ signal }) => apiJson<{ sources: GuideSource[] }>(credentials, "/api/iptv/sources", { signal }),
   });
@@ -22,6 +23,7 @@ export const iptvSourcesQuery = (credentials: ApiCredentials) =>
 /** Up to 50 channels from offset, each with what's on now and next. */
 export const iptvGuideQuery = (credentials: ApiCredentials, search: { offset: number; group: string; q: string }) =>
   queryOptions({
+    staleTime: 30_000,
     queryKey: ["iptv", "guide", search],
     queryFn: ({ signal }) => apiJson<GuidePage>(credentials, `/api/iptv/guide?${new URLSearchParams({ offset: String(search.offset), group: search.group, q: search.q })}`, { signal }),
   });

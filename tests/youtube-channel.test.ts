@@ -21,3 +21,17 @@ test("A channel whose listing fails keeps its sections, named after its address"
   expect(page.item?.title).toBe("UC4eYXhJI4-7wSWc8UNRwD4A");
   expect(page.items).toHaveLength(4);
 });
+
+test("a video's creator survives separately from the selected playlist", async () => {
+  const playlist = "https://www.youtube.com/playlist?list=PLabcdefghijk";
+  const page = await createYouTubeBrowser(async () => JSON.stringify({title: "Tiny Desk", entries: [
+    {id: "abcdefghijk", title: "A concert", channel: "NPR Music", channel_url: url},
+  ]}))({url: playlist});
+  const item = page.items[0]!;
+  expect(item.creator).toEqual({title: "NPR Music", url});
+  expect(item.collection?.url).toBe(playlist);
+  const { providerMetadata } = await import("../src/server/provider-metadata");
+  expect(providerMetadata(item).creator).toEqual(item.creator);
+  expect(providerMetadata(item).collection).toBeUndefined();
+  expect(providerMetadata(item, true).collection?.url).toBe(playlist);
+});

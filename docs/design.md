@@ -1,8 +1,8 @@
 # Couch design system
 
 Couch is one app on three kinds of screen: the TV (driven by a remote), a
-desktop window (mouse and keyboard) and phones (touch). The look is **Clock**:
-black ground, white ink, hairlines. The picture brings the colour.
+desktop window (mouse and keyboard) and phones (touch). The visual identity is media-led: black ground, white ink, contained artwork,
+open typography and quiet dividers. The picture brings the colour.
 
 Everything on screen comes from one model: **Devices**, the **Playback** each
 one serves, and **Where it plays**, a Playback's Devices with their picture and
@@ -37,8 +37,11 @@ first-run screens.
   header; a full-bleed player with a compact
   bottom control band; and the Device you control and where it plays one step
   away.
-- **One target per row and tile.** Pressing a media row or tile does its main
-  verb; its one menu holds the rest ([Menus](#menus)).
+- **One primary action, direct relationships.** Pressing the main area of a
+  media row or tile does its main verb. Related channels, artists, albums,
+  series, stations and collections are separate visible internal links. They
+  stay outside the primary target so links are never nested in buttons. Menus
+  hold secondary actions, not the only route to related content.
 - **Real content only.** A browse page shows what its source returns, never
   suggestions Couch picked: Discover samples each source's own home. A source
   without one (YouTube, Bandcamp, SoundCloud) scopes the header's search field
@@ -46,10 +49,10 @@ first-run screens.
 - **Sources are peers.** Every provider uses the same search, Details, Saved
   and Home surfaces. Source-specific behaviour follows the site's content
   and pagination, with no separate genre-specific layout or copy.
-- **Time is the organising idea.** Every length is read as the clock time it
-  ends: "4:52, ends 10:29". The now-playing bar reads "−3:24 ends 20:59"; the
-  player says "ends 20:59" once, in its top band or Now playing, and its band
-  keeps "−3:24". Live reads "Live", with no total.
+- **Content leads, time supports.** Artwork, title and relationships establish
+  hierarchy. Runtime, progress and end times are secondary metadata. A watched
+  item uses ordinary proportional progress; unstarted items show their runtime.
+  There is no time ruler. Live reads "Live", with no invented total.
 - **Colour only when it means something.** Destructive red is the only colour.
   Live is the word "Live", not a red badge.
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
@@ -98,27 +101,27 @@ reads alike on black and over a picture's scrim.
 `html` font size is `clamp(16px, 1.25vw, 24px)`. Use Tailwind's rem sizes so
 the same typography and controls scale across screens.
 
-**Names are heavy, times are light.** Titles and names are set semibold and
-tight; the clock and every departures line are set light in tabular figures,
-so the board's two voices come from one family without colour.
+**Titles lead, metadata recedes.** Inter Tight carries the interface. Titles
+are semibold with tight tracking; runtime and progress use small muted tabular
+figures. Time never competes with a title.
 
 | Role | Classes |
 | --- | --- |
-| Board (Home's hero and Now playing titles) | `text-4xl font-semibold tracking-tight md:text-5xl` |
-| Display (Details and Search's closest match titles) | `text-3xl font-semibold tracking-tight` (`text-2xl` for the closest match) |
+| Hero / Now playing | `text-3xl` / `text-4xl`, `font-semibold tracking-tight md:text-5xl` |
+| Details / closest match | `text-4xl` / `text-2xl`, `font-semibold tracking-tight` |
 | Title over a video (the player's top band) | `text-2xl font-semibold tracking-tight` |
-| Departures line (the hero's and Now playing's end time) | `text-3xl font-light tabular-nums md:text-4xl` (`text-xl` in the player's top band and Search's closest match) |
-| Clock (the header's) | `text-2xl font-light tabular-nums` (`text-xl` in the player's top band) |
-| Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
-| Section title | `text-base font-medium` |
+| Runtime, end time, progress | `text-sm text-muted-foreground tabular-nums` |
+| Clock (TV header only) | `text-sm text-muted-foreground tabular-nums` |
+| Page title | `text-3xl font-semibold tracking-tight` (use `PageHeader`) |
+| Shelf title | `text-xl font-semibold tracking-tight` |
 | Row title, settings label | `text-base` (a media row's or Up next's title adds `font-medium` and wraps to two lines) |
 | Departures in a row (Up next's start times) | `text-base font-light tabular-nums`, the row title's size |
 | Body, controls, metadata | `text-sm` (metadata adds `text-muted-foreground`) |
 | Caption | `text-xs text-muted-foreground` |
 
 Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12, plus `gap-0.5`, `py-1.5` and `-ml-2.5` for compact rows and aligned controls. The page gutter is
-`px-(--gutter)` (3rem, 1rem on phones). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
-The shell's content wrapper sets the one top offset below the header (`pt-6`); pages add none.
+`px-(--gutter)` (`clamp(1rem, 4vw, 3rem)`). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
+The shell's content wrapper sets the one top offset below the header (`pt-8`); pages add none.
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
@@ -129,7 +132,7 @@ actions reuse the default Button variant, including its type, target size and fo
 it plays, Up next, Playback, fullscreen, the player's Back and every Sheet's
 Close. The band, the now-playing bar and every Sheet's heading row give each
 a 44px target (`size-11`, in rem); beside Home's hero verbs they keep
-`icon-lg`'s 40px, the `lg` verbs' height (44px on touch). An icon control at the end of a row pulls back
+`icon-lg`'s 40px, the `lg` verbs use 44px. An icon control at the end of a row pulls back
 (`-ml-2.5`, `-mr-2.5`) so its glyph lines up with the text above it. A row's
 own "…" stays at its row's size.
 
@@ -145,8 +148,8 @@ answers a control, **200 ms** for what arrives.
 | Hover, press and selection: tints, ink, borders, the current tab's underline | colour, both ways | 150 ms |
 | Focus and a menu's highlight (inversion), a tile's outline | at once in, eased out as they leave | 150 ms |
 | A menu, popover, select or dialog | shadcn's fade, 95% zoom and short slide in; leaves at once | 150 ms |
-| A page (a new route) | fades in | 200 ms |
-| Artwork | fades in once it has loaded | 200 ms |
+| A page (a new route) | appears immediately, preserving cached content | — |
+| Artwork | fades on a cold load; decoded cache appears immediately | 200 ms |
 | The Sheet | fades and rises in; leaves at once | 200 ms |
 | A toast | sonner's slide and fade, both ways | 200 ms |
 | The player's bands, and the subtitles they lift | fade; the subtitles move with them | 200 ms |
@@ -154,9 +157,7 @@ answers a control, **200 ms** for what arrives.
 
 - **General rules first.** Every link, button, tab, option and menu item eases
   its colours from one base rule in `index.css`, as the shadcn primitives'
-  own `transition-*` utilities do, and those win. A page fades in from the
-  shell (`starting:` on its root, so Saved's tabs or a new query don't
-  replay it), and `MediaArtwork` fades its image in. Add a `transition-*`
+  own `transition-*` utilities do, and those win. Routes appear immediately; `MediaArtwork` fades only images that still need loading. Add a `transition-*`
   only where a component moves something else, as a saved list's rows fade
   in their actions on hover.
 - **Inversion arrives at once.** Easing it in would pass through a grey that
@@ -168,7 +169,7 @@ answers a control, **200 ms** for what arrives.
   small elements. The bar's grow is the one longer move, as it crosses the
   screen.
 - **Never in the way.** No entrances on scroll, staggers, springs, scaling
-  tiles or loops; a page takes keys while it fades in.
+  tiles or loops; a page takes keys immediately.
 - **Reduced motion stills it all.** New motion is written `motion-safe:`; a
   primitive's own `transition-*` carries `motion-reduce:transition-none`;
   sonner stills toasts itself.
@@ -178,17 +179,21 @@ answers a control, **200 ms** for what arrives.
 Prefer shadcn components from `src/client/components/ui`, and check the
 [catalog](https://ui.shadcn.com/docs/components) before building anything
 custom; record the gap that justifies a custom component in its surface doc.
-Their files are owned by Couch; the Mira defaults were changed only where Clock needs it:
+Their files are owned by Couch; the Mira defaults were changed only where Couch needs it:
 `text-sm` controls at `h-8`, flat left-rule `Alert`, left-aligned borderless
 `Empty`, no shadows, a 1.25rem glyph in `icon-lg` (the default 1.15em read
 small on the player's icon-only band, and per-use `[&_svg]` overrides lose to
-the variant's own selector) and a ghost button's open state in the hover tint
+the variant's own selector) Select items reserve space for their checkmark, and a ghost button's open state in the hover tint
 ([Hover](#tokens)).
 
 Shared building blocks in `src/client/components`:
 
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
-- `PageHeader`: title with optional back and actions.
+- `PageHeader`: wrapping title, optional description, back and actions.
+- `ContentLink` / `MediaContext`: internal content relationships with Back/focus
+  restoration, visible underlines and independent touch targets.
+- `playbackStatus`: one status vocabulary for Home, player, compact bar, Remote
+  and Up next; recovery follows the fixed transport slots.
 - `ChoiceGroup`: inline choices with a check on the selected option.
 - `DetailHeader`: an item or collection page's artwork, title, meta, synopsis
   and row of verbs ([Browse](design/browse.md#details)).
@@ -210,7 +215,7 @@ Messages:
 - **Toast** (`sonner`) for errors, removal/Stop Undo and unexpected outcomes. Successful explicit Queue confirms `Queued {title}` with Up next on the requesting controller, idle or playing; other controllers and queue snapshots stay quiet. Playback activity from other devices (Play, Pause, Resume, Stop, Queue and Remove) stays quiet too: the player and Up next show the result. An ended shared source still names who stopped sharing on its receivers; its publisher stays quiet. Pairing still names the new device when its dialog closes. Other routine user-triggered actions stay quiet. Short copy, at most one action, named by its verb: Undo, Up next, Tap to hear.
   - **Kinds.** Every toast is one of `src/client/toasts.ts`'s kinds; only that module and the Toaster import sonner. Each kind fixes its duration and its action, and shows one toast at a time: a repeat updates the one showing, in place; once that one is leaving (timed out, dismissed or acted on) or hidden behind two newer toasts, the repeat takes a new id and the old one goes, since sonner removes whatever a leaving toast's id shows when its exit ends, and an update keeps a hidden toast hidden: `failed` ("Couldn't X.", 6 s), `undoable` (Undo, 6 s or what the Undo has left; each offer retires the last), `queued` (Up next, 4 s), `playingOn` (4 s), `notice` (6 s) and `waitingForTap` (Tap to hear, until sound plays). `failed` shows Core's own sentence when Core sent one; a network error or timeout gets the call site's Couch sentence, and its detail goes to the console.
   - **Lifetime.** A new item or controlled device clears the previous Queue and Undo feedback, including when another controller starts playback. Playing on keeps its four seconds while that device remains the destination, even if the confirming snapshot arrives after the command result; changing destinations retires it. Errors and audio recovery stay available, including after recovering the shell with Try again. Switching Couch clears every old notification and action. A TV ignores pointer hover over toasts so a parked pointer cannot pause their timers; desktop hover and touch interaction retain Sonner's behavior.
-  - **Appearance and placement.** A flat black row with Alert's left rule, no rounded frame or shadow, and rem-sized spacing and type. Copy wraps instead of truncating the recovery instruction; the action keeps its size. Sonner's supported `unstyled` option and Button variants provide this: Sonner's default bordered surface doesn't fit Clock, and Couch's old single-line styling hid recovery instructions and long device names. Top right at the page gutter on every screen, below the measured header (`--top-bar`), and in the player below its top band (`--player-top`). Two show at most, both open, since a remote can't hover to expand a stack.
+  - **Appearance and placement.** A flat black row with Alert's left rule, no rounded frame or shadow, and rem-sized spacing and type. Copy wraps instead of truncating the recovery instruction; the action keeps its size. Sonner's supported `unstyled` option and Button variants provide this: Sonner's default bordered surface doesn't fit Couch, and Couch's old single-line styling hid recovery instructions and long device names. Top right at the page gutter on every screen, below the measured header (`--top-bar`), and in the player below its top band (`--player-top`). Two show at most, both open, since a remote can't hover to expand a stack.
   - **Focus.** A toast never takes focus. Up where nothing is above (the header's tabs, or the top of the player's band) reaches the newest toast's action, with a remote as with arrow keys; OK runs it, and any other key, Back included, returns focus to where it came from, as sonner does when focus leaves a toast. Spatial navigation otherwise passes toasts by, so they never catch a press meant for the page.
 - **System notification**: the desktop app has one, "Couch X is ready", shown
   once per version when an update has downloaded. It stays because desktop
@@ -228,8 +233,9 @@ Messages:
 ## Menus
 
 One item, one menu. Every media row and tile has one primary target, its
-press, and at most one menu holding everything else, Details included where
-the press doesn't open Details. The menu is a controlled shadcn Dropdown Menu
+press, and at most one menu holding secondary verbs, Details included where
+the press doesn't open Details. Visible Details and relationship links can also
+provide direct navigation beside that primary target. The menu is a controlled shadcn Dropdown Menu
 fed one verb list (`useItemMenu` and `ItemMenu` in `RowMenu.tsx`). It hangs
 from the item's "…" ("Options for {title}"), or from the whole item where a
 row's page holds all its verbs and the row shows no "…", so it opens in one
@@ -307,3 +313,9 @@ structure hasn't reached it.
   and at 390×844 on a phone.
 - **Docs follow code.** A surface's doc changes with its code, so it keeps
   describing what is built.
+
+### Loading and cached navigation
+
+Use the existing shadcn Skeleton for cold reads, composed into the same artwork, row, detail and settings geometry as the destination. Shelf skeletons have fixed artwork dimensions; catalogue-grid skeletons fill their cells. These compositions cover Couch-specific media layouts absent from the primitive catalog. Respect reduced motion and keep placeholders out of the focus order.
+
+Keep usable query data mounted during refreshes and refresh failures. List and detail metadata use a short freshness window; seed known details from the same authenticated QueryClient, preserving the source timestamp. Never share metadata across connections. Search publishes cached summaries before paint and preserves its first leading match as later sources arrive.

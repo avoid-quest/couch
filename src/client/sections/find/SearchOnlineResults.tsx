@@ -1,5 +1,5 @@
 import { browserActions } from "@/original-page";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { collectionLocation } from "@/detail-navigation";
 import { providerCollectionCursor } from "@/collection-pagination";
@@ -23,6 +23,7 @@ export type SearchFacet = { kind: SearchKind; duration?: number | null };
 export type SearchHit = SearchFacet & {
   id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
+  radio?: {id: string; title: string}; context?: MediaCollection; creator?: import("../../../shared/media").CollectionLink;
   /** What an openable hit is, shown instead of a length. */
   collection?: "Channel" | "List" | "Album" | "Series" | "Season" | "Programme";
   thumbnail?: string; video?: boolean;
@@ -30,8 +31,8 @@ export type SearchHit = SearchFacet & {
   /** Every verb, the primary's included; MediaRow's menu holds the rest. */
   actions: MenuAction[];
 };
-export type SearchCollection = { url?: string; title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
-export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
+export type SearchCollection = { context?: MediaCollection; creator?: import("../../../shared/media").CollectionLink; url?: string; title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
+export type SearchResultSummary = { count: number; loading: boolean; refreshing?: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
 export const lengthOf = (seconds: number): SearchLength => seconds < 600 ? "Under 10 min" : seconds <= 3600 ? "10–60 min" : "Over 1 hr";
 export function matchesFacet(item: SearchFacet, kind?: SearchKind, length?: SearchLength) {
   return (!kind || item.kind === kind) && (!length || item.duration != null && lengthOf(item.duration) === length);
@@ -41,7 +42,8 @@ export type SearchPlaybackProps = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   onCommand?: (action: Action) => Promise<boolean>;
 };
-export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
+export { providerNames } from "../../../shared/providers";
+import { providerNames } from "../../../shared/providers";
 export const searchError = (reason: unknown) => reason instanceof Error ? reason.message : "Didn't respond.";
 export function collectionLabel(item: ProviderItem): SearchHit["collection"] {
   if (item.kind === "media") return;
@@ -95,7 +97,8 @@ function OnlineResults(props: Props) {
     const warning = [...new Set(pages.flatMap(part => part.warning ? [part.warning] : []))].join(" ");
     return { ...pages[0]!, items, nextCursor: pages.at(-1)?.nextCursor, ...(warning ? { warning } : {}) };
   }, [browse.data, single.data, props.paged]);
-  const loading = props.connected && (props.paged ? single.isFetching : browse.isFetching);
+  const fetching = props.connected && (props.paged ? single.isFetching : browse.isFetching);
+  const loading = fetching && !page;
   const failure = props.paged ? single.error : browse.error;
   const error = failure ? searchError(failure) : "";
   const [visible, setVisible] = useState(() => Math.max(60, page?.items.length ?? 0));
@@ -113,7 +116,7 @@ function OnlineResults(props: Props) {
   // Debounced summaries can still call online actions after a disconnect.
   useEffect(() => { const controller = new AbortController(); lifetime.current = props.connected ? controller : null; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   async function more() {
-    if (!page || loading || !props.connected) return;
+    if (!page || fetching || !props.connected) return;
     if (visible < page.items.length) { setVisible(value => value + 6); return; }
     if (!browse.hasNextPage) return;
     const signal = lifetime.current?.signal;
@@ -157,12 +160,12 @@ function OnlineResults(props: Props) {
       }
     });
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     const hits: SearchHit[] = (page?.items ?? []).slice(0, props.paged ? undefined : visible).map(item => {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: !props.connected || busy || saveUnavailable, run: () => save(item, saved) };
-      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: collectionLabel(item), thumbnail: item.thumbnail,
+      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, context: item.collection, creator: item.creator, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: collectionLabel(item), thumbnail: item.thumbnail,
         primary: { label: "Open", href: collectionLocation(item), run: () => props.onOpenCollection?.(item) },
         actions: [...(item.kind === "media" ? [
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(item, true) },
@@ -199,14 +202,14 @@ function OnlineResults(props: Props) {
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
     const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(`Couldn't ${playNow ? "play" : "queue"} ${page.title || selected?.title || providerNames[provider]}.`, () => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(!playNow ? { title: page.title || selected?.title || providerNames[provider] } : {}), ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
-    props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
-      ...(props.url ? { collection: { url: selected?.url ?? props.url, title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
+    props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, refreshing: fetching && !!page, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || fetching, facets: page?.items.map(facet), hits,
+      ...(props.url ? { collection: { context: props.context ?? selected?.collection, creator: selected?.creator, url: selected?.url ?? props.url, title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
         single: selected?.kind === "media", playAll: start || resume ? () => startItem() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
         playNext: selected?.kind === "media" && props.onCommand ? () => play(selected, false, "next") : undefined,
         playLabel: resume ? "Resume" : start ? "Play" : undefined, position: resume?.position, duration: resume?.duration, fromStart: resume ? () => startItem(true) : undefined,
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
+  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }
