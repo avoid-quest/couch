@@ -8,6 +8,8 @@ import { createInterface } from "node:readline";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import electron from "electron";
 import { Identity } from "@sonn-audio/node-sendspin";
+import { assessInboundCounters, totalObservedCounter } from "./audio-lab/rtc-counters";
+import { createActivityMeasurement } from "./audio-lab/activity";
 
 assert(process.env.COUCH_NETWORK_MANIFEST && process.env.COUCH_LAB_IPC, "Use the isolated network runner");
 const network = JSON.parse(readFileSync(process.env.COUCH_NETWORK_MANIFEST, "utf8"));
@@ -66,11 +68,14 @@ type Worker = { index: number; id: string; child: ChildProcess; request: (value:
 const workers: Worker[] = [], pulseEnvs: NodeJS.ProcessEnv[] = [];
 type Output = { frames: number; windows: number; active: number; silent: number; invalid: number; clipped: number; lastActive: number; lastWindow: number; pending: number; sum: number; peak: number; carry: Buffer };
 const outputs: Output[] = [];
-const results: any = { schema: "couch-live-performance/1", startedAt: new Date().toISOString(), head: command(["git", "rev-parse", "HEAD"]).trim(),
-  contract: { count, seconds, rounds, faultCounts, tailSeconds, warmupMs: 15000, observationMs: 5000, outputWindowFrames: 48000, minimumRms: .001,
+let activityDeadline = 0;
+let activityMeasurements: ReturnType<typeof createActivityMeasurement>[] | null = null;
+const results: any = { schema: "couch-live-performance/2", startedAt: new Date().toISOString(), head: command(["git", "rev-parse", "HEAD"]).trim(),
+  contract: { count, seconds, rounds, faultCounts, tailSeconds, warmupMs: 15000, observationMs: 5000, outputWindowFrames: 48000, minimumRms: .001, activityDrainMs: 1500,
+    timing: "Harness monotonic observation time; PCM monitors have no source timestamps",
     recoveryAllocationMs: 5000, hardRecoveryTimeoutMs: 45000, fullOutagePlayAtMs: 8000, capture: "looping 30-second 440+997 Hz fake microphone", route: "production direct WebRTC", qualified: false },
   hashes: Object.fromEntries(["tests/live-audio-scale.native.ts", "tests/live-audio-scale-worker.ts", "build/core.mjs", "dist/index.html"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])),
-  admissions: [], faults: [], stages: [], qualified: false };
+  admissions: [], faults: [], stages: [], functionalPassed: false, telemetryComplete: false, qualified: false };
 const resources: any[] = [];
 let lastResourceAt = performance.now(), lastTicks = new Map<string, number>(), highCpuSince = 0;
 const ticksPerSecond = Number(command(["getconf", "CLK_TCK"]));
@@ -87,10 +92,10 @@ const sampleResources = () => {
     rss += Number(fields[21]) * 4096; processes++;
   } catch {}
   const available = Number(/^MemAvailable:\s+(\d+)/m.exec(readFileSync("/proc/meminfo", "utf8"))![1]) * 1024;
-  const cpus = ticks / ticksPerSecond / (elapsed / 1000);
+  const cpus = lastTicks.size ? ticks / ticksPerSecond / (elapsed / 1000) : null;
   const item = { at: Date.now(), elapsed, cpus, rss, processes, available, harnessEventLoopMaxMs: delay.max / 1e6 };
   resources.push(item); log("resources.jsonl", item); delay.reset(); lastResourceAt = now; lastTicks = next;
-  highCpuSince = cpus > (network.profile.resources.cpuAffinity?.length ?? 16) * .8 ? highCpuSince || now : 0;
+  highCpuSince = cpus !== null && cpus > (network.profile.resources.cpuAffinity?.length ?? 16) * .8 ? highCpuSince || now : 0;
   if (available < 8 * 1024 ** 3 || highCpuSince && now - highCpuSince > 30000) fatal ??= new Error("Worker resource guard: inconclusive");
 };
 const resourceTimer = setInterval(sampleResources, 2000);
@@ -103,24 +108,51 @@ const snapshot = async (label: string) => {
   }
   return values.map(item => item.value);
 };
-const activePeer = (state: any, first = 0) => state.peers.findLast((peer: any) => peer.index >= first && peer.state === "connected" && peer.stats.some((s: any) => s.type === "inbound-rtp" && s.bytesReceived > 0));
+const activePeer = (state: any, first = 0) => state?.peers.findLast((peer: any) => peer.index >= first && peer.state === "connected" && peer.stats.some((s: any) => s.type === "inbound-rtp" && s.bytesReceived > 0));
 const steady = async (label: string, duration: number) => {
-  const start = Date.now(), before = await snapshot(label + "-before"), windows = outputs.map(output => ({ windows: output.windows, silent: output.silent, invalid: output.invalid, clipped: output.clipped }));
-  while (Date.now() - start < duration * 1000) { await Bun.sleep(Math.min(5000, duration * 1000 - (Date.now() - start))); await snapshot(label); if (fatal) throw fatal; }
-  const after = await snapshot(label + "-after");
-  const receivers = outputs.map((output, index) => {
-    const a = activePeer(before[index + 1]), b = activePeer(after[index + 1]); assert(a && b && a.index === b.index, `receiver ${index}: stable peer`);
-    const counters = (peer: any) => peer.stats.find((s: any) => s.type === "inbound-rtp" && s.kind === "audio");
-    const old = counters(a), current = counters(b);
-    const delta = Object.fromEntries(["packetsLost", "packetsReceived", "totalSamplesReceived", "concealedSamples", "silentConcealedSamples", "concealmentEvents", "jitterBufferDelay", "jitterBufferEmittedCount", "insertedSamplesForDeceleration", "removedSamplesForAcceleration"].map(key => [key, typeof current[key] === "number" && typeof old[key] === "number" ? current[key] - old[key] : null]));
-    assert.equal(output.invalid, windows[index]!.invalid); assert.equal(output.clipped, windows[index]!.clipped);
-    assert.equal(output.silent, windows[index]!.silent, `receiver ${index}: silent steady output window`);
-    assert(output.windows - windows[index]!.windows >= duration - 2, `receiver ${index}: monitor coverage`);
-    return { index, windows: output.windows - windows[index]!.windows, delta };
-  });
-  const stage = { label, start, end: Date.now(), receivers }; results.stages.push(stage); write("result.json", results);
-  console.log(JSON.stringify({ stage: label, seconds: (stage.end - start) / 1000, concealedSamples: receivers.reduce((sum, r) => sum + Number(r.delta.concealedSamples), 0) }));
+  const before = await snapshot(label + "-before"), start = performance.now();
+  const firstFrames = outputs.map(output => output.frames);
+  const measurements = outputs.map(() => createActivityMeasurement(duration * 48000));
+  activityMeasurements = measurements;
+  activityDeadline = start + duration * 1000 + 1500;
+  const stage: any = { label, start, requestedSeconds: duration, collectionDeadline: activityDeadline, firstFrames, endFrames: firstFrames.map(frame => frame + duration * 48000), status: "running", receivers: [] };
+  results.stages.push(stage); write("result.json", results);
+  let after: any[] = [];
+  try {
+    const end = start + duration * 1000;
+    while (performance.now() < end) {
+      await Bun.sleep(Math.max(0, Math.min(5000, end - performance.now())));
+      await snapshot(label); if (fatal) throw fatal;
+    }
+    // Freeze each original sample endpoint. Draining only delivers those bytes;
+    // it cannot substitute later active windows for a silent or missing cell.
+    const drainDeadline = activityDeadline;
+    while (measurements.some(value => !value.complete) && performance.now() < drainDeadline) {
+      if (fatal) throw fatal;
+      await Bun.sleep(Math.min(25, Math.max(0, drainDeadline - performance.now())));
+    }
+    activityMeasurements = null; // Snapshot latency cannot extend the frozen drain deadline.
+    after = await snapshot(label + "-after");
+  } finally {
+    activityMeasurements = null;
+    stage.end = performance.now();
+    stage.receivers = measurements.map((measurement, index) => {
+      const a = activePeer(before[index + 1]), b = activePeer(after[index + 1]);
+      const counters = assessInboundCounters(a, b);
+      return { index, stablePeer: !!a && !!b && a.index === b.index, activity: measurement.finish(), counters, delta: counters.delta };
+    });
+    stage.telemetryComplete = stage.receivers.every((receiver: any) => receiver.counters.status === "observed");
+    stage.activityPassed = stage.receivers.every((receiver: any) => receiver.activity.passed);
+    stage.stablePeers = stage.receivers.every((receiver: any) => receiver.stablePeer);
+    stage.status = after.length && stage.activityPassed && stage.stablePeers ? "activity-passed" : "incomplete";
+    stage.concealedSamples = totalObservedCounter(stage.receivers.map((receiver: any) => receiver.delta.concealedSamples));
+    write("result.json", results);
+  }
+  console.log(JSON.stringify({ stage: label, seconds: (stage.end - start) / 1000,
+    activityPassed: stage.activityPassed, telemetryComplete: stage.telemetryComplete, concealedSamples: stage.concealedSamples }));
+  assert(stage.activityPassed && stage.stablePeers, "Incomplete, silent, clipped or invalid steady output, or changed peer; inspect stage coverage");
 };
+
 let cleanupPromise: Promise<void> | undefined;
 const cleanup = () => cleanupPromise ??= (async () => {
   ending = true; clearInterval(resourceTimer); delay.disable();
@@ -132,6 +164,10 @@ const cleanup = () => cleanupPromise ??= (async () => {
   await Promise.race([Promise.all(children.filter(e => !e.closed).map(e => new Promise(resolve => e.child.once("close", resolve)))), Bun.sleep(2000)]);
   for (let index = -1; index < count; index++) { rmSync(join(directory, `profile-${index}`), { recursive: true, force: true }); rmSync(join(directory, `browser-${index}.json`), { force: true }); }
   results.cleanup = children.map(({ name, child, closed, code, signal }) => ({ name, pid: child.pid, closed, code, signal }));
+  results.monitorFinal = outputs.map((output, index) => ({ index, frames: output.frames, pendingBytes: output.carry.length }));
+  if (children.some(entry => !entry.closed) || outputs.some(output => output.carry.length)) {
+    results.functionalPassed = false; results.cleanupError = "Unclosed child or partial PCM sample"; process.exitCode = 1;
+  }
   results.resources = resources; write("result.json", results);
 })();
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => { results.error = signal; void cleanup().then(() => process.exit(2)); });
@@ -192,25 +228,26 @@ try {
     const output: Output = { frames: 0, windows: 0, active: 0, silent: 0, invalid: 0, clipped: 0, lastActive: 0, lastWindow: 0, pending: 0, sum: 0, peak: 0, carry: Buffer.alloc(0) }; outputs.push(output);
     const monitor = launch(`monitor-${index}`, [bin("parec"), "--raw", "--format=float32le", "--rate=48000", "--channels=1", `--device=receiver_${index}.monitor`, "--latency-msec=20"], env, undefined, true);
     monitor.child.stdout!.on("data", (chunk: Buffer) => {
+      const measurement = performance.now() <= activityDeadline ? activityMeasurements?.[index] : null;
       const data = output.carry.length ? Buffer.concat([output.carry, chunk]) : chunk, end = data.length - data.length % 4;
       for (let at = 0; at < end; at += 4) {
-        const sample = data.readFloatLE(at); output.frames++; output.pending++;
+        const sample = data.readFloatLE(at); measurement?.push(sample); output.frames++; output.pending++;
         if (!Number.isFinite(sample)) output.invalid++; else { output.sum += sample * sample; output.peak = Math.max(output.peak, Math.abs(sample)); if (Math.abs(sample) >= 1) output.clipped++; }
         if (output.pending === 48000) {
-          const rms = Math.sqrt(output.sum / output.pending), now = Date.now(); output.windows++; output.lastWindow = now;
+          const rms = Math.sqrt(output.sum / output.pending), now = performance.now(); output.windows++; output.lastWindow = now;
           if (rms > .001) { output.active++; output.lastActive = now; } else output.silent++;
           log("output-windows.jsonl", { index, at: now, firstFrame: output.frames - 48000, rms, peak: output.peak }); output.pending = 0; output.sum = 0; output.peak = 0;
         }
       }
       output.carry = Buffer.from(data.subarray(end));
     });
-    const started = Date.now();
+    const started = performance.now();
     if (index === 0) {
       const source = await workers[0]!.js("__scaleSession().startLive({kind:'microphone'}).then(source=>({id:source.id}))");
       assert(await workers[0]!.js(`__scaleSession().run({type:'playLive',sourceId:${JSON.stringify(source.id)},deviceId:${JSON.stringify(identity.peerId)}})`));
     } else assert(await workers[0]!.js(`__scaleSession().run({type:'output',deviceId:${JSON.stringify(identity.peerId)},level:100})`));
     await until(async () => { const state = await worker.js("__scale.snapshot()"); log("observations.jsonl", { label: "admission", index, state }); return activePeer(state) && output.lastActive > started; }, `${name} active output`);
-    results.admissions.push({ index, elapsedMs: Date.now() - started }); console.log(`Admitted ${index + 1}/${count}`);
+    results.admissions.push({ index, elapsedMs: performance.now() - started }); console.log(`Admitted ${index + 1}/${count}`);
   }
   // Validate exact sink routing, accepting Chromium's owned audio-service descendant.
   for (let group = 0; group < pulseEnvs.length; group++) {
@@ -226,7 +263,7 @@ try {
   }
   await Bun.sleep(15000); await steady("initial", seconds);
   for (let round = 0; round < rounds; round++) for (const faultCount of faultCounts) {
-    const before = await snapshot("before-fault"), faultStart = Date.now();
+    const before = await snapshot("before-fault"), faultStart = performance.now();
     const fault: any = { round, count: faultCount, start: faultStart, receivers: [], resumeAtMs: null, automatic: true, completed: false };
     results.faults.push(fault);
     const unaffected = outputs.map(o => o.silent);
@@ -236,8 +273,8 @@ try {
     fault.requestSpreadMs = Math.max(...faultRequests.map(r => r.at)) - Math.min(...faultRequests.map(r => r.at));
     const progress = Array.from({ length: faultCount }, (_, index) => ({ index, controlMs: null as number | null, mediaMs: null as number | null, outputMs: null as number | null, paused: false, outputAfterWindow: 0 }));
     fault.receivers = progress;
-    while (Date.now() - faultStart < 45000 && progress.some(p => p.outputMs === null)) {
-      const state = await snapshot("fault"), elapsed = Date.now() - faultStart;
+    while (performance.now() - faultStart < 45000 && progress.some(p => p.outputMs === null)) {
+      const state = await snapshot("fault"), elapsed = performance.now() - faultStart;
       for (let index = faultCount; index < count; index++) {
         assert.equal(activePeer(state[index + 1])?.index, activePeer(before[index + 1])?.index, `unaffected receiver ${index}: peer changed`);
         assert.equal(outputs[index]!.silent, unaffected[index], `unaffected receiver ${index}: silent output`);
@@ -248,7 +285,7 @@ try {
         if (activePeer(s, oldPeers[item.index]) && item.mediaMs === null) { item.mediaMs = elapsed; item.outputAfterWindow = outputs[item.index]!.windows + 1; }
         if (item.mediaMs !== null && outputs[item.index]!.windows > item.outputAfterWindow && outputs[item.index]!.lastActive === outputs[item.index]!.lastWindow && item.outputMs === null) item.outputMs = elapsed;
       }
-      if (faultCount === count && elapsed >= 8000 && fault.resumeAtMs === null) { fault.resumeAtMs = Date.now() - faultStart; assert(await workers[0]!.js("__scaleSession().run({type:'pause',playbackId:__scaleSession().state.player.playbackId,paused:false})")); }
+      if (faultCount === count && elapsed >= 8000 && fault.resumeAtMs === null) { fault.resumeAtMs = performance.now() - faultStart; assert(await workers[0]!.js("__scaleSession().run({type:'pause',playbackId:__scaleSession().state.player.playbackId,paused:false})")); }
       await Bun.sleep(250);
     }
     const profile = await workers[0]!.request({ profile: "stop" }); write(`publisher-${round}-${faultCount}.cpuprofile`, profile.profile);
@@ -258,8 +295,9 @@ try {
   }
   if (tailSeconds) { await Bun.sleep(15000); await steady("soak", tailSeconds); }
   await workers[0]!.js("__scaleSession().endLive()");
-  const stop = Date.now(); await until(() => outputs.every(o => o.lastWindow > stop + 2000 && o.lastActive < o.lastWindow), "all outputs silent after source stop");
+  const stop = performance.now(); await until(() => outputs.every(o => o.lastWindow > stop + 2000 && o.lastActive < o.lastWindow), "all outputs silent after source stop");
   results.functionalPassed = true;
+  results.telemetryComplete = results.stages.every((stage: any) => stage.telemetryComplete);
   results.recoveryWithinAllocation = results.faults.length > 0 && results.faults.every((f: any) => f.withinAllocation);
 } catch (error) { results.error = String(error); process.exitCode = 1; console.error(error); }
 finally { await cleanup(); }

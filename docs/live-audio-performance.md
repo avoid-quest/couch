@@ -67,6 +67,25 @@ or presentation clock. The looped two-tone microphone fixture cannot detect
 wrong or repeated content or rule out subsecond gaps. Concealment, insertion and
 removal counters are observations, never inferred durations of missing source.
 
+Steady stages now freeze a per-receiver sample interval after the initial
+snapshot and require every one of its `seconds * 48000` frames. A shared
+1.5-second drain can deliver pending bytes, but later browser snapshot delays
+cannot extend it. Each cell is scored within that interval; silent cells cannot
+be replaced by later active output. Missing frames, invalid samples and clipping
+remain explicit. A failed stage is exported before the runner exits. These are
+delivered PCM intervals, not proof of wall-clock presentation coverage: `parec`
+does not supply source sample addresses or independent capture timestamps.
+
+Counter deltas require one unambiguous inbound audio stream with the same peer,
+stats ID and SSRC, and an advancing stats timestamp. Unsupported, nonfinite,
+malformed or reset counters stay null, including the aggregate if any receiver
+is unknown. `telemetryComplete` is separate from the activity verdict. Per the
+[WebRTC statistics specification](https://www.w3.org/TR/webrtc-stats/#dom-rtcreceivedrtpstreamstats-packetslost),
+`packetsLost` is a signed estimate and may legitimately decrease or be negative;
+the other reported counters must not regress. Duration/recovery observations
+use the harness's monotonic clock. The first resource sample establishes a CPU
+baseline and reports unknown CPU instead of zero.
+
 `qualified` stays false. Physical devices, venue Wi-Fi, independent clocks,
 latency/skew, waveform identity and the In sync route require separate evidence.
 Keep raw directories private: Core logs and temporary browser configurations
