@@ -35,7 +35,9 @@ Whoever may read the pairing code, the host or an admin, reads the TV's name
 through the same `store.pair` as `/api/pair`. The TV polls
 `POST /api/pair/tv/poll` with its code and secret and collects its token once.
 A device that is already paired can't ask, so an approval never re-keys
-another device.
+another device. Whether a device last connected as a TV (`/api/ws?tv=1`)
+is kept in its `devices` row (the host's in `installation`), so a TV that's off
+is still one after Core restarts.
 
 Settings that change the Couch for everyone (Share on network, HTTP, network
 address, the live relay, TV mode, sources, hardware, updates) accept the host

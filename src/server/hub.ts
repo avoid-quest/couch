@@ -308,7 +308,6 @@ export async function createHub(options: HubOptions) {
   const targets = new Map<string, string>();
   // An explicit Remote choice stays on its TV through idle/disconnect/output changes.
   const remoteControllers = new Set<string>();
-  const tvDevices = new Set<string>();
   const tvSocket = (id: string) => { const socket = newest(id); return socket?.data.tv ? socket : undefined; };
   const remote = createTvRemote<Socket<SocketData>>({ current: socket => socket.data.tv && newest(deviceOf(socket)) === socket, send: (socket, message) => send(socket, JSON.stringify(message)), changed: () => broadcast() });
   const shares = (id: string, actor: string) => { try { requireControl(id, actor); return true; } catch { return false; } };
@@ -996,7 +995,7 @@ export async function createHub(options: HubOptions) {
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
           ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
-      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
+      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: store.deviceTv(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
       liveSources: live.sources(),
     };
     const views = new Map<string, string>();
@@ -1667,7 +1666,7 @@ export async function createHub(options: HubOptions) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
         send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
-        if (socket.data.tv) tvDevices.add(deviceOf(socket));
+        store.saveDeviceTv(deviceOf(socket), socket.data.tv);
         log(`device online ${nameOf(deviceOf(socket))}`);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }

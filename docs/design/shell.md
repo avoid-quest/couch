@@ -37,8 +37,7 @@ keeps focus clear of it. Below `lg` a TV centres its tabs on a second row.
 Its geometry holds from page to page: the search field fills the right column
 (up to 22rem with Keyboard shortcuts), tokens or not, and on Remote, whose keys
 drive the TV, Keyboard shortcuts keeps its slot unseen. Remote shows while the
-Couch has a TV, counting the TVs this browser has seen (`knownTvs`), since Core
-forgets which devices are TVs when it restarts.
+Couch has a TV, on or off.
 
 **Offline**, the mark is hollow, and the right cluster says "Reconnecting…"
 with a Spinner before the search, as sharing does (the Spinner alone on a

@@ -4,9 +4,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Identity } from "@sonn-audio/node-sendspin";
+import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { TV_PAIRING_TTL } from "../src/server/tv-pairing";
+import type { DeviceSummary, ServerMessage } from "../src/shared/protocol";
 
 // A TV shows a code; an admin approves it from a paired device; the TV collects its credentials.
 const hostToken = "h".repeat(64);
@@ -101,4 +103,35 @@ test("only a paired admin approves", async () => {
     // Unpaired, without this Couch's origin, a request can't even be made.
     assert.equal((await fetch(`${f.hub.origin}/api/pair/tv`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 403);
   } finally { await f.close(); }
+});
+
+test("a paired TV is still a TV after Core restarts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-tv-restart-"));
+  const databasePath = join(directory, "couch.sqlite");
+  const store = openStore(databasePath, true);
+  const phone = Identity.generate().peerId, admin = store.pair(phone, "Phone");
+  store.close();
+  const devices = async (hub: Awaited<ReturnType<typeof createHub>>, token: string, id: string, tv = false) => {
+    const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&device=${id}${tv ? "&tv=1" : ""}`, { headers: { Origin: hub.origin } });
+    try {
+      return await new Promise<DeviceSummary[]>((resolve, reject) => {
+        socket.once("error", reject);
+        socket.on("message", data => { const message = JSON.parse(String(data)) as ServerMessage; if (message.type === "state") resolve(message.state.devices!); });
+      });
+    } finally { socket.terminate(); }
+  };
+  let hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: 0 });
+  try {
+    const id = Identity.generate().peerId;
+    const post = (path: string, body: unknown) => fetch(`${hub.origin}${path}`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const request = await (await post("/api/pair/tv", { id, name: "Living room TV" })).json() as { code: string; secret: string };
+    assert.equal((await fetch(`${hub.origin}/api/pair/tv/${request.code}`, { method: "POST", headers: { Authorization: `Bearer ${hostToken}` } })).status, 200);
+    const { token } = await (await post("/api/pair/tv/poll", request)).json() as { token: string };
+    assert.equal((await devices(hub, token, id, true)).find(device => device.id === id)?.tv, true);
+    await hub.close();
+    hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: 0 });
+    // The TV is off; the phone still sees it as a TV.
+    const seen = (await devices(hub, admin, phone)).find(device => device.id === id);
+    assert.deepEqual([seen?.online, seen?.tv], [false, true]);
+  } finally { await hub.close(); await rm(directory, { recursive: true, force: true }); }
 });
