@@ -46,9 +46,9 @@ export function PlaybackPage() {
   const preferences = state?.preferences;
   const chooser = useMutation({ mutationFn: (enabled: boolean) => run({ type: "askEveryDevice", enabled }) });
   return <SettingsLayout section="playback">
-    <SettingsSection description={profile && `For ${profile.name}, on every device.`}>
+    <SettingsSection>
       {profile && preferences && credentials && <PlaybackPreferences key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={run} />}
-      <SettingsRow label="Ask every device where a shared source plays" htmlFor="ask-every-device" className="[&_label]:touch:min-h-11 [&_label]:items-center"
+      <SettingsRow label="Ask every device where a shared source plays" htmlFor="ask-every-device"
         description={`Off: only the device that pressed Play asks.${administrator ? "" : ` ${ADMIN_ONLY}`}`}>
         <Switch id="ask-every-device" checked={chooser.isPending ? chooser.variables : state?.askEveryDevice ?? false} disabled={!administrator || !connected || chooser.isPending} onCheckedChange={enabled => chooser.mutate(enabled)} />
       </SettingsRow>

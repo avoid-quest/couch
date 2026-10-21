@@ -1,5 +1,8 @@
 import type { Action, PlayerState, ProfilePlaybackPreferences } from "./protocol";
 
+/** The speeds the player and Settings offer; a speed saved outside them joins the list where it is shown. */
+export const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
 export type PlaybackDefaultSetting = Extract<Action, { type: "savePlaybackDefault" }>["setting"];
 
 export function playbackDefault(player: Pick<PlayerState, "status" | "speed" | "tracks">, setting: PlaybackDefaultSetting): Partial<ProfilePlaybackPreferences> | null {

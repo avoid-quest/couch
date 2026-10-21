@@ -70,3 +70,16 @@ test("A controller still sees what the Couch's Sound page holds, Bluetooth inclu
   expect(rows(html)).toEqual(["Output", "Test &amp; delay", "Audio delay", "Test tone", "Bluetooth"]);
   expect(html).toContain("Only an admin can change this.");
 });
+
+test("Playback offers subtitles in one row, and the player's speeds", async () => {
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const { PlaybackPreferences } = await import("../src/client/sections/settings/couch/PlaybackPreferences");
+  const profile = { audioLanguage: "", subtitleLanguage: "it", subtitles: "off" as const, speed: 1 };
+  const html = renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>
+    <PlaybackPreferences profile={{ id: "household", name: "Household" }} preferences={{ profile } as never} connected onCommand={async () => true} />
+  </QueryClientProvider>);
+  expect([...html.matchAll(/data-slot="field-label"[^>]*>([^<]+)</g)].map(match => match[1])).toEqual(["Autoplay", "Audio language", "Subtitles", "Speed"]);
+  const choices = (label: string) => [...html.slice(html.indexOf(`aria-label="${label}"`)).split("</div>")[0]!.matchAll(/<button[^>]*aria-checked="(true|false)"[^>]*>[\s\S]*?<\/svg>([^<]+)</g)].map(match => match[2] + (match[1] === "true" ? "*" : ""));
+  expect(choices("Subtitles")).toEqual(["Off*", "Original", "Italiano", "English"]);
+  expect(choices("Speed")).toEqual(["0.5×", "0.75×", "1×*", "1.25×", "1.5×", "2×"]);
+});

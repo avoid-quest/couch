@@ -11,9 +11,9 @@ import type { WatchingProfile } from "../../shared/viewing";
 import type { Action, PlaybackPreferences as Preferences, QueueEntry } from "../../shared/protocol";
 import type { ClientPlayerState, Credentials } from "@/session/session";
 import { apiJson } from "@/api/client";
-import { playbackDefault, type PlaybackDefaultSetting } from "../../shared/playback-default";
+import { playbackDefault, playbackSpeeds, type PlaybackDefaultSetting } from "../../shared/playback-default";
 import { supportsCurrentVideoQuality } from "../../shared/video-quality";
-import { videoQualityLabels } from "@/video-quality";
+import { videoQualityChoice, videoQualityLabels, videoQualityOptions } from "@/video-quality";
 
 export type PlaybackSettingsProps = {
   entry?: QueueEntry;
@@ -197,7 +197,7 @@ export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 
   const chapters = player.chapters ?? [];
   const chapterIndex = chapters.findLastIndex(chapter => chapter.position <= playbackClock.position);
   const qualityAvailable = supportsCurrentVideoQuality(entry, player);
-  const speeds = [...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, player.speed ?? 1])].sort((a, b) => a - b);
+  const speeds = [...new Set([...playbackSpeeds, player.speed ?? 1])].sort((a, b) => a - b);
   // Audio is a choice only with more than one track, as YouTube's Audio track row.
   const rows: { view: View; value: string }[] = [
     ...(showTracks ? [{ view: "subtitles" as const, value: subtitle ? trackLabel(subtitle, "Subtitle") : "Off" }] : []),
@@ -223,8 +223,8 @@ export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 
     <ChoiceGroup label="Speed" orientation="vertical" disabled={idle} value={String(player.speed ?? 1)} onValueChange={value => command(playbackId => ({ type: "speed", playbackId, speed: Number(value) }))}
       options={speeds.map(speed => ({ value: String(speed), label: speedLabel(speed) }))} />
     {saveDefault("speed", "speed")}
-  </> : view === "quality" ? <ChoiceGroup label="Quality" orientation="vertical" disabled={idle || !qualityAvailable} value={entry?.quality ?? "auto"} onValueChange={quality => command(playbackId => ({ type: "videoQuality", playbackId, quality }))}
-    options={(Object.entries(videoQualityLabels) as [NonNullable<QueueEntry["quality"]>, string][]).map(([value, label]) => ({ value, label }))} />
+  </> : view === "quality" ? <ChoiceGroup label="Quality" orientation="vertical" disabled={idle || !qualityAvailable} value={videoQualityChoice(entry?.quality ?? "auto")} onValueChange={quality => command(playbackId => ({ type: "videoQuality", playbackId, quality }))}
+    options={videoQualityOptions} />
   : view === "chapters" ? <ChoiceGroup label="Chapters" orientation="vertical" disabled={idle} value={String(chapterIndex)} onValueChange={value => { const chapter = chapters[Number(value)]; if (chapter) command(playbackId => ({ type: "seek", playbackId, position: chapter.position })); }}
     options={chapters.map((chapter, index) => ({ value: String(index), label: <span className="truncate">{chapter.title || `Chapter ${index + 1}`}</span>, count: clock(chapter.position) }))} />
   : view === "audioDelay" ? <Stepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "audioDelay", playbackId, delay: Math.round(((player.audioDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
