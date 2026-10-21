@@ -61,7 +61,8 @@ export type SessionState = {
   controlling?: string;
   textField?: import("./remote").RemoteTextField | null;
   queue: QueueEntry[];
-  autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
+  // upcoming: the first entries Autoplay will play after Up next, in order.
+  autoplay?: { enabled: boolean; contextTitle: string | null; upcoming: QueueEntry[]; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
   // An explicit Play's picture intent; stable across quality/transport reloads, null on Next/retry.

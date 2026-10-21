@@ -32,7 +32,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     seekable: !!player?.seekable,
     // Paused live media resumes, so it offers Play rather than a disabled Pause.
     pausable: !live || !!player?.seekable || player?.status === "paused",
-    hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.next || !!state.autoplay.pending)),
+    hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.upcoming.length || !!state.autoplay.pending)),
   };
 }
 

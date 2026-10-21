@@ -9,7 +9,6 @@ import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,7 +16,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, X } from "lucide-react";
-import { useOptionalShell } from "@/sections/shell/shell-context";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
@@ -58,7 +56,6 @@ function knownLength(entry: QueueEntry): number | null {
 export function QueuePanel({ state, credentials, connected, available, run, titled = true, current: showCurrent = true, onClose, closeRef }: Props) {
   const playbackClock = usePlaybackClock();
   const autoplayId = useId();
-  const shell = useOptionalShell();
   const [saveOpen, setSaveOpen] = useState(false);
   const [listName, setListName] = useState("");
   const keep = useMutation({ mutationFn: (name: string) => apiSend(credentials, "/api/playlists", { name, scope: "upNext" }, "POST", 20_000) });
@@ -79,6 +76,17 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     const length = knownLength(entry);
     return seconds == null || length == null ? null : seconds + length;
   }, startsIn);
+  // Each row is a board line starting when the one before it ends: the queued rows, then Autoplay's.
+  const board = (entry: QueueEntry) => {
+    const starts = startsIn;
+    const length = knownLength(entry);
+    startsIn = startsIn == null || length == null ? null : startsIn + length;
+    return { time: starts == null ? undefined : formatEndTime(starts), length: entry.live || length == null ? null : duration(length) };
+  };
+  const autoplay = state?.autoplay;
+  // The switch shows only where Autoplay has something to continue; Settings → Playback always holds it.
+  const autoplayUpcoming = autoplay?.enabled ? autoplay.upcoming : [];
+  const autoplayFinding = !!autoplay?.enabled && !!autoplay.pending && !autoplayUpcoming.length;
 
   const keepUpNext = async () => {
     if (!connected || keeping || !upNext.length || !listName.trim()) return;
@@ -112,9 +120,10 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     const row = element.closest<HTMLElement>("[data-queue-entry-id]");
     focusedEntry.current = row ? { element, id: row.dataset.queueEntryId!, index: [...panelRef.current.querySelectorAll("[data-queue-entry-id]")].indexOf(row), label: element.getAttribute("aria-label") } : null;
   }}>
-    {/* The heading row is a sheet's header: the title, then its Close. */}
-    <div className={cn("sticky top-0 z-10 flex min-h-11 items-center justify-between gap-4 bg-background", !titled && "sr-only")}>
-      <h2 id="queue-title" tabIndex={-1} className="text-base font-medium">Up next</h2>
+    {/* The heading row is a sheet's header: the title, Autoplay's switch, then its Close. Under a sheet's own header only the switch shows. */}
+    <div className={cn("flex min-h-11 items-center justify-between gap-4 bg-background", titled ? "sticky top-0 z-10" : !autoplay?.upcoming.length && "sr-only")}>
+      <h2 id="queue-title" tabIndex={-1} className={cn("text-base font-medium", !titled && "sr-only")}>Up next</h2>
+      {autoplay && autoplay.upcoming.length > 0 && <div className="ml-auto flex items-center gap-3"><Label htmlFor={autoplayId} className="touch:min-h-11 text-sm font-normal text-muted-foreground">Autoplay</Label><Switch id={autoplayId} checked={autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>}
       {onClose && <Button ref={closeRef} variant="ghost" size="icon-lg" className="-mr-2.5 size-11" aria-label="Close Up next" title="Close Up next" onClick={onClose}><X aria-hidden="true" /></Button>}
     </div>
       <DialogContent aria-describedby={undefined}>
@@ -127,26 +136,24 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       </DialogContent>
     {current && showCurrent && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
-    {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title">
+    {upNext.length || autoplayUpcoming.length || autoplayFinding ? <div className="grid gap-2">
       {/* The list's status line, with the verb that saves it. */}
-      <div className="flex items-center justify-between gap-4"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
+      {upNext.length > 0 && <><div className="flex items-center justify-between gap-4"><h3 className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
         <DialogTrigger asChild><Button variant="ghost" className="-mr-2.5" disabled={!connected} onClick={() => { keep.reset(); setListName(""); }}>Save as list</Button></DialogTrigger></div>
       <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">{upNext.map((entry, index) => {
-        const starts = startsIn;
-        const length = knownLength(entry);
-        startsIn = startsIn == null || length == null ? null : startsIn + length;
-        const meta = [entry.live ? "Live" : length == null ? null : duration(length), entry.addedBy && entry.addedBy.deviceId !== deviceId() && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
-        return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} time={starts == null ? undefined : formatEndTime(starts)} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
+        const { time, length } = board(entry);
+        const meta = [length, entry.addedBy && entry.addedBy.deviceId !== deviceId() && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
+        return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} time={time} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           verbs={{ credentials, entry, index: cursorIndex + 1 + index, queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />;
-      })}</ul>
-    </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Search.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Search")}>Search</Button></EmptyContent>}</Empty>}
-    {state?.autoplay && <section aria-label="Autoplay" className="grid gap-2">
-      <div className="flex items-center justify-between gap-4"><h3><Label htmlFor={autoplayId} className="touch:min-h-11 text-base font-medium">Autoplay</Label></h3><Switch id={autoplayId} checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
-      {state.autoplay.enabled && state.autoplay.next ? <>
-        <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after Up next"}</p>
-        <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
-      </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after Up next."}</p>}
-    </section>}
+      })}</ul></>}
+      {/* What Autoplay picked continues the list, quieter than what someone queued. */}
+      {autoplayUpcoming.length > 0 && <><h3 className={cn("text-sm text-muted-foreground", upNext.length > 0 && "pt-4")}>Then from {autoplay!.contextTitle}</h3>
+        <ul aria-label="Autoplay" className="m-0 list-none divide-y border-y p-0 opacity-60">{autoplayUpcoming.map(entry => {
+          const { time, length } = board(entry);
+          return <QueueRow key={entry.id} entry={entry} meta={length ?? undefined} time={time} />;
+        })}</ul></>}
+      {autoplayFinding && <p className="text-sm text-muted-foreground">Finding the next item…</p>}
+    </div> : <p className="text-sm text-muted-foreground">Nothing queued.</p>}
     {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="-mx-2.5 justify-between text-base">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
       <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} verbs={{ credentials, entry, index: queue.indexOf(entry), queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />)}</ul>
     </CollapsibleContent></Collapsible>}

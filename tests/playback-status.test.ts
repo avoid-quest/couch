@@ -27,3 +27,10 @@ test("Next can recover from loading or failure, but never acts while offline or 
   }
   expect(playbackCapabilities(state("unavailable"), true).nextReady).toBe(false);
 });
+
+test("Next continues into what Autoplay picked, only while Autoplay is on", () => {
+  const last = (autoplay: object) => state("playing", {currentEntryId: "two", autoplay});
+  expect(playbackCapabilities(last({enabled: true, contextTitle: null, upcoming: []}), true).hasNext).toBe(false);
+  expect(playbackCapabilities(last({enabled: true, contextTitle: "Series", upcoming: [{id: "three"}]}), true).hasNext).toBe(true);
+  expect(playbackCapabilities(last({enabled: false, contextTitle: "Series", upcoming: [{id: "three"}]}), true).hasNext).toBe(false);
+});
