@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { radioStationQuery } from "@/api/radio";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
-import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
+import { HitList, SourcesUnanswered } from "@/sections/find/SearchPanel";
 import { SearchRadioResults } from "@/sections/find/SearchRadioResults";
 import type { SearchResultSummary } from "@/sections/find/SearchOnlineResults";
 import { radioBrowseLocation } from "@/radio-navigation";
@@ -33,6 +33,6 @@ function RadioItems({ station }: { station?: RadioStation }) {
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load stations.</p>}
     {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}
     <HitList showSource={false} hits={hits.slice(0, 4)} compact label="More stations" />
-    <SourceProblems summaries={summary ? [[source, summary]] : []} />
+    <SourcesUnanswered summaries={summary ? [[source, summary]] : []} />
   </section>;
 }

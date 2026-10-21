@@ -6,7 +6,7 @@ import { collectionLinks } from "@/collection-target";
 import { providerCollectionCursor } from "@/collection-pagination";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
-import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
+import { HitList, SourcesUnanswered } from "@/sections/find/SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
 import type { MediaCollection } from "../../shared/media";
 import type { ProviderId, ProviderItem } from "../../shared/providers";
@@ -34,6 +34,6 @@ function RelatedItems({ target, collection, currentUrl, currentTitle }: { target
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this list.</p>}
     {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}
     <HitList showSource={false} hits={nearby} compact label={title} />
-    <SourceProblems summaries={summary ? [[target.title, summary]] : []} />
+    <SourcesUnanswered summaries={summary ? [[target.title, summary]] : []} />
   </section>;
 }

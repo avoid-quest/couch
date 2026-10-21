@@ -266,7 +266,7 @@ function Empty({ scope, recents, onScope, onRecent, onOpen }: { scope: SearchSco
   </div>;
 }
 
-/** While typing: the query first, then the scopes it names and what the client holds that matches, never a source's search. */
+/** While typing: Search for the query first, then the scopes it names and what the client holds that matches, never a source's search. */
 function Typed({ text, link, scope, labels, recents, connected, onSearch, onScope, onRecent, onOpen, onPlayStation, onPlayLink }: {
   text: string; link: boolean; scope: SearchScope; labels: string[]; recents: string[]; connected: boolean;
   onSearch: () => void; onScope: (scope: Scope) => void; onRecent: (query: string) => void; onOpen: (href: string) => void; onPlayStation: (station: RadioStation) => void; onPlayLink: () => void;
@@ -286,9 +286,10 @@ function Typed({ text, link, scope, labels, recents, connected, onSearch, onScop
   }
   return <>
     <CommandGroup>
-      {/* On the TV the typed query reads from the sofa here, larger than the header's field holds it. */}
+      {/* A verb, not a second field: "Search “ra” in Music". On the TV the typed query reads from the sofa here, larger than
+          the header's field holds it. */}
       <CommandItem value="query" onSelect={onSearch} className="text-base font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight">
-        <Search aria-hidden="true" className="text-muted-foreground tv:size-6" /><span className="sr-only">Search </span><span className="min-w-0 truncate">{text}</span>
+        <Search aria-hidden="true" className="text-muted-foreground tv:size-6" /><span className="min-w-0 truncate">Search “{text.trim()}”</span>
         {labels.length > 0 && <span className="shrink-0 font-normal text-muted-foreground">in {labels.join(", ")}</span>}
       </CommandItem>
     </CommandGroup>

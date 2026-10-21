@@ -1,5 +1,4 @@
-import { MediaRowsSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { ChevronRight } from "lucide-react";
+import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { playbackStatus } from "@/playback-status";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
@@ -21,7 +20,7 @@ import { SearchOnlineResults, providerNames, type SearchHit, type SearchResultSu
 import { Shelf } from "@/components/Shelf";
 import { MediaTile } from "@/components/MediaTile";
 import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
-import { metaLine } from "@/media-caption";
+import { metaLine, withoutUrls } from "@/media-caption";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
@@ -31,8 +30,10 @@ import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } 
 import { createId } from "../../session/session";
 import type { SourceKind } from "@/components/sourceTypes";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { DurationBar, useDurationClock } from "@/components/DurationBar";
-import { formatDuration, formatEndTime } from "@/time-format";
+import { DurationBar } from "@/components/DurationBar";
+import { formatDuration } from "@/time-format";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SaveToggle } from "@/components/DetailHeader";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 
 export type Props = {
@@ -51,21 +52,20 @@ const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twi
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
 type GroupId = SearchKind | "channels";
-type Group = { id: GroupId; title: string; shape: ArtShape | "rows"; noun: [one: string, many: string] };
-// What's on the board first, then what you'd listen to, then the long tail of videos and channels. Each heading counts
-// what it holds by name, as Home's shelves say "3 unfinished" or "2 saved".
+type Group = { id: GroupId; title: string; shape: ArtShape };
+// What's on the board first, then what you'd listen to, then the long tail of videos and channels, every kind a shelf.
+// The kinds above already count, so the headings don't.
 const groups: Group[] = [
-  { id: "films", title: "Films and series", shape: "poster", noun: ["title", "titles"] },
-  { id: "radio", title: "Radio", shape: "square", noun: ["station", "stations"] },
-  { id: "live", title: "Live now", shape: "video", noun: ["stream", "streams"] },
-  { id: "music", title: "Music", shape: "square", noun: ["result", "results"] },
-  { id: "videos", title: "Videos", shape: "rows", noun: ["video", "videos"] },
-  { id: "channels", title: "Channels and lists", shape: "rows", noun: ["result", "results"] },
+  { id: "films", title: "Films and series", shape: "poster" },
+  { id: "radio", title: "Radio", shape: "square" },
+  { id: "live", title: "Live now", shape: "video" },
+  { id: "music", title: "Music", shape: "square" },
+  { id: "videos", title: "Videos", shape: "video" },
+  { id: "channels", title: "Channels and lists", shape: "round" },
 ];
 // The kinds above the results, in the shelves' order; only those the query found are offered.
 const kinds = groups.flatMap(group => group.id === "channels" ? [] : [{ value: group.id as SearchKind, label: kindLabels[group.id as SearchKind] }]);
 const kindOf = (group: GroupId): SearchKind => group === "channels" ? "videos" : group;
-const count = (group: Group, n: number) => `${n} ${group.noun[n === 1 ? 0 : 1]}`;
 const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 // RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
 const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List" || hit.source === "RaiPlay" && !!hit.collection ? "films"
@@ -79,8 +79,8 @@ const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]"
 
 /**
  * The results of the header's search (`searchState`, the route's): the kinds it found, then that kind's sources, then the
- * closest match, then every source's hits by kind, each kind in the shape it reads best in (posters, squares, frames,
- * or rows under the time ruler); one kind fills the page as a grid or a list. Or a pasted link.
+ * closest match, then every source's hits by kind as shelves in their artwork's shape; one kind fills the page as a grid.
+ * Sources that didn't answer close the page in one quiet line. Or a pasted link.
  */
 export function SearchPanel(props: Props) {
   const { searchState } = props;
@@ -99,7 +99,6 @@ export function SearchPanel(props: Props) {
   const url = isLink(query) ? query : undefined;
   const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[];
   const pending = (source: string) => !summaries[source] || summaries[source].loading;
-  const now = useDurationClock();
   // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
   // strong when its title holds every word.
   const { close, strong } = searchRelevance(query);
@@ -165,22 +164,21 @@ export function SearchPanel(props: Props) {
         {!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”.`}
         {asking.length > 0 && ` ${asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}`}
       </p>
-      <SourceProblems summaries={shown} />
-      {!scoped.length && asking.length > 0 && (one && one.shape !== "rows" ? <ul aria-label="Loading search results…" className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[one.shape])}><MediaTilesSkeleton shape={one.shape} fluid /></ul> : <MediaRowsSkeleton label="Loading search results…" />)}
-      {top && <TopResult key={top.id} hit={top} now={now} />}
-      {grouped.map((group, index) => group.shape === "rows"
-        ? <section key={group.id} aria-label={group.title} className="grid min-w-0 gap-3">
-          {/* One kind's own list needs no heading: the row names it. Channels and lists stay headed under Videos. */}
-          {kind !== group.id && <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{heading(group) ? <KindLink href={heading(group)!} title={group.title} /> : group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{count(group, group.hits.length)}</p></header>}
-          <HitList pageFirst={!top && index === 0} hits={group.hits} label={group.title} />
-        </section>
-        : kind ? <ul key={group.id} aria-label={group.title} className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[majorityShape(group.hits.map(shapeOf))])}>
-          {group.hits.map((hit, position) => <li key={hit.id} className="@container min-w-0"><HitTile hit={hit} now={now} shape={majorityShape(group.hits.map(shapeOf))} pageFirst={!top && position === 0} className={cn("w-full [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full", fluidTile[majorityShape(group.hits.map(shapeOf))])} /></li>)}
-        </ul>
-        : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)} href={heading(group)}>
-          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} now={now} shape={majorityShape(group.hits.slice(0, 12).map(shapeOf))} pageFirst={!top && index === 0 && position === 0} /></li>)}
+      {!scoped.length && asking.length > 0 && (one ? <ul aria-label="Loading search results…" className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[one.shape])}><MediaTilesSkeleton shape={one.shape} fluid /></ul> : <SearchSkeleton />)}
+      {top && <TopResult key={top.id} hit={top} />}
+      {grouped.map((group, index) => {
+        const shape = majorityShape(group.hits.slice(0, 12).map(shapeOf));
+        // A word every hit of a kind shares (RaiPlay's "Programme") says nothing, so it goes.
+        const showCollection = !(group.hits.length > 1 && group.hits.every(hit => hit.collection && hit.collection === group.hits[0]!.collection));
+        // One kind fills the page as a grid, without its heading or the twelve-tile cap; Channels and lists stay a shelf under Videos.
+        if (kind === group.id) return <ul key={group.id} aria-label={group.title} className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[shape])}>
+          {group.hits.map((hit, position) => <li key={hit.id} className="@container min-w-0"><HitTile hit={hit} shape={shape} showCollection={showCollection} pageFirst={!top && position === 0} className={cn("w-full [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full", fluidTile[shape])} /></li>)}
+        </ul>;
+        return <Shelf key={group.id} title={group.title} href={heading(group)}>
+          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} shape={shape} showCollection={showCollection} pageFirst={!top && index === 0 && position === 0} /></li>)}
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
-        </Shelf>)}
+        </Shelf>;
+      })}
       <MoreResults summaries={shown} />
       {/* A scope from the field that holds nothing says so, with the way back to everything the query found. */}
       {props.connected && !asking.length && !scoped.length && found.length > 0 && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing in {scopeLabels({ kind, source: filter }).join(" on ")} for “{query}”</h2></EmptyTitle></EmptyHeader><EmptyContent><Button data-page-first variant="outline" onClick={everything}>Show all {found.length} {found.length === 1 ? "result" : "results"}</Button></EmptyContent></Empty>}
@@ -190,6 +188,8 @@ export function SearchPanel(props: Props) {
         <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 h-auto min-h-8 max-w-full justify-self-start text-left whitespace-normal text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} {loose.length === 1 ? "result that doesn't" : "results that don't"} mention “{query}”</Button></CollapsibleTrigger>
         <CollapsibleContent><HitList hits={loose} label="Other results" compact /></CollapsibleContent>
       </Collapsible>}
+      {/* Sources that didn't answer close the page in one quiet line, so the results lead. */}
+      <SourcesUnanswered summaries={shown} />
     </>}
     {providers.map(provider => <SearchOnlineResults key={`${provider}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(providerNames[provider])} provider={provider} query={query} quality={quality} onEnqueued={resetQuality} />)}
     {!url && radioSources.map(source => <SearchRadioResults key={`${source}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(source)} query={query} source={source} />)}
@@ -197,42 +197,38 @@ export function SearchPanel(props: Props) {
   </section>;
 }
 
-/** A group's heading under All opens its kind, as a shelf's heading opens what it samples. */
-function KindLink({ href, title }: { href: string; title: string }) {
-  const details = useDetailNavigation();
-  return <Button asChild variant="ghost" className="-ml-2.5 h-auto min-h-8 gap-1 text-left text-base font-medium whitespace-normal">
-    <a id={`shelf-${title.toLowerCase().replace(/\W+/g, "-")}`} href={href} onClick={event => {
-      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      details.open(href);
-    }}>{title}<ChevronRight aria-hidden="true" className="text-muted-foreground" /></a>
-  </Button>;
-}
-
 const hitContext = (hit: SearchHit) => metaLine(...hit.meta.split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })));
+/** One meta line by the caption rules: the byline the links don't already give, what an openable hit is, then its length. */
+const hitMeta = (hit: SearchHit, showCollection = true) => metaLine(hitContext(hit), showCollection && hit.collection, !hit.live && !hit.collection && hit.duration != null && formatDuration(hit.duration));
 
 /** Sources stay readable even when a long artist or programme name fills the context line. */
-function HitSource({ hit, showSource = true, showCollection = true }: { hit: SearchHit; showSource?: boolean; showCollection?: boolean }) {
-  return <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />{showCollection && hit.collection && <span>{hit.collection}</span>}</div>;
+function HitSource({ hit, showSource = true }: { hit: SearchHit; showSource?: boolean }) {
+  return <MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />;
 }
 
-/** The closest match, laid out like Home's hero at a smaller size: artwork, title, meta, when it ends, then its verbs. */
-function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
+/**
+ * The closest match, laid out like Home's hero at a smaller size: artwork, title, one meta line and its links, then its
+ * verbs. On a phone the artwork sits beside the title, so the first screen holds the shelves too.
+ */
+function TopResult({ hit }: { hit: SearchHit }) {
   const { on } = usePlayOn();
   const label = hit.primary.label === "Play" || hit.primary.label === "Resume" ? on(hit.primary.label) : hit.primary.label;
   const play = hit.primary.label !== "Play" ? hit.actions.find(action => action.label === "Play") : undefined;
   const queue = hit.actions.find(action => action.label === "Queue");
   const save = hit.actions.find(action => action.label === "Save" || action.label === "Saved");
   const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action !== save && action.label !== hit.primary.label));
-  const time = !hit.live && !hit.collection && hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
-  return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid gap-x-8 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
-    <div aria-hidden="true" className="h-40 min-w-0 md:h-48 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className={cn("h-full w-auto max-w-full object-contain", artAspect[shapeOf(hit)])} /></div>
-    <div className="grid min-w-0 gap-1">
-      <h2 className="break-words text-2xl font-semibold tracking-tight">{hit.primary.href ? <ContentLink href={hit.primary.href} className="no-underline hover:underline">{hit.title}</ContentLink> : hit.title}</h2>
-      {hitContext(hit) && <p className="text-sm text-muted-foreground break-words">{hitContext(hit)}</p>}
+  const meta = hitMeta(hit);
+  const description = withoutUrls(hit.description);
+  return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3">
+    {/* Its shape's frame at a set height, as Details draws it. */}
+    <div aria-hidden="true" className={cn("h-20 max-w-[36vw] overflow-hidden bg-muted md:row-span-2 md:h-48 md:max-w-[40vw]", artAspect[shapeOf(hit)])}><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className="aspect-auto size-full object-cover" /></div>
+    <div className="grid min-w-0 gap-1 md:self-end">
+      <h2 className="break-words text-lg leading-snug font-semibold tracking-tight md:text-2xl">{hit.primary.href ? <ContentLink href={hit.primary.href} className="no-underline hover:underline">{hit.title}</ContentLink> : hit.title}</h2>
+      {meta && <p className="text-sm text-muted-foreground break-words tabular-nums">{meta}</p>}
       <HitSource hit={hit} />
-      {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}
-      <div data-nav-row className="mt-3 flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full">
+    </div>
+    <div className="col-span-2 grid min-w-0 gap-4 md:col-span-1 md:col-start-2">
+      <div data-nav-row className="flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full">
         <Button data-page-first data-play size="lg" asChild={!!hit.primary.href && !hit.primary.disabled} disabled={hit.primary.disabled} onClick={event => {
           if (hit.primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
           if (hit.primary.href) event.preventDefault();
@@ -240,26 +236,42 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
         }}>{hit.primary.href && !hit.primary.disabled ? <a href={detailHref(hit.primary.href)}>{label}</a> : label}</Button>
         {play && <Button variant="ghost" size="lg" disabled={play.disabled} onClick={play.run}>{on("Play")}</Button>}
         {queue && <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>Queue</Button>}
-        {save && <Button variant="ghost" size="lg" aria-pressed={save.pressed} disabled={save.disabled} onClick={save.run}>{save.label}</Button>}
+        {save && <SaveToggle saved={!!save.pressed} disabled={save.disabled} onClick={save.run} />}
         <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
       </div>
-      {hit.description && <p className="mt-4 line-clamp-3 max-w-prose break-words text-sm leading-relaxed text-muted-foreground">{hit.description}</p>}
+      {description && <p className="line-clamp-3 max-w-prose break-words text-sm leading-relaxed text-muted-foreground max-md:hidden">{description}</p>}
     </div>
   </section>;
 }
 
-/** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
-function HitTile({ hit, now, shape, pageFirst, className }: { hit: SearchHit; now: number; shape: ArtShape; pageFirst: boolean; className?: string }) {
-  const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
-  const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
-  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} plays={primary.label === "Play" || primary.label === "Resume"} title={hit.title} meta={hitContext(hit)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
-    href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]}>
-    {!hit.live && !hit.collection && hit.duration != null && <span className="text-sm font-light tabular-nums">{formatDuration(hit.duration)}, ends {formatEndTime(hit.duration - (hit.position ?? 0), now)}</span>}
-  </MediaTile>;
+/** Search's cold load in the geometry it becomes: the closest match, then a shelf. */
+function SearchSkeleton() {
+  return <div role="status" aria-label="Loading search results…" data-loading="search" className="space-y-8">
+    <div aria-hidden="true" className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3">
+      <Skeleton className="size-20 rounded-none md:row-span-2 md:size-48" />
+      <div className="grid gap-2 md:self-end"><Skeleton className="h-7 w-3/5 max-w-96 md:h-8" /><Skeleton className="h-4 w-2/5 max-w-64" /></div>
+      <div className="col-span-2 flex flex-wrap gap-2 md:col-span-1 md:col-start-2"><Skeleton className="h-11 w-28 max-md:w-full" /><Skeleton className="h-11 w-20" /><Skeleton className="size-10" /></div>
+    </div>
+    <div aria-hidden="true" className="grid gap-3">
+      <div className="flex min-h-11 items-center"><Skeleton className="h-6 w-40" /></div>
+      <ol className="-m-1 flex gap-4 overflow-hidden p-1 pb-3"><MediaTilesSkeleton shape="square" /></ol>
+    </div>
+  </div>;
 }
 
-/** Search hits as divided rows; collection and station pages use the compact layout. */
-export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean }) {
+/** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
+function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { hit: SearchHit; shape: ArtShape; showCollection?: boolean; pageFirst: boolean; className?: string }) {
+  const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
+  const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
+  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} plays={primary.label === "Play" || primary.label === "Resume"} title={hit.title} meta={hitMeta(hit, showCollection)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
+    href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]} />;
+}
+
+/**
+ * Search hits as divided rows; collection and station pages use the compact layout. An album's tracks (`numbered`, its
+ * first number) are a tracklist: number, title and time, with nothing the page already says.
+ */
+export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true, numbered }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean; numbered?: number }) {
   const session = useOptionalSessionGate();
   if (!hits.length) return null;
   // The list takes its majority shape; a word every row shares ("Programme") says nothing, so it goes.
@@ -269,8 +281,12 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
     <MediaList aria-label={label}>{hits.map((hit, index) => {
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
-      return <MediaRow context={<HitSource hit={hit} showSource={showSource} showCollection={!sameKind} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={!compact ? hitContext(hit) : metaLine(hitContext(hit), !hit.live && hit.duration != null && formatDuration(hit.duration))} description={!compact ? hit.description : undefined} shape={shape} own={shapeOf(hit)}
-      art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
+      const track = numbered != null;
+      return <MediaRow context={track ? undefined : <HitSource hit={hit} showSource={showSource} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title}
+      number={track ? numbered + index : undefined}
+      meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? hitMeta(hit, !sameKind) : metaLine(hitContext(hit), !sameKind && hit.collection)}
+      description={!compact ? withoutUrls(hit.description) || undefined : undefined} shape={shape} own={shapeOf(hit)}
+      art={track ? undefined : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       // A press that plays keeps the hit's own destination (a station's page) in the menu as Open.
       menu={play || hit.primary.label === "Play" ? [...play && hit.primary.label !== "Play" ? [{ label: hit.primary.label, disabled: hit.primary.disabled, run: hit.primary.run }] : [], ...hit.actions.filter(action => action.label !== "Play")] : hit.actions}>
@@ -286,20 +302,35 @@ export function MoreResults({ summaries }: { summaries: Entry[] }) {
   return more.length ? <div className="flex flex-wrap gap-2">{more.map(([source, summary]) => <Button key={source} variant="outline" className="h-auto min-h-8 max-w-full whitespace-normal" disabled={summary.moreDisabled} onClick={summary.more}>More from {source}</Button>)}</div> : null;
 }
 
-/** Sources that failed, as one Alert with one Try again; then source notes. */
+const names = (sources: string[]) => sources.length > 1 ? `${sources.slice(0, -1).join(", ")} and ${sources.at(-1)}` : sources[0];
+
+/** A page whose one source failed: one Alert with its reason and Try again; then source notes. */
 export function SourceProblems({ summaries }: { summaries: Entry[] }) {
   const failed = summaries.filter(([, summary]) => summary.error);
   const notes = summaries.filter(([, summary]) => summary.warning && summary.warning !== summary.errorMessage);
-  const names = failed.map(([source]) => source);
   const messages = [...new Set(failed.map(([, summary]) => summary.errorMessage || "Didn't respond."))];
   return <>
     {failed.length > 0 && <Alert variant="destructive">
-      <AlertTitle>Couldn't load {names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}.</AlertTitle>
+      <AlertTitle>Couldn't load {names(failed.map(([source]) => source))}.</AlertTitle>
       <AlertDescription>{messages.length === 1 ? messages[0] : <ul>{failed.map(([source, summary]) => <li key={source} className="break-words">{failed.length > 1 && `${source}: `}{summary.errorMessage || "Didn't respond."}</li>)}</ul>}</AlertDescription>
       <AlertAction><Button variant="ghost" size="sm" onClick={() => failed.forEach(([, summary]) => summary.retry?.())}>Try again</Button></AlertAction>
     </Alert>}
     {notes.length > 0 && <Alert><AlertDescription><ul>{notes.map(([source, summary]) => <li key={source}>{source}: {summary.warning}</li>)}</ul></AlertDescription></Alert>}
   </>;
+}
+
+/**
+ * Sources that didn't answer, where others did or the page is something else (Search, a Details page's neighbours): one
+ * muted line at the end with one Try again, then a muted line per source note. Their reasons wait on the source's own page.
+ */
+export function SourcesUnanswered({ summaries }: { summaries: Entry[] }) {
+  const failed = summaries.filter(([, summary]) => summary.error);
+  const notes = summaries.filter(([, summary]) => summary.warning && summary.warning !== summary.errorMessage);
+  if (!failed.length && !notes.length) return null;
+  return <div data-source-problems className="grid gap-1 text-sm text-muted-foreground">
+    {failed.length > 0 && <p>{names(failed.map(([source]) => source))} didn't answer. <Button variant="link" className="h-auto p-0 align-baseline text-foreground touch:min-h-0" onClick={() => failed.forEach(([, summary]) => summary.retry?.())}>Try again</Button></p>}
+    {notes.map(([source, summary]) => <p key={source} className="break-words">{source}: {summary.warning}</p>)}
+  </div>;
 }
 
 function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props & { url: string; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void; onDone: () => void }) {

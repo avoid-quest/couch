@@ -85,7 +85,8 @@ aren't listed, since Discover has them; typing a source's name offers it. On
 the TV they are columns the arrows cross (Up/Down within, Left/Right between).
 Nothing is selected until an arrow, so Enter still submits.
 
-**Typing** selects the query row ("jazz in Music"), then suggests only what
+**Typing** selects the query row, a verb rather than a second field: "Search
+“jazz”", or "Search “jazz” in Music" when scoped. Then it suggests only what
 the client already holds, once typing pauses (`useDebouncedValue`, 120 ms):
 the scopes the text names, matching recent searches, then up to three each of
 Saved, Played and Stations, each with its artwork over where it comes from,
