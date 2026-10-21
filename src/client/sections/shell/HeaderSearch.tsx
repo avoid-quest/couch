@@ -48,7 +48,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   const [focused, setFocused] = useState(false);
   const search = (query: string, action: "clear" | "submit" | "enter" = "clear") => {
     if (!query && !results) return;
-    const href = query ? searchLocation({ ...route ?? { source: scope }, query, ...isLink(query) ? { source: "All" } : {} }) : "/discover";
+    const href = query ? searchLocation({ ...route ?? { source: scope }, query, ...isLink(query) ? { source: "All", kind: undefined } : {} }) : "/discover";
     if (query && !isLink(query) && installationId) setRecents(rememberSearch(installationId, query));
     // Submission goes on to the results; clearing keeps focus here (on the TV too).
     if (href !== pathname + searchStr) void router.navigate({ href, replace: results, ...action !== "clear" ? {} : { state: { detailFocus: { selector: "#media-search", index: 0 } } } });

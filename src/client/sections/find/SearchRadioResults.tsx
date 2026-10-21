@@ -73,7 +73,7 @@ function RadioResults(props: Props) {
         ],
       };
     });
-    props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), warning: saveError || undefined, facets: results.map(() => ({ kind: "Radio" })), hits });
+    props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), warning: saveError || undefined, hits });
   }, [title, stations, favorites, programmes.data, now, results.length, loading, error, saveError, busy, props.connected, props.onResults, props.canPlay, props.onCommand, props.browse]);
   return null;
 }

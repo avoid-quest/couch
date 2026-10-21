@@ -87,7 +87,7 @@ export function DetailFocusRestoration() {
     const filterable = ["/search", "/collection", "/discover/radio", "/discover/live-tv"].includes(location.pathname);
     const params = new URLSearchParams(location.searchStr);
     if (filterable) {
-      for (const name of ["filter", "page", "radioSource", "group", ...location.pathname === "/search" ? ["source", "until", "kind", "length"] : []]) params.delete(name);
+      for (const name of ["filter", "page", "radioSource", "group", ...location.pathname === "/search" ? ["source", "kind"] : []]) params.delete(name);
     }
     params.sort();
     const pageKey = location.pathname + "?" + params;

@@ -62,13 +62,19 @@ export async function runSearchResultsRegression() {
     open!.click();
     await wait();
     assert(opened === "live-1", "Live tile Open did not reach its collection");
-    state = { query: "x", source: "All", until: "01:01" }; render();
+    state = { query: "x", source: "All", kind: "live" }; render();
     await wait();
-    assert(host.querySelector('[role="combobox"][aria-label="Ends by"]')?.textContent?.includes("01:01"), "Selected Ends by filter disappeared");
+    assert(host.querySelectorAll("[data-media-tile]").length === 14 && !host.querySelector('section[aria-label="Live now"]') && ![...host.querySelectorAll("button")].some(button => /^\d+ more$/.test(button.textContent ?? "")), "One kind kept its heading or its cap");
+    assert(host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "twitch:live-0", "One kind lost its leading result");
+    state = { ...state, source: "Twitch" }; render();
+    await wait();
+    [...host.querySelectorAll<HTMLElement>('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].find(radio => radio.textContent === "Films & series")!.click();
+    await wait();
+    assert(state.kind === "films" && state.source === "All", "A source without films stayed chosen");
     state = { query: "x stream", source: "All" }; render();
     await wait(900);
     assert(host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "streamingcommunity:film", "Previous query's snapshot pinned the wrong hero");
-    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "selected deadline filter", "query change retires the old hero hold"] };
+    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "one kind fills the page", "kind change resets an empty source", "query change retires the old hero hold"] };
   } finally {
     releaseFilms!(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }
@@ -118,16 +124,16 @@ export async function runSearchResultStatesRegression() {
     await wait(900);
     assert(attempts === 2 && !host.querySelector('[role="alert"]'), "Try again did not clear the recovered failure");
     assert(host.querySelector('[data-hit-id="youtube:space"]') && host.querySelector('[data-hit-id="twitch:stream"]'), "Retry replaced successful results");
-    state = { query: "space", source: "Bandcamp" }; render();
+    state = { query: "space", source: "Bandcamp", kind: "music" }; render();
     await wait();
-    assert(host.textContent?.includes("Nothing matches these filters"), "Empty source scope had no explanation");
-    [...host.querySelectorAll("button")].find(button => button.textContent === "Clear filters")!.click();
+    assert(host.textContent?.includes("No music on Bandcamp for “space”"), "Empty source scope had no explanation");
+    [...host.querySelectorAll("button")].find(button => button.textContent === "All results")!.click();
     await wait();
-    assert(state.source === "All" && host.querySelector("[data-search-top]"), "Clear filters did not restore results");
+    assert(state.source === "All" && !state.kind && host.querySelector("[data-search-top]"), "All results did not restore results");
     state = { query: "no matches", source: "All" }; render();
     await wait(900);
     assert(host.textContent?.includes("Nothing found for “no matches”") && !host.querySelector("[data-hit-id]"), "Empty search retained stale results");
-    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "retry retains successes", "filtered empty and clear", "empty search retires results"] };
+    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "retry retains successes", "filtered empty and All results", "empty search retires results"] };
   } finally {
     release(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }

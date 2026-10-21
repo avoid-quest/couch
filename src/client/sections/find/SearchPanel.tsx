@@ -1,15 +1,16 @@
-import { MediaRowsSkeleton } from "@/components/LoadingMedia";
+import { MediaRowsSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
+import { ChevronRight } from "lucide-react";
 import { playbackStatus } from "@/playback-status";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
-import { isLink, mergeSearchHits, searchSources, searchEndBounds, searchDeadline, searchSecondsLeft, searchRelevance, type SearchRouteState } from "../../search";
+import { isLink, mergeSearchHits, searchLocation, searchRelevance, type SearchKind, type SearchRouteState } from "../../search";
 import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { FilterBar, FilterSelect } from "@/components/ContentFilters";
+import { FilterBar, FilterChoice, FilterSelect } from "@/components/ContentFilters";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
@@ -46,7 +47,7 @@ type Entry = [source: string, summary: SearchResultSummary];
 const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
-type GroupId = "films" | "radio" | "live" | "music" | "videos" | "channels";
+type GroupId = SearchKind | "channels";
 type Group = { id: GroupId; title: string; shape: TileShape | "rows"; noun: [one: string, many: string] };
 // What's on the board first, then what you'd listen to, then the long tail of videos and channels. Each heading counts
 // what it holds by name, as Home's shelves say "3 unfinished" or "2 saved".
@@ -58,24 +59,33 @@ const groups: Group[] = [
   { id: "videos", title: "Videos", shape: "rows", noun: ["video", "videos"] },
   { id: "channels", title: "Channels and lists", shape: "rows", noun: ["result", "results"] },
 ];
+// The row of kinds above the results. Every source is searched on every query, so the row never changes while they answer.
+const kinds: { value: SearchKind | "all"; label: string; none: string }[] = [
+  { value: "all", label: "All", none: "results" }, { value: "films", label: "Films & series", none: "films or series" }, { value: "live", label: "Live", none: "live streams" },
+  { value: "radio", label: "Radio", none: "stations" }, { value: "music", label: "Music", none: "music" }, { value: "videos", label: "Videos", none: "videos" },
+];
+const kindOf = (group: GroupId): SearchKind => group === "channels" ? "videos" : group;
 const count = (group: Group, n: number) => `${n} ${group.noun[n === 1 ? 0 : 1]}`;
 const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 // RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
 const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List" || hit.source === "RaiPlay" && !!hit.collection ? "films"
   : hit.kind === "Radio" ? "radio" : hit.kind === "Live" ? "live" : hit.kind === "Music" ? "music" : hit.collection ? "channels" : "videos";
 const shapeOf = (hit: SearchHit): TileShape => { const shape = groups.find(group => group.id === groupOf(hit))!.shape; return shape === "rows" || hit.source === "RaiPlay" ? "video" : shape; };
+// One kind's tiles wrap as ProviderPage's posters do, each as wide as its column.
+const gridColumns = { poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]", square: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]", video: "grid-cols-[repeat(auto-fill,minmax(14rem,1fr))]" } as const;
+const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]", video: "[--tile-art:56.25cqi]" } as const;
 
 /**
- * The results of the header's search (`searchState`, the route's): the closest match on top, then every source's hits
- * by kind, each kind in the shape it reads best in (posters, squares, frames, or rows under the time ruler), with the
- * sources and "Ends by" as one row of choices above them; or a pasted link.
+ * The results of the header's search (`searchState`, the route's): a row of kinds and a source above them, then the
+ * closest match, then every source's hits by kind, each kind in the shape it reads best in (posters, squares, frames,
+ * or rows under the time ruler); one kind fills the page as a grid or a list. Or a pasted link.
  */
 export function SearchPanel(props: Props) {
   const { searchState } = props;
   const query = searchState.query;
   const [remoteSummaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
   const liveHits = useLiveSourceHits(query);
-  const latest = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Shared sources": { count: liveHits.length, hits: liveHits, facets: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
+  const latest = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Shared sources": { count: liveHits.length, hits: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
   // Query cache hits are published before paint; never debounce them into a blank revisit.
   const summaries = latest;
   const resultsKey = JSON.stringify([query, props.origin, props.token]);
@@ -83,41 +93,31 @@ export function SearchPanel(props: Props) {
   if (resultsKey !== seenResults) { setSeenResults(resultsKey); setSummaries({}); }
   const reportResults = useCallback((source: string, summary: SearchResultSummary) => setSummaries(current => ({ ...current, [source]: summary })), []);
   const filter = searchState.source;
-  const until = searchState.until;
-  const setFilter = (source: string) => props.onSearchChange({ ...searchState, source });
-  const setUntil = (value: string) => props.onSearchChange({ ...searchState, until: value === "any" ? undefined : value });
+  const kind = searchState.kind;
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(query) ? query : undefined;
   const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[];
   const inScope = (source: string) => filter === "All" || filter === source;
+  const inKind = (hit: SearchHit, of = kind) => !of || kindOf(groupOf(hit)) === of;
   const asking = sourceOrder.filter(source => inScope(source) && (!summaries[source] || summaries[source].loading));
-  // Ends by: three clock times ahead, on the half hour, the first at least twenty minutes out. Live and radio always fit.
   const now = useDurationClock();
-  const [selectedDeadline, setSelectedDeadline] = useState(() => until ? { until, deadline: searchDeadline(until, now) } : null);
-  const deadline = selectedDeadline?.until === until ? selectedDeadline : until ? { until, deadline: searchDeadline(until, now) } : null;
-  if (deadline !== selectedDeadline) setSelectedDeadline(deadline);
-  const bounds = searchEndBounds(now);
-  if (deadline && !bounds.some(bound => bound.value === until)) bounds.unshift({ value: deadline.until, deadline: deadline.deadline });
-  const fits = deadline ? searchSecondsLeft(deadline.deadline, now) : null;
-  const fitsBy = (hit: SearchHit, seconds: number | null) => seconds == null || !!hit.live || hit.kind === "Radio" || !hit.collection && hit.duration != null && hit.duration - (hit.position ?? 0) <= seconds;
   // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
   // strong when its title holds every word.
   const { close, strong } = searchRelevance(query);
   const merged = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), query), [summaries, query]);
-  const scoped = merged.filter(hit => inScope(hit.source) && fitsBy(hit, fits));
+  const scoped = merged.filter(hit => inScope(hit.source) && inKind(hit));
   const relevant = scoped.filter(close);
   const loose = scoped.filter(hit => !close(hit));
   // The closest match leads: the first strong hit of the first kind that has one, as Home's hero leads its shelves. The first match
-  // holds still for the query, so nothing moves under the focus while browsing.
+  // holds still for the query and kind, so nothing moves under the focus while browsing.
   const candidate = groups.map(group => relevant.find(hit => groupOf(hit) === group.id && strong(hit))).find(Boolean);
-  const [held, setHeld] = useState<{ key: string; id: string } | null>(null);
+  const holdKey = `${resultsKey}:${kind ?? "all"}`;
+  const [held, setHeld] = useState<Record<string, string>>({});
   useLayoutEffect(() => {
-    if (candidate) {
-      setHeld(current => current?.key === resultsKey ? current : { key: resultsKey, id: candidate.id });
-    }
-  }, [candidate, resultsKey]);
-  const top = (held?.key === resultsKey && relevant.find(hit => hit.id === held.id)) || candidate;
+    if (candidate) setHeld(current => current[holdKey] ? current : { ...current, [holdKey]: candidate.id });
+  }, [candidate, holdKey]);
+  const top = (held[holdKey] && relevant.find(hit => hit.id === held[holdKey])) || candidate;
   const [expanded, setExpanded] = useState<{ key: string; groups: GroupId[] }>({ key: resultsKey, groups: [] });
   const expandedGroups = expanded.key === resultsKey ? expanded.groups : [];
   const grouped = groups.map(group => ({ ...group, hits: relevant.filter(hit => hit !== top && groupOf(hit) === group.id) })).filter(group => group.hits.length);
@@ -128,39 +128,58 @@ export function SearchPanel(props: Props) {
       ?? panel.current?.querySelector<HTMLElement>("[data-play], [data-media-tile]");
     row?.focus({ preventScroll: true });
   }, [relevant, props.active]);
+  // A heading or All results that changed the kind left with its control; the focus goes to the chosen kind.
+  const shownKind = useRef(kind);
+  useLayoutEffect(() => {
+    if (shownKind.current === kind) return;
+    shownKind.current = kind;
+    if (document.activeElement === document.body) panel.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
+  }, [kind]);
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
-  const clearFilters = () => props.onSearchChange({ query, source: "All" });
-  const sourceCount = (source: string) => merged.filter(hit => (source === "All" || hit.source === source) && close(hit) && fitsBy(hit, fits)).length;
+  const kindHits = merged.filter(hit => inKind(hit) && close(hit));
+  const sourceHits = (source: string) => kindHits.filter(hit => hit.source === source).length;
+  // A source with no hits of a newly chosen kind would empty it, so the choice falls back to every source.
+  const chooseKind = (value: SearchKind | "all") => {
+    const next = value === "all" ? undefined : value;
+    props.onSearchChange({ ...searchState, kind: next, source: filter === "All" || merged.some(hit => hit.source === filter && close(hit) && inKind(hit, next)) ? filter : "All" });
+  };
+  const allResults = () => props.onSearchChange({ query, source: "All" });
   const [looseOpen, setLooseOpen] = useState(false);
-  const filtered = filter !== "All" || !!until;
+  const one = kind && groups.find(group => group.id === kind)!;
+  const heading = (group: Group) => kind ? undefined : searchLocation({ ...searchState, kind: kindOf(group.id) });
   return <section ref={panel} className="min-w-0 space-y-8" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && <>
-      <FilterBar label="Search filters">
-        <FilterSelect label="Source" value={filter} onChange={setFilter} options={searchSources.map(source => ({ value: source, label: source === "All" ? "All sources" : source,
-          detail: source === "All" ? sourceCount(source) : !summaries[source] || summaries[source].loading ? "Loading…" : summaries[source].error ? "Unavailable" : sourceCount(source),
-        }))} />
-        <FilterSelect label="Ends by" value={until ?? "any"} onChange={setUntil} options={[{ value: "any", label: "Any end time" }, ...bounds.map(bound => ({ value: bound.value, label: `Ends by ${bound.value}` }))]} />
-        {filtered && <Button variant="ghost" onClick={() => { clearFilters(); panel.current?.querySelector<HTMLElement>('button[aria-label="Source"]')?.focus(); }}>Clear filters</Button>}
+      <FilterBar label="Search filters" data-nav-row>
+        <FilterChoice label="Kind" value={kind ?? "all"} onChange={chooseKind} options={kinds} className="max-sm:w-full" />
+        <FilterSelect label="Source" value={filter} onChange={source => props.onSearchChange({ ...searchState, source })} className="sm:ml-auto" options={[
+          { value: "All", label: "All sources", detail: kindHits.length },
+          ...sourceOrder.filter(source => source === filter || sourceHits(source)).map(source => ({ value: source, label: source, detail: sourceHits(source) })),
+        ]} />
       </FilterBar>
       <p role="status" className="sr-only">
         {!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”.`}
         {asking.length > 0 && ` ${asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}`}
       </p>
       <SourceProblems summaries={shown} />
-      {!scoped.length && asking.length > 0 && <MediaRowsSkeleton label="Loading search results…" />}
+      {!scoped.length && asking.length > 0 && (one && one.shape !== "rows" ? <ul aria-label="Loading search results…" className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[one.shape])}><MediaTilesSkeleton shape={one.shape} fluid /></ul> : <MediaRowsSkeleton label="Loading search results…" />)}
       {top && <TopResult key={top.id} hit={top} now={now} />}
       {grouped.map((group, index) => group.shape === "rows"
         ? <section key={group.id} aria-label={group.title} className="grid min-w-0 gap-3">
-          <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{count(group, group.hits.length)}</p></header>
+          {/* One kind's own list needs no heading: the row names it. Channels and lists stay headed under Videos. */}
+          {kind !== group.id && <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{heading(group) ? <KindLink href={heading(group)!} title={group.title} /> : group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{count(group, group.hits.length)}</p></header>}
           <HitList pageFirst={!top && index === 0} hits={group.hits} label={group.title} />
         </section>
-        : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)}>
+        : kind ? <ul key={group.id} aria-label={group.title} className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[group.shape])}>
+          {group.hits.map((hit, position) => <li key={hit.id} className="@container min-w-0"><HitTile hit={hit} now={now} shape={shapeOf(hit)} pageFirst={!top && position === 0} className={cn("w-full [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full", fluidTile[shapeOf(hit)])} /></li>)}
+        </ul>
+        : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)} href={heading(group)}>
           {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} now={now} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
-      {props.connected && !asking.length && !relevant.length && filtered && !shown.some(([, summary]) => summary.error) && <Empty><EmptyHeader><EmptyTitle>Nothing matches these filters</EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={clearFilters}>Clear filters</Button></EmptyContent></Empty>}
-      {props.connected && !asking.length && !relevant.length && !filtered && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
+      {props.connected && !asking.length && !relevant.length && !shown.some(([, summary]) => summary.error) && (kind || filter !== "All"
+        ? <Empty role="status"><EmptyHeader><EmptyTitle><h2>No {kinds.find(option => option.value === (kind ?? "all"))!.none}{filter !== "All" && ` on ${filter}`} for “{query}”</h2></EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={allResults}>All results</Button></EmptyContent></Empty>
+        : <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>)}
       {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
       {loose.length > 0 && <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">
         <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 h-auto min-h-8 max-w-full justify-self-start text-left whitespace-normal text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} {loose.length === 1 ? "result that doesn't" : "results that don't"} mention “{query}”</Button></CollapsibleTrigger>
@@ -171,6 +190,18 @@ export function SearchPanel(props: Props) {
     {!url && radioSources.map(source => <SearchRadioResults key={`${source}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(source)} query={query} source={source} />)}
     {url && <PastedLink key={url} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
   </section>;
+}
+
+/** A group's heading under All opens its kind, as a shelf's heading opens what it samples. */
+function KindLink({ href, title }: { href: string; title: string }) {
+  const details = useDetailNavigation();
+  return <Button asChild variant="ghost" className="-ml-2.5 h-auto min-h-8 gap-1 text-left text-base font-medium whitespace-normal">
+    <a id={`shelf-${title.toLowerCase().replace(/\W+/g, "-")}`} href={href} onClick={event => {
+      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      details.open(href);
+    }}>{title}<ChevronRight aria-hidden="true" className="text-muted-foreground" /></a>
+  </Button>;
 }
 
 const hitContext = (hit: SearchHit) => hit.meta.split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })).join(" · ");
@@ -213,10 +244,10 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
 }
 
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
-function HitTile({ hit, now, shape, pageFirst }: { hit: SearchHit; now: number; shape: TileShape; pageFirst: boolean }) {
+function HitTile({ hit, now, shape, pageFirst, className }: { hit: SearchHit; now: number; shape: TileShape; pageFirst: boolean; className?: string }) {
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
-  return <MediaTile context={<HitSource hit={hit} />} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} title={hit.title} meta={hitContext(hit)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
+  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} title={hit.title} meta={hitContext(hit)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
     href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]}>
     {!hit.live && !hit.collection && hit.duration != null && <span className="text-sm font-light tabular-nums">{formatDuration(hit.duration)}, ends {formatEndTime(hit.duration - (hit.position ?? 0), now)}</span>}
   </MediaTile>;

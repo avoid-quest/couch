@@ -1,5 +1,6 @@
 // Run on an empty Vite page with #fixture. Real routes and controls; no external writes.
 import { mountUiAudit } from "./ui-audit.browser";
+import { readSearchState } from "../src/client/search";
 
 const wait = (ms = 250) => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (value: unknown, message: string) => { if (!value) throw new Error(message); };
@@ -50,18 +51,25 @@ export async function runFilterControlsRegression() {
     }
     return fixtureFetch(input, init);
   };
+  const searched = () => readSearchState(audit.router.state.location.searchStr);
   try {
-    await audit.go('/search?q=missing&source=Bandcamp', { mode: "empty", fresh: true });
-    assert(button("Source") && button("Ends by"), "Empty search hid its filters");
-    assert(document.body.textContent?.includes("Nothing matches these filters"), "Empty filtered search has no recovery");
-    await choose("Source", "YouTube");
-    assert(audit.router.state.location.search.source === "YouTube", "Source selection did not reach the URL");
+    await audit.go('/search?q=missing&kind=music&source=Bandcamp', { mode: "empty", fresh: true });
+    assert(button("Source") && document.querySelector('[role="radiogroup"][aria-label="Kind"]'), "Empty search hid its filters");
+    assert(!button("Ends by") && !document.body.textContent?.includes("Clear filters"), "Search kept a removed filter");
+    assert(document.body.textContent?.includes("No music on Bandcamp for “missing”"), "Empty filtered search does not say what it looked for");
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "All results")!.click(); await wait();
+    assert(!searched().kind && searched().source === "All", "All results kept a kind or a source");
     await audit.go('/search?q=concert', { mode: "loaded", fresh: true });
     const searchReads = audit.calls.length;
     await choose("Source", "StreamingCommunity");
+    assert(searched().source === "StreamingCommunity", "Source selection did not reach the URL");
+    await pick("Kind", "Music");
+    assert(searched().kind === "music" && searched().source === "All", "A source without hits of the chosen kind stayed chosen");
     await choose("Source", "Bandcamp");
+    await pick("Kind", "All");
+    assert(searched().source === "Bandcamp", "A source with hits of the chosen kind was dropped");
     await choose("Source", "All sources");
-    assert(audit.calls.length === searchReads, "Source filtering unnecessarily refetched cached results");
+    assert(audit.calls.length === searchReads, "Filtering unnecessarily refetched cached results");
 
     await audit.go('/discover/radio');
     assert(!button("Clear filter"), "An empty filter offered to clear itself");
