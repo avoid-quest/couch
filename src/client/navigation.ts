@@ -126,7 +126,11 @@ function moveFocus(key: string) {
   // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
   // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
   const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(visible) : undefined;
-  focus(rail ?? tab ?? best?.element ?? toast);
+  // Up out of the band over a picture reaches the gear at the top line's right, as Up on Prime Video's remote reaches
+  // its top-right controls; the title and its links are a Left away. An open Up next or the Next card comes first.
+  const gear = key === "ArrowUp" && active.closest(".player-page[data-osd] [data-player-band]") && (!best || best.element.closest("[data-player-top]"))
+    ? [...scope.querySelectorAll<HTMLElement>('.player-page [data-player-top] [data-panel="settings"]:not(:disabled)')].find(visible) : undefined;
+  focus(rail ?? tab ?? gear ?? best?.element ?? toast);
 }
 
 /** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */

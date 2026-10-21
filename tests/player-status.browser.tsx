@@ -76,6 +76,11 @@ export async function runPlayerStatusRegression() {
       else assert(document.querySelector('[data-player-audio-copy] [data-player-status]') && !document.querySelector('[data-player-band] [data-player-status]'), `${status}: status left the artwork's copy`);
       assert(document.querySelector('[data-player-summary]'), `${status}: artwork summary disappeared`);
     }
+    // Beside artwork the gear keeps its place at the top line's right, with no fullscreen, and the band keeps the bar's tools.
+    const labels = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(button => button.getClientRects().length).map(button => button.getAttribute("aria-label"));
+    const barTools = [...innerWidth < 640 ? [] : ["Volume"], "Up next", "Where it plays"];
+    assert(JSON.stringify(labels("[data-player-top] [data-player-picture-tools] button")) === JSON.stringify(["Playback"]), `Artwork top line tools: ${labels("[data-player-top] [data-player-picture-tools] button").join(", ")}`);
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {
       const rect = button.getBoundingClientRect();
       assert(rect.left >= 0 && rect.right <= innerWidth, "A player tool requires horizontal scrolling");
@@ -87,12 +92,26 @@ export async function runPlayerStatusRegression() {
     assert(controls.every(rect => rect.left >= 0 && rect.right <= innerWidth && rect.width >= 44), "Video controls overflow or shrink touch targets");
     const ordered = controls.toSorted((a, b) => a.left - b.left);
     assert(ordered.every((rect, index) => index === 0 || rect.left >= ordered[index - 1]!.right), "Player touch targets overlap");
-    // Over a video the tools are the now-playing bar's, in its order, then the player's own gear and fullscreen; Subtitles
-    // and Audio live in the gear's menu, not a button of their own.
-    const tools = [...document.querySelectorAll<HTMLElement>('[data-player-tools] button')].filter(button => button.getClientRects().length).map(button => button.getAttribute("aria-label"));
-    assert(JSON.stringify(tools) === JSON.stringify([...innerWidth < 640 ? [] : ["Volume"], "Where it plays", "Up next", "Playback", "Enter fullscreen"]), `Player tools out of the bar's order: ${tools.join(", ")}`);
+    // Over a video the band's tools are exactly the now-playing bar's, Where it plays last; the gear and fullscreen are the
+    // top line's, at its right over the band's last two. Subtitles and Audio live in the gear's menu, not a button of their own.
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Player tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    assert(JSON.stringify(labels("[data-player-top] [data-player-picture-tools] button")) === JSON.stringify(["Playback", "Enter fullscreen"]), "Gear and fullscreen left the top line");
+    const centre = (selector: string) => { const rect = document.querySelector(selector)!.getBoundingClientRect(); return Math.round(rect.left + rect.width / 2); };
+    assert(centre('[data-player-top] button[aria-label="Enter fullscreen"]') === centre('[data-player-tools] button[aria-label="Where it plays"]')
+      && centre('[data-player-top] button[aria-label="Playback"]') === centre('[data-player-tools] button[aria-label="Up next"]'), "Top line tools don't line up with the band's last two");
+    const transport = [...document.querySelectorAll<HTMLElement>('[aria-label="Playback controls"] button')].map(button => button.getBoundingClientRect());
+    assert(Math.abs((transport[0]!.left + transport.at(-1)!.right) / 2 - innerWidth / 2) < 1, "Band transport is not centred");
     // Over a picture buffering is a spinner centred on it, its words for screen readers only.
     assert(document.querySelector('.player-page > [data-player-status] [role="status"]')?.textContent?.includes("Buffering") && !document.querySelector('[data-player-band] [data-player-status]'), "Buffering not announced over the picture");
+    // The gear's menu opens down from the top line, and both lines stay up while it is open over a playing video.
+    await review.state("playing", {video: true});
+    const gear = document.querySelector<HTMLButtonElement>('[data-player-top] button[aria-label="Playback"]')!;
+    gear.click(); await wait(400);
+    assert(document.querySelector('[data-player-menu]')!.getBoundingClientRect().top >= gear.getBoundingClientRect().bottom, "Playback menu did not open downward");
+    await wait(4300);
+    assert(document.querySelector('[data-player-top="shown"]') && document.querySelector('[data-player-band="shown"]'), "Controls hid under the open Playback menu");
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); await wait(300);
+    assert(!document.querySelector('[data-player-menu][data-state="open"]') && document.activeElement === gear, "Esc did not close the menu onto the gear");
     await review.state("loading", {retry: true});
     assert(document.querySelector('[aria-label="Try again"]:not(:disabled)'), "Scheduled retry has no immediate remedy");
     const status = document.querySelector('[data-player-status]')!;

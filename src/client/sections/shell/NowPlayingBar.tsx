@@ -48,14 +48,14 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
-  // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Where it plays, Up next at
-  // the band's right edge, each at the band's target (--player-target); the timeline is the line along its top edge.
-  // The player adds its own gear and fullscreen after them. Phones (below sm, where the band drops Volume too) keep
-  // Play/Pause and Where it plays; the player keeps the rest.
+  // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Up next, Where it plays at
+  // the band's right edge, each at the band's target (--player-target) and x; the timeline is the line along its top
+  // edge. Where it plays ends both everywhere. Phones (below sm, where the band drops Volume too) keep Play/Pause right
+  // beside it, where the band's Up next sits, so the right end reads the same; the player keeps the rest.
   const desktop = "max-sm:hidden";
-  return <footer data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:grid-cols-[minmax(0,1fr)_auto_auto] [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
+  return <footer data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
     <PlaybackTimeline state={state} connected={connected} run={run} className="absolute inset-x-0 top-0 -translate-y-1/2 [&_[data-time-labels]]:hidden [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-transparent [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100" />
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 items-center gap-3 max-sm:pr-4">
       {/* The title is the control; the artwork is a larger pointer target for it. */}
       <button type="button" tabIndex={-1} aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted hover:opacity-80 sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full" onClick={() => onOpen()}>{artwork}</button>
       <div className="min-w-0">
@@ -71,8 +71,8 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
     <PlaybackTransport state={state} connected={connected} run={run} moreClassName={desktop} />
     <div className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5">
       <VolumeButton state={state} connected={connected} run={run} className={desktop} />
-      <WhereItPlays state={state} connected={connected} run={run} />
       <Button data-panel="queue" variant="ghost" size="icon-lg" className={desktop} aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" /></Button>
+      <WhereItPlays state={state} connected={connected} run={run} />
     </div>
   </footer>;
 }

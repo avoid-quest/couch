@@ -170,12 +170,13 @@ const viewTitles: Record<View, string> = { subtitles: "Subtitles", audio: "Audio
 const row = "h-11 w-full justify-start gap-3 rounded-none px-3 font-normal";
 
 /**
- * The gear's menu, as YouTube's: a small menu above the gear over the picture, each row its setting and current value,
- * and a submenu that replaces it in place under a Back row. Subtitles and Audio lead it, as YouTube's Subtitles/CC and
- * Audio track rows; Details ends it. It is the Popover's content; the player owns the Popover and its trigger.
- * `tracks` is false where there is no picture (audio), so Subtitles and Audio stay out.
+ * The gear's menu, as YouTube's: a small menu over the picture, each row its setting and current value, and a submenu
+ * that replaces it in place under a Back row. Subtitles and Audio lead it, as YouTube's Subtitles/CC and Audio track
+ * rows; Details ends it. It is the Popover's content; the player owns the Popover and its trigger, at the top line's
+ * right, so it opens downward and keeps `clearBottom` px (the band) free. `tracks` is false where there is no picture
+ * (audio), so Subtitles and Audio stay out.
  */
-export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 8, ...props }: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; sideOffset?: number }) {
+export function PlaybackMenu({ details, tracks: showTracks = true, clearBottom = 0, ...props }: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; clearBottom?: number }) {
   const { entry, player, credentials, connected } = props;
   const playbackClock = usePlaybackClock();
   const { disabled, idle, command, saveDefault, messages } = usePlaybackCommands(props);
@@ -230,7 +231,7 @@ export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 
   : view === "audioDelay" ? <Stepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "audioDelay", playbackId, delay: Math.round(((player.audioDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
   : null;
   // The Back row stays while a long list (subtitle languages, chapters) scrolls under it.
-  return <PopoverContent ref={content} data-player-menu side="top" align="end" sideOffset={sideOffset} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
+  return <PopoverContent ref={content} data-player-menu side="bottom" align="end" sideOffset={8} collisionPadding={{ top: 16, right: 16, left: 16, bottom: clearBottom + 8 }} aria-label={view ? viewTitles[view] : "Playback"}
     className="max-h-[calc(var(--radix-popover-content-available-height)-1rem)] w-72 gap-0 overflow-hidden p-0"
     // Back in a submenu returns to the menu, as on YouTube and a TV's own menus; Back on the menu closes it.
     onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}>
