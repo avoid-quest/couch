@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
@@ -18,6 +18,9 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, packaged: false });
   }
 })();
+// index.html preloads the latin Inter Tight so the first paint is in it. The build resolves that path to the asset
+// the stylesheet uses; the dev server serves it where the stylesheet asks, under /@fs/.
+const interTight = "node_modules/@fontsource-variable/inter-tight/files/inter-tight-latin-wght-normal.woff2";
 export default defineConfig(({ command }) => ({
   clearScreen: false,
   root: "src/client",
@@ -29,6 +32,7 @@ export default defineConfig(({ command }) => ({
     tanstackRouter({ autoCodeSplitting: true, routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
     react(),
     tailwindcss(),
+    { name: "couch-font-preload", apply: "serve", transformIndexHtml: html => html.replace(`../../${interTight}`, `/@fs${realpathSync(interTight)}`) },
     // App-shell precache only (#338): the generated worker precaches the build's
     // static assets and leaves every API and WebSocket request on the network.
     // Registration is manual in the client entry so the app window never
