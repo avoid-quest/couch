@@ -9,7 +9,7 @@ const real = { ...await import("../src/client/components/ui/sheet") };
 type SheetProps = ComponentProps<typeof real.Sheet>;
 const sheets: SheetProps[] = [];
 mock.module("../src/client/components/ui/sheet", () => ({ ...real, Sheet: (props: SheetProps) => { sheets.push(props); return real.Sheet(props); } }));
-const { WhereItPlays } = await import("../src/client/sections/shell/Outputs");
+const { Mixer, WhereItPlays } = await import("../src/client/sections/shell/Outputs");
 const { SessionGateContext } = await import("../src/client/session/gate-context");
 
 const devices = [{ id: "mac", name: "Mac", online: true, volume: 50, muted: false }, { id: "tv", name: "TV", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }];
@@ -112,75 +112,75 @@ test("with shared requests off, a waiting source opens only in the window that p
   expect(mount("p:here:2", "p:here:1")).toBe(true);
 });
 
-type Props = { children?: ReactNode; id?: string; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "aria-describedby"?: string; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
+type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: () => void; onPressedChange?: (pressed: boolean) => void };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
-const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
+const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" || typeof node === "number" ? String(node) : "";
 const inSync = { deviceId: "tv", picture: true, sound: true, delay: 80, delayActive: true };
 
-test("the picker shows the playback, its one Volume, then its devices, each with a fader, Sync while in sync and a … menu, then the other devices under their heading", async () => {
+test("the mixer shows the Volume, the counts, then the playback's devices with Picture, Sound, a fader and …, then the rest with Move here", async () => {
   const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
   const sent: unknown[] = [];
   const phone = { id: "phone", name: "Phone", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } };
+  const away = { id: "away", name: "Away", online: false, volume: 50, muted: false };
   const radio = { id: "r", title: "avoid radio", status: "playing", outputs: [{ deviceId: "phone", picture: false, sound: true }] };
-  const state = { ...waiting(0), devices: [...devices, phone], outputs: [inSync], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [inSync] }, radio], liveSources: [] } as unknown as ClientSessionState;
-  const tree = WhereItPlays({ state, connected: true, run: async action => { sent.push(action); return true; } });
+  const state = { ...waiting(0), devices: [...devices, phone, away], outputs: [inSync], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [inSync] }, radio], liveSources: [] } as unknown as ClientSessionState;
+  const tree = Mixer({ state, connected: true, run: async action => { sent.push(action); return true; } });
   const all = elements(tree), labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
-  // On one device its fader is the level; on two or more the Playback's Volume sits above them.
-  expect(all.filter(item => item.type === PlaybackVolume).length).toBe(0);
-  const outputs = [inSync, { deviceId: "mac", picture: false, sound: true }];
-  const two = { ...state, outputs, playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs }, radio] } as unknown as ClientSessionState;
-  expect(elements(WhereItPlays({ state: two, connected: true, run: async () => true })).filter(item => item.type === PlaybackVolume).length).toBe(1);
-  expect(labelled("All trim")).toEqual([]);
-  expect(text(tree)).toContain("Mac · Screen");
-  // The devices it plays on, then the others, each saying what it plays now.
+  // The Volume always leads, with one device or many; there is no header repeating what plays.
+  expect(all.filter(item => item.type === PlaybackVolume).length).toBe(1);
+  expect(text(tree)).not.toContain("Mac · Screen");
+  expect(text(tree)).toContain("Picture 1 · Sound 1 · In sync 1 · Offline 1");
+  // The playback's devices, then the rest after a hairline with no heading, offline ones folded into one line.
   const lists = all.filter(item => item.type === "ul");
-  expect(lists.map(item => [item.props["aria-label"], elements(item.props.children).filter(child => child.props["data-device-check"]).map(child => child.props["aria-label"])])).toEqual([["Playing", ["TV"]], ["Other devices", ["Mac", "Phone"]]]);
-  expect(all.filter(item => item.type === "h3").map(item => text(item.props.children))).toEqual(["Other devices"]);
+  expect(lists.map(item => [item.props["aria-label"], elements(item.props.children).filter(child => child.type === "li").map(child => (child.props as { "data-device"?: string })["data-device"])])).toEqual([["Playing", ["tv"]], ["Not playing", ["mac", "phone"]]]);
+  expect(all.filter(item => /^h\d$/.test(String(item.type)))).toEqual([]);
+  expect(text(tree)).toMatch(/Offline:\s+Away/);
   expect(text(tree)).toContain("Playing avoid radio");
-  expect(text(tree)).not.toMatch(/\b(zone|group|room|Playback)\b/i);
-  // Sync belongs to the row that plays in sync, and only there: its "…" offers Sync…, and its line shows while it isn't 0.
+  expect(text(tree)).not.toMatch(/\b(Not playing|Other devices|zone|group|room|House|Listeners)\b/);
+  // Sync belongs to the row that plays in sync: its "…" offers Sync…, and its line shows while it isn't 0.
   const syncs = all.filter(item => /sync$/.test(item.props.label ?? ""));
   expect(syncs.map(item => item.props.label)).toEqual(["TV sync"]);
-  expect(all.filter(item => (item.props as { sync?: boolean }).sync).length).toBe(1);
   const line = (delay: number) => renderToStaticMarkup(createElement(syncs[0]!.type as FunctionComponent, { ...syncs[0]!.props, delay }));
   expect(line(80)).toContain("Sync 80 ms earlier");
   expect(line(0)).toBe("");
-  const checks = all.filter(item => item.props["data-device-check"]);
-  expect(checks.map(item => [item.props["aria-label"], item.props["aria-checked"]])).toEqual([["TV", true], ["Mac", false], ["Phone", false]]);
-  for (const label of ["TV volume", "Options for TV", "TV picture", "Mute TV", "Only on TV"]) expect(labelled(label).length).toBe(1);
-  for (const label of ["Mac volume", "Options for Mac", "Mac picture", "Mute Mac", "Only on Mac"]) expect(labelled(label)).toEqual([]);
-  // Pressing a row sends the model's own action: in, it leaves. Mac shares nothing, so its row is disabled.
-  checks[0]!.props.onClick!();
-  expect(sent).toEqual([{ type: "output", deviceId: "tv", picture: false, level: 0 }]);
-  expect(checks[1]!.props.disabled).toBe(true);
+  for (const label of ["TV picture", "TV sound", "TV volume", "Options for TV", "Mute TV", "Phone picture", "Phone sound", "Move here: Phone"]) expect(labelled(label).length).toBe(1);
+  // The only output can't move anywhere new; a device out of the playback has no fader or "…".
+  for (const label of ["Move here: TV", "Phone volume", "Options for Phone", "Mute Phone"]) expect(labelled(label)).toEqual([]);
+  // A toggle sends the model's own action: the TV's Picture goes, the Phone's Sound joins; Mac shares nothing.
+  labelled("TV picture")[0]!.props.onPressedChange!(false);
+  labelled("Phone sound")[0]!.props.onPressedChange!(true);
+  labelled("Move here: Phone")[0]!.props.onClick!();
+  expect(sent).toEqual([{ type: "output", deviceId: "tv", picture: false }, { type: "output", deviceId: "phone", level: 50 }, { type: "solo", deviceId: "phone" }]);
+  expect(labelled("Mac picture")[0]!.props.disabled).toBe(true);
+  expect(labelled("Mac sound")[0]!.props.disabled).toBe(true);
 });
 
-test("a source waiting for receivers lists every device without a heading", () => {
-  const all = elements(WhereItPlays({ state: waiting(1), connected: true, run: async () => true }));
-  expect(all.filter(item => item.type === "ul").map(item => item.props["aria-label"])).toEqual(["Devices"]);
-  expect(all.filter(item => item.type === "h3")).toEqual([]);
-});
-
-test("a receiver's check describes its status and buffered explanation, including Core's failure reason", () => {
-  for (const output of [{ deviceId: "tv", picture: true, sound: true, buffered: true }, { deviceId: "tv", picture: true, sound: true, buffered: true, error: "The live input encoder stopped." }]) {
-    const state = { ...waiting(0), outputs: [output] } as unknown as ClientSessionState;
-    const all = elements(WhereItPlays({ state, connected: true, run: async () => true }));
-    const check = all.find(item => item.props["data-device-check"] && item.props["aria-label"] === "TV")!;
-    const description = all.find(item => item.props.id === check.props["aria-describedby"])!;
-    expect(text(description.props.children)).toBe(output.error
-      ? `Can't play It couldn't connect directly to this source, and Couch's buffered stream failed: ${output.error}`
-      : "Buffered It couldn't connect directly to this source, so it plays a few seconds behind.");
-    expect(elements(check.props.children)).toContain(description);
-  }
-});
-
-
-test("a single output retains the effective Playback Volume until a legacy trim is folded", async () => {
+test("a source waiting for receivers asks where it plays instead of the Volume", async () => {
   const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
-  const outputs = [{ deviceId: "tv", picture: true, sound: true }];
-  for (const trim of [0, 50, 100]) {
-    const state = { ...waiting(0), liveSources: [], outputs, mixTrim: trim, player: { volume: 50 * trim / 100 }, playbacks: [{ id: "p", status: "playing", outputs }] } as unknown as ClientSessionState;
-    const controls = elements(WhereItPlays({ state, connected: true, run: async () => true }));
-    expect(controls.filter(item => item.type === PlaybackVolume).length).toBe(trim === 100 ? 0 : 1);
+  const all = elements(Mixer({ state: waiting(1), connected: true, run: async () => true }));
+  expect(all.filter(item => item.type === PlaybackVolume)).toEqual([]);
+  expect(text(all[0]!.props.children)).toContain("Choose where Mac · Screen plays");
+  expect(all.filter(item => item.type === "ul").map(item => item.props["aria-label"])).toEqual(["Not playing"]);
+});
+
+test("a receiver's row says Behind, or Can't play with Core's reason in red", () => {
+  for (const output of [{ deviceId: "tv", picture: true, sound: true, buffered: true }, { deviceId: "tv", picture: true, sound: true, buffered: true, error: "The live input encoder stopped." }]) {
+    const state = { ...waiting(0), outputs: [output], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
+    const html = renderToStaticMarkup(<>{Mixer({ state, connected: true, run: async () => true })}</>);
+    expect(html).toContain(output.error ? `Can&#x27;t play: ${output.error}` : ">Behind<");
+    expect(html.includes("text-destructive")).toBe(!!output.error);
   }
+});
+
+test("past eight devices the counts filter the list and a search field finds a device", () => {
+  const many = Array.from({ length: 10 }, (_, index) => ({ id: `d${index}`, name: `Speaker ${index}`, online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }));
+  const outputs = [{ deviceId: "d4", picture: false, sound: true }];
+  const state = { ...waiting(0), devices: many, outputs, playbacks: [{ id: "p", status: "playing", outputs }], liveSources: [] } as unknown as ClientSessionState;
+  const filtered: unknown[] = [];
+  const all = elements(Mixer({ state, connected: true, run: async () => true, filter: "sound", onFilter: filter => filtered.push(filter) }));
+  const group = all.find(item => item.props["aria-label"] === "Show")!;
+  expect(elements(group.props.children).filter(item => item.props.value).map(item => text(item.props.children).replace(/\s+/g, " "))).toEqual(["Sound 1"]);
+  expect(all.some(item => item.props.label === "Find a device")).toBe(true);
+  expect(all.filter(item => item.type === "li").length).toBe(1);
+  expect(elements(Mixer({ state, connected: true, run: async () => true, query: "speaker 1" })).filter(item => item.type === "li").length).toBe(1);
 });

@@ -289,7 +289,7 @@ test("Only here is refused, changing nothing, while a device that joined on its 
     const outputs = f.admin.state.outputs;
     const only = await f.admin.command({ type: "solo", deviceId: f.adminId });
     assert.equal(only.ok, false);
-    assert.equal(only.error, "Only here is unavailable while Device plays this privately.");
+    assert.equal(only.error, "Move here is unavailable while Device plays this privately.");
     assert.deepEqual(f.admin.state.outputs, outputs);
     assert.deepEqual(f.admin.state.outputs?.map(output => [output.deviceId, output.local]), [[f.adminId, false], [f.deviceId, true]]);
   } finally { await f.close(); }

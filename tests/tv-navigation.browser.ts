@@ -363,51 +363,59 @@ window.runTvNavigationRegression = async () => {
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Volume overlay lost Home opener");
   });
-  await check("Where it plays opens on its first device you can choose, Down walks its devices, and Back returns to its button", async () => {
+  await check("Where it plays opens on its first device, Down walks its devices, Left and Right move a level at once, and Back returns to its button", async () => {
     await click('[data-app-nav] a[href="/"]');
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
-    await until(() => !!document.activeElement && document.activeElement === checks()[0]);
-    assert(checks().length >= 2, "Pair a second online shared output before running");
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-row]')];
+    await until(() => !!document.activeElement && document.activeElement === rows()[0]);
+    assert(rows().length >= 2, "Pair a second online shared output before running");
     await key("ArrowDown");
-    assert(document.activeElement === checks()[1], "Down did not reach the next device");
+    assert(document.activeElement === rows()[1], "Down did not reach the next device");
+    assert(!document.querySelector('[role="menu"]'), "Down opened a row's options");
+    const row = rows().find(item => item.getAttribute("aria-valuetext") !== "No sound");
+    if (row) {
+      row.focus();
+      const level = Number(row.getAttribute("aria-valuenow"));
+      const target = level >= 5 ? level - 5 : level + 5;
+      await key(level >= 5 ? "ArrowLeft" : "ArrowRight");
+      await until(() => Number(row.getAttribute("aria-valuenow")) === target);
+      assert(document.activeElement === row, "A level change moved focus");
+      await key(level >= 5 ? "ArrowRight" : "ArrowLeft");
+    }
     await key("Escape");
     await until(() => !document.querySelector('[role="dialog"][data-state="open"]') && !!document.activeElement?.matches('[data-now-playing] button[aria-label="Where it plays"]'));
   });
-  await check("Down from a device's check passes its Sync line for the next device, and Down from its fader reaches that line", async () => {
+  await check("OK opens a row's options with Picture and Sound; Sync… puts focus on its Sync line, and Back hides a line still at 0", async () => {
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-row]')];
+    const items = () => [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
+    const item = (text: string) => items().find(element => element.textContent?.startsWith(text));
     let name = "", added = false;
-    const device = () => checks().find(item => item.getAttribute("aria-label") === name)!;
-    const sync = (check: HTMLElement) => check.closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");
-    // A line shows while its delay isn't 0; otherwise Sync… in the row's "…" reveals it.
-    const reveal = async (check: () => HTMLElement) => {
-      if (sync(check())) return;
-      check().closest("li")!.querySelector<HTMLElement>('[aria-haspopup="menu"]')!.focus(); await key("Enter");
-      const item = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === "Sync…");
-      await until(() => !!item()).catch(() => undefined);
-      assert(item(), "No Sync… while the sound plays on both devices");
-      item()!.click(); await until(() => !!sync(check()) && document.activeElement === sync(check()));
-    };
-    // Everything after the Sheet opens is undone in finally: the device it added leaves, and the Sheet closes.
+    const device = () => rows().find(row => row.getAttribute("aria-label") === name)!;
+    const sound = () => device()?.getAttribute("aria-valuetext") !== "No sound";
     try {
-      await until(() => document.activeElement === checks()[0]);
-      assert(checks().length >= 2, "Pair a second online shared output before running");
+      await until(() => document.activeElement === rows()[0]);
+      assert(rows().length >= 2, "Pair a second online shared output before running");
       // Sync applies while the sound plays in sync on several devices, so the second device's sound joins.
-      // Joining can take it offline for a moment, its check disabled, so the rows settle first.
-      name = checks()[1]!.getAttribute("aria-label")!;
-      if (checks()[1]!.getAttribute("aria-checked") !== "true") { added = true; device().click(); await until(() => device()?.getAttribute("aria-checked") === "true"); await wait(1500); }
-      const first = () => checks()[0]!;
-      await reveal(first);
-      first().focus(); await key("ArrowDown");
-      assert(document.activeElement === checks()[1], "Down from a check did not reach the next device");
-      first().closest("li")!.querySelector<HTMLElement>("[data-volume]:not([data-sync-line]) [role=slider]")!.focus(); await key("ArrowDown");
-      assert(document.activeElement === sync(first()), "Down from the fader did not reach its Sync line");
-      await reveal(device);
-      device().focus(); await key("ArrowDown");
-      assert(document.activeElement !== sync(device()), "Down from a check reached its own Sync line");
+      name = rows()[1]!.getAttribute("aria-label")!;
+      device().focus(); await key("Enter");
+      await until(() => !!item("Picture") && !!item("Sound"));
+      if (!sound()) { added = true; item("Sound")!.click(); await until(sound); await wait(1500); }
+      else await key("Escape");
+      const first = () => rows()[0]!;
+      first().focus(); await key("Enter");
+      await until(() => !!item("Sound"));
+      const sync = item("Sync…") ?? item("Lip sync…");
+      assert(sync, "No Sync… while the sound plays on both devices");
+      sync!.click();
+      const line = () => first().closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");
+      await until(() => !!line() && document.activeElement === line());
+      if (line()!.getAttribute("aria-valuenow") === "0") {
+        await key("Escape");
+        await until(() => !line() && document.activeElement === first());
+      }
     } finally {
-      if (added && device()?.getAttribute("aria-checked") === "true") { device().click(); await until(() => device()?.getAttribute("aria-checked") !== "true").catch(() => undefined); }
+      if (added && sound()) { device().focus(); await key("Enter"); await until(() => !!item("Sound")).catch(() => undefined); item("Sound")?.click(); await until(() => !sound()).catch(() => undefined); }
       for (let attempt = 0; attempt < 3 && document.querySelector('[role="dialog"][data-state="open"]'); attempt++) { await key("Escape"); await wait(350); }
     }
   });
@@ -543,11 +551,11 @@ window.runTvNavigationRegression = async () => {
     // Where it plays opened before Play on lands closes as the bar moves to the recipient's Playback.
     await until(() => !!document.querySelector('[data-now-playing] button[aria-label="Where it plays"]:not(:disabled)') && !!document.querySelector("[data-now-playing]")?.textContent?.includes(`on ${targetName}`));
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    // The recipient's row is the only one checked, and it shows the picture.
-    const checked = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check][aria-checked="true"]')];
-    await until(() => checked().length === 1 && checked()[0]!.getAttribute("aria-label") === targetName);
-    assert(/^(This device · )?Picture/.test(document.getElementById(checked()[0]!.getAttribute("aria-describedby")!)?.textContent ?? ""), "Play on did not select the recipient's picture");
-    assert(document.querySelector('[role="dialog"]')?.textContent?.includes(title), "Play on did not select the queued channel");
+    // The recipient's row is the only one playing it, and it shows the picture.
+    const playing = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] ul[aria-label="Playing"] [data-device-row]')];
+    await until(() => playing().length === 1 && playing()[0]!.getAttribute("aria-label") === targetName);
+    assert(playing()[0]!.querySelector("svg.lucide-monitor"), "Play on did not select the recipient's picture");
+    assert(document.querySelector("[data-now-playing]")?.textContent?.includes(title), "Play on did not select the queued channel");
     await key("Escape"); await wait(350);
     assert(location.pathname === "/discover/live-tv", "Play on lost the controller's browse page");
   });

@@ -98,8 +98,8 @@ function moveFocus(key: string) {
     const forward = (horizontal ? dx : dy) * sign;
     const penalty = sideways(to);
     // Up and Down reach a control in the active's own row only past its edge and in line with it: a wrapped line,
-    // Continue's Details under its tile, a device's Sync under its fader. Never one beside it, though a shorter or
-    // taller caption moves that one's centre, nor a device's Sync from its check.
+    // Continue's Details under its tile, a device's Sync line under its row. Never one beside it, though a shorter or
+    // taller caption moves that one's centre.
     // Left/Right stay on the same visual line. A sideways distance penalty alone
     // can still choose a completely unrelated shelf when there is no neighbour.
     const beside = horizontal ? to.bottom <= from.top || to.top >= from.bottom

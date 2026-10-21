@@ -30,12 +30,12 @@ export function FilterSelect<T extends string>({ label, value, onChange, options
   </Select>;
 }
 
-/** The text filter: a search glyph, "Filter", and a clear button only while there is text to clear. */
-export function FilterInput({ label, value, onChange, maxLength = 200, className }: { label: string; value: string; onChange: (value: string) => void; maxLength?: number; className?: string }) {
+/** The text filter: a search glyph, "Filter" (or its own placeholder), and a clear button only while there is text to clear. */
+export function FilterInput({ label, value, onChange, maxLength = 200, placeholder = "Filter", className }: { label: string; value: string; onChange: (value: string) => void; maxLength?: number; placeholder?: string; className?: string }) {
   const input = useRef<HTMLInputElement>(null);
   return <InputGroup className={cn("w-auto min-w-48 flex-1 sm:max-w-72", className, "has-[input:focus-visible]:bg-foreground has-[input:focus-visible]:text-background has-[input:focus-visible]:duration-0 has-[[data-slot=input-group-control]:focus-visible]:ring-0")}>
     <InputGroupAddon className="group-has-[input:focus-visible]/input-group:text-background/65"><Search aria-hidden="true" /></InputGroupAddon>
-    <InputGroupInput ref={input} type="search" aria-label={label} maxLength={maxLength} autoComplete="off" placeholder="Filter" value={value} onChange={event => onChange(event.target.value)} className="[&::-webkit-search-cancel-button]:hidden focus-visible:placeholder:text-background/65" />
+    <InputGroupInput ref={input} type="search" aria-label={label} maxLength={maxLength} autoComplete="off" placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} className="[&::-webkit-search-cancel-button]:hidden focus-visible:placeholder:text-background/65" />
     {value && <InputGroupAddon align="inline-end" className="p-0 text-current">
       <InputGroupButton size="icon-sm" className="touch:size-11" aria-label="Clear filter" onClick={() => { onChange(""); input.current?.focus(); }}><X aria-hidden="true" /></InputGroupButton>
     </InputGroupAddon>}

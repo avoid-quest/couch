@@ -1,5 +1,5 @@
 import type { ClientSessionState } from "./session";
-import type { Action, DeviceSummary, Output, PlaybackSummary } from "../../shared/protocol";
+import type { Action, DeviceSummary, Output } from "../../shared/protocol";
 
 // Where it plays' rules, without React (docs/design/where-it-plays.md): which devices the picker lists and in what
 // order, what each row says, which controls it offers, and when the chooser opens. Core decides; these rules
@@ -7,8 +7,6 @@ import type { Action, DeviceSummary, Output, PlaybackSummary } from "../../share
 
 type State = ClientSessionState | null | undefined;
 const served = (state: State, id: string) => state?.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === id));
-
-const statusText: Record<PlaybackSummary["status"], string> = { unavailable: "Unavailable", idle: "Not playing", loading: "Loading", playing: "Playing", paused: "Paused", ended: "Finished", error: "Can't play" };
 
 /** A request to choose where a shared source plays: its playback and Core's count of requests. */
 export const chooserRequest = (state: ClientSessionState) => { const playback = state.playbacks?.find(item => item.id === state.playback); return playback?.choosing ? `${playback.id}:${playback.choosing}` : null; };
@@ -36,50 +34,41 @@ export const choosesHere = (action: Action, before: ClientSessionState | null, a
 /** Why a control is disabled, in one word where it can be: Core's refusal, or what the media lacks. */
 export type Reason = "Offline" | "Private" | "Sharing this source" | "Can't play this channel" | "No picture" | "No sound";
 export type Control = { enabled: boolean; reason?: Reason };
+/** A channel's toggle: pressed while the device plays it here; its action turns it over, and turning off the last channel takes the device out. */
+export type Channel = Control & { on: boolean; action: Action };
 export type Row = {
   device: DeviceSummary;
-  /** Its picture and sound in this playback: the row's check. */
+  /** Its picture and sound in this playback: in while it has either. */
   output?: Output;
   /** This device, whose own controls stay its own. */
   mine: boolean;
-  /** One line: why you can't change it, what it plays elsewhere, or what it plays here. This device's starts "This device". */
+  /** Only what matters: "This device", then an exception ("Behind", "Can't play: {Core's reason}", "Muted", "Private"…). */
   status: string;
-  /** Why this receiver plays buffered, or why that stream failed, with Core's reason. */
-  explanation?: string;
-  /** Pressing the row: in, it leaves; out, it joins with picture and sound as its consent and the media allow. */
-  check: Control & { action?: Action };
-  /** The fader, while it is in: its volume while its sound is in, else 0. */
+  /** The status is a failure, said in destructive red. */
+  failed: boolean;
+  picture: Channel;
+  sound: Channel;
+  /** The fader, shown while its sound is in: its volume while its sound is in, else 0. */
   level: Control & { value: number; sound: boolean };
-  /** The "…" menu, while it is in. */
-  picture: Control & { on: boolean };
   mute: Control & { on: boolean };
-  /** Pressed again it still commits: a publisher held out for its own capture would otherwise return. */
-  only: Control & { on: boolean };
-  /** Sync … ms earlier, only while its sound plays in sync with other devices. */
-  sync?: { delay: number };
+  /** Move here (Core's solo): it alone keeps the playback. Absent where it would change nothing. */
+  move?: Control;
+  /** Sync … ms earlier, only while its sound plays in sync with other devices; Lip sync while another device shows the picture. */
+  sync?: { delay: number; lip: boolean };
 };
 export type Picker = {
-  title?: string;
-  /** The playback's status, or a waiting source's request to choose. */
-  status: string;
-  /** The Sheet's one hint line: on the TV, how its faders take the arrows. */
-  hint?: string;
+  /** A shared source waiting for receivers: "Choose where {title} plays". */
+  choose?: string;
   /** In sync, where it applies: a live input on several devices, or already on. */
   inSync?: boolean;
+  /** Every device, the playback's first. */
   rows: Row[];
 };
 
 const control = (reason: Reason | false | undefined): Control => reason ? { enabled: false, reason } : { enabled: true };
-// What an output plays here, never whether it can be heard: Mute is the device's, so it shows. A channel the
-// media lacks plays nothing.
-function plays(output: Output, device: DeviceSummary, audioOnly: boolean, silent: boolean) {
-  const picture = output.picture && !audioOnly;
-  if (output.sound && !silent) return picture ? device.muted ? "Picture, muted" : "Picture and sound" : device.muted ? "Muted" : "Sound";
-  return picture ? "Picture" : output.picture ? "No picture" : "No sound";
-}
 
 /** Where it plays for the playback `state` looks at, as seen from device `here`. */
-export function picker(state: ClientSessionState, { here, tv = false }: { here: string; tv?: boolean }): Picker {
+export function picker(state: ClientSessionState, { here }: { here: string }): Picker {
   const outputs = state.outputs ?? [];
   const output = (id: string) => outputs.find(item => item.deviceId === id);
   const playback = state.playbacks?.find(item => item.id === state.playback);
@@ -91,9 +80,9 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
   // that returns after its source, makes it unavailable.
   const privately = [...outputs, ...playback?.held ? [playback.held] : []].filter(item => item.deviceId !== here && (item.picture && sharingOf(item.deviceId)?.video !== true || item.sound && sharingOf(item.deviceId)?.audio !== true));
   const waiting = !!source && !outputs.length;
-  // Every device, once: the playback's first, then the others, offline ones last.
-  const order = (device: DeviceSummary) => output(device.id) ? 0 : device.online ? 1 : 2;
-  const devices = [...state.devices ?? []].sort((a, b) => order(a) - order(b));
+  // Every device, once: the playback's first, then the others.
+  const devices = [...state.devices ?? []].sort((a, b) => Number(!output(a.id)) - Number(!output(b.id)));
+  const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
   const rows = devices.map((device): Row => {
     const current = output(device.id);
     // Ownership permits local controls even while viewing another playback.
@@ -110,37 +99,75 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
     // Moving a device from another playback would replace its private channel there.
     const elsewhere = !!occupied && occupied.id !== state.playback, moved = elsewhere && privateOutput && !mine && "Private";
     const offline = !device.online && "Offline", lock = offline || hostOnly && "Can't play this channel", sharing = capturing && "Sharing this source";
-    // Taking it out changes each channel it plays here, so each needs its consent; it joins on any channel it may use.
-    const check = control(lock || sharing || (current ? current.picture && !screen || current.sound && !speakers : moved || !audio && !video) && "Private");
-    const action: Action | undefined = !check.enabled ? undefined : current
-      ? { type: "output", deviceId: device.id, ...current.picture ? { picture: false } : {}, ...current.sound ? { level: 0 } : {} }
-      // Sound joins at the device's own level; a level of 0 would leave it out.
-      : { type: "output", deviceId: device.id, ...video ? { picture: true } : {}, ...audio ? { level: device.volume || 50 } : {} };
-    const busy = elsewhere && occupied.outputs.some(item => item.deviceId === device.id) ? occupied : undefined;
-    const status = offline || sharing || (current
-      ? current.error ? "Can't play" : !check.enabled ? check.reason! : current.buffered ? "Buffered" : plays(current, device, audioOnly, silent)
-      : !check.enabled ? check.reason! : busy ? busy.status === "idle" ? statusText.idle : `${statusText[busy.status]} ${busy.title ?? "something else"}` : statusText.idle);
-    const sound = !!current?.sound && !silent;
+    // A channel the media lacks plays nothing, so its toggle isn't pressed.
+    const pictureOn = !!current?.picture && !audioOnly, soundOn = !!current?.sound && !silent;
+    // Turning off its last channel takes it out: each channel it plays here goes, so each needs its consent.
+    const leave: Action = { type: "output", deviceId: device.id, ...current?.picture ? { picture: false } : {}, ...current?.sound ? { level: 0 } : {} };
+    const leaving = !!current && (current.picture && !screen || current.sound && !speakers) && "Private";
+    const pictureReason = lock || sharing || audioOnly && "No picture" || !screen && "Private" || moved;
+    const soundReason = lock || sharing || silent && "No sound" || !speakers && "Private" || moved;
+    const picture: Channel = pictureOn
+      ? { on: true, ...control(pictureReason || !soundOn && leaving), action: soundOn ? { type: "output", deviceId: device.id, picture: false } : leave }
+      : { on: false, ...control(pictureReason), action: { type: "output", deviceId: device.id, picture: true } };
+    // Sound joins at the device's own level; a level of 0 would leave it out.
+    const sound: Channel = soundOn
+      ? { on: true, ...control(soundReason || !pictureOn && leaving), action: pictureOn ? { type: "output", deviceId: device.id, level: 0 } : leave }
+      : { on: false, ...control(soundReason), action: { type: "output", deviceId: device.id, level: device.volume || 50 } };
+    // Move here changes nothing for the only output, unless a held publisher would return after its source.
+    const alone = outputs.length > 0 && outputs.every(item => item.deviceId === device.id) && !playback?.held;
+    const busy = elsewhere && occupied.outputs.some(item => item.deviceId === device.id) && occupied.status !== "idle" ? occupied : undefined;
+    // Private only where consent leaves you nothing to change on it.
+    const locked = !picture.enabled && !sound.enabled && (picture.reason === "Private" || sound.reason === "Private") && "Private";
+    const status = current && offline || sharing || hostOnly && lock || (current?.error ? `Can't play: ${current.error}` : current?.buffered ? "Behind" : locked || (soundOn && device.muted ? "Muted" : busy ? `Playing ${busy.title ?? "something else"}` : ""));
     return {
-      device, output: current, mine, status: mine ? `This device · ${status}` : status,
-      explanation: current?.error ? `It couldn't connect directly to this source, and Couch's buffered stream failed: ${current.error}`
-        : current?.buffered ? "It couldn't connect directly to this source, so it plays a few seconds behind." : undefined,
-      check: { ...check, action },
-      level: { value: sound ? device.volume : 0, sound, ...control(lock || sharing || silent && "No sound" || !speakers && "Private" || moved) },
-      picture: { on: !!current?.picture && !audioOnly, ...control(lock || sharing || audioOnly && "No picture" || !screen && "Private" || moved) },
+      device, output: current, mine, status: mine ? ["This device", status].filter(Boolean).join(" · ") : status, failed: !!current?.error,
+      picture, sound,
+      level: { value: soundOn ? device.volume : 0, sound: soundOn, ...control(soundReason) },
       mute: { on: device.muted, ...control(lock || silent && "No sound" || !speakers && "Private") },
-      only: { on: outputs.length > 0 && outputs.every(item => item.deviceId === device.id), ...control(lock || sharing || (!audio && !video || privateOutput && !mine || privately.some(item => item.deviceId !== device.id)) && "Private") },
-      sync: audio && current?.sound && current.delayActive ? { delay: current.delay ?? 0 } : undefined,
+      move: alone ? undefined : control(lock || sharing || (!audio && !video || privateOutput && !mine || privately.some(item => item.deviceId !== device.id)) && "Private"),
+      sync: audio && current?.sound && current.delayActive ? { delay: current.delay ?? 0, lip: !audioOnly && outputs.some(item => item.deviceId !== device.id && item.picture) } : undefined,
     };
   });
   return {
-    title: state.queue.find(entry => entry.id === state.currentEntryId)?.title,
-    status: waiting ? "Choose where it plays" : playback ? statusText[playback.status] : "",
-    hint: tv ? "Press OK to adjust a level, then OK or Back to finish." : undefined,
+    choose: waiting ? `Choose where ${title ?? "it"} plays` : undefined,
     // A live input plays directly on each device unless In sync is chosen (docs/adr/0001).
     inSync: source && (outputs.length > 1 || playback?.inSync) ? !!playback?.inSync : undefined,
     rows,
   };
+}
+
+/** The summary's counts and the filters they become, in the order the summary says them. */
+export type Filter = "picture" | "sound" | "sync" | "behind" | "error" | "offline";
+export const filterLabels: Record<Filter, string> = { picture: "Picture", sound: "Sound", sync: "In sync", behind: "Behind", error: "Can't play", offline: "Offline" };
+const filtersOf = (row: Row): Filter[] => [
+  ...row.picture.on ? ["picture" as const] : [], ...row.level.sound ? ["sound" as const] : [], ...row.output?.delayActive ? ["sync" as const] : [],
+  ...row.output?.buffered && !row.output.error ? ["behind" as const] : [], ...row.output?.error ? ["error" as const] : [], ...!row.device.online ? ["offline" as const] : [],
+];
+/** Each count over every device, zeros left out: Picture 2 · Sound 3 · Offline 1. */
+export const counts = (rows: Row[]) => (Object.keys(filterLabels) as Filter[])
+  .map(filter => ({ filter, label: filterLabels[filter], count: rows.filter(row => filtersOf(row).includes(filter)).length })).filter(item => item.count > 0);
+
+/** The order rows keep while the panel is open: the playback's devices, then the rest. */
+export type Order = { playing: string[]; rest: string[] };
+export const orderOf = (rows: Row[]): Order => ({ playing: rows.filter(row => row.output).map(row => row.device.id), rest: rows.filter(row => !row.output).map(row => row.device.id) });
+/** Past this many rows the summary filters and a search field appears. */
+export const crowded = 8;
+
+/**
+ * The panel's rows: in `order` (taken when it opened, so nothing jumps while you use it; new devices append), then
+ * filtered without reordering. Offline devices out of the playback fold into one line; one in it keeps its row.
+ */
+export function arrange(rows: Row[], order: Order = orderOf(rows), filter: Filter | null = null, query = "") {
+  const known = new Set([...order.playing, ...order.rest]), byId = new Map(rows.map(row => [row.device.id, row]));
+  const fresh = orderOf(rows.filter(row => !known.has(row.device.id)));
+  const pick = (ids: string[]) => ids.flatMap(id => byId.get(id) ?? []);
+  const needle = query.trim().toLocaleLowerCase();
+  const shown = (row: Row) => (!filter || filtersOf(row).includes(filter)) && (!needle || row.device.name.toLocaleLowerCase().includes(needle));
+  const folded = (row: Row) => !row.device.online && !row.output;
+  const all = [...pick([...order.playing, ...fresh.playing]), ...pick([...order.rest, ...fresh.rest])];
+  const playing = pick([...order.playing, ...fresh.playing]).filter(row => !folded(row));
+  const rest = pick([...order.rest, ...fresh.rest]).filter(row => !folded(row));
+  return { playing: playing.filter(shown), rest: rest.filter(shown), offline: all.filter(folded).filter(shown), listed: playing.length + rest.length };
 }
 
 /** Play on's targets: this device first, then the other online devices that share; none while this is the only one. */

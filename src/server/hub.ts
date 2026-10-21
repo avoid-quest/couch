@@ -821,7 +821,7 @@ export async function createHub(options: HubOptions) {
   const sendTo = async (playback: Playback, output: Output, authorize: () => void, actor: string) => {
     const permitted = () => {
       authorize();
-      if (!output.picture && !output.sound) throw new Error("Playback destination was withdrawn. Try Only here again to play it there.");
+      if (!output.picture && !output.sound) throw new Error("Playback destination was withdrawn. Try Move here again to play it there.");
       requireOutput(output, actor); requireReplacement(output.deviceId, actor); requireReceiver(playback, output.deviceId);
     };
     permitted();
@@ -1862,8 +1862,8 @@ export async function createHub(options: HubOptions) {
               const exclusive = () => {
                 permitted();
                 const kept = target.outputs.filter(item => item.deviceId !== action.deviceId && !allows(item, deviceId));
-                if (kept.length) throw new ControllerError(`Only here is unavailable while ${kept.map(item => nameOf(item.deviceId)).join(", ")} plays this privately.`, 403);
-                if (target.held && target.held.deviceId !== action.deviceId && !allows(target.held, deviceId)) throw new ControllerError(`Only here is unavailable while ${nameOf(target.held.deviceId)} keeps its place in this playback privately.`, 403);
+                if (kept.length) throw new ControllerError(`Move here is unavailable while ${kept.map(item => nameOf(item.deviceId)).join(", ")} plays this privately.`, 403);
+                if (target.held && target.held.deviceId !== action.deviceId && !allows(target.held, deviceId)) throw new ControllerError(`Move here is unavailable while ${nameOf(target.held.deviceId)} keeps its place in this playback privately.`, 403);
               };
               exclusive();
               const left = target.outputs.map(item => item.deviceId).filter(id => id !== action.deviceId);
