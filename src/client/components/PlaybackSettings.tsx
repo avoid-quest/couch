@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
 import { PopoverContent } from "@/components/ui/popover";
+import { toolPanel } from "@/components/PlaybackTransport";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import type { WatchingProfile } from "../../shared/viewing";
 import type { Action, PlaybackPreferences as Preferences, QueueEntry } from "../../shared/protocol";
@@ -175,7 +176,7 @@ const row = "h-11 w-full justify-start gap-3 rounded-none px-3 font-normal";
  * Audio track rows; Details ends it. It is the Popover's content; the player owns the Popover and its trigger.
  * `tracks` is false where there is no picture (audio), so Subtitles and Audio stay out.
  */
-export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 8, ...props }: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; sideOffset?: number }) {
+export function PlaybackMenu({ details, tracks: showTracks = true, trigger, ...props }: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; trigger: HTMLElement | null }) {
   const { entry, player, credentials, connected } = props;
   const playbackClock = usePlaybackClock();
   const { disabled, idle, command, saveDefault, messages } = usePlaybackCommands(props);
@@ -230,7 +231,7 @@ export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 
   : view === "audioDelay" ? <Stepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "audioDelay", playbackId, delay: Math.round(((player.audioDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
   : null;
   // The Back row stays while a long list (subtitle languages, chapters) scrolls under it.
-  return <PopoverContent ref={content} data-player-menu side="top" align="end" sideOffset={sideOffset} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
+  return <PopoverContent ref={content} data-player-menu {...toolPanel(trigger)} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
     className="max-h-[calc(var(--radix-popover-content-available-height)-1rem)] w-72 gap-0 overflow-hidden p-0"
     // Back in a submenu returns to the menu, as on YouTube and a TV's own menus; Back on the menu closes it.
     onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}>

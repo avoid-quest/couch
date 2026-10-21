@@ -12,13 +12,13 @@ import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FilterInput } from "@/components/ContentFilters";
 import { RangeControl } from "@/components/RangeControl";
-import { PlaybackVolume } from "@/components/PlaybackTransport";
+import { PlaybackVolume, toolPanel } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
 import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
-import { arrange, chooserFor, chooserRequest, counts, crowded, orderOf, picker, reopens, soundActions, type Control, type Filter, type Order, type Row } from "@/session/where-it-plays";
+import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, reopens, soleSound, soundActions, type Control, type Filter, type Order, type Row } from "@/session/where-it-plays";
 import type { Action } from "../../../shared/protocol";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
@@ -35,13 +35,14 @@ const popoverRows = 10;
  * Where it plays: the mixer for one Couch's devices, its own button in the now-playing bar and the player band.
  * The Volume, the counts, then every device's row, the playback's first. The rules are the model's (session/where-it-plays.ts).
  */
-export function WhereItPlays(props: Props & { className?: string; label?: string; sideOffset?: number }) {
+export function WhereItPlays(props: Props & { className?: string; label?: string }) {
   // A new playback starts closed, with its own order.
   return <Panel key={props.state.playback} {...props} />;
 }
 
-// The player's band passes a sideOffset so its Popover opens above the whole band, clear of the timeline, as its menus do.
-function Panel({ state, connected, run, className, label, sideOffset }: Props & { className?: string; label?: string; sideOffset?: number }) {
+// From the band or the bar its Popover opens above the whole row, clear of the timeline, as their menus do (toolPanel).
+function Panel({ state, connected, run, className, label }: Props & { className?: string; label?: string }) {
+  const button = useRef<HTMLButtonElement>(null);
   const tv = isTvPresentation();
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
   // Radix's controlled open state: a changed defaultOpen would not open a mounted panel. The session remembers the
@@ -65,7 +66,7 @@ function Panel({ state, connected, run, className, label, sideOffset }: Props & 
     if (requested) gate?.dismissChooser(requested);
     setView(null); setFilter(null); setQuery("");
   };
-  const trigger = <Button variant="ghost" size={label ? "default" : "icon-lg"} className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" />{label}</Button>;
+  const trigger = <Button ref={button} variant="ghost" size={label ? "default" : "icon-lg"} className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" />{label}</Button>;
   const body = (close?: ReactNode) => <Mixer state={state} connected={connected} run={run} tv={tv} order={view?.order} filter={filter} query={query} onFilter={setFilter} onQuery={setQuery} close={close} />;
   // It opens on the first device on the TV, else on the Volume, never on a control that changes where it plays.
   const focusFirst = (event: Event) => {
@@ -74,8 +75,9 @@ function Panel({ state, connected, run, className, label, sideOffset }: Props & 
   };
   if (side === "popover") return <Popover open={open} onOpenChange={change}>
     <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-    <PopoverContent side="top" align="end" sideOffset={sideOffset} aria-label="Where it plays" onOpenAutoFocus={focusFirst}
-      className="max-h-[min(40rem,calc(var(--radix-popover-content-available-height)-1rem))] w-[min(34rem,calc(100vw-2rem))] gap-0 overflow-y-auto px-4 pt-2 pb-3"><SyncScope>{body()}</SyncScope></PopoverContent>
+    {/* The rows scroll under the first line, so the panel keeps one surface rather than a sticky line painted over it. */}
+    <PopoverContent {...toolPanel(button.current)} aria-label="Where it plays" onOpenAutoFocus={focusFirst}
+      className="max-h-[min(40rem,calc(var(--radix-popover-content-available-height)-1rem))] w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-hidden p-3"><SyncScope>{body()}</SyncScope></PopoverContent>
   </Popover>;
   return <Sheet open={open} onOpenChange={change}>
     <SheetTrigger asChild>{trigger}</SheetTrigger>
@@ -100,10 +102,13 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
   const { choose, inSync, rows } = picker(state, { here: deviceId() });
   const { playing, rest, offline, listed } = arrange(rows, order, filter, query);
   const summary = counts(rows), many = listed > crowded;
-  const row = (item: Row) => tv ? tvRow({ row: item, run }) : deviceRow({ row: item, run });
+  // One device sounding: the Volume above is its level, so its row doesn't repeat the fader.
+  const sole = soleSound(rows);
+  const row = (item: Row) => tv ? tvRow({ row: item, run }) : deviceRow({ row: item, run, fader: item.device.id !== sole });
   return <>
-    {/* The first line, and with the counts and search, what stays put while a long list scrolls. */}
-    <div className="sticky top-0 z-10 grid gap-1 bg-inherit pt-2 pb-2">
+    {/* The first line, and with the counts and search, what stays put while a long list scrolls: in a Sheet it sticks
+        over the rows on the Sheet's own ground; a Popover scrolls only its rows, under it. */}
+    <div className={cn("grid shrink-0 gap-1 pb-2", close && "sticky top-0 z-10 bg-inherit pt-2")}>
       <div data-nav-row className="flex min-h-11 items-center gap-2">
         {choose ? <p className="min-w-0 flex-1 text-base [overflow-wrap:anywhere]">{choose}</p> : <PlaybackVolume state={state} connected={connected} run={run} className="-ml-2.5" />}
         {/* Close, or the "…" column's room, so the numbers line up. */}
@@ -117,9 +122,12 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
         : <p data-mixer-summary className="text-sm text-muted-foreground tabular-nums">{summary.map(item => `${item.label} ${item.count}`).join(" · ")}</p>)}
       {many && <div data-nav-row className="flex pt-1"><FilterInput label="Find a device" placeholder="Find a device" value={query} onChange={value => onQuery?.(value)} className="sm:max-w-none" /></div>}
     </div>
-    {playing.length > 0 && <ul aria-label="Playing" className="grid">{playing.map(row)}</ul>}
-    {rest.length > 0 && <ul aria-label="Not playing" className={cn("grid", playing.length > 0 && "mt-2 border-t pt-2")}>{rest.map(row)}</ul>}
-    {offline.length > 0 && <p data-offline className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">Offline: {offline.map(item => item.device.name).join(", ")}</p>}
+    {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}
+    <div data-mixer-rows className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3">
+      {playing.length > 0 && <ul aria-label="Playing" className="grid">{playing.map(row)}</ul>}
+      {rest.length > 0 && <ul aria-label="Not playing" className={cn("grid", playing.length > 0 && "mt-2 border-t pt-2")}>{rest.map(row)}</ul>}
+      {offline.length > 0 && <p data-offline className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">Offline: {offlineNames(offline)}</p>}
+    </div>
   </>;
 }
 
@@ -131,10 +139,10 @@ const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
 
 /**
  * A device's row, the same at every scale: its name and any exception, its Picture and Sound toggles, its fader and
- * number while its sound is on (Move here instead while it isn't in), and "…" while Sync applies. On phones the fader takes a second line.
+ * number while its sound is on and another device's sounds too (Move here instead while it isn't in), and "…" while Sync applies. On phones the fader takes a second line.
  * Called rather than rendered, so tests can walk its controls without a DOM.
  */
-function deviceRow({ row, run }: { row: Row; run: Props["run"] }) {
+function deviceRow({ row, run, fader = true }: { row: Row; run: Props["run"]; fader?: boolean }) {
   const { device, output, picture, sound, level, move } = row;
   const toggle = (channel: typeof picture, label: string, on: ReactNode, off: ReactNode, name: string) =>
     <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
@@ -146,7 +154,7 @@ function deviceRow({ row, run }: { row: Row; run: Props["run"] }) {
     </span>
     {toggle(picture, "picture", <Monitor aria-hidden="true" />, <MonitorOff aria-hidden="true" />, "Picture")}
     {toggle(sound, "sound", <Volume2 aria-hidden="true" />, <VolumeOff aria-hidden="true" />, "Sound")}
-    {output && level.sound && <div data-volume className="col-span-full row-start-2 flex min-h-11 min-w-0 items-center gap-3 sm:col-span-1 sm:col-start-4 sm:row-start-1">
+    {output && level.sound && fader && <div data-volume className="col-span-full row-start-2 flex min-h-11 min-w-0 items-center gap-3 sm:col-span-1 sm:col-start-4 sm:row-start-1">
       <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} onCommit={value => send(run, row, { type: "output", deviceId: device.id, level: value })} />
       <span className="w-[3ch] shrink-0 text-right tabular-nums">{Math.round(level.value)}</span>
     </div>}

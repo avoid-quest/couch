@@ -36,7 +36,7 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   return <header className={cn("grid gap-x-8 gap-y-6 md:items-start lg:gap-x-12", thumbnail && "md:grid-cols-[fit-content(min(45%,36rem))_minmax(0,1fr)]")}>
     {/* Artwork as it comes, at a set height and its own width (Home's hero), so the title follows it whatever its shape;
         a wide one stops at the column's cap. Missing artwork keeps its shape's frame. */}
-    {thumbnail && <div aria-hidden="true" className="flex h-56 min-w-0 md:h-64 xl:h-80 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain object-left-top", tileAspect[shape])} /></div>}
+    {thumbnail && <div data-detail-art aria-hidden="true" className="flex h-56 min-w-0 md:h-64 xl:h-80 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain object-left-top", tileAspect[shape])} /></div>}
     <div className="grid min-w-0 content-start gap-2">
       <h1 tabIndex={-1} className="text-3xl leading-tight md:text-4xl font-semibold tracking-tight break-words outline-none">{title}</h1>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}

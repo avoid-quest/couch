@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { muted } from "../src/client/components/PlaybackTransport";
 import { playsOn } from "../src/client/session/device-id";
 import type { ClientSessionState } from "../src/client/session/session";
-import { arrange, chooserFor, chooserRequest, counts, crowded, orderOf, picker, playingOn, playOnTargets, reopens, soundActions } from "../src/client/session/where-it-plays";
+import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, playingOn, playOnTargets, reopens, soleSound, soundActions } from "../src/client/session/where-it-plays";
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
 
 // One rule per test, in the order of docs/design/where-it-plays.md (src/client/session/where-it-plays.ts). "here" is this device; every other device
@@ -195,6 +195,13 @@ describe("fader and Sync", () => {
     expect(row(state, "kitchen").level).toEqual({ value: 0, sound: false, enabled: true });
   });
 
+  test("with one device sounding, the Volume is its level, so its row has no fader", () => {
+    expect(soleSound(rows(session({ outputs: [both("tv"), picture("kitchen")] })))).toBe("tv");
+    expect(soleSound(rows(session({ outputs: [both("tv"), sound("kitchen")] })))).toBeNull();
+    // A fader this device can't move isn't the Volume's.
+    expect(soleSound(rows(session({ devices: [device("tv", { sharing: { audio: false, video: false } })], outputs: [sound("tv")] })))).toBeNull();
+  });
+
   test("Sync shows only while the device's sound plays in sync with others, Lip sync while another shows the picture", () => {
     expect(row(session({ outputs: [sound("tv", { delay: 80, delayActive: true }), sound("kitchen")] }), "tv").sync).toEqual({ delay: 80, lip: false });
     expect(row(session({ outputs: [sound("tv", { delay: 80, delayActive: true }), both("kitchen")] }), "tv").sync).toEqual({ delay: 80, lip: true });
@@ -251,6 +258,11 @@ describe("the panel", () => {
     const state = session({ devices: [device("tv"), device("away", { online: false }), device("gone", { online: false }), device("kitchen")], outputs: [both("kitchen"), both("gone")] });
     const { playing, rest, offline } = arrange(rows(state));
     expect([playing.map(item => item.device.id), rest.map(item => item.device.id), offline.map(item => item.device.id)]).toEqual([["gone", "kitchen"], ["tv"], ["away"]]);
+  });
+
+  test("the offline line names each device once, counting devices that share a name", () => {
+    const state = session({ devices: [device("a", { name: "Living room TV", online: false }), device("b", { name: "Desk", online: false }), device("c", { name: "Living room TV", online: false })] });
+    expect(offlineNames(arrange(rows(state)).offline)).toBe("Living room TV ×2, Desk");
   });
 
   test("keeps the order it opened with while it is open, new devices appended", () => {

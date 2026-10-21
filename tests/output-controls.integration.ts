@@ -133,10 +133,11 @@ test("output controls agree with Core for own moves and foreign private replacem
     await f.actor.command({ type: "sharing", sharing: { audio: false, video: false } });
     // Private and the only output, its row still offers no Move here, and its own controls stay enabled.
     assert.equal(control(render(), "Move here: Actor"), undefined);
-    for (const label of ["Actor volume", "Actor picture", "Actor sound"]) {
+    for (const label of ["Actor picture", "Actor sound"]) {
       const props = control(render(), label); assert.ok(props, label); assert.equal(!!props.disabled, false, label);
     }
-    await check("Actor volume", { type: "output", deviceId: f.actorId, level: 40 }, true);
+    // The only sound: the Volume is its level, so its row has no fader of its own.
+    assert.equal(control(render(), "Actor volume"), undefined);
     await f.play(f.actor, hostId, "Foreign boundary");
     await f.other.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.play(f.other, otherId, "Foreign private picture");

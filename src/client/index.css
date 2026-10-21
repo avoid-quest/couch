@@ -152,9 +152,30 @@ html { view-transition-name: none; }
 :is([data-now-playing], .player-band) button[data-panel="settings"] { view-transition-name: couch-gear; }
 /* The last slot: the bar's Open player glides into the band's fullscreen (or its empty slot) and back. */
 :is([data-now-playing], .player-band) [data-player-last] { view-transition-name: couch-last; }
+/* Artwork travels (Design → Motion): the now-playing bar's thumbnail, or after Play on a Details page (the couch-play
+   transition) that page's artwork, becomes the player's artwork, or its picture, and back. One element holds the name
+   at a time, so Details' artwork takes it from the bar's while it travels. It moves over 280 ms, a little ahead of the
+   band, and each end keeps its proportions. */
+[data-now-playing] [data-bar-art] > *, .player-art > :first-child, .player-page[data-osd] > [data-player-surface] { view-transition-name: couch-art; }
+html:active-view-transition-type(couch-play) [data-detail-art] > * { view-transition-name: couch-art; }
+html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-playing] [data-bar-art] > * { view-transition-name: none; }
+::view-transition-group(couch-art) { animation-duration: .28s; animation-timing-function: var(--ease-out); }
+::view-transition-old(couch-art), ::view-transition-new(couch-art) { height: 100%; object-fit: contain; }
+/* The bar's title and the line under it don't stretch with the band over its timeline: they leave at once as it grows,
+   and return once it has shrunk back. */
+[data-now-playing] [data-bar-title] { view-transition-name: couch-bar-title; }
+::view-transition-old(couch-bar-title) { animation: couch-fade-out .1s var(--ease-out) both; }
+::view-transition-new(couch-bar-title) { animation: couch-fade-in .1s var(--ease-out) .22s both; }
+@keyframes couch-fade-out { to { opacity: 0; } }
+@keyframes couch-fade-in { from { opacity: 0; } }
 /* Toasts arrive like the other surfaces, over 200 ms, not sonner's 400 ms, so a leaving one has faded by the time sonner
    unmounts it (200 ms). Sonner itself keeps them still with reduced motion. */
 [data-sonner-toaster] :is([data-sonner-toast], [data-sonner-toast] > *) { transition-duration: 200ms; transition-timing-function: var(--ease-out); }
+/* A toast hugs its words, its action beside them, at the toaster's right edge (the gutter), rather than a slab the
+   toaster's width. On phones, where sonner stretches both, the toaster spans the gutters and toasts still hug. */
+[data-sonner-toaster][data-x-position] { width: var(--width); }
+@media (max-width: 600px) { [data-sonner-toaster][data-x-position] { width: auto; } }
+[data-sonner-toaster][data-x-position] [data-sonner-toast] { left: auto; right: 0; width: fit-content; max-width: 100%; }
 
 /* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window
    around their controls and leave 90pt for the window's buttons, which don't zoom.
@@ -170,6 +191,8 @@ html { view-transition-name: none; }
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }
 .app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
+/* The footer (now-playing bar, phone tabs) is fixed, not sticky, so the shell keeps room for it (AppShell.tsx). */
+.app-shell:not(:has(.player-page)) { padding-bottom: var(--bottom-bar, 0px); }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
 .player-band { padding-bottom: max(.5rem, env(safe-area-inset-bottom)); position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
@@ -196,10 +219,12 @@ html { view-transition-name: none; }
 .player-video video::-webkit-media-text-track-container { transition: translate .2s var(--ease-out); }
 .player-page:has(> [data-player-band="shown"]) video::-webkit-media-text-track-container { translate: 0 calc(-1 * var(--bottom-bar, 0px)); }
 @media (prefers-reduced-motion: reduce) { .player-video video::-webkit-media-text-track-container { transition: none; } }
-/* The timeline over a picture is a thin line, as YouTube's: its unplayed part is translucent white, it thickens under a
-   pointer, and its thumb shows only while a pointer or focus is on it. The hover time sits on the panel surface. */
-.player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); @apply motion-safe:transition-[height]; }
-.player-video-controls .player-timeline:hover [data-slot="slider-track"] { height: .375rem; }
+/* Every player timeline (the band's, the bar's) thickens under a pointer and while it is dragged, as YouTube's. Over a
+   picture it is a thin line whose unplayed part is translucent white, and its thumb shows only while a pointer or focus
+   is on it. The hover time sits on the panel surface. */
+:is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
+@media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
+.player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
 .player-video-controls [data-hover-time] { background: var(--player-surface); border-radius: calc(var(--radius) - 2px); }
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
@@ -212,8 +237,10 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 /* A playing picture never moves or resizes for a panel. Up next over it is a panel at the right above the band, as
    Netflix's episodes panel (full width on phones); the Next card waits above the band at the right. */
 .player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
-.player-page[data-osd][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + .75rem); width: min(28rem, calc(100% - 2 * var(--gutter))); max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem); padding: .5rem 1.25rem 1rem; }
-.player-next-up { position: absolute; z-index: 20; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + .75rem); @apply motion-safe:transition-[bottom]; }
+/* It is one of the band's panels (Volume, Where it plays, the gear's menu): their surface and corner, their wide width,
+   their .75rem inset, and the same place, 8px above the band and ending at the gutter. */
+.player-page[data-osd][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); width: min(32rem, calc(100% - 2 * var(--gutter))); max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem); padding: .25rem .75rem .75rem; border-radius: var(--radius-md); }
+.player-next-up { position: absolute; z-index: 20; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); @apply motion-safe:transition-[bottom]; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
 [data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
 .player-summary { display: flex; flex-direction: column; gap: 1.5rem; width: min(32rem, 100%); min-height: 0; flex: 0 1 auto; pointer-events: auto; }
@@ -238,7 +265,8 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-control-row > .player-transport { grid-column: 2; justify-self: center; }
 .player-control-row > [data-player-tools] { grid-column: 3; justify-self: end; }
 @media (min-width: 960px) {
-  [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
+  /* Up next sits beside the artwork while it has something to show; otherwise the artwork has the stage. */
+  [data-artwork-stage] .player-workspace:has(> .player-queue) { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
   [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
 }
 @media (max-width: 959px) {
@@ -256,6 +284,10 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
   .player-control-row > div { gap: 0; }
   .player-control-row > .player-transport { grid-column: 1; justify-self: start; margin-left: -.625rem; }
   .player-control-row > [data-player-tools] { grid-column: 2; }
+  /* The bar keeps only Open player on phones, so the band's empty last slot has no x to keep: the tools end at the gutter. */
+  .player-control-row span[data-player-last] { display: none; }
+  /* Artwork takes the gutter's width as far as the height allows, not 24rem. */
+  .player-art { max-height: none; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 @media (max-height: 500px) {

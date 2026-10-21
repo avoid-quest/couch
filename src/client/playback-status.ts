@@ -1,12 +1,13 @@
 import type { ClientSessionState } from "./session/session";
-import { offline } from "./copy";
+import { deviceName } from "./copy";
 
 /**
  * One vocabulary for the player, its compact bar, Home and Up next. `quiet` marks the plain states (Playing, Paused,
  * Ready to play) that the Play/Pause glyph already says, so status lines show only what the transport can't.
  */
 export function playbackStatus(state: ClientSessionState | null | undefined, connected: boolean, now = Date.now()) {
-  if (!connected) return { label: "Offline", detail: offline(state?.installationName), busy: true };
+  // The label says Offline; its detail says only what happens next.
+  if (!connected) return { label: "Offline", detail: `Reconnecting to ${deviceName(state?.installationName)}…`, busy: true };
   const player = state?.player;
   if (!player) return { label: "Connecting…", detail: "Waiting for playback information.", busy: true };
   if (player.status === "unavailable") return { label: "Player unavailable", detail: player.error || "Check the playing device's connection, or choose another device in Where it plays.", busy: false };

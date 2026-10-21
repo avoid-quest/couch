@@ -83,11 +83,13 @@ export async function runPlayerStatusRegression() {
     const centre = (selector: string) => { const element = [...document.querySelectorAll(selector)].find(item => item.getClientRects().length); if (!element) return NaN; const rect = element.getBoundingClientRect(); return Math.round(rect.left + rect.width / 2); };
     const topTools = () => labels('[data-player-top] button:not([aria-label^="Back"])');
     // The band's tools are the bar's, sound, then content, then view: Volume (not on phones), Where it plays, Up next, the
-    // gear. The top line holds no tools. Beside artwork there is no fullscreen, so its last slot stays empty.
+    // gear. The top line holds no tools. Beside artwork there is no fullscreen, so its last slot stays empty, holding the
+    // bar's x; on phones, whose bar has no tools to line up with, the slot goes and the tools end at the gutter.
     const barTools = [...phone ? [] : ["Volume"], "Where it plays", "Up next", "Playback"];
     assert(JSON.stringify(topTools()) === JSON.stringify([]), `Top line tools: ${topTools().join(", ")}`);
     assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
-    assert(centre("[data-player-tools] span[data-player-last]") > centre('[data-player-tools] [aria-label="Playback"]'), "Artwork band lost fullscreen's empty slot after the gear");
+    if (phone) assert(!document.querySelector("[data-player-tools] span[data-player-last]")?.getClientRects().length, "Artwork band keeps an empty slot on a phone");
+    else assert(centre("[data-player-tools] span[data-player-last]") > centre('[data-player-tools] [aria-label="Playback"]'), "Artwork band lost fullscreen's empty slot after the gear");
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {
       const rect = button.getBoundingClientRect();
       assert(rect.left >= 0 && rect.right <= innerWidth, "A player tool requires horizontal scrolling");

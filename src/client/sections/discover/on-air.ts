@@ -10,7 +10,7 @@ import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
-import { type RadioStation } from "../../../shared/radio";
+import { isRadio, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
 import { metaLine } from "@/media-caption";
 
 /**
@@ -91,4 +91,19 @@ export function useStationMenu() {
       { label: "Play on", disabled: !available, playOn: deviceId => void play(on => enqueueRadio(station, true, on), deviceId) },
     ];
   };
+}
+
+/**
+ * A playing station's show: Core's programme for the playback, else the show its tile shows, so its title and artwork
+ * (the show's photo, else the station's logo) are the same on the tile, the now-playing bar, Home's hero and the player,
+ * while it loads as while it plays. Null for anything but a station on air.
+ */
+export function useStationShow(): RadioProgrammeDetails | null {
+  const { credentials, current, programme } = useShell();
+  const { connected, state } = useSessionGate();
+  const station = isRadio(current) && current?.source.startsWith("radio:") ? current.source.slice(6) : null;
+  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && !!station, refetchInterval: 60_000 });
+  if (programme && programme.playbackId === state?.player.playbackId) return programme;
+  const listed = station ? programmes.data?.[station] : undefined;
+  return listed && listed.expiresAt > Date.now() ? listed : null;
 }

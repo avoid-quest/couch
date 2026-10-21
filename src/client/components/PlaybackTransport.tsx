@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useState, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -142,10 +142,26 @@ export function PlaybackVolume({ state, connected, run, showSlider = true, showV
   </div>;
 }
 
+/**
+ * Where the band's and the now-playing bar's panels open (Volume, Where it plays, the gear's menu): above the whole row,
+ * clear of its timeline, and ending at the tools' right edge (the gutter, as Up next does) whichever tool opened them,
+ * so they line up as one family. Elsewhere a panel just sits above its trigger. Read as the panel opens.
+ */
+export function toolPanel(trigger: HTMLElement | null): { side: "top"; align: "end"; sideOffset?: number; alignOffset?: number } {
+  const tools = trigger?.closest<HTMLElement>("[data-player-tools], [data-bar-tools]"), row = tools?.closest<HTMLElement>("[data-player-band], [data-now-playing]");
+  if (!trigger || !tools || !row) return { side: "top", align: "end" };
+  const at = trigger.getBoundingClientRect(), group = tools.getBoundingClientRect();
+  // The group pulls back past the gutter (-mr-2.5) so its last glyph lines up with the time; its margin box ends at the gutter.
+  return { side: "top", align: "end", sideOffset: at.top - row.getBoundingClientRect().top + 8, alignOffset: at.right - group.right - parseFloat(getComputedStyle(tools).marginRight) };
+}
+
 /** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
-export function VolumeButton({ state, connected, run, className, sideOffset }: Props & { className?: string; sideOffset?: number }) {
-  return <Popover>
-    <PopoverTrigger asChild><Button variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
-    <PopoverContent side="top" align="end" sideOffset={sideOffset} aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
+export function VolumeButton({ state, connected, run, className }: Props & { className?: string }) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  // Controlled, so it places itself as it opens (toolPanel).
+  const [open, setOpen] = useState(false);
+  return <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
+    <PopoverContent {...toolPanel(trigger.current)} aria-label="Volume controls" className="w-72"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
   </Popover>;
 }

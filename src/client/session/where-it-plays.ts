@@ -175,6 +175,19 @@ export function arrange(rows: Row[], order: Order = orderOf(rows), filter: Filte
   return { playing: playing.filter(shown), rest: rest.filter(shown), offline: all.filter(folded).filter(shown), listed: playing.length + rest.length };
 }
 
+/** The one device sounding, while only one does and its fader moves: the Volume is its level, so its row has no fader. */
+export function soleSound(rows: Row[]) {
+  const sounding = rows.filter(row => row.output && row.level.sound);
+  return sounding.length === 1 && sounding[0]!.level.enabled ? sounding[0]!.device.id : null;
+}
+
+/** The folded offline line's names, each once, counted where several devices share one: "Desk, Living room TV ×4". */
+export function offlineNames(rows: Row[]) {
+  const named = new Map<string, number>();
+  for (const row of rows) named.set(row.device.name, (named.get(row.device.name) ?? 0) + 1);
+  return [...named].map(([name, count]) => count > 1 ? `${name} ×${count}` : name).join(", ");
+}
+
 /** Play on's targets: this device first, then the other online devices that share; none while this is the only one. */
 export function playOnTargets(state: State, here: string) {
   const online = (state?.devices ?? []).filter(device => device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(b.id === here) - Number(a.id === here));

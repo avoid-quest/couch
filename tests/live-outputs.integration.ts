@@ -381,7 +381,8 @@ test("Play inherits the publisher's mix without it, and the publisher keeps cont
     assert.equal(status(f.publisher, f.publisher.id), "Sharing this source");
     for (const label of ["Publisher picture", "Publisher sound", "Move here: Publisher"]) assert.equal(control(rows, label)?.disabled, true, label);
     for (const label of ["Publisher volume", "Options for Publisher"]) assert.equal(control(rows, label), undefined, label);
-    assert.equal(control(rows, "Receiver volume")?.disabled, false);
+    // The receiver is the only sound, so the Volume is its level and its row has no fader of its own.
+    assert.equal(control(rows, "Receiver volume"), undefined);
   } finally { await f.close(); }
 });
 

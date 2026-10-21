@@ -4,13 +4,13 @@ import { ContentLink } from "@/components/ContentLink";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronRight, ListMusic, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import { ArrowLeft, ChevronRight, Maximize, Minimize, Music2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
-import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities, useEndTime } from "@/components/PlaybackTransport";
+import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities, toolPanel, useEndTime } from "@/components/PlaybackTransport";
 import { DigitalClock } from "@/components/DigitalClock";
 import { sourceLabel } from "@/source-label";
 import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
@@ -18,7 +18,7 @@ import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
 import { useBottomBar } from "@/sections/shell/NowPlayingBar";
-import { QueuePanel } from "./QueuePanel";
+import { QueuePanel, UpNextButton, hasUpNext } from "./QueuePanel";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { isAudioOnly } from "./player-presentation";
 import { useShell } from "@/sections/shell/AppShell";
@@ -30,6 +30,7 @@ import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
 import { isRadio } from "../../../shared/radio";
+import { useStationShow } from "@/sections/discover/on-air";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
 
 type Panel = "settings";
@@ -41,7 +42,8 @@ const isWide = () => window.matchMedia(wideQuery).matches;
 export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
   const shell = useShell();
-  const { credentials, available, active, current, programme } = shell;
+  const { credentials, available, active, current } = shell;
+  const currentProgramme = useStationShow();
   const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget, localLiveSourceId } = useSessionGate();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -51,6 +53,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const queueOpen = requestedQueueOpen ?? localQueueOpen;
   const setQueueOpen = useCallback((open: boolean) => { if (onQueueOpenChange) onQueueOpenChange(open); else setLocalQueueOpen(open); }, [onQueueOpenChange]);
   const queueTrigger = useRef<HTMLButtonElement>(null);
+  const gear = useRef<HTMLButtonElement>(null);
   const queueClose = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const root = useRef<HTMLElement>(null);
@@ -181,7 +184,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // An explicitly opened queue remains available after playback stops.
   if (!current && !queueOpen && !playerTarget) return null;
 
-  const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const radio = isRadio(current);
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
   const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -195,18 +197,19 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const setPanel = (value: Panel | null) => { if (!value) setPanelState(null); else if (player?.playbackId) { setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); } };
   const source = current ? sourceLabel(current.source) : "";
   const title = currentProgramme?.title || current?.title;
-  // As in Home's hero: a show's station, else the subtitle (series, episode or channel), else the source (a station's is
-  // its stream host). A subtitle the relationship links already name isn't said twice.
-  const byline = !current || currentProgramme || current.subtitle && !mediaSubtitle(current) ? "" : current.subtitle || (radio ? "Radio" : source);
+  // As in Home's hero: a show's genre and host (its station is the link above), else the subtitle (series, episode or
+  // channel), else the source (a station's is its stream host). A subtitle the relationship links already name isn't
+  // said twice.
+  const byline = !current ? "" : currentProgramme ? [currentProgramme.genre, currentProgramme.artist].filter(Boolean).join(", ") : current.subtitle && !mediaSubtitle(current) ? "" : current.subtitle || (radio ? "Radio" : source);
   const osd = !!current && !artworkStage;
   const meta = [byline, separate && ["playing", "paused"].includes(player?.status ?? "") && "in a separate window"].filter(Boolean).join(", ");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const status = playbackStatus(state, connected, now);
-  const context = current && <MediaContext creator={current.creator} collection={current.collection} radio={radio && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} />;
+  // A station's link names it under its show; without a show the title is the station, and already opens it.
+  const context = current && <MediaContext creator={current.creator} collection={current.collection} radio={radio && currentProgramme && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} />;
   const linkedTitle = detailHref ? <ContentLink href={detailHref} className="no-underline hover:underline">{title}</ContentLink> : title;
-  // The menus open above the whole band, clear of the timeline, as YouTube's gear menu does.
-  const controlRow = band.current?.querySelector(".player-control-row")?.getBoundingClientRect().top, bandTop = band.current?.getBoundingClientRect().top;
-  const sideOffset = controlRow != null && bandTop != null ? Math.max(8, controlRow - bandTop + 8) : 8;
+  // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
+  const queueOrigin = `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%`;
   const settings = player && state?.preferences ? { entry: current, player, ready: transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
   // Over a picture the status is the picture's (a spinner centred on it, as YouTube's and Apple's HIG; a problem as a
   // short centred line with its one remedy); beside artwork it follows the title. Plain loading says nothing else.
@@ -274,7 +277,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       {/* Over a picture Up next is a panel over it, at the right above the band, as Netflix's episodes panel: it closes
           from its heading row, and what plays now heads the list only where the player's own title is off screen (a
           phone's Up next over Now playing). Beside artwork it stays on screen. */}
-      {(artworkStage || queueOpen) && <aside data-player-queue aria-label="Up next" className={cn("player-queue", osd ? "rounded-md" : "bg-background")}>
+      {/* Beside artwork it shows only while it has something to show; the artwork then takes the whole stage. */}
+      {(artworkStage && hasUpNext(state) || queueOpen) && <aside data-player-queue aria-label="Up next" className={cn("player-queue", osd ? "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90" : "bg-background")} style={osd ? { transformOrigin: queueOrigin } : undefined}>
         <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen ? closeQueue : undefined} closeRef={queueClose} />
       </aside>}
     </div>
@@ -297,15 +301,15 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
               {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
                   with the same Volume, so the narrowest row leaves it out and keeps one line. */}
-              {state && <VolumeButton state={state} connected={connected} run={run} sideOffset={sideOffset} className="max-sm:hidden" />}
-              {state && <WhereItPlays state={state} connected={connected} run={run} sideOffset={sideOffset} />}
+              {state && <VolumeButton state={state} connected={connected} run={run} className="max-sm:hidden" />}
+              {state && <WhereItPlays state={state} connected={connected} run={run} />}
               {/* Beside artwork, on wide screens, Up next is already on screen, so its button takes focus into it. */}
-              <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
+              <UpNextButton ref={queueTrigger} state={state} aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)} />
               {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
                   turns subtitles on and off. It opens over the picture above the gear. */}
               <Popover open={panel === "settings"} onOpenChange={open => setPanel(open ? "settings" : null)}>
-                <PopoverTrigger asChild><Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
-                {settings && <PlaybackMenu {...settings} tracks={!audioOnly} sideOffset={sideOffset} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
+                <PopoverTrigger asChild><Button ref={gear} data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
+                {settings && <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
               </Popover>
               {/* The window can leave fullscreen. Where nothing can fill the screen (artwork, the TV, which is always
                   full) the slot stays empty, not a control that can never act, so the tools keep their x and the TV

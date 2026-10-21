@@ -4,7 +4,7 @@ import { queueItemLocation } from "@/detail-navigation";
 import { playbackStatus } from "@/playback-status";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useId, useLayoutEffect, useRef, useState, type Ref } from "react";
+import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type Ref } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, ListMusic, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
@@ -51,6 +51,25 @@ function duration(seconds: number) {
 
 function knownLength(entry: QueueEntry): number | null {
   return entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
+}
+
+/**
+ * Whether Up next has anything to show: a queued or played row, Autoplay's picks or its search, or a queue error.
+ * Empty, it isn't offered as a panel that only says so.
+ */
+export function hasUpNext(state: ClientSessionState | null | undefined) {
+  return !!state && (state.queue.some(entry => entry.id !== state.currentEntryId) || !!state.autoplay?.upcoming.length || !!state.autoplay?.enabled && !!state.autoplay.pending || !!state.queueError);
+}
+
+/**
+ * Up next's button in the band and the now-playing bar. While there is nothing to show it keeps its slot, disabled, and
+ * says so as its tooltip (a disabled button takes no pointer, so its slot holds the tooltip).
+ */
+export function UpNextButton({ state, className, ...props }: ComponentProps<typeof Button> & { state: ClientSessionState | null }) {
+  const empty = !hasUpNext(state) && props["aria-expanded"] !== true;
+  return <span title={empty ? "Nothing queued" : undefined} className={cn("inline-flex", className)}>
+    <Button data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" disabled={empty} {...props}><ListMusic aria-hidden="true" /></Button>
+  </span>;
 }
 
 export function QueuePanel({ state, credentials, connected, available, run, titled = true, current: showCurrent = true, onClose, closeRef }: Props) {

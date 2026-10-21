@@ -41,7 +41,7 @@ import type { HistoryItem } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
-import { useOnAir, useStationMenu } from "@/sections/discover/on-air";
+import { useOnAir, useStationMenu, useStationShow } from "@/sections/discover/on-air";
 import { useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
@@ -68,7 +68,7 @@ export function HomePage() {
   const playbackClock = usePlaybackClock();
   const shell = useShell();
   const { on, play } = usePlayOn();
-  const { credentials, available, current, programme } = shell;
+  const { credentials, available, current } = shell;
   const { state, connected, run, queue: queued, nativeHost, videoQualityPreference } = useSessionGate();
   const details = useDetailNavigation();
   const now = useDurationClock();
@@ -156,7 +156,7 @@ export function HomePage() {
 
   const live = !!(current?.live || current?.kind === "radio");
   const at = playsOn(state);
-  const show = programme?.playbackId === player?.playbackId ? programme : null;
+  const show = useStationShow();
   // Where it plays reads "on {name}" here too, as in the now-playing bar and the player. A station without its show
   // reads Radio, as the player does, never its stream's host.
   const status = playbackStatus(state, connected);

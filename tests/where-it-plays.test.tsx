@@ -143,9 +143,10 @@ test("the mixer shows the Volume, the counts, then the playback's devices with P
   const line = (delay: number) => renderToStaticMarkup(createElement(syncs[0]!.type as FunctionComponent, { ...syncs[0]!.props, delay }));
   expect(line(80)).toContain("Sync 80 ms earlier");
   expect(line(0)).toBe("");
-  for (const label of ["TV picture", "TV sound", "TV volume", "Options for TV", "Phone picture", "Phone sound", "Move here: Phone"]) expect(labelled(label).length).toBe(1);
-  // The only output can't move anywhere new; a device out of the playback has no fader or "…". The Volume mutes, not a row.
-  for (const label of ["Move here: TV", "Phone volume", "Options for Phone", "Mute TV", "Mute Phone"]) expect(labelled(label)).toEqual([]);
+  for (const label of ["TV picture", "TV sound", "Options for TV", "Phone picture", "Phone sound", "Move here: Phone"]) expect(labelled(label).length).toBe(1);
+  // The only output can't move anywhere new, and the Volume is its level, so it has no fader of its own; a device out of
+  // the playback has no fader or "…". The Volume mutes, not a row.
+  for (const label of ["Move here: TV", "TV volume", "Phone volume", "Options for Phone", "Mute TV", "Mute Phone"]) expect(labelled(label)).toEqual([]);
   // A toggle sends the model's own action: the TV's Picture goes, the Phone's Sound joins; Mac shares nothing.
   labelled("TV picture")[0]!.props.onPressedChange!(false);
   labelled("Phone sound")[0]!.props.onPressedChange!(true);
@@ -157,10 +158,12 @@ test("the mixer shows the Volume, the counts, then the playback's devices with P
 
 test("a row shows \"…\" only with options in it, and a device muted elsewhere says Muted and unmutes as its fader moves", async () => {
   const sent: unknown[] = [];
-  const state = { ...waiting(0), devices: devices.map(item => item.id === "tv" ? { ...item, muted: true } : item), outputs: [{ deviceId: "tv", picture: true, sound: true }], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
+  // A second sounding device, so the TV keeps its own fader.
+  const phone = { id: "phone", name: "Phone", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } };
+  const state = { ...waiting(0), devices: [...devices.map(item => item.id === "tv" ? { ...item, muted: true } : item), phone], outputs: [{ deviceId: "tv", picture: true, sound: true }, { deviceId: "phone", picture: false, sound: true }], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
   const tree = Mixer({ state, connected: true, run: async action => { sent.push(action); return true; } });
   const all = elements(tree), labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
-  // The only output, out of sync: no Move here and no Sync…, so nothing for "…" to hold.
+  // Playing, out of sync: no Move here and no Sync…, so nothing for "…" to hold.
   expect(labelled("Options for TV")).toEqual([]);
   expect(text(tree)).toContain("Muted");
   expect(await labelled("TV volume")[0]!.props.onCommit!(30)).toBe(true);

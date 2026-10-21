@@ -18,6 +18,7 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  children,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -27,11 +28,16 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-[110] flex w-72 origin-(--radix-popover-content-transform-origin) flex-col gap-4 rounded-md bg-popover p-3 text-sm text-popover-foreground shadow-none ring-1 ring-foreground/10 outline-hidden duration-150 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 motion-safe:data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
+          "z-[110] flex w-72 origin-(--radix-popover-content-transform-origin) flex-col gap-4 rounded-md bg-popover p-3 text-sm text-popover-foreground shadow-none ring-1 ring-foreground/10 outline-hidden duration-150 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 motion-safe:data-open:animate-in data-open:fade-in-0 data-open:zoom-in-90",
           className
         )}
         {...props}
-      />
+      >
+        {children}
+        {/* Couch: an arrow that draws nothing, so Radix sets the transform origin at the trigger's centre and the
+            content grows from the button that opened it, wherever it is aligned. */}
+        <PopoverPrimitive.Arrow width={0} height={0} />
+      </PopoverPrimitive.Content>
     </PopoverPrimitive.Portal>
   )
 }

@@ -98,12 +98,13 @@ function useShellValue() {
     }
   };
   const changeSection = changePage;
-  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id) => {
+  // `types` name the view transition, so its CSS can pick what travels (index.css: couch-play).
+  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id, types?: string[]) => {
     const href = `/now${defaultStringifySearch({ queue: panel === "queue" || undefined, targetDeviceId })}`;
     if (playerTarget && targetDeviceId === playerTarget.id) void router.navigate({ href, replace: true, state: location.state });
     else if (targetDeviceId) detailNavigation.open(href, section === "Remote" && panel === "queue" ? '[data-remote-page] button[aria-label="Up next"]' : undefined);
     else if (section === "Now") void router.navigate({ href, replace: true, state: previous => previous });
-    else detailNavigation.open(href, undefined, playerTransition);
+    else detailNavigation.open(href, undefined, playerTransition && (types ? { types } : true));
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
@@ -120,7 +121,8 @@ function useShellValue() {
     const explicitlyStarted = !!state.playedBy && !current.settled;
     // Consume audio-only starts too: a retry can temporarily clear their media flags.
     if (explicitlyStarted) current.settled = true;
-    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer();
+    // A Details page's artwork travels into the player its Play opened.
+    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer(undefined, undefined, ["couch-play"]);
     current.picture = picture;
   }, [picture, presentation, pictured, !!state?.playedBy, !!state]);
   // The header's field, which the player hides: from there, its page comes back first.
@@ -363,7 +365,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
             {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             {/* Cached routes appear immediately; the player keeps its separate band transition. */}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
-            <div ref={footer} className={cn("app-footer sticky bottom-0 z-20", onPlayer && "hidden")}>
+            {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
+                the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
+            <div ref={footer} className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}>
               {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
               <SectionTabs bar className="hidden border-t bg-background touch:flex tv:hidden" />
             </div>

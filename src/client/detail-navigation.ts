@@ -54,7 +54,7 @@ export function restoreDetailFocus(target?: FocusTarget) {
 export function useDetailNavigation() {
   const router = useRouter({ warn: false });
   return {
-    open(href: string, focusSelector?: string, viewTransition = false) {
+    open(href: string, focusSelector?: string, viewTransition: boolean | { types: string[] } = false) {
       if (!router) return;
       const location = router.state.location;
       const focus = opener(focusSelector);
