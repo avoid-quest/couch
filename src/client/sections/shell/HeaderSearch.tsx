@@ -256,7 +256,7 @@ function useHeld() {
 function Empty({ scope, recents, onScope, onRecent, onOpen }: { scope: SearchScope; recents: string[]; onScope: (scope: Scope) => void; onRecent: (query: string) => void; onOpen: (href: string) => void }) {
   const { played } = useHeld();
   const recent = recents.slice(0, 6), continuing = played.slice(0, 6);
-  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-1.5 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:bg-muted **:[[cmdk-item]]:px-3 **:[[cmdk-item]]:data-[checked=true]:bg-foreground **:[[cmdk-item]]:data-[checked=true]:text-background tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:data-[selected=false]:bg-transparent tv:**:[[cmdk-item]]:data-[selected=false]:text-foreground";
+  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-1.5 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:bg-muted **:[[cmdk-item]]:px-3 **:[[cmdk-item]]:data-[checked=true]:bg-foreground **:[[cmdk-item]]:data-[checked=true]:text-background tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:px-2 tv:**:[[cmdk-item]]:data-[selected=false]:bg-transparent tv:**:[[cmdk-item]]:data-[selected=false]:text-foreground";
   return <div className="grid gap-y-2 tv:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] tv:gap-x-8">
     <div data-palette-column data-palette-kinds className={chips}><CommandGroup heading="Search in"><ScopeRows items={kindScopes} scope={scope} onScope={onScope} /></CommandGroup></div>
     {(recent.length > 0 || continuing.length > 0) && <div data-palette-column className="grid content-start gap-2">

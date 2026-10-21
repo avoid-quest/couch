@@ -30,7 +30,7 @@ export function MediaArtwork({ thumbnail, title, collection = false, className =
       <span className="absolute inset-0 flex bg-(--muted) text-(--foreground)">
         {collection ? <Folder className="m-auto size-[max(1rem,20cqi)] text-(--muted-foreground)" />
           : <>
-            <span className="m-[6cqi] line-clamp-4 h-fit text-[max(.75rem,10cqi)] leading-[1.05] font-semibold tracking-tight text-balance break-words @max-[8rem]:hidden">{title}</span>
+            <span className="m-[6cqi] line-clamp-3 h-fit text-[max(.75rem,13cqi)] leading-[1.05] font-semibold tracking-tight text-balance break-words @max-[8rem]:hidden">{title}</span>
             <span className="m-auto hidden text-[45cqi] leading-none font-semibold @max-[8rem]:block">{title.match(/[\p{L}\p{N}]/u)?.[0]?.toLocaleUpperCase()}</span>
           </>}
       </span>
