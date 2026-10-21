@@ -18,7 +18,7 @@ import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
-import { arrange, chooserFor, chooserRequest, counts, crowded, orderOf, picker, reopens, type Control, type Filter, type Order, type Row } from "@/session/where-it-plays";
+import { arrange, chooserFor, chooserRequest, counts, crowded, orderOf, picker, reopens, soundActions, type Control, type Filter, type Order, type Row } from "@/session/where-it-plays";
 import type { Action } from "../../../shared/protocol";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
@@ -122,18 +122,21 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
   </>;
 }
 
+/** A row's change, with the unmute its sound brings (soundActions), each in turn until Core refuses one. */
+const send = async (run: Props["run"], row: Row, action: Action) => { for (const next of soundActions(row, action)) if (!await run(next)) return false; return true; };
+
 const statusLine = (row: Row) => row.status && <span id={`where-it-plays-${row.device.id}`} data-output-status className={cn("text-sm [overflow-wrap:anywhere]", row.failed ? "text-destructive" : "text-muted-foreground")}>{row.status}</span>;
 const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
 
 /**
  * A device's row, the same at every scale: its name and any exception, its Picture and Sound toggles, its fader and
- * number while its sound is on (Move here instead while it isn't in), and "…". On phones the fader takes a second line.
+ * number while its sound is on (Move here instead while it isn't in), and "…" while it has options. On phones the fader takes a second line.
  * Called rather than rendered, so tests can walk its controls without a DOM.
  */
 function deviceRow({ state, row, run }: Omit<Props, "connected"> & { row: Row }) {
   const { device, output, picture, sound, level, move } = row;
   const toggle = (channel: typeof picture, label: string, on: ReactNode, off: ReactNode, name: string) =>
-    <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!channel.enabled} onPressedChange={() => void run(channel.action)}
+    <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
       className="size-11 data-[state=off]:text-muted-foreground data-[state=on]:bg-transparent">{channel.on ? on : off}</Toggle>;
   return <li key={device.id} data-nav-row data-device={device.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto_5.5rem] items-center gap-x-1 py-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_11rem_2.75rem]">
     <span className="grid min-w-0 py-1">
@@ -143,12 +146,12 @@ function deviceRow({ state, row, run }: Omit<Props, "connected"> & { row: Row })
     {toggle(picture, "picture", <Monitor aria-hidden="true" />, <MonitorOff aria-hidden="true" />, "Picture")}
     {toggle(sound, "sound", <Volume2 aria-hidden="true" />, <VolumeOff aria-hidden="true" />, "Sound")}
     {output && level.sound && <div data-volume className="col-span-full row-start-2 flex min-h-11 min-w-0 items-center gap-3 sm:col-span-1 sm:col-start-4 sm:row-start-1">
-      <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} />
+      <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} onCommit={value => send(run, row, { type: "output", deviceId: device.id, level: value })} />
       <span className="w-[3ch] shrink-0 text-right tabular-nums">{Math.round(level.value)}</span>
     </div>}
     {!output && move && <Button variant="ghost" aria-label={`Move here: ${device.name}`} title={move.reason} disabled={!move.enabled} onClick={() => void run({ type: "solo", deviceId: device.id })} className="col-start-4 row-start-1 -mr-2.5 justify-self-end sm:mr-0 sm:justify-self-start">Move here</Button>}
     {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
-    {output && <DropdownMenu>
+    {output && (move || row.sync) && <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-4 row-start-1 -mr-2.5 size-11 justify-self-end sm:col-start-5" aria-label={`Options for ${device.name}`} title="Options"><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
       <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{menuItems({ state, row, run, channels: false })}</Options>
     </DropdownMenu>}
@@ -161,7 +164,7 @@ function deviceRow({ state, row, run }: Omit<Props, "connected"> & { row: Row })
  */
 function tvRow({ state, row, run }: Omit<Props, "connected"> & { row: Row }) {
   const { device, picture, sound, level } = row;
-  const step = (by: number) => { if (level.enabled && level.sound) void run({ type: "output", deviceId: device.id, level: Math.max(0, Math.min(100, level.value + by)) }); };
+  const step = (by: number) => { if (level.enabled && level.sound) void send(run, row, { type: "output", deviceId: device.id, level: Math.max(0, Math.min(100, level.value + by)) }); };
   return <li key={device.id} data-nav-row data-device={device.id} className="grid">
     <DropdownMenu>
       {/* A horizontal slider outside a Volume, so Left/Right reach it and Up/Down move on (navigation.ts). */}
@@ -181,16 +184,15 @@ function tvRow({ state, row, run }: Omit<Props, "connected"> & { row: Row }) {
   </li>;
 }
 
-/** A row's options: on the TV its Picture and Sound first; Move here where it changes something; Mute while it is in. */
+/** A row's options: on the TV its Picture and Sound first; Move here where it changes something. Its sound is its Sound and fader's. */
 function menuItems({ row, run, channels }: Omit<Props, "connected"> & { row: Row; channels: boolean }) {
-  const { device, output, picture, sound, mute, move } = row;
+  const { device, output, picture, sound, move } = row;
   return <>
     {channels && <>
-      <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={() => void run(picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
-      <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!sound.enabled} onCheckedChange={() => void run(sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
     </>}
     {move && (channels || output) && <DropdownMenuItem aria-label={`Move here: ${device.name}`} className="pl-8" disabled={!move.enabled} onSelect={() => void run({ type: "solo", deviceId: device.id })}>Move here<Why {...move} /></DropdownMenuItem>}
-    {output && <DropdownMenuCheckboxItem aria-label={`Mute ${device.name}`} checked={mute.on} disabled={!mute.enabled} onCheckedChange={muted => void run({ type: "mute", deviceId: device.id, muted })}>Mute<Why {...mute} /></DropdownMenuCheckboxItem>}
   </>;
 }
 

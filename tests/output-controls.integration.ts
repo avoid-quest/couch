@@ -86,7 +86,7 @@ test("output controls agree with Core for own moves and foreign private replacem
   const f = await fixture();
   try {
     const render = () => Mixer({ state: f.actor.state, connected: true, run: async () => true });
-    // A row's Picture and Sound, its fader, Move here, and the Mute in its menu are each labelled by its device's name.
+    // A row's Picture and Sound, its fader and Move here are each labelled by its device's name.
     async function check(label: string, action: Action, expected: boolean) {
       let result: Promise<boolean> | undefined;
       const tree = Mixer({ state: f.actor.state, connected: true, run: command => {
@@ -130,7 +130,7 @@ test("output controls agree with Core for own moves and foreign private replacem
     await f.actor.command({ type: "sharing", sharing: { audio: false, video: false } });
     // The only output: Move here would change nothing, so it isn't offered.
     assert.equal(control(render(), "Move here: Actor"), undefined);
-    for (const label of ["Actor volume", "Actor picture", "Actor sound", "Mute Actor"]) {
+    for (const label of ["Actor volume", "Actor picture", "Actor sound"]) {
       const props = control(render(), label); assert.ok(props, label); assert.equal(!!props.disabled, false, label);
     }
     await check("Actor volume", { type: "output", deviceId: f.actorId, level: 40 }, true);
@@ -145,7 +145,7 @@ test("output controls agree with Core for own moves and foreign private replacem
     await check("Move here: Other", { type: "solo", deviceId: otherId }, false);
     assert.deepEqual(f.actor.state.playbacks?.find(playback => playback.id === foreignBefore?.id), foreignBefore);
     // Out of this playback, Other offers no fader or menu.
-    for (const label of ["Other volume", "Mute Other"]) assert.equal(control(render(), label), undefined, label);
+    for (const label of ["Other volume", "Options for Other"]) assert.equal(control(render(), label), undefined, label);
 
     // Same-playback private picture allows shared sound changes, but Solo replaces the whole output.
     await f.play(f.other, hostId, "Joined boundary");
@@ -159,7 +159,7 @@ test("output controls agree with Core for own moves and foreign private replacem
     await check("Other volume", { type: "output", deviceId: otherId, level: 45 }, false);
     f.other.socket.terminate();
     await until(() => f.actor.state.devices?.find(device => device.id === otherId)?.online === false);
-    for (const label of ["Other volume", "Other picture", "Other sound", "Mute Other", "Move here: Other"]) assert.equal(control(render(), label)?.disabled, true, label);
+    for (const label of ["Other volume", "Other picture", "Other sound", "Move here: Other"]) assert.equal(control(render(), label)?.disabled, true, label);
   } finally { await f.close(); }
 });
 

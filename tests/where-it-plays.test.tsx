@@ -112,7 +112,7 @@ test("with shared requests off, a waiting source opens only in the window that p
   expect(mount("p:here:2", "p:here:1")).toBe(true);
 });
 
-type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: () => void; onPressedChange?: (pressed: boolean) => void };
+type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: () => void; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => Promise<boolean> };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" || typeof node === "number" ? String(node) : "";
 const inSync = { deviceId: "tv", picture: true, sound: true, delay: 80, delayActive: true };
@@ -143,9 +143,9 @@ test("the mixer shows the Volume, the counts, then the playback's devices with P
   const line = (delay: number) => renderToStaticMarkup(createElement(syncs[0]!.type as FunctionComponent, { ...syncs[0]!.props, delay }));
   expect(line(80)).toContain("Sync 80 ms earlier");
   expect(line(0)).toBe("");
-  for (const label of ["TV picture", "TV sound", "TV volume", "Options for TV", "Mute TV", "Phone picture", "Phone sound", "Move here: Phone"]) expect(labelled(label).length).toBe(1);
-  // The only output can't move anywhere new; a device out of the playback has no fader or "…".
-  for (const label of ["Move here: TV", "Phone volume", "Options for Phone", "Mute Phone"]) expect(labelled(label)).toEqual([]);
+  for (const label of ["TV picture", "TV sound", "TV volume", "Options for TV", "Phone picture", "Phone sound", "Move here: Phone"]) expect(labelled(label).length).toBe(1);
+  // The only output can't move anywhere new; a device out of the playback has no fader or "…". The Volume mutes, not a row.
+  for (const label of ["Move here: TV", "Phone volume", "Options for Phone", "Mute TV", "Mute Phone"]) expect(labelled(label)).toEqual([]);
   // A toggle sends the model's own action: the TV's Picture goes, the Phone's Sound joins; Mac shares nothing.
   labelled("TV picture")[0]!.props.onPressedChange!(false);
   labelled("Phone sound")[0]!.props.onPressedChange!(true);
@@ -153,6 +153,18 @@ test("the mixer shows the Volume, the counts, then the playback's devices with P
   expect(sent).toEqual([{ type: "output", deviceId: "tv", picture: false }, { type: "output", deviceId: "phone", level: 50 }, { type: "solo", deviceId: "phone" }]);
   expect(labelled("Mac picture")[0]!.props.disabled).toBe(true);
   expect(labelled("Mac sound")[0]!.props.disabled).toBe(true);
+});
+
+test("a row shows \"…\" only with options in it, and a device muted elsewhere says Muted and unmutes as its fader moves", async () => {
+  const sent: unknown[] = [];
+  const state = { ...waiting(0), devices: devices.map(item => item.id === "tv" ? { ...item, muted: true } : item), outputs: [{ deviceId: "tv", picture: true, sound: true }], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
+  const tree = Mixer({ state, connected: true, run: async action => { sent.push(action); return true; } });
+  const all = elements(tree), labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
+  // The only output, out of sync: no Move here and no Sync…, so nothing for "…" to hold.
+  expect(labelled("Options for TV")).toEqual([]);
+  expect(text(tree)).toContain("Muted");
+  expect(await labelled("TV volume")[0]!.props.onCommit!(30)).toBe(true);
+  expect(sent).toEqual([{ type: "output", deviceId: "tv", level: 30 }, { type: "mute", deviceId: "tv", muted: false }]);
 });
 
 test("a source waiting for receivers asks where it plays instead of the Volume", async () => {

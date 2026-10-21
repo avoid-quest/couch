@@ -380,7 +380,7 @@ test("Play inherits the publisher's mix without it, and the publisher keeps cont
     const rows = Mixer({ state: f.publisher.state, connected: true, run: async () => true });
     assert.equal(status(f.publisher, f.publisher.id), "Sharing this source");
     for (const label of ["Publisher picture", "Publisher sound", "Move here: Publisher"]) assert.equal(control(rows, label)?.disabled, true, label);
-    for (const label of ["Publisher volume", "Mute Publisher"]) assert.equal(control(rows, label), undefined, label);
+    for (const label of ["Publisher volume", "Options for Publisher"]) assert.equal(control(rows, label), undefined, label);
     assert.equal(control(rows, "Receiver volume")?.disabled, false);
   } finally { await f.close(); }
 });

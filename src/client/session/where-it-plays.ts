@@ -50,7 +50,6 @@ export type Row = {
   sound: Channel;
   /** The fader, shown while its sound is in: its volume while its sound is in, else 0. */
   level: Control & { value: number; sound: boolean };
-  mute: Control & { on: boolean };
   /** Move here (Core's solo): it alone keeps the playback. Absent where it would change nothing. */
   move?: Control;
   /** Sync … ms earlier, only while its sound plays in sync with other devices; Lip sync while another device shows the picture. */
@@ -123,7 +122,6 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
       device, output: current, mine, status: mine ? ["This device", status].filter(Boolean).join(" · ") : status, failed: !!current?.error,
       picture, sound,
       level: { value: soundOn ? device.volume : 0, sound: soundOn, ...control(soundReason) },
-      mute: { on: device.muted, ...control(lock || silent && "No sound" || !speakers && "Private") },
       move: alone ? undefined : control(lock || sharing || (!audio && !video || privateOutput && !mine || privately.some(item => item.deviceId !== device.id)) && "Private"),
       sync: audio && current?.sound && current.delayActive ? { delay: current.delay ?? 0, lip: !audioOnly && outputs.some(item => item.deviceId !== device.id && item.picture) } : undefined,
     };
@@ -135,6 +133,13 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     rows,
   };
 }
+
+/**
+ * What a row's Sound or fader sends: Core's level leaves a device's Mute as it is, so one muted elsewhere (still "Muted")
+ * unmutes as its Sound turns on or its fader moves up. The row has no Mute of its own; the Volume does.
+ */
+export const soundActions = (row: Row, action: Action): Action[] =>
+  row.device.muted && action.type === "output" && !!action.level ? [action, { type: "mute", deviceId: row.device.id, muted: false }] : [action];
 
 /** The summary's counts and the filters they become, in the order the summary says them. */
 export type Filter = "picture" | "sound" | "sync" | "behind" | "error" | "offline";
