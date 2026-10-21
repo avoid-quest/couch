@@ -17,6 +17,12 @@ import { failed } from "@/toasts";
 import type { MenuAction } from "@/components/RowMenu";
 import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
 import type { HistoryItem } from "../../../shared/viewing";
+import { collectionLinks } from "@/collection-target";
+import { episodeLabel } from "@/media-caption";
+
+// The same page whatever origin a source healed to.
+const samePage = (a: string, b: string) => { try { return new URL(a).pathname.replace(/\/$/, "") === new URL(b).pathname.replace(/\/$/, ""); } catch { return false; } };
+const inCollection = (progress: HistoryItem, url: string) => collectionLinks(progress.collection).some(link => samePage(link.url, url));
 
 export type SearchHit = {
   kind: "Video" | "Music" | "Live" | "Radio" | "Channels"; duration?: number | null;
@@ -103,6 +109,11 @@ function OnlineResults(props: Props) {
   // The one place provider items become hits, so Hide reaches Search, source pages and Discover alike.
   const { isHidden, hide } = useHidden(props, props.connected);
   const history = useQuery({ ...historyQuery(props, provider), enabled: props.connected && !!props.url && !!props.onPlayHistory });
+  // A series of seasons starts from the season its latest played episode is in, else the first: its next episode plays.
+  const seasons = props.url && props.paged && page?.items.length && page.items.every(item => item.kind === "collection" && /\b(?:season|stagione)\b/i.test(`${item.title} ${item.url}`)) ? page.items : undefined;
+  const latest = seasons && history.data?.items.filter(progress => seasons.some(season => inCollection(progress, season.url))).sort((a, b) => (b.lastPlayedAt ?? 0) - (a.lastPlayedAt ?? 0))[0];
+  const season = seasons && (seasons.find(season => latest && inCollection(latest, season.url)) ?? seasons[0]);
+  const seasonPage = useQuery({ ...providerPageQuery(props, provider, { url: season?.url ?? "" }), enabled: props.connected && !!season });
   const savedWeb = (item: ProviderItem) => later.data?.items.find(entry => entry.url === item.url);
   const [busy, setBusy] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
@@ -189,7 +200,8 @@ function OnlineResults(props: Props) {
         || provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(new URL(selected.url).pathname)
         || provider === "animesaturn" || provider === "animeunity");
     const historyItems = history.data?.items ?? [];
-    const start = selected?.kind === "media" ? selected : episodeList ? nextEpisode(page!.items, historyItems) : undefined;
+    const seasonEpisodes = seasonPage.data?.items.filter(item => item.kind === "media") ?? [];
+    const start = selected?.kind === "media" ? selected : episodeList ? nextEpisode(page!.items, historyItems) : seasonEpisodes.length ? nextEpisode(seasonEpisodes, historyItems) : undefined;
     const animeResume = selected && ["animesaturn", "animeunity"].includes(provider) ? seriesResumeFor(selected, historyItems) : undefined;
     const progress = animeResume ?? (start ? progressFor(start, historyItems) : selected ? seriesResumeFor(selected, historyItems) : undefined);
     const resume = progress?.playable && !progress.watched && progress.position > 0 ? progress : undefined;
@@ -198,16 +210,20 @@ function OnlineResults(props: Props) {
       else if (start) play(start, true, undefined, deviceId);
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
+    // Without the season's episodes yet, Play plays the season from its first.
+    const playSeason = season && props.onCommand && !start ? (deviceId?: string) => void action(`Couldn't play ${season.title}.`, () => props.onCommand?.({ type: "enqueueProvider", provider, url: season.url, shape: "playlist", ...(season.collection ? { collection: season.collection } : {}), playNow: true, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
+    // A series names the episode its Play starts: "Resume S1 E1", "Play S1 E2".
+    const episode = selected?.kind === "media" ? undefined : resume ? episodeLabel(resume) : start ? episodeLabel(start) : playSeason ? episodeLabel({ title: "", collection: { ...season!, index: 0 } }) : undefined;
     const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(`Couldn't ${playNow ? "play" : "queue"} ${page.title || selected?.title || providerNames[provider]}.`, () => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(!playNow ? { title: page.title || selected?.title || providerNames[provider] } : {}), ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
     props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, refreshing: fetching && !!page, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || fetching, hits,
       ...(props.url ? { collection: { context: props.context ?? selected?.collection, creator: selected?.creator, url: selected?.url ?? props.url, title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
-        single: selected?.kind === "media", playAll: start || resume ? () => startItem() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
+        single: selected?.kind === "media", playAll: start || resume ? () => startItem() : playSeason ? () => playSeason() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : playSeason ?? (list(true) && (deviceId => list(true, deviceId)?.())), queueAll: list(false),
         playNext: selected?.kind === "media" && props.onCommand ? () => play(selected, false, "next") : undefined,
-        playLabel: resume ? "Resume" : start ? "Play" : undefined, position: resume?.position, duration: resume?.duration, fromStart: resume ? () => startItem(true) : undefined,
+        playLabel: [resume ? "Resume" : start || playSeason ? "Play" : undefined, episode].filter(Boolean).join(" ") || undefined, position: resume?.position, duration: resume?.duration ?? (selected?.kind === "media" && !selected.live ? selected.duration : undefined), fromStart: resume ? () => startItem(true) : undefined,
         // A page's section opens from that page; it isn't something to keep (one saved before can still go).
         save: selected && (!pageSection(selected) || selectedSaved) ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, isHidden, later.data, history.data, history.isLoading, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
+  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, isHidden, later.data, history.data, history.isLoading, seasonPage.data, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }

@@ -104,6 +104,9 @@ export async function runFilterControlsRegression() {
     const collection = '/collection?provider=youtube&url=' + encodeURIComponent('https://www.youtube.com/playlist?list=PL1B627337ED6F55F0');
     const context = { title: "NPR Music", url: "https://www.youtube.com/@nprmusic" };
     await audit.go(collection + '&context=' + encodeURIComponent(JSON.stringify(context)) + '&from=saved');
+    // Two items need no Filter; one that already filters keeps it.
+    assert(!field("Filter items"), "A short collection offered Filter");
+    await audit.go(collection + '&context=' + encodeURIComponent(JSON.stringify(context)) + '&from=saved&filter=' + encodeURIComponent(JSON.stringify("A")));
     const collectionReads = audit.calls.length;
     type("Filter items", "Anderson"); await wait();
     assert(document.querySelectorAll('[data-hit-id]').length === 1, "Collection filter did not narrow the list");
@@ -139,7 +142,7 @@ export async function runFilterControlsRegression() {
     button("Clear filter").click(); await wait(500);
     assert(field("Filter channels").value === "" && button("Group").textContent?.includes("Culture"), "Clearing text changed the selected group");
     assert(document.activeElement === field("Filter channels"), "Clearing text lost focus");
-    return { passed: true, checks: ["an empty search offers no filters", "only found kinds and sources are offered", "source selection preserves focus and cache", "radio source preserves text", "clear restores input focus", "local filtering makes no reads", "Back restores collection filters", "Live TV debounces typing", "pending requests retain channels", "group and text filters compose"] };
+    return { passed: true, checks: ["an empty search offers no filters", "only found kinds and sources are offered", "source selection preserves focus and cache", "radio source preserves text", "clear restores input focus", "a short collection has no Filter", "local filtering makes no reads", "Back restores collection filters", "Live TV debounces typing", "pending requests retain channels", "group and text filters compose"] };
   } finally {
     releaseGuide?.();
     window.fetch = fixtureFetch;
