@@ -26,9 +26,10 @@ export function MediaTilesSkeleton({ shape = "video", count = 6, fluid = false }
 }
 
 export function DetailSkeleton({ shape = "video", home = false }: { shape?: ArtShape; home?: boolean }) {
-  return <div role="status" aria-label={home ? "Loading your Home…" : "Loading details…"} data-loading="details" className={cn("grid gap-x-8 gap-y-6 lg:gap-x-12", home ? "border-b pb-8 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:items-center md:pb-12" : shape === "video" ? "md:grid-cols-[minmax(0,min(42%,28rem))_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,min(36%,18rem))_minmax(0,1fr)]")}>
-    <Skeleton className={cn("rounded-none", home ? "h-56 md:h-80" : artAspect[shape], !home && (shape === "square" ? "max-w-64 md:max-w-72" : shape === "poster" && "max-w-48 md:max-w-64"))} />
-    <div aria-hidden="true" className="grid content-start gap-4"><Skeleton className="h-10 w-4/5" /><Skeleton className="h-5 w-2/5" /><div className="mt-4 flex flex-wrap gap-2"><Skeleton className="h-11 w-28 max-md:w-full" /><Skeleton className="h-11 w-20" /><Skeleton className="h-11 w-20" /></div><Skeleton className="mt-4 h-4 w-full" /><Skeleton className="h-4 w-4/5" /></div>
+  return <div role="status" aria-label={home ? "Loading your Home…" : "Loading details…"} data-loading="details" className={cn("grid gap-x-8 gap-y-6 lg:gap-x-12", home ? "border-b pb-8 md:flex md:items-center md:gap-12 md:pb-12" : shape === "video" ? "md:grid-cols-[minmax(0,min(42%,28rem))_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,min(36%,18rem))_minmax(0,1fr)]")}>
+    {/* Home's hero most often leads with a frame, at the hero's height. */}
+    <Skeleton className={cn("rounded-none", home ? "aspect-video w-full shrink-0 md:h-[min(26rem,52vh)] md:w-auto md:max-w-[55%]" : artAspect[shape], !home && (shape === "square" ? "max-w-64 md:max-w-72" : shape === "poster" && "max-w-48 md:max-w-64"))} />
+    <div aria-hidden="true" className="grid min-w-0 flex-1 content-start gap-4"><Skeleton className="h-10 w-4/5" /><Skeleton className="h-5 w-2/5" /><div className="mt-4 flex flex-wrap gap-2"><Skeleton className="h-11 w-28 max-md:w-full" /><Skeleton className="h-11 w-20" /><Skeleton className="h-11 w-20" /></div><Skeleton className="mt-4 h-4 w-full" /><Skeleton className="h-4 w-4/5" /></div>
   </div>;
 }
 
