@@ -28,6 +28,10 @@ xvfb-run -a scripts/live-audio-network.sh run --profile control --clients 50 \
 Preflight with two clients and five steady seconds before scaling. For a soak,
 set `COUCH_SCALE_SECONDS=1800` and increase the wrapper's wall limit to include
 sequential admission, warmup, faults and cleanup. Runs must remain sequential.
+Alternatively, `COUCH_SCALE_TAIL_SECONDS=1800` keeps the same initial comparison
+and reconnect rounds, then adds a 15-second warmup and a 30-minute soak on those
+receivers before stopping capture. This tests sustained playback after churn;
+it does not replace a fresh-start soak. Include it in the wrapper's wall limit.
 The wrapper independently caps processes, summed RSS and duration. The benchmark
 also stops below 8 GiB host available memory or after 30 seconds above 80% of the
 assigned logical CPUs. Summed RSS double-counts shared mappings; process CPU

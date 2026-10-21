@@ -24,8 +24,10 @@ const root = resolve(import.meta.dirname, ".."), directory = resolve(process.arg
 mkdirSync(directory, { mode: 0o700 });
 const count = network.profile.clients.length, seconds = Number(process.env.COUCH_SCALE_SECONDS ?? 60);
 const rounds = Number(process.env.COUCH_SCALE_ROUNDS ?? 3);
+const tailSeconds = Number(process.env.COUCH_SCALE_TAIL_SECONDS ?? 0);
 assert(Number.isInteger(seconds) && seconds >= 5 && seconds <= 3600);
 assert(Number.isInteger(rounds) && rounds >= 0 && rounds <= 10);
+assert(Number.isInteger(tailSeconds) && tailSeconds >= 0 && tailSeconds <= 3600);
 const faultCounts = (process.env.COUCH_SCALE_FAULTS ?? `${Math.max(1, count - 1)},${count}`).split(",").map(Number);
 assert(faultCounts.every(n => Number.isInteger(n) && n > 0 && n <= count));
 const prefix = process.env.COUCH_LAB_PREFIX;
@@ -65,7 +67,7 @@ const workers: Worker[] = [], pulseEnvs: NodeJS.ProcessEnv[] = [];
 type Output = { frames: number; windows: number; active: number; silent: number; invalid: number; clipped: number; lastActive: number; lastWindow: number; pending: number; sum: number; peak: number; carry: Buffer };
 const outputs: Output[] = [];
 const results: any = { schema: "couch-live-performance/1", startedAt: new Date().toISOString(), head: command(["git", "rev-parse", "HEAD"]).trim(),
-  contract: { count, seconds, rounds, faultCounts, warmupMs: 15000, observationMs: 5000, outputWindowFrames: 48000, minimumRms: .001,
+  contract: { count, seconds, rounds, faultCounts, tailSeconds, warmupMs: 15000, observationMs: 5000, outputWindowFrames: 48000, minimumRms: .001,
     recoveryAllocationMs: 5000, hardRecoveryTimeoutMs: 45000, fullOutagePlayAtMs: 8000, capture: "looping 30-second 440+997 Hz fake microphone", route: "production direct WebRTC", qualified: false },
   hashes: Object.fromEntries(["tests/live-audio-scale.native.ts", "tests/live-audio-scale-worker.ts", "build/core.mjs", "dist/index.html"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])),
   admissions: [], faults: [], stages: [], qualified: false };
@@ -254,6 +256,7 @@ try {
     write("result.json", results); console.log(JSON.stringify(fault));
     assert(fault.completed, "Recovery hard timeout"); await steady(`after-${round}-${faultCount}`, 15);
   }
+  if (tailSeconds) { await Bun.sleep(15000); await steady("soak", tailSeconds); }
   await workers[0]!.js("__scaleSession().endLive()");
   const stop = Date.now(); await until(() => outputs.every(o => o.lastWindow > stop + 2000 && o.lastActive < o.lastWindow), "all outputs silent after source stop");
   results.functionalPassed = true;
