@@ -167,6 +167,14 @@ test("a row shows \"…\" only with options in it, and a device muted elsewhere 
   expect(sent).toEqual([{ type: "output", deviceId: "tv", level: 30 }, { type: "mute", deviceId: "tv", muted: false }]);
 });
 
+test("a playing row's \"…\" never offers Move here: it holds only Sync…", () => {
+  const phone = { id: "phone", name: "Phone", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } };
+  const state = { ...waiting(0), devices: [...devices, phone], outputs: [{ deviceId: "tv", picture: true, sound: true }, { deviceId: "phone", picture: false, sound: true }], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
+  const all = elements(Mixer({ state, connected: true, run: async () => true }));
+  const labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
+  for (const label of ["Move here: TV", "Move here: Phone", "Options for TV", "Options for Phone"]) expect(labelled(label)).toEqual([]);
+});
+
 test("a source waiting for receivers asks where it plays instead of the Volume", async () => {
   const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
   const all = elements(Mixer({ state: waiting(1), connected: true, run: async () => true }));

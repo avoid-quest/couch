@@ -99,7 +99,7 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
   const { choose, inSync, rows } = picker(state, { here: deviceId() });
   const { playing, rest, offline, listed } = arrange(rows, order, filter, query);
   const summary = counts(rows), many = listed > crowded;
-  const row = (item: Row) => tv ? tvRow({ state, row: item, run }) : deviceRow({ state, row: item, run });
+  const row = (item: Row) => tv ? tvRow({ row: item, run }) : deviceRow({ row: item, run });
   return <>
     {/* The first line, and with the counts and search, what stays put while a long list scrolls. */}
     <div className="sticky top-0 z-10 grid gap-1 bg-inherit pt-2 pb-2">
@@ -130,10 +130,10 @@ const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
 
 /**
  * A device's row, the same at every scale: its name and any exception, its Picture and Sound toggles, its fader and
- * number while its sound is on (Move here instead while it isn't in), and "…" while it has options. On phones the fader takes a second line.
+ * number while its sound is on (Move here instead while it isn't in), and "…" while Sync applies. On phones the fader takes a second line.
  * Called rather than rendered, so tests can walk its controls without a DOM.
  */
-function deviceRow({ state, row, run }: Omit<Props, "connected"> & { row: Row }) {
+function deviceRow({ row, run }: { row: Row; run: Props["run"] }) {
   const { device, output, picture, sound, level, move } = row;
   const toggle = (channel: typeof picture, label: string, on: ReactNode, off: ReactNode, name: string) =>
     <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
@@ -151,9 +151,9 @@ function deviceRow({ state, row, run }: Omit<Props, "connected"> & { row: Row })
     </div>}
     {!output && move && <Button variant="ghost" aria-label={`Move here: ${device.name}`} title={move.reason} disabled={!move.enabled} onClick={() => void run({ type: "solo", deviceId: device.id })} className="col-start-4 row-start-1 -mr-2.5 justify-self-end sm:mr-0 sm:justify-self-start">Move here</Button>}
     {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
-    {output && (move || row.sync) && <DropdownMenu>
+    {output && row.sync && <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-4 row-start-1 -mr-2.5 size-11 justify-self-end sm:col-start-5" aria-label={`Options for ${device.name}`} title="Options"><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{menuItems({ state, row, run, channels: false })}</Options>
+      <Options id={device.id} sync={`${syncLabel(row)}…`} />
     </DropdownMenu>}
   </li>;
 }
@@ -162,7 +162,7 @@ function deviceRow({ state, row, run }: Omit<Props, "connected"> & { row: Row })
  * On a TV a row is one focus stop: Left and Right move its level by 5 at once (no OK to take the arrows), OK opens
  * its options with Picture and Sound, and Back closes the panel. Called rather than rendered, as deviceRow is.
  */
-function tvRow({ state, row, run }: Omit<Props, "connected"> & { row: Row }) {
+function tvRow({ row, run }: { row: Row; run: Props["run"] }) {
   const { device, picture, sound, level } = row;
   const step = (by: number) => { if (level.enabled && level.sound) void send(run, row, { type: "output", deviceId: device.id, level: Math.max(0, Math.min(100, level.value + by)) }); };
   return <li key={device.id} data-nav-row data-device={device.id} className="grid">
@@ -178,21 +178,18 @@ function tvRow({ state, row, run }: Omit<Props, "connected"> & { row: Row }) {
         {level.sound ? <Progress value={level.value} aria-hidden="true" className="bg-current/20 [&_[data-slot=progress-indicator]]:bg-current" /> : <span />}
         <span className="text-right tabular-nums">{level.sound ? Math.round(level.value) : ""}</span>
       </div></DropdownMenuTrigger>
-      <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{menuItems({ state, row, run, channels: true })}</Options>
+      <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{channelItems({ row, run })}</Options>
     </DropdownMenu>
     {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
   </li>;
 }
 
-/** A row's options: on the TV its Picture and Sound first; Move here where it changes something. Its sound is its Sound and fader's. */
-function menuItems({ row, run, channels }: Omit<Props, "connected"> & { row: Row; channels: boolean }) {
-  const { device, output, picture, sound, move } = row;
+/** A TV row's Picture and Sound, which its OK opens. Its sound is its Sound and fader's. */
+function channelItems({ row, run }: { row: Row; run: Props["run"] }) {
+  const { device, picture, sound } = row;
   return <>
-    {channels && <>
-      <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
-      <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
-    </>}
-    {move && (channels || output) && <DropdownMenuItem aria-label={`Move here: ${device.name}`} className="pl-8" disabled={!move.enabled} onSelect={() => void run({ type: "solo", deviceId: device.id })}>Move here<Why {...move} /></DropdownMenuItem>}
+    <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
+    <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
   </>;
 }
 
@@ -203,9 +200,9 @@ function SyncScope({ children }: { children: ReactNode }) {
   return <RevealedSync value={{ id, reveal }}>{children}</RevealedSync>;
 }
 
-// A row's options, then Sync… while Sync applies, which reveals the row's Sync line and moves focus to its slider
+// A row's options (a TV row's Picture and Sound), then Sync… while Sync applies, which reveals the row's Sync line and moves focus to its slider
 // rather than back to what opened the menu. The items stay children, so tests walk them without a DOM.
-function Options({ id, sync, children }: { id: string; sync?: string; children: ReactNode }) {
+function Options({ id, sync, children }: { id: string; sync?: string; children?: ReactNode }) {
   const { reveal } = useContext(RevealedSync);
   const picked = useRef(false);
   return <DropdownMenuContent align="end" onCloseAutoFocus={event => {
@@ -215,7 +212,7 @@ function Options({ id, sync, children }: { id: string; sync?: string; children: 
     document.querySelector<HTMLElement>(`[data-sync-line="${id}"] [role="slider"]`)?.focus();
   }}>
     {children}
-    {sync && <><DropdownMenuSeparator /><DropdownMenuItem className="pl-8" onSelect={() => { picked.current = true; reveal(id); }}>{sync}</DropdownMenuItem></>}
+    {sync && <>{children && <DropdownMenuSeparator />}<DropdownMenuItem className="pl-8" onSelect={() => { picked.current = true; reveal(id); }}>{sync}</DropdownMenuItem></>}
   </DropdownMenuContent>;
 }
 

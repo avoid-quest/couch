@@ -385,7 +385,7 @@ window.runTvNavigationRegression = async () => {
     await key("Escape");
     await until(() => !document.querySelector('[role="dialog"][data-state="open"]') && !!document.activeElement?.matches('[data-now-playing] button[aria-label="Where it plays"]'));
   });
-  await check("OK opens a row's options with Picture and Sound, without Mute; Sync… puts focus on its Sync line, and Back hides a line still at 0", async () => {
+  await check("OK opens a row's options with Picture and Sound, without Mute or Move here; Sync… puts focus on its Sync line, and Back hides a line still at 0", async () => {
     await click('[data-now-playing] button[aria-label="Where it plays"]');
     const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-row]')];
     const items = () => [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
@@ -401,6 +401,7 @@ window.runTvNavigationRegression = async () => {
       device().focus(); await key("Enter");
       await until(() => !!item("Picture") && !!item("Sound"));
       assert(!item("Mute"), "A row's options offer Mute; its Sound and level are its sound, and the Volume mutes");
+      assert(!item("Move here"), "A row's options offer Move here");
       if (!sound()) { added = true; item("Sound")!.click(); await until(sound); await wait(1500); }
       else await key("Escape");
       const first = () => rows()[0]!;
