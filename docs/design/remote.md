@@ -6,7 +6,7 @@ What the TV does with each press: [TV](tv.md).
 
 **Remote** (`/remote`) appears on devices that aren't TVs while the Couch has
 a TV. One column, phone first: the TV (a Select when there are several;
-offline or private TVs can't be controlled), the pad, Back, Home and Info,
+TVs that are off or private can't be controlled), the pad, Back, Home and Info,
 what plays with the shared transport, timeline, Volume and Up next, then Type
 on TV. It controls a TV without joining or moving its outputs. The
 now-playing bar hides here.
@@ -16,6 +16,12 @@ the catalog has no direction pad, so it is clipped `Button`s. Each press sends
 one key. OK sends on release; held for 500 ms it sends a held OK (`menu`),
 which opens the focused item's menu on the TV ([Menus](../design.md#menus)).
 Arrow keys work while the pad has focus. Info opens the TV's player.
+
+Remote picks the TV this device controls, else one that's on, else the one
+seen last. A TV that's off says so ("Living room TV is off."); "No TV
+connected" with Open Devices is only for a Couch without a TV. Core knows a
+device is a TV only once it connects as one after Core starts, so this browser
+remembers the TVs it has seen (`known-tvs.ts`).
 
 Commands reject a disconnected, revoked or reassigned target rather than act
 on a different TV.

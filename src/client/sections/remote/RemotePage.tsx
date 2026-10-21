@@ -3,6 +3,9 @@ import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { queueItemLocation } from "@/detail-navigation";
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { devicesQuery } from "@/api/devices";
+import { knownTvs } from "@/known-tvs";
 import { Link } from "@tanstack/react-router";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/AppShell";
@@ -18,9 +21,13 @@ import type { RemoteTextField } from "../../../shared/remote";
 export function RemotePage() {
   const { state, connected, tvPresentation, credentials, run, error, setError } = useSessionGate();
   const shell = useShell();
-  const tvs = state?.devices?.filter(device => device.tv) ?? [];
+  const known = knownTvs(state?.devices);
+  const tvs = state?.devices?.filter(device => known.has(device.id)) ?? [];
+  // With every TV off, the one seen last.
+  const seen = useQuery({ ...devicesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && tvs.length > 1 && !tvs.some(tv => tv.online) });
+  const lastSeen = (id: string) => seen.data?.find(device => device.id === id)?.lastSeenAt ?? 0;
   const [chosen, setChosen] = useState<string | null>(null);
-  const targetId = chosen ?? tvs.find(tv => tv.id === state?.controlling)?.id ?? tvs.find(tv => tv.online)?.id ?? tvs[0]?.id;
+  const targetId = chosen ?? tvs.find(tv => tv.id === state?.controlling)?.id ?? tvs.find(tv => tv.online)?.id ?? [...tvs].sort((a, b) => lastSeen(b.id) - lastSeen(a.id))[0]?.id;
   const target = tvs.find(tv => tv.id === targetId);
   const allowed = !!target && (target.sharing?.audio === true || target.sharing?.video === true);
   const [binding, setBinding] = useState<string | null>(null);
@@ -45,9 +52,9 @@ export function RemotePage() {
     <div className="grid gap-1">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>
         <SelectTrigger aria-label="TV to control" className="min-h-11 w-full"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
-        <SelectContent>{tvs.map(tv => <SelectItem key={tv.id} value={tv.id} className="min-h-11" disabled={!tv.online || !(tv.sharing?.audio || tv.sharing?.video)}>{tv.name}{!tv.online ? " · Offline" : !(tv.sharing?.audio || tv.sharing?.video) ? " · Private" : ""}</SelectItem>)}</SelectContent>
+        <SelectContent>{tvs.map(tv => <SelectItem key={tv.id} value={tv.id} className="min-h-11" disabled={!tv.online || !(tv.sharing?.audio || tv.sharing?.video)}>{tv.name}{!tv.online ? " · Off" : !(tv.sharing?.audio || tv.sharing?.video) ? " · Private" : ""}</SelectItem>)}</SelectContent>
       </Select> : <p className="min-w-0 break-words text-lg font-medium">{target?.name ?? "No TV connected"}</p>}
-      <p className="text-sm text-muted-foreground" role="status">{!target ? "Pair a TV with this Couch to use Remote." : !connected ? "Reconnecting to Couch…" : !target.online ? `${target.name} is offline.` : !allowed ? `${target.name} is private. Enable its sharing to control it.` : !ready ? "Selecting TV…" : "Connected"}</p>
+      <p className="text-sm text-muted-foreground" role="status">{!target ? "Pair a TV with this Couch to use Remote." : !connected ? "Reconnecting to Couch…" : !target.online ? `${target.name} is off.` : !allowed ? `${target.name} is private. Enable its sharing to control it.` : !ready ? "Selecting TV…" : "Connected"}</p>
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
     </div>
     {target && <>

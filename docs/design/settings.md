@@ -7,12 +7,12 @@ hand, and the Couch everyone shares, its hardware included:
 
 | Page | Owner | Path | Holds |
 | --- | --- | --- | --- |
-| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, which Couch it shows, what it lets other devices use, Share screen or sound, Quit Couch (app) |
+| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Connection (which Couch it shows), what it lets other devices use, Share screen or sound, Quit Couch (app) |
 | Home & Discover | This device | `/settings/device/home` | Home's shelves, then Discover's sections |
 | Updates | This device | `/settings/device/updates` | this app's updates and logs (a desktop app that doesn't run the Couch) |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
-| Playback | Couch | `/settings/couch/playback` | the watching profile's preferences (Autoplay among them), Ask every device where a shared source plays |
-| Sources | Couch | `/settings/couch/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under Sources), AirPlay, Hidden |
+| Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays |
+| Sources | Couch | `/settings/couch/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under Sources), AirPlay (hidden off Linux; one muted line when this build or computer lacks the receiver), Hidden |
 | Sound | Couch | `/settings/couch/sound` | output, test and delay, Bluetooth (where Couch controls the system's sound) |
 | TV | Couch | `/settings/couch/tv` | TV mode, Start on boot, Screen, text size (where the Couch is or can be a TV) |
 | Updates | Couch | `/settings/couch/updates` | the Couch apps an admin updates (where there is an updater) |
@@ -22,9 +22,32 @@ Wide screens and the TV open Settings on General. The stack's flat paths
 ones redirect through `settingsAliases`. The player's gear opens the player's
 own Playback menu, not this page.
 
-Home & Discover lists each section with a Switch and Move up/down (no drag),
-saved per device, each list with Reset to default. A Move that reaches an end
-returns focus to the row's Switch.
+Online video quality offers Best, 1080p, 720p and 480p: Auto plays 1080p, so
+it is the 1080p choice.
+
+Home & Discover lists each section as a Switch beside its name, with Move
+up/down at the row's end (no drag), saved per device; each list ends in an
+outline Reset to default. A Move that reaches an end returns focus to the
+row's Switch.
+
+## Rows
+
+`SettingsRow` sets a label beside its control once the column has room. A
+one-line label centres on the control's line, and every control starts on the
+column's edge: an input, Select or Switch at it, a ghost button's text pulled
+back to it, and a choice's label on it with its check hung in the gutter. When
+the row stacks, a choice's check sits on the label's edge instead.
+
+## Devices
+
+Each device leads with a glyph where its kind is known: a TV (Core says so, or
+this browser saw it as one), the computer or TV that runs the Couch, this
+device (phone or computer by its pointer); any other is a phone-or-computer
+glyph. An offline device is muted and says when it was seen, relatively ("Seen
+10 min ago", "Seen yesterday", "Seen Tuesday", "Seen Oct 3"). An offline device
+that shares its name with one online or seen since is an older duplicate (the
+same screen paired again): it says so and offers only Forget, and with two or
+more a last row offers Forget all. Forget asks first in an AlertDialog.
 
 ## Section nav
 
@@ -43,6 +66,9 @@ its owner as a breadcrumb ("This device ›" or "{Couch} ›") above a visible
 title; Back goes up to the list. A source's own page shows "Sources ›" above
 its title at every width. Rows stack label and control until their column has
 room for both.
+
+On wide screens the rail stays in view below the header while a long page
+scrolls.
 
 On the TV, Settings starts on the rail's current entry; OK opens a page and
 focuses its first enabled control; Back from the content returns to the rail

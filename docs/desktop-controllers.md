@@ -84,7 +84,7 @@ a changed address can require pairing again.
 The client retries when the TV or network returns; the header shows connection
 status and the playback computer's address. If Couch rejects the saved pairing,
 the pairing form appears. Get a current QR or code from the TV and pair again.
-An Administrator can remove an old device in **Settings → Devices & network**.
+An Administrator can forget an old device in **Settings → Devices & network**; offline duplicates of a newer device are marked and can be forgotten together.
 Pairing again does not delete the TV's media or queue.
 
 Couch serves the LAN over HTTPS with its own self-signed certificate, so a
