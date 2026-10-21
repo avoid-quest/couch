@@ -167,7 +167,8 @@ html { view-transition-name: none; }
 .player-band[data-player-band="hidden"], .player-top[data-player-top="hidden"] { pointer-events: none; }
 /* The top band or Now playing says when it ends, so the band's timeline doesn't repeat it. */
 .player-band [data-end-time] { display: none; }
-/* Up next over a video starts below the top band, which turns solid, so the picture letterboxes under it. */
+/* A playing picture never moves or resizes for a panel: Up next, the Sheet and the popovers lie over it. Up next over a video
+   starts below the top band, which turns solid. */
 .player-page[data-queue-open]:not([data-artwork-stage]) .player-top { padding-bottom: .75rem; background: var(--background); }
 .player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
@@ -197,14 +198,13 @@ html { view-transition-name: none; }
   [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
   [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
   .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: var(--player-top, 3.5rem); bottom: var(--bottom-bar, 10rem); grid-template-columns: minmax(0, 1fr) 24rem; }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-video { top: var(--player-top, 3.5rem); right: 24rem; }
   .player-page[data-queue-open]:not([data-artwork-stage]) .player-queue { display: flex; border-left: 1px solid var(--border); padding: 1.5rem; }
 }
 @media (max-width: 959px) {
   [data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1rem); }
-  /* On phones Up next replaces the picture too. */
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: calc(var(--player-top, 3.5rem) + 1rem); }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-video { visibility: hidden; }
+  /* On phones Up next covers the picture, edge to edge between the bands. */
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { inset: var(--player-top, 3.5rem) 0 var(--bottom-bar, 10rem); }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-queue { padding: 1rem var(--gutter) 0; }
   [data-queue-open] .player-main { display: none; }
   [data-queue-open] .player-summary { display: none; }
   [data-queue-open] .player-queue { display: flex; grid-row: 1; }
