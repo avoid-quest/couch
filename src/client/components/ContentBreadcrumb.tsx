@@ -24,12 +24,13 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
   ];
   return <Breadcrumb aria-label="Content path" className="min-w-0">
     <BreadcrumbList className="grid auto-cols-[minmax(0,max-content)] grid-flow-col justify-start text-sm">
-      {/* Each crumb leads on to the next, the last to the h1; none is the page itself, so none is current. */}
-      {trail.map(crumb => <Fragment key={crumb.to}>
+      {/* Each crumb leads on to the next, the last to the h1 below; none is the page itself, so none is current and
+          no separator points past the last. */}
+      {trail.map((crumb, index) => <Fragment key={crumb.to}>
+        {index > 0 && <BreadcrumbSeparator />}
         <BreadcrumbItem className="min-w-0">
           <BreadcrumbLink asChild><Link to={crumb.to} activeOptions={{ exact: true }} title={crumb.label} className="block truncate leading-8 touch:leading-11">{crumb.label}</Link></BreadcrumbLink>
         </BreadcrumbItem>
-        <BreadcrumbSeparator />
       </Fragment>)}
     </BreadcrumbList>
   </Breadcrumb>;
