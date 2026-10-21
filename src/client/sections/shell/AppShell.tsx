@@ -289,7 +289,7 @@ function PairingPage({ status }: { status: ReactNode }) {
     {status}
     {lost}
     <PairForm />
-    {tvPresentation && <Button variant="ghost" className="-ml-3 self-start" onClick={() => setTyping(false)}>Scan with a phone instead</Button>}
+    {tvPresentation && <Button variant="ghost" data-back className="-ml-3 self-start" onClick={() => setTyping(false)}>Scan with a phone instead</Button>}
   </Onboarding>;
 }
 

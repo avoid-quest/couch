@@ -219,6 +219,7 @@ only the pairing page, with no header: centred in the window, its mark and
 "Pair with Couch" the only brand, and in the Mac app the whole window drags by
 it. The app, or a browser that has known another Couch, gets one line under the
 description, the address then Change, which opens the Couch switch; a TV picks
-its Couch in Settings once paired. The pairing dialog warns about Couch's self-signed
+its Couch in Settings once paired. A TV shows a code and a QR instead, which an
+admin's phone approves ([TV](tv.md#pairing)). The pairing dialog warns about Couch's self-signed
 certificate and closes when a device pairs, with a toast naming it ("Phone
 paired · admin").

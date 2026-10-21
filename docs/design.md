@@ -64,7 +64,9 @@ Tailwind names, never hex values in components.
 **Focus inverts** the focused control to white with black ink; it is the only
 focus treatment, and the TV's only highlight. White controls (slider, Switch,
 Checkbox, RadioGroupItem) take a 2px foreground outline instead; a tile's
-caption inverts and its artwork takes a thin outline.
+caption inverts and its artwork takes a thin outline, which the TV thickens
+while it lifts the tile 5% ([TV](design/tv.md)). A text link's inversion
+reaches a little past its words (a shadow, so nothing moves).
 
 **Hover** is a white tint, never on the TV; over a tile's artwork it is a dim
 instead (with Play where the press plays), and a row tints whole. A ghost button whose panel is open

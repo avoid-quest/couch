@@ -12,7 +12,22 @@ it adds is for a remote with only arrows, OK and Back:
   fullscreen or pointer time readout. Toasts ignore a parked pointer.
 
 Focus inversion is the only highlight. Remote input makes focus visible even
-after a pointer was used.
+after a pointer was used. From the sofa a thin outline is too faint, so a
+focused tile also lifts (scale 1.05, easing over 150 ms unless reduced motion is
+on), its "…" and links with it, and its artwork's outline
+thickens to .25rem. A shelf's padding and the tile's scroll margin keep the
+lifted tile clear of the clip and the screen's edge.
+
+## Pairing
+
+An unpaired TV shows its code, six digits as large as the screen allows, and
+a QR of `https://<LAN address>/pair/tv?code=…` beside it. A phone or computer
+paired with this Couch as an admin scans it (or opens `/pair/tv` and types the
+code), sees "Pair {TV}?" and the code to check, and chooses Pair or Cancel. The
+TV polls every 2 s and pairs by itself; Pair's toast names it ("Living room
+paired"). A controller is told only an admin can pair a TV. **Enter a code
+instead** keeps the old form for the host's code; Back or **Scan with a phone
+instead** returns to the QR.
 
 ## See the TV in a browser
 

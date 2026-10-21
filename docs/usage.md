@@ -91,7 +91,12 @@ a Mac.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
    device you pair becomes the admin. The dialog closes when the phone pairs,
    and a message names it, ending in "· admin" for the first.
-3. Type in the header's search field and press Enter. To search one kind or
+3. To pair a TV, open Couch on it: it shows a code and a QR code. Scan the QR
+   with a phone that's paired as an admin (or open the address the TV shows and
+   type the code), check the code matches, and choose **Pair**. The TV pairs by
+   itself. A code lasts ten minutes; the TV then shows a new one. **Enter a
+   code instead** on the TV takes the six-digit code as in step 2.
+4. Type in the header's search field and press Enter. To search one kind or
    source, pick it from the list under the field first, or type its name (`film`,
    `music`, `yt`) and press Tab. Results are grouped by kind; **Music** holds
    Bandcamp and SoundCloud. **Play** starts an item now; **Queue** in its **…**

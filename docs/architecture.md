@@ -26,6 +26,17 @@ unnamed one adopts the name it paired with instead. An administrator
 renames the Couch from any paired device in Devices & network
 (`/api/settings`); every other device names only itself.
 
+A TV pairs without typing (`src/server/tv-pairing.ts`). Unauthenticated, it
+asks `POST /api/pair/tv` with its device ID and name, under the same origin,
+sharing and rate limits as `POST /api/pair` (20 a minute), and gets a six-digit
+code and a 256-bit secret. The request lives in Core's memory for ten minutes.
+Whoever may read the pairing code, the host or an admin, reads the TV's name
+(`GET /api/pair/tv/<code>`) and approves it (`POST`), which pairs the device
+through the same `store.pair` as `/api/pair`. The TV polls
+`POST /api/pair/tv/poll` with its code and secret and collects its token once.
+A device that is already paired can't ask, so an approval never re-keys
+another device.
+
 Settings that change the Couch for everyone (Share on network, HTTP, network
 address, the live relay, TV mode, sources, hardware, updates) accept the host
 or any paired admin and refuse controllers; writes recheck the role after
