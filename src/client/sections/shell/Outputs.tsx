@@ -69,7 +69,7 @@ function Panel({ state, connected, run, className, label }: Props & { className?
   // It opens on the first device on the TV, else on the Volume, never on a control that changes where it plays.
   const focusFirst = (event: Event) => {
     const target = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(tv ? "[data-device-row]" : '[aria-label="Volume"] [role="slider"], [data-device-row]');
-    if (target) { event.preventDefault(); target.focus(); }
+    if (target) { event.preventDefault(); target.focus({ preventScroll: true }); }
   };
   if (side === "popover") return <Popover open={open} onOpenChange={change}>
     <PopoverTrigger asChild>{trigger}</PopoverTrigger>
