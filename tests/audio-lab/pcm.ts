@@ -148,7 +148,10 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
       return energy > 0.0001 ? dot / Math.sqrt(energy * 128 * 0.0625) : 0;
     };
     const peaks: { frame: number; score: number }[] = [];
-    for (let frame = lower; frame <= upper; frame += stride) {
+    // Capture/codec filtering can move chip edges between samples. Inspect
+    // every sample phase: a chip-sized step can skip an otherwise matching
+    // waveform before full-score refinement ever sees it.
+    for (let frame = lower; frame <= upper; frame++) {
       const value = score(frame);
       if (value < 0.8) continue;
       const previous = peaks.at(-1);
@@ -158,7 +161,8 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
     // Refine using every sample, not chip decimation, to recover sub-chip timing.
     for (const peak of peaks) {
       let best = -Infinity;
-      for (let frame = Math.max(lower, peak.frame - stride); frame <= Math.min(upper, peak.frame + stride); frame++) {
+      const first = Math.max(lower, peak.frame - stride), last = Math.min(upper, peak.frame + stride);
+      for (let frame = first; frame <= last; frame++) {
         let dot = 0, energy = 0;
         for (let offset = 0; offset < signal.markerFrames; offset++) { const value = track.pcm[frame - track.start + offset]!; dot += value * marker.samples[offset]!; energy += value * value; }
         const value = energy ? dot / Math.sqrt(energy * signal.markerFrames * 0.0625) : 0;

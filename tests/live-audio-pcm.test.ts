@@ -184,3 +184,26 @@ test("bounded correlation agrees with exhaustive scoring near the acceptance thr
     if (best >= 0.8) expect(receiver.latencyMs.max).toBe(bestFrame * 1000 / sampleRate);
   }
 });
+
+test("finds a filtered marker at every sub-chip sample phase", () => {
+  const signal = createMarkerSignal({ sampleRate: 48_000, seed: 73 });
+  const marker = signal.marker(0).samples;
+  for (let phase = 0; phase < 6; phase++) {
+    const delay = 960 + phase, output = new Float32Array(2_400);
+    // A symmetric eleven-tap low-pass filter preserves the declared center.
+    // Full-waveform identity stays above 0.8 even near a chip boundary.
+    for (let i = -5; i < marker.length + 5; i++) {
+      for (let tap = -5; tap <= 5; tap++) output[delay + i]! += (marker[i + tap] ?? 0) / 11;
+    }
+    let dot = 0, energy = 0;
+    for (let i = 0; i < marker.length; i++) { const value = output[delay + i]!; dot += value * marker[i]!; energy += value * value; }
+    expect(dot / Math.sqrt(energy * marker.length * 0.0625)).toBeGreaterThan(0.8);
+    const analyzer = createPcmAnalyzer({ sampleRate: 48_000, seed: 73, receiverIds: ["listener"],
+      durationFrames: 800, maxDelayMs: 30, clockUncertaintyMs: 0 });
+    analyzer.push("reference", { startFrame: 0, samples: signal.render(0, 800) });
+    analyzer.push("listener", { startFrame: 0, samples: output });
+    const receiver = analyzer.finish().receivers[0]!;
+    expect(receiver).toMatchObject({ detected: 1, missing: 0, duplicated: 0 });
+    expect(Math.abs(receiver.latencyMs.max! * 48 - delay)).toBeLessThanOrEqual(1);
+  }
+});
