@@ -1,8 +1,9 @@
 # Audio benchmark evaluation audit
 
-Performance tuning is paused while the measurement path is corrected. The
-proposed Linux audio-buffer change remains stashed and unpushed. These changes
-repair test evidence; they do not establish a lower supported audio latency.
+This audit was completed before performance tuning resumed. These changes
+repair test evidence; they do not themselves establish a lower supported audio
+latency. The subsequent measurements and retained failures are in
+[the latency results](live-audio-latency-results.md).
 
 ## Defects corrected
 
@@ -95,7 +96,7 @@ correctly reports unknown CPU. This validates runner integration, not capacity,
 latency or longer-duration stability. Artifacts are `/var/tmp/couch-eval-scale-1`
 and `/var/tmp/couch-eval-scale-net-1`.
 
-## Remaining limits before performance comparison
+## Limits carried into subsequent performance work
 
 The exact marker benchmark with 50 synthetic outputs and ten seconds of input
 took 16.895 seconds, with a 200.36 ms worst synchronous batch. Its throughput
