@@ -7,7 +7,7 @@ import { readCollectionSearch, collectionPagination } from "@/collection-paginat
 import { collectionLocation, keepSection } from "@/detail-navigation";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
-import { ContentBack } from "@/components/ContentBack";
+import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { PageHeader } from "@/components/PageHeader";
 import { FilterBar, FilterInput } from "@/components/ContentFilters";
@@ -26,7 +26,7 @@ export function ProviderPage() {
   const { search } = useLocation();
   const state = readCollectionSearch(search);
   if (!state.provider) return <section data-page="Collection">
-    <PageHeader back={<ContentBack />} title="Collection unavailable" />
+    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Collection unavailable" />
     <p className="text-muted-foreground">This collection link is incomplete or unsupported.</p>
   </section>;
   return <CollectionPage key={`${state.provider}:${state.url}`} provider={state.provider} url={state.url ?? ""} search={state} />;
@@ -89,7 +89,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     <div className="grid gap-3">
-      <ContentBack title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
+      <ContentBreadcrumb title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
       {cold && url ? <DetailSkeleton shape={tileShape(providerNames[provider], false)} /> : <CollectionHeader collection={collection} canPlay={available} shape={tileShape(providerNames[provider], !!collection.single && !!(search.context ?? page?.item?.collection))} />}
     </div>
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}

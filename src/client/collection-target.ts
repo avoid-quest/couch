@@ -16,7 +16,7 @@ export function collectionLinks(collection?: PlaybackCollection): ProviderItem[]
     .map(link => ({ id: link.url, url: link.url, title: link.title, provider, kind: "collection" }));
 }
 
-/** Open the exact containing list; its back link leads to the outer collection. */
+/** Open the exact containing list; its breadcrumb exposes the outer collection. */
 export function collectionTarget(collection?: PlaybackCollection): ProviderItem | undefined {
   return collectionLinks(collection).at(-1);
 }
