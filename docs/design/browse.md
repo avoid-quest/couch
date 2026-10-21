@@ -157,9 +157,9 @@ Turning a page moves focus to the list's top.
 
 `ContentBreadcrumb` (shadcn's Breadcrumb) puts a sub-page's ancestors above its
 h1, each a link: the section it opened in, Radio or the source's home, then
-the collections holding it ("Discover › StreamingCommunity › Series"). The h1
-names the page, so the trail stops before it. One line of small muted text;
-when it runs out of room the middle truncates first. Esc and the TV's Back
+the collections holding it ("Discover › StreamingCommunity › Series ›"), the
+last separator leading into the h1, which names the page. One line of small
+muted text; out of room, the longest crumbs truncate first. Esc and the TV's Back
 still go back in history, restoring focus.
 
 ## Play on in menus
