@@ -218,6 +218,13 @@ held OK. A list's own entries keep Remove and a drag handle. A tracklist row
 (`number`) is the track's number, its title and its time at the end of the
 title's line, without artwork.
 
+**What plays** carries the [level](../design.md#motion) wherever it is listed
+(Home, Discover, Search, Saved, Radio, a source's pages): a black square at its
+artwork's bottom-left corner with the bars in white, or, in a tracklist, in
+place of its number. A row or tile knows it by its addresses (`source`: its
+page, or a station's `radio:` source and stream), matched against what the
+looked-at Playback plays.
+
 **`MediaTile`**: one Button around `MediaArtwork` at its shelf's shape
 (`--tile-art` sets the height: posters 18rem, frames 11rem, squares 12rem,
 circles 10rem), a title of up to two lines and one meta line, plus a

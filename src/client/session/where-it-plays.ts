@@ -197,3 +197,10 @@ export function playOnTargets(state: State, here: string) {
 
 /** The device "Playing on {name}" names after a play this window started: the target, unless it is this device. */
 export const playingOn = (state: Pick<ClientSessionState, "devices"> | null | undefined, target: string | undefined, here: string) => target && target !== here ? state?.devices?.find(device => device.id === target)?.name : undefined;
+
+/**
+ * A row's level (Level.tsx): none unless its sound is in the playback; moving while the playback sounds (`sounding`)
+ * and this device's sound comes out (online, not muted, failing or behind), else flat.
+ */
+export const rowLevel = (row: Row, sounding: boolean) => !row.output || !row.level.sound ? null
+  : sounding && row.level.value > 0 && row.device.online && !row.device.muted && !row.output.error && !row.output.buffered ? "moving" : "flat";

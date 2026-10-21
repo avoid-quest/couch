@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../../../shared/providers";
-import type { RadioStation } from "../../../shared/radio";
+import { stationSources, type RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
@@ -106,6 +106,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const move = (offset: number) => { const plan = moveFavorite(favorites, favorite, offset); if (plan && !blocked) reorder.mutate(plan); };
     // A station's page holds no Remove or ordering, so the row keeps its "…", which opens its Details too.
     return <MediaRow context={favorite.kind === "provider" ? <MediaContext creator={favorite.item.creator} collection={favorite.item.collection} /> : undefined} key={key(favorite)}
+      source={favorite.kind === "provider" ? favorite.item.url : stationSources(favorite.item)}
       artFit="contain"
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}

@@ -44,7 +44,7 @@ export function PlayedSection({ origin, token, connected, onFind }: Credentials 
         const playable = connected && shell.available && !!(item.playable || item.queueEntryId);
         const start = (on?: string) => shell.playHistory(item, { fromStart: item.position === 0, on });
         const caption = historyCaption(item);
-        return <MediaRow key={item.mediaId} data-history-details={item.mediaId} art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />} artFit="contain"
+        return <MediaRow key={item.mediaId} data-history-details={item.mediaId} source={item.url} art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />} artFit="contain"
           title={caption.title} meta={metaLine(caption.meta, progress(item))} primary={{ label: "Details", href, onClick: () => details.open(href) }}
           menu={[
             { label: item.position > 0 && !item.watched ? "Resume" : "Play", disabled: !playable, run: () => void play(start) },

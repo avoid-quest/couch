@@ -6,6 +6,7 @@ import { artAspect, fillsFrame, type ArtShape } from "@/art-shape";
 import { detailHref } from "@/detail-navigation";
 import { usePlayOn } from "./PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "./RowMenu";
+import { ArtLevel, Level, useLevel } from "./Level";
 
 /** A divided list of MediaRow items. */
 export function MediaList({ className, ...props }: ComponentProps<"ul">) {
@@ -49,14 +50,17 @@ type Props = {
   pageFirst?: boolean;
   /** A tracklist's number, in place of artwork; the meta (its time) then ends the title's line. */
   number?: number;
+  /** Its addresses (a page's URL; a station's `radio:{id}` and stream URL): while it is what plays, its artwork shows the level. */
+  source?: string | readonly (string | undefined)[];
 } & Omit<ComponentProps<"li">, "title" | "children">;
 
 /**
  * Media row: thumbnail, title, meta and the length bar, as one target whose press does its main verb; its other
  * verbs wait in its menu, behind a "…" at its end, and on its page. Used by Search, Saved and Discover's pages; Up next has its own compact rows.
  */
-export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta, context, children, description, primary, menu = [], menuOnPage = false, actions, compact = false, pageFirst = false, number, className, ...props }: Props) {
+export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta, context, children, description, primary, menu = [], menuOnPage = false, actions, compact = false, pageFirst = false, number, source, className, ...props }: Props) {
   const options = useItemMenu(menu);
+  const level = useLevel(source);
   const { on } = usePlayOn();
   const shape = frame ?? (compact ? "square" : "video");
   const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
@@ -71,8 +75,9 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
   return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border px-0 py-3", primary && !primary.disabled && "hover:bg-foreground/10", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
     <li data-nav-row {...props} {...options.item}>
       {/* The artwork is a larger pointer target for the main verb, as the now-playing bar's is. */}
-      {number != null && <span aria-hidden="true" className="self-start pt-1.5 text-right text-sm leading-6 text-muted-foreground tabular-nums">{number}</span>}
-      {art && <ItemMedia aria-hidden={!!primary || undefined} onClick={primary?.disabled ? undefined : primary?.onClick} className={cn("w-full self-start overflow-hidden bg-muted *:size-full *:rounded-[inherit]", primary && !primary.disabled && "cursor-pointer", artAspect[shape], artFit === "contain" || own && !fillsFrame(own, shape) ? "[&_img]:object-contain" : "[&_img]:object-cover")}>{art}</ItemMedia>}
+      {/* A tracklist's playing track shows the level in place of its number. */}
+      {number != null && <span aria-hidden="true" className="flex justify-end self-start pt-1.5 text-right text-sm leading-6 text-muted-foreground tabular-nums">{level ? <Level moving={level === "moving"} className="mt-1.5 text-xs text-foreground" /> : number}</span>}
+      {art && <ItemMedia aria-hidden={!!primary || undefined} onClick={primary?.disabled ? undefined : primary?.onClick} className={cn("relative w-full self-start overflow-hidden bg-muted *:size-full *:rounded-[inherit]", primary && !primary.disabled && "cursor-pointer", artAspect[shape], artFit === "contain" || own && !fillsFrame(own, shape) ? "[&_img]:object-contain" : "[&_img]:object-cover")}>{art}<ArtLevel level={level} className="size-6! text-xs" /></ItemMedia>}
       {/* The "…" ends the main verb's line, so it keeps the trailing end on every screen and width. */}
       <div className="flex min-w-0 items-start gap-1">
         <div className="min-w-0 flex-1">

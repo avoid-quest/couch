@@ -164,9 +164,9 @@ html { view-transition-name: none; }
    transition) that page's artwork, becomes the player's artwork, or its picture, and back. One element holds the name
    at a time, so Details' artwork takes it from the bar's while it travels. It moves over 280 ms, a little ahead of the
    band, and each end keeps its proportions. */
-[data-now-playing] [data-bar-art] > *, .player-art > :first-child, .player-page[data-osd] > [data-player-surface] { view-transition-name: couch-art; }
+[data-now-playing] [data-bar-art] > :first-child, .player-art > :first-child, .player-page[data-osd] > [data-player-surface] { view-transition-name: couch-art; }
 html:active-view-transition-type(couch-play) [data-detail-art] > * { view-transition-name: couch-art; }
-html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-playing] [data-bar-art] > * { view-transition-name: none; }
+html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-playing] [data-bar-art] > :first-child { view-transition-name: none; }
 ::view-transition-group(couch-art) { animation-duration: .28s; animation-timing-function: var(--ease-out); }
 ::view-transition-old(couch-art), ::view-transition-new(couch-art) { height: 100%; object-fit: contain; }
 /* The bar's title and the line under it don't stretch with the band over its timeline: they leave at once as it grows,
@@ -330,4 +330,18 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
   @media (prefers-reduced-motion: reduce) { .ambient-frame { animation: none !important; } .ambient-frame[data-leaving]:last-child { display: none; } }
   .ambient-haze { position: absolute; left: calc(var(--light-x) + var(--light-w) / 2); top: calc(var(--light-y) + var(--light-h) / 2); width: calc(3 * max(var(--light-w), var(--light-h))); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, var(--light-b), color-mix(in srgb, var(--light-b) 55%, transparent) 50%, transparent); }
   .ambient-backlight { position: absolute; left: calc(var(--light-x) - var(--glow)); top: calc(var(--light-y) - var(--glow)); width: calc(var(--light-w) + 2 * var(--glow)); height: calc(var(--light-h) + 2 * var(--glow)); padding: var(--glow); background: radial-gradient(closest-side, var(--light-a) 55%, color-mix(in srgb, var(--light-a) 25%, transparent) 80%, transparent); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude; }
+
+  /* The level (Level.tsx): Couch's one loop. Three bars rise and fall while sound comes out, each at its own pace, as
+     transforms only; paused, buffering or loading they lie flat. Reduced motion holds them still at three heights. */
+  .level { display: inline-flex; align-items: flex-end; gap: 12.5%; width: 1em; height: 1em; flex-shrink: 0; }
+  .level > span { flex: 1; height: 100%; background: currentColor; transform: scaleY(.2); transform-origin: bottom; transition: transform .15s var(--ease-out); }
+  .level[data-level="moving"] > span:nth-child(1) { transform: scaleY(.6); }
+  .level[data-level="moving"] > span:nth-child(2) { transform: scaleY(1); }
+  .level[data-level="moving"] > span:nth-child(3) { transform: scaleY(.8); }
+  @media (prefers-reduced-motion: no-preference) {
+    .level[data-level="moving"] > span { animation: couch-level .9s ease-in-out infinite alternate; }
+    .level[data-level="moving"] > span:nth-child(2) { animation-duration: .64s; animation-delay: -.3s; }
+    .level[data-level="moving"] > span:nth-child(3) { animation-duration: 1.1s; animation-delay: -.5s; }
+  }
 }
+@keyframes couch-level { from { transform: scaleY(.25); } to { transform: scaleY(1); } }

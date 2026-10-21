@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { muted } from "../src/client/components/PlaybackTransport";
 import { playsOn } from "../src/client/session/device-id";
 import type { ClientSessionState } from "../src/client/session/session";
-import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, playingOn, playOnTargets, reopens, soleSound, soundActions } from "../src/client/session/where-it-plays";
+import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, playingOn, playOnTargets, reopens, rowLevel, soleSound, soundActions } from "../src/client/session/where-it-plays";
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
 
 // One rule per test, in the order of docs/design/where-it-plays.md (src/client/session/where-it-plays.ts). "here" is this device; every other device
@@ -366,5 +366,22 @@ describe("Play on", () => {
     expect(at([sound("kitchen"), both("tv")], "elsewhere")).toMatchObject({ name: "Tv", more: 1 });
     expect(at([both("tv")], undefined, "idle")?.elsewhere).toBe(false);
     expect(at([])).toBeNull();
+  });
+});
+
+describe("the level beside a device", () => {
+  test("shows on each device whose sound is in the playback, moving only while it sounds and its sound comes out", () => {
+    const state = session({ outputs: [both("tv"), picture("kitchen")] });
+    expect(rowLevel(row(state, "tv"), true)).toBe("moving");
+    expect(rowLevel(row(state, "tv"), false)).toBe("flat");
+    // Picture only, or not in the playback: no level.
+    expect(rowLevel(row(state, "kitchen"), true)).toBeNull();
+    expect(rowLevel(row(state, here), true)).toBeNull();
+  });
+  test("lies flat on a device that is muted, behind, failing or offline", () => {
+    expect(rowLevel(row(session({ outputs: [sound("tv")], devices: [device(here), device("tv", { muted: true })] }), "tv"), true)).toBe("flat");
+    expect(rowLevel(row(session({ outputs: [sound("tv", { buffered: true })] }), "tv"), true)).toBe("flat");
+    expect(rowLevel(row(session({ outputs: [sound("tv", { error: "No audio device" })] }), "tv"), true)).toBe("flat");
+    expect(rowLevel(row(session({ outputs: [sound("tv")], devices: [device(here), device("tv", { online: false })] }), "tv"), true)).toBe("flat");
   });
 });

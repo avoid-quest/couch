@@ -110,7 +110,7 @@ export function LiveTvPage() {
     {!!channels.length && <MediaList aria-label="Live TV channels" aria-busy={updating} className="transition-opacity aria-busy:opacity-60">{channels.map((channel, index) => {
       const { disabled, play, menu } = actions(channel);
       // A channel has no page, so its row keeps its "…".
-      return <MediaRow key={channel.id} compact shape="video" pageFirst={index === 0} title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} meta={channelMeta(channel, group)} primary={{ label: "Play", disabled, onClick: play }} menu={menu} />;
+      return <MediaRow key={channel.id} compact shape="video" pageFirst={index === 0} source={`iptv:${channel.id}`} title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} meta={channelMeta(channel, group)} primary={{ label: "Play", disabled, onClick: play }} menu={menu} />;
     })}</MediaList>}
     <BrowsePagination page={requested} pages={pages} previous={requested > 1 ? liveTvLocation({ page: requested - 1, filter, group }) : undefined} next={requested < pages ? liveTvLocation({ page: requested + 1, filter, group }) : undefined} disabled={!connected || guide.isFetching || updating} onSelectPage={page => go({ page })}
       onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ page: Number(new URL(href, location.origin).searchParams.get("page") ?? 1) }); }} />

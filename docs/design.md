@@ -152,8 +152,16 @@ control, 200 ms for what arrives.
   skips them.
 - The light cross-fades over 600 ms when the artwork changes, the one slow
   move ([Light](#light)). Reduced motion swaps it at once, still lit.
-- No scroll entrances, staggers, springs or scaling tiles. New motion is
-  `motion-safe:`; reduced motion stills everything.
+- No scroll entrances, staggers, springs or scaling tiles, and no loops but one:
+  the **level**, three bars that rise and fall while sound comes out
+  (`Level`). It says the player's state, not the sound's loudness: it moves
+  only while what plays is playing, and lies flat while paused, buffering or
+  loading. It sits on the playing item's artwork (a black square in its
+  bottom-left corner) wherever it is listed, in place of a playing track's
+  number, on the now-playing bar's thumbnail and beside each device in Where
+  it plays whose sound is in. Its bars move by transforms only. Reduced motion
+  holds them still at three heights while it plays.
+- New motion is `motion-safe:`; reduced motion stills everything.
 
 ## Components
 

@@ -1,4 +1,5 @@
-import { playbackStatus } from "@/playback-status";
+import { playbackStatus, sounding } from "@/playback-status";
+import { ArtLevel } from "@/components/Level";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -75,7 +76,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
         links, so they sit outside the title's button. Those links drop their row height here and keep a 24px hit
         area that doesn't push the line apart. */}
     <div className="flex min-w-0 items-center gap-3 max-sm:pr-4">
-      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center overflow-hidden bg-muted hover:opacity-80 [&_img]:aspect-auto [&_img]:size-auto [&_img]:max-h-full [&_img]:max-w-full [&>span]:size-full" onClick={() => onOpen()}>{artwork}</button>
+      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden bg-muted hover:opacity-80 [&_img]:aspect-auto [&_img]:size-auto [&_img]:max-h-full [&_img]:max-w-full [&>span]:size-full" onClick={() => onOpen()}>{artwork}<ArtLevel level={sounding(state, connected) ? "moving" : "flat"} className="size-[1.125rem]! text-[.625rem]" /></button>
       <div data-bar-title className="grid min-w-0 flex-1">
         <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start p-0 text-left text-sm leading-5 font-medium touch:min-h-0" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}

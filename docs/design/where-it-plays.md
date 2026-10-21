@@ -65,7 +65,10 @@ the open state, the order and the filters.
 
 ## Device rows
 
-The same at every scale: the device's name, then its **Picture** and
+The same at every scale: the device's name, with the
+[level](../design.md#motion) beside it while its sound is in the Playback
+(moving while sound comes out of it, flat while paused, muted, behind, failing
+or offline), then its **Picture** and
 **Sound** toggles (`Monitor`/`MonitorOff`, `Volume2`/`VolumeOff`), its level
 fader and number while its sound is on, and "…". On phones the fader takes a
 second line under the name. A device is in the Playback while either channel

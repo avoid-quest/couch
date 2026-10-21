@@ -135,8 +135,8 @@ nothing changes side as it grows into the band
 ([Player](player.md#the-band-and-the-now-playing-bar)).
 
 - **At the left, what plays,** as compact as a mini-player's (YouTube Music,
-  Spotify and Apple Music run about 56–64px): a 2.5rem artwork and two tight
-  lines, so the bar is as tall as its 44px controls plus its padding: 61px on
+  Spotify and Apple Music run about 56–64px): a 2.5rem artwork, with the
+  [level](../design.md#motion) at its bottom-left corner, and two tight lines, so the bar is as tall as its 44px controls plus its padding: 61px on
   phones, 64px at 1440 wide. The title is the control across its whole line,
   with the artwork a pointer target for it. Under the title, one line that
   doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its

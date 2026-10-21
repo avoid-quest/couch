@@ -59,4 +59,4 @@ everything else opens Details. Other verbs are its menu. Continue adds a
 sibling Details button (44px) so a remote reaches History's verbs without a
 held OK. Up next tiles read their length and end time ("4:52, ends 21:47").
 Each shelf takes its items' majority shape; station art is square and fills
-its tile.
+its tile. The tile of what plays carries the [level](../design.md#motion).

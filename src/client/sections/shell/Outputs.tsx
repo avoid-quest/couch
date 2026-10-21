@@ -14,11 +14,13 @@ import { FilterInput } from "@/components/ContentFilters";
 import { RangeControl } from "@/components/RangeControl";
 import { PlaybackVolume, toolPanel } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
+import { Level } from "@/components/Level";
+import { sounding } from "@/playback-status";
 import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
-import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, reopens, soleSound, soundActions, type Control, type Filter, type Order, type Row } from "@/session/where-it-plays";
+import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, reopens, rowLevel, soleSound, soundActions, type Control, type Filter, type Order, type Row } from "@/session/where-it-plays";
 import type { Action } from "../../../shared/protocol";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
@@ -104,7 +106,8 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
   const summary = counts(rows), many = listed > crowded;
   // One device sounding: the Volume above is its level, so its row doesn't repeat the fader.
   const sole = soleSound(rows);
-  const row = (item: Row) => tv ? tvRow({ row: item, run }) : deviceRow({ row: item, run, fader: item.device.id !== sole });
+  const sounds = sounding(state, connected);
+  const row = (item: Row) => tv ? tvRow({ row: item, run, playing: sounds }) : deviceRow({ row: item, run, fader: item.device.id !== sole, playing: sounds });
   return <>
     {/* The first line, and with the counts and search, what stays put while a long list scrolls: in a Sheet it sticks
         over the rows on the Sheet's own ground; a Popover scrolls only its rows, under it. */}
@@ -134,6 +137,11 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
 /** A row's change, with the unmute its sound brings (soundActions), each in turn until Core refuses one. */
 const send = async (run: Props["run"], row: Row, action: Action) => { for (const next of soundActions(row, action)) if (!await run(next)) return false; return true; };
 
+/** A device's name, with the level while its sound is in the playback (rowLevel). */
+const deviceName = (row: Row, playing: boolean) => {
+  const level = rowLevel(row, playing);
+  return <span data-output-name className="flex items-baseline gap-2 text-base [overflow-wrap:anywhere]">{row.device.name}{level && <Level moving={level === "moving"} className="text-xs" />}</span>;
+};
 const statusLine = (row: Row) => row.status && <span id={`where-it-plays-${row.device.id}`} data-output-status className={cn("text-sm [overflow-wrap:anywhere]", row.failed ? "text-destructive" : "text-muted-foreground")}>{row.status}</span>;
 const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
 
@@ -142,14 +150,14 @@ const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
  * number while its sound is on and another device's sounds too (Move here instead while it isn't in), and "…" while Sync applies. On phones the fader takes a second line.
  * Called rather than rendered, so tests can walk its controls without a DOM.
  */
-function deviceRow({ row, run, fader = true }: { row: Row; run: Props["run"]; fader?: boolean }) {
+function deviceRow({ row, run, fader = true, playing = false }: { row: Row; run: Props["run"]; fader?: boolean; playing?: boolean }) {
   const { device, output, picture, sound, level, move } = row;
   const toggle = (channel: typeof picture, label: string, on: ReactNode, off: ReactNode, name: string) =>
     <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
       className="size-11 data-[state=off]:text-muted-foreground data-[state=on]:bg-transparent">{channel.on ? on : off}</Toggle>;
   return <li key={device.id} data-nav-row data-device={device.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto_5.5rem] items-center gap-x-1 py-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_11rem_2.75rem]">
     <span className="grid min-w-0 py-1">
-      <span data-output-name className="text-base [overflow-wrap:anywhere]">{device.name}</span>
+      {deviceName(row, playing)}
       {statusLine(row)}
     </span>
     {toggle(picture, "picture", <Monitor aria-hidden="true" />, <MonitorOff aria-hidden="true" />, "Picture")}
@@ -171,7 +179,7 @@ function deviceRow({ row, run, fader = true }: { row: Row; run: Props["run"]; fa
  * On a TV a row is one focus stop: Left and Right move its level by 5 at once (no OK to take the arrows), OK opens
  * its options with Picture and Sound, and Back closes the panel. Called rather than rendered, as deviceRow is.
  */
-function tvRow({ row, run }: { row: Row; run: Props["run"] }) {
+function tvRow({ row, run, playing = false }: { row: Row; run: Props["run"]; playing?: boolean }) {
   const { device, picture, sound, level } = row;
   const step = (by: number) => { if (level.enabled && level.sound) void send(run, row, { type: "output", deviceId: device.id, level: Math.max(0, Math.min(100, level.value + by)) }); };
   return <li key={device.id} data-nav-row data-device={device.id} className="grid">
@@ -181,7 +189,7 @@ function tvRow({ row, run }: { row: Row; run: Props["run"] }) {
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={level.value} aria-valuetext={level.sound ? `${Math.round(level.value)} percent` : "No sound"}
         onKeyDown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); step(event.key === "ArrowLeft" ? -5 : 5); } }}
         className="-mx-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)_3ch] items-center gap-x-3 px-2.5 py-2 outline-none">
-        <span className="grid min-w-0"><span data-output-name className="text-base [overflow-wrap:anywhere]">{device.name}</span>{statusLine(row)}</span>
+        <span className="grid min-w-0">{deviceName(row, playing)}{statusLine(row)}</span>
         {picture.on ? <Monitor aria-hidden="true" className="size-5" /> : <MonitorOff aria-hidden="true" className="size-5 opacity-50" />}
         {sound.on ? <Volume2 aria-hidden="true" className="size-5" /> : <VolumeOff aria-hidden="true" className="size-5 opacity-50" />}
         {level.sound ? <Progress value={level.value} aria-hidden="true" className="bg-current/20 [&_[data-slot=progress-indicator]]:bg-current" /> : <span />}

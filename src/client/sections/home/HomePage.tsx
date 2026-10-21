@@ -37,7 +37,7 @@ import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
-import { avoidRadioPlaylistId, isRadio, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
+import { avoidRadioPlaylistId, isRadio, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
@@ -188,7 +188,7 @@ export function HomePage() {
   const shelves: Record<HomeRowId, ReactNode> = {
     continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played">
       {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="flex shrink-0 flex-col items-start gap-1">
-        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={continueShape} own={historyShape(item)} {...historyCaption(item)} thumbnail={item.thumbnail} plays
+        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={continueShape} own={historyShape(item)} {...historyCaption(item)} thumbnail={item.thumbnail} source={item.url} plays
           aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)}>
           <DurationBar duration={item.duration} position={item.position} />
         </MediaTile>
@@ -206,21 +206,21 @@ export function HomePage() {
 
     radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio">
       {listed.map(station => <li key={station.id} className="shrink-0">
-        <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} plays
+        <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)} plays
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>,
 
     later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later">
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
-        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail}
+        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail} source={item.url}
           href={itemLocation("saved", item.id)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,
 
     recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played">
       {recent.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
-        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} thumbnail={item.thumbnail}
+        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} thumbnail={item.thumbnail} source={item.url}
           href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
       </li>)}
     </Shelf>,

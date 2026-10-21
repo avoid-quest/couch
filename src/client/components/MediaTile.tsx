@@ -7,6 +7,7 @@ import { detailHref } from "@/detail-navigation";
 import { isTvPresentation } from "@/session/presentation";
 import { artAspect, artShape, fillsFrame, type ArtShape } from "@/art-shape";
 import { ItemMenu, useItemMenu, type MenuAction } from "./RowMenu";
+import { ArtLevel, useLevel } from "./Level";
 
 export { artAspect as tileAspect, type ArtShape as TileShape };
 /** A media item's shape (art-shape.ts): an episode is a frame, the rest go by their source. */
@@ -20,7 +21,7 @@ const tileHeight = { poster: "[--tile-art:18rem]", square: "[--tile-art:12rem]",
  * media tile and Card breaks Flat, so it is the smallest Button composition; index.css outlines its artwork and
  * inverts its caption on focus. `className` sizes the tile, such as its artwork's height (`--tile-art`).
  */
-export function MediaTile({ title, meta, context, thumbnail, shape, own = shape, fit, plays = false, dim = false, children, className, href, onClick, disabled, menu = [], ...props }: {
+export function MediaTile({ title, meta, context, thumbnail, shape, own = shape, fit, plays = false, dim = false, source, children, className, href, onClick, disabled, menu = [], ...props }: {
   title: string;
   meta?: string;
   context?: ReactNode;
@@ -35,6 +36,8 @@ export function MediaTile({ title, meta, context, thumbnail, shape, own = shape,
   plays?: boolean;
   /** Not available now (an offline channel): the artwork dims. */
   dim?: boolean;
+  /** Its addresses (a page's URL; a station's `radio:{id}` and stream URL): while it is what plays, its artwork shows the level. */
+  source?: string | readonly (string | undefined)[];
   /** Extra caption line, e.g. Continue's DurationBar. */
   children?: ReactNode;
   href?: string;
@@ -43,11 +46,13 @@ export function MediaTile({ title, meta, context, thumbnail, shape, own = shape,
   menu?: MenuAction[];
 } & Omit<ComponentProps<typeof Button>, "title" | "children" | "asChild" | "onClick">) {
   const options = useItemMenu(menu);
+  const level = useLevel(source);
   const body = <>
     <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background", artAspect[shape], dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
       <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover")} />
       {/* A pointer over the tile dims its artwork, with Play where the press plays (index.css); never on the TV. */}
       <span data-tile-hover aria-hidden="true" className="absolute inset-0 grid place-items-center">{plays && <span className="grid size-12 place-items-center rounded-full bg-foreground text-background"><Play className="size-5 translate-x-px fill-current" /></span>}</span>
+      <ArtLevel level={level} className="size-8 text-base" />
     </span>
     {/* The caption takes the artwork's width and always the room of two title lines and a meta line, so the shelf's
         tiles end level while each meta line follows its own title. */}

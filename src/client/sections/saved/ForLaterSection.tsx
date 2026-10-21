@@ -84,7 +84,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
         const move = (offset: number) => { const next = order(index, offset); if (next && !blocked) reorder.mutate(next); };
         const caption = savedCaption(item);
         // One meta line and a "…", as Saved's other tabs; Details holds the description and the same verbs.
-        return <MediaRow key={item.id} data-saved-details={item.id}
+        return <MediaRow key={item.id} data-saved-details={item.id} source={item.url}
           art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />}
           artFit="contain"
           title={caption.title}

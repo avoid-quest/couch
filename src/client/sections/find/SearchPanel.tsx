@@ -30,6 +30,7 @@ import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } 
 import { createId } from "../../session/session";
 import type { SourceKind } from "@/components/sourceTypes";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { ArtLevel, useLevel } from "@/components/Level";
 import { DurationBar } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -219,9 +220,10 @@ function TopResult({ hit }: { hit: SearchHit }) {
   const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action !== save && action.label !== hit.primary.label));
   const meta = hitMeta(hit);
   const description = withoutUrls(hit.description);
+  const level = useLevel(hitSources(hit));
   return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3">
     {/* Its shape's frame at a set height, as Details draws it. */}
-    <div aria-hidden="true" className={cn("h-20 max-w-[36vw] overflow-hidden bg-muted md:row-span-2 md:h-48 md:max-w-[40vw]", artAspect[shapeOf(hit)])}><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className="aspect-auto size-full object-cover" /></div>
+    <div aria-hidden="true" className={cn("relative h-20 max-w-[36vw] overflow-hidden bg-muted md:row-span-2 md:h-48 md:max-w-[40vw]", artAspect[shapeOf(hit)])}><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className="aspect-auto size-full object-cover" /><ArtLevel level={level} className="max-md:size-6 max-md:text-xs" /></div>
     <div className="grid min-w-0 gap-1 md:self-end">
       <h2 className="break-words text-lg leading-snug font-semibold tracking-tight md:text-2xl">{hit.primary.href ? <ContentLink href={hit.primary.href} className="no-underline hover:underline">{hit.title}</ContentLink> : hit.title}</h2>
       {meta && <p className="text-sm text-muted-foreground break-words tabular-nums">{meta}</p>}
@@ -259,11 +261,14 @@ function SearchSkeleton() {
   </div>;
 }
 
+/** A hit's addresses, for the level while it plays: its page, or its station. */
+const hitSources = (hit: SearchHit) => [hit.url, hit.radio && `radio:${hit.radio.id}`];
+
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
 function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { hit: SearchHit; shape: ArtShape; showCollection?: boolean; pageFirst: boolean; className?: string }) {
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
-  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} plays={primary.label === "Play" || primary.label === "Resume"} title={hit.title} meta={hitMeta(hit, showCollection)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
+  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} plays={primary.label === "Play" || primary.label === "Resume"} title={hit.title} meta={hitMeta(hit, showCollection)} thumbnail={hit.thumbnail} source={hitSources(hit)} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
     href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]} />;
 }
 
@@ -282,7 +287,7 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
       const track = numbered != null;
-      return <MediaRow context={track ? undefined : <HitSource hit={hit} showSource={showSource} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title}
+      return <MediaRow context={track ? undefined : <HitSource hit={hit} showSource={showSource} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={hit.title}
       number={track ? numbered + index : undefined}
       meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? hitMeta(hit, !sameKind) : metaLine(hitContext(hit), !sameKind && hit.collection)}
       description={!compact ? withoutUrls(hit.description) || undefined : undefined} shape={shape} own={shapeOf(hit)}

@@ -24,7 +24,7 @@ import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { TRY_AGAIN } from "@/copy";
 import type { GuideRow } from "../../../shared/iptv";
-import { avoidRadioPlaylistId } from "../../../shared/radio";
+import { avoidRadioPlaylistId, stationSources } from "../../../shared/radio";
 import { pageSection, type ProviderId, type ProviderItem } from "../../../shared/providers";
 import { discoverStations, useOnAir, useStationMenu } from "./on-air";
 import { useDiscoverRows } from "./discover-rows";
@@ -91,7 +91,7 @@ function OnAir() {
   return <Shelf loading={onAir.loading} title="Radio" label="Radio stations" href="/discover/radio">
     {onAir.loading ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-      <MediaTile data-page-first={index === 0 || undefined} shape="square" plays title={station.name} meta={onAir.meta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : metaLine(station.groupTitle || station.countryCode)) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
+      <MediaTile data-page-first={index === 0 || undefined} shape="square" plays title={station.name} meta={onAir.meta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : metaLine(station.groupTitle || station.countryCode)) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
     </li>)}
   </Shelf>;
@@ -113,7 +113,7 @@ function LiveTv() {
 
 function ChannelTile({ channel, disabled, play, menu, first }: { first: boolean; channel: GuideRow; disabled: boolean; play: () => void; menu: MenuAction[] }) {
   const { on } = usePlayOn();
-  return <MediaTile data-page-first={first || undefined} shape="video" fit="contain" plays title={channel.name} meta={channelMeta(channel) || undefined} thumbnail={useChannelLogo(channel)} aria-label={on(`Play ${channel.name}`)} disabled={disabled} onClick={play} menu={menu} />;
+  return <MediaTile data-page-first={first || undefined} shape="video" fit="contain" plays title={channel.name} meta={channelMeta(channel) || undefined} thumbnail={useChannelLogo(channel)} source={`iptv:${channel.id}`} aria-label={on(`Play ${channel.name}`)} disabled={disabled} onClick={play} menu={menu} />;
 }
 
 /**
@@ -130,7 +130,7 @@ function SavedShelf({ provider, items: saved }: { provider: ProviderId; items: P
   const frame = majorityShape(items.map(shape));
   return <Shelf title={name} href={collectionLocation({ provider, url: "" })}>
     {items.map((item, index) => <li key={item.id} className="shrink-0">
-      <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} data-page-first={index === 0 || undefined} shape={frame} own={shape(item)} dim={item.kind === "channel" && item.live === false} title={item.title} meta={metaLine(item.subtitle)} thumbnail={item.thumbnail} aria-label={`Open ${item.title}`}
+      <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} data-page-first={index === 0 || undefined} shape={frame} own={shape(item)} dim={item.kind === "channel" && item.live === false} title={item.title} meta={metaLine(item.subtitle)} thumbnail={item.thumbnail} source={item.url} aria-label={`Open ${item.title}`}
         menu={browserActions(item.url)} href={collectionLocation(item)} onClick={() => openProvider(item)} />
     </li>)}
   </Shelf>;

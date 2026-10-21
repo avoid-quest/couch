@@ -130,7 +130,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
         {hits.slice(paging.start, paging.end).map((hit, index) => {
           const item = page?.items.find(item => item.url === hit.url);
           return item && <li key={hit.id} className="@container min-w-0">
-            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={metaLine(mediaSubtitle(item))} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
+            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={metaLine(mediaSubtitle(item))} thumbnail={hit.thumbnail} source={hit.url} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
               href={collectionLocation(item)} onClick={() => openProvider(item)} />
           </li>;
         })}
