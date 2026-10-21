@@ -96,7 +96,8 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
       ...(typeof entry.automaticTitle === "boolean" ? { automaticTitle: entry.automaticTitle } : {}),
       ...(typeof entry.subtitle === "string" ? { subtitle: entry.subtitle.slice(0, 300) } : {}),
       ...(typeof entry.description === "string" ? { description: entry.description.slice(0, 2000) } : {}),
-      ...(entry.collection ? { collection: { title: entry.collection.title, url: entry.collection.url, ...(entry.collection.index === undefined ? {} : { index: entry.collection.index }) } } : {}),
+      ...(entry.creator ? { creator: { title: entry.creator.title, url: entry.creator.url } } : {}),
+      ...(entry.collection ? { collection: { title: entry.collection.title, url: entry.collection.url, ...(entry.collection.parent ? {parent: {...entry.collection.parent}} : {}), ...(entry.collection.index === undefined ? {} : { index: entry.collection.index }) } } : {}),
     };
   });
 }

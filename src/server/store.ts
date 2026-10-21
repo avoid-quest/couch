@@ -350,7 +350,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(mediaId);
       return row ? JSON.parse(row.entry) : null;
     },
-    enrichHistorySource(mediaId: string, source: string, metadata: Pick<QueueEntry, "thumbnail" | "subtitle" | "description" | "collection">) {
+    enrichHistorySource(mediaId: string, source: string, metadata: Pick<QueueEntry, "thumbnail" | "subtitle" | "description" | "collection" | "creator">) {
       const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ? AND EXISTS (SELECT 1 FROM viewing_progress WHERE mediaId = history_sources.mediaId)").get(mediaId);
       if (!row) return false;
       const entry: QueueEntry = JSON.parse(row.entry);
@@ -372,7 +372,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
           const previous: QueueEntry | undefined = saved ? JSON.parse(saved.entry) : undefined;
           // A playing item's snapshot can predate a catalog refresh. Preserve its
           // trusted descriptive fields without changing transport or progress.
-          const metadata = previous?.source === entry.source ? Object.fromEntries((["subtitle", "description", "thumbnail"] as const).flatMap(key => previous[key] ? [[key, previous[key]]] : [])) : {};
+          const metadata = previous?.source === entry.source ? Object.fromEntries((["subtitle", "description", "thumbnail", "creator"] as const).flatMap(key => previous[key] ? [[key, previous[key]]] : [])) : {};
           db.query("INSERT INTO history_sources VALUES (?, ?) ON CONFLICT(mediaId) DO UPDATE SET entry=excluded.entry WHERE history_sources.entry != excluded.entry").run(item.mediaId, JSON.stringify({ ...entry, ...metadata, ...(!entry.collection && previous?.id === entry.id && previous.collection ? { collection: previous.collection } : {}) }));
         }
       })();

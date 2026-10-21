@@ -13,9 +13,9 @@ export function SettingsLayout({ section, title, children }: { section: Settings
   const scope = useSettingsScope();
   const page = settingsPages[section];
   const source = section.startsWith("source-");
-  const eyebrow = page.scope === "device" ? `This device · ${scope.device}`
-    : "group" in page && page.group === "Hardware" ? `${scope.couch} · Shared hardware`
-    : `${scope.couch} · Shared${scope.host ? " · This device" : ""}`;
+  const owner = page.scope === "device" ? `Only on ${scope.device}`
+    : "group" in page && page.group === "Hardware" ? `Shared hardware on ${scope.couch}`
+    : `Shared by everyone on ${scope.couch}`;
   return (
     <section aria-label="Settings" data-page="Settings" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
       <SettingsNav active={section} />
@@ -28,8 +28,7 @@ export function SettingsLayout({ section, title, children }: { section: Settings
         if (document.activeElement !== navigation) return;
         event.preventDefault(); event.stopPropagation();
       }}>
-        <p className="mb-1 truncate text-xs text-muted-foreground" data-settings-scope={page.scope}>{eyebrow}</p>
-        <PageHeader title={title ?? page.label} back={source ? { label: "Sources", onClick: () => void navigate({ to: settingsPages.sources.path }) } : undefined} />
+        <PageHeader title={title ?? page.label} description={<p data-settings-scope={page.scope}>{owner}</p>} back={source ? { label: "Sources", onClick: () => void navigate({ to: settingsPages.sources.path }) } : undefined} />
         <div className="flex min-w-0 flex-col gap-8">{children}</div>
       </div>
     </section>

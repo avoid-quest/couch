@@ -1,3 +1,5 @@
+import { DetailSkeleton, MediaRowsSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -42,6 +44,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const summary = reported?.cursor === cursor ? reported?.summary : undefined;
   const collection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
   const page = summary?.page;
+  const cold = connected && (!summary || summary.loading) && !page;
   // Use the provider's canonical catalogue route; title and season pages keep their rows.
   const path = url ? new URL(page?.item?.url ?? url).pathname : "";
   const posterCatalogue = provider === "streamingcommunity" && (!url || /^\/(?:[a-z]{2}\/)?(?:archive|browse\/genre)\/?$/.test(path))
@@ -87,7 +90,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     <ContentBreadcrumb title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
-    <CollectionHeader collection={collection} canPlay={available} shape={tileShape(providerNames[provider], !!collection.single && !!(search.context ?? page?.item?.collection))} />
+    {cold && url ? <DetailSkeleton shape={tileShape(providerNames[provider], false)} /> : <CollectionHeader collection={collection} canPlay={available} shape={tileShape(providerNames[provider], !!collection.single && !!(search.context ?? page?.item?.collection))} />}
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
@@ -100,21 +103,23 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
             <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
             <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
           </>}
-          <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={search.filter}
+          <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter by name…" className="w-44 sm:w-52" value={search.filter}
             onChange={event => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: event.target.value }), replace: true, resetScroll: false })} />
           {(paging.remote || (paging.pages ?? 1) > 1) && pager}
         </div>
       </div>
       {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
-      {posterCatalogue ? <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="grid list-none grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-4 gap-y-2 p-0">
+      {cold && !posterCatalogue && <MediaRowsSkeleton compact />}
+      {posterCatalogue ? <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6 p-0">
+        {cold && <MediaTilesSkeleton shape="poster" fluid />}
         {hits.slice(paging.start, paging.end).map((hit, index) => {
           const item = page?.items.find(item => item.url === hit.url);
-          return item && <li key={hit.id} className="min-w-0">
-            <MediaTile data-page-first={index === 0 || undefined} title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
+          return item && <li key={hit.id} className="@container min-w-0">
+            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={mediaSubtitle(item)} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
               href={collectionLocation(item)} onClick={() => openProvider(item)} />
           </li>;
         })}
-      </ul> : <HitList pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
+      </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: "" }), replace: true })}>Clear filter</Button>}</Empty>}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
@@ -124,7 +129,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
 
 function CollectionHeader({ collection: c, canPlay, shape }: { collection: SearchCollection; canPlay: boolean; shape: TileShape }) {
   const disabled = !canPlay || c.disabled;
-  return <DetailHeader title={c.title} meta={c.subtitle} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.position ? c.duration : undefined}
+  return <DetailHeader context={<MediaContext collection={c.context} creator={c.creator} />} title={c.title} meta={mediaSubtitle({ subtitle: c.subtitle, creator: c.creator, collection: c.context })} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.position ? c.duration : undefined}
     play={c.playAll && { label: c.playLabel ?? (c.single ? "Play" : "Play all"), run: c.playAll, disabled }}
     fromStart={c.fromStart && { label: "From start", run: c.fromStart, disabled }}
     queue={c.queueAll && { label: c.single ? "Queue" : "Queue all", run: c.queueAll, disabled: c.disabled }}

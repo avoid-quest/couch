@@ -40,7 +40,7 @@ const columns = "grid grid-cols-[minmax(0,1fr)_2.75rem] gap-x-4 md:grid-cols-[mi
  * Each request to choose a shared source's receivers opens it, so Play on the publisher leads here. The rules are the
  * model's (session/where-it-plays.ts).
  */
-export function WhereItPlays({ state, connected, run, className }: Props & { className?: string }) {
+export function WhereItPlays({ state, connected, run, className, label }: Props & { className?: string; label?: string }) {
   const tv = isTvPresentation();
   const { title, status, hint, inSync, rows } = picker(state, { here: deviceId(), tv });
   const entry = state.queue.find(item => item.id === state.currentEntryId);
@@ -50,7 +50,7 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
   const list = (label: string, items: Row[]) => items.length > 0 && <ul aria-label={label} className="divide-y border-y">{items.map(row => deviceRow({ state, row, run, tv }))}</ul>;
   return <ChooserSheet key={state.playback} request={chooserRequest(state)} playback={state.playback ?? null}>
     {/* Device icons stand for individual devices; the mixer opens all output rows. */}
-    <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
+    <SheetTrigger asChild><Button variant="ghost" size={label ? "default" : "icon-lg"} className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" />{label}</Button></SheetTrigger>
     {/* It opens on the first device you can choose; Up reaches the Volume. */}
     <SheetContent side="bottom" onOpenAutoFocus={event => { const check = (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-device-check]:not(:disabled)"); if (check) { event.preventDefault(); check.focus(); } }}
       showCloseButton={false} className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11">

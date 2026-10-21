@@ -1,3 +1,4 @@
+import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { avoidRadioPlaylistId, type RadioPlaylist } from "../../../../shared/radio";
@@ -6,7 +7,6 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { ADMIN_ONLY } from "@/copy";
 import { apiFetch } from "@/api/client";
 import { radioSourcesQuery } from "@/api/radio";
@@ -49,7 +49,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
   return (
     <div className="flex min-w-0 flex-col gap-8" data-radio-settings>
       <SettingsSection aria-label="Radio playlists">
-        {available && page.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
+        {available && page.isPending && <SettingsRowsSkeleton />}
         {page.data && <SettingsRow data-avoid-radio label="avoid radio" description={<>{["Built in", builtIn?.updatedAt && `${builtIn.stationCount} stations`, builtIn?.updatedAt && updated(builtIn.updatedAt)].filter(Boolean).join(" · ")}{builtIn?.error && <span className="block text-destructive">{builtIn.error}</span>}</>}>
           <Button variant="outline" disabled={!canWrite} onClick={() => update("avoid?refresh=true", "GET")}>Update stations</Button>
         </SettingsRow>}

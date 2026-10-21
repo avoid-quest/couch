@@ -10,7 +10,7 @@ export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
 export type PlaybackCollection = MediaCollection;
-export type QueueEntry = { subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; liveSourceId?: string; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
+export type QueueEntry = { creator?: import("./media").CollectionLink; subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; liveSourceId?: string; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
 export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; autoplay?: boolean };

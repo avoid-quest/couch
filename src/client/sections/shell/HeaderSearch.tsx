@@ -79,8 +79,8 @@ export function HeaderSearch({ className }: { className?: string }) {
   const recentsShown = focused && !value && recents.length > 0;
   return <form role="search" aria-label="Search" aria-busy={busy} className={cn("relative", className)} onSubmit={event => { event.preventDefault(); if (!composing.current) search(value.trim(), (event.nativeEvent as SubmitEvent).submitter ? "submit" : "enter"); }}
     onFocus={() => setFocused(true)} onBlur={event => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setFocused(false); }}>
-    {/* InputGroup keeps its input/addon behavior; the header needs a hairline and Clock inversion instead of a box. */}
-    <InputGroup className="h-11 rounded-none border-x-0 border-t-0 border-b bg-transparent transition-colors dark:bg-transparent has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0 has-[[data-slot=input-group-control]:focus-visible]:ring-0">
+    {/* InputGroup keeps its input/addon behavior; the header gives search a quiet filled surface and an immediate focus inversion. */}
+    <InputGroup className="h-11 rounded-md border-transparent bg-muted transition-colors dark:bg-muted has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0 has-[[data-slot=input-group-control]:focus-visible]:ring-0">
       <InputGroupAddon className="pl-2.5 group-has-[input:focus]/input-group:text-background/65"><InputGroupButton type="submit" size="icon-xs" className="touch:size-11" aria-label="Search" title="Search">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupButton></InputGroupAddon>
       <InputGroupInput ref={input} id="media-search" data-remote-field="find" type="search" aria-label="Search or paste a link" placeholder={scope === "All" ? "Search" : `Search ${scope}`} maxLength={4096} autoComplete="off" className="h-full text-base md:text-base caret-current focus:duration-0 focus-visible:outline-none group-has-[input:focus]/input-group:placeholder:text-background/65 [&::-webkit-search-cancel-button]:hidden" value={value}
         onChange={event => type(event.target.value)}
@@ -101,7 +101,7 @@ export function HeaderSearch({ className }: { className?: string }) {
             if (page) { event.preventDefault(); focusPageControl(page); }
           }
         }} />
-      {!value && <InputGroupAddon align="inline-end" className="hidden pointer-fine:flex group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
+      {!value && <InputGroupAddon align="inline-end" className="hidden pointer-fine:flex touch:hidden group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
       {value && <InputGroupAddon align="inline-end" className="pr-2.5 group-has-[input:focus]/input-group:text-background/65"><InputGroupButton size="icon-xs" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
     </InputGroup>
     {/* The last queries, as divided rows under the field while it is empty and focused; Down walks them, Up returns. */}

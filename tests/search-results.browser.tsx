@@ -48,9 +48,9 @@ export async function runSearchResultsRegression() {
     hero.focus();
     releaseFilms!();
     await wait(900);
-    assert(document.activeElement?.matches('[data-hit-id="twitch:live-0"][data-media-tile]'), "Hero demotion did not retain focus on the same tile");
+    assert(document.activeElement === hero && host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "twitch:live-0", "A late source replaced the leading result or moved focus");
     const more = [...host.querySelectorAll<HTMLButtonElement>("button")].find(button => /^\d+ more$/.test(button.textContent ?? ""))!;
-    assert(more && host.querySelectorAll("[data-media-tile]").length === 12, "Expected twelve initial shelf hits");
+    assert(more && host.querySelectorAll('[data-hit-id^="twitch:"] [data-media-tile], [data-media-tile][data-hit-id^="twitch:"]').length === 12, "Expected twelve initial live shelf hits");
     more.click();
     await wait();
     assert(host.querySelectorAll("[data-media-tile]").length === 15 && state.source === "All", "More did not reveal all hits in the same scope");
@@ -64,11 +64,11 @@ export async function runSearchResultsRegression() {
     assert(opened === "live-1", "Live tile Open did not reach its collection");
     state = { query: "x", source: "All", until: "01:01" }; render();
     await wait();
-    assert([...host.querySelectorAll('button[data-state="on"]')].some(button => button.textContent?.includes("01:01")), "Selected Ends by chip disappeared");
+    assert(host.querySelector('[role="combobox"][aria-label="Ends by"]')?.textContent?.includes("01:01"), "Selected Ends by filter disappeared");
     state = { query: "x stream", source: "All" }; render();
     await wait(900);
     assert(host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "streamingcommunity:film", "Previous query's snapshot pinned the wrong hero");
-    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "hero demotion focus", "shelf expansion", "live tile Open", "selected deadline chip", "query change retires the old hero hold"] };
+    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "selected deadline filter", "query change retires the old hero hold"] };
   } finally {
     releaseFilms!(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }

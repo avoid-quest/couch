@@ -24,9 +24,9 @@ export function CouchSwitch({ credentials, connected, status, installationName }
   const name = deviceName(installationName);
   return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button ref={trigger} variant="ghost" className="-ml-2.5 min-w-0 shrink gap-2 text-base font-normal text-muted-foreground touch:min-w-11" aria-label={`${name}: ${status}`}>
+      <Button ref={trigger} variant="ghost" className="-ml-2.5 min-w-0 shrink gap-2 text-lg font-semibold tracking-tight touch:min-w-11" aria-label={`${name}: ${status}`}>
         <CouchMark connected={connected} />
-        <span className="max-w-48 truncate max-sm:max-w-32">{name}</span>
+        <span className="max-w-40 truncate max-sm:max-w-24">{name}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" className="max-h-(--radix-popover-content-available-height) w-96 max-w-[calc(100vw-1rem)] overflow-y-auto [&_[data-slot=field]]:grid-cols-1" onOpenAutoFocus={event => { event.preventDefault(); (event.currentTarget as HTMLElement).focus(); }}>

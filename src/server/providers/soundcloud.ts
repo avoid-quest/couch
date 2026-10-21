@@ -1,3 +1,4 @@
+import { mediaCreator } from "../media-creator";
 import { publicProviderMediaUrl, type BrowseRequest, type ProviderItem, type ProviderPage } from "../../shared/providers";
 import { runYtDlp } from "../yt-dlp";
 import { ProviderError, providerItemId, withProviderItem } from "./http";
@@ -25,7 +26,7 @@ function item(value: unknown): ProviderItem | null {
   const images = [value.thumbnail, ...(Array.isArray(value.thumbnails) ? value.thumbnails.filter(object).map(image => image.url).toReversed() : [])];
   const thumbnail = images.find((image): image is string => typeof image === "string" && image.length <= 2048 && /^https:\/\/[a-z0-9-]+\.sndcdn\.com\/[^\s\\]*$/.test(image));
   return { id: providerItemId("soundcloud", url), provider: "soundcloud", kind: "media", url, title,
-    subtitle: label(value.uploader), description: label(value.description, 2000), thumbnail,
+    creator: mediaCreator(value), subtitle: label(value.uploader), description: label(value.description, 2000), thumbnail,
     ...(typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration >= 0 ? { duration: value.duration } : {}) };
 }
 

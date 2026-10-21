@@ -1,3 +1,4 @@
+import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { offline } from "@/copy";
 import { useSessionGate } from "@/session/session-context";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -41,12 +42,13 @@ export function RadioPage() {
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><p id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading && !summary.hits?.length ? <><Spinner className="size-3.5" /><span role="status">Loading stations…</span></> : <>{hits.length} {hits.length === 1 ? "station" : "stations"}</>}</p>
       <div className="flex flex-wrap items-center gap-4">
-        <Input type="search" aria-label="Filter these stations" placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={filter} onChange={event => void navigate({ href: radioBrowseLocation(source, 1, event.target.value), replace: true, resetScroll: false })} />
+        <Input type="search" aria-label="Filter these stations" placeholder="Filter by name…" className="w-44 sm:w-52" value={filter} onChange={event => void navigate({ href: radioBrowseLocation(source, 1, event.target.value), replace: true, resetScroll: false })} />
         <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? radioBrowseLocation(source, paging.page - 1, filter) : undefined} next={paging.next ? radioBrowseLocation(source, paging.page + 1, filter) : undefined} disabled={!connected || !!summary?.loading} onSelectPage={goToPage}
           onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); goToPage(Number(new URL(href, location.origin).searchParams.get("page") ?? 1)); }} />
       </div>
     </div>
-    {hits.length ? <HitList pageFirst hits={hits.slice(paging.start, paging.end)} timeline={false} label="Radio stations" /> : null}
+    {connected && (!summary || summary.loading) && !hits.length && <MediaRowsSkeleton compact label="Loading stations…" />}
+    {hits.length ? <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} compact label="Radio stations" /> : null}
     {summary && <SourceProblems summaries={[[source, summary]]} />}
     {summary && !summary.loading && !summary.error && !hits.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter ? "No stations match this filter. Try another name or clear the filter." : source === "avoid radio" ? "No stations are available right now. Try Radio playlists." : source === "Radio directory" ? "No stations are available right now. Try another source." : "No radio playlists yet. An admin can add one in Settings → Sources → Radio playlists."}</EmptyDescription></EmptyHeader></Empty>}
     <SearchRadioResults origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} browse source={source} query="" onResults={report} />

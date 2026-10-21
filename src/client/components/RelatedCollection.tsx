@@ -1,3 +1,4 @@
+import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { useCallback, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { collectionLocation, keepSection } from "@/detail-navigation";
@@ -7,7 +8,6 @@ import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
-import { Spinner } from "@/components/ui/spinner";
 import type { MediaCollection } from "../../shared/media";
 import type { ProviderId, ProviderItem } from "../../shared/providers";
 
@@ -28,12 +28,12 @@ function RelatedItems({ target, collection, currentUrl, currentTitle }: { target
   const nearby = hits.slice(start, start + 5).filter(hit => !isCurrent(hit)).slice(0, 4);
   const cursor = collection ? providerCollectionCursor(target.provider, collection) : undefined;
   const title = collection ? `More from ${collection.title}` : `Browse ${target.title}`;
-  return <section aria-label={title} hidden={!!summary && !summary.loading && !summary.error && !nearby.length} className="mt-6 min-w-0 space-y-2">
-    <h2 className="text-sm text-muted-foreground"><Link to={keepSection(collectionLocation(target), section)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">{title}</Link></h2>
+  return <section aria-label={title} hidden={!!summary && !summary.loading && !summary.error && !nearby.length} className="mt-10 min-w-0 space-y-4">
+    <h2 className="text-xl font-semibold tracking-tight"><Link to={keepSection(collectionLocation(target), section)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">{title}</Link></h2>
     <SearchOnlineResults provider={target.provider} query="" url={target.url} cursor={cursor} paged onResults={report} onOpenCollection={openProvider} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this list.</p>}
-    {summary?.loading && !hits.length && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3.5" />Loading items…</p>}
-    <HitList hits={nearby} timeline={false} label={title} />
+    {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}
+    <HitList showSource={false} hits={nearby} compact label={title} />
     <SourceProblems summaries={summary ? [[target.title, summary]] : []} />
   </section>;
 }

@@ -1,7 +1,8 @@
+import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { offline, TRY_AGAIN } from "@/copy";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -11,7 +12,7 @@ import { useOptionalSessionGate } from "@/session/session-context";
 /** Status line while offline or loading. */
 export function SavedStatus({ connected, loading }: { connected: boolean; loading: boolean }) {
   const name = useOptionalSessionGate()?.state?.installationName;
-  if (connected && !loading) return null;
+  if (connected) return loading ? <MediaRowsSkeleton /> : null;
   return <p role="status" className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
     {connected && <Spinner aria-hidden="true" role="presentation" />}{connected ? "Loading…" : offline(name)}
   </p>;
@@ -26,9 +27,9 @@ export function SavedError({ message, onRetry }: { message: string; onRetry?: ()
 }
 
 /** An empty tab: what goes here and the next step. */
-export function SavedEmpty({ children, action }: { children: ReactNode; action?: ReactNode }) {
-  return <Empty className="pt-0">
-    <EmptyHeader><EmptyDescription>{children}</EmptyDescription></EmptyHeader>
+export function SavedEmpty({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
+  return <Empty className="border-t py-8">
+    <EmptyHeader>{title && <EmptyTitle><h2>{title}</h2></EmptyTitle>}<EmptyDescription>{children}</EmptyDescription></EmptyHeader>
     {action && <EmptyContent>{action}</EmptyContent>}
   </Empty>;
 }

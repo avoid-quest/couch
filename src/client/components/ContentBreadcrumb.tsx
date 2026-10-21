@@ -18,6 +18,7 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
     <BreadcrumbList className="text-sm">
       {/* It starts at the section the page opened in (the shell's tab), else Discover. */}
       <BreadcrumbItem><BreadcrumbLink asChild><Link to={sectionUrl(section)} className={linkClassName}>{section}</Link></BreadcrumbLink></BreadcrumbItem>
+      {radio && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={keepSection("/discover/radio", section)} className={linkClassName}>Radio</Link></BreadcrumbLink></BreadcrumbItem></>}
       {!radio && source && (title !== providerNames[source] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={keepSection(collectionLocation({ provider: source, url: "" }), section)} className={linkClassName}>{providerNames[source]}</Link></BreadcrumbLink></BreadcrumbItem></>}
       {collections.map(item => <Fragment key={item.url}>
         <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={keepSection(collectionLocation(item), section)} className={`${linkClassName} break-words`}>{item.title}</Link></BreadcrumbLink></BreadcrumbItem>

@@ -6,6 +6,7 @@ import { apiJson, type ApiCredentials } from "./client";
 // SessionGate replaces the entire client on a connection or authority change.
 export const devicesQuery = (credentials: ApiCredentials) =>
   queryOptions({
+    staleTime: 30_000,
     queryKey: ["devices", "list"],
     queryFn: ({ signal }) => apiJson<{ devices: Device[] }>(credentials, "/api/devices", { signal }).then(value => value.devices),
     retry: false,

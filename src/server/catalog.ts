@@ -73,11 +73,11 @@ export function createCatalog({ radio, viewing }: Services) {
     const queueEntry = queue.find(entry => entry.id === currentEntryId && playbackMediaId(entry) === item.mediaId)
       ?? queue.findLast(entry => playbackMediaId(entry) === item.mediaId);
     const saved = viewing!.store.historySource(item.mediaId);
-    const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail, collection: queueEntry.collection ?? (saved.id === queueEntry.id ? saved.collection : undefined) } : {}) } : saved;
+    const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { creator: saved.creator ?? queueEntry.creator, subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail, collection: queueEntry.collection ?? (saved.id === queueEntry.id ? saved.collection : undefined) } : {}) } : saved;
     const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
     const sourceLabel = provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" }[provider] : "Online";
     const url = source?.source.startsWith("web:") && !source.live && source.kind !== "radio" ? publicProviderMediaUrl(source.source.slice(4)) : undefined;
-    return { ...item, ...(url ? { url } : {}), ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
+    return { ...item, ...(url ? { url } : {}), ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, creator: source.creator, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
   };
   return {
     async handle(request: Request, _trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {

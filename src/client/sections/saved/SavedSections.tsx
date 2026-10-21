@@ -2,7 +2,6 @@ import type { ClientSessionState } from "@/session/session";
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Check } from "lucide-react";
 
 import type { Credentials } from "../../session/session";
 import { ForLaterSection } from "./ForLaterSection";
@@ -22,7 +21,7 @@ import { deviceName } from "@/copy";
 export const savedTabs = ["later", "channels", "lists", "played"] as const;
 export type SavedTab = typeof savedTabs[number];
 
-/** Saved's sections the way Settings shows its pages: a rail with a check on wide screens, a Select on narrow ones. */
+/** Saved's sections the way Settings shows its pages: a rail on wide screens, a Select on narrow ones. */
 export function SavedSections({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
   state: ClientSessionState | null;
   credentials: Credentials;
@@ -59,28 +58,27 @@ export function SavedSections({ state, credentials, connected, canPlay, tab, onT
 
   return <section ref={page} aria-label="Saved" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
     <Select value={tab} onValueChange={value => onTabChange(value as SavedTab)}>
-      <SelectTrigger aria-label="Saved section" data-page-first className="w-full md:hidden"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label="Saved section" data-page-first className="w-full md:hidden"><SelectValue>{tabs.find(([value]) => value === tab)?.[1]}</SelectValue></SelectTrigger>
       <SelectContent><SelectGroup>
         <SelectLabel>{shared}</SelectLabel>
         {tabs.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
       </SelectGroup></SelectContent>
     </Select>
     <nav aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
-      <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{shared}</p>
-      {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="w-full justify-start font-normal">
+      <p className="text-base font-semibold">Saved</p>
+      <p aria-hidden="true" className="mt-1 mb-3 text-sm text-muted-foreground">{shared}</p>
+      {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="h-10 w-full justify-start rounded-none border-y-0 border-r-0 border-l-2 border-transparent pl-3 font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground">
         <Link to="/saved" search={value === "later" ? {} : { tab: value }} replace activeOptions={{ exact: true }} data-page-first={tab === value || undefined}>
-          <Check aria-hidden="true" className={tab === value ? undefined : "invisible"} />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count != null && <span className="tabular-nums text-muted-foreground">{count}</span>}
         </Link>
       </Button>)}
     </nav>
-    {/* Narrow screens name the tab in the Select above, so its title is for screen readers there. */}
     <div className="min-w-0">
-      {tab === "later" && <><PageHeader title="For later" className="max-md:sr-only" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
-      {tab === "channels" && <><PageHeader title="Channels & stations" className="max-md:sr-only" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
+      {tab === "later" && <><PageHeader title="For later" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
+      {tab === "channels" && <><PageHeader title="Channels & stations" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
       {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} onFind={onFind} />}
-      {tab === "played" && <><PageHeader title="Played" className="max-md:sr-only" /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
+      {tab === "played" && <><PageHeader title="Played" /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
     </div>
   </section>;
 }

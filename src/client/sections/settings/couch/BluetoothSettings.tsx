@@ -1,3 +1,4 @@
+import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,7 +59,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       </SettingsRow>}
       {state?.adapter === "absent" && <Alert><AlertDescription>No Bluetooth adapter found.</AlertDescription></Alert>}
       {state?.adapter === "blocked" && <Alert><AlertDescription>Bluetooth is blocked. Turn off airplane mode.</AlertDescription></Alert>}
-      {!state && connected && !error && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
+      {!state && connected && !error && <SettingsRowsSkeleton />}
       {status && <div role="status" className="flex flex-wrap items-center gap-3 text-sm">
         {active && <Spinner />}<span className="text-muted-foreground">{status}</span>
         {active && own && !searching && <Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => change({ op: "cancel", token: current.id })}>Cancel</Button>}

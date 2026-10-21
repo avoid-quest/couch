@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils";
 /** A label on the left and its control on the right, divided from the next row. */
 export function SettingsRow({ label, htmlFor, description, children, className, ...props }: Omit<ComponentProps<"div">, "children"> & { label: ReactNode; htmlFor?: string; description?: ReactNode; children?: ReactNode }) {
   return (
-    <Field className={cn("grid items-start gap-x-8 gap-y-2 border-b py-3 *:w-auto md:grid-cols-[14rem_minmax(0,1fr)]", className)} {...props}>
-      <FieldContent className="min-w-0 gap-0.5">
+    <Field className={cn("grid items-start gap-x-8 gap-y-3 border-b py-4 *:w-auto @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]", className)} {...props}>
+      <FieldContent className="min-w-0 gap-1">
         {htmlFor ? <FieldLabel htmlFor={htmlFor} className="text-base font-normal">{label}</FieldLabel> : <FieldTitle className="min-w-0 text-base font-normal break-words">{label}</FieldTitle>}
         {description && <FieldDescription className="break-words">{description}</FieldDescription>}
       </FieldContent>
-      {Children.toArray(children).length > 0 && <div className="flex min-h-6 min-w-0 flex-wrap items-center gap-2">{children}</div>}
+      {Children.toArray(children).length > 0 && <div className="flex min-h-8 min-w-0 flex-wrap items-center gap-2">{children}</div>}
     </Field>
   );
 }
@@ -24,7 +24,7 @@ export function SettingsSection({ title, description, children, className, ...pr
     <FieldSet className={cn("min-w-0 gap-2", className)} {...props}>
       {title && <FieldLegend className="mb-0 data-[variant=legend]:text-base font-medium">{title}</FieldLegend>}
       {description && <FieldDescription className="nth-last-2:mt-0 [[data-variant=legend]+&]:mt-0">{description}</FieldDescription>}
-      {Children.toArray(children).length > 0 && <div className="flex min-w-0 flex-col border-t [&>:not([data-slot=field])]:mt-3">{children}</div>}
+      {Children.toArray(children).length > 0 && <div className="@container flex min-w-0 flex-col border-t [&>:not([data-slot=field])]:mt-4">{children}</div>}
     </FieldSet>
   );
 }

@@ -15,10 +15,10 @@ which their window can leave and the TV's never does. The band lays that
 order out around the transport: the timeline on its own row above, then
 Volume and Where it plays at the left, the transport in the middle and Up
 next, Playback and fullscreen at the right, so the band reads as one line
-with Play at its centre. Up next shows only where it has something to open
+with Play at its centre. On phones, the same controls remain in one row with 44px targets and no gaps between groups. The control row uses the dock’s edge space on narrow phones so adjacent targets never overlap. The band includes the phone safe-area inset. Up next shows only where it has something to open
 (on wide screens audio keeps the queue beside the artwork), and fullscreen
 only over a picture. F and double-click follow the same rule, while an already
-fullscreen window can always leave it. One lane on every screen, phones included: the eight 44px controls fit a 390px phone at its gutters. When a narrower window or larger text leaves less room, the control lane scrolls horizontally by swipe or keyboard focus; the timeline stays fixed above it. On phones the bar keeps Play/Pause and
+fullscreen window can always leave it. The phone player keeps transport and secondary tools together; the compact now-playing bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
 
@@ -46,7 +46,7 @@ no bar, no position and no total; the player's "Live" is in its top band or
 Now playing, as below.
 
 The player says when it ends once on screen: the top band over a video, or
-Now playing's departures line, reads "ends 21:42" (or "Live", with no end
+Now playing's metadata, reads "ends 21:42" (or "Live", with no end
 time), so the band's timeline keeps only its position and the time remaining
 ("−3:24"), and live media leaves its slot empty. `useEndTime` is that line,
 in clock time.
@@ -78,7 +78,7 @@ from the stage by a hairline over audio, as the now-playing bar is. Keep
 unavailable controls in their slots so loading and queue changes preserve
 muscle memory (the live timeline is the exception: it gives way to "Live",
 which the player says in its top band or Now playing);
-adapt the rows to screen width, with content above the dock.
+preserve the single control row at every screen width, with content above the dock.
 
 ### Now playing echoes Home's hero
 
@@ -88,8 +88,7 @@ aspect ratio on black, set down on the copy below it (the box hugs the image up
 to a square, and short screens shrink it whole, never cropping it); the title
 at display size; one muted meta line, which reads the show's station, else the
 subtitle, else the source ("Radio" for a station), then Paused, Finished or
-where it plays ("on Kitchen +1"); then the departures line ("ends 21:42" or
-"Live") in tabular figures, the largest text after the title. A station's
+where it plays ("on Kitchen +1"); then small muted end-time or Live metadata. A station's
 current track follows in muted ink.
 
 ### Controls over the picture
@@ -98,11 +97,10 @@ Audio keeps its solid controls visible. Over a video, two bands show and hide
 together, like a media centre's on-screen display: the band at the bottom, and
 a top band. The top band holds, at the left, the title (wrapping to two lines
 before it truncates) and the subtitle (series, episode, channel or source) in
-muted ink, and at the right the clock and the end time, with no collection
-trail, Couch switch or Details button: Details is in the Playback sheet. Each
+muted ink, and at the right the clock and the end time, with direct creator and collection links. The title opens Details; Details
+also remains available in the Playback sheet. Each
 of its two rows sizes itself, so a narrow screen gives the title all but the
-clock. Paused shows a large Pause glyph and "Paused" over the picture, which
-reads from the sofa.
+clock. Paused reads in the shared status area above the controls.
 
 Both bands are an overlay on the picture: one transparent black scrim,
 mirrored, eased so it has no edge that reads as a crop. It rises over `--fade`
@@ -167,11 +165,23 @@ shows no top band unless this device shares. It returns to the page that
 opened the player, as Escape and a remote's Back do. A Remote's player keeps
 its TV's status beside it.
 
-The player's transient Buffering status reserves its own row above the transport
-(beside the TV status in a Remote's player). While playing or paused, the label
-is invisible and absent from the accessibility tree, but keeps its natural size
-so the band, artwork, queue and subtitle clearance stay still. It reuses the
-existing status text and shadcn Spinner; no custom component is needed.
+## Status and recovery
+
+One status row sits immediately above the timeline and transport for video,
+audio and Remote playback alike. `playbackStatus` supplies Playing, Paused,
+Loading…, Buffering…, Reconnecting…, Finished, Can't play, Player unavailable
+and Offline. It also supplies specific error or reconnect information. Home,
+the compact bar, Remote and Up next use the same vocabulary.
+
+Artwork and title remain visible during loading and failure. Paused has no
+separate central overlay. Transport keeps Play/Pause, Stop and Next in fixed
+slots: the first becomes Try again after failure or during a scheduled retry,
+and Replay when finished. Next remains available during loading or failure
+when another entry exists. Unavailable playback offers Choose device through
+the existing Where it plays sheet and describes the connection problem; it
+never tells the user to press a disabled Play. Offline keeps controls visible
+while reconnection proceeds. Controls auto-hide only during connected video
+playback, never during recovery.
 
 ## Stop sharing stays on screen
 
@@ -214,3 +224,5 @@ Autoplay is a
 separate preview with a profile switch, continuing only the current series,
 album or playlist. Explicit queue entries play first. Stop clears the
 sequence; its end never starts recommendations.
+
+The video header follows the shell: a small clock appears only in TV presentation. Desktop and phone headers give that space to the title and content links.

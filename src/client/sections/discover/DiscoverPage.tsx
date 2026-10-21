@@ -1,13 +1,16 @@
+import { MediaTilesSkeleton } from "@/components/LoadingMedia";
+import { MediaContext } from "@/components/MediaContext";
 import { useCallback, useState, type ComponentProps, type MouseEvent, type ReactNode, Fragment } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { iptvGuideQuery, iptvSourcesQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
 import { MediaTile, tileShape } from "@/components/MediaTile";
 import { usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
+import { PageHeader } from "@/components/PageHeader";
 import { Shelf } from "@/components/Shelf";
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
@@ -62,13 +65,10 @@ export function DiscoverPage() {
     sources: <Sources />,
   };
   return <section data-page="Discover" aria-label="Discover" className="group/discover grid min-w-0 gap-12">
-    <header className="flex justify-end">
-      <h1 className="sr-only">Discover</h1>
-      <Button variant="ghost" asChild><a id="customize-discover" href="/settings/device/discover" onClick={event => {
+    <PageHeader title="Discover" className="mb-0" actions={<Button variant="ghost" asChild className="touch:size-11 touch:p-0 tv:w-auto tv:px-3"><a id="customize-discover" href="/settings/device/discover" aria-label="Customize Discover" title="Customize Discover" onClick={event => {
         if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault(); details.open("/settings/device/discover");
-      }}>Customize Discover</a></Button>
-    </header>
+      }}><SlidersHorizontal aria-hidden="true" /><span className="touch:sr-only tv:not-sr-only">Customize Discover</span></a></Button>} />
     {rows.filter(row => row.shown).map(row => <Fragment key={row.id}>{sections[row.id]}</Fragment>)}
     <Empty className="group-has-[section]/discover:hidden group-has-[[role=alert]]/discover:hidden">
       <EmptyHeader><EmptyTitle>{rows.every(row => !row.shown) ? "All sections are hidden" : "Nothing to discover here yet"}</EmptyTitle>
@@ -85,13 +85,13 @@ function OnAir() {
   const stationMenu = useStationMenu();
   // As on Home, the shelf keeps the order it opened with, so a refetch or a new favourite never moves a tile under the focus.
   const stations = useKeptOrder(onAir.stations, station => station.id, !onAir.pending);
-  if (onAir.favorites.error || onAir.builtIn.error) return <Failed what="Radio" retry={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])} />;
+  if (!stations.length && (onAir.favorites.error || onAir.builtIn.error)) return <Failed what="Radio" retry={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])} />;
   if (!onAir.pending && !stations.length) return null;
   // It waits for the shows, so its tiles don't grow a line under the focus.
-  return <Shelf title="Radio" label="Radio stations" href="/discover/radio" time={onAir.pending ? undefined : stations.some(station => onAir.show(station.id)) ? "On air now" : plural(stations.length, "station")}>
-    {onAir.pending ? <Pending /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
+  return <Shelf loading={onAir.pending} title="Radio" label="Radio stations" href="/discover/radio" time={onAir.pending ? undefined : stations.some(station => onAir.show(station.id)) ? "On air now" : plural(stations.length, "station")}>
+    {onAir.pending ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-      <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
+      <MediaTile context={<MediaContext radio={{id: station.id, title: "Station details"}} />} data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
     </li>)}
   </Shelf>;
@@ -104,10 +104,10 @@ function LiveTv() {
   // The guide's first page, as Live TV's own page asks for it.
   const guide = useQuery({ ...iptvGuideQuery(credentials, { offset: 0, group: "", q: "" }), enabled: connected, refetchInterval: 60_000 });
   const actions = useChannelActions();
-  if (guide.error) return <Failed what="Live TV" retry={() => void guide.refetch()} />;
+  if (guide.error && !guide.data) return <Failed what="Live TV" retry={() => void guide.refetch()} />;
   if (guide.data && !guide.data.channels.length) return null;
-  return <Shelf title="Live TV" href="/discover/live-tv" time={guide.data && plural(guide.data.total, "channel")}>
-    {!guide.data ? <Pending /> : guide.data.channels.slice(0, shelfLength).map((channel, index) => <li key={channel.id} className="shrink-0"><ChannelTile first={index === 0} channel={channel} {...actions(channel)} /></li>)}
+  return <Shelf loading={!guide.data} title="Live TV" href="/discover/live-tv" time={guide.data && plural(guide.data.total, "channel")}>
+    {!guide.data ? <MediaTilesSkeleton /> : guide.data.channels.slice(0, shelfLength).map((channel, index) => <li key={channel.id} className="shrink-0"><ChannelTile first={index === 0} channel={channel} {...actions(channel)} /></li>)}
   </Shelf>;
 }
 
@@ -130,11 +130,11 @@ function SourceHome({ provider, time }: { provider: ProviderId; time: string }) 
   if (summary && !summary.loading && !hits.length) return results;
   return <>
     {results}
-    <Shelf title={name} href={collectionLocation({ provider, url: "" })} time={time}>
-      {!hits.length ? <Pending /> : hits.map((hit, index) => {
+    <Shelf loading={!summary || !!summary.loading} title={name} href={collectionLocation({ provider, url: "" })} time={time}>
+      {!hits.length ? <MediaTilesSkeleton shape={tileShape(name, false)} /> : hits.map((hit, index) => {
         const item = items.find(item => item.url === hit.url);
         return item && <li key={hit.id} className="shrink-0">
-          <MediaTile data-page-first={index === 0 || undefined} shape={tileShape(name, false)} title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
+          <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} data-page-first={index === 0 || undefined} shape={tileShape(name, false)} title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
             href={collectionLocation(item)} onClick={() => openProvider(item)} />
         </li>;
       })}
@@ -146,7 +146,7 @@ function SourceHome({ provider, time }: { provider: ProviderId; time: string }) 
 function SharedSources({ hits }: { hits: SearchHit[] }) {
   const { on } = usePlayOn();
   return <section aria-labelledby="discover-shared-sources" className="grid min-w-0 gap-3">
-    <h2 id="discover-shared-sources" className="flex min-h-8 items-center text-base font-medium">Shared sources</h2>
+    <h2 id="discover-shared-sources" className="flex min-h-11 items-center text-xl font-semibold tracking-tight">Shared sources</h2>
     <ul data-nav-row aria-label="Shared sources" className="-ml-2.5 flex flex-wrap gap-x-4 gap-y-2">
       {hits.map((hit, index) => <SourceButton key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={on(`Play ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== "Play")} />)}
     </ul>
@@ -157,7 +157,7 @@ function SharedSources({ hits }: { hits: SearchHit[] }) {
 function Sources() {
   const { scopeSearch } = useShell();
   return <section aria-labelledby="discover-sources" className="grid min-w-0 gap-3">
-    <h2 id="discover-sources" className="flex min-h-8 items-center text-base font-medium">Sources</h2>
+    <h2 id="discover-sources" className="flex min-h-11 items-center text-xl font-semibold tracking-tight">Search a source</h2>
     <ul data-nav-row aria-label="Sources" className="-ml-2.5 flex flex-wrap gap-x-4 gap-y-2">
       {searches.map(({ provider, meta }, index) => <SourceButton data-page-first={index === 0 || undefined} key={provider} title={providerNames[provider]} meta={meta} aria-label={`Search ${providerNames[provider]}`} onClick={() => scopeSearch(providerNames[provider])} />)}
     </ul>
@@ -176,11 +176,6 @@ function SourceButton({ title, meta, href, onClick, menu = [], ...props }: { tit
     }}>{href ? <a href={detailHref(href)}>{body}</a> : body}</Button>
     <ItemMenu menu={options} title={title} className="absolute top-2 right-1" />
   </li>;
-}
-
-/** A shelf's place while it loads, about a tile's height, so the shelves below don't move when it fills. */
-function Pending() {
-  return <li className="h-58"><span role="status" className="flex items-center gap-2 pt-1 text-sm text-muted-foreground"><Spinner aria-hidden="true" className="size-3.5" />Loading…</span></li>;
 }
 
 function Failed({ what, retry }: { what: string; retry?: () => void }) {

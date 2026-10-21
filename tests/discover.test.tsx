@@ -10,6 +10,7 @@ mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) =
 mock.module("../src/client/components/PlayOn", () => ({ PlayOnGroup: () => null, usePlayOn: () => ({ devices: [], on: (label: string) => label }) }));
 mock.module("../src/client/detail-navigation", () => ({
   collectionLocation: ({ provider }: { provider: string }) => `/collection?provider=${provider}`,
+  itemLocation: (kind: string, id: string) => `/item?kind=${kind}&id=${id}`,
   detailHref: (href: string) => href,
   useDetailNavigation: () => ({ open: () => {} }),
 }));

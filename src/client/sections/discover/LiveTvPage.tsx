@@ -1,3 +1,4 @@
+import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { defaultStringifySearch, useLocation, useNavigate } from "@tanstack/react-router";
@@ -98,15 +99,16 @@ export function LiveTvPage() {
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><p id="live-tv-channels" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{guide.isLoading ? <><Spinner className="size-3.5" /><span role="status">Loading channels…</span></> : <>{total} {total === 1 ? "channel" : "channels"}</>}</p>
       <div className="flex flex-wrap items-center gap-4">
         {!!guide.data?.groups.length && <Select value={group || allGroups} onValueChange={value => go({ page: 1, group: value === allGroups ? "" : value }, true)}>
-          <SelectTrigger aria-label="Group" className="h-8 w-auto border-0 bg-transparent px-0 text-muted-foreground shadow-none dark:bg-transparent"><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="Group" className="w-auto min-w-32"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value={allGroups}>All groups</SelectItem>{guide.data.groups.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent>
         </Select>}
-        <Input type="search" aria-label="Filter channels" placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={filter} onChange={event => go({ page: 1, filter: event.target.value }, true)} />
+        <Input type="search" aria-label="Filter channels" placeholder="Filter by name…" className="w-44 sm:w-52" value={filter} onChange={event => go({ page: 1, filter: event.target.value }, true)} />
         <BrowsePagination page={requested} pages={pages} previous={requested > 1 ? liveTvLocation({ page: requested - 1, filter, group }) : undefined} next={requested < pages ? liveTvLocation({ page: requested + 1, filter, group }) : undefined} disabled={!connected || guide.isFetching} onSelectPage={page => go({ page })}
           onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ page: Number(new URL(href, location.origin).searchParams.get("page") ?? 1) }); }} />
       </div>
     </div>
     {guide.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {guide.isLoading && <MediaRowsSkeleton compact label="Loading channels…" />}
     {!!channels.length && <MediaList aria-label="Live TV channels">{channels.map((channel, index) => {
       const { disabled, play, menu } = actions(channel);
       // A channel has no page, so its row keeps its "…".

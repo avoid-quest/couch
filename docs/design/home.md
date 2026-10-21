@@ -1,6 +1,6 @@
 # Home
 
-## Home is a departures board
+## Home starts with the media
 
 Home opens on one large item, the hero, then shelves of tiles, the way Apple
 TV and Infuse do. Discover is its sibling, built of the same shelves and
@@ -10,11 +10,10 @@ a pointer gets the shelves' scrollbars, which the TV hides.
 
 ## The hero
 
-The board's top line, and the one place Home spends boldness. In order:
-contained artwork at its own aspect ratio on black, never blurred, stretched or
-cropped into a backdrop; the title at display size; one muted meta line; the
-time it ends in tabular figures, the largest text after the title ("ends
-21:42", or "Live"); then its verbs. Its item is the first of:
+The hero pairs contained artwork with a large title. Small metadata supplies
+context; related content is directly linked below the title. Runtime or Live
+follows quietly, then the actions. Artwork stays intact on black, without a
+blurred backdrop. A divider separates the hero from the shelves. Its item is the first of:
 
 1. what you control, playing now: its meta reads the station or subtitle (else
    the source, or "Radio" for a station, as the player's does, never a stream's
@@ -45,7 +44,7 @@ always has the built-in stations, so a fresh Couch opens on something playable.
 Home ends with its content; with none at all it says "Find something to play"
 and offers Discover.
 
-Each shelf's heading names it, then, in muted ink, the time it matters at: "3
+Each shelf's heading names it, then adds quiet context: "3
 unfinished", "On air now", "2 saved", "4 titles", "until 23:10" (Up next ends
 then). A shelf holds at most twelve; where the rest has a page, the heading is
 a link with a chevron that opens it: Continue and Played recently open
@@ -64,10 +63,11 @@ afresh.
 
 ## Tiles everywhere
 
-Every item is one [`MediaTile`](browse.md#mediatile), one focus stop on every
+Every item is one [`MediaTile`](browse.md#mediatile), one primary target on every
 screen, and its press does its main verb: Continue resumes, a station plays,
 an Up next entry plays now, everything else opens its page, which holds every
-verb. Its other verbs (Details, From start, Queue, Save, Play on…) are its one
+verb. Related content has visible sibling links. Its other actions (From start,
+Queue, Save, Play on…) are its one
 menu, behind the "…" in its caption ([Menus](../design.md#menus)). Continue
 alone adds a sibling secondary Details button (at least 44px): Resume's
 playback destination lacks its history actions, and a remote reaches it
@@ -76,7 +76,9 @@ Resume is unavailable. Up next tiles read their length and the clock time
 each ends ("4:52, ends 21:47").
 
 Shelves are plain overflow rows (`data-nav-row`); a pointer scrolls them by
-their thin scrollbar, which the TV hides. How the TV walks them: [TV](tv.md#every-journey-step-works-with-a-remote).
+their thin scrollbar or the Previous/Next controls beside the heading.
+Touch swipes and TV focus scrolling use the same native overflow row.
+The paging controls are hidden on touch and TV. How the TV walks them: [TV](tv.md#every-journey-step-works-with-a-remote).
 
 Shelf menus share [Open in browser](browse.md#open-in-browser) when the item
 has an original page, including Continue, Played recently, For later and Up next.

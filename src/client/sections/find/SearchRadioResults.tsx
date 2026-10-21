@@ -1,5 +1,5 @@
 import { browserActions } from "@/original-page";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
@@ -27,7 +27,7 @@ function RadioResults(props: Props) {
   const kept = useQuery({ ...radioFavoritesListQuery(props), enabled: props.connected, retry: false });
   const stations = useMemo(() => search.data?.stations ?? [], [search.data?.stations]);
   const favorites = useMemo(() => kept.error ? null : kept.data?.favorites ?? null, [kept.error, kept.data?.favorites]);
-  const loading = props.connected && search.isFetching;
+  const loading = props.connected && search.isPending;
   const error = search.error ? searchError(search.error) : search.data?.error ?? "";
   const saveError = kept.error ? searchError(kept.error) : "";
   // Debounced summaries can still call online actions after a disconnect.
@@ -57,12 +57,12 @@ function RadioResults(props: Props) {
   const matches = (station: RadioStation) => !!station.sourceId && station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
   const stationIds = new Set(stations.map(station => station.id));
   const results = directory || avoid ? stations : [...stations, ...(favorites ?? []).filter(station => matches(station) && !stationIds.has(station.id))];
-  useEffect(() => {
+  useLayoutEffect(() => {
     const hits: SearchHit[] | undefined = results.map(station => {
       const saved = !!favorites?.some(item => item.id === station.id);
       const value = programmes.data?.[station.id];
       const programme = avoid && value && value.expiresAt > now ? value : undefined;
-      return { id: `${title}:${station.id}`, source: title, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
+      return { id: `${title}:${station.id}`, source: title, radio: {id: station.id, title: station.name}, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
         primary: props.browse ? { label: "Open", href: itemLocation("radio", station.id), run: () => navigation.open(itemLocation("radio", station.id)) } : { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
