@@ -239,26 +239,22 @@ function useTapToHear() {
 }
 
 const isOffline = (status: string) => status === "server-unavailable" || status === "reconnecting";
-// The app pointed at another Couch can try it again or use this computer's.
-function Recovery() {
-  const { nativeHost, localHost, reconnect } = useSessionGate();
-  const device = usePlaybackDevice();
-  return nativeHost && !localHost && <>
-    <Button variant="ghost" size="sm" onClick={reconnect}>{TRY_AGAIN}</Button>
-    <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
-  </>;
-}
 
-// Connection and player state as one quiet line; red only for errors that need a decision. Paired, offline is the
-// header's (HeaderOffline), not a line that pushes the page down.
+// Connection and player state as one quiet line; red only for errors that need a decision. Offline is the header's
+// (HeaderOffline) while Couch reconnects on its own; the line stays for the app pointed at another Couch, which offers
+// to try again or use this computer.
 function ConnectionStatus({ paired }: { paired: boolean }) {
-  const { nativeHost, localHost, state, status, details, credentials, connected } = useSessionGate();
+  const { nativeHost, localHost, state, status, details, credentials, connected, reconnect } = useSessionGate();
   const device = usePlaybackDevice();
   const remoteApp = nativeHost && !localHost;
   const name = deviceName(state?.installationName ?? details?.name ?? (remoteApp && device?.address ? device.address.replace(/^https?:\/\//i, "") : undefined));
+  const recovery = remoteApp && <>
+    <Button variant="ghost" size="sm" onClick={reconnect}>{TRY_AGAIN}</Button>
+    <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
+  </>;
   if (status === "connection-rejected") return <Alert variant="destructive"><AlertDescription>{name} refused this address. Open Couch at the address it shows.</AlertDescription></Alert>;
   if (status === "build-mismatch") return <StatusLine actions={<Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button>}>{name} was updated.</StatusLine>;
-  if (isOffline(status)) return paired ? null : <StatusLine busy actions={<Recovery />}>{offline(name)}</StatusLine>;
+  if (isOffline(status)) return paired && !remoteApp ? null : <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
   if (!credentials || status === "pairing-required") return null;
   if (!connected) return null;
   if (state?.player.status === "unavailable" && state.player.error) return <StatusLine>{state.player.error}</StatusLine>;
@@ -346,13 +342,13 @@ export function ShellChrome({ children }: PropsWithChildren) {
             <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
               {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
-              <HeaderOffline />
             </div>
             {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
             <SectionTabs className="flex min-w-0 items-center gap-1 touch:hidden tv:flex tv:max-lg:col-span-2 tv:max-lg:row-start-2 tv:max-lg:justify-center" />
             {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. On a
                 phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
             <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
+              <HeaderOffline />
               <LiveSharingStatus header />
               <HeaderSearch className="min-w-0 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:max-w-64 tv:has-[[data-search-token]]:max-w-88 tv:max-lg:min-w-44" />
               {/* Only a keyboard can use its shortcuts. Remote's keys drive the TV, so there it keeps its place unseen and the field doesn't move. */}
@@ -380,16 +376,15 @@ export function ShellChrome({ children }: PropsWithChildren) {
 }
 
 /**
- * Offline, beside the hollow mark: a Spinner and "Reconnecting…" (the Spinner alone on a phone), where it moves nothing.
- * The shell's status region announces it, and the Couch switch's name carries it.
+ * Offline, the header's right cluster says so before the search, as sharing does: a Spinner and "Reconnecting…" (the
+ * Spinner alone on a phone). The tabs keep their place, and the hollow mark and the shell's status region say it too.
  */
 function HeaderOffline() {
-  const { status } = useSessionGate();
-  if (!isOffline(status)) return null;
-  return <span data-header-offline className="ml-3 flex min-w-0 items-center gap-2 text-sm text-muted-foreground tv:text-base">
-    <Spinner role="presentation" aria-hidden="true" aria-label={undefined} className="size-3.5 shrink-0" />
-    <span aria-hidden="true" className="truncate max-sm:hidden">Reconnecting…</span>
-    <Recovery />
+  const { nativeHost, localHost, status } = useSessionGate();
+  if (!isOffline(status) || (nativeHost && !localHost)) return null;
+  return <span data-header-offline className="mr-3 flex shrink-0 items-center gap-2 text-sm text-muted-foreground tv:text-base">
+    <Spinner role="presentation" aria-hidden="true" aria-label={undefined} className="size-3.5" />
+    <span aria-hidden="true" className="max-sm:hidden">Reconnecting…</span>
   </span>;
 }
 
