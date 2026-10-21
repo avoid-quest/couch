@@ -56,12 +56,15 @@ export function createLiveAudioEvidence(run: LiveAudioRun) {
   if (!finite(run.fixedWarmupMs) || run.fixedWarmupMs > liveAudioAcceptance.warmupMaxMs) throw new Error("Fixed warmup exceeds the frozen contract");
   for (const [name, value] of Object.entries(calibration)) if (typeof value === "number" && !finite(value)) throw new Error(`Invalid calibration: ${name}`);
   const invalid: string[] = [];
+  if (new Set(run.telemetry.map(value => value.id)).size !== run.telemetry.length) invalid.push("Duplicate renderer telemetry identities");
   if (analysis) {
+    if (new Set(analysis.receivers.map(value => value.id)).size !== analysis.receivers.length) invalid.push("Duplicate measured output identities");
     if (!analysis.measurementValid) invalid.push(...analysis.measurementIssues);
     if (analysis.sampleRate !== run.source.sampleRate) invalid.push("Source and analyzer sample rates differ");
     if (analysis.warmupFrames * 1_000 / analysis.sampleRate !== run.fixedWarmupMs) invalid.push("Warmup differs from the predeclared window");
     if (analysis.clockUncertaintyMs !== run.timeline.clockMappingErrorMs) invalid.push("Analyzer and evidence clock bounds differ");
     if (analysis.reference.missing || analysis.reference.duplicated || analysis.reference.outOfOrder || analysis.reference.unmatchedActivityFrames) invalid.push("Reference PCM is incomplete or ambiguous");
+    if (analysis.reference.clippedSamples) invalid.push("Reference PCM clips the fixture");
     if (analysis.receivers.some(receiver => receiver.latencyMs.min !== null && receiver.latencyMs.min < -analysis.uncertaintyMs)) invalid.push("Output precedes reference beyond the clock error bound");
   }
   if (run.timeline.basis === "unmapped" || !finite(run.timeline.clockMappingErrorMs)) invalid.push("No bounded common graph/clock mapping");
@@ -89,6 +92,7 @@ export function createLiveAudioEvidence(run: LiveAudioRun) {
   const durationMs = analysis ? (analysis.durationFrames - analysis.warmupFrames) * 1_000 / analysis.sampleRate : 0;
   for (const receiver of analysis?.receivers ?? []) {
     const telemetry = run.telemetry.find(value => value.id === receiver.id);
+    if (receiver.clippedSamples) qualityFailures.push(`${receiver.id}: clipped output samples`);
     if (receiver.duplicated || receiver.outOfOrder || (run.network.quality === "clean" && receiver.missing)) qualityFailures.push(`${receiver.id}: missing/repeated/out-of-order markers`);
     if (receiver.unmatchedActivityFrames) {
       const reason = `${receiver.id}: ${receiver.unmatchedActivityFrames} unmatched fixture activity frames outside identified marker spans`;

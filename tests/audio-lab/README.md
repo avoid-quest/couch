@@ -10,6 +10,14 @@ search window plus an input slice. Failure snapshots are capped at eight
 256-sample snippets; `onMarker` lets the runner stream raw frame observations
 into its own bounded artifact.
 
+Capture must start no later than source frame zero. Reference coverage must
+reach `durationFrames`; every output must reach `durationFrames +
+ceil(maxDelayMs * sampleRate / 1000)`, even when all markers arrived early.
+Per-track `capture` records the observed and required endpoints. Missing
+preroll/source/tail coverage makes measurement invalid. A writer exception is
+propagated, invalidates the measurement and disables further writer calls;
+`finish()` can retain the incomplete diagnostic result without recounting markers.
+
 Generate the source with `createMarkerSignal({ sampleRate, seed })`. `render`
 works at arbitrary file/chunk boundaries; `marker(index)` exposes identity,
 start frame and samples. Generate the full duration: looping a short file is
@@ -20,21 +28,26 @@ quality fixture. The recorded `reference` must contain these actual samples.
 Construct `createPcmAnalyzer` before recording with fixed `durationFrames`,
 `warmupFrames`, `maxDelayMs`, receiver IDs and `clockUncertaintyMs`. Source
 markers before warmup are excluded and reported; no later window selection is
-supported. Missing, repeated and reordered markers are counted; absence never
-becomes an omitted latency sample. Correlation searches are bounded by
+supported. Missing, repeated and reordered markers are counted explicitly.
+Latency distributions describe matched markers only; they cannot bound an
+unobserved marker's latency. Correlation searches are bounded by
 `maxDelayMs` either side of nominal marker time. Audio outside that range
 cannot qualify as a timely match. Markers are spaced at 100 ms by default;
 this does not establish continuous speech/music integrity between markers.
 Keep renderer dropout/concealment telemetry separate.
 
-The coarse search evaluates 48, then 64, then all 128 chips. Cauchy-Schwarz
-bounds the best possible correlation over the unread suffix: with prefix dot
-product `d`, energy `e` and `k` chips, the squared upper bound is
-`(max(d, 0)^2 / e + (128-k)/16) / 8` (the quotient is zero when `e` is zero).
-Candidates below 0.8 even under that bound can stop early. A conservative
-rounding margin protects the comparison; surviving candidates retain the
-original full score and sample-by-sample refinement. The search window,
-threshold and duplicate/reordering checks are unchanged.
+The search evaluates every sample position using full-waveform correlation.
+Because a marker is constant within each chip, prefix sums compute the exact
+dot product with 128 chip sums, without discarding samples. After 32 and 64
+chips, Cauchy-Schwarz bounds the remaining dot product by
+`sqrt(remainingOutputEnergy * remainingMarkerEnergy)`. Only candidates unable
+to reach 0.8 can stop early; a rounding margin protects this comparison.
+The mean-square energy floor is `0.0001 / 128`. Qualifying peaks are grouped
+within half a marker length and selected by their full score. Overlapping
+copies closer than that are not independently resolved by this fixture.
+An independent exhaustive oracle covers sub-chip phase, search-window edges,
+distortion near the threshold and chunk partitioning. A sparse impostor cannot
+win a coarse score and hide a genuine full-waveform match.
 
 Run the separate, environment-dependent throughput probe with
 `bun tests/audio-lab/pcm-benchmark.ts`: 10 seconds of synthetic 48 kHz PCM,
@@ -60,6 +73,9 @@ unknown quantities. Calibration offset/uncertainty is reported separately from
 raw distributions. Source-to-capture delay is never subtracted. An unknown
 output correction cannot create a qualified upper bound. Physical sound,
 venue Wi-Fi and sustained 50-listener qualification remain unmeasured here.
+Duplicate output/telemetry identities invalidate the evidence rather than
+selecting the first observation. Observed output clipping fails quality;
+reference clipping makes the measurement inconclusive.
 
 `calibration.fixtureActivityPath` defaults to `unknown`. Activity outside matched
 marker spans makes lossy/unknown paths inconclusive: filters and codecs can

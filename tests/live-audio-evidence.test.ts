@@ -89,6 +89,21 @@ test("missing markers and absent underrun telemetry cannot disappear from a clea
   expect(createLiveAudioEvidence(unknown).measured.gates.quality.status).toBe("inconclusive");
 });
 
+test("observed clipping cannot pass quality, and a clipped reference invalidates measurement", () => {
+  const output = calibratedFixture(); output.analysis!.receivers[0]!.clippedSamples = 1;
+  expect(createLiveAudioEvidence(output).measured.gates.quality.status).toBe("failed");
+  const reference = calibratedFixture(); reference.analysis!.reference.clippedSamples = 1;
+  expect(createLiveAudioEvidence(reference).measured.status).toBe("inconclusive");
+});
+
+test("duplicate telemetry identities cannot hide a conflicting observation", () => {
+  const value = calibratedFixture();
+  value.telemetry.push({ ...value.telemetry[0]!, rendererUnderruns: 1 });
+  const result = createLiveAudioEvidence(value).measured;
+  expect(result.status).toBe("inconclusive");
+  expect(result.gates.quality.reasons.join(" ")).toContain("Duplicate");
+});
+
 test("warmup and clock bounds cannot be changed after PCM analysis", () => {
   const value = calibratedFixture(); value.fixedWarmupMs = 100;
   expect(createLiveAudioEvidence(value).measured.status).toBe("inconclusive");

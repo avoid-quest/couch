@@ -88,9 +88,9 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
   // Dedicated fixture: its tone bed peaks at 0.02, codes at 0.25. This detects
   // unexplained fixture-level activity, not arbitrarily quiet/overlaid replay.
   const activityThreshold = 0.05;
-  let finished = false, lastJoined = firstIndex - 1, peakRetainedPcmFrames = 0;
+  let finished = false, observerFailed = false, lastJoined = firstIndex - 1, peakRetainedPcmFrames = 0;
   const tracks = new Map(["reference", ...receiverIds].map(id => [id, {
-    id, start: 0, end: null as number | null, pcm: new Float32Array(0), covered: new Uint8Array(0), next: 0,
+    id, start: 0, first: null as number | null, end: null as number | null, pcm: new Float32Array(0), covered: new Uint8Array(0), next: 0,
     detected: 0, missing: 0, duplicated: 0, outOfOrder: 0, previousFrame: -Infinity, gaps: 0, clippedSamples: 0,
     unmatchedActivityFrames: 0, unmatchedActivityBursts: 0, unmatchedActivityFirstFrame: null as number | null, inUnmatchedActivity: false,
     latency: distribution(),
@@ -107,9 +107,10 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
       if (frame !== null) outputFrames.push(frame);
     }
     if (outputFrames.length === receiverIds.length && outputFrames.length > 1) skew.add((Math.max(...outputFrames) - Math.min(...outputFrames)) * 1_000 / sampleRate);
-    options.onMarker?.({ index, id: `${seed}:${index}`, referenceFrame, outputs });
     lastJoined = index;
     pending.delete(index);
+    if (!observerFailed) try { options.onMarker?.({ index, id: `${seed}:${index}`, referenceFrame, outputs }); }
+    catch (error) { observerFailed = true; issues.add("Marker observation writer failed"); throw error; }
   };
   const submit = (index: number, id: string, positions: number[]) => {
     if (index <= lastJoined) return;
@@ -127,47 +128,44 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
     const lower = Math.max(track.start, marker.startFrame - delayFrames);
     const upper = Math.min(track.start + track.pcm.length - signal.markerFrames, marker.startFrame + delayFrames);
     const stride = signal.chipFrames;
-    const checkpoints = [48, 64, 128];
+    // The marker is constant within each chip. Prefix sums give the EXACT
+    // full-waveform dot product in 128 chip sums, without decimation.
+    const sums = new Float64Array(track.pcm.length + 1), squares = new Float64Array(track.pcm.length + 1);
+    for (let i = 0; i < track.pcm.length; i++) {
+      const value = track.pcm[i]!;
+      sums[i + 1] = sums[i]! + value;
+      squares[i + 1] = squares[i]! + value * value;
+    }
+    const markerEnergy = signal.markerFrames * 0.0625;
     const score = (frame: number) => {
-      let dot = 0, energy = 0, offset = Math.floor(stride / 2);
-      for (const chips of checkpoints) {
-        for (; offset < chips * stride; offset += stride) {
-          const value = track.pcm[frame - track.start + offset]!;
-          dot += value * marker.samples[offset]!;
-          energy += value * value;
+      const start = frame - track.start, end = start + signal.markerFrames;
+      const energy = squares[end]! - squares[start]!;
+      // Preserve the previous mean-square floor (0.0001 over 128 chips).
+      if (energy <= 0.0001 * stride) return 0;
+      const denominator = Math.sqrt(energy * markerEnergy);
+      let dot = 0, chip = 0;
+      for (const checkpoint of [32, 64, 128]) {
+        for (; chip < checkpoint; chip++) {
+          const offset = start + chip * stride;
+          dot += (sums[offset + stride]! - sums[offset]!) * marker.samples[chip * stride]!;
         }
-        if (chips < 128) {
-          // Cauchy-Schwarz bounds the best possible normalized correlation
-          // over ALL remaining samples. Reject only if even that is below
-          // 0.8; surviving candidates keep the original full score/refinement.
-          const positive = Math.max(0, dot);
-          const possible = (energy ? positive * positive / energy : 0) + (128 - chips) * 0.0625;
-          if (possible < 0.8 ** 2 * 128 * 0.0625 - 1e-12) return 0;
+        if (checkpoint < 128) {
+          // Cauchy-Schwarz bounds the remaining dot product using its actual
+          // energy. A candidate that can reach the full 0.8 score is retained.
+          const remainingEnergy = Math.max(0, squares[end]! - squares[start + checkpoint * stride]!);
+          const possible = dot + Math.sqrt(remainingEnergy * (128 - checkpoint) * stride * 0.0625);
+          if (possible < 0.8 * denominator - 1e-12) return 0;
         }
       }
-      return energy > 0.0001 ? dot / Math.sqrt(energy * 128 * 0.0625) : 0;
+      return dot / denominator;
     };
     const peaks: { frame: number; score: number }[] = [];
-    // Capture/codec filtering can move chip edges between samples. Inspect
-    // every sample phase: a chip-sized step can skip an otherwise matching
-    // waveform before full-score refinement ever sees it.
     for (let frame = lower; frame <= upper; frame++) {
       const value = score(frame);
       if (value < 0.8) continue;
       const previous = peaks.at(-1);
       if (previous && frame - previous.frame < signal.markerFrames / 2) { if (value > previous.score) { previous.frame = frame; previous.score = value; } }
       else peaks.push({ frame, score: value });
-    }
-    // Refine using every sample, not chip decimation, to recover sub-chip timing.
-    for (const peak of peaks) {
-      let best = -Infinity;
-      const first = Math.max(lower, peak.frame - stride), last = Math.min(upper, peak.frame + stride);
-      for (let frame = first; frame <= last; frame++) {
-        let dot = 0, energy = 0;
-        for (let offset = 0; offset < signal.markerFrames; offset++) { const value = track.pcm[frame - track.start + offset]!; dot += value * marker.samples[offset]!; energy += value * value; }
-        const value = energy ? dot / Math.sqrt(energy * signal.markerFrames * 0.0625) : 0;
-        if (value > best) { best = value; peak.score = value; peak.frame = frame; }
-      }
     }
     const positions = peaks.filter(peak => peak.score >= 0.8).map(peak => peak.frame);
     for (const frame of positions) track.covered.fill(1, frame - track.start, frame - track.start + signal.markerFrames);
@@ -215,11 +213,11 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
     push(trackId: string, chunk: PcmChunk) {
       if (finished) throw new Error("PCM analyzer is already finished");
       const track = tracks.get(trackId);
-      if (!track || !Number.isSafeInteger(chunk.startFrame)) throw new Error("Invalid PCM track or frame");
+      if (!track || !Number.isSafeInteger(chunk.startFrame) || !Number.isSafeInteger(chunk.startFrame + chunk.samples.length)) throw new Error("Invalid PCM track or frame");
       if (!chunk.samples.length) return;
+      track.first ??= chunk.startFrame;
       if (track.end !== null && chunk.startFrame !== track.end) { track.gaps++; issues.add(`Non-contiguous PCM on ${trackId}`); track.pcm = new Float32Array(0); track.covered = new Uint8Array(0); }
       if (!track.pcm.length) track.start = chunk.startFrame;
-      track.end = chunk.startFrame + chunk.samples.length;
       for (let offset = 0; offset < chunk.samples.length; offset += 1_024) {
         const samples = chunk.samples.subarray(offset, offset + 1_024);
         const appended = new Float32Array(track.pcm.length + samples.length);
@@ -232,6 +230,7 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
         covered.set(track.covered);
         track.covered = covered;
         track.pcm = appended;
+        track.end = chunk.startFrame + offset + samples.length;
         peakRetainedPcmFrames = Math.max(peakRetainedPcmFrames, [...tracks.values()].reduce((sum, value) => sum + value.pcm.length, 0));
         process(track);
       }
@@ -244,10 +243,21 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
         for (const track of tracks.values()) if (track.next === index) detect(track, track.next++);
       }
       for (const track of tracks.values()) scanActivity(track, track.pcm.length);
+      for (const track of tracks.values()) {
+        // A missing tail can conceal an arbitrarily late marker or replay.
+        // Require the declared source plus the ENTIRE allowed output delay,
+        // independently of how many early markers happened to match.
+        const requiredEnd = durationFrames + (track.id === "reference" ? 0 : delayFrames);
+        if (track.first === null || track.first > 0 || track.end === null || track.end < requiredEnd)
+          issues.add(`Incomplete PCM coverage on ${track.id}: requires [0, ${requiredEnd})`);
+      }
       finished = true;
       const stats = (track: typeof tracks extends Map<string, infer T> ? T : never) => {
         const latencyMs = track.latency.result();
-        return { id: track.id, expected, detected: track.detected, missing: track.missing, duplicated: track.duplicated, outOfOrder: track.outOfOrder, gaps: track.gaps, clippedSamples: track.clippedSamples, unmatchedActivityFrames: track.unmatchedActivityFrames, unmatchedActivityBursts: track.unmatchedActivityBursts, unmatchedActivityFirstFrame: track.unmatchedActivityFirstFrame, latencyMs, latencyUpperBoundMs: latencyMs.max === null ? null : latencyMs.max + uncertaintyMs };
+        const requiredEndFrame = durationFrames + (track.id === "reference" ? 0 : delayFrames);
+        const capture = { firstFrame: track.first, endFrame: track.end, requiredStartFrame: 0, requiredEndFrame,
+          complete: track.first !== null && track.first <= 0 && track.end !== null && track.end >= requiredEndFrame && track.gaps === 0 };
+        return { id: track.id, capture, expected, detected: track.detected, missing: track.missing, duplicated: track.duplicated, outOfOrder: track.outOfOrder, gaps: track.gaps, clippedSamples: track.clippedSamples, unmatchedActivityFrames: track.unmatchedActivityFrames, unmatchedActivityBursts: track.unmatchedActivityBursts, unmatchedActivityFirstFrame: track.unmatchedActivityFirstFrame, latencyMs, latencyUpperBoundMs: latencyMs.max === null ? null : latencyMs.max + uncertaintyMs };
       };
       const skewMs = skew.result();
       return {

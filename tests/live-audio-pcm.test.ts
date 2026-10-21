@@ -114,7 +114,8 @@ test("reports invalid measurement on a sample gap, while negative preroll remain
   const analyzer = createPcmAnalyzer({ sampleRate: 48_000, seed: 42, receiverIds: ["listener"], durationFrames: 9_600, maxDelayMs: 200, clockUncertaintyMs: 0 });
   for (const id of ["reference", "listener"]) analyzer.push(id, { startFrame: -480, samples: new Float32Array(480) });
   analyzer.push("reference", { startFrame: 0, samples: signal.render(0, 9_600) });
-  analyzer.push("listener", { startFrame: 1, samples: signal.render(0, 9_600) });
+  const output = new Float32Array(19_199); output.set(signal.render(0, 9_600));
+  analyzer.push("listener", { startFrame: 1, samples: output });
   expect(analyzer.finish()).toMatchObject({ measurementValid: false, measurementIssues: ["Non-contiguous PCM on listener"] });
 });
 
@@ -205,5 +206,86 @@ test("finds a filtered marker at every sub-chip sample phase", () => {
     const receiver = analyzer.finish().receivers[0]!;
     expect(receiver).toMatchObject({ detected: 1, missing: 0, duplicated: 0 });
     expect(Math.abs(receiver.latencyMs.max! * 48 - delay)).toBeLessThanOrEqual(1);
+  }
+});
+
+test("a decimated false peak cannot hide a full-waveform marker nearby", () => {
+  const signal = createMarkerSignal({ sampleRate: 48_000, seed: 73 });
+  const marker = signal.marker(0).samples, output = new Float32Array(2_400);
+  for (let i = 0; i < marker.length; i++) output[960 + i] = marker[i]! + 0.01 * Math.sin(i);
+  // This sparse impostor correlates perfectly at one sample per chip, but
+  // does not match the full waveform. Its window overlaps the actual marker.
+  for (let i = 3; i < marker.length; i += 6) output[1_260 + i] = marker[i]!;
+  let best = -Infinity, frameAtBest = -1;
+  for (let frame = 0; frame <= 1_440; frame++) {
+    let dot = 0, energy = 0;
+    for (let i = 0; i < marker.length; i++) { const value = output[frame + i]!; dot += value * marker[i]!; energy += value * value; }
+    const score = energy ? dot / Math.sqrt(energy * marker.length * 0.0625) : 0;
+    if (score > best) { best = score; frameAtBest = frame; }
+  }
+  expect(best).toBeGreaterThan(0.8);
+  expect(frameAtBest).toBe(960);
+  const analyzer = createPcmAnalyzer({ sampleRate: 48_000, seed: 73, receiverIds: ["listener"], durationFrames: 800, maxDelayMs: 30, clockUncertaintyMs: 0 });
+  analyzer.push("reference", { startFrame: 0, samples: signal.render(0, 800) });
+  analyzer.push("listener", { startFrame: 0, samples: output });
+  const receiver = analyzer.finish().receivers[0]!;
+  expect(receiver).toMatchObject({ detected: 1, missing: 0, duplicated: 0 });
+  expect(receiver.latencyMs.max).toBe(20);
+});
+
+test("complete markers do not hide truncated capture coverage", () => {
+  const signal = createMarkerSignal({ sampleRate: 8_000, seed: 42 });
+  for (const [referenceStart, referenceEnd, outputEnd] of [[0, 800, 2_399], [0, 799, 2_400], [1, 800, 2_400]]) {
+    const analyzer = createPcmAnalyzer({ sampleRate: 8_000, seed: 42, receiverIds: ["listener"], durationFrames: 800, maxDelayMs: 200, clockUncertaintyMs: 0 });
+    const reference = signal.render(0, 800), output = new Float32Array(outputEnd); output.set(reference, 160);
+    analyzer.push("reference", { startFrame: referenceStart!, samples: reference.subarray(referenceStart, referenceEnd) });
+    analyzer.push("listener", { startFrame: 0, samples: output });
+    const result = analyzer.finish();
+    expect(result.receivers[0]!.detected).toBe(1);
+    expect(result.measurementValid).toBe(false);
+    expect(result.measurementIssues.join(" ")).toContain("coverage");
+  }
+});
+
+test("an observation writer failure invalidates measurement without recounting markers", () => {
+  const signal = createMarkerSignal({ sampleRate: 8_000, seed: 42 });
+  let writes = 0;
+  const analyzer = createPcmAnalyzer({ sampleRate: 8_000, seed: 42, receiverIds: ["listener"], durationFrames: 1_600, maxDelayMs: 200, clockUncertaintyMs: 0,
+    onMarker() { writes++; throw new Error("disk full"); } });
+  const reference = new Float32Array(3_200), output = new Float32Array(3_200);
+  reference.set(signal.render(0, 1_600)); output.set(reference.subarray(0, 1_600), 160);
+  analyzer.push("reference", { startFrame: 0, samples: reference });
+  expect(() => analyzer.push("listener", { startFrame: 0, samples: output })).toThrow("disk full");
+  const result = analyzer.finish();
+  expect(result.measurementValid).toBe(false);
+  expect(result.measurementIssues.join(" ")).toContain("writer");
+  expect(result.receivers[0]!.latencyMs.count).toBeLessThanOrEqual(result.receivers[0]!.detected);
+  expect(writes).toBe(1);
+});
+
+test("full-waveform search agrees with an exhaustive oracle across phases and distortion", () => {
+  const signal = createMarkerSignal({ sampleRate: 48_000, seed: 94 }), marker = signal.marker(0).samples;
+  for (const inverted of [0, 64, 80, 96, 128]) for (const delay of [0, 1, 2, 3, 4, 5, 240]) {
+    const output = new Float32Array(1_040);
+    for (let i = 0; i < marker.length; i++) output[delay + i] = marker[i]! * (i < inverted ? -1 : 1) + 0.005 * Math.sin(i * 1.17);
+    let best = -Infinity, bestFrame = -1;
+    for (let frame = 0; frame <= 240; frame++) {
+      let dot = 0, energy = 0;
+      for (let i = 0; i < marker.length; i++) { const value = output[frame + i]!; dot += value * marker[i]!; energy += value * value; }
+      const score = energy > 0.0006 ? dot / Math.sqrt(energy * 48) : 0;
+      if (score > best) { best = score; bestFrame = frame; }
+    }
+    for (const size of [127, 1_040]) {
+      const analyzer = createPcmAnalyzer({ sampleRate: 48_000, seed: 94, receiverIds: ["listener"], durationFrames: 800, maxDelayMs: 5, clockUncertaintyMs: 0 });
+      const reference = new Float32Array(1_040); reference.set(marker);
+      for (let frame = 0; frame < output.length; frame += size) {
+        analyzer.push("reference", { startFrame: frame, samples: reference.subarray(frame, frame + size) });
+        analyzer.push("listener", { startFrame: frame, samples: output.subarray(frame, frame + size) });
+      }
+      const result = analyzer.finish();
+      expect(result.measurementValid).toBe(true);
+      expect(result.receivers[0]!.detected).toBe(best >= 0.8 ? 1 : 0);
+      if (best >= 0.8) expect(result.receivers[0]!.latencyMs.max).toBe(bestFrame / 48);
+    }
   }
 });
