@@ -154,7 +154,7 @@ test("restored All follows live audio consent in Direct and Synced delivery", { 
   } finally { await f.close(); }
 });
 
-test("private Only here after restored All=0 stays audible and a positive fader still unsilences All", { timeout: 12_000 }, async () => {
+test("private Move here after restored All=0 stays audible and a positive fader still unsilences All", { timeout: 12_000 }, async () => {
   const f = await fixture();
   try {
     await f.devices[0]!.command(f.queue("saved"));
@@ -165,7 +165,7 @@ test("private Only here after restored All=0 stays audible and a positive fader 
     await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
     await b!.command(f.queue("next", a!.id));
     await pause(a!);
-    // Only here is exclusive: Device 70 shares, so it leaves and Device 40 plays Direct at its own level.
+    // Move here is exclusive: Device 70 shares, so it leaves and Device 40 plays Direct at its own level.
     await b!.command({ type: "solo", deviceId: b!.id });
     await until(() => b!.state.outputs?.map(output => output.deviceId).join() === b!.id && directLevel(b!.messages) === 40);
     assert.equal(b!.state.mixTrim, 0);

@@ -1880,7 +1880,7 @@ export async function createHub(options: HubOptions) {
               const allowed = outputFor(action.deviceId, deviceId);
               const output = { ...allowed, picture: allowed.picture && (!target.outputs.length || target.outputs.some(output => output.picture)) };
               if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(action.deviceId)} is not sharing audio.`, 403);
-              // Only here is exclusive, across the queue too: another device's private output, or a publisher's
+              // Move here is exclusive, across the queue too: another device's private output, or a publisher's
               // private output held to return after its source, stays its own, so it is refused, not partial.
               // Checked again where the move lands, after the item resolves for its new Device.
               const exclusive = () => {

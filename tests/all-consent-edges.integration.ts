@@ -88,7 +88,7 @@ const setupMix = async () => {
   return {...f,levels};
 };
 
-test("private Only here after All=0 plays there alone at its own level; the shared speaker leaves", {timeout:15000}, async()=>{
+test("private Move here after All=0 plays there alone at its own level; the shared speaker leaves", {timeout:15000}, async()=>{
   const f=await setupMix();
   try {
     await f.admin.command({type:"output",deviceId:f.adminId,picture:true});
@@ -96,7 +96,7 @@ test("private Only here after All=0 plays there alone at its own level; the shar
     await until(()=>f.levels[0]!.at(-1)!==undefined);
     await f.admin.command({type:"allSpeakers",level:0});
     await until(()=>f.levels[0]!.at(-1)===0);
-    // Only here is exclusive: Admin shares, so its output leaves rather than staying in a partial mix.
+    // Move here is exclusive: Admin shares, so its output leaves rather than staying in a partial mix.
     const only=await f.device.command({type:"solo",deviceId:f.deviceId});
     assert.equal(only.ok,true,only.error);
     await until(()=>f.device.state.outputs?.map(o=>o.deviceId).join()===f.deviceId&&!!f.device.state.outputs[0]!.sound);

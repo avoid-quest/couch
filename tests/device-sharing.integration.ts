@@ -279,7 +279,7 @@ test("Play from a controller cannot pull a device out of, or replace, its privat
   } finally { await f.close(); }
 });
 
-test("Only here is refused, changing nothing, while a device that joined on its own plays privately", { timeout: 15_000 }, async () => {
+test("Move here is refused, changing nothing, while a device that joined on its own plays privately", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
     await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } });

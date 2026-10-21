@@ -75,7 +75,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
   // A live input without sound keeps each output's sound, as the device chose it, but plays none.
   const audioOnly = !!playback?.audioOnly, silent = source?.audio === false;
   const sharingOf = (id: string) => state.devices?.find(device => device.id === id)?.sharing;
-  // Only here is exclusive, so another device's private output in this playback, or a held publisher's
+  // Move here is exclusive, so another device's private output in this playback, or a held publisher's
   // that returns after its source, makes it unavailable.
   const privately = [...outputs, ...playback?.held ? [playback.held] : []].filter(item => item.deviceId !== here && (item.picture && sharingOf(item.deviceId)?.video !== true || item.sound && sharingOf(item.deviceId)?.audio !== true));
   const waiting = !!source && !outputs.length;
