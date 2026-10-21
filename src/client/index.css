@@ -129,7 +129,16 @@ body { min-width: 0; }
 html { view-transition-name: none; }
 
 /* The now-playing bar grows into the player band and back: the one longer move, as it crosses the screen. */
-::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-group(couch-player-band), ::view-transition-group(*.couch-control) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+/* The bar's controls are the band's: each glides to its own place in the band rather than cross-fading with the band
+   (on phones Play/Pause crosses from the bar's right to the band's left). */
+:is([data-now-playing], .player-band) button:is([data-play-button], [aria-label="Stop"], [aria-label="Next"], [aria-label="Volume"], [aria-label="Where it plays"], [data-panel="queue"]) { view-transition-class: couch-control; }
+:is([data-now-playing], .player-band) button[data-play-button] { view-transition-name: couch-play; }
+:is([data-now-playing], .player-band) button[aria-label="Stop"] { view-transition-name: couch-stop; }
+:is([data-now-playing], .player-band) button[aria-label="Next"] { view-transition-name: couch-next; }
+:is([data-now-playing], .player-band) button[aria-label="Volume"] { view-transition-name: couch-volume; }
+:is([data-now-playing], .player-band) button[aria-label="Where it plays"] { view-transition-name: couch-where; }
+:is([data-now-playing], .player-band) button[data-panel="queue"] { view-transition-name: couch-queue; }
 /* Toasts arrive like the other surfaces, over 200 ms, not sonner's 400 ms, so a leaving one has faded by the time sonner
    unmounts it (200 ms). Sonner itself keeps them still with reduced motion. */
 [data-sonner-toaster] :is([data-sonner-toast], [data-sonner-toast] > *) { transition-duration: 200ms; transition-timing-function: var(--ease-out); }
@@ -161,7 +170,8 @@ html { view-transition-name: none; }
 :root { --player-surface: rgb(0 0 0 / 75%); }
 /* The player's icon targets are 44px and grow with the interface only to 2.25rem (54px at 1920 wide), the size of
    YouTube's fullscreen controls, so the band stays as small as the references' on a large window. */
-.player-page { --player-target: max(44px, 2.25rem); }
+/* The band's and the now-playing bar's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
+:root { --player-target: max(44px, 2.25rem); }
 .player-video-controls { --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; isolation: isolate; }
 .player-video-controls::before { content: ""; position: absolute; inset-inline: 0; z-index: -1; pointer-events: none; --ramp: rgb(0 0 0 / 70%), rgb(0 0 0 / 50%) calc(100% - 4rem), rgb(0 0 0 / 30%) calc(100% - 3rem), rgb(0 0 0 / 13%) calc(100% - 1.75rem), rgb(0 0 0 / 3%) calc(100% - .75rem), transparent; }
 .player-band.player-video-controls::before { bottom: 0; height: calc(100% + 4rem); background: linear-gradient(to top, var(--ramp)); }
@@ -207,8 +217,8 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-timeline:has([role="slider"]) [data-time-labels] > span:first-child { grid-column: 1; grid-row: 1; max-width: 9rem; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
 /* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it the transport sits
-   in the middle and the tools at the right in the now-playing bar's order (Volume, Where it plays, Up next), then
-   Audio & subtitles, Playback and fullscreen, so nothing changes side as the bar grows into the band. */
+   in the middle and the tools at the right in the now-playing bar's order (Volume, Where it plays, Up next), then the
+   player's own Playback gear and fullscreen, so nothing changes side as the bar grows into the band. */
 .player-control-row { display: grid; grid-template-columns: 1fr auto 1fr; grid-auto-flow: dense; align-items: center; gap: .5rem 1rem; }
 /* Keep one control row. Insets preserve focus outlines; narrow screens can scroll the row without moving the timeline. */
 .player-controls-scroll { overflow-x: auto; margin: -.125rem -.625rem; padding: .125rem .625rem; scrollbar-width: thin; }
@@ -225,14 +235,13 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
   [data-artwork-stage][data-queue-open] .player-queue { display: flex; grid-row: 1; }
   .player-control-row { column-gap: .5rem; }
 }
-@media (max-width: 599px) {
-  .player-controls-scroll { margin-inline: calc(.25rem - var(--gutter)); padding-inline: 0; }
-  /* No room to centre the transport: it leads, the tools keep the right. */
-  .player-control-row { min-width: 22rem; grid-template-columns: auto minmax(0, 1fr); column-gap: 0; }
-  .player-control-row > .player-transport { grid-column: 1; justify-self: start; }
-  .player-control-row > [data-player-tools] { grid-column: 2; }
+/* Phones, at the bar's breakpoint (sm): no room to centre the transport, so it leads, its glyph under the position as
+   the tools' last glyph is over the time left; the tools keep the bar's right edge. Without gaps the row fits 320px. */
+@media (width < 40rem) {
+  .player-control-row { min-width: max-content; grid-template-columns: auto minmax(0, 1fr); column-gap: 0; }
   .player-control-row > div { gap: 0; }
-  .player-control-row > [data-player-tools] { margin-inline: 0; }
+  .player-control-row > .player-transport { grid-column: 1; justify-self: start; margin-left: -.625rem; }
+  .player-control-row > [data-player-tools] { grid-column: 2; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 @media (max-height: 500px) {

@@ -220,9 +220,12 @@ function Options({ id, sync, children }: { id: string; sync?: string; children?:
 /** A disabled menu item's one-word reason, at its end. */
 const Why = ({ reason }: Control) => reason ? <span className="ml-auto pl-6 text-xs">{reason}</span> : null;
 
-/** "on {name} +N", plain text: where the controlled Playback plays when that isn't only this Device. */
+/**
+ * "on {name} +N": where the controlled Playback plays when that isn't only this Device. The now-playing bar and the
+ * player say it the same way: first under the title, so it reads on from it, in the ink, not the muted metadata.
+ */
 export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> }) {
-  return <span className="flex min-w-0 gap-1"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>;
+  return <span data-plays-on className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>;
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:

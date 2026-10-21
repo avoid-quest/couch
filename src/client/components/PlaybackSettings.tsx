@@ -165,19 +165,20 @@ function usePlaybackCommands({ entry, player, ready, connected, credentials, pre
   return { disabled, idle: disabled || !player.playbackId, command, saveDefault, messages };
 }
 
-type View = "speed" | "quality" | "chapters" | "audioDelay";
-const viewTitles: Record<View, string> = { speed: "Speed", quality: "Quality", chapters: "Chapters", audioDelay: "Audio delay" };
+type View = "subtitles" | "audio" | "speed" | "quality" | "chapters" | "audioDelay";
+const viewTitles: Record<View, string> = { subtitles: "Subtitles", audio: "Audio", speed: "Speed", quality: "Quality", chapters: "Chapters", audioDelay: "Audio delay" };
 const row = "h-11 w-full justify-start gap-3 rounded-none px-3 font-normal";
 
 /**
  * The gear's menu, as YouTube's: a small menu above the gear over the picture, each row its setting and current value,
- * and a submenu that replaces it in place under a Back row. Details ends it. It is the Popover's content; the
- * player owns the Popover and its trigger.
+ * and a submenu that replaces it in place under a Back row. Subtitles and Audio lead it, as YouTube's Subtitles/CC and
+ * Audio track rows; Details ends it. It is the Popover's content; the player owns the Popover and its trigger.
+ * `tracks` is false where there is no picture (audio), so Subtitles and Audio stay out.
  */
-export function PlaybackMenu({ details, sideOffset = 8, ...props }: PlaybackSettingsProps & { details?: ReactNode; sideOffset?: number }) {
-  const { entry, player } = props;
+export function PlaybackMenu({ details, tracks: showTracks = true, sideOffset = 8, ...props }: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; sideOffset?: number }) {
+  const { entry, player, credentials, connected } = props;
   const playbackClock = usePlaybackClock();
-  const { idle, command, saveDefault, messages } = usePlaybackCommands(props);
+  const { disabled, idle, command, saveDefault, messages } = usePlaybackCommands(props);
   const [view, setView] = useState<View | null>(null);
   const content = useRef<HTMLDivElement>(null);
   const opener = useRef<View | null>(null);
@@ -187,17 +188,38 @@ export function PlaybackMenu({ details, sideOffset = 8, ...props }: PlaybackSett
     if (!menu || !opener.current) return;
     (view ? menu.querySelector<HTMLElement>('[data-view-body] [data-state="on"]') ?? menu.querySelector<HTMLElement>("[data-view-body] button:not(:disabled)") : menu.querySelector<HTMLElement>(`[data-view="${opener.current}"]`))?.focus({ preventScroll: true });
   }, [view]);
+  const tracks = player.tracks ?? [];
+  const audio = tracks.filter(track => track.kind === "audio");
+  const subtitles = tracks.filter(track => track.kind === "subtitle");
+  const subtitle = subtitles.find(track => track.selected);
+  const audioTrack = audio.find(track => track.selected);
+  const select = (kind: "audio" | "subtitle", index: number) => command(playbackId => ({ type: "track", playbackId, kind, index }));
   const chapters = player.chapters ?? [];
   const chapterIndex = chapters.findLastIndex(chapter => chapter.position <= playbackClock.position);
   const qualityAvailable = supportsCurrentVideoQuality(entry, player);
   const speeds = [...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, player.speed ?? 1])].sort((a, b) => a - b);
+  // Audio is a choice only with more than one track, as YouTube's Audio track row.
   const rows: { view: View; value: string }[] = [
+    ...(showTracks ? [{ view: "subtitles" as const, value: subtitle ? trackLabel(subtitle, "Subtitle") : "Off" }] : []),
+    ...(showTracks && audio.length > 1 ? [{ view: "audio" as const, value: audioTrack ? trackLabel(audioTrack, "Audio") : "" }] : []),
     ...(player.seekable && !entry?.live ? [{ view: "speed" as const, value: speedLabel(player.speed ?? 1) }] : []),
     ...(qualityAvailable ? [{ view: "quality" as const, value: videoQualityLabels[entry?.quality ?? "auto"] }] : []),
     ...(chapters.length > 0 && player.seekable ? [{ view: "chapters" as const, value: chapters[chapterIndex]?.title || (chapterIndex >= 0 ? `Chapter ${chapterIndex + 1}` : "") }] : []),
     ...(player.audioDelay !== undefined ? [{ view: "audioDelay" as const, value: seconds(player.audioDelay ?? 0) }] : []),
   ];
-  const body = view === "speed" ? <>
+  const body = view === "subtitles" ? <>
+    {subtitles.length ? <ChoiceGroup label="Subtitles" orientation="vertical" disabled={disabled} value={String(subtitle?.index ?? -1)} onValueChange={value => select("subtitle", Number(value))}
+      options={[{ value: "-1", label: "Off" }, ...subtitles.map(track => ({ value: String(track.index), label: <span className="truncate">{trackLabel(track, "Subtitle")}</span> }))]} /> : <p className="py-2 text-muted-foreground">None in this video</p>}
+    {subtitles.length > 0 && saveDefault("subtitles", "subtitles")}
+    <div className="-mx-3 grid gap-2 border-t px-3 pt-2">
+      <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
+      <Stepper label="Subtitle delay" value={seconds(player.subtitleDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "subtitleDelay", playbackId, delay: Math.round(((player.subtitleDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
+    </div>
+  </> : view === "audio" ? <>
+    <ChoiceGroup label="Audio" orientation="vertical" disabled={disabled} value={String(audioTrack?.index ?? "")} onValueChange={value => select("audio", Number(value))}
+      options={audio.map(track => ({ value: String(track.index), label: <span className="truncate">{trackLabel(track, "Audio")}</span> }))} />
+    {saveDefault("audio", "audio language")}
+  </> : view === "speed" ? <>
     <ChoiceGroup label="Speed" orientation="vertical" disabled={idle} value={String(player.speed ?? 1)} onValueChange={value => command(playbackId => ({ type: "speed", playbackId, speed: Number(value) }))}
       options={speeds.map(speed => ({ value: String(speed), label: speedLabel(speed) }))} />
     {saveDefault("speed", "speed")}
@@ -207,55 +229,21 @@ export function PlaybackMenu({ details, sideOffset = 8, ...props }: PlaybackSett
     options={chapters.map((chapter, index) => ({ value: String(index), label: <span className="truncate">{chapter.title || `Chapter ${index + 1}`}</span>, count: clock(chapter.position) }))} />
   : view === "audioDelay" ? <Stepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "audioDelay", playbackId, delay: Math.round(((player.audioDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
   : null;
+  // The Back row stays while a long list (subtitle languages, chapters) scrolls under it.
   return <PopoverContent ref={content} data-player-menu side="top" align="end" sideOffset={sideOffset} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
-    className="max-h-[calc(var(--radix-popover-content-available-height)-1rem)] w-72 gap-0 overflow-y-auto p-0 py-1"
+    className="max-h-[calc(var(--radix-popover-content-available-height)-1rem)] w-72 gap-0 overflow-hidden p-0"
     // Back in a submenu returns to the menu, as on YouTube and a TV's own menus; Back on the menu closes it.
     onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}>
     {view ? <>
-      <div className="flex items-center gap-1 border-b px-1 py-1"><Button variant="ghost" size="icon" aria-label="Back to Playback" title="Back to Playback" onClick={() => setView(null)}><ChevronLeft aria-hidden="true" /></Button><h2 className="text-sm font-medium">{viewTitles[view]}</h2></div>
-      <div data-view-body className="grid gap-2 px-3 py-2">{body}{messages}</div>
-    </> : <>
+      <div className="flex shrink-0 items-center gap-1 border-b px-1 py-1"><Button variant="ghost" size="icon" aria-label="Back to Playback" title="Back to Playback" onClick={() => setView(null)}><ChevronLeft aria-hidden="true" /></Button><h2 className="text-sm font-medium">{viewTitles[view]}</h2></div>
+      <div data-view-body className="grid min-h-0 gap-2 overflow-y-auto overscroll-contain px-3 py-2">{body}{messages}</div>
+    </> : <div className="min-h-0 overflow-y-auto py-1">
       {rows.map(item => <Button key={item.view} data-view={item.view} variant="ghost" className={row} onClick={() => { opener.current = item.view; setView(item.view); }}>
-        {viewTitles[item.view]}<span className="ml-auto truncate text-muted-foreground">{item.value}</span><ChevronRight aria-hidden="true" className="-mr-1" />
+        {viewTitles[item.view]}<span className="ml-auto min-w-0 truncate text-muted-foreground">{item.value}</span><ChevronRight aria-hidden="true" className="-mr-1" />
       </Button>)}
       {details}
-    </>}
+    </div>}
   </PopoverContent>;
 }
 
 export const playbackMenuRow = row;
-
-/**
- * Audio & subtitles, as Netflix's: one panel over the picture next to its button, Audio and Subtitles side by side
- * (stacked on a phone), each column scrolling on its own. Subtitles add a file, a delay and Save as default.
- */
-export function TracksPanel({ sideOffset = 8, ...props }: PlaybackSettingsProps & { sideOffset?: number }) {
-  const { player, credentials, connected } = props;
-  const { disabled, idle, command, saveDefault, messages } = usePlaybackCommands(props);
-  const tracks = player.tracks ?? [];
-  const audio = tracks.filter(track => track.kind === "audio");
-  const subtitles = tracks.filter(track => track.kind === "subtitle");
-  const select = (kind: "audio" | "subtitle", index: number) => command(playbackId => ({ type: "track", playbackId, kind, index }));
-  const none = <p className="text-sm text-muted-foreground">None</p>;
-  const column = "flex min-w-0 flex-1 flex-col gap-2 sm:min-h-0 sm:overflow-y-auto sm:overscroll-contain";
-  return <PopoverContent data-player-tracks side="top" align="end" sideOffset={sideOffset} collisionPadding={16} aria-label="Audio & subtitles"
-    className="max-h-[min(24rem,calc(var(--radix-popover-content-available-height)-1rem))] w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-y-auto p-0 sm:overflow-hidden">
-    <div className="flex flex-col gap-6 p-4 sm:min-h-0 sm:flex-row sm:gap-8">
-      <section aria-labelledby="tracks-audio" className={column}>
-        <h2 id="tracks-audio" className="text-base font-medium">Audio</h2>
-        {audio.length ? <ChoiceGroup label="Audio" orientation="vertical" disabled={disabled} value={String(audio.find(track => track.selected)?.index ?? "")} onValueChange={value => select("audio", Number(value))}
-          options={audio.map(track => ({ value: String(track.index), label: trackLabel(track, "Audio") }))} /> : none}
-        {saveDefault("audio", "audio language")}
-      </section>
-      <section aria-labelledby="tracks-subtitles" className={column}>
-        <h2 id="tracks-subtitles" className="text-base font-medium">Subtitles</h2>
-        {subtitles.length ? <ChoiceGroup label="Subtitles" orientation="vertical" disabled={disabled} value={String(subtitles.find(track => track.selected)?.index ?? -1)} onValueChange={value => select("subtitle", Number(value))}
-          options={[{ value: "-1", label: "Off" }, ...subtitles.map(track => ({ value: String(track.index), label: trackLabel(track, "Subtitle") }))]} /> : none}
-        <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
-        {saveDefault("subtitles", "subtitles")}
-        <Stepper label="Subtitle delay" value={seconds(player.subtitleDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "subtitleDelay", playbackId, delay: Math.round(((player.subtitleDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
-      </section>
-    </div>
-    {messages && <div className="px-4 pb-4">{messages}</div>}
-  </PopoverContent>;
-}

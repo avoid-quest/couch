@@ -4,7 +4,7 @@ import { ContentLink } from "@/components/ContentLink";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, Captions, ChevronRight, ListMusic, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import { ArrowLeft, ChevronRight, ListMusic, Maximize, Minimize, Music2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
@@ -13,7 +13,7 @@ import { mediaSubtitle } from "@/components/MediaContext";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities, useEndTime } from "@/components/PlaybackTransport";
 import { DigitalClock } from "@/components/DigitalClock";
 import { sourceLabel } from "@/source-label";
-import { PlaybackMenu, TracksPanel, playbackMenuRow } from "@/components/PlaybackSettings";
+import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
@@ -25,14 +25,14 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
-import { WhereItPlays } from "@/sections/shell/Outputs";
+import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
 import { isRadio } from "../../../shared/radio";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
 
-type Panel = "tracks" | "settings";
+type Panel = "settings";
 // From 960px audio keeps Up next on screen beside the artwork (index.css), so the band's Up next has nothing to open.
 const wideQuery = "(min-width: 960px)";
 const subscribeWide = (onChange: () => void) => { const media = window.matchMedia(wideQuery); media.addEventListener("change", onChange); return () => media.removeEventListener("change", onChange); };
@@ -199,8 +199,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // its stream host). A subtitle the relationship links already name isn't said twice.
   const byline = !current || currentProgramme || current.subtitle && !mediaSubtitle(current) ? "" : current.subtitle || (radio ? "Radio" : source);
   const osd = !!current && !artworkStage;
-  const where = elsewhere && at ? `on ${at.name}${at.more ? ` +${at.more}` : ""}` : separate && ["playing", "paused"].includes(player?.status ?? "") ? "in a separate window" : null;
-  const meta = [byline, where].filter(Boolean).join(", ");
+  const meta = [byline, separate && ["playing", "paused"].includes(player?.status ?? "") && "in a separate window"].filter(Boolean).join(", ");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const status = playbackStatus(state, connected, now);
   const context = current && <MediaContext creator={current.creator} collection={current.collection} radio={radio && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} />;
@@ -263,7 +262,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         {/* The media title leads; related content and secondary metadata follow, then what's wrong, if anything. */}
         <div data-player-audio-copy className="grid min-w-0 gap-2">
           <h1 className="min-w-0 line-clamp-2 text-4xl font-semibold tracking-tight break-words md:text-5xl" title={title}>{linkedTitle}</h1>
-          {context}
+          {/* Where it plays leads the line under the title, as in the now-playing bar. */}
+          {elsewhere && at ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"><PlaysOn at={at} />{context}</div> : context}
           {meta && <p className="truncate text-sm text-muted-foreground">{meta}</p>}
           {ends && <p data-player-ends className="text-sm text-muted-foreground tabular-nums">{ends}</p>}
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
@@ -285,8 +285,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
     }} className={cn("player-band z-20 pt-1 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", osd ? "player-video-controls" : "bg-background", !shown && "opacity-0")}>
       {/* The timeline, then one row in the now-playing bar's order: Play/Pause, Stop and Next in the middle, the tools at
-          the right: Volume, Where it plays, Up next (only where it has something to open), Audio & subtitles (over a
-          video), the Playback gear and fullscreen (over a picture). Every control is a ghost icon (icon-lg) at the band's
+          the right: the bar's Volume, Where it plays and Up next (only where it has something to open), then the player's
+          own Playback gear and fullscreen (over a picture). Every control is a ghost icon (icon-lg) at the band's
           target (--player-target); those at the band's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
       <div className="grid gap-1">
         {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
@@ -299,15 +299,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
               {state && <VolumeButton state={state} connected={connected} run={run} sideOffset={sideOffset} className="max-sm:hidden" />}
               {state && <WhereItPlays state={state} connected={connected} run={run} sideOffset={sideOffset} />}
               {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
-              {/* Audio & subtitles has its own button, as Netflix's and YouTube's CC; speed, quality, chapters and delay
-                  sit in the gear's menu, as YouTube's. Both open over the picture next to their button. */}
-              {!audioOnly && <Popover open={panel === "tracks"} onOpenChange={open => setPanel(open ? "tracks" : null)}>
-                <PopoverTrigger asChild><Button data-panel="tracks" variant="ghost" size="icon-lg" aria-label="Audio & subtitles" title="Audio & subtitles" disabled={!settings}><Captions aria-hidden="true" /></Button></PopoverTrigger>
-                {settings && <TracksPanel {...settings} sideOffset={sideOffset} />}
-              </Popover>}
+              {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
+                  turns subtitles on and off. It opens over the picture above the gear. */}
               <Popover open={panel === "settings"} onOpenChange={open => setPanel(open ? "settings" : null)}>
                 <PopoverTrigger asChild><Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
-                {settings && <PlaybackMenu {...settings} sideOffset={sideOffset} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
+                {settings && <PlaybackMenu {...settings} tracks={!audioOnly} sideOffset={sideOffset} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
               </Popover>
               {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
               {!tvPresentation && (!artworkStage || fullscreen.fullscreen) && <Button variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
