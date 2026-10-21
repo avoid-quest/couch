@@ -8,6 +8,7 @@ import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { artAspect, detailArt, type ArtShape } from "@/art-shape";
 import { withoutUrls } from "@/media-caption";
 import { cn } from "@/lib/utils";
+import { AmbientLight } from "@/components/AmbientLight";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
 
@@ -62,8 +63,12 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
   const first = [!play?.disabled && play && "play", !queue?.disabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
-  return <header className={cn("grid gap-x-8 gap-y-6 md:items-start lg:gap-x-12", thumbnail && "md:grid-cols-[fit-content(45%)_minmax(0,1fr)]")}>
-    {thumbnail && <div data-detail-art aria-hidden="true" className={cn("max-w-full overflow-hidden bg-muted", artAspect[shape], detailArt[shape])}>
+  const art = useRef<HTMLDivElement>(null);
+  // The cover lights the page around it, out to the window's edges (AmbientLight), and falls away above it, where the
+  // trail's muted links sit close.
+  return <header className={cn("relative grid gap-x-8 gap-y-6 md:items-start lg:gap-x-12", thumbnail && "md:grid-cols-[fit-content(45%)_minmax(0,1fr)]")}>
+    {thumbnail && <AmbientLight src={thumbnail} anchor={art} className="-inset-x-(--gutter) -bottom-16 [mask-image:linear-gradient(transparent,#000_1.5rem,#000_calc(100%-3rem),transparent)]" />}
+    {thumbnail && <div ref={art} data-detail-art aria-hidden="true" className={cn("max-w-full overflow-hidden bg-muted", artAspect[shape], detailArt[shape])}>
       <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full", fit === "contain" ? "object-contain" : "object-cover")} />
     </div>}
     <div className="grid min-w-0 content-start gap-2">

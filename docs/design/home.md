@@ -24,7 +24,8 @@ first of:
    Details.
 3. **The first station on air**: Play.
 
-An episode leads with its series ("Phony", then "S1 E1, Episodio 1" on the
+The hero's artwork lights the board's top ([Light](../design.md#light)),
+whichever item it shows. An episode leads with its series ("Phony", then "S1 E1, Episodio 1" on the
 meta line). Radio and live media show no progress or time. The primary verb
 carries `data-page-first`. The hero waits for the data that decides it
 (session, history, stations) so it never swaps under the focus, and the shelves

@@ -36,6 +36,7 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
+import { artworkResponse } from "./artwork";
 import { createPassThrough } from "./pass-through";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
@@ -1616,6 +1617,7 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
+      if (!websocket && url.pathname === "/api/artwork") return cors(request, await artworkResponse(request, authorize));
       if (!websocket && url.pathname === "/api/subtitles") return cors(request, await subtitles.handle(request, () => {
         authorize();
         const playback = playing(url.searchParams.get("playbackId") ?? "");

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AmbientLight } from "@/components/AmbientLight";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaTile } from "@/components/MediaTile";
 import { Progress } from "@/components/ui/progress";
@@ -282,8 +283,11 @@ function HomeHero({ thumbnail, shape, title, meta, context, progress, playing = 
     observer.observe(root.current);
     return () => { observer.disconnect(); html.removeAttribute("data-hero-playing"); };
   }, [playing]);
-  return <section ref={root} data-home-hero aria-label={title} className="grid gap-x-12 gap-y-6 border-b pb-8 [--hero-art:min(26rem,52vh)] md:flex md:items-center md:pb-12">
-    <div aria-hidden="true" className={cn("shrink-0 overflow-hidden bg-muted md:h-(--hero-art)", artAspect[shape], heroArt[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full object-cover", shape === "round" && "rounded-full")} /></div>
+  const art = useRef<HTMLDivElement>(null);
+  return <section ref={root} data-home-hero aria-label={title} className="relative grid gap-x-12 gap-y-6 border-b pb-8 [--hero-art:min(26rem,52vh)] md:flex md:items-center md:pb-12">
+    {/* Its artwork lights the board's top, as it lights Details and the player (AmbientLight). */}
+    <AmbientLight src={thumbnail} anchor={art} className="-inset-x-(--gutter)" />
+    <div ref={art} aria-hidden="true" className={cn("shrink-0 overflow-hidden bg-muted md:h-(--hero-art)", artAspect[shape], heroArt[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full object-cover", shape === "round" && "rounded-full")} /></div>
     <div className="grid min-w-0 flex-1 gap-4">
       <h2 title={title} className="line-clamp-4 text-3xl leading-[1.08] font-semibold tracking-tight text-balance break-words md:text-5xl">{title}</h2>
       {/* The meta line and its links read as one block under the title. */}

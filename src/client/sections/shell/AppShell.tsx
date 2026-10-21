@@ -368,8 +368,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
           {!paired ? <PairingPage status={status} /> : <>
             {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
-            {/* Cached routes appear immediately; the player keeps its separate band transition. */}
-            <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
+            {/* Cached routes appear immediately; the player keeps its separate band transition. The page is its own layer,
+                so artwork's light (AmbientLight) lies under its content and over the shell's black. */}
+            <div className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
             {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
                 the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
             <div ref={footer} className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}>

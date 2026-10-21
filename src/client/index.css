@@ -317,3 +317,17 @@ html[data-hero-playing] [data-now-playing] { display: none; }
 /* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
 html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }
 
+/* Ambient light (AmbientLight.tsx, docs/design.md): the one layer of gradient and soft edge in Couch, behind artwork
+   and only there. A backlight in the artwork's first colour hugs the picture (a ring around it, so nothing shows through
+   transparent art) and is gone --glow out; a haze in its second colour, far darker, spreads three pictures wide. Both
+   are painted once and only cross-fade (opacity) when the artwork changes; the newest frame lies over the one it
+   replaces, which fades out only when nothing replaces it. Reduced motion swaps them at once. */
+@layer components {
+  .ambient-light { --glow: 3rem; position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow-x: clip; }
+  .ambient-frame { position: absolute; inset: 0; animation: couch-fade-in .6s var(--ease-out) both; }
+  .ambient-frame:is([data-still], [data-leaving]) { animation: none; }
+  .ambient-frame[data-leaving]:last-child { animation: couch-fade-out .6s var(--ease-out) both; }
+  @media (prefers-reduced-motion: reduce) { .ambient-frame { animation: none !important; } .ambient-frame[data-leaving]:last-child { display: none; } }
+  .ambient-haze { position: absolute; left: calc(var(--light-x) + var(--light-w) / 2); top: calc(var(--light-y) + var(--light-h) / 2); width: calc(3 * max(var(--light-w), var(--light-h))); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, var(--light-b), color-mix(in srgb, var(--light-b) 55%, transparent) 50%, transparent); }
+  .ambient-backlight { position: absolute; left: calc(var(--light-x) - var(--glow)); top: calc(var(--light-y) - var(--glow)); width: calc(var(--light-w) + 2 * var(--glow)); height: calc(var(--light-h) + 2 * var(--glow)); padding: var(--glow); background: radial-gradient(closest-side, var(--light-a) 55%, color-mix(in srgb, var(--light-a) 25%, transparent) 80%, transparent); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude; }
+}

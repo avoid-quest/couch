@@ -21,6 +21,11 @@ bar for thumb reach.
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
   panels, shadows, gradients or blur; only the player's bands shade a picture,
   with a scrim, and what opens over a picture is one translucent black.
+- **The artwork lights the room**, the one exception to Flat
+  ([Light](#light)). Behind the large artwork (the player's Now playing, a
+  video's letterbox, Details and Home's hero) its own two colours glow and fall
+  to black. It is light, never chrome: no surface, border or control takes its
+  colour, ink stays white and controls black and white.
 - **One primary target per item, one menu.** Pressing a row or tile does its
   main verb; its other verbs are its one menu ([Menus](#menus)). Related
   channels, albums, series and stations are separate visible links, never
@@ -35,6 +40,26 @@ bar for thumb reach.
   inline or in an AlertDialog.
 - **Disabled keeps its place.** A control that can't act stays in its slot at
   half ink (`disabled:opacity-50`); nothing shrinks or moves.
+
+## Light
+
+`AmbientLight` reads two colours from the artwork on screen: a 16×16 copy,
+once per address (`artwork-light.ts`). Core fetches the picture for the read
+(`/api/artwork`, raster pictures only), since most artwork hosts don't let a
+page read theirs; artwork it can't read gives no light, and the picture on
+screen is never touched. The first colour is a **backlight** that hugs the
+picture's edges and is gone 3rem out; the second a **haze**, three pictures
+wide. Both lie under the page's content and never move or size anything.
+
+- **7:1 at the brightest.** The backlight is at most luminance 0.07, so white
+  ink over it keeps 7:1; only titles come that close to artwork. The haze, which
+  may lie under any text, is at most 0.004, so muted ink keeps 7:1 over it
+  with room for the backlight's last trace.
+- **The letterbox** is lit around the contained picture, as YouTube's ambient
+  mode: the item's artwork gives the colours, painted once, so a playing video
+  costs nothing per frame and a cross-origin video lights too.
+- **Not light:** a gradient wash on a page, colour on a surface, a blurred
+  copy of the picture, or light without artwork behind it.
 
 ## Brand mark
 
@@ -125,6 +150,8 @@ control, 200 ms for what arrives.
   rather than stretch over the band's timeline (`couch-bar-title`). These
   are view transitions, so they are composited snapshots, and reduced motion
   skips them.
+- The light cross-fades over 600 ms when the artwork changes, the one slow
+  move ([Light](#light)). Reduced motion swaps it at once, still lit.
 - No scroll entrances, staggers, springs or scaling tiles. New motion is
   `motion-safe:`; reduced motion stills everything.
 

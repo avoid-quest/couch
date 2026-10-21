@@ -156,7 +156,9 @@ geometry per shape (`detailArt`, `art-shape.ts`), sized by height so each
 carries about the same weight: posters 20rem tall, squares 16rem, circles
 14rem, frames 13.5rem (smaller on phones), filling the frame, the width
 following the shape and capped at 45% of the row, so the title follows it
-(stacked below `md`); a station's logo is contained. Then the title, one meta
+(stacked below `md`); a station's logo is contained. The artwork lights the
+page around it ([Light](../design.md#light)), from its top edge down, so the
+trail's muted links above it stay on black. Then the title, one meta
 line, its links (a creator; the collections holding it are already the trail,
 so they aren't repeated), a `DurationBar` when the length is known (a video's
 "9:07"), one row of verbs, then the synopsis without bare addresses (a line

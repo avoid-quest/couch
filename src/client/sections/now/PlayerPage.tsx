@@ -28,6 +28,7 @@ import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
+import { AmbientLight } from "@/components/AmbientLight";
 import { Link, useLocation } from "@tanstack/react-router";
 import { isRadio } from "../../../shared/radio";
 import { useStationShow } from "@/sections/discover/on-air";
@@ -59,6 +60,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const root = useRef<HTMLElement>(null);
   const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
   const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
+  // What the room's light comes from (AmbientLight): the artwork beside the copy, or the playing picture.
+  const art = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
   const tap = useRef<boolean | null>(null);
   // What the picture's last click asked for, so a double-click's second click can undo it.
@@ -88,6 +92,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // An mpv channel shows its picture in mpv's own window, so this one shows the artwork.
   const separate = !!playback?.hostOnly && showsPicture(state);
   const picture = showsPicture(state) && !separate;
+  const showPicture = useCallback((element: HTMLDivElement | null) => {
+    stage.current = element;
+    const leave = picture ? renderInto(element) : undefined;
+    return () => { stage.current = null; leave?.(); };
+  }, [picture]);
   const artworkStage = audioOnly || !picture;
   const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending && (!artworkStage || fullscreen.fullscreen);
   useCouchHotkeys([{ hotkey: "F", enabled: canFullscreen, action: () => void fullscreen.toggle() }]);
@@ -193,6 +202,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // A pointer has no Back key, so desktop and phones lead the top line with Back; the TV's remote has its own.
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
   const back = !tvPresentation && <Button variant="ghost" size="icon-lg" className="-ml-2.5 size-(--player-target) shrink-0" aria-label={backLabel} title={backLabel} onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /></Button>;
+  const artworkUrl = currentProgramme?.artworkUrl || current?.thumbnail;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const setPanel = (value: Panel | null) => { if (!value) setPanelState(null); else if (player?.playbackId) { setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); } };
   const source = current ? sourceLabel(current.source) : "";
@@ -227,7 +237,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         takes focus when the player opens, and keys on it are shortcuts (useCouchHotkeys counts a tabindex of -1 as
         background). As on YouTube, a click on a video plays or pauses (on audio, a stray click leaves the music alone),
         a click while Up next is open only closes it, and a double-click toggles fullscreen; a tap shows or hides the controls. */}
-    <div ref={picture ? renderInto : undefined} data-player-surface tabIndex={-1} role="group" aria-label={title ? `Player: ${title}` : "Player"} className="player-video absolute inset-0 outline-none"
+    {/* The artwork lights the room: around the artwork beside the copy, or in the bars around a contained picture. */}
+    {current && <AmbientLight src={osd ? current.thumbnail : artworkUrl} anchor={osd ? stage : art} className={osd ? "[--glow:8rem]" : undefined} />}
+    <div ref={showPicture} data-player-surface tabIndex={-1} role="group" aria-label={title ? `Player: ${title}` : "Player"} className="player-video absolute inset-0 outline-none"
       onPointerDown={event => { tap.current = event.pointerType === "touch" ? shown : null; }}
       onClick={event => {
         if (queueOpen && osd) { closeQueue(); return; }
@@ -261,7 +273,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
       {current && artworkStage && <div data-player-summary className="player-summary">
-        <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
+        <div ref={art} data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         {/* The media title leads; related content and secondary metadata follow, then what's wrong, if anything. */}
         <div data-player-audio-copy className="grid min-w-0 gap-2">
           <h1 className="min-w-0 line-clamp-2 text-4xl font-semibold tracking-tight break-words md:text-5xl" title={title}>{linkedTitle}</h1>
@@ -278,7 +290,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           from its heading row, and what plays now heads the list only where the player's own title is off screen (a
           phone's Up next over Now playing). Beside artwork it stays on screen. */}
       {/* Beside artwork it shows only while it has something to show; the artwork then takes the whole stage. */}
-      {(artworkStage && hasUpNext(state) || queueOpen) && <aside data-player-queue aria-label="Up next" className={cn("player-queue", osd ? "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90" : "bg-background")} style={osd ? { transformOrigin: queueOrigin } : undefined}>
+      {(artworkStage && hasUpNext(state) || queueOpen) && <aside data-player-queue aria-label="Up next" className={cn("player-queue", osd && "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90")} style={osd ? { transformOrigin: queueOrigin } : undefined}>
         <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen ? closeQueue : undefined} closeRef={queueClose} />
       </aside>}
     </div>
@@ -287,7 +299,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         picture, unless the click opened something. A keyboard's click (detail 0) keeps focus where the keyboard put it. */}
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={event => {
       if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
-    }} className={cn("player-band z-20 pt-1 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", osd ? "player-video-controls" : "bg-background", !shown && "opacity-0")}>
+    }} className={cn("player-band z-20 pt-1 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
       {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
           bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
           gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So

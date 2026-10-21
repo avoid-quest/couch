@@ -39,6 +39,13 @@ Over a picture, these surfaces are one translucent black,
 darker so that subtitles behind a panel don't fight its text. There is no
 blur, no shadow and no hairline.
 
+The bars around a contained picture are lit by the item's artwork, as
+YouTube's ambient mode lights its player ([Light](../design.md#light)): its
+first colour glows 8rem out of the picture's edges, over a dark haze of its
+second. The light lies
+behind the video element, so it shows only in the bars, and it is painted
+once: nothing reads or redraws the picture while it plays.
+
 The four panels the tools open, Volume, Where it plays, Up next and the gear's
 menu, are one family wherever they open, from the band or the now-playing bar:
 
@@ -314,6 +321,11 @@ Audio, and media playing elsewhere, show **Now playing** as Home's hero does:
   window" for a channel that plays in mpv's window
 - the end time
 - a station's current programme or track
+
+The artwork lights the stage ([Light](../design.md#light)): a backlight in its
+first colour around its edges and a dark haze of its second, cross-fading when
+the show or item changes. The band and Up next beside it are open, with no
+ground of their own, so the light reaches the window's edges.
 
 **A station's show** is Core's programme for the playback, else the show its
 tile lists (`useStationShow`). The rule is the same on the tile, the
