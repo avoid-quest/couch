@@ -3,7 +3,7 @@ import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
-import { useLocation, useRouter } from "@tanstack/react-router";
+import { useRouter, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
@@ -59,8 +59,9 @@ async function readDetails(credentials: ApiCredentials, kind: Exclude<Kind, "que
 }
 
 export function ItemPage() {
-  const { search } = useLocation();
-  const { kind, id } = readItemSearch(search);
+  // The page's own match, not the location: while a navigation away is pending (Play opening the player) the location
+  // is already the next page's, which names no item.
+  const { kind, id } = readItemSearch(useSearch({ strict: false }));
   return <section data-page="Item" className="min-w-0 space-y-6">
     {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <ItemNotFound />}
   </section>;
