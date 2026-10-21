@@ -135,7 +135,8 @@ Shared building blocks in `src/client/components`:
 - `DetailHeader`: an item or collection page's header
   ([Browse](design/browse.md#details)).
 - `ContentFilters` (`FilterBar`, `FilterChoice`, `FilterSelect`, `FilterInput`)
-  and `BrowsePagination` ([Browse](design/browse.md#filters-and-pages)).
+  and `BrowsePagination` ([Browse](design/browse.md#filters-and-pages));
+  Search's own `SearchFilters` ([Browse](design/browse.md#search)).
 - `ContentLink` / `MediaContext`: relationship links with Back and focus
   restoration.
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
@@ -152,7 +153,9 @@ Custom compositions, and the gap each fills: `MediaTile`, `MediaRow` and
 navigation); the timeline's hover readout (Slider has none); the Remote's pad
 (no direction pad); toasts on sonner's `unstyled` option (its default surface
 is bordered); release notes with `react-markdown` (GFM, no raw HTML; no
-Markdown renderer).
+Markdown renderer); Search's kind and source lines, `SearchFilters`, on Toggle
+Group and Button (a Select or tabs offer fixed choices; Search offers only what
+its results hold, as it finds them).
 
 ### Messages
 
