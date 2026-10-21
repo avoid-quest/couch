@@ -117,8 +117,9 @@ collection pages (`/collection`: a source's home, a series, season, album,
 channel, film or episode) have their own URLs, so refresh and Back restore
 them with scroll and focus.
 
-They open on `DetailHeader`, laid out like Home's hero: contained artwork at
-its own aspect ratio (stacked below `md`), the title, one meta line, a
+They open on `DetailHeader`, laid out like Home's hero: contained artwork at a
+set height and its own width, capped at 45% of the row, so the title follows
+it whatever its shape (stacked below `md`), the title, one meta line, a
 `DurationBar` when the length is known, one row of verbs, then the synopsis.
 The verbs: Play (Play all; Resume with From start once partly watched), Queue,
 Save / Saved, Play on while another device can play it, then "…" for the rest

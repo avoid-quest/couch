@@ -38,7 +38,8 @@ keeps focus clear of it. Below `lg` a TV centres its tabs on a second row.
 Remote while the Couch has a TV, Settings; lucide icons over labels), and the
 top bar is the Couch switch then the search field. A narrow TV undoes
 `touch:` with `tv:`. **The Mac window** puts its buttons and drag region in the
-header (`[data-window-controls]`).
+header (`[data-window-controls]`). Unpaired there is no header (see First run
+and pairing).
 
 **Sharing.** While this device shares its screen or sound, the header shows
 "Sharing screen" (or sound, or microphone) with Stop sharing; it shrinks to
@@ -154,7 +155,11 @@ Checks: `tests/desktop-interactions.browser.ts` (build with
 
 The app asks "Where is your Couch?" (This computer hosts it; Another Couch
 joins one), then the computer's name, with a random default, and whether to
-share it on the network. Pairing reuses that name. Unpaired browsers see only
-the pairing page. The pairing dialog warns about Couch's self-signed
+share it on the network. Pairing reuses that name. Unpaired, every device sees
+only the pairing page, with no header: centred in the window, its mark and
+"Pair with Couch" the only brand, and in the Mac app the whole window drags by
+it. The app, or a browser that has known another Couch, gets one line under the
+description, the address then Change, which opens the Couch switch; a TV picks
+its Couch in Settings once paired. The pairing dialog warns about Couch's self-signed
 certificate and closes when a device pairs, with a toast naming it ("Phone
 paired · admin").
