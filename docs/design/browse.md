@@ -8,18 +8,31 @@ independently; failures, with Try again, sit above the results. Counts and
 "still asking" are a screen-reader status; on screen the header's Spinner and
 skeleton rows show the wait.
 
-One filter row ([Filters](#filters-and-pages)) holds two compact Selects,
-Source ("All sources", each source with its count, loading or unavailable) and
-Ends by ("Any end time", or three half-hour clock times ahead, `?until=HH:MM`;
-live media fits, collections don't), plus Clear filters while one is set.
+One filter row ([Filters](#filters-and-pages)) narrows the results: the kinds
+All · Films & series · Live · Radio · Music · Videos as an underlined
+`FilterChoice`, then a compact `FilterSelect` of sources at the row's end ("All
+sources", then each source with hits of the chosen kind, with counts). The
+kinds never change while sources answer, since every source is asked on every
+query, and carry no counts. A kind takes the source along when the source has
+hits of it, otherwise the source goes back to All. Both live in the URL
+(`/search?q=jazz&kind=music&source=Bandcamp`, kind one of
+`films|live|radio|music|videos`), and a new query from the header keeps them.
+On a phone the kinds are one line that scrolls sideways, with the Select on the
+line below. On the TV the row is a `data-nav-row`: Left and Right move, OK
+chooses and the focus stays; the page still starts on the closest match.
 
-A query word matches the start of a word in a hit. The **closest match** leads,
-laid out like Home's hero at a smaller size with its verbs (Save among them)
-and `data-page-first`; it holds still once shown. Then each kind as a shelf of
-twelve (More reveals the rest) or a list: Films and series (posters), Radio and
-Music (squares), Live now (frames), Videos and Channels and lists (rows). Hits
+A query word matches the start of a word in a hit. The **closest match** of the
+chosen kind leads, laid out like Home's hero at a smaller size with its verbs
+(Save among them) and `data-page-first`; it holds still once shown, per query
+and kind. With All, each kind follows as a shelf of twelve (More reveals the
+rest) or a list, its heading opening that kind: Films and series (posters),
+Radio and Music (squares), Live now (frames), Videos and Channels and lists
+(rows). One kind fills the page without its heading or the twelve-tile cap, as
+a wrapping grid or, for Videos, a list with Channels and lists under it. Hits
 that mention no query word wait behind "Show N results that don't mention …".
-A pasted link opens as a page or as direct media.
+A kind or source with nothing for the query says so ("No music on Bandcamp for
+“jazz”") with one All results button; nothing at all is "Nothing found",
+with Add a source. A pasted link opens as a page or as direct media.
 
 Twitch results refresh every 20 s while visible and connected.
 
@@ -96,9 +109,9 @@ the app) and never travels through Remote.
 
 `/saved`, one section per `?tab=`: For later, Channels & stations (saved
 channels, playlists, albums and series, then favourite stations), Lists and
-Played (History, newest first). They share Settings' section nav: a rail on
-wide screens (no heading, counts only when not zero), a Select on phones; the
-rail names the page. Lists keeps Save as list at its top; a list keeps its own
+Played (History, newest first). A rail on wide screens (left rule on the
+current entry, no heading, counts only when not zero) and a Select on phones
+choose the section; the rail names the page. Lists keeps Save as list at its top; a list keeps its own
 title and verbs. An empty tab says what goes there and offers Discover.
 Removing says "Removed … from Saved." with Undo.
 
@@ -137,8 +150,9 @@ Radio, Live TV, source pages and Search share one row (`ContentFilters`):
 Nothing is labelled on screen (each control has an aria-label) and no count
 sits between the filters and the results.
 
-- `FilterChoice`: a few choices (Radio's sources) as an underlined Toggle
-  Group; Left and Right move along it and past its ends.
+- `FilterChoice`: a few choices (Radio's sources, Search's kinds) as an
+  underlined Toggle Group; Left and Right move along it and past its ends. On a
+  phone it stays one line that scrolls sideways.
 - `FilterSelect`: many choices (Live TV's groups, Search's sources) as a
   compact Select whose value names it.
 - `FilterInput`: a search glyph, "Filter", and Clear only while it holds text;
