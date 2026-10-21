@@ -113,10 +113,16 @@ player's band made small: it shares the band's grid, controls and sizes, so
 nothing changes side as it grows into the band
 ([Player](player.md#the-band-and-the-now-playing-bar)).
 
-- **At the left, what plays.** Artwork and title open the player. Under the
-  title, one line: "on {device}" in the ink when it plays elsewhere, then its
+- **At the left, what plays,** as compact as a mini-player's (YouTube Music,
+  Spotify and Apple Music run about 56–64px): a 2.5rem artwork and two tight
+  lines, so the bar is as tall as its 44px controls plus its padding: 61px on
+  phones, 64px at 1440 wide. The title is the control across its whole line,
+  with the artwork a pointer target for it. Under the title, one line that
+  doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its
   collection or station link, then a status only when it isn't plain playing
-  or paused. The player says where it plays the same way (`PlaysOn`).
+  or paused. Those links sit outside the title's button and drop their row
+  height here, keeping a 24px hit area that doesn't push the line apart. The
+  player says where it plays the same way (`PlaysOn`).
 - **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
 - **At the right, Volume, Where it plays, Up next and the Playback gear,**
   the band's own tools at the band's x, then **Open player** (ChevronUp, a
