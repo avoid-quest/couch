@@ -4,7 +4,8 @@ import { playbackStatus } from "@/playback-status";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
-import { isLink, mergeSearchHits, searchLocation, searchRelevance, type SearchKind, type SearchRouteState } from "../../search";
+import { canReturn, isLink, mergeSearchHits, searchLocation, searchRelevance, type SearchKind, type SearchRouteState } from "../../search";
+import { kindLabels, scopeLabels } from "../../search-palette";
 import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -60,9 +61,7 @@ const groups: Group[] = [
   { id: "channels", title: "Channels and lists", shape: "rows", noun: ["result", "results"] },
 ];
 // The kinds above the results, in the shelves' order; only those the query found are offered.
-const kinds: { value: SearchKind; label: string }[] = [
-  { value: "films", label: "Films & series" }, { value: "radio", label: "Radio" }, { value: "live", label: "Live" }, { value: "music", label: "Music" }, { value: "videos", label: "Videos" },
-];
+const kinds = groups.flatMap(group => group.id === "channels" ? [] : [{ value: group.id as SearchKind, label: kindLabels[group.id as SearchKind] }]);
 const kindOf = (group: GroupId): SearchKind => group === "channels" ? "videos" : group;
 const count = (group: Group, n: number) => `${n} ${group.noun[n === 1 ? 0 : 1]}`;
 const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
@@ -101,17 +100,18 @@ export function SearchPanel(props: Props) {
   // strong when its title holds every word.
   const { close, strong } = searchRelevance(query);
   const merged = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), query), [summaries, query]);
-  // The filters come from what was found, so no choice can come up empty: a kind is offered once it has a hit, and
-  // inside a kind, a source once it has a hit of it. A kind or source the route asks for counts while it may still
-  // answer; once it can't, the results show everything.
+  // The kind and source are the header field's scope, chosen before or after the results. The filters come from what
+  // was found, so no choice made here can come up empty: a kind is offered once it has a hit, and inside a kind, a
+  // source once it has a hit of it. A scope chosen in the field shows too, and says so when it holds nothing.
   const found = merged.filter(close);
   const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
-  const foundKinds = kinds.filter(option => found.some(hit => kindOfHit(hit) === option.value));
-  const kind = searchState.kind && (foundKinds.some(option => option.value === searchState.kind) || sourceOrder.some(pending)) ? searchState.kind : undefined;
+  const kind = searchState.kind;
+  const foundKinds = kinds.flatMap(option => { const n = found.filter(hit => kindOfHit(hit) === option.value).length; return n || option.value === kind && found.length ? [{ ...option, count: n }] : []; });
   const inKind = (hit: SearchHit, of = kind) => !of || kindOfHit(hit) === of;
-  const foundSources = sourceOrder.map(source => ({ value: source, count: found.filter(hit => hit.source === source && inKind(hit)).length })).filter(source => source.count);
-  const filter = foundSources.some(source => source.value === searchState.source) || searchState.source !== "All" && pending(searchState.source) ? searchState.source : "All";
-  const inScope = (source: string) => filter === "All" || filter === source;
+  const filter = searchState.source;
+  const foundSources = sourceOrder.map(source => ({ value: source, count: found.filter(hit => hit.source === source && inKind(hit)).length })).filter(source => source.count || source.value === filter && found.length);
+  // Only the sources that can return the kind are waited on, or report a problem.
+  const inScope = (source: string) => (filter === "All" || filter === source) && canReturn(source, kind);
   const asking = sourceOrder.filter(source => inScope(source) && pending(source));
   const scoped = merged.filter(hit => inScope(hit.source) && inKind(hit));
   const relevant = scoped.filter(close);
@@ -144,7 +144,8 @@ export function SearchPanel(props: Props) {
   }, [kind, filter]);
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
   // A kind keeps the chosen source when the source has hits of it; otherwise every source.
-  const withKind = (next?: SearchKind): SearchRouteState => ({ ...searchState, kind: next, source: found.some(hit => hit.source === filter && inKind(hit, next)) ? filter : "All" });
+  const withKind = (next?: SearchKind): SearchRouteState => ({ ...searchState, kind: next, source: canReturn(filter, next) && found.some(hit => hit.source === filter && inKind(hit, next)) ? filter : "All" });
+  const everything = () => props.onSearchChange({ query, source: "All" });
   const [looseOpen, setLooseOpen] = useState(false);
   const one = kind && groups.find(group => group.id === kind)!;
   const heading = (group: Group) => kind ? undefined : searchLocation(withKind(kindOf(group.id)));
@@ -153,7 +154,7 @@ export function SearchPanel(props: Props) {
       {/* The lines hold their height while sources answer, so nothing below moves as options arrive. A chosen kind
           always keeps its source line, empty while it has one source. */}
       {(foundKinds.length > 0 || asking.length > 0) && <div role="group" aria-label="Search filters" className="flex flex-col gap-1">
-        <div className="min-h-10 touch:min-h-11">{foundKinds.length > 0 && <SearchKinds query={resultsKey} value={kind ?? "all"} onChange={next => props.onSearchChange(withKind(next === "all" ? undefined : next))} options={[{ value: "all", label: "All" }, ...foundKinds]} />}</div>
+        <div className="min-h-8 touch:min-h-11">{foundKinds.length > 0 && <SearchKinds query={resultsKey} value={kind ?? "all"} onChange={next => props.onSearchChange(withKind(next === "all" ? undefined : next))} options={[{ value: "all", label: "All", count: found.length }, ...foundKinds]} />}</div>
         {(kind || filter !== "All") && <div className="min-h-8 touch:min-h-11">{(foundSources.length > 1 || filter !== "All") && <SearchSources query={`${resultsKey}:${kind}`} value={filter} onChange={source => props.onSearchChange({ ...searchState, kind, source })} options={foundSources} />}</div>}
       </div>}
       <p role="status" className="sr-only">
@@ -177,6 +178,8 @@ export function SearchPanel(props: Props) {
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
+      {/* A scope from the field that holds nothing says so, with the way back to everything the query found. */}
+      {props.connected && !asking.length && !scoped.length && found.length > 0 && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing in {scopeLabels({ kind, source: filter }).join(" on ")} for “{query}”</h2></EmptyTitle></EmptyHeader><EmptyContent><Button data-page-first variant="outline" onClick={everything}>Show all {found.length} {found.length === 1 ? "result" : "results"}</Button></EmptyContent></Empty>}
       {props.connected && !asking.length && !found.length && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
       {loose.length > 0 && <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">

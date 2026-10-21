@@ -164,10 +164,10 @@ export async function runTvFocusRegression() {
       const all = control('[role="radiogroup"][aria-label="Kind"] [aria-checked="true"]');
       // Up passes the top result's own links on its way.
       for (let step = 0; step < 6 && document.activeElement !== all && !document.activeElement?.closest('.app-header'); step++) await remote('up');
-      assert(document.activeElement === all && all.textContent === "All", "Up from the top result missed the kinds");
+      assert(document.activeElement === all && all.firstChild?.textContent === "All", "Up from the top result missed the kinds");
       await remote('right'); await remote('select');
       const films = document.activeElement as HTMLElement;
-      assert(films.textContent === "Films & series" && films.getAttribute("aria-checked") === "true" && audit.router.state.location.searchStr.includes("kind=films"), "OK did not choose the focused kind, or lost the focus");
+      assert(films.firstChild?.textContent === "Films & series" && films.getAttribute("aria-checked") === "true" && audit.router.state.location.searchStr.includes("kind=films"), "OK did not choose the focused kind, or lost the focus");
       await remote('down');
       const source = document.activeElement as HTMLElement;
       assert(source.closest('[aria-label="Source"]'), "Down from a kind missed its sources");

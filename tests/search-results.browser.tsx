@@ -31,7 +31,7 @@ export async function runSearchResultsRegression() {
   let state: SearchRouteState = { query: "x", source: "All" };
   const render = () => root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><SearchPanel origin={location.origin} token="fixture" connected canPlay active searchState={state} onSearchChange={next => { state = next; render(); }} onCommand={gate.run} onOpenCollection={item => { opened = item.id; }} /></QueryClientProvider></SessionGateContext>);
   try {
-    const kinds = () => [...host.querySelectorAll('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].map(radio => radio.textContent).join();
+    const kinds = () => [...host.querySelectorAll('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].map(radio => radio.firstChild?.textContent).join();
     render();
     await wait(900);
     assert(kinds() === "All,Live", `Kinds offered before their sources answered: ${kinds()}`);
@@ -75,16 +75,21 @@ export async function runSearchResultsRegression() {
     await wait();
     const twitch = host.querySelector<HTMLButtonElement>('[aria-label="Source"] button[aria-pressed="true"]');
     assert(twitch?.textContent?.startsWith("Twitch"), "The chosen source was not shown pressed");
-    [...host.querySelectorAll<HTMLElement>('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].find(radio => radio.textContent === "Films & series")!.click();
+    [...host.querySelectorAll<HTMLElement>('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].find(radio => radio.firstChild?.textContent === "Films & series")!.click();
     await wait();
     assert(state.kind === "films" && state.source === "All", "A source without films stayed chosen");
+    // A scope chosen in the field before the results says when it holds nothing, and leads back to everything.
     state = { query: "x", source: "Bandcamp", kind: "music" }; render();
     await wait();
-    assert(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent === "All" && host.querySelectorAll("[data-media-tile]").length && !host.textContent?.includes("No music"), "A kind and source the query has no hits for emptied the page");
+    const everything = host.querySelector<HTMLButtonElement>("[data-page-first]");
+    assert(host.querySelector('[role="radio"][aria-checked="true"]')?.firstChild?.textContent === "Music" && host.textContent?.includes("Nothing in Music on Bandcamp for “x”") && !host.querySelector("[data-media-tile]") && everything?.textContent?.startsWith("Show all"), "A scope without hits did not say so, or offered no way back");
+    everything!.click();
+    await wait();
+    assert(state.source === "All" && !state.kind && host.querySelectorAll("[data-media-tile]").length, "Show all did not clear the scope");
     state = { query: "x stream", source: "All" }; render();
     await wait(900);
     assert(host.querySelector('[data-search-top]')?.getAttribute("data-hit-id") === "streamingcommunity:film", "Previous query's snapshot pinned the wrong hero");
-    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "one kind fills the page", "kinds arrive in order without moving results", "kind change resets an empty source", "impossible route filters show everything", "query change retires the old hero hold"] };
+    return { passed: true, checks: ["hero href and modified clicks", "controlled-device label", "late responses preserve hero and focus", "shelf expansion", "live tile Open", "one kind fills the page", "kinds arrive in order without moving results", "kind change resets an empty source", "an empty scope says so and leads back", "query change retires the old hero hold"] };
   } finally {
     releaseFilms!(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }
@@ -126,6 +131,12 @@ export async function runSearchResultStatesRegression() {
     assert(opened === "space", "Successful result could not open while another source was pending");
     release();
     await wait(900);
+    // A kind only reports the sources that could return it.
+    state = { query: "space", source: "All", kind: "music" }; render();
+    await wait();
+    assert(!host.querySelector('[role="alert"]'), "Music reported a source that never returns music");
+    state = { query: "space", source: "All" }; render();
+    await wait();
     const alert = host.querySelector('[role="alert"]')!;
     assert(alert?.textContent?.includes("Couldn't load Twitch."), "Failed source was not named");
     assert(alert.compareDocumentPosition(host.querySelector("[data-search-top]")!) & Node.DOCUMENT_POSITION_FOLLOWING, "Partial failure was buried after the results");
@@ -136,13 +147,13 @@ export async function runSearchResultStatesRegression() {
     assert(host.querySelector('[data-hit-id="youtube:space"]') && host.querySelector('[data-hit-id="twitch:stream"]'), "Retry replaced successful results");
     state = { query: "space", source: "Bandcamp", kind: "music" }; render();
     await wait();
-    const offered = [...host.querySelectorAll('[role="radio"]')].map(radio => radio.textContent).join();
-    assert(offered === "All,Live,Videos" && !host.querySelector('[aria-label="Source"]'), `Search offered a kind or a source without hits: ${offered}`);
-    assert(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent === "All" && host.querySelector("[data-search-top]") && !host.textContent?.includes("No music"), "A kind and source without hits emptied the results");
+    const offered = [...host.querySelectorAll('[role="radio"]')].map(radio => radio.firstChild?.textContent).join();
+    assert(offered === "All,Live,Music,Videos", `Search offered a kind without hits, or hid the chosen one: ${offered}`);
+    assert(host.textContent?.includes("Nothing in Music on Bandcamp for “space”") && !host.querySelector("[data-search-top]") && !host.querySelector('[role="alert"]'), "A scope without hits showed other results, or another kind's failure");
     state = { query: "no matches", source: "All" }; render();
     await wait(900);
     assert(host.textContent?.includes("Nothing found for “no matches”") && !host.querySelector("[data-hit-id]"), "Empty search retained stale results");
-    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "retry retains successes", "no empty kind or source", "empty search retires results"] };
+    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "a kind reports only its own sources", "retry retains successes", "no empty kind or source", "empty search retires results"] };
   } finally {
     release(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }

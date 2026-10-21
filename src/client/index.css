@@ -113,7 +113,7 @@ body { min-width: 0; }
 :is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { outline: 2px solid var(--foreground); outline-offset: 2px; }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
 [role="slider"][data-adjusting] { scale: 1.75; }
-:is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
+:is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground, [cmdk-item][data-selected="true"] .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
 /* Artwork stays contained; focus outlines it and inverts only the tile caption. */
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { background: none; color: inherit; }
 /* The outline grows from nothing rather than fading from transparent, which forced colours would draw on every tile. */
@@ -122,7 +122,8 @@ body { min-width: 0; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-caption] { background: var(--foreground); color: var(--background); }
 /* Inversion (focus, a menu's highlight) arrives at once and fades only as it leaves: easing it in would pass through a
    grey nobody can read, which a held arrow would show at every step, and a remote would feel slow. */
-:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role^="menuitem"]):is(:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus), [data-highlighted]),
+:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role^="menuitem"]):is(:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus), [data-highlighted], [cmdk-item][data-selected="true"]),
+[cmdk-item][data-selected="true"] .text-muted-foreground,
 :is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground,
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) :is([data-tile-art], [data-tile-caption], [data-tile-caption] *), [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) ~ * { transition-duration: 0s; }
 html { view-transition-name: none; }

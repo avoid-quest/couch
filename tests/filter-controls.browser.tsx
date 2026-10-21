@@ -13,7 +13,7 @@ const type = (label: string, value: string) => {
 };
 const button = (label: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
 async function pick(label: string, text: string) {
-  const choice = [...document.querySelectorAll<HTMLElement>(`[role="radiogroup"][aria-label="${label}"] [role="radio"]`)].find(choice => choice.textContent === text);
+  const choice = [...document.querySelectorAll<HTMLElement>(`[role="radiogroup"][aria-label="${label}"] [role="radio"]`)].find(choice => choice.textContent === text || choice.firstChild?.textContent === text);
   assert(choice, `Missing ${label} choice: ${text}`);
   choice!.focus(); choice!.click();
   await wait();
@@ -65,7 +65,7 @@ export async function runFilterControlsRegression() {
     assert(document.body.textContent?.includes("Nothing found for “missing”") && !document.body.textContent?.includes("No music"), "An empty search named a kind or a source instead of saying nothing was found");
     await audit.go('/search?q=concert', { mode: "loaded", fresh: true });
     const searchReads = audit.calls.length;
-    const kinds = () => [...document.querySelectorAll('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].map(radio => radio.textContent).join();
+    const kinds = () => [...document.querySelectorAll('[role="radiogroup"][aria-label="Kind"] [role="radio"]')].map(radio => radio.firstChild?.textContent).join();
     const sources = () => [...document.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Source"] button')];
     assert(kinds() === "All,Films & series,Live,Music,Videos", `Search offered kinds it did not find, or out of order: ${kinds()}`);
     assert(!sources().length, "All offered sources before a kind was chosen");
@@ -83,7 +83,7 @@ export async function runFilterControlsRegression() {
     const bandcamp = sources().find(source => source.getAttribute("aria-pressed") === "true")!;
     bandcamp.focus(); bandcamp.click(); await wait();
     assert(searched().source === "All" && !sources().length, "Pressing the chosen source again did not show every source");
-    assert(document.activeElement?.getAttribute("aria-checked") === "true" && document.activeElement.textContent === "All", "Focus was lost with the source line");
+    assert(document.activeElement?.getAttribute("aria-checked") === "true" && document.activeElement.firstChild?.textContent === "All", "Focus was lost with the source line");
     assert(audit.calls.length === searchReads, "Filtering unnecessarily refetched cached results");
 
     await audit.go('/discover/radio');

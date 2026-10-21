@@ -16,6 +16,7 @@ import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { HeaderSearch } from "./HeaderSearch";
 import { TvAppearancePreview } from "./TvAppearancePreview";
 import { readSearchState, searchLocation, type SearchRouteState } from "@/search";
+import type { SearchScope } from "@/search-palette";
 import { createId } from "@/session/session";
 import { discoverPaths, pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
@@ -126,8 +127,8 @@ function useShellValue() {
     else focus();
   };
   // A source without a home scopes the header's field to itself, so there is one search field, not two.
-  const [searchScope, setSearchScope] = useState<string | null>(null);
-  const scopeSearch = (source: string) => { setSearchScope(source); focusSearch(); };
+  const [searchScope, setSearchScope] = useState<SearchScope | null>(null);
+  const scopeSearch = (source: string) => { setSearchScope({ source }); focusSearch(); };
   const leavePlayer = () => {
     detailNavigation.back(playerTarget ? "/remote" : lastBrowsePath.current);
   };
@@ -318,8 +319,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. */}
-          <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_minmax(14rem,22rem)] items-center gap-x-8 border-b bg-background px-(--gutter) py-3 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="flex min-w-0 items-center">
+          <header ref={header} hidden={onPlayer} className="app-header group/header drag-region window-controls-inset sticky top-0 z-30 grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_minmax(14rem,22rem)] items-center gap-x-8 border-b bg-background px-(--gutter) py-3 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
+            {/* On a phone the open search takes the whole row. */}
+            <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
               {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
@@ -331,7 +333,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
               <LiveSharingStatus header />
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64 tv:max-lg:min-w-44" />}
+              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 has-[[data-search-token]]:max-w-88 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64 tv:has-[[data-search-token]]:max-w-88 tv:max-lg:min-w-44" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-3 hidden text-base text-muted-foreground tv:inline" />

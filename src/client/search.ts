@@ -12,6 +12,16 @@ export const searchSources = ["All", "Shared sources", "YouTube", "Bandcamp", "S
 export const searchKinds = ["films", "live", "radio", "music", "videos"] as const;
 export type SearchKind = typeof searchKinds[number];
 export type SearchRouteState = { query: string; source: string; kind?: SearchKind };
+/**
+ * The kinds each source can return, so a kind waits on, and reports problems from, only the sources that could answer
+ * it. Catalogues' series and RaiPlay's programmes are films and series; channels and lists are videos.
+ */
+export const sourceKinds: Record<string, readonly SearchKind[]> = {
+  "Shared sources": ["live"], YouTube: ["videos", "live"], Bandcamp: ["music"], SoundCloud: ["music"], Twitch: ["live", "videos"],
+  RaiPlay: ["films", "videos", "live"], StreamingCommunity: ["films"], "123MoviesFree": ["films", "videos"], AnimeSaturn: ["films"], AnimeUnity: ["films"],
+  "avoid radio": ["radio"], "Radio playlists": ["radio"], "Radio directory": ["radio"],
+};
+export const canReturn = (source: string, kind?: SearchKind) => !kind || source === "All" || (sourceKinds[source] ?? searchKinds).includes(kind);
 export function readSearchState(search: string | Record<string, string | string[] | undefined>): SearchRouteState {
   const params = typeof search === "string" ? new URLSearchParams(search) : new URLSearchParams(Object.entries(search).flatMap(([key, value]) => value === undefined ? [] : [[key, Array.isArray(value) ? value[0] ?? "" : value]] as [string, string][]));
   const kind = searchKinds.find(value => value === params.get("kind"));
