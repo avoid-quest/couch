@@ -23,8 +23,8 @@ Discover's pages), `/where-it-plays` → `/`, and old Settings paths through
 `settingsAliases`. Core serves every path in `src/shared/page-paths.ts`.
 
 Tab pages (Home, Discover, Saved, Settings, Remote) have no visible title: the
-current tab names them, and an `sr-only` h1 remains. Sub-pages carry one back
-link above their h1 ([Browse](browse.md#back-links)).
+current tab names them, and an `sr-only` h1 remains. Sub-pages carry their
+trail above their h1 ([Browse](browse.md#breadcrumbs)).
 
 ## Header
 
