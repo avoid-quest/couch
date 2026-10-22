@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { atLuminance, contrast, haze, lightFrom, luminance, peak, pickLight, type Rgb } from "../src/client/artwork-light";
+import { atLuminance, contrast, haze, lightFrom, luminance, peak, pickLight, readLight, type Rgb } from "../src/client/artwork-light";
 
 // A 16×16 read as getImageData gives it: RGBA, one pixel after another.
 const pixels = (...parts: [Rgb, number][]) => new Uint8ClampedArray(parts.flatMap(([[r, g, b], count]) => Array.from({ length: count }, () => [r, g, b, 255]).flat()));
@@ -56,4 +56,20 @@ test("a photo with some colour among its greys lights in that colour; one with a
   expect(hue(garden[0])).toBe("green");
   const [grey] = pickLight(pixels([[200, 200, 205], 240], [[60, 90, 50], 10], [[0, 0, 0], 6]))!;
   expect(Math.max(...grey) - Math.min(...grey)).toBeLessThan(10);
+});
+
+test("a read that failed isn't kept as no light: the next showing reads the picture again", async () => {
+  const src = "https://example.test/cover.jpg";
+  const globals = globalThis as unknown as Record<string, unknown>;
+  const saved = { fetch: globals.fetch, createImageBitmap: globals.createImageBitmap, document: globals.document };
+  let reachable = false;
+  globals.fetch = async () => { if (!reachable) throw new TypeError("Failed to fetch"); return new Response("picture"); };
+  globals.createImageBitmap = async () => ({ close() {} });
+  const blue = Array.from({ length: 16 * 16 }, () => [30, 60, 220, 255]).flat();
+  globals.document = { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: blue }) }) }) };
+  try {
+    expect(await readLight(src)).toBeNull();
+    reachable = true;
+    expect((await readLight(src))?.key).toBe(src);
+  } finally { Object.assign(globals, saved); }
 });

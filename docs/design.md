@@ -47,7 +47,8 @@ bar for thumb reach.
 once per address (`artwork-light.ts`). Core fetches the picture for the read
 (`/api/artwork`, raster pictures only), since most artwork hosts don't let a
 page read theirs; artwork it can't read gives no light, and the picture on
-screen is never touched. The first colour is a **backlight** that hugs the
+screen is never touched. A picture's answer is kept per address; a read that
+failed (Core out of reach) is tried again the next time the artwork shows. The first colour is a **backlight** that hugs the
 picture's edges and is gone 3rem out; the second a **haze**, three pictures
 wide. Both lie under the page's content and never move or size anything.
 

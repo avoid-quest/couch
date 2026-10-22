@@ -77,7 +77,11 @@ const pending = new Map<string, Promise<Light | null>>();
 const picture = async (src: string, credentials: ApiCredentials | null | undefined) =>
   (src.startsWith("blob:") || !credentials ? await fetch(src, { referrerPolicy: "no-referrer" }) : await apiFetch(credentials, `/api/artwork?${new URLSearchParams({ url: src })}`)).blob();
 
-/** One read per address, apart from the shown image, so the picture on screen is never changed or broken by it. */
+/**
+ * One read per address, apart from the shown image, so the picture on screen is never changed or broken by it. A
+ * picture's answer is kept, light or none; a read that failed (Core unreachable, a host that timed out) isn't, so the
+ * next time the artwork shows it is read again.
+ */
 export function readLight(src: string, credentials?: ApiCredentials | null): Promise<Light | null> {
   if (cache.has(src)) return Promise.resolve(cache.get(src)!);
   let read = pending.get(src);
@@ -93,7 +97,7 @@ export function readLight(src: string, credentials?: ApiCredentials | null): Pro
         const picked = pickLight(context.getImageData(0, 0, size, size).data);
         return picked && lightFrom(src, picked);
       } finally { bitmap.close(); }
-    })().catch(() => null).then(light => { cache.set(src, light); pending.delete(src); return light; });
+    })().then(light => { cache.set(src, light); return light; }, () => null).finally(() => pending.delete(src));
     pending.set(src, read);
   }
   return read;
