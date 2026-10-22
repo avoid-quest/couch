@@ -111,7 +111,7 @@ export type Action =
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
   // With playNow, deviceId plays on that Device, which this window then controls.
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
-  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection; deviceId?: string }
+  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; fromStart?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection; deviceId?: string }
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next"; deviceId?: string }
   | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next"; deviceId?: string }
   | { type: "remove"; entryId: string }

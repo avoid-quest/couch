@@ -147,11 +147,11 @@ export function parseCommand(message: string): ClientMessage {
   }
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, ...guard, action: { type: "navigate", key: value.action.key, ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }) } };
   if (value.action.type === "enqueueProvider") {
-    const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection, deviceId } = value.action;
+    const { provider, url, shape, title, thumbnail, playNow, fromStart, quality, placement, collection, deviceId } = value.action;
     return { type: "command", requestId: value.requestId, ...guard, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
       ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
       ...(collection === undefined ? {} : { collection: { title: collection.title, url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }), ...(collection.parent ? { parent: { title: collection.parent.title, url: collection.parent.url } } : {}) } }),
-      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }), ...(deviceId === undefined ? {} : { deviceId }) } };
+      ...(playNow === undefined ? {} : { playNow }), ...(fromStart === undefined ? {} : { fromStart }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }), ...(deviceId === undefined ? {} : { deviceId }) } };
   }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
