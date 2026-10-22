@@ -3,6 +3,11 @@
  * squares for music and stations, circles for people and channels. Tiles and rows draw it, and the Stage (Home's hero, Details); a shelf or a
  * list takes its majority shape, so its tiles line up, and an item of another shape is contained in that frame.
  */
+import type { ForLaterItem } from "../shared/for-later";
+import type { ProviderItem } from "../shared/providers";
+import type { HistoryItem } from "../shared/viewing";
+import { savedSourceLabel } from "./saved-source";
+
 export type ArtShape = "poster" | "square" | "video" | "round";
 export type ArtKind = "media" | "episode" | "collection" | "channel" | "station";
 
@@ -21,6 +26,12 @@ export function artShape(source: string | undefined, kind: ArtKind = "media"): A
   if (source === "Twitch" && kind === "collection") return "poster";
   return catalogues.has(source ?? "") && kind !== "episode" ? "poster" : "video";
 }
+
+/** A provider's item by its kind; `source` is the provider's name. */
+export const providerItemShape = (source: string, item: Pick<ProviderItem, "kind" | "collection">) =>
+  artShape(source, item.kind === "channel" ? "channel" : item.kind === "collection" ? "collection" : item.collection ? "episode" : "media");
+export const historyShape = (item: HistoryItem) => artShape(item.sourceLabel, item.collection ? "episode" : "media");
+export const savedShape = (item: ForLaterItem) => artShape(savedSourceLabel(item), item.collection ? "episode" : "media");
 
 /** The shape most of a shelf's or a list's items have; a tie keeps the first item's. */
 export function majorityShape(shapes: readonly ArtShape[], fallback: ArtShape = "video"): ArtShape {

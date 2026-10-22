@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { historyShape, majorityShape } from "@/art-shape";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
 import { apiSend } from "@/api/client";
@@ -33,6 +34,7 @@ export function PlayedSection({ origin, token, connected, onFind }: Credentials 
   const { play } = usePlayOn();
   const items = connected ? history.data?.items ?? [] : [];
   const loading = connected && history.isPending;
+  const shape = majorityShape(items.map(historyShape));
   const queue = (item: HistoryItem) => void session?.queue(item.title, () => apiSend({ origin, token }, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id })).catch(reason => failed(`Couldn't queue ${item.title}.`, reason));
   return <section aria-label="Played">
     <SavedStatus connected={connected} loading={loading} />
@@ -44,7 +46,7 @@ export function PlayedSection({ origin, token, connected, onFind }: Credentials 
         const playable = connected && shell.available && !!(item.playable || item.queueEntryId);
         const start = (on?: string) => shell.playHistory(item, { fromStart: item.position === 0, on });
         const caption = historyCaption(item);
-        return <MediaRow key={item.mediaId} data-history-details={item.mediaId} source={item.url} art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />} artFit="contain"
+        return <MediaRow key={item.mediaId} data-history-details={item.mediaId} source={item.url} art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />} artFit="contain" shape={shape} own={historyShape(item)}
           title={caption.title} meta={metaLine(caption.meta, progress(item))} primary={{ label: "Details", href, onClick: () => details.open(href) }}
           menu={[
             { label: item.position > 0 && !item.watched ? "Resume" : "Play", disabled: !playable, run: () => void play(start) },

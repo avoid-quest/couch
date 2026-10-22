@@ -7,6 +7,7 @@ import { metaLine, savedCaption } from "@/media-caption";
 import { formatDuration } from "@/time-format";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { majorityShape, savedShape } from "@/art-shape";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -61,6 +62,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   const section = useRef<HTMLElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const shape = majorityShape(items.map(savedShape));
   const removing = useRemovalFocus(items.map(item => item.id), !pending, list, () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current);
   const act = (item: ForLaterItem, mode: Mode, index: number, deviceId?: string) => {
     if (!connected || pending) return;
@@ -86,7 +88,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
         // One meta line and a "…", as Saved's other tabs; Details holds the description and the same verbs.
         return <MediaRow key={item.id} data-saved-details={item.id} source={item.url}
           art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />}
-          artFit="contain"
+          artFit="contain" shape={shape} own={savedShape(item)}
           title={caption.title}
           meta={metaLine(caption.meta, !item.live && item.duration != null && formatDuration(item.duration))}
           primary={{ label: "Details", onClick: inspect }}

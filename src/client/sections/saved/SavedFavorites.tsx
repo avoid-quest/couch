@@ -8,6 +8,7 @@ import { stationSources, type RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { majorityShape, providerItemShape, type ArtShape } from "@/art-shape";
 import { usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -28,6 +29,7 @@ export type SavedFavoriteActions = {
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
+const shapeOf = (favorite: Favorite): ArtShape => favorite.kind === "radio" ? "square" : providerItemShape(providerNames[favorite.item.provider], favorite.item);
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
 const meta = (favorite: Favorite) => favorite.kind === "provider"
@@ -80,6 +82,8 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     ...applyIdOrder(online.data?.favorites ?? [], order("provider"), item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
     ...applyIdOrder(radio.data?.favorites ?? [], order("radio"), item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
   ] : [];
+  // The list takes its majority shape (art-shape.ts); an item of another shape is contained in it.
+  const shape = majorityShape(favorites.map(shapeOf));
   const loadError = connected ? [online.error, radio.error].filter(error => error !== null).map(error => error.message).join(" ") : "";
   const failure = remove.error ? remove.error.message || "Couldn't remove this." : reorder.error ? reorder.error.message || "Couldn't save the order." : "";
   // Play and Queue run on the session, which reports its own errors.
@@ -107,7 +111,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     // A station's page holds no Remove or ordering, so the row keeps its "…", which opens its Details too.
     return <MediaRow related={favorite.kind === "provider" ? { creator: favorite.item.creator, collection: favorite.item.collection } : undefined} key={key(favorite)}
       source={favorite.kind === "provider" ? favorite.item.url : stationSources(favorite.item)}
-      artFit="contain" own={favorite.kind === "provider" && favorite.item.kind === "channel" ? "round" : undefined}
+      artFit="contain" shape={shape} own={shapeOf(favorite)}
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}

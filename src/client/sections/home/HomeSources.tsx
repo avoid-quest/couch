@@ -5,7 +5,7 @@ import { iptvGuideQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { MediaTile } from "@/components/MediaTile";
-import { artShape, majorityShape } from "@/art-shape";
+import { majorityShape, providerItemShape } from "@/art-shape";
 import { metaLine } from "@/media-caption";
 import { usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
@@ -57,7 +57,7 @@ export function SavedSourceShelf({ provider, items: saved }: { provider: Provide
   // A section of a source's front page (RaiPlay's "In Diretta") is that page's, which the heading opens; Save no longer offers it.
   const items = saved.filter(item => !pageSection(item)).sort((a, b) => Number(!!b.live) - Number(!!a.live));
   if (!items.length) return null;
-  const shape = (item: ProviderItem) => artShape(name, item.kind === "channel" ? "channel" : item.kind === "collection" ? "collection" : item.collection ? "episode" : "media");
+  const shape = (item: ProviderItem) => providerItemShape(name, item);
   const frame = majorityShape(items.map(shape));
   return <Shelf title={name} href={collectionLocation({ provider, url: "" })}>
     {items.map((item, index) => <li key={item.id} className="shrink-0">
