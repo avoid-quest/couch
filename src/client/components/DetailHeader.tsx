@@ -31,9 +31,15 @@ export function Description({ text, className }: { text?: string | null; classNa
   const [long, setLong] = useState(false);
   const body = useRef<HTMLParagraphElement>(null);
   const id = useId();
+  // Measured again as its width or font changes (a resize, a rotation, a late font), so More comes and goes with it.
   useLayoutEffect(() => {
     const node = body.current;
-    if (node && !open) setLong(node.scrollHeight > node.clientHeight + 1);
+    if (!node || open) return;
+    const measure = () => setLong(node.scrollHeight > node.clientHeight + 1);
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    measure();
+    return () => observer.disconnect();
   }, [shown, open]);
   if (!shown) return null;
   return <div className={cn("grid max-w-prose justify-items-start", className)}>
