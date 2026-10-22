@@ -213,8 +213,9 @@ page has already shown appears at once on every tab; only a cold load fades.
 
 **`MediaRow` / `MediaList`**: thumbnail, title, meta and length bar as one
 target whose press does the main verb (Play for stations, channels and live
-hits, else Open or Details), with the row's menu behind an always-visible "…"
-at the end of the title's line. A pointer over a row tints all of it, artwork
+hits, else Open or Details), with the row's menu behind a "…" at the end of the
+title's line, which a pointer sees while over the row or focus is in it (touch
+and the TV always see it). A pointer over a row tints all of it, artwork
 and "…" too. The thumbnail takes the list's majority shape at about one height
 (a compact square is 4rem, a compact frame 7rem wide), and a word every row
 shares (RaiPlay's "Programme") is left out, in a row or a shelf. Relationship

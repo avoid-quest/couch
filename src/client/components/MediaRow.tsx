@@ -91,7 +91,7 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
         </Button> : <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 px-2 py-1.5">{body}</div>}
         {context && <div className="min-w-0 px-2 empty:hidden">{context}</div>}
         </div>
-        <ItemMenu menu={options} title={title} hidden={menuOnPage} className="mt-1.5" />
+        <ItemMenu data-row-menu menu={options} title={title} hidden={menuOnPage} className="mt-1.5" />
       </div>
       {actions && <ItemActions className={compact ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center" : cn("flex-wrap gap-0.5 motion-safe:transition-opacity @3xl:row-start-1 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 @3xl:col-start-auto")}>{actions}</ItemActions>}
     </li>

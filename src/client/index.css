@@ -150,9 +150,11 @@ body { min-width: 0; }
 [data-shelf-row] > li > [data-tile] { grid-row: span 3; display: grid; grid-template-rows: subgrid; row-gap: 0; }
 [data-shelf-row] [data-media-tile] { grid-row: span 2; display: grid; grid-template-rows: subgrid; row-gap: .75rem; }
 [data-shelf-row] [data-tile-caption] { min-height: 0; }
+/* A row's "…" waits the same way, so a long list isn't a column of them. */
+[data-row-menu] { @apply motion-safe:transition-opacity; }
 @media (hover: hover) and (pointer: fine) {
-  [data-tile-menu]:where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
-  [data-tile]:is(:hover, :focus-within) [data-tile-menu] { opacity: 1; }
+  :is([data-tile-menu], [data-row-menu]):where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
+  [data-tile]:is(:hover, :focus-within) [data-tile-menu], [data-nav-row]:is(:hover, :focus-within) > * [data-row-menu] { opacity: 1; }
 }
 /* Inversion (focus, a menu's highlight) arrives at once and fades only as it leaves: easing it in would pass through a
    grey nobody can read, which a held arrow would show at every step, and a remote would feel slow. */

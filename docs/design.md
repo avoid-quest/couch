@@ -266,7 +266,7 @@ opened it.
 
 | Input | Opens the menu |
 | --- | --- |
-| Pointer | The "…" (a tile's shows over or inside the tile, a row's always); right-click |
+| Pointer | The "…", shown while the pointer is over its tile or row or focus is in it; right-click |
 | Touch | The "…"; a 500 ms long press |
 | Keyboard | The "…" (a Tab stop); the menu key or Shift+F10 on the item |
 | TV remote | OK held 500 ms (a short OK acts on release); Right to a row's "…" |
