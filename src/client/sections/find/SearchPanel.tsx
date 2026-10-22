@@ -204,8 +204,8 @@ const hitMeta = (hit: SearchHit, showCollection = true) => metaLine(hitContext(h
 
 /** Sources stay readable even when a long artist or programme name fills the context line. */
 /** Where a hit leads: its source's home, its creator, series or season, its station. */
-const hitRelated = (hit: SearchHit, showSource = true, shared?: { context: boolean; creator: boolean }) =>
-  ({ radio: hit.radio?.title !== hit.title ? hit.radio : undefined, source: showSource ? hit.source : undefined, collection: shared?.context ? undefined : hit.context, creator: shared?.creator ? undefined : hit.creator });
+const hitRelated = (hit: SearchHit, showSource = true, onPage?: { context: boolean; creator: boolean }) =>
+  ({ radio: hit.radio?.title !== hit.title ? hit.radio : undefined, source: showSource ? hit.source : undefined, collection: onPage?.context ? undefined : hit.context, creator: onPage?.creator ? undefined : hit.creator });
 function HitSource({ hit }: { hit: SearchHit }) {
   return <MediaContext {...hitRelated(hit)} />;
 }
@@ -278,18 +278,16 @@ function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { 
 /**
  * Search hits as divided rows; collection and station pages use the compact layout. An album's tracks (`numberOf`, a
  * track's place in the whole album, filtered or not) are a tracklist: number, title and time, with nothing the page
- * already says.
+ * already says. `pageLinks` are what the page itself shows (its address, its creator, its trail): a row doesn't
+ * repeat them.
  */
-export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true, numberOf }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean; numberOf?: (hit: SearchHit) => number }) {
+export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true, numberOf, pageLinks = [] }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean; numberOf?: (hit: SearchHit) => number; pageLinks?: readonly (string | undefined)[] }) {
   const session = useOptionalSessionGate();
   if (!hits.length) return null;
   // The list takes its majority shape; a word every row shares ("Programme") says nothing, so it goes.
   const shape = majorityShape(hits.map(shapeOf), compact ? "square" : "video");
   const sameKind = hits.length > 1 && hits.every(hit => hit.collection && hit.collection === hits[0]!.collection);
-  // On a page's own list, a link every row shares (the season, the channel) is the page's header or trail already.
-  const onPage = !showSource && hits.length > 1;
-  const same = (urls: (string | undefined)[]) => { const found = urls.filter(Boolean); return onPage && found.length > 1 && found.every(url => url === found[0]); };
-  const shared = { context: same(hits.map(hit => hit.context?.url)), creator: same(hits.map(hit => hit.creator?.url)) };
+  const onPage = (url?: string) => !!url && pageLinks.includes(url);
   return <div className="min-w-0">
     <MediaList aria-label={label}>{hits.map((hit, index) => {
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
@@ -297,7 +295,7 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
       const track = !!numberOf;
       // An episode in its series' own list goes by its name, "S1 E1" leading its meta, even as the list's one row.
       const episode = !showSource ? episodeRow(hit.title) : { title: hit.title };
-      return <MediaRow related={track ? undefined : hitRelated(hit, showSource, shared)} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
+      return <MediaRow related={track ? undefined : hitRelated(hit, showSource, { context: onPage(hit.context?.url), creator: onPage(hit.creator?.url) })} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
       number={numberOf?.(hit)}
       meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? metaLine(episode.lead, hitMeta(hit, !sameKind), showSource && hit.source) : metaLine(hitContext(hit), !sameKind && hit.collection, showSource && hit.source)}
       description={!compact ? withoutUrls(hit.description) || undefined : undefined} shape={shape} own={shapeOf(hit)}

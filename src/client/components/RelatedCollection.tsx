@@ -19,10 +19,10 @@ const channelVideos = (creator?: CollectionLink): ProviderItem | undefined => cr
 export function RelatedCollection({ collection, creator, currentUrl, currentTitle, provider }: { collection?: MediaCollection; creator?: CollectionLink; currentUrl?: string; currentTitle?: string; provider?: ProviderId }) {
   const channel = collection ? undefined : channelVideos(creator);
   const target = collectionLinks(collection).at(-1) ?? channel ?? (provider ? { id: provider, provider, title: providerNames[provider], url: "", kind: "collection" as const } : undefined);
-  return target && <RelatedItems key={`${target.provider}:${target.url}`} target={target} collection={collection} more={!!channel} currentUrl={currentUrl} currentTitle={currentTitle} />;
+  return target && <RelatedItems key={`${target.provider}:${target.url}`} target={target} collection={collection} creator={creator} more={!!channel} currentUrl={currentUrl} currentTitle={currentTitle} />;
 }
 
-function RelatedItems({ target, collection, more, currentUrl, currentTitle }: { target: ProviderItem; collection?: MediaCollection; more: boolean; currentUrl?: string; currentTitle?: string }) {
+function RelatedItems({ target, collection, creator, more, currentUrl, currentTitle }: { target: ProviderItem; collection?: MediaCollection; creator?: CollectionLink; more: boolean; currentUrl?: string; currentTitle?: string }) {
   const { credentials, available, openProvider, section } = useShell();
   const { connected, run, videoQualityPreference } = useSessionGate();
   const [summary, setSummary] = useState<SearchResultSummary | null>(null);
@@ -39,7 +39,7 @@ function RelatedItems({ target, collection, more, currentUrl, currentTitle }: { 
     <SearchOnlineResults provider={target.provider} query="" url={target.url} cursor={cursor} paged onResults={report} onOpenCollection={openProvider} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this list.</p>}
     {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}
-    <HitList showSource={false} hits={nearby} compact label={title} />
+    <HitList showSource={false} hits={nearby} compact label={title} pageLinks={[target.url, ...collectionLinks(collection).map(link => link.url), creator?.url]} />
     <SourcesUnanswered summaries={summary ? [[target.title, summary]] : []} />
   </section>;
 }
