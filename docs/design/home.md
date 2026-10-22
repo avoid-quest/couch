@@ -53,11 +53,12 @@ Shelves keep their order while Home stays open and never hold the hero's item:
 the one that led Home when it opened, nor the one leading it now (after Stop,
 the next hero's item leaves Continue).
 They are plain overflow rows (`data-nav-row`) without paging buttons: a
-pointer scrolls them, touch swipes, keyboard and remote move focus. A shelf of
-one or two tiles takes only their width (`sparse`), so short shelves sit side by
-side ("Continue", "For later" and "Radio" on one line) rather than stacking a
-column of lone tiles; a full shelf takes the line, and the TV keeps one shelf
-per row so Up and Down still go shelf to shelf.
+pointer scrolls them, touch swipes, keyboard and remote move focus. From `md`
+up a shelf of one or two tiles takes only their width (`sparse`), so short
+shelves share rows as one board ("Continue", "For later" and "Radio" on one
+line, "Played recently" on the next) rather than stacking a column of lone
+tiles; a full shelf takes the line. Phones and the TV keep one shelf per row,
+so Up and Down still go shelf to shelf.
 
 ## Tiles
 

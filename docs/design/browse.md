@@ -255,8 +255,9 @@ wherever tiles, rows or the hero show it.
 row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll
 work natively. The row runs out to the window's edges, so a long shelf runs off
 the right of the screen, and its padding holds a lit tile's glow and the TV's
-lifted tile. A `sparse` shelf (one or two tiles) takes only their width off the
-TV, so Home sets short shelves side by side; the TV keeps one shelf per row.
+lifted tile. A `sparse` shelf (one or two tiles) takes only their width from `md`
+up, off the TV, so Home sets short shelves side by side; phones and the TV keep
+one shelf per row.
 Search kinds and Discover's shelves use it too.
 
 **`MediaArtwork`** fills its frame when the art matches the frame's shape and

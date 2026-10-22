@@ -10,10 +10,10 @@ import { detailHref, useDetailNavigation } from "@/detail-navigation";
  * every station, Saved), as one focus stop between it and the shelf above.
  */
 export function Shelf({ title, label = title, time, href, loading = false, sparse = false, children }: { title: string; label?: string; time?: string; href?: string; loading?: boolean;
-  /** One or two tiles: off the TV the shelf takes only their width, so a page of short shelves sets them side by side. */
+  /** One or two tiles: from `md` up, off the TV, the shelf takes only their width, so a page of short shelves sets them side by side. */
   sparse?: boolean; children: ReactNode }) {
   const details = useDetailNavigation();
-  return <section aria-label={title} aria-busy={loading || undefined} data-sparse={sparse || undefined} className={cn("grid min-w-0 basis-full gap-2", sparse && "basis-auto tv:basis-full")}>
+  return <section aria-label={title} aria-busy={loading || undefined} data-sparse={sparse || undefined} className={cn("grid min-w-0 basis-full gap-2", sparse && "md:basis-auto tv:basis-full")}>
     <header className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
       <h2 className="min-w-0 text-lg font-semibold tracking-tight">{href ? <Button asChild variant="ghost" className="group/heading -ml-2.5 h-auto min-h-11 gap-1 text-left text-lg font-semibold tracking-tight whitespace-normal text-foreground">
         {/* An id restores focus here when Back returns from what it opened. */}
@@ -29,6 +29,6 @@ export function Shelf({ title, label = title, time, href, loading = false, spars
     {/* It scrolls by wheel, trackpad, scrollbar or focus, out to the window's edges, so a long shelf runs off the right
         of the screen rather than stopping at the gutter; its padding holds a lit tile's glow, its ring and, on the TV, the
         lifted tile, clear of the clip. The TV, which moves by focus, hides the scrollbar. */}
-    <ol data-nav-row data-shelf-row aria-label={label} className={cn("-mx-(--gutter) -my-6 flex scroll-px-(--gutter) gap-4 overflow-x-auto px-(--gutter) py-6 [scrollbar-color:rgb(255_255_255/20%)_transparent] [scrollbar-width:thin] tv:[scrollbar-width:none]", sparse && "-mx-6 px-6 tv:-mx-(--gutter) tv:px-(--gutter)")}>{children}</ol>
+    <ol data-nav-row data-shelf-row aria-label={label} className={cn("-mx-(--gutter) -my-6 flex scroll-px-(--gutter) gap-4 overflow-x-auto px-(--gutter) py-6 [scrollbar-color:rgb(255_255_255/20%)_transparent] [scrollbar-width:thin] tv:[scrollbar-width:none]", sparse && "md:-mx-6 md:px-6 tv:-mx-(--gutter) tv:px-(--gutter)")}>{children}</ol>
   </section>;
 }
