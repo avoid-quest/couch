@@ -83,14 +83,14 @@ test("a source shelf puts live channels first, dims offline ones, and leaves out
   } finally { favorites = []; }
 });
 
-test("a source whose last answer failed is muted on the Sources line", () => {
+test("a source whose last answer failed is muted on the Sources line, and says so to a screen reader", () => {
   liveSources = [];
   failedQueries = [{ queryKey: ["search", "provider-page", "streamingcommunity", {}], state: { status: "error", dataUpdatedAt: 0, errorUpdatedAt: 2 } },
     { queryKey: ["search", "providers", "raiplay", {}], state: { status: "error", dataUpdatedAt: 0, errorUpdatedAt: 1 } },
     { queryKey: ["search", "provider-page", "raiplay", {}], state: { status: "success", dataUpdatedAt: 3, errorUpdatedAt: 0 } }];
   try {
     const sources = view().split('aria-label="Sources"').slice(1).join("");
-    expect(sources.split('aria-label="Open StreamingCommunity"')[1]!.split("</li>")[0]).toContain("Couldn&#x27;t load");
+    expect(sources.split('aria-label="Open StreamingCommunity, couldn&#x27;t load"')[1]!.split("</li>")[0]).toContain("Couldn&#x27;t load");
     expect(sources.split('aria-label="Open RaiPlay"')[1]!.split("</li>")[0]).not.toContain("Couldn&#x27;t load");
   } finally { failedQueries = []; }
 });
