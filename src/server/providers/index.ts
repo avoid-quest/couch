@@ -97,16 +97,16 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
   }
   const cache = new Map<string, { page: ProviderPage; expires: number }>();
   // Saved Twitch channels say whether they are live now, asked at most every 20 s and for at most 3 s; unanswered,
-  // they keep what they were saved with.
-  let live: { key: string; expires: number; channels: Map<string, Pick<ProviderItem, "live" | "subtitle">> } | null = null;
+  // they keep what they were saved with. Concurrent reads share one query, and a failure is kept for the 20 s too.
+  let live: { key: string; expires: number; channels: Promise<Map<string, Pick<ProviderItem, "live" | "subtitle">>> } | null = null;
   async function liveNow(items: ProviderItem[]) {
     const key = JSON.stringify(items.filter(item => item.provider === "twitch" && item.kind === "channel").map(item => item.url).sort());
     if (key === "[]") return items;
     if (live?.key !== key || live.expires < Date.now()) {
-      try { live = { key, expires: Date.now() + 20_000, channels: await liveChannels(items, AbortSignal.any([AbortSignal.timeout(3_000), shutdown.signal])) }; }
-      catch { return items; }
+      live = { key, expires: Date.now() + 20_000, channels: liveChannels(items, AbortSignal.any([AbortSignal.timeout(3_000), shutdown.signal])).catch(() => new Map()) };
     }
-    return items.map(item => item.provider === "twitch" && live!.channels.has(item.url) ? { ...item, ...live!.channels.get(item.url) } : item);
+    const channels = await live.channels;
+    return items.map(item => item.provider === "twitch" && channels.has(item.url) ? { ...item, ...channels.get(item.url) } : item);
   }
   const pending = new Map<string, { promise: Promise<ProviderPage>; controller: AbortController; waiters: number }>();
   const shutdown = new AbortController();
