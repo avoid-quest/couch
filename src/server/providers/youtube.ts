@@ -135,8 +135,8 @@ export const browseYouTube = createYouTubeBrowser();
 export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
   return async (url: string, signal?: AbortSignal): Promise<ProviderPage> => {
     signal?.throwIfAborted();
-    const source = target(url);
-    if (source.kind === "channel") source.url = `${source.url.replace(/\/$/, "")}/videos`;
+    let source = target(url);
+    if (source.kind === "channel") source = target(`${source.url}/videos`);
     const channelSection = source.kind === "collection" && /\/(?:videos|shorts|streams)$/.test(source.url);
     if (!isYouTubePlaylistUrl(source.url) && !channelSection) throw new ProviderError("Choose a YouTube playlist or channel list link.", 400);
     const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30_000)]);

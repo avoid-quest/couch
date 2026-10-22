@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createYouTubeBrowser } from "../src/server/providers/youtube";
+import { createYouTubeBrowser, createYouTubePlaylistLoader } from "../src/server/providers/youtube";
 
 const url = "https://www.youtube.com/channel/UC4eYXhJI4-7wSWc8UNRwD4A";
 const avatar = "https://yt3.googleusercontent.com/avatar=s900";
@@ -35,3 +35,20 @@ test("a video's creator survives separately from the selected playlist", async (
   expect(providerMetadata(item).collection).toBeUndefined();
   expect(providerMetadata(item, true).collection?.url).toBe(playlist);
 });
+
+for (const channel of ["@nprmusic", "channel/UC4eYXhJI4-7wSWc8UNRwD4A", "c/nprmusic", "user/nprmusic"]) {
+  test(`Play and Queue on saved ${channel} load its Videos section`, async () => {
+    const source = `https://www.youtube.com/${channel}`;
+    const calls: string[][] = [];
+    const load = createYouTubePlaylistLoader(async args => {
+      calls.push(args);
+      return JSON.stringify({ _type: "playlist", title: "NPR Music - Videos", webpage_url: `${source}/videos`,
+        entries: [{ id: "abcdefghijk", title: "First" }, { id: "lmnopqrstuv", title: "Second" }] });
+    });
+    const page = await load(source);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.slice(-4)).toEqual(["--playlist-items", "1:501", "--", `${source}/videos`]);
+    expect(page.items.map(item => item.url)).toEqual(["https://www.youtube.com/watch?v=abcdefghijk", "https://www.youtube.com/watch?v=lmnopqrstuv"]);
+    expect(page.items.map(item => item.title)).toEqual(["First", "Second"]);
+  });
+}
