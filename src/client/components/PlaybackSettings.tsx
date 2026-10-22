@@ -234,7 +234,9 @@ export function PlaybackMenu({ details, tracks: showTracks = true, trigger, ...p
   return <PopoverContent ref={content} data-player-menu {...toolPanel(trigger)} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
     className="max-h-[calc(var(--radix-popover-content-available-height)-1rem)] w-72 gap-0 overflow-hidden p-0"
     // Back in a submenu returns to the menu, as on YouTube and a TV's own menus; Back on the menu closes it.
-    onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}>
+    onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}
+    // It opens on the menu again, however it closed; focus still returns to the gear.
+    onCloseAutoFocus={() => { opener.current = null; setView(null); }}>
     {view ? <>
       <div className="flex shrink-0 items-center gap-1 border-b px-1 py-1"><Button variant="ghost" size="icon" aria-label="Back to Playback" title="Back to Playback" onClick={() => setView(null)}><ChevronLeft aria-hidden="true" /></Button><h2 className="text-sm font-medium">{viewTitles[view]}</h2></div>
       <div data-view-body className="grid min-h-0 gap-2 overflow-y-auto overscroll-contain px-3 py-2">{body}{messages}</div>
