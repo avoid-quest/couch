@@ -418,7 +418,7 @@ export async function createHub(options: HubOptions) {
   // The Devices a volume without a Device acts on: those in the Playback's sound, else the window's own.
   const sounding = (playback: Playback | undefined, deviceId: string) => { const ids = playback?.outputs.flatMap(output => output.sound ? [output.deviceId] : []) ?? []; return ids.length ? ids : [deviceId]; };
   // Of those, the sound an actor's Volume shows and moves: what its Device may control, as outputFor grants it.
-  const controlled = (playback: Playback | undefined, actor: string) => sounding(playback, selected(actor)).filter(id => id === actor || sharingOf(id).audio);
+  const controlled = (playback: Playback | undefined, actor: string, sharing = sharingOf) => sounding(playback, selected(actor)).filter(id => id === actor || sharing(id).audio);
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
   const deliver = (playback: Playback, command: PlaybackCommand) => {
     if (mpvPlayback === playback) mpv.send(command);
@@ -998,14 +998,32 @@ export async function createHub(options: HubOptions) {
       liveSources: live.sources(),
     };
     const views = new Map<string, string>();
+    // Consent was just projected for this synchronous broadcast; commands still read it live.
+    const permissions = new Map(shared.devices.map(device => [device.id, device.sharing]));
+    const sharingAt = (id: string) => permissions.get(id) ?? sharingOf(id);
+    // Playback projections are shared by its viewers, but refreshed on every flush.
+    const levels = new Map<Playback | undefined, Map<string, number>>(), outputs = new Map<Playback | undefined, Output[]>();
+    const levelAt = (playback: Playback | undefined, deviceId: string) => {
+      let values = levels.get(playback);
+      if (!values) levels.set(playback, values = new Map());
+      if (!values.has(deviceId)) values.set(deviceId, playsAt(playback, deviceId));
+      return values.get(deviceId)!;
+    };
     // A speaker's delay is its player's own, as it last reported it; it applies while the speaker is in sync.
-    const delays = (playback: Playback | undefined) => (playback?.outputs ?? []).map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback!); return { ...output, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
+    const delays = (playback: Playback | undefined) => {
+      let value = outputs.get(playback);
+      if (!value) {
+        value = (playback?.outputs ?? []).map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback!); return { ...output, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
+        outputs.set(playback, value);
+      }
+      return value;
+    };
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
-      const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket)), moves = controlled(playback, deviceOf(socket));
+      const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket)), moves = controlled(playback, deviceOf(socket), sharingAt);
       // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
       // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
-      const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => playsAt(playback, id)))), view = `${playback?.id}:${device}:${volume}`;
+      const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => levelAt(playback, id)))), view = `${playback?.id}:${device}:${volume}`;
       if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
