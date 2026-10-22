@@ -108,6 +108,8 @@ function OnlineResults(props: Props) {
   const later = useQuery({ ...forLaterQuery(props), enabled: props.connected, retry: false });
   // The one place provider items become hits, so Hide reaches Search, source pages and Home alike.
   const { isHidden, hide } = useHidden(props, props.connected);
+  // What the page shows: "More" counts these, not what is hidden.
+  const shown = page?.items.filter(item => !isHidden(item)) ?? [];
   const history = useQuery({ ...historyQuery(props, provider), enabled: props.connected && !!props.url && !!props.onPlayHistory });
   // A series of seasons starts from the season its latest played episode is in, else the first: its next episode plays.
   const seasons = props.url && props.paged && page?.items.length && page.items.every(item => item.kind === "collection" && /\b(?:season|stagione)\b/i.test(`${item.title} ${item.url}`)) ? page.items : undefined;
@@ -125,7 +127,7 @@ function OnlineResults(props: Props) {
   useEffect(() => { const controller = new AbortController(); lifetime.current = props.connected ? controller : null; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   async function more() {
     if (!page || fetching || !props.connected) return;
-    if (visible < page.items.length) { setVisible(value => value + 6); return; }
+    if (visible < shown.length) { setVisible(value => value + 6); return; }
     if (!browse.hasNextPage) return;
     const signal = lifetime.current?.signal;
     const result = await browse.fetchNextPage({ cancelRefetch: false });
@@ -169,7 +171,7 @@ function OnlineResults(props: Props) {
     });
   }
   useLayoutEffect(() => {
-    const hits: SearchHit[] = (page?.items ?? []).filter(item => !isHidden(item)).slice(0, props.paged ? undefined : visible).map(item => {
+    const hits: SearchHit[] = shown.slice(0, props.paged ? undefined : visible).map(item => {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: !props.connected || busy || saveUnavailable, run: () => save(item, saved) };
@@ -215,7 +217,7 @@ function OnlineResults(props: Props) {
     // A series names the episode its Play starts: "Resume S1 E1", "Play S1 E2".
     const episode = selected?.kind === "media" ? undefined : resume ? episodeLabel(resume) : start ? episodeLabel(start) : playSeason ? episodeLabel({ title: "", collection: { ...season!, index: 0 } }) : undefined;
     const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(`Couldn't ${playNow ? "play" : "queue"} ${page.title || selected?.title || providerNames[provider]}.`, () => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(!playNow ? { title: page.title || selected?.title || providerNames[provider] } : {}), ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
-    props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, refreshing: fetching && !!page, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || fetching, hits,
+    props.onResults?.(providerNames[provider], { page: page ?? undefined, count: shown.length, loading, refreshing: fetching && !!page, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < shown.length || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || fetching, hits,
       ...(props.url ? { collection: { context: props.context ?? selected?.collection, creator: selected?.creator, url: selected?.url ?? props.url, title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
         single: selected?.kind === "media", playAll: start || resume ? () => startItem() : playSeason ? () => playSeason() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : playSeason ?? (list(true) && (deviceId => list(true, deviceId)?.())), queueAll: list(false),
         playNext: selected?.kind === "media" && props.onCommand ? () => play(selected, false, "next") : undefined,
