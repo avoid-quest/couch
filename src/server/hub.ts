@@ -1287,7 +1287,7 @@ export async function createHub(options: HubOptions) {
       const title = item.title?.trim();
       // Until the page's own title resolves, the link itself names it ("youtube.com/watch?v=…"), not just its host.
       const url = new URL(item.url);
-      const linkTitle = `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}${url.search}`.slice(0, 200);
+      const linkTitle = `${url.host.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}${url.search}`.slice(0, 200);
       return { entry: { id: item.entryId, source: `web:${item.url}`, title: title || linkTitle, automaticTitle: !title, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...metadata.cached(item.url), ...(item.quality ? { quality: item.quality } : {}) }, fromStart: item.fromStart, ...(!title ? { inspectUrl: item.url } : {}) };
     };
     const list = async (provider: ProviderId, url: string, quality?: VideoQuality): Promise<Intake> => {
