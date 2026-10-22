@@ -19,7 +19,12 @@ const shown = new Set<string>();
 /** The cover's hue, from its title. */
 const hue = (title: string) => { let hash = 7; for (const char of title) hash = (hash * 31 + char.codePointAt(0)!) >>> 0; return hash % 360; };
 
-export function MediaArtwork({ thumbnail, title, collection = false, bare = false, className = "" }: { thumbnail?: string; title: string; collection?: boolean; bare?: boolean; className?: string }) {
+export function MediaArtwork({ thumbnail, title, collection = false, bare = false, priority = false, className = "" }: {
+  thumbnail?: string; title: string; collection?: boolean; bare?: boolean;
+  /** The page's largest picture (a Stage's): fetched first, never lazily. */
+  priority?: boolean;
+  className?: string;
+}) {
   const [failedSrc, setFailedSrc] = useState("");
   let src = "";
   try {
@@ -35,7 +40,7 @@ export function MediaArtwork({ thumbnail, title, collection = false, bare = fals
     if (image.current?.complete && image.current.naturalWidth) { shown.add(src); setLoadedSrc(src); }
   }, [src]);
   return src && src !== failedSrc
-    ? <img ref={image} className={cn("media-artwork block w-full aspect-video object-cover bg-muted motion-safe:transition-opacity motion-safe:duration-200 motion-safe:not-data-loaded:opacity-0", className)} data-loaded={src === loadedSrc || shown.has(src) || undefined} src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => { shown.add(src); setLoadedSrc(src); }} onError={() => setFailedSrc(src)} />
+    ? <img ref={image} className={cn("media-artwork block w-full aspect-video object-cover bg-muted motion-safe:transition-opacity motion-safe:duration-200 motion-safe:not-data-loaded:opacity-0", className)} data-loaded={src === loadedSrc || shown.has(src) || undefined} src={src} alt="" loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined} decoding="async" referrerPolicy="no-referrer" onLoad={() => { shown.add(src); setLoadedSrc(src); }} onError={() => setFailedSrc(src)} />
     : bare ? null : <span className={cn("media-artwork @container relative flex w-full aspect-video overflow-hidden", className)} aria-hidden="true">
       <span className="absolute inset-0 flex text-white" style={{ background: `oklch(.3 .05 ${hue(title)})` }}>
         {collection ? <Folder className="m-auto size-[max(1rem,20cqi)] text-white/70" />

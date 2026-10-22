@@ -56,7 +56,7 @@ export function Stage({ thumbnail, shape, fit, title, size = "details", label, c
     style={{ ...roomStyle(art?.light), "--art-ratio": ratio } as CSSProperties}>
     {thumbnail !== undefined && <div aria-hidden="true" className="room" />}
     {thumbnail && <div ref={picture} aria-hidden="true" data-stage-picture data-detail-art={size === "details" || undefined} data-shape={shape} data-wide={wide || undefined} onClick={onPicture} className={cn("stage-picture", onPicture && "cursor-pointer")}>
-      <MediaArtwork bare thumbnail={thumbnail} title={title} className="stage-object" />
+      <MediaArtwork bare priority thumbnail={thumbnail} title={title} className="stage-object" />
     </div>}
     <div className="stage-copy">{children}</div>
   </Tag>;
