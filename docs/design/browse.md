@@ -266,7 +266,9 @@ categories; frames (16:9) for videos, episodes, streams, RaiPlay's programmes
 and Live TV; squares for music (Bandcamp, SoundCloud) and stations; circles for
 channels and artists (YouTube, Twitch). A shelf or a list takes its majority
 shape (`majorityShape`): art of that shape fills it, art of another shape (and
-a channel logo) is contained in it. Details and Search's closest match draw the
+a channel logo) is contained in it, unclipped by a circle it doesn't fill; a
+channel's avatar stays a circle, the frame's height, in a frame of another
+shape. Artwork still loading holds the muted fill rather than black. Details and Search's closest match draw the
 item's own shape ([Details](#details)).
 
 Every named relationship with a known destination (channel, artist, album,

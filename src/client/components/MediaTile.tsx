@@ -9,6 +9,8 @@ import { artAspect, artShape, fillsFrame, type ArtShape } from "@/art-shape";
 import { ItemMenu, useItemMenu, type MenuAction } from "./RowMenu";
 import { ArtLevel, useLevel } from "./Level";
 
+// A channel keeps its circle in a frame of another shape: a circle the frame's height, centred.
+export const roundInFrame = "mx-auto aspect-square! h-full w-auto! rounded-full object-cover";
 export { artAspect as tileAspect, type ArtShape as TileShape };
 /** A media item's shape (art-shape.ts): an episode is a frame, the rest go by their source. */
 export const tileShape = (source: string | undefined, episode: boolean) => artShape(source, episode ? "episode" : "media");
@@ -51,8 +53,8 @@ export function MediaTile({ title, meta, context, thumbnail, shape, own = shape,
   const options = useItemMenu(menu);
   const level = useLevel(source);
   const body = <>
-    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background", artAspect[shape], tileWidth[shape], dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
-      <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover")} />
+    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
+      <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && fillsFrame(own, shape) && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover", own === "round" && shape !== "round" && roundInFrame)} />
       {/* Where the press plays, a pointer or keyboard focus dims the artwork under a Play disc (index.css); never on the TV. */}
       {plays && <span data-tile-hover aria-hidden="true" className="absolute inset-0 grid place-items-center"><span className="grid size-12 place-items-center rounded-full bg-foreground text-background"><Play className="size-5 translate-x-px fill-current" /></span></span>}
       <ArtLevel level={level} className="size-8 text-base" />

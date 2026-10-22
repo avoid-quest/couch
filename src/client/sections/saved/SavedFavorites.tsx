@@ -107,7 +107,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     // A station's page holds no Remove or ordering, so the row keeps its "…", which opens its Details too.
     return <MediaRow context={favorite.kind === "provider" ? <MediaContext creator={favorite.item.creator} collection={favorite.item.collection} /> : undefined} key={key(favorite)}
       source={favorite.kind === "provider" ? favorite.item.url : stationSources(favorite.item)}
-      artFit="contain"
+      artFit="contain" own={favorite.kind === "provider" && favorite.item.kind === "channel" ? "round" : undefined}
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}
