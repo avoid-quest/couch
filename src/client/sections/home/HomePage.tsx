@@ -40,7 +40,9 @@ import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { useOnAir, useStationMenu, useStationShow } from "./on-air";
 import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
+import { Board, BoardArt, BoardList } from "./HomeBoard";
 import { Failed, LiveTvShelf, SavedSourceShelf, SharedSources, SourcesLine, sourceHomes } from "./HomeSources";
+import { MediaRow } from "@/components/MediaRow";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { providerFavoritesQuery } from "@/api/providers";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
@@ -48,8 +50,9 @@ import type { ProviderId } from "../../../shared/providers";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
 
-// A shelf scrolls, so it holds more than fits; its heading opens the rest.
+// A shelf scrolls, so it holds more than fits; a board's list holds its first few. Their headings open the rest.
 const shelfLength = 12;
+const boardLength = 4;
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 const entryShape = (entry: QueueEntry): ArtShape => isRadio(entry) ? "square" : artShape(sourceLabel(entry.source), entry.collection ? "episode" : "media");
 const historyShape = (item: HistoryItem) => artShape(item.sourceLabel, item.collection ? "episode" : "media");
@@ -152,6 +155,7 @@ export function HomePage() {
   const onAirPending = favorites.isPending || builtIn.isPending;
   const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [], item => item.id, hero !== undefined && !later.isPending);
   const stationMeta = (station: RadioStation) => metaLine(showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode));
+  const filled: Partial<Record<HomeRowId, boolean>> = { upNext: !!upcoming.length, continue: !!continued.length, later: !!savedMedia.length, recent: !!recent.length };
   // The sources: shared inputs, Live TV while a source has channels, and what's saved from each source with a home.
   const sharedSources = useLiveSourceHits("");
   const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected && hasRow("live-tv") });
@@ -187,41 +191,37 @@ export function HomePage() {
       <Button data-page-first size="lg" aria-label={on(`Play ${hero.station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(hero.station, true)}><Play aria-hidden="true" />{on("Play")}</Button>
     </HomeHero> : null;
 
-  // A shelf takes its items' majority shape; an item of another shape is contained in that frame.
+  // A list takes its items' majority shape; an item of another shape is contained in that frame.
   const continueShape = majorityShape(continued.map(historyShape));
-  const upNextShape = majorityShape(upcoming.slice(0, shelfLength).map(entryShape));
-  const laterShape = majorityShape(savedMedia.slice(0, shelfLength).map(savedShape));
+  const upNextShape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
+  const laterShape = majorityShape(savedMedia.slice(0, boardLength).map(savedShape));
   const recentShape = majorityShape(recent.map(historyShape));
+  // With no Stage, a remote starts on the board's first row.
+  const firstBoard = !hero && onHome.find(row => boardRows.includes(row.id) && filled[row.id])?.id;
   const lists: Partial<Record<HomeRowId, ReactNode>> = {
-    continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played" sparse={continued.length < 3}>
-      {continued.slice(0, shelfLength).map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
-        <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={continueShape} own={historyShape(item)} {...continueCaption(item)} thumbnail={item.thumbnail} source={item.url}
-          progress={item.duration ? item.position / item.duration : undefined}
-          aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)} />
-      </li>)}
-    </Shelf>,
+    continue: !!continued.length && <BoardList title="Continue" href="/saved?tab=played">
+      {continued.slice(0, boardLength).map((item, index) => <MediaRow compact key={item.mediaId} data-history-details={item.mediaId} pageFirst={firstBoard === "continue" && index === 0} related={{ collection: item.collection, creator: item.creator }} shape={continueShape} own={historyShape(item)} {...continueCaption(item)} source={item.url}
+        art={<BoardArt thumbnail={item.thumbnail} title={item.title} progress={item.duration ? item.position / item.duration : undefined} />}
+        primary={{ label: "Resume", disabled: !resumable(item), onClick: () => resume.mutate({ item, fromStart: false }) }} menu={historyMenu(item, true)} />)}
+    </BoardList>,
 
-    upNext: !!upcoming.length && <Shelf title="Up next" sparse={upcoming.length < 3} time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : undefined}>
-      {plan.slice(0, shelfLength).map(({ entry, starts, seconds }, index) => <li key={entry.id} className="shrink-0">
-        <UpNextTile entry={entry} shape={upNextShape} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? undefined : metaLine(formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`)}
-          verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />
-      </li>)}
-      {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
-    </Shelf>,
+    upNext: !!upcoming.length && <BoardList title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : undefined}
+      more={upcoming.length > boardLength && <Button variant="ghost" className="-ml-3.5 justify-self-start text-muted-foreground" onClick={() => setQueueOpen(true)}>{upcoming.length - boardLength} more</Button>}>
+      {plan.slice(0, boardLength).map(({ entry, starts, seconds }, index) => <UpNextRow key={entry.id} entry={entry} shape={upNextShape} pageFirst={firstBoard === "upNext" && index === 0} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? undefined : metaLine(formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`)}
+        verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />)}
+    </BoardList>,
 
-    later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later" sparse={savedMedia.length < 3}>
-      {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
-        <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail} source={item.url}
-          href={itemLocation("saved", item.id)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
-      </li>)}
-    </Shelf>,
+    later: !!savedMedia.length && <BoardList title="For later" href="/saved?tab=later">
+      {savedMedia.slice(0, boardLength).map((item, index) => <MediaRow compact key={item.id} data-saved-details={item.id} pageFirst={firstBoard === "later" && index === 0} related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} source={item.url}
+        art={<BoardArt thumbnail={item.thumbnail} title={item.title} />}
+        primary={{ label: "Details", href: itemLocation("saved", item.id), onClick: () => details.open(itemLocation("saved", item.id)) }} menu={savedMenu(item)} />)}
+    </BoardList>,
 
-    recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played" sparse={recent.length < 3}>
-      {recent.slice(0, shelfLength).map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
-        <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} thumbnail={item.thumbnail} source={item.url}
-          href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
-      </li>)}
-    </Shelf>,
+    recent: !!recent.length && <BoardList title="Played recently" href="/saved?tab=played">
+      {recent.slice(0, boardLength).map((item, index) => <MediaRow compact key={item.mediaId} data-history-details={item.mediaId} pageFirst={firstBoard === "recent" && index === 0} related={{ collection: item.collection, creator: item.creator }} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} source={item.url}
+        art={<BoardArt thumbnail={item.thumbnail} title={item.title} />}
+        primary={{ label: "Details", href: itemLocation("history", item.mediaId), onClick: () => details.open(itemLocation("history", item.mediaId)) }} menu={historyMenu(item, false)} />)}
+    </BoardList>,
 
     shared: !!sharedSources.length && <SharedSources hits={sharedSources} />,
 
@@ -243,8 +243,9 @@ export function HomePage() {
   };
   // A list or shelf still loading holds its place, so nothing moves under the focus when it arrives.
   const pending = (id: HomeRowId) => connected && (id === "later" ? later.isPending : id === "continue" || id === "recent" ? history.isPending : id === "radio" ? onAirPending : false);
-  const section = (id: HomeRowId) => lists[id] || (pending(id) && <Shelf title={homeRowLabels[id]} loading><MediaTilesSkeleton shape={id === "radio" ? "square" : "video"} /></Shelf>);
-  // Consecutive rows of your own share one board of short shelves; every other row is a section of its own.
+  const section = (id: HomeRowId) => lists[id] || (pending(id) && (boardRows.includes(id) ? <BoardList title={homeRowLabels[id]} loading />
+    : <Shelf title={homeRowLabels[id]} loading><MediaTilesSkeleton shape="square" /></Shelf>));
+  // Consecutive rows of your own share one board; every other row is a section of its own.
   const groups = onHome.reduce<HomeRowId[][]>((all, row) => {
     const last = all.at(-1);
     if (last && boardRows.includes(row.id) && boardRows.includes(last[0]!)) last.push(row.id); else all.push([row.id]);
@@ -260,7 +261,7 @@ export function HomePage() {
     {hero === undefined && <DetailSkeleton home />}
     {lead}
     {hero !== undefined && groups.map(group => boardRows.includes(group[0]!)
-      ? group.some(id => lists[id] || pending(id)) && <div key={group.join(" ")} className="flex flex-wrap items-start gap-x-16 gap-y-12">{group.map(id => <Fragment key={id}>{section(id)}</Fragment>)}</div>
+      ? group.some(id => lists[id] || pending(id)) && <Board key={group.join(" ")}>{group.map(id => <Fragment key={id}>{section(id)}</Fragment>)}</Board>
       : <Fragment key={group[0]}>{section(group[0]!)}</Fragment>)}
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
@@ -272,10 +273,10 @@ export function HomePage() {
   </section>;
 }
 
-/** An Up next entry's tile: its press plays it now, and its menu holds what its Up next row's does. */
-function UpNextTile({ entry, shape, meta, disabled, onPlay, verbs }: { entry: QueueEntry; shape: ArtShape; meta?: string; disabled: boolean; onPlay: () => void; verbs: QueueActionsProps }) {
+/** An Up next entry's row: its press plays it now, and its menu holds what its Up next row in the player does. */
+function UpNextRow({ entry, shape, meta, disabled, onPlay, verbs, pageFirst }: { entry: QueueEntry; shape: ArtShape; meta?: string; disabled: boolean; onPlay: () => void; verbs: QueueActionsProps; pageFirst: boolean }) {
   const caption = mediaCaption(entry);
-  return <MediaTile related={{ collection: entry.collection, creator: entry.creator }} shape={shape} own={entryShape(entry)} title={caption.title} thumbnail={entry.thumbnail} meta={metaLine(caption.lead, meta)} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} menu={useQueueActions(verbs)} />;
+  return <MediaRow compact pageFirst={pageFirst} related={{ collection: entry.collection, creator: entry.creator }} shape={shape} own={entryShape(entry)} title={caption.title} art={<BoardArt thumbnail={entry.thumbnail} title={entry.title} />} meta={metaLine(caption.lead, meta)} primary={{ label: "Play", disabled, onClick: onPlay }} menu={useQueueActions(verbs)} />;
 }
 
 /** How far it got as a slim line, which advances while it plays, beside how much is left (and, playing, when it ends). */
