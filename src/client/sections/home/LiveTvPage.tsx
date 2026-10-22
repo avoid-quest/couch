@@ -107,7 +107,7 @@ export function LiveTvPage() {
     <p id="live-tv-channels" tabIndex={-1} role="status" className="sr-only">{guide.data && !updating ? `${total} ${total === 1 ? "channel" : "channels"}` : ""}</p>
     {guide.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {guide.isLoading && <MediaRowsSkeleton compact shape="video" label="Loading channels…" />}
-    {!!channels.length && <MediaList aria-label="Live TV channels" aria-busy={updating} className="transition-opacity aria-busy:opacity-60">{channels.map((channel, index) => {
+    {!!channels.length && <MediaList aria-label="Live TV channels" aria-busy={updating} className="motion-safe:transition-opacity aria-busy:opacity-60">{channels.map((channel, index) => {
       const { disabled, play, menu } = actions(channel);
       // A channel has no page, so its row keeps its "…".
       return <MediaRow key={channel.id} compact shape="video" pageFirst={index === 0} source={`iptv:${channel.id}`} title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} meta={channelMeta(channel, group)} primary={{ label: "Play", disabled, onClick: play }} menu={menu} />;
