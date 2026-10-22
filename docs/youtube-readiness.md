@@ -70,7 +70,9 @@ The Spec review additionally ran the production UI against an actual isolated Co
 
 ## Stack and automated checks
 
-The five implementation layers extend the earlier six-PR preview stack. All remain open for review; `main` is unchanged.
+The five implementation layers extend the earlier six-PR preview stack. The
+table records the initial audit heads and their Check runs, before the PR-review
+follow-up below. It is historical evidence, not the current merge/check status.
 
 | PR | Change | Source revision | Manual Check |
 | --- | --- | --- | --- |
@@ -81,6 +83,47 @@ The five implementation layers extend the earlier six-PR preview stack. All rema
 | [871](https://github.com/avoid-quest/couch/pull/871) | Catalog identity and occurrence contracts | `7596d02` | [Passed](https://github.com/avoid-quest/couch/actions/runs/39869096411) |
 
 Hosted Check performs frozen install, typecheck and production build. Regression tests above were run separately. No workflow or packaging code changed.
+
+## PR review follow-up
+
+Four P2 review findings were reproduced and repaired by GPT-6.1-Sol xhigh,
+then integrated into their owning stack layers. The original measurements and
+review results above retain their original source revisions.
+
+- [#863](https://github.com/avoid-quest/couch/pull/863): Stop now recovers focus
+  from the bar's portalled panels and waits for a loading page's primary control.
+  Back uses a provisional page control when the exact bar opener has disappeared.
+  A deliberate key, pointer, focus choice or navigation cancels recovery; observers,
+  listeners and router subscriptions are removed on completion or the 15-second
+  limit. Layout and styles are unchanged.
+- [#869](https://github.com/avoid-quest/couch/pull/869): Resume from another
+  playlist occurrence keeps the original history media ID and source, including
+  short links and Shorts. The existing history endpoint accepts the selected
+  collection and quality, validates them against the saved provider, and creates
+  a new occurrence without changing earlier queue entries. Resume retains the
+  saved 45 seconds; From start uses zero; continuation follows the selected
+  duplicate. Same-occurrence, history-only and series paths stay intact.
+
+The focus implementation passed 33 desktop, 47 TV and 12 phone-width cases,
+plus five cleanup checks. The alias implementation passed 54 Node tests,
+16 Bun tests and 18 browser groups in each of those three viewports, plus the
+existing rendering, history freshness, provider-cache, Save and series journeys.
+These are overlapping invocations, not a unique-test total.
+
+The rebased server suites passed 79 tests with no failures or skips. The final
+combined production source at `4e1f9a00ed313483476076bb4e5cf56675691933`
+passed all three project typechecks and the production build. The catalog layer's
+shared maximum index, 2423, remains in the extracted collection validator.
+
+Retained regressions are `tests/focus-recovery.browser.ts`,
+`tests/youtube-context.browser.ts`, `tests/provider-resume.integration.ts` and
+`tests/history-selection.integration.ts`. Run the focus suite through
+`runFocusRecoveryRegression({ includeTimeout: true })` on the empty browser
+fixture described below; use the same three viewport/presentation combinations.
+The Core test uses real REST/WebSocket/helper-process boundaries with private
+data and synthetic renderer reports. These fixtures do not qualify physical
+devices, OS media-control UI or decoded live YouTube playback. No new performance
+measurement or packaging change is claimed by this follow-up.
 
 ## Reproduce
 

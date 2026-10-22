@@ -308,5 +308,91 @@
       }
     },
     "method": "Single final-harness validation, not an additional before/after pair. Owned Core closed, port 43731 closed and generated database removed."
+  },
+  "prReviewFollowup": {
+    "date": "2026-10-23",
+    "comparison": {
+      "baseline": "fba89561660cd69d25ad2f0de1f2afef9d7e3e45",
+      "reviewedProductionHead": "4e1f9a00ed313483476076bb4e5cf56675691933",
+      "method": "direct tree diff; stack commits were rebased"
+    },
+    "implementationModel": {
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "xhigh"
+    },
+    "focus": {
+      "pr": 863,
+      "commit": "13f2bfe15213a6d397c369ffe9f1ab97013eb3bd",
+      "comments": [
+        4353728794,
+        4353728804,
+        4353728812
+      ],
+      "red": {
+        "desktop": {
+          "passed": 7,
+          "failed": 8
+        },
+        "tv": {
+          "passed": 9,
+          "failed": 6
+        },
+        "note": "Initial 15-case suite, subsequently expanded."
+      },
+      "green": {
+        "desktop": 33,
+        "tv": 47,
+        "phoneViewport": 12,
+        "cleanup": 5
+      },
+      "retained": "tests/focus-recovery.browser.ts"
+    },
+    "aliasResume": {
+      "pr": 869,
+      "commit": "fefa9525b2fee331699bd21a0c8e656bbdc3c341",
+      "comments": [
+        4354398963
+      ],
+      "before": "Canonical enqueue changed media identity and started at zero instead of saved45s.",
+      "after": "History playback retains original alias source/media ID with selected occurrence/quality; Resume45s and From start0s; continuation follows selected duplicate.",
+      "implementationTests": {
+        "node": 54,
+        "bun": 16,
+        "browserGroupsPerViewport": 18,
+        "viewports": [
+          "desktop",
+          "phone",
+          "tv"
+        ]
+      },
+      "retained": [
+        "tests/provider-resume.integration.ts",
+        "tests/history-selection.integration.ts",
+        "tests/youtube-context.browser.ts"
+      ]
+    },
+    "integration": {
+      "node": {
+        "passed": 79,
+        "failed": 0,
+        "skipped": 0
+      },
+      "testFiles": [
+        "tests/provider-resume.integration.ts",
+        "tests/history-selection.integration.ts",
+        "tests/youtube-catalog.integration.ts",
+        "tests/web-intake.integration.ts",
+        "tests/history-provider-url.integration.ts"
+      ],
+      "serverTreeUnchangedByFocusIntegration": true,
+      "collectionMaximumIndex": 2423,
+      "projectTypechecks": "passed",
+      "productionBuild": "passed"
+    },
+    "limits": [
+      "Counts overlap; do not sum distinct runs.",
+      "Chromium viewport fixtures and synthetic renderer reports, not physical-device or OS media UI validation.",
+      "No new performance measurements, live adaptive decoding or packaging validation."
+    ]
   }
 }
