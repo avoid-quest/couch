@@ -192,8 +192,9 @@ the app) and never travels through Remote.
 
 `/saved`, one section per `?tab=`: For later, Channels & stations (saved
 channels, playlists, albums and series, then favourite stations), Lists and
-Played (History, newest first). A rail on wide screens (left rule on the
-current entry, no heading, counts only when not zero) and a Select on phones
+Played (History, newest first). A rail on wide screens (left rule and
+white ink on the current entry, with no ground, so a pointer's tint never reads
+as current; no heading; counts only when not zero) and a Select on phones
 choose the section; the rail names the page. Without a `?tab=`, Saved opens the
 first section that holds something (For later when all are empty), then names
 it in the URL; while the counts arrive it draws loading rows, so an empty

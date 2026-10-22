@@ -23,7 +23,7 @@ export function SettingsNav({ active, index = false }: { active?: SettingsPage; 
       {group.pages.map(({ id, locked }, row) => (
         <Button key={id} variant="ghost" asChild className={index
           ? "h-auto min-h-12 w-full justify-start gap-2 rounded-none px-0 py-3 text-base font-normal"
-          : "h-10 w-full justify-start gap-2 rounded-none border-y-0 border-r-0 border-l-2 border-transparent pl-3 font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground"}>
+          : "h-10 w-full justify-start gap-2 rounded-none border-y-0 border-r-0 border-l-2 border-transparent pl-3 font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"}>
           <Link data-settings-page={id} activeOptions={{ exact: true }} data-page-first={(index ? position === 0 && row === 0 : current === id) || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path} onClick={event => {
             if (index || !tvPresentation || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
