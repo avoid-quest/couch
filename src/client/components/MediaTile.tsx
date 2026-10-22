@@ -68,7 +68,7 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
       {meta && <span data-tile-meta className="text-meta text-pretty break-words text-muted-foreground">{meta}</span>}
     </span>
   </>;
-  return <div data-tile {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} style={light.style} className={cn("relative flex w-fit flex-col", tileHeight[shape], options.item.className, className)}>
+  return <div data-tile {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} className={cn("relative flex w-fit flex-col", tileHeight[shape], options.item.className, className)}>
     <Button variant="ghost" data-media-tile {...options.target} asChild={!!href && !disabled} disabled={disabled} className="peer h-auto w-min text-foreground flex-col items-stretch justify-start gap-2 rounded-none border-0 p-0 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent disabled:opacity-50" {...props} onClick={event => {
       if (href && onClick) {
         if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

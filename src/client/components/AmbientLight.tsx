@@ -28,13 +28,26 @@ export const roomStyle = (light: Light | null | undefined) => light ? { "--room-
 /**
  * A tile's or a row's light (Design → Hover), read the first time a pointer or focus reaches it: `--item-light`, the
  * artwork's first colour, which index.css lets glow under the picture while it is hovered or focused. `thumbnail` is
- * the address, or finds it in the item (a row's artwork is its caller's node).
+ * the address, or finds it in the item (a row's artwork is its caller's node). The colour is set on the item itself,
+ * not through React state, so a hover never renders the item (and its menu) again; a picture read before lights at once.
  */
 export function useItemLight(thumbnail?: string | ((item: HTMLElement) => string | undefined)) {
-  const [src, setSrc] = useState<string>();
-  const light = useArtworkLight(src);
-  const ask = (event: SyntheticEvent<HTMLElement>) => setSrc(typeof thumbnail === "function" ? thumbnail(event.currentTarget) : thumbnail);
-  return { onPointerEnter: ask, onFocus: ask, style: light ? { "--item-light": `rgb(${light.a.join(" ")})` } as CSSProperties : undefined };
+  const credentials = useContext(SessionGateContext)?.credentials;
+  const ask = (event: SyntheticEvent<HTMLElement>) => {
+    const item = event.currentTarget, src = typeof thumbnail === "function" ? thumbnail(item) : thumbnail;
+    // Lit already for this picture, or reading it; a read that failed is tried again on the next hover.
+    if (!src || !/^(https?|blob):/.test(src) || item.dataset.itemLight === src) return;
+    item.dataset.itemLight = src;
+    const paint = (art: Art | null) => {
+      // An item showing another picture by the time this one is read keeps its own.
+      if (item.dataset.itemLight !== src) return;
+      if (!art) delete item.dataset.itemLight;
+      if (art?.light) item.style.setProperty("--item-light", rgb(art.light.a)); else item.style.removeProperty("--item-light");
+    };
+    const known = cachedArt(src);
+    if (known) paint(known); else { item.style.removeProperty("--item-light"); void readArt(src, credentials).then(paint); }
+  };
+  return { onPointerEnter: ask, onFocus: ask };
 }
 
 type Frame = { id: number; light: Light | null; leaving: boolean; still: boolean };

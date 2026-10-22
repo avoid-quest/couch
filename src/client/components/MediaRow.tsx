@@ -77,7 +77,7 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
   </>;
   // A pointer over the row lights its artwork, as a tile's (index.css); nothing tints the row.
   return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border/60 px-0 py-2", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
-    <li data-nav-row {...props} {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} style={{ ...light.style, ...props.style }}>
+    <li data-nav-row {...props} {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus}>
       {/* The artwork is a larger pointer target for the main verb, as the now-playing bar's is. */}
       {/* A tracklist's playing track shows the level in place of its number. */}
       {number != null && <span aria-hidden="true" className="flex justify-end self-start pt-1.5 text-right text-sm leading-6 text-muted-foreground tabular-nums">{level ? <Level moving={level === "moving"} className="mt-1.5 text-xs text-foreground" /> : number}</span>}
