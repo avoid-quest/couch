@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  */
 export function SettingsRow({ label, htmlFor, description, children, className, ...props }: Omit<ComponentProps<"div">, "children"> & { label: ReactNode; htmlFor?: string; description?: ReactNode; children?: ReactNode }) {
   return (
-    <Field className={cn("grid items-start gap-x-8 gap-y-3 border-b py-4 *:w-auto @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]", className)} {...props}>
+    <Field className={cn("grid items-start gap-x-8 gap-y-3 border-b py-3.5 *:w-auto @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]", className)} {...props}>
       <FieldContent className="min-w-0 gap-1">
         {htmlFor ? <FieldLabel htmlFor={htmlFor} className={cn("items-center", labelLine)}>{label}</FieldLabel> : <FieldTitle className={cn("min-w-0 break-words", labelLine)}>{label}</FieldTitle>}
         {description && <FieldDescription className="break-words">{description}</FieldDescription>}
@@ -21,7 +21,7 @@ export function SettingsRow({ label, htmlFor, description, children, className, 
 
 // A label's line is 1.375rem and a control's 2rem: the control rises by half the difference. Touch controls are taller,
 // so there the label's line grows to theirs instead.
-const labelLine = "text-base font-normal @2xl:touch:min-h-11";
+const labelLine = "text-body font-normal @2xl:touch:min-h-11";
 
 /**
  * A titled group of settings. Rows sit flush and divided; anything else

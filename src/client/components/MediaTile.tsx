@@ -57,19 +57,19 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
   const level = useLevel(source);
   const light = useItemLight(thumbnail);
   const body = <>
-    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
+    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden rounded-md bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
       <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && fillsFrame(own, shape) && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover", own === "round" && shape !== "round" && roundInFrame)} />
       {progress != null && <span data-tile-progress aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-black/60"><span className="block h-full bg-foreground" style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} /></span>}
       <ArtLevel level={level} className={cn("size-8 text-base", progress != null && "bottom-1")} />
     </span>
     {/* A title of up to two lines and one meta line, as wide as the artwork; nothing under it. */}
-    <span data-tile-caption className="relative grid w-0 min-w-full content-start gap-0.5">
-      <span className={cn("line-clamp-2 text-[.9375rem] leading-snug font-medium break-words", options.shown.length && "pr-8 touch:pr-11")}>{title}</span>
-      {meta && <span data-tile-meta className="truncate text-sm text-muted-foreground">{meta}</span>}
+    <span data-tile-caption className="relative grid w-0 min-w-full content-start gap-caption">
+      <span className={cn("line-clamp-2 text-body break-words", options.shown.length && "pr-8 touch:pr-11")}>{title}</span>
+      {meta && <span data-tile-meta className="truncate text-meta text-muted-foreground">{meta}</span>}
     </span>
   </>;
   return <div data-tile {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} style={light.style} className={cn("relative flex w-fit flex-col", tileHeight[shape], options.item.className, className)}>
-    <Button variant="ghost" data-media-tile {...options.target} asChild={!!href && !disabled} disabled={disabled} className="peer h-auto w-min text-foreground flex-col items-stretch justify-start gap-2.5 rounded-none border-0 p-0 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent disabled:opacity-50" {...props} onClick={event => {
+    <Button variant="ghost" data-media-tile {...options.target} asChild={!!href && !disabled} disabled={disabled} className="peer h-auto w-min text-foreground flex-col items-stretch justify-start gap-2 rounded-none border-0 p-0 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent disabled:opacity-50" {...props} onClick={event => {
       if (href && onClick) {
         if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -83,6 +83,6 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
         is always shown and no focus stop, so Up and Down still go shelf to shelf and a held OK opens the menu, unless
         the press is disabled (nothing can play): then it is the tile's one stop, so its other verbs stay in reach. */}
     <ItemMenu data-tile-menu menu={options} title={title} tabIndex={isTvPresentation() && !disabled ? -1 : undefined}
-      className="absolute top-[calc(var(--tile-art)+.25rem)] right-0 size-8 text-muted-foreground hover:bg-transparent hover:text-foreground touch:top-[calc(var(--tile-art)+.0625rem)] touch:size-11" />
+      className="absolute top-[calc(var(--tile-art)+.125rem)] right-0 size-8 text-muted-foreground hover:bg-transparent hover:text-foreground touch:top-[calc(var(--tile-art)+.0625rem)] touch:size-11" />
   </div>;
 }

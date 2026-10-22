@@ -57,13 +57,39 @@ body { min-width: 0; }
     --color-foreground: var(--foreground);
     --color-background: var(--background);
     --color-fill-hover: var(--fill-hover);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+}
+/* Couch's scales (Design → Tokens). Radius: what you press or type into is a capsule (rounded-full); a picture or a row
+   inside a surface has a soft corner (sm, md); a surface that opens over the page has a larger one (lg, xl). */
+@theme {
+    --radius-xs: .125rem;
+    --radius-sm: .25rem;
+    --radius-md: .5rem;
+    --radius-lg: .75rem;
+    --radius-xl: 1rem;
+    /* Control heights: a chip, a control, a verb, the header's search field. Touch raises each to 44px. */
+    --spacing-control-sm: 1.75rem;
+    --spacing-control: 2rem;
+    --spacing-control-lg: 2.75rem;
+    --spacing-field: 3rem;
+    /* Spacing rhythm: inside a caption, heading to its content, between items, between sections. */
+    --spacing-caption: .125rem;
+    --spacing-stack: .75rem;
+    --spacing-item: 1rem;
+    --spacing-section: 3.5rem;
+    /* Type: caption, meta, body (titles of items, controls), heading (a shelf, a section), page; the Stage's display
+       sizes live with it (.stage-title). Weights: 400 for everything but headings (600) and display (600). */
+    --text-caption: .75rem;
+    --text-caption--line-height: 1rem;
+    --text-meta: .8125rem;
+    --text-meta--line-height: 1.125rem;
+    --text-body: .9375rem;
+    --text-body--line-height: 1.3125rem;
+    --text-heading: 1.25rem;
+    --text-heading--line-height: 1.75rem;
+    --text-heading--letter-spacing: -.015em;
+    --text-page: 2.25rem;
+    --text-page--line-height: 2.5rem;
+    --text-page--letter-spacing: -.025em;
 }
 /* Motion eases out: every transition-* utility, and the rules below, start fast and settle (Design → Motion). */
 @theme { --default-transition-timing-function: var(--ease-out); }
@@ -91,7 +117,7 @@ body { min-width: 0; }
     --border: rgb(255 255 255 / 14%);
     --input: rgb(255 255 255 / 16%);
     --ring: #fff;
-    --radius: .25rem;
+    --radius: .5rem;
     --gutter: clamp(1rem, 4vw, 3rem);
     color-scheme: dark;
 }
@@ -260,7 +286,7 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
 .player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
-.player-video-controls [data-hover-time] { background: var(--player-surface); border-radius: calc(var(--radius) - 2px); }
+.player-video-controls [data-hover-time] { background: var(--player-surface); }
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[data-osd] :is(.player-queue, .player-next-up) { background: var(--player-surface); box-shadow: none; }
@@ -273,7 +299,7 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
 /* It is one of the band's panels (Volume, Where it plays, the gear's menu): their surface and corner, their wide width,
    their .75rem inset, and the same place, 8px above the band and ending at the gutter. */
-.player-page[data-osd][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); width: min(32rem, calc(100% - 2 * var(--gutter))); max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem); padding: .25rem .75rem .75rem; border-radius: var(--radius-md); }
+.player-page[data-osd][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); width: min(32rem, calc(100% - 2 * var(--gutter))); max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem); padding: .25rem .75rem .75rem; border-radius: var(--radius-lg); }
 .player-next-up { position: absolute; z-index: 20; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); @apply motion-safe:transition-[bottom]; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
 [data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }

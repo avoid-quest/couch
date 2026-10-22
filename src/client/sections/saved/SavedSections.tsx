@@ -73,7 +73,7 @@ export function SavedSections({ state, credentials, connected, canPlay, tab: nam
       <SelectContent>{tabs.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
     </Select>
     <nav data-nav-rail aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
-      {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="h-10 w-full justify-start rounded-none border-y-0 border-r-0 border-l-2 border-transparent pl-3 font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground">
+      {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="h-control w-full justify-start gap-2 px-3.5 text-body font-normal text-muted-foreground hover:text-foreground aria-[current=page]:bg-secondary aria-[current=page]:text-foreground">
         <Link to="/saved" search={{ tab: value }} replace activeOptions={{ exact: true }} aria-current={tab === value ? "page" : undefined} data-page-first={tab === value || undefined}>
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {!!count && <span className="tabular-nums text-muted-foreground">{count}</span>}

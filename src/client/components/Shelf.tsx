@@ -15,7 +15,7 @@ export function Shelf({ title, label = title, time, href, loading = false, spars
   const details = useDetailNavigation();
   return <section aria-label={title} aria-busy={loading || undefined} data-sparse={sparse || undefined} className={cn("grid min-w-0 basis-full gap-2", sparse && "md:basis-auto tv:basis-full")}>
     <header className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
-      <h2 className="min-w-0 text-lg font-semibold tracking-tight">{href ? <Button asChild variant="ghost" className="group/heading -ml-2.5 h-auto min-h-11 gap-1 text-left text-lg font-semibold tracking-tight whitespace-normal text-foreground">
+      <h2 className="min-w-0 text-heading font-semibold">{href ? <Button asChild variant="ghost" className="group/heading -ml-3.5 h-auto min-h-11 gap-1 text-left text-heading font-semibold whitespace-normal text-foreground">
         {/* An id restores focus here when Back returns from what it opened. */}
         <a id={`shelf-${title.toLowerCase().replace(/\W+/g, "-")}`} href={detailHref(href)} onClick={event => {
           if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -24,7 +24,7 @@ export function Shelf({ title, label = title, time, href, loading = false, spars
         }}>{title}<ChevronRight aria-hidden="true" className="text-muted-foreground group-hover/heading:text-foreground" /></a>
       </Button> : title}</h2>
       {loading && <span role="status" className="sr-only">Loading {title}…</span>}
-      {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}
+      {time && <p className="text-meta text-muted-foreground tabular-nums">{time}</p>}
     </header>
     {/* It scrolls by wheel, trackpad, scrollbar or focus, out to the window's edges, so a long shelf runs off the right
         of the screen rather than stopping at the gutter; its padding holds a lit tile's glow, its ring and, on the TV, the

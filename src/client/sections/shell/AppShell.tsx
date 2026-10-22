@@ -28,7 +28,7 @@ import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
 import { useNavigation } from "@/navigation";
 import { collectionLocation, DetailFocusRestoration, useDetailNavigation } from "@/detail-navigation";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { dismiss, waitingForTap } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
@@ -419,7 +419,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   // A TV that's off still has its Remote.
   const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
   return <nav data-app-nav aria-label="Main navigation" className={className}>
-    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("relative rounded-none border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100", bar ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs after:top-0 after:w-6" : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4")}>
+    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("relative border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100", bar ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6" : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4")}>
       <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
     </Button>)}
   </nav>;

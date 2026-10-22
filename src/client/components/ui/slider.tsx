@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { Slider as SliderPrimitive } from "radix-ui"
 
 function Slider({
@@ -41,7 +41,7 @@ function Slider({
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
-        className="relative grow overflow-hidden rounded-md bg-muted data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
+        className="relative grow overflow-hidden rounded-full bg-muted data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
       >
         {buffered != null && <div data-slot="slider-buffered" className="absolute inset-y-0 left-0 bg-foreground/35" style={{ width: `${Math.min(100, Math.max(0, (buffered - min) / (max - min) * 100))}%` }} />}
         <SliderPrimitive.Range
@@ -56,7 +56,7 @@ function Slider({
           aria-label={_values.length > 1 && ariaLabel ? `${ariaLabel} ${index + 1}` : ariaLabel}
           aria-labelledby={ariaLabelledBy}
           aria-valuetext={ariaValueText}
-          className="relative block size-3 shrink-0 rounded-md border border-ring bg-foreground ring-ring/30 transition-[color,box-shadow,scale] select-none after:absolute after:-inset-2 group-not-data-disabled/slider:group-hover/slider:ring-2 motion-reduce:transition-none focus-visible:ring-2 focus-visible:outline-hidden active:ring-2 disabled:pointer-events-none disabled:opacity-50"
+          className="relative block size-3 shrink-0 rounded-full border border-ring bg-foreground ring-ring/30 transition-[color,box-shadow,scale] select-none after:absolute after:-inset-2 group-not-data-disabled/slider:group-hover/slider:ring-2 motion-reduce:transition-none focus-visible:ring-2 focus-visible:outline-hidden active:ring-2 disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

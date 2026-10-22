@@ -28,7 +28,7 @@ function RadioItems({ station }: { station?: RadioStation }) {
   const report = useCallback((_: string, summary: SearchResultSummary) => setSummary(summary), []);
   const hits = (summary?.hits ?? []).filter(hit => !station || hit.id !== `${source}:${station.id}`);
   return <section aria-label="More stations" hidden={!!summary && !summary.loading && !summary.error && !hits.length} className="mt-10 min-w-0 space-y-4">
-    <h2 className="text-lg font-semibold tracking-tight"><Link data-text-link to={radioBrowseLocation(source)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">More stations</Link></h2>
+    <h2 className="text-heading font-semibold"><Link data-text-link to={radioBrowseLocation(source)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">More stations</Link></h2>
     <SearchRadioResults browse source={source} query="" onResults={report} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load stations.</p>}
     {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}

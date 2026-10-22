@@ -17,8 +17,8 @@ export function MediaList({ className, ...props }: ComponentProps<"ul">) {
 
 // The thumbnail column by the list's shape, each about as tall as the others: a compact row's square is 4rem.
 const rowArt = {
-  compact: { video: "[--row-art:7rem]", square: "[--row-art:4rem]", round: "[--row-art:4rem]", poster: "[--row-art:2.75rem]" },
-  regular: { video: "[--row-art:6rem] @md:[--row-art:8rem]", square: "[--row-art:3.375rem] @md:[--row-art:4.5rem]", round: "[--row-art:3.375rem] @md:[--row-art:4.5rem]", poster: "[--row-art:2.25rem] @md:[--row-art:3rem]" },
+  compact: { video: "[--row-art:6rem]", square: "[--row-art:3.5rem]", round: "[--row-art:3.5rem]", poster: "[--row-art:2.5rem]" },
+  regular: { video: "[--row-art:5rem] @md:[--row-art:6rem]", square: "[--row-art:3rem] @md:[--row-art:3.5rem]", round: "[--row-art:3rem] @md:[--row-art:3.5rem]", poster: "[--row-art:2.25rem] @md:[--row-art:2.5rem]" },
 } as const satisfies Record<string, Record<ArtShape, string>>;
 
 type Props = {
@@ -69,19 +69,19 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
   const shape = frame ?? (compact ? "square" : "video");
   const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
   const body = <>
-    {number != null ? <span className="flex w-full items-baseline gap-4"><span className="line-clamp-2 min-w-0 flex-1 text-base font-medium">{title}</span>{meta && <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{meta}</span>}</span>
-      : <span className="line-clamp-2 w-full text-base font-medium">{title}</span>}
-    {meta && number == null && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
+    {number != null ? <span className="flex w-full items-baseline gap-4"><span className="line-clamp-2 min-w-0 flex-1 text-body">{title}</span>{meta && <span className="shrink-0 text-meta text-muted-foreground tabular-nums">{meta}</span>}</span>
+      : <span className="line-clamp-2 w-full text-body">{title}</span>}
+    {meta && number == null && <span className="w-full truncate text-meta text-muted-foreground">{meta}</span>}
     {children}
-    {description && <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-sm text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
+    {description && <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-meta text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
   </>;
   // A pointer over the row lights its artwork, as a tile's (index.css); nothing tints the row.
-  return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border/60 px-0 py-3", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
+  return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border/60 px-0 py-2", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
     <li data-nav-row {...props} {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} style={{ ...light.style, ...props.style }}>
       {/* The artwork is a larger pointer target for the main verb, as the now-playing bar's is. */}
       {/* A tracklist's playing track shows the level in place of its number. */}
       {number != null && <span aria-hidden="true" className="flex justify-end self-start pt-1.5 text-right text-sm leading-6 text-muted-foreground tabular-nums">{level ? <Level moving={level === "moving"} className="mt-1.5 text-xs text-foreground" /> : number}</span>}
-      {art && <ItemMedia data-row-art aria-hidden={!!primary || undefined} onClick={primary?.disabled ? undefined : primary?.onClick} className={cn("relative w-full self-start overflow-hidden bg-muted *:size-full *:rounded-[inherit]", primary && !primary.disabled && "cursor-pointer", artAspect[shape], artFit === "contain" || own && !fillsFrame(own, shape) ? "[&_img]:object-contain" : "[&_img]:object-cover", own === "round" && shape !== "round" && "[&_img]:mx-auto [&_img]:aspect-square [&_img]:w-auto [&_img]:rounded-full [&_img]:object-cover")}>{art}<ArtLevel level={level} className="size-6! text-xs" /></ItemMedia>}
+      {art && <ItemMedia data-row-art aria-hidden={!!primary || undefined} onClick={primary?.disabled ? undefined : primary?.onClick} className={cn("relative w-full self-start overflow-hidden rounded-sm bg-muted *:size-full *:rounded-[inherit]", primary && !primary.disabled && "cursor-pointer", artAspect[shape], artFit === "contain" || own && !fillsFrame(own, shape) ? "[&_img]:object-contain" : "[&_img]:object-cover", own === "round" && shape !== "round" && "[&_img]:mx-auto [&_img]:aspect-square [&_img]:w-auto [&_img]:rounded-full [&_img]:object-cover")}>{art}<ArtLevel level={level} className="size-6! text-xs" /></ItemMedia>}
       {/* The "…" ends the main verb's line, so it keeps the trailing end on every screen and width. */}
       <div className="relative flex min-w-0 items-start gap-1">
         <div className="min-w-0 flex-1">
@@ -90,9 +90,9 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
           if (primary.href) event.preventDefault();
           primary.onClick();
         }}
-          className="group/main h-auto w-full min-w-0 text-foreground flex-col items-start justify-center gap-0.5 self-stretch px-2 py-1.5 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent">
+          className="group/main h-auto w-full min-w-0 rounded-md text-foreground flex-col items-start justify-center gap-caption self-stretch px-2.5 py-1.5 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent">
           {primary.href && !primary.disabled ? <a href={detailHref(primary.href)}>{body}</a> : body}
-        </Button> : <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 px-2 py-1.5">{body}</div>}
+        </Button> : <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-caption px-2.5 py-1.5">{body}</div>}
         </div>
         <ItemMenu data-row-menu menu={options} title={title} hidden={menuOnPage} className="mt-1.5" />
       </div>

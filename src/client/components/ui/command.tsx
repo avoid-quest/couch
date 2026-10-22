@@ -19,7 +19,7 @@ function CommandGroup({ className, ...props }: ComponentProps<typeof CommandPrim
 
 // The selected item inverts as a menu's highlighted item does; the focus stays in the field.
 function CommandItem({ className, children, ...props }: ComponentProps<typeof CommandPrimitive.Item>) {
-  return <CommandPrimitive.Item data-slot="command-item" className={cn("group/command-item relative flex min-h-8 touch:min-h-11 cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4", className)} {...props}>
+  return <CommandPrimitive.Item data-slot="command-item" className={cn("group/command-item relative flex min-h-control touch:min-h-11 cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-sm outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4", className)} {...props}>
     {children}
     <CheckIcon aria-hidden="true" className="ml-auto hidden group-data-[checked=true]/command-item:block" />
   </CommandPrimitive.Item>;

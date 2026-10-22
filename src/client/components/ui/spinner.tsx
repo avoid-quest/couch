@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Loader2Icon } from "lucide-react"
 
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 function Spinner({
   className,
