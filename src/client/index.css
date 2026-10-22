@@ -371,7 +371,7 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
    scrim at the top keeps the header's ink at 7:1 over it. A logo or a channel stands whole, contained, in its light. */
 .stage { --stage-h: min(39.375vw, 70vh); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
 .stage[data-stage="details"] { --stage-h: min(33vw, 60vh); }
-.stage::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: calc(var(--top-bar, 4rem) + 4rem); background: linear-gradient(rgb(0 0 0 / 92%) var(--top-bar, 4rem), transparent); pointer-events: none; }
+.stage::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: calc(var(--top-bar, 4rem) + 4rem); background: linear-gradient(rgb(0 0 0 / 96%) var(--top-bar, 4rem), transparent); pointer-events: none; }
 .stage-picture { position: absolute; inset: 0 0 auto; z-index: -2; display: flex; justify-content: flex-end; height: var(--stage-h); mask-image: linear-gradient(90deg, transparent 40vw, rgb(0 0 0 / 30%) 50vw, #000 66vw), linear-gradient(0deg, transparent, rgb(0 0 0 / 40%) 18%, #000 45%); mask-composite: intersect; }
 /* The frame: the picture at the stage's height and its shape (a poster a little cropped, to carry the right side), its own
    left edge soft where the window's mask doesn't reach it. */

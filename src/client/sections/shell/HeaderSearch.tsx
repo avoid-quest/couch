@@ -135,7 +135,7 @@ export function HeaderSearch({ className }: { className?: string }) {
     <Command label="Search or paste a link" shouldFilter={false} loop={false} vimBindings={false} value={selected} onValueChange={setSelected} className="relative min-w-0 flex-1">
       {/* InputGroup keeps its input/addon behavior; the header gives search a quiet filled surface. Focused, it inverts
           at once; while the palette is open its selected row is the one white thing, so the field takes a white edge instead. */}
-      <InputGroup className={cn("h-11 rounded-md border-transparent bg-foreground/10 transition-colors dark:bg-foreground/10 has-[[data-slot=input-group-control]:focus-visible]:ring-0",
+      <InputGroup className={cn("h-11 rounded-md border-transparent bg-muted transition-colors dark:bg-muted has-[[data-slot=input-group-control]:focus-visible]:ring-0",
         open ? "border-foreground" : "has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0")}>
         <InputGroupAddon className={cn("min-w-0 shrink pl-2.5", !open && "group-has-[input:focus]/input-group:text-background/65")}>
           <InputGroupButton type="submit" size="icon-xs" className="shrink-0 touch:size-11" aria-label="Search" title="Search">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupButton>

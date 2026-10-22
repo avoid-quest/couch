@@ -32,9 +32,11 @@ One sticky row: the Couch switch (or, on a TV, its own name) and the section
 tabs at the left; search, the sharing control and, on desktop, Keyboard
 shortcuts at the right; the TV adds a small clock. No hairline under it: it is
 ink on the room. The current tab is white with a short white rule under its
-name, the others muted until a pointer brings them up. The search field is a
-translucent white (10%) rather than a grey box. Over a [Stage](../design.md#stage),
-while the page is at its top, the header is see-through and the Stage's scrim
+name, the others muted until a pointer brings them up. The search field keeps
+a solid fill (`muted`), so artwork under the see-through header never shows
+through its text. Over a [Stage](../design.md#stage), while the page is at its
+top, the header is see-through and the Stage's scrim (96% black to the
+header's foot)
 keeps its ink at 7:1; once the page scrolls it is black again. The header
 publishes its height as `--top-bar` so scroll padding keeps focus clear of it
 and the Stage reaches up under it. Below `lg` a TV centres its tabs on a second row.
@@ -141,8 +143,8 @@ nothing changes side as it grows into the band
 
 - **At the left, what plays,** as compact as a mini-player's (YouTube Music,
   Spotify and Apple Music run about 56–64px): the artwork 3rem tall at its own
-  shape (a frame 16:9, up to 6rem wide), with the
-  [level](../design.md#motion) at its bottom-left corner, and two tight lines, so the bar is as tall as its 44px controls plus its padding: 61px on
+  shape (a frame 16:9, up to 6rem wide), and two tight lines, the title's led by
+  the [level](../design.md#motion) while sound comes out, so the bar is as tall as its 44px controls plus its padding: 61px on
   phones, 64px at 1440 wide. The title is the control across its whole line,
   with the artwork a pointer target for it. Under the title, one line that
   doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its
