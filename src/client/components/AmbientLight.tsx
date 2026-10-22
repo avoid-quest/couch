@@ -1,22 +1,29 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject, type SyntheticEvent } from "react";
-import { cachedLight, readLight, type Light } from "@/artwork-light";
+import { cachedArt, readArt, type Art, type Light, type Rgb } from "@/artwork-light";
 import { SessionGateContext } from "@/session/gate-context";
 import { cn } from "@/lib/utils";
 
-/** The light of the artwork at `src`, at once when this page has read it before; null while reading or without any. */
-export function useArtworkLight(src: string | undefined) {
+/** What was read of the artwork at `src` (its light, its edges), at once when this page has read it before; null while reading or unreadable. */
+export function useArtwork(src: string | undefined) {
   const credentials = useContext(SessionGateContext)?.credentials;
   const usable = !!src && /^(https?|blob):/.test(src);
-  const [light, setLight] = useState<Light | null>(() => usable ? cachedLight(src) : null);
+  const [art, setArt] = useState<Art | null>(() => usable ? cachedArt(src) : null);
   useEffect(() => {
-    if (!usable) { setLight(null); return; }
+    if (!usable) { setArt(null); return; }
     // The last light stays until the next is read, so the room cross-fades from one to the other.
     let live = true;
-    void readLight(src, credentials).then(value => { if (live) setLight(value); });
+    void readArt(src, credentials).then(value => { if (live) setArt(value); });
     return () => { live = false; };
   }, [src, usable]);
-  return light;
+  return art;
 }
+
+/** The light of the artwork at `src`, at once when this page has read it before; null while reading or without any. */
+export const useArtworkLight = (src: string | undefined): Light | null => useArtwork(src)?.light ?? null;
+
+const rgb = (colour: Rgb) => `rgb(${colour.join(" ")})`;
+/** The room's colours and the light behind its picture as custom properties (index.css, .room); none keeps the neutral room. */
+export const roomStyle = (light: Light | null | undefined) => light ? { "--room-a": rgb(light.room), "--room-b": rgb(light.deep), "--light-a": rgb(light.a), "--light-b": rgb(light.b), "--tone": rgb(light.tone) } as CSSProperties : undefined;
 
 /**
  * A tile's or a row's light (Design → Hover), read the first time a pointer or focus reaches it: `--item-light`, the

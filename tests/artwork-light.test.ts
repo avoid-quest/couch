@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { atLuminance, contrast, haze, lightFrom, luminance, peak, pickLight, readLight, type Rgb } from "../src/client/artwork-light";
+import { atLuminance, clearEdges, contrast, deepPeak, haze, lightFrom, luminance, peak, pickLight, readLight, roomPeak, tonePeak, type Rgb } from "../src/client/artwork-light";
 
 // A 16×16 read as getImageData gives it: RGBA, one pixel after another.
 const pixels = (...parts: [Rgb, number][]) => new Uint8ClampedArray(parts.flatMap(([[r, g, b], count]) => Array.from({ length: count }, () => [r, g, b, 255]).flat()));
@@ -72,4 +72,24 @@ test("a read that failed isn't kept as no light: the next showing reads the pict
     reachable = true;
     expect((await readLight(src))?.key).toBe(src);
   } finally { Object.assign(globals, saved); }
+});
+
+test("the room and the bar's tone keep muted ink at 7:1 over the brightest colour of any hue", () => {
+  const muted: Rgb = [189, 189, 189];
+  for (const colour of [[255, 255, 0], [0, 255, 255], [255, 0, 0], [0, 0, 255], [200, 200, 200]] as Rgb[]) {
+    const { room, deep, tone } = lightFrom("art", [colour, colour]);
+    expect(luminance(room)).toBeLessThanOrEqual(roomPeak);
+    expect(luminance(deep)).toBeLessThanOrEqual(deepPeak);
+    expect(luminance(tone)).toBeLessThanOrEqual(tonePeak);
+    expect(contrast(muted, room)).toBeGreaterThanOrEqual(7);
+  }
+});
+
+test("a picture whose edge is mostly see-through is a mark; an opaque one isn't", () => {
+  const side = 16, picture = (clear: (x: number, y: number) => boolean) => new Uint8ClampedArray(Array.from({ length: side * side }, (_, index) => [255, 255, 255, clear(index % side, Math.floor(index / side)) ? 0 : 255]).flat());
+  const edge = (x: number, y: number) => x === 0 || y === 0 || x === side - 1 || y === side - 1;
+  expect(clearEdges(picture(edge))).toBe(true);
+  expect(clearEdges(picture(() => false))).toBe(false);
+  // A logo on white with a see-through corner or two is still opaque.
+  expect(clearEdges(picture((x, y) => x < 2 && y < 2))).toBe(false);
 });

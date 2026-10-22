@@ -7,7 +7,13 @@ import { apiFetch, type ApiCredentials } from "./api/client";
  * never touched.
  */
 export type Rgb = readonly [number, number, number];
-export type Light = { key: string; a: Rgb; b: Rgb };
+/**
+ * `a` and `b` light the picture (the backlight and the haze); `room` and `deep` paint the room it stands in (the
+ * Stage, the player's Now playing) and `tone` tints the now-playing bar's glass.
+ */
+export type Light = { key: string; a: Rgb; b: Rgb; room: Rgb; deep: Rgb; tone: Rgb };
+/** What a read learns of a picture: its light, if it has colour, and whether its edges are see-through (a logo). */
+export type Art = { light: Light | null; clear: boolean };
 
 const linear = (channel: number) => { const value = channel / 255; return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4; };
 // Rounded down, so a colour never ends brighter than asked.
@@ -35,6 +41,12 @@ export function atLuminance(colour: Rgb, target: number): Rgb {
  * the backlight's last trace where text comes near the artwork.
  */
 export const peak = 0.07, haze = 0.004;
+/**
+ * The room may lie under any text, so muted ink (#bdbdbd, luminance .509) keeps 7:1 over its brightest colour
+ * (.559 / 7 − .05 = .03), with room to spare; its second colour is deeper still. The bar's tone is mixed into glass
+ * over a dimmed backdrop, and the bar's ink is checked over white behind it (docs/design.md, Glass).
+ */
+export const roomPeak = 0.022, deepPeak = 0.01, tonePeak = 0.03;
 
 /**
  * The two colours of a picture's pixels (RGBA, as getImageData gives them): the strongest hue, by how vivid its pixels
@@ -65,13 +77,26 @@ export function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
 }
 
 /** Light from two picked colours: the first as the backlight, the second as the haze. */
-export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({ key, a: atLuminance(a, peak), b: atLuminance(b, haze) });
+export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({ key, a: atLuminance(a, peak), b: atLuminance(b, haze), room: atLuminance(a, roomPeak), deep: atLuminance(b, deepPeak), tone: atLuminance(a, tonePeak) });
+
+/** A picture whose edge is mostly see-through (a logo on nothing) stands without a shadow, which would outline its box. */
+export function clearEdges(pixels: ArrayLike<number>, side = 16) {
+  let edge = 0, clear = 0;
+  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
+    if (x && y && x < side - 1 && y < side - 1) continue;
+    edge++;
+    if (pixels[(y * side + x) * 4 + 3]! < 128) clear++;
+  }
+  return clear > edge / 2;
+}
 
 const size = 16;
-const cache = new Map<string, Light | null>();
+const cache = new Map<string, Art>();
 /** The light already read for an address, if any. */
-export const cachedLight = (src: string) => cache.get(src) ?? null;
-const pending = new Map<string, Promise<Light | null>>();
+export const cachedLight = (src: string) => cache.get(src)?.light ?? null;
+/** What was already read of a picture, if it was. */
+export const cachedArt = (src: string) => cache.get(src) ?? null;
+const pending = new Map<string, Promise<Art | null>>();
 
 /** The picture's bytes: through Core, which reads hosts that don't allow a page to (CORS); a blob: is the page's own. */
 const picture = async (src: string, credentials: ApiCredentials | null | undefined) =>
@@ -82,7 +107,10 @@ const picture = async (src: string, credentials: ApiCredentials | null | undefin
  * picture's answer is kept, light or none; a read that failed (Core unreachable, a host that timed out) isn't, so the
  * next time the artwork shows it is read again.
  */
-export function readLight(src: string, credentials?: ApiCredentials | null): Promise<Light | null> {
+export const readLight = (src: string, credentials?: ApiCredentials | null): Promise<Light | null> => readArt(src, credentials).then(art => art?.light ?? null);
+
+/** The picture's light and edges; null while Core can't read it (it is read again next time). */
+export function readArt(src: string, credentials?: ApiCredentials | null): Promise<Art | null> {
   if (cache.has(src)) return Promise.resolve(cache.get(src)!);
   let read = pending.get(src);
   if (!read) {
@@ -94,10 +122,10 @@ export function readLight(src: string, credentials?: ApiCredentials | null): Pro
         const context = canvas.getContext("2d", { willReadFrequently: true });
         if (!context) return null;
         context.drawImage(bitmap, 0, 0, size, size);
-        const picked = pickLight(context.getImageData(0, 0, size, size).data);
-        return picked && lightFrom(src, picked);
+        const pixels = context.getImageData(0, 0, size, size).data, picked = pickLight(pixels);
+        return { light: picked && lightFrom(src, picked), clear: clearEdges(pixels, size) };
       } finally { bitmap.close(); }
-    })().then(light => { cache.set(src, light); return light; }, () => null).finally(() => pending.delete(src));
+    })().then(art => { if (art) cache.set(src, art); return art; }, () => null).finally(() => pending.delete(src));
     pending.set(src, read);
   }
   return read;
