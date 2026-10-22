@@ -295,8 +295,8 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
       const track = !!numberOf;
-      // An episode in its series' own list goes by its name, "S1 E1" leading its meta.
-      const episode = onPage ? episodeRow(hit.title) : { title: hit.title };
+      // An episode in its series' own list goes by its name, "S1 E1" leading its meta, even as the list's one row.
+      const episode = !showSource ? episodeRow(hit.title) : { title: hit.title };
       return <MediaRow related={track ? undefined : hitRelated(hit, showSource, shared)} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
       number={numberOf?.(hit)}
       meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? metaLine(episode.lead, hitMeta(hit, !sameKind), showSource && hit.source) : metaLine(hitContext(hit), !sameKind && hit.collection, showSource && hit.source)}
