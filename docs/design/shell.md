@@ -207,9 +207,12 @@ sits inside the page's scroll padding, which the footer itself fills, so focus
 on a sticky footer's control (from Tab, or focus moved by script) scrolled
 the page beneath by hundreds of pixels. The page stays still as the bar opens
 a panel and as Stop takes the bar away.
-If Stop removes the focused bar, focus returns to the current page's primary
-control. A control chosen while Stop finishes keeps focus, and leaving the
-page uses the destination's normal focus entry.
+If Stop (including OS media controls) removes the focused bar or one of its
+portalled Volume, Where it plays or Playback panels, focus returns to the
+current page's primary control. While that control loads, the page's heading
+or another control holds focus provisionally for up to 15 seconds. A key,
+pointer press, focus choice or navigation ends recovery; a control chosen
+while Stop finishes keeps focus.
 
 ## A picture you start opens the player
 

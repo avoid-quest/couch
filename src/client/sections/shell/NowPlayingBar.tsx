@@ -4,7 +4,7 @@ import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ChevronRight, ChevronUp, Settings } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter, type AnyRouter } from "@tanstack/react-router";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
@@ -46,21 +46,54 @@ export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true) {
   }, [ref, shown]);
 }
 
+// Stop may reveal a loading page. Its heading/other controls are provisional
+// until the primary control arrives, unless the user chooses or navigates away.
+function recoverPageFocus(page: HTMLElement, router: AnyRouter) {
+  let provisional: Element | null = document.body;
+  let restoring = false;
+  const restore = () => {
+    if (!page.isConnected || document.activeElement !== document.body && document.activeElement !== provisional) { stop(); return; }
+    restoring = true;
+    focusPageControl(page);
+    provisional = document.activeElement;
+    restoring = false;
+    if (provisional?.matches("[data-page-first]")) stop();
+  };
+  const observer = new MutationObserver(restore);
+  const chosen = () => { if (!restoring) stop(); };
+  const stop = () => {
+    observer.disconnect(); clearTimeout(timer); unsubscribe();
+    window.removeEventListener("keydown", stop, true);
+    window.removeEventListener("pointerdown", stop, true);
+    window.removeEventListener("focusin", chosen, true);
+  };
+  const timer = setTimeout(stop, 15_000);
+  const unsubscribe = router.subscribe("onBeforeNavigate", stop);
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert"] });
+  window.addEventListener("keydown", stop, true);
+  window.addEventListener("pointerdown", stop, true);
+  window.addEventListener("focusin", chosen, true);
+  restore();
+}
+
 /** What plays, one row above the page (and the phone tab bar): its artwork and title open the player. */
 export function NowPlayingBar({ state, connected, run, onOpen }: { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean>; onOpen: (panel?: "queue") => void }) {
   const { credentials } = useShell();
   const [menu, setMenu] = useState(false);
   const gear = useRef<HTMLButtonElement>(null);
-  const bar = useRef<HTMLElement>(null);
+  const router = useRouter();
+  // React focus events include this bar's portalled popovers and sheets.
+  const focusWithin = useRef(false);
   useLayoutEffect(() => () => {
-    if (!bar.current?.contains(document.activeElement)) return;
+    if (!focusWithin.current) return;
     const page = document.querySelector<HTMLElement>("[data-page]");
+    const location = router.state.location;
     // Stop removes the focused bar. After the commit, return lost focus to the
     // same page, leaving navigation and any deliberately chosen target alone.
     queueMicrotask(() => {
-      if (page?.isConnected && document.activeElement === document.body) focusPageControl(page);
+      if (page?.isConnected && router.state.location === location && document.activeElement === document.body) recoverPageFocus(page, router);
     });
-  }, []);
+  }, [router]);
   const detailNavigation = useDetailNavigation();
   const programme = useStationShow();
   const player = state.player;
@@ -87,7 +120,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   // The bar is the player's band, minimized: a capsule of tinted glass floating over the page, its corners and its
   // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
   return <div className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5">
-  <footer ref={bar} data-now-playing aria-label="Now playing" style={roomStyle(light)} className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
+  <footer data-now-playing onFocusCapture={() => { focusWithin.current = true; }} onBlurCapture={() => { focusWithin.current = false; }} aria-label="Now playing" style={roomStyle(light)} className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
     <PlaybackTimeline state={state} connected={connected} run={run} className="bar-timeline absolute inset-x-5 top-0 z-10 -translate-y-1/2 max-sm:inset-x-4 [&_[data-time-labels]]:hidden" />
     {/* Two lines beside the artwork at its own shape, as a mini-player's. The title is the control, across the whole
         line, and the artwork a pointer target for it; the line under it keeps its own links, so they sit outside the

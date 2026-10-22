@@ -9,6 +9,7 @@ import type { SessionGateValue } from "../src/client/session/session-context";
 import { deviceId } from "../src/client/session/device-id";
 import { isTvPresentation } from "../src/client/session/presentation";
 import { avoidRadioPlaylistId } from "../src/shared/radio";
+import type { Action } from "../src/shared/protocol";
 
 const wait = (ms = 160) => new Promise(resolve => setTimeout(resolve, ms));
 const thumbnail = "https://i.ytimg.com/vi/vWLJeqLPfSU/hqdefault.jpg";
@@ -30,6 +31,7 @@ export async function mountUiAudit() {
   let mode: AuditMode = "loaded";
   const unknown = new Set<string>();
   const calls: string[] = [];
+  const actions: Action[] = [];
   window.fetch = async (input, init) => {
     const url = new URL(String(input), location.href), path = url.pathname;
     if (!path.startsWith("/api/")) return originalFetch(input,init);
@@ -75,7 +77,7 @@ export async function mountUiAudit() {
   };
   let gate = {credentials:{origin:location.origin,token:'visual-fixture',installationId:'visual-fixture'},connected:true,status:'connected',nativeHost:false,localHost:false,tvPresentation:isTvPresentation(),queryClient:client,
     identity:{authority:'administrator',device:{id,name:'Studio browser',role:'administrator'}},details:{name:'Living room',installationId:'visual-fixture',urls:[location.origin],systemAudio:false,tvPresentation:false},
-    videoQualityPreference:{quality:'auto',setQuality:()=>{}},screenWakeLock:{enabled:false,setEnabled:()=>{}},run:async()=>true,queue:async(_title:string,work:()=>Promise<unknown>)=>work(),setError:()=>{},seekBy:async()=>true,offerUndo:()=>{},unpair:()=>{},setCredentials:()=>{},remoteControlEnabled:true,booting:false,error:null,
+    videoQualityPreference:{quality:'auto',setQuality:()=>{}},screenWakeLock:{enabled:false,setEnabled:()=>{}},run:async(action:Action)=>{actions.push(action);return true;},queue:async(_title:string,work:()=>Promise<unknown>)=>work(),setError:()=>{},seekBy:async()=>true,offerUndo:()=>{},unpair:()=>{},setCredentials:()=>{},remoteControlEnabled:true,booting:false,error:null,
     state:baseState,
   } as unknown as SessionGateValue;
   const router = createRouter({routeTree,history:createMemoryHistory({initialEntries:['/']}),context:{queryClient:client,identity:gate.identity,localHost:false,connected:true}});
@@ -96,7 +98,16 @@ export async function mountUiAudit() {
     },
     async click(label:string) {const target=[...document.querySelectorAll<HTMLElement>('button,a')].find(e=>e.checkVisibility()&&(e.getAttribute('aria-label')===label||e.textContent===label)); if(!target) throw new Error(`No visible control: ${label}`);target.click();await wait();},
     setReadMode(value: AuditMode) { mode=value; },
-    client,router,calls,
+    // A remote/OS Stop changes session state without navigating this browser.
+    async stopPlayback() {
+      gate={...gate,state:{...gate.state!,currentEntryId:null,player:{...gate.state!.player,status:'idle'}}};
+      render();await wait();
+    },
+    async resumePlayback() {
+      gate={...gate,state:{...gate.state!,currentEntryId:entry.id,player:{...gate.state!.player,status:'paused'}}};
+      render();await wait();
+    },
+    client,router,calls,actions,
     close(){root.unmount();client.clear();window.fetch=originalFetch;document.body.classList.toggle('tv-presentation',wasTv);},
   };
 }
