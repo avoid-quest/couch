@@ -130,7 +130,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
               href={collectionLocation(item)} onClick={() => openProvider(item)} />
           </li>;
         })}
-      </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact numbered={tracks ? paging.start + 1 : undefined} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
+      </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact numberOf={tracks ? hit => (summary?.hits ?? []).indexOf(hit) + 1 : undefined} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: locationFor({ page: 1, filter: "" }), replace: true, resetScroll: false })}>Clear filter</Button>}</Empty>}
       {pager}
     </>}

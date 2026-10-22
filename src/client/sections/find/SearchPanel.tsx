@@ -276,10 +276,11 @@ function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { 
 }
 
 /**
- * Search hits as divided rows; collection and station pages use the compact layout. An album's tracks (`numbered`, its
- * first number) are a tracklist: number, title and time, with nothing the page already says.
+ * Search hits as divided rows; collection and station pages use the compact layout. An album's tracks (`numberOf`, a
+ * track's place in the whole album, filtered or not) are a tracklist: number, title and time, with nothing the page
+ * already says.
  */
-export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true, numbered }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean; numbered?: number }) {
+export const HitList = memo(function HitList({ hits, label, compact = false, currentId, pageFirst = false, showSource = true, numberOf }: { hits: SearchHit[]; label: string; compact?: boolean; currentId?: string; pageFirst?: boolean; showSource?: boolean; numberOf?: (hit: SearchHit) => number }) {
   const session = useOptionalSessionGate();
   if (!hits.length) return null;
   // The list takes its majority shape; a word every row shares ("Programme") says nothing, so it goes.
@@ -293,11 +294,11 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
     <MediaList aria-label={label}>{hits.map((hit, index) => {
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
-      const track = numbered != null;
+      const track = !!numberOf;
       // An episode in its series' own list goes by its name, "S1 E1" leading its meta.
       const episode = onPage ? episodeRow(hit.title) : { title: hit.title };
       return <MediaRow related={track ? undefined : hitRelated(hit, showSource, shared)} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
-      number={track ? numbered + index : undefined}
+      number={numberOf?.(hit)}
       meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? metaLine(episode.lead, hitMeta(hit, !sameKind), showSource && hit.source) : metaLine(hitContext(hit), !sameKind && hit.collection, showSource && hit.source)}
       description={!compact ? withoutUrls(hit.description) || undefined : undefined} shape={shape} own={shapeOf(hit)}
       art={track ? undefined : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
