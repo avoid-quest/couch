@@ -11,7 +11,7 @@ export function Level({ moving, className }: { moving: boolean; className?: stri
   const root = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const level = root.current;
-    if (!moving || !level || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!moving || !level || still?.matches) return;
     return step(level);
   }, [moving]);
   return <span ref={root} aria-hidden="true" data-level={moving ? "moving" : "flat"} className={cn("level", className)}><span /><span /><span /></span>;
@@ -26,10 +26,15 @@ export function Level({ moving, className }: { moving: boolean; className?: stri
 const paces = [{ period: 1.8, phase: 0 }, { period: 1.28, phase: .23 }, { period: 2.2, phase: .23 }];
 const levels = new Set<HTMLElement>();
 let clock: ReturnType<typeof setInterval> | undefined;
+// Reduced motion, asked on every step, so turning it on while something plays holds the bars still at once.
+const still = typeof matchMedia === "undefined" ? undefined : matchMedia("(prefers-reduced-motion: reduce)");
 const height = (seconds: number, { period, phase }: { period: number; phase: number }) => .25 + .75 * (.5 - .5 * Math.cos(2 * Math.PI * (seconds / period + phase)));
 function tick() {
   const seconds = performance.now() / 1000;
-  for (const level of levels) for (const [index, bar] of [...level.children].entries()) (bar as HTMLElement).style.transform = `scaleY(${height(seconds, paces[index]!).toFixed(2)})`;
+  for (const level of levels) for (const [index, bar] of [...level.children].entries()) {
+    if (still?.matches) (bar as HTMLElement).style.removeProperty("transform");
+    else (bar as HTMLElement).style.transform = `scaleY(${height(seconds, paces[index]!).toFixed(2)})`;
+  }
 }
 function step(level: HTMLElement) {
   levels.add(level);
