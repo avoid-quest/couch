@@ -51,3 +51,15 @@ test("an item rule hides that item; a word hides any title, subtitle, creator or
   expect(matchesHidden([rule("word", "rai 2")], item)).toBe(true);
   expect(matchesHidden([rule("word", "sanremo")], item)).toBe(false);
 });
+
+test("a word rule matches the same on a device in any locale", async () => {
+  // A Turkish device lowercases "I" to "ı"; Core and every client compare words without the locale.
+  const real = String.prototype.toLocaleLowerCase;
+  String.prototype.toLocaleLowerCase = function (this: string) { return real.call(this, "tr"); };
+  const hidden = createHidden({ databasePath: ":memory:", onChange: () => {} });
+  try {
+    const { rule } = await (await hidden.handle(request("/api/hidden", "POST", { rule: { kind: "word", value: "I", label: "I" } }))).json() as { rule: HiddenRule };
+    expect(rule.value).toBe("i");
+    expect(matchesHidden([rule], { provider: "youtube", url: "https://youtu.be/x", title: "Istanbul" })).toBe(true);
+  } finally { String.prototype.toLocaleLowerCase = real; hidden.close(); }
+});

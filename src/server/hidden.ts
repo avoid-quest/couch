@@ -25,7 +25,7 @@ export function createHidden({ databasePath, onChange }: { databasePath: string;
           authorize();
           const kind = rule?.kind;
           // Words match case-insensitively, so one word is one rule whatever its case.
-          const value = kind === "word" ? text(rule?.value, 100).toLocaleLowerCase() : text(rule?.value, 2100);
+          const value = kind === "word" ? text(rule?.value, 100).toLowerCase() : text(rule?.value, 2100);
           if (kind !== "item" && kind !== "word" || !value) throw new ControllerError(kind === "word" ? "Enter a word to hide." : "Choose something to hide.");
           const label = text(rule?.label, 300) || value;
           const result = db.transaction(() => {

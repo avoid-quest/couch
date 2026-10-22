@@ -11,6 +11,6 @@ export const hiddenItemKey = (item: Pick<HiddenCandidate, "provider" | "url">) =
 export function matchesHidden(rules: readonly HiddenRule[], item: HiddenCandidate) {
   if (!rules.length) return false;
   const key = hiddenItemKey(item);
-  const text = [item.title, item.subtitle, item.creator?.title, item.collection?.title, item.collection?.parent?.title].filter(Boolean).join("\n").toLocaleLowerCase();
-  return rules.some(rule => rule.kind === "item" ? rule.value === key : text.includes(rule.value.toLocaleLowerCase()));
+  const text = [item.title, item.subtitle, item.creator?.title, item.collection?.title, item.collection?.parent?.title].filter(Boolean).join("\n").toLowerCase();
+  return rules.some(rule => rule.kind === "item" ? rule.value === key : text.includes(rule.value.toLowerCase()));
 }
