@@ -8,13 +8,13 @@ hides the shelves' scrollbars.
 ## The hero
 
 The Stage at Home's height (`min(39.375vw, 70vh)`), in its picture's room:
-the picture at the right at its own shape, a wide photograph as a backdrop
-dissolving into the room, anything else (a cover, a logo, a poster) whole as
-an object ([Stage](../design.md#stage)); at the bottom left the title in the
-display face, sized and narrowed by its length and set whole
+the picture at the right, whole at its own shape as an object (a video's
+frame, a cover, a logo, a poster; [Stage](../design.md#stage)), as on every
+Details page; at the bottom left the title in the display face, sized by its
+length and set whole
 ([Type](../design.md#type)), one muted meta line with its relationship links,
 how far it got as a slim line beside what's left, and the verbs. Phones put
-the picture at the top of the column (a frame across it, an object centred)
+the picture at the top of the column (centred; a wide one across it)
 and the copy under it, the primary verb growing along the verbs' one line. Its
 item is the first of:
 

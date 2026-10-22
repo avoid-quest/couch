@@ -37,9 +37,8 @@ ink on the room. The current tab is white with a short white rule under its
 name, the others muted until a pointer brings them up. The search field keeps
 a solid fill (`muted`), so artwork under the see-through header never shows
 through its text. Over a [Stage](../design.md#stage), while the page is at its
-top, the header is see-through: over a frame the Stage's scrim (90% black to
-the header's foot) keeps its ink at 7:1, and over a room, dark enough for
-muted ink, it needs none; once the page scrolls it is black again. The header
+top, the header is see-through over the Stage's room, dark enough for muted
+ink at 7:1; once the page scrolls it is black again. The header
 publishes its height as `--top-bar` so scroll padding keeps focus clear of it
 and the Stage reaches up under it. Below `lg` a TV centres its tabs on a second row.
 

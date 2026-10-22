@@ -2,10 +2,10 @@
 
 Couch is one app on three kinds of screen: the TV (a remote), a desktop window
 (mouse and keyboard) and phones (touch). It is a dark living room lit by what
-plays. Every picture is an object you could hold (a sleeve, a poster, a logo),
-shown whole and crisp in a room painted with its own colours; only a wide
-photograph fills the stage as a backdrop. Type is set large and whole, in a
-display face whose width follows its words. Home and every Details page open
+plays. Every picture is an object you could hold (a sleeve, a poster, a logo,
+a video's frame), shown whole and crisp in a room painted with its own colours.
+Type is set large and whole, in one display face at one width, stepping down in
+size as a title grows. Home and every Details page open
 on a [Stage](#stage), the one bold thing, and what plays floats over every page
 in a capsule of tinted [glass](#glass).
 
@@ -23,10 +23,11 @@ bar for thumb reach.
 ## Principles
 
 - **Show the whole picture.** Artwork keeps its true shape everywhere. On the
-  Stage and in the player a wide photograph (a video's frame, a show's photo)
-  is a **frame** that fills the stage as a backdrop; anything else (a square
-  cover, a poster, an avatar, a logo on its own ground) is an **object** that
-  stands whole at a generous size with a shadow under it; a logo on nothing
+  Stage and in the player a picture (a video's frame, a square cover, a
+  poster, an avatar, a logo on its own ground) is an **object** that stands
+  whole at a generous size with a shadow under it, never a backdrop: a
+  thumbnail's own lettering is part of the picture, not a ghost beside the
+  title, and nothing ends in a hard edge; a logo on nothing
   (a vector, see-through edges) is a **mark** that stands whole without one.
   Nothing is cropped into a band, and white artwork stays white
   ([Stage](#stage)).
@@ -117,33 +118,34 @@ is the other, on the player).
 `Stage` (`components/Stage.tsx`) opens Home (the hero) and every Details page
 (`DetailHeader`). It reaches up under the header and out to the window's
 edges, in its picture's [room](#room), which fades into the page's black at
-its foot. The picture's form (`artForm`) comes from its own proportions, read
-once it loads (`useArtRatio`; its kind's shape until then), and from its read:
+its foot. The picture stands whole at the right at its own proportions, read
+once it loads (`useArtRatio`; its kind's shape until then):
 
-- **Frame**, a photograph at least 1.3 times wider than tall: it stands at the
-  right at the stage's height and its own shape, and dissolves leftwards and
-  downwards (a mask in the window's coordinates: nothing of it shows left of
-  40vw, all of it right of 66vw) into the room. A scrim holds the header's ink
-  at 7:1 over it, and the copy is at most 38vw wide.
-- **Object**, anything else: whole at the right, as tall as the stage allows
-  under the header (`--object-h`) and no wider than 40vw, `rounded-sm`, with
-  its shadow (`--object-shadow`); a channel's avatar is a circle. A picture
-  that loads cold settles into place (.75rem, 450 ms) as it fades in.
+- **Object**, any picture, a wide frame too (a video's 16:9): as tall as the
+  stage allows under the header (`--object-h`) and no wider than 40vw
+  (`--object-w`), `rounded-sm`, with its shadow (`--object-shadow`); a
+  channel's avatar is a circle. A picture that loads cold settles into place
+  (.75rem, 450 ms) as it fades in. Never a backdrop: no fade can know where a
+  thumbnail's lettering sits, so a backdrop ghosts it beside the title and
+  ends in a hard edge.
 - **Mark**, a vector or a picture with see-through edges: whole, without a
   shadow or a corner, which would outline its box.
 
-The copy sits at the bottom left, at most 42vw wide: the trail, the title at
-display size ([Type](#type)), one muted meta line and its links, progress, the
-verbs, the synopsis. The header is see-through while the page is at its top
-and black once it scrolls.
+The copy sits at the bottom left in the room left of the picture (at most
+46rem, less the picture's width and a gap): the trail, the title at display
+size ([Type](#type)), one muted meta line ending in its links, progress, the
+verbs, the synopsis. Nothing of it lies over the picture. The header is
+see-through while the page is at its top and black once it scrolls.
 
-- **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. Below
-  `md` the picture leads the column at the top: a frame spans it (cropped to
-  4:3, a poster 4:5) and fades downwards with the copy over its foot; an
-  object stands centred (at most 72vw, 22rem or 46vh tall) above the copy.
-- **7:1, measured.** Over the brightest frame each run of copy keeps 7:1; over
-  a room the copy sits where it is at most luminance .022.
-- **Without artwork** a page gets the room's graphite and its cover in type.
+- **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
+  Details page with nothing under its stage fills the window above the bar
+  and centres its copy and picture in it (from `md`). Below `md` the picture
+  leads the column at the top, centred above the copy (at most 72vw, 22rem or
+  46vh tall); a wide one spans the column.
+- **7:1, measured.** The copy and the header sit only on the room, where it is
+  at most luminance .022.
+- **Without artwork** (or when it doesn't load) the room stands alone, in its
+  graphite: the title is already set large, so no cover in type repeats it.
 
 ## Brand mark
 

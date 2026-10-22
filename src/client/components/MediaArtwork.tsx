@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
  * at its bottom left, sized to the frame (a container query), so it keeps the shelf's rhythm and reads as the item's
  * own cover. The tone is dark enough (OKLCH lightness .3) that white ink over it keeps 7:1. A frame too
  * small for words (a row's or the bar's thumbnail) holds the title's first letter instead, and a collection a folder. An
- * address breaks after its slashes rather than inside a word.
+ * address breaks after its slashes rather than inside a word. A `bare` picture (the Stage's, beside a title already set
+ * large) has no cover: without artwork it is nothing.
  * Its fill and ink are set by value, not by .bg-muted or .text-muted-foreground, which a focused control changes for its
  * inverted ground (index.css) while artwork keeps its own, and on an inner layer so a caller's ground for the picture
  * doesn't cover it.
@@ -18,7 +19,7 @@ const shown = new Set<string>();
 /** The cover's hue, from its title. */
 const hue = (title: string) => { let hash = 7; for (const char of title) hash = (hash * 31 + char.codePointAt(0)!) >>> 0; return hash % 360; };
 
-export function MediaArtwork({ thumbnail, title, collection = false, className = "" }: { thumbnail?: string; title: string; collection?: boolean; className?: string }) {
+export function MediaArtwork({ thumbnail, title, collection = false, bare = false, className = "" }: { thumbnail?: string; title: string; collection?: boolean; bare?: boolean; className?: string }) {
   const [failedSrc, setFailedSrc] = useState("");
   let src = "";
   try {
@@ -35,7 +36,7 @@ export function MediaArtwork({ thumbnail, title, collection = false, className =
   }, [src]);
   return src && src !== failedSrc
     ? <img ref={image} className={cn("media-artwork block w-full aspect-video object-cover bg-muted motion-safe:transition-opacity motion-safe:duration-200 motion-safe:not-data-loaded:opacity-0", className)} data-loaded={src === loadedSrc || shown.has(src) || undefined} src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onLoad={() => { shown.add(src); setLoadedSrc(src); }} onError={() => setFailedSrc(src)} />
-    : <span className={cn("media-artwork @container relative flex w-full aspect-video overflow-hidden", className)} aria-hidden="true">
+    : bare ? null : <span className={cn("media-artwork @container relative flex w-full aspect-video overflow-hidden", className)} aria-hidden="true">
       <span className="absolute inset-0 flex text-white" style={{ background: `oklch(.3 .05 ${hue(title)})` }}>
         {collection ? <Folder className="m-auto size-[max(1rem,20cqi)] text-white/70" />
           : <>

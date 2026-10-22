@@ -11,26 +11,19 @@ const mark = () => document.documentElement.toggleAttribute("data-stage-under-he
 
 /** Each kind's shape, as width over height, until the picture's own is known. */
 export const shapeRatio: Record<ArtShape, number> = { video: 16 / 9, poster: 2 / 3, square: 1, round: 1 };
-/** A picture this much wider than tall is a photograph's frame: it fills the stage as a backdrop. */
-const frameRatio = 1.3;
+/** A picture this much wider than tall is wide: on a phone it spans the column. */
+const wideRatio = 1.3;
 const vector = (src: string | undefined) => /\.svg(\?|#|$)/i.test(src ?? "");
 
 /**
- * How a picture stands on the Stage and in the player (docs/design.md, Stage): a wide photograph's `frame` fills the
- * stage as a backdrop; anything else (a square cover, a poster, an avatar, a logo on its own ground) is an `object`,
- * shown whole and crisp with a shadow in its room; a `mark` (a logo on nothing: a vector, see-through edges) stands
- * whole without the shadow, which would outline its box.
- */
-export function artForm(ratio: number, { clear = false, contain = false, round = false, src }: { clear?: boolean; contain?: boolean; round?: boolean; src?: string }) {
-  if (vector(src) || clear) return "mark";
-  return !contain && !round && ratio >= frameRatio ? "frame" : "object";
-}
-
-/**
  * The top of Home and of every Details page (docs/design.md, Stage). It reaches up under the header and out to the
- * window's edges, in a room painted with the picture's own colours. A frame enters from the right and dissolves into
- * the room; an object or a mark stands whole at the right. The title and its verbs sit at the bottom left. `onPicture`
- * makes the picture a pointer target (Home's playing Stage opens the player), never a focus stop of its own.
+ * window's edges, in a room painted with the picture's own colours. The picture stands whole at the right at its own
+ * shape: an `object` (a frame, a cover, a poster, an avatar, a logo on its own ground) crisp with its shadow, a `mark`
+ * (a logo on nothing: a vector, see-through edges) without the shadow, which would outline its box. A wide frame is
+ * shown whole too, never as a backdrop, so a thumbnail's own lettering never ghosts beside the title. Without a
+ * picture the room stands alone: the title is already set large, so no cover repeats it. The title and its verbs sit
+ * at the bottom left. `onPicture` makes the picture a pointer target (Home's playing Stage opens the player), never a
+ * focus stop of its own.
  */
 export function Stage({ thumbnail, shape, fit, title, size = "details", label, className, onPicture, children, ...props }: {
   thumbnail?: string; shape: ArtShape;
@@ -55,16 +48,15 @@ export function Stage({ thumbnail, shape, fit, title, size = "details", label, c
     addEventListener("scroll", mark, { passive: true });
     return () => { removeEventListener("scroll", mark); stages.delete(element); mark(); };
   }, []);
-  const form = artForm(ratio, { clear: art?.clear, contain: fit === "contain", round: shape === "round", src: thumbnail });
+  const form = vector(thumbnail) || art?.clear ? "mark" : "object";
+  const wide = fit !== "contain" && shape !== "round" && ratio >= wideRatio;
   // A Details page's stage is its header; Home's is a section of the board.
   const Tag = size === "details" ? "header" : "section";
-  return <Tag ref={root as never} {...props} data-stage={size} data-form={thumbnail !== undefined ? form : undefined} aria-label={label} className={cn("stage", className)}
+  return <Tag ref={root as never} {...props} data-stage={size} data-form={thumbnail ? form : undefined} aria-label={label} className={cn("stage", className)}
     style={{ ...roomStyle(art?.light), "--art-ratio": ratio } as CSSProperties}>
     {thumbnail !== undefined && <div aria-hidden="true" className="room" />}
-    {thumbnail !== undefined && <div ref={picture} aria-hidden="true" data-stage-picture data-detail-art={size === "details" || undefined} data-shape={shape} onClick={onPicture} className={cn("stage-picture", onPicture && "cursor-pointer")}>
-      {form === "frame"
-        ? <div className="stage-frame"><MediaArtwork thumbnail={thumbnail} title={title} className="aspect-auto size-full object-cover" /></div>
-        : <MediaArtwork thumbnail={thumbnail} title={title} className={cn("stage-object", shape === "round" && "rounded-full")} />}
+    {thumbnail && <div ref={picture} aria-hidden="true" data-stage-picture data-detail-art={size === "details" || undefined} data-shape={shape} data-wide={wide || undefined} onClick={onPicture} className={cn("stage-picture", onPicture && "cursor-pointer")}>
+      <MediaArtwork bare thumbnail={thumbnail} title={title} className="stage-object" />
     </div>}
     <div className="stage-copy">{children}</div>
   </Tag>;

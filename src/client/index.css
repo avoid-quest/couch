@@ -471,49 +471,42 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 
 /* Unlayered, so a page's spacing utilities (space-y) never undo the stage's reach under the header. */
 /* The Stage (Stage.tsx, docs/design.md): Couch's one bold thing. It reaches up under the header and out to the window's
-   edges, in the picture's room. A frame (a wide photograph) enters from the right edge at the stage's height and
-   dissolves leftwards and downwards (a mask) into the room; an object (a cover, a poster, an avatar, a logo on its own
-   ground) stands whole at the right at a generous size, crisp, with its shadow; a mark (a logo on nothing) without one.
-   The copy sits at the bottom left: over a frame at most a third of the picture shows under the title and less than a
-   tenth under muted ink; an object never lies under it. A scrim at the top keeps the header's ink at 7:1. */
-.stage { --stage-h: min(39.375vw, 70vh); --object-h: calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
+   edges, in the picture's room. The picture stands whole at the right, at its own shape and a generous size, crisp,
+   with its shadow (a mark, a logo on nothing, without one): a wide frame too, at 16:9, so a thumbnail's own lettering is
+   part of the picture, never a ghost beside the title, and nothing ends in a hard edge. The copy sits at the bottom
+   left in the room left of it and never lies over it. The room is dimmed so the header's ink keeps 7:1 over it. */
+.stage { --stage-h: min(39.375vw, 70vh); --object-h: calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem); --object-w: min(40vw, calc(var(--object-h) * var(--art-ratio))); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
 .stage[data-stage="details"] { --stage-h: min(33vw, 60vh); --title-short: 4.5rem; --title-medium: 3.5rem; --title-long: 2.75rem; --title-xlong: 2.25rem; }
-.stage[data-form="frame"]::before, .stage:not([data-form])::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: calc(var(--top-bar, 4rem) + 4rem); background: linear-gradient(rgb(0 0 0 / 90%) var(--top-bar, 4rem), transparent); pointer-events: none; }
-/* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the next section). */
-.stage > .room { mask-image: linear-gradient(#000 50%, transparent); }
-.stage[data-form="frame"] > .room { --room-x: 60%; }
-.stage-picture { position: absolute; inset: 0 0 auto; z-index: -2; display: flex; justify-content: flex-end; height: var(--stage-h); }
-.stage[data-form="frame"] .stage-picture { mask-image: linear-gradient(90deg, transparent 40vw, rgb(0 0 0 / 30%) 50vw, #000 66vw), linear-gradient(0deg, transparent, rgb(0 0 0 / 40%) 18%, #000 45%); mask-composite: intersect; }
-/* The frame: the picture at the stage's height and its own shape, its left edge soft where the window's mask doesn't reach it. */
-.stage-frame { position: relative; height: 100%; max-width: 72vw; flex-shrink: 0; aspect-ratio: var(--art-ratio); mask-image: linear-gradient(90deg, transparent, #000 10rem); }
-.stage-frame > .media-artwork { object-position: 50% 30%; }
-/* An object or a mark: whole, at its own shape, as tall as the stage allows under the header and no wider than 40vw,
-   at the right of the copy, and above the room's light. */
-.stage:not([data-form="frame"]) .stage-picture { inset: calc(var(--top-bar, 4rem) + 1.5rem) calc(var(--gutter) + 3vw) auto auto; height: var(--object-h); align-items: center; }
-.stage-object { width: min(40vw, calc(var(--object-h) * var(--art-ratio))); height: auto; aspect-ratio: var(--art-ratio); object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
+/* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the
+   next section); its light pools behind the picture. */
+.stage > .room { --room-x: 80%; mask-image: linear-gradient(#000 50%, transparent); }
+/* The picture: as tall as the stage allows under the header and no wider than 40vw, at the right of the copy, above the room's light. */
+.stage-picture { position: absolute; inset: calc(var(--top-bar, 4rem) + 1.5rem) calc(var(--gutter) + 3vw) auto auto; z-index: -2; display: flex; justify-content: flex-end; align-items: center; height: var(--object-h); }
+.stage-object { width: var(--object-w); height: auto; aspect-ratio: var(--art-ratio); object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
 /* A picture that loads cold settles into its place as it fades in, once; one already shown is there at once. */
 @media (prefers-reduced-motion: no-preference) { .stage-object { transition: opacity .2s var(--ease-out), translate .45s var(--ease-out); } .stage-object:not([data-loaded]) { translate: 0 .75rem; } }
+.stage-picture[data-shape="round"] .stage-object { border-radius: 50%; }
 .stage[data-form="mark"] .stage-object { box-shadow: none; border-radius: 0; background: transparent; }
-.stage:not([data-form="frame"]) > .room { --room-x: 80%; }
-.stage-copy { position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; width: 100%; max-width: min(46rem, 42vw); padding-bottom: 2.5rem; container-type: inline-size; }
-.stage[data-form="frame"] .stage-copy { max-width: min(44rem, 38vw); }
-/* Phones and narrow windows: the picture leads the column at the top, under the header; a frame spans it and fades
-   downwards with the copy over its foot, an object stands centred above the copy. */
+/* A picture that didn't load leaves no box: the room stands alone, as it does without one. */
+.stage-picture:empty { display: none; }
+.stage-copy { position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; width: 100%; max-width: 46rem; padding-bottom: 2.5rem; container-type: inline-size; }
+/* Beside a picture the copy takes the room left of it, less a gap: a wide picture leaves less than a poster. */
+.stage:has(> [data-stage-picture] > *) .stage-copy { max-width: min(46rem, calc(100% - var(--object-w) - 3vw - 3rem)); }
+/* Phones and narrow windows: the picture leads the column at the top, under the header, centred above the copy; a
+   wide one spans the column. */
 @media (max-width: 47.99rem) {
   .stage { min-height: 0; padding-top: 0; align-content: start; --title-short: 3rem; --title-medium: 2.375rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
   .stage[data-stage="details"] { --title-short: 2.75rem; --title-medium: 2.25rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
-  .stage-picture, .stage:not([data-form="frame"]) .stage-picture { position: relative; inset: auto; height: auto; margin-inline: calc(-1 * var(--gutter)); }
-  .stage[data-form="frame"] .stage-picture { max-height: 62vh; mask-image: linear-gradient(0deg, transparent, transparent 10%, rgb(0 0 0 / 35%) 30%, #000 60%); }
-  .stage-frame { width: 100%; height: auto; max-width: none; max-height: 62vh; mask-image: none; aspect-ratio: 4 / 3; }
-  .stage-picture[data-shape="poster"] .stage-frame { aspect-ratio: 4 / 5; }
-  .stage:not([data-form="frame"]) .stage-picture { justify-content: center; padding: calc(var(--top-bar, 4rem) + 1.25rem) var(--gutter) 0; }
+  .stage-picture { position: relative; inset: auto; height: auto; justify-content: center; margin-inline: calc(-1 * var(--gutter)); padding: calc(var(--top-bar, 4rem) + 1.25rem) var(--gutter) 0; }
   .stage-object { width: min(72vw, 22rem, calc(46vh * var(--art-ratio))); }
+  .stage-picture[data-wide] .stage-object { width: 100%; }
+  /* Without a picture the copy clears the header itself. */
+  .stage:not(:has(> [data-stage-picture] > *)) { padding-top: calc(var(--top-bar, 4rem) + 1.25rem); }
   .stage > .room { --room-x: 50%; --room-y: 25%; }
-  .stage-copy, .stage[data-form="frame"] .stage-copy { max-width: none; padding-bottom: 1.5rem; }
-  .stage[data-form="frame"] .stage-copy { margin-top: -2.5rem; }
-  .stage:not([data-form="frame"]) .stage-copy { margin-top: 1.75rem; }
+  .stage-copy, .stage:has(> [data-stage-picture] > *) .stage-copy { max-width: none; padding-bottom: 1.5rem; }
+  .stage:has(> [data-stage-picture] > *) .stage-copy { margin-top: 1.75rem; }
 }
-/* Over a stage, while the page is at its top, the header is see-through, its ink kept by the stage's scrim; scrolled, black again. */
+/* Over a stage, while the page is at its top, the header is see-through, its ink kept by the dimmed room; scrolled, black again. */
 html[data-stage-under-header] .app-header { background: transparent; }
 
 @keyframes couch-level { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
