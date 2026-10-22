@@ -1,5 +1,7 @@
 // Public references keep their original identity across transport domain moves.
 export const animeUnityOrigin = "https://www.animeunity.so";
+// Public browser destinations and the initial catalogue transport use the current site.
+export const animeUnitySiteOrigin = "https://www.animeunity.to";
 
 // Keep saved links from before the domain move usable.
 export const isAnimeUnityHost = (hostname: string) => /^(?:www\.)?animeunity\.[a-z]{2,63}$/i.test(hostname);

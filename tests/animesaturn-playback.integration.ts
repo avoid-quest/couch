@@ -44,6 +44,21 @@ test("HD extraction reads public literals, validates HLS and preserves page meta
   assert.deepEqual(result.subtitles, []);
 });
 
+test("HD progressive MP4 goes to playback without downloading the media as text", async () => {
+  const requests: string[] = [];
+  const progressive = "https://srv30.sake.streampeaker.org/DDL/ANIME/Suikoden/01.mp4?token=fixture";
+  const result = await resolveAnimeSaturnLink(page, undefined, fixture(url => {
+    if (url === page) return html;
+    assert.equal(url, live, "extraction must stop at the public player response");
+    return `<script>var src = ${JSON.stringify(progressive)}; var isHls = false;</script>`;
+  }, requests));
+  assert.deepEqual(requests, [page, live]);
+  assert.equal(result.url, progressive);
+  assert.deepEqual(result.metadata, { title: "One Piece Sub ITA Episode 1180", thumbnail: image });
+  assert.deepEqual(result.headers, { "User-Agent": "Mozilla/5.0", Referer: `${origin}/` });
+  assert.deepEqual(result.subtitles, []);
+});
+
 test("Mega remains available through one allowlisted iframe when HD fails", async () => {
   const requests: string[] = [];
   const result = await resolveAnimeSaturnLink(page, undefined, fixture(url => {
@@ -58,7 +73,7 @@ test("Mega remains available through one allowlisted iframe when HD fails", asyn
   assert.deepEqual(requests, [page, live, mega, embed, megaStream]);
 });
 
-test("malicious public embeds, stream hosts and non-HLS responses are rejected", async () => {
+test("unaccepted public embeds, stream hosts and invalid HLS responses are rejected", async () => {
   for (const body of [
     `<script>var src = "https://127.0.0.1/private/master.m3u8";</script>`,
     frame("https://cdn2.megaplay.su.evil.example/e/6cc193a4facd7d3d177fc90079bc86cec5da770737cc838d"),

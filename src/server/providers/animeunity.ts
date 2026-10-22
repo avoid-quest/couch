@@ -1,6 +1,6 @@
 import { publicFetch } from "../public-network";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
-import { animeUnityOrigin, animeUnityPageUrl, isAnimeUnityHost } from "../../shared/animeunity";
+import { animeUnityOrigin, animeUnitySiteOrigin, animeUnityPageUrl, isAnimeUnityHost } from "../../shared/animeunity";
 import { ProviderError, providerItemId, readProviderText } from "./http";
 
 const changed = () => new ProviderError("AnimeUnity changed this page or it is unavailable. Try again shortly.");
@@ -88,7 +88,7 @@ export async function animeUnityText<T = undefined>(url: string, signal?: AbortS
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(25_000)]);
   cancellation.throwIfAborted();
   let state = origins.get(request);
-  if (!state) { state = { origin: "https://www.animeunity.to", retryAt: 0 }; origins.set(request, state); }
+  if (!state) { state = { origin: animeUnitySiteOrigin, retryAt: 0 }; origins.set(request, state); }
   const attemptedOrigin = state.origin;
   const load = async () => {
     const target = new URL(url);

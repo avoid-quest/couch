@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { originalPageUrl, queuePageUrl } from "../src/client/original-page";
+import { animeUnityPageUrl } from "../src/shared/animeunity";
 
 test("media, live channels and collections retain their original page", () => {
   for (const url of [
@@ -7,7 +8,7 @@ test("media, live channels and collections retain their original page", () => {
     "https://www.youtube.com/@channel/videos", "https://www.twitch.tv/channel",
     "https://artist.bandcamp.com/album/record", "https://soundcloud.com/artist/sets/record",
     "https://www.raiplay.it/video/2026/10/episode.html", "https://www.raiplay.it/dirette/rai1",
-    "https://animesaturn.ro/anime/show/", "https://www.animeunity.so/anime/123-show/456",
+    "https://animesaturn.ro/anime/show/", "https://www.animeunity.to/anime/123-show/456",
     "https://streamingcommunityz.pictures/watch/123?e=456", "https://www.nts.live/",
   ]) expect(originalPageUrl(url)).toBe(url);
 });
@@ -34,4 +35,17 @@ test("missing pages, files, streams and unsafe links have no browser action dest
   const page = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   expect(queuePageUrl({ id: "entry", title: "Video", source: `web:${page}` })).toBe(page);
   expect(queuePageUrl({ id: "entry", title: "Shared input", source: `web:${page}`, liveSourceId: "input" })).toBeUndefined();
+});
+
+
+test("AnimeUnity opens the current site while saved page identities remain canonical", () => {
+  const path = "/anime/123-show/456";
+  const canonical = `https://www.animeunity.so${path}`;
+  const current = `https://www.animeunity.to${path}`;
+  expect(animeUnityPageUrl(current)?.href).toBe(canonical);
+  expect(queuePageUrl({ id: "episode", title: "Episode", source: `web:${canonical}` })).toBe(canonical);
+  expect(originalPageUrl(canonical)).toBe(current);
+  expect(originalPageUrl(`http://animeunity.so${path}?view=episodes#player`)).toBe(`${current}?view=episodes#player`);
+  expect(originalPageUrl(current)).toBe(current);
+  expect(originalPageUrl(`https://www.animeunity.cc${path}`)).toBe(`https://www.animeunity.cc${path}`);
 });

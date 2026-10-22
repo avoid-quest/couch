@@ -15,8 +15,8 @@ function publicPlayerUrl(value: string, embed: boolean): URL | undefined {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.port || url.username || url.password || url.hash) return;
     if (embed ? /^cdn\d{1,3}\.megaplay\.su$/.test(url.hostname) && /^\/e\/[a-f\d]{16,128}$/.test(url.pathname) && (!url.search || url.search === "?autoplay=1")
-      : /^(?:cdn\d{1,3}\.megaplay\.su|srv\d{1,3}\.[a-z\d-]+\.streampeaker\.org)$/.test(url.hostname) && /\.m3u8$/.test(url.pathname)) return url;
-  } catch { /* Only the observed public players and their HLS hosts are used. */ }
+      : /^(?:cdn\d{1,3}\.megaplay\.su|srv\d{1,3}\.[a-z\d-]+\.streampeaker\.org)$/.test(url.hostname) && /\.(?:m3u8|mp4)$/.test(url.pathname)) return url;
+  } catch { /* Only the observed public players and their media hosts are used. */ }
 }
 
 async function playerText(url: string, maximum: number, signal: AbortSignal, request: typeof fetch): Promise<string> {
@@ -47,7 +47,7 @@ export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), deadline]);
   try {
     const title = await animeSaturnTitle(url.href, cancellation, request);
-    // HD publishes HLS in one response; Mega adds one allowlisted iframe hop.
+    // HD publishes HLS or progressive MP4; Mega adds one allowlisted iframe hop.
     const players = title.players.sort((a, b) => Number(new URL(b).searchParams.get("source") === "animesaturn_live") - Number(new URL(a).searchParams.get("source") === "animesaturn_live"));
     for (const player of players) {
       try {
@@ -61,8 +61,12 @@ export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal
           stream = directStream(html);
           if (!stream || stream.origin !== embed.origin) continue;
         }
-        const manifest = await playerText(stream.href, 512 * 1024, cancellation, request);
-        if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) continue;
+        // Like AnimeUnity's progressive fallback, MP4 goes straight to the guarded
+        // playback resolver. Reading it here as text could download the whole film.
+        if (stream.pathname.endsWith(".m3u8")) {
+          const manifest = await playerText(stream.href, 512 * 1024, cancellation, request);
+          if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) continue;
+        }
         cancellation.throwIfAborted();
         const { title: name, thumbnail, duration } = title.item;
         return { url: stream.href, headers: { ...headers }, metadata: { title: name, ...(thumbnail ? { thumbnail } : {}), ...(duration !== undefined ? { duration } : {}) }, subtitles: [] };
