@@ -230,8 +230,10 @@ looked-at Playback plays.
 circles 10rem), a title of up to two lines and one meta line, plus a
 `DurationBar` on Continue. The caption always keeps the room of two title
 lines and a meta line, so a shelf's tiles end level while each meta line
-follows its own title. A pointer over a tile dims its artwork, with a white
-Play disc where the press plays or resumes. The "…" sits over the end of the
+follows its own title. A pointer over a tile draws a hairline round its
+artwork and tints its caption ([Hover](../design.md#tokens)); where the press
+plays or resumes, the artwork also dims under a white Play disc, for a pointer
+or keyboard focus. The "…" sits over the end of the
 title's first line; a pointer sees it over or inside the tile, touch always;
 on the TV it is always shown and no focus stop unless the press is disabled.
 

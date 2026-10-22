@@ -50,8 +50,8 @@ export function MediaTile({ title, meta, context, thumbnail, shape, own = shape,
   const body = <>
     <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background", artAspect[shape], dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
       <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover")} />
-      {/* A pointer over the tile dims its artwork, with Play where the press plays (index.css); never on the TV. */}
-      <span data-tile-hover aria-hidden="true" className="absolute inset-0 grid place-items-center">{plays && <span className="grid size-12 place-items-center rounded-full bg-foreground text-background"><Play className="size-5 translate-x-px fill-current" /></span>}</span>
+      {/* Where the press plays, a pointer or keyboard focus dims the artwork under a Play disc (index.css); never on the TV. */}
+      {plays && <span data-tile-hover aria-hidden="true" className="absolute inset-0 grid place-items-center"><span className="grid size-12 place-items-center rounded-full bg-foreground text-background"><Play className="size-5 translate-x-px fill-current" /></span></span>}
       <ArtLevel level={level} className="size-8 text-base" />
     </span>
     {/* The caption takes the artwork's width and always the room of two title lines and a meta line, so the shelf's
@@ -63,7 +63,7 @@ export function MediaTile({ title, meta, context, thumbnail, shape, own = shape,
     </span>
   </>;
   return <div data-tile {...options.item} className={cn("relative flex w-fit flex-col", tileHeight[shape], options.item.className, className)}>
-    <Button variant="ghost" data-media-tile {...options.target} asChild={!!href && !disabled} disabled={disabled} className="peer h-auto w-min flex-col items-stretch justify-start gap-3 rounded-none border-0 p-0 text-left font-normal whitespace-normal disabled:opacity-50" {...props} onClick={event => {
+    <Button variant="ghost" data-media-tile {...options.target} asChild={!!href && !disabled} disabled={disabled} className="peer h-auto w-min flex-col items-stretch justify-start gap-3 rounded-none border-0 p-0 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent disabled:opacity-50" {...props} onClick={event => {
       if (href && onClick) {
         if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

@@ -72,7 +72,7 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
     {description && <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-sm text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
   </>;
   // A pointer over the row tints all of it, artwork and "…" too; its main verb's own tint stays off (the TV has none).
-  return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border px-0 py-3", primary && !primary.disabled && "hover:bg-foreground/10", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
+  return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border px-0 py-3", primary && !primary.disabled && "motion-safe:transition-colors hover:bg-foreground/10 has-[[data-play]:active]:bg-foreground/20", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
     <li data-nav-row {...props} {...options.item}>
       {/* The artwork is a larger pointer target for the main verb, as the now-playing bar's is. */}
       {/* A tracklist's playing track shows the level in place of its number. */}
@@ -86,7 +86,7 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
           if (primary.href) event.preventDefault();
           primary.onClick();
         }}
-          className="group/main h-auto w-full min-w-0 flex-col items-start justify-center gap-0.5 self-stretch px-2 py-1.5 text-left font-normal whitespace-normal hover:bg-transparent">
+          className="group/main h-auto w-full min-w-0 flex-col items-start justify-center gap-0.5 self-stretch px-2 py-1.5 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent">
           {primary.href && !primary.disabled ? <a href={detailHref(primary.href)}>{body}</a> : body}
         </Button> : <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-0.5 px-2 py-1.5">{body}</div>}
         {context && <div className="min-w-0 px-2 empty:hidden">{context}</div>}

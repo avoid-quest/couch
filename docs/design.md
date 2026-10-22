@@ -93,10 +93,15 @@ caption inverts and its artwork takes a thin outline, which the TV thickens
 while it lifts the tile 5% ([TV](design/tv.md)). A text link's inversion
 reaches a little past its words (a shadow, so nothing moves).
 
-**Hover** is a white tint, never on the TV; over a tile's artwork it is a dim
-instead (with Play where the press plays), and a row tints whole. A ghost button whose panel is open
-(`aria-expanded`: Volume, Where it plays, Up next, Playback)
-keeps the tint.
+**Hover is focus, quietly**, and a press is the step between them: a pointer
+tints the ground focus would invert (white 15% on a control, 10% on a row or
+a tile's caption), a press deepens it at once (25%, 20%; the white button
+greys), and focus inverts it. A tile's artwork takes focus's outline as a
+hairline; where its press plays, the artwork also dims under a white Play
+disc, which keyboard focus shows too. Nothing scales, lifts or slides under a
+pointer, and whatever a press acts on shows the hand. Never on the TV, which
+lifts its focus instead. A row tints whole. A ghost button whose panel is open
+(`aria-expanded`: Volume, Where it plays, Up next, Playback) keeps the tint.
 
 ## Scale
 
@@ -156,7 +161,7 @@ control, 200 ms for what arrives.
   the **level**, three bars that rise and fall while sound comes out
   (`Level`). It says the player's state, not the sound's loudness: it moves
   only while what plays is playing, and lies flat while paused, buffering or
-  loading. It sits on the playing item's artwork (a black square in its
+  loading, as short thin bars that can't be read as a "…". It sits on the playing item's artwork (a black square in its
   bottom-left corner) wherever it is listed, in place of a playing track's
   number, on the now-playing bar's thumbnail and beside each device in Where
   it plays whose sound is in. Its bars move by transforms only. Reduced motion

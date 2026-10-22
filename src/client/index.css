@@ -98,6 +98,8 @@ body { min-width: 0; }
   html { @apply font-sans; font-size: clamp(16px, 1.25vw, 24px); font-variant-numeric: tabular-nums; }
   body { @apply bg-background text-foreground; }
   button, [role="button"] { touch-action: manipulation; }
+  /* Whatever a press acts on shows the hand, as links do (Tailwind 4 leaves buttons on the arrow; shadcn's upgrade note). */
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
   :is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { outline: 2px solid var(--ring); outline-offset: 2px; }
   /* What hover, a press or leaving focus changes on a control eases over 150 ms, as the shadcn primitives' own
      transition-* utilities do (those win, being utilities). Muted text and a tile's caption ease with it. */
@@ -128,12 +130,18 @@ body { min-width: 0; }
 /* A text link's inversion reaches a little past its words, so a short one ("Blender") reads as a chip. A shadow, not
    padding, so nothing moves. */
 [data-text-link]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { box-shadow: -.25rem 0 0 .125rem var(--foreground), .25rem 0 0 .125rem var(--foreground); box-decoration-break: clone; }
-/* A pointer over a tile dims its artwork (with Play on a tile whose press plays) and shows its "…"; touch keeps the
-   "…" shown, and the TV, which has no pointer to answer, shows the "…" and never the dim. */
+/* Hover is focus, quietly (Design → Hover): a pointer over a tile draws focus's outline as a hairline and tints the
+   caption focus inverts; a press deepens the tint. Where the press plays, the artwork dims under a Play disc, for a
+   pointer and for keyboard focus alike. Touch keeps the "…" shown, and the TV, which has no pointer to answer and lifts
+   its focus instead, shows the "…" and never the disc. */
 [data-tile-hover] { opacity: 0; background: color-mix(in srgb, var(--background) 45%, transparent); @apply motion-safe:transition-opacity; }
+[data-media-tile]:where(:not(.tv-presentation *)):focus-visible [data-tile-hover] { opacity: 1; }
 @media (hover: hover) {
   [data-media-tile]:where(:not(.tv-presentation *)):not(:disabled):hover [data-tile-hover] { opacity: 1; }
+  [data-media-tile]:where(:not(.tv-presentation *)):not(:disabled, :focus-visible):hover [data-tile-art] { outline-width: 1px; outline-color: rgb(255 255 255 / 60%); }
+  [data-media-tile]:where(:not(.tv-presentation *)):not(:disabled, :focus-visible):hover [data-tile-caption] { background: rgb(255 255 255 / 10%); }
 }
+[data-media-tile]:where(:not(.tv-presentation *)):not(:disabled, :focus-visible):active [data-tile-caption] { background: rgb(255 255 255 / 20%); }
 @media (hover: hover) and (pointer: fine) {
   [data-tile-menu]:where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
   [data-tile]:is(:hover, :focus-within) [data-tile-menu] { opacity: 1; }
@@ -332,9 +340,9 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
   .ambient-backlight { position: absolute; left: calc(var(--light-x) - var(--glow)); top: calc(var(--light-y) - var(--glow)); width: calc(var(--light-w) + 2 * var(--glow)); height: calc(var(--light-h) + 2 * var(--glow)); padding: var(--glow); background: radial-gradient(closest-side, var(--light-a) 55%, color-mix(in srgb, var(--light-a) 25%, transparent) 80%, transparent); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude; }
 
   /* The level (Level.tsx): Couch's one loop. Three bars rise and fall while sound comes out, each at its own pace, as
-     transforms only; paused, buffering or loading they lie flat. Reduced motion holds them still at three heights. */
-  .level { display: inline-flex; align-items: flex-end; gap: 12.5%; width: 1em; height: 1em; flex-shrink: 0; }
-  .level > span { flex: 1; height: 100%; background: currentColor; transform: scaleY(.2); transform-origin: bottom; transition: transform .15s var(--ease-out); }
+     transforms only; paused, buffering or loading they lie flat, as short thin bars, never three dots that read as a "…". Reduced motion holds them still at three heights. */
+  .level { display: inline-flex; align-items: flex-end; gap: 20%; width: 1em; height: 1em; flex-shrink: 0; }
+  .level > span { flex: 1; height: 100%; background: currentColor; transform: scaleY(.4); transform-origin: bottom; transition: transform .15s var(--ease-out); }
   .level[data-level="moving"] > span:nth-child(1) { transform: scaleY(.6); }
   .level[data-level="moving"] > span:nth-child(2) { transform: scaleY(1); }
   .level[data-level="moving"] > span:nth-child(3) { transform: scaleY(.8); }
