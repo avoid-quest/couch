@@ -71,7 +71,7 @@ export async function mountUiAudit() {
     player:{status:'idle',playbackId:'p',speed:1,volume:50,position:120,duration:900,seekable:true,tracks:[],error:null},
     devices:[{id,name:'Studio browser',role:'administrator',online:true,volume:50,muted:false,sharing:{audio:true,video:true}},{id:'audit-tv',name:'Living room TV',tv:true,online:true,volume:60,muted:false,sharing:{audio:true,video:true}}],
     outputs:[{deviceId:id,picture:false,sound:true}],playbacks:[{id:'p',title:entry.title,status:'paused',audioOnly:true,outputs:[{deviceId:id,picture:false,sound:true}]}],
-    liveSources:[],preferences:{profile:{audioLanguage:'',subtitleLanguage:'',subtitles:'auto',speed:1,autoplay:true},device:{audioDelay:0}},activeProfile:{id:'default',name:'Everyone'},profiles:[{id:'default',name:'Everyone'}],autoplay:{enabled:true,status:'idle'},versions:{},administratorClaimed:true,
+    liveSources:[],preferences:{profile:{audioLanguage:'',subtitleLanguage:'',subtitles:'auto',speed:1,autoplay:true},device:{audioDelay:0}},activeProfile:{id:'default',name:'Everyone'},profiles:[{id:'default',name:'Everyone'}],autoplay:{enabled:true,contextTitle:null,upcoming:[]},versions:{},administratorClaimed:true,
   };
   let gate = {credentials:{origin:location.origin,token:'visual-fixture',installationId:'visual-fixture'},connected:true,status:'connected',nativeHost:false,localHost:false,tvPresentation:isTvPresentation(),queryClient:client,
     identity:{authority:'administrator',device:{id,name:'Studio browser',role:'administrator'}},details:{name:'Living room',installationId:'visual-fixture',urls:[location.origin],systemAudio:false,tvPresentation:false},

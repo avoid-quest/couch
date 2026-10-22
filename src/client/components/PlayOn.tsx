@@ -31,7 +31,7 @@ export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}`
 function Devices({ onPlay, disabled, sharingDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
   const { devices, here } = usePlayOn();
   return devices.map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
-    <span className="w-full break-words">{device.name}</span>{(device.id === here || device.id === sharingDeviceId) && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">{[device.id === here && "This device", device.id === sharingDeviceId && "Sharing this source"].filter(Boolean).join(" · ")}</span>}
+    <span className="w-full break-words">{device.name}</span>{(device.id === here || device.id === sharingDeviceId) && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">{[device.id === here && "This device", device.id === sharingDeviceId && "Sharing this source"].filter(Boolean).join(", ")}</span>}
   </DropdownMenuItem>);
 }
 

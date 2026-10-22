@@ -1,36 +1,35 @@
 import { DetailSkeleton, MediaRowsSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
-import { collectionLocation, keepSection } from "@/detail-navigation";
+import { collectionLocation, keepSection, useOwnSearch } from "@/detail-navigation";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
-import { PageHeader } from "@/components/PageHeader";
-import { FilterInput } from "@/components/ContentFilters";
+import { FilterBar, FilterInput } from "@/components/ContentFilters";
 import { Button } from "@/components/ui/button";
 import { BrowsePagination } from "@/components/BrowsePagination";
 import { MediaTile } from "@/components/MediaTile";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
 import { HitList, SourceProblems } from "./SearchPanel";
+import { ItemNotFound } from "@/sections/details/ItemPage";
 import { providerNames, SearchOnlineResults, type SearchCollection, type SearchResultSummary } from "./SearchOnlineResults";
 import { DetailHeader } from "@/components/DetailHeader";
-import { tileShape, type TileShape } from "@/components/MediaTile";
+import { artShape, type ArtShape } from "@/art-shape";
+import { isChannelTab, metaLine, pageTitle } from "@/media-caption";
+import { collectionLinks } from "@/collection-target";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { TRY_AGAIN } from "@/copy";
+import { useSettingsScope } from "@/sections/settings/settings-scope";
 import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 
 export function ProviderPage() {
-  const { search } = useLocation();
-  const state = readCollectionSearch(search);
-  if (!state.provider) return <section data-page="Collection">
-    <ContentBreadcrumb title="Collection unavailable" />
-    <PageHeader title="Collection unavailable" />
-    <p className="text-muted-foreground">This collection link is incomplete or unsupported.</p>
-  </section>;
+  const state = useOwnSearch(readCollectionSearch);
+  if (!state.provider) return <section data-page="Collection"><ItemNotFound title="Collection not found" /></section>;
   return <CollectionPage key={`${state.provider}:${state.url}`} provider={state.provider} url={state.url ?? ""} search={state} />;
 }
 
@@ -42,8 +41,18 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const [reported, setReported] = useState<{ cursor?: string; summary: SearchResultSummary } | null>(null);
   const report = useCallback((_: string, summary: SearchResultSummary) => setReported({ cursor, summary }), [cursor]);
   const summary = reported?.cursor === cursor ? reported?.summary : undefined;
-  const collection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
+  const reportedCollection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
+  // A YouTube channel's tab ("Stanford - Videos") is the channel; another source's "… - Live" album keeps its name.
+  const tab = provider === "youtube" && isChannelTab(reportedCollection.title);
+  const collection = { ...reportedCollection, title: tab ? pageTitle(reportedCollection.title) : reportedCollection.title };
   const page = summary?.page;
+  // A channel's tab sits under its channel, which is the page itself: the trail stops before it.
+  const holder = search.context ?? page?.item?.collection ?? page?.parent;
+  const trail = holder && !("parent" in holder && holder.parent) && holder.title === collection.title ? undefined : holder;
+  // A Twitch page that isn't its directory is a channel, whose picture is its avatar.
+  const channel = page?.item?.kind === "channel" || tab || provider === "twitch" && !!url && !new URL(url).pathname.startsWith("/directory");
+  // The page's own shape: a channel is round, an album square, a series a poster, an episode a frame.
+  const shape = artShape(providerNames[provider], channel ? "channel" : collection.single ? (search.context ?? page?.item?.collection ? "episode" : "media") : "collection");
   const cold = connected && (!summary || summary.loading) && !page;
   // Use the provider's canonical catalogue route; title and season pages keep their rows.
   const path = url ? new URL(page?.item?.url ?? url).pathname : "";
@@ -68,6 +77,9 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const episodeList = provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path) || /\/season-\d+|\/ContentSet-/.test(url)
     || ["streamingcommunity", "animesaturn", "animeunity"].includes(provider) && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media");
   const seasonList = provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection");
+  const filterable = (summary?.hits?.length ?? 0) > filterAfter || !!paging.previous || !!paging.next || !!search.filter;
+  // An album's tracks are a tracklist: number, title and time.
+  const tracks = (provider === "bandcamp" || provider === "soundcloud") && !!url && !!hits.length && hits.every(hit => !hit.collection);
   let noun = "Items";
   if (provider === "bandcamp") noun = url ? "Tracks" : "Albums";
   else if (episodeList) noun = "Episodes";
@@ -90,54 +102,73 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     onSelectPage={page => goToPage(locationFor({ page }))} />;
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
-    <ContentBreadcrumb title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
-    {cold && url ? <DetailSkeleton shape={tileShape(providerNames[provider], false)} /> : <CollectionHeader collection={collection} canPlay={available} shape={tileShape(providerNames[provider], !!collection.single && !!(search.context ?? page?.item?.collection))} />}
+    {cold && url ? <DetailSkeleton trail={<ContentBreadcrumb stage title={collection.title} provider={provider} collection={trail} />} />
+      : <CollectionHeader collection={collection} canPlay={available} shape={shape} trail={<ContentBreadcrumb stage title={collection.title} provider={provider} collection={trail} />} />}
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
-      <div className="grid gap-3">
-        <div role="group" aria-label="Collection filters" className="flex flex-wrap items-end gap-3">
-          <FilterInput label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} className="w-full sm:max-w-sm" value={search.filter}
-            onChange={filter => void navigate({ href: locationFor({ page: 1, filter }), replace: true, resetScroll: false })} />
-          {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
-          {provider === "movies123" && posterCatalogue && <>
-            <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
-            <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
-          </>}
-        </div>
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{cold && !hits.length ? <><Spinner aria-hidden="true" className="size-3.5" /><span role="status">Loading items…</span></> : <span role="status">{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</span>}</h2>
-          {pager}
-        </div>
-      </div>
+      {/* Filter waits for more than a glance holds: one season or eight tracks need none. */}
+      {(filterable || provider === "twitch" && !url || provider === "movies123" && posterCatalogue) && <FilterBar label="Collection filters">
+        {filterable && <FilterInput label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} value={search.filter}
+          onChange={filter => void navigate({ href: locationFor({ page: 1, filter }), replace: true, resetScroll: false })} />}
+        {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
+        {provider === "movies123" && posterCatalogue && <>
+          <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
+          <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
+        </>}
+      </FilterBar>}
+      <h2 id="collection-items" tabIndex={-1} className="sr-only"><span role="status">{cold ? "" : `${hits.length} ${noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}${paging.remote ? " on this page" : ""}`}</span></h2>
       {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
-      {cold && !posterCatalogue && <MediaRowsSkeleton compact />}
+      {/* The rows it loads into: a source's music as squares, everything else as frames. */}
+      {cold && !posterCatalogue && <MediaRowsSkeleton compact shape={artShape(providerNames[provider]) === "square" ? "square" : "video"} />}
       {posterCatalogue ? <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6 p-0">
         {cold && <MediaTilesSkeleton shape="poster" fluid />}
         {hits.slice(paging.start, paging.end).map((hit, index) => {
           const item = page?.items.find(item => item.url === hit.url);
           return item && <li key={hit.id} className="@container min-w-0">
-            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={mediaSubtitle(item)} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
+            <MediaTile related={{ collection: item.collection, creator: item.creator }} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={metaLine(mediaSubtitle(item))} thumbnail={hit.thumbnail} source={hit.url} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
               href={collectionLocation(item)} onClick={() => openProvider(item)} />
           </li>;
         })}
-      </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
+      </ul> : <HitList showSource={false} pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} compact numberOf={tracks ? hit => (summary?.hits ?? []).indexOf(hit) + 1 : undefined}
+        pageLinks={[url, summary?.collection?.creator?.url, ...collectionLinks(holder).map(link => link.url)]} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: locationFor({ page: 1, filter: "" }), replace: true, resetScroll: false })}>Clear filter</Button>}</Empty>}
+      {pager}
     </>}
-    <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
-    {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}
+    {summary?.error && moved.test(summary.errorMessage ?? "") ? <MovedSource name={providerNames[provider]} message={summary.errorMessage!.replace(moved, "")} retry={summary.retry} />
+      : <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />}
+    {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} creator={page?.item?.creator} currentUrl={page?.item?.url ?? url} />}
   </section>;
 }
 
-function CollectionHeader({ collection: c, canPlay, shape }: { collection: SearchCollection; canPlay: boolean; shape: TileShape }) {
+// Filter shows once a list holds more than about a screen of rows.
+const filterAfter = 20;
+
+function CollectionHeader({ collection: c, canPlay, shape, trail }: { collection: SearchCollection; canPlay: boolean; shape: ArtShape; trail: ReactNode }) {
   const disabled = !canPlay || c.disabled;
-  return <DetailHeader context={<MediaContext collection={c.context} creator={c.creator} />} title={c.title} meta={mediaSubtitle({ subtitle: c.subtitle, creator: c.creator, collection: c.context })} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.position ? c.duration : undefined}
+  // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
+  const creator = c.creator && c.creator.url !== c.url && !collectionLinks(c.context).some(link => link.url === c.creator!.url) ? c.creator : undefined;
+  return <DetailHeader trail={trail} context={<MediaContext creator={creator} />} title={c.title} meta={mediaSubtitle({ subtitle: c.subtitle, creator: c.creator, collection: c.context })} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.duration}
     play={c.playAll && { label: c.playLabel ?? (c.single ? "Play" : "Play all"), run: c.playAll, disabled }}
     fromStart={c.fromStart && { label: "From start", run: c.fromStart, disabled }}
     queue={c.queueAll && { label: c.single ? "Queue" : "Queue all", run: c.queueAll, disabled: c.disabled }}
     save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
     playOn={c.playOn && { run: c.playOn, disabled }}
     more={[...browserActions(c.url), ...c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []]} />;
+}
+
+// Core ends a moved source's error with where to fix it, which an admin gets as a button instead.
+const moved = / Set it in Settings → Sources\.$/;
+function MovedSource({ name, message, retry }: { name: string; message: string; retry?: () => void }) {
+  const { administrator } = useSettingsScope();
+  return <Alert variant="destructive">
+    <AlertTitle>Couldn't load {name}.</AlertTitle>
+    <AlertDescription>{message}</AlertDescription>
+    <AlertAction className="flex gap-2">
+      {administrator && <Button data-page-first variant="ghost" size="sm" asChild><Link to="/settings/couch/sources/streaming-community">Set site address</Link></Button>}
+      <Button variant="ghost" size="sm" onClick={() => retry?.()}>{TRY_AGAIN}</Button>
+    </AlertAction>
+  </Alert>;
 }
 
 // Sources without a home page of their own start from the header's field, scoped to them.

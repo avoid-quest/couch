@@ -5,7 +5,7 @@ Bluetooth settings work on Linux, where Core calls BlueZ's own
 (`src/server/bluetooth-linux.ts`). On macOS and Windows the page reports that
 Bluetooth isn't available on this Couch; pair devices in the system settings.
 
-Administrators search for nearby devices in Settings → Bluetooth and pair,
+Administrators search for nearby devices in Settings → Sound → Bluetooth and pair,
 connect, disconnect or forget any listed device. Discovery lasts 30 seconds and
 every operation stops within 60 seconds. Cancelling, leaving the page, losing
 the connection or losing administrator access stops the pending operation.

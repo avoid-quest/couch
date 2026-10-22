@@ -23,6 +23,14 @@ export type Device = {
   lastSeenAt: number | null;
 };
 
+/** Offline devices that share a name with another seen since, or online: the same screen paired again, left behind. */
+export function staleDuplicates(devices: Device[], online: ReadonlySet<string>, selfId?: string) {
+  const name = (device: Device) => device.name.trim().toLowerCase();
+  const paired = devices.filter(device => device.role !== "host");
+  return paired.filter(device => device.id !== selfId && !online.has(device.id)
+    && paired.some(other => other !== device && name(other) === name(device) && (online.has(other.id) || (other.lastSeenAt ?? 0) > (device.lastSeenAt ?? 0))));
+}
+
 export type DeviceIdentity = {
   device: Device | null;
   authority: "host" | "administrator" | "controller";

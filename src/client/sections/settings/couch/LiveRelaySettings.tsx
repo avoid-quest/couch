@@ -40,7 +40,7 @@ export function LiveRelaySettings({ credentials, connected, device, couch, host 
     onSuccess: result => {
       client.setQueryData(liveRelayQuery(credentials).queryKey, result);
       setDraft(null);
-      setStatus(result.relay ? "Saved. New connections use this relay when needed. If a device is already Buffered, stop sharing and start again." : "Relay removed. New connections use the local network.");
+      setStatus(result.relay ? "Saved. New connections use this relay when needed. If a device is already marked Behind, stop sharing and start again." : "Relay removed. New connections use the local network.");
     },
   });
   const busy = !connected || query.isPending || query.isError || save.isPending || check.isPending;
@@ -48,9 +48,9 @@ export function LiveRelaySettings({ credentials, connected, device, couch, host 
   const submit = (event: FormEvent) => { event.preventDefault(); if (!busy) { check.reset(); setStatus(""); save.mutate(relay); } };
   const localStatus = local.data?.error ?? (local.data?.status === "running" ? `Running on ${couch}. Only paired devices on this LAN can use it.`
     : local.data?.status === "starting" ? "Starting the bundled relay…"
-    : local.data?.enabled ? "Waiting for Share on network and a usable LAN address." : "Off. Turn on to help paired devices play shared screens and sound with low delay.");
-  return <SettingsSection title="Live playback relay" description={`Couch includes a relay for devices that cannot connect directly. It runs on ${couch} while Share on network is on; no separate server or account is needed.`}>
-    <SettingsRow label={`Run relay on ${couch}`} description="Turning this off stops its connections. If a device is already Buffered, stop sharing the source and start again after enabling the relay.">
+    : local.data?.enabled ? "Waiting for Share on network and a usable LAN address." : "Off.");
+  return <SettingsSection title="Live playback relay" description="For devices that can't connect directly to a shared screen or sound.">
+    <SettingsRow label={`Run relay on ${couch}`} description="A device already marked Behind stays behind until its source is shared again.">
       <Switch aria-label={`Run relay on ${couch}`} checked={toggle.isPending ? toggle.variables : local.data?.enabled ?? false} disabled={!connected || local.isPending || local.isError || toggle.isPending || check.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />
     </SettingsRow>
     {local.data?.error ? <Alert variant="destructive"><AlertDescription>{localStatus}</AlertDescription></Alert> : <p role="status" className="text-sm text-muted-foreground">{localStatus}</p>}

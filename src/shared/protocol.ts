@@ -19,7 +19,7 @@ export type ExternalSubtitle = { source: string; title: string; language?: strin
 export type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
-export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "devices" | "settings" | "sound" | "bluetooth" | "display";
+export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "hidden" | "devices" | "settings" | "sound" | "bluetooth" | "display";
 // "menu" is OK held, which opens a focused item's menu (docs/design/remote.md).
 export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "menu" | "back" | "home" | "info";
 
@@ -61,7 +61,8 @@ export type SessionState = {
   controlling?: string;
   textField?: import("./remote").RemoteTextField | null;
   queue: QueueEntry[];
-  autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
+  // upcoming: the first entries Autoplay will play after Up next, in order.
+  autoplay?: { enabled: boolean; contextTitle: string | null; upcoming: QueueEntry[]; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
   // An explicit Play's picture intent; stable across quality/transport reloads, null on Next/retry.

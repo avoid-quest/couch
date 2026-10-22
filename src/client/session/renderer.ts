@@ -3,6 +3,7 @@ import type Mpegts from "mpegts.js";
 import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
 import { soundClock } from "./sendspin";
 import { localDeviceName } from "./device-id";
+import { bufferedEnd, setBuffered } from "./buffered";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
 // itself. URLs play in <video>; YouTube's separate audio in an <audio> that follows the
@@ -127,6 +128,9 @@ for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "wa
   });
 }
 video.addEventListener("canplay", () => { ready = true; send(); });
+// The timeline's loaded segment, only for media that seeks: not a capture, raw MPEG-TS or a live stream.
+const buffered = () => { const end = playbackId && Number.isFinite(video.duration) && !mpegts && !mediaStream ? bufferedEnd(video.buffered, video.currentTime) : null; setBuffered(end === null ? null : { playbackId: playbackId!, end }); };
+for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"]) video.addEventListener(event, buffered);
 video.addEventListener("timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
 video.addEventListener("error", () => {
   if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");

@@ -11,14 +11,14 @@ import { BrowsePagination } from "@/components/BrowsePagination";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { NoPlaylists } from "@/components/NoPlaylists";
 import { PageHeader } from "@/components/PageHeader";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import type { MenuAction } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { FilterInput, FilterSelect } from "@/components/ContentFilters";
-import { Spinner } from "@/components/ui/spinner";
+import { FilterBar, FilterInput, FilterSelect } from "@/components/ContentFilters";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { failed } from "@/toasts";
@@ -26,12 +26,12 @@ import type { GuideChannel, GuideRow } from "../../../shared/iptv";
 import { searchError } from "@/sections/find/SearchOnlineResults";
 
 type LiveTvSearch = { page?: number; filter?: string; group?: string };
-const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) => `/discover/live-tv${defaultStringifySearch({ group: group || undefined, page: page > 1 ? page : undefined, filter: filter || undefined })}`;
+const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) => `/live-tv${defaultStringifySearch({ group: group || undefined, page: page > 1 ? page : undefined, filter: filter || undefined })}`;
 // Guide groups are display text without control characters, so this can't name one.
 const allGroups = "\u0000";
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 /** What's on a channel now and next, then its group where the list mixes them. */
-export const channelMeta = (channel: GuideRow, group = "") => [channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(" · ");
+export const channelMeta = (channel: GuideRow, group = "") => [channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(", ");
 
 /** A channel has no page: its press plays it, and its menu holds Play on and Queue. */
 export function useChannelActions() {
@@ -68,7 +68,7 @@ export function useChannelLogo(channel: GuideChannel) {
   return src;
 }
 
-/** Every Live TV channel, which Discover's Live TV heading opens: the guide's channels with what's on now and next, a page at a time. */
+/** Every Live TV channel, which Home's Live TV heading opens: the guide's channels with what's on now and next, a page at a time. */
 export function LiveTvPage() {
   const { credentials } = useShell();
   const { connected, state } = useSessionGate();
@@ -89,34 +89,32 @@ export function LiveTvPage() {
     if (guide.data && !updating && requested > pages) void navigate({ href: liveTvLocation({ page: pages, filter, group }), replace: true, resetScroll: false });
   }, [guide.data, updating, requested, pages, filter, group, navigate]);
   const actions = useChannelActions();
+  // No channels at all, unfiltered: nothing to choose or filter yet.
+  const none = !!guide.data && !updating && !guide.error && !total && !filter && !group;
   const go = (next: LiveTvSearch, replace = false) => void navigate({ href: liveTvLocation({ page: requested, filter, group, ...next }), replace, resetScroll: false }).then(() => {
     if (replace) return;
     const heading = document.getElementById("live-tv-channels");
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
   return <section data-page="Live TV" className="min-w-0 space-y-6">
-    <ContentBreadcrumb title="Live TV" />
-    <PageHeader title="Live TV" />
+    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Live TV" />
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
-    <div className="grid gap-3">
-      <div role="group" aria-label="Live TV filters" className="grid items-end gap-3 sm:grid-cols-[14rem_minmax(0,24rem)]">
-        <FilterSelect label="Group" value={group || allGroups} onChange={value => go({ page: 1, group: value === allGroups ? "" : value }, true)} options={[{ value: allGroups, label: "All groups" }, ...[...new Set([...(guide.data?.groups ?? []), ...group ? [group] : []])].map(name => ({ value: name, label: name }))]} />
-        <FilterInput label="Filter channels" value={filter} maxLength={100} onChange={filter => go({ page: 1, filter }, true)} />
-      </div>
-      <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p id="live-tv-channels" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{guide.isLoading || updating ? <><Spinner aria-hidden="true" className="size-3.5" /><span role="status">{guide.data ? "Updating channels…" : "Loading channels…"}</span></> : <span role="status">{total} {total === 1 ? "channel" : "channels"}</span>}</p>
-        <BrowsePagination page={requested} pages={pages} previous={requested > 1 ? liveTvLocation({ page: requested - 1, filter, group }) : undefined} next={requested < pages ? liveTvLocation({ page: requested + 1, filter, group }) : undefined} disabled={!connected || guide.isFetching || updating} onSelectPage={page => go({ page })}
-          onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ page: Number(new URL(href, location.origin).searchParams.get("page") ?? 1) }); }} />
-      </div>
-    </div>
+    {/* The filters wait for the guide, so an empty one never offers a choice. */}
+    {none ? <NoPlaylists what="channels" settings="/settings/couch/sources/live-tv" /> : guide.data && <FilterBar label="Live TV filters">
+      <FilterSelect label="Group" value={group || allGroups} onChange={value => go({ page: 1, group: value === allGroups ? "" : value }, true)} options={[{ value: allGroups, label: "All groups" }, ...[...new Set([...(guide.data?.groups ?? []), ...group ? [group] : []])].map(name => ({ value: name, label: name }))]} />
+      <FilterInput label="Filter channels" value={filter} maxLength={100} onChange={filter => go({ page: 1, filter }, true)} />
+    </FilterBar>}
+    <p id="live-tv-channels" tabIndex={-1} role="status" className="sr-only">{guide.data && !updating ? `${total} ${total === 1 ? "channel" : "channels"}` : ""}</p>
     {guide.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
-    {guide.isLoading && <MediaRowsSkeleton compact label="Loading channels…" />}
-    {!!channels.length && <MediaList aria-label="Live TV channels" aria-busy={updating}>{channels.map((channel, index) => {
+    {guide.isLoading && <MediaRowsSkeleton compact shape="video" label="Loading channels…" />}
+    {!!channels.length && <MediaList aria-label="Live TV channels" aria-busy={updating} className="motion-safe:transition-opacity aria-busy:opacity-60">{channels.map((channel, index) => {
       const { disabled, play, menu } = actions(channel);
       // A channel has no page, so its row keeps its "…".
-      return <MediaRow key={channel.id} compact pageFirst={index === 0} title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} meta={channelMeta(channel, group)} primary={{ label: "Play", disabled, onClick: play }} menu={menu} />;
+      return <MediaRow key={channel.id} compact shape="video" pageFirst={index === 0} source={`iptv:${channel.id}`} title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} meta={channelMeta(channel, group)} primary={{ label: "Play", disabled, onClick: play }} menu={menu} />;
     })}</MediaList>}
-    {guide.data && !updating && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || group ? "No channels match. Try another name or group, or clear the filter." : "No channels yet. An admin can add one in Settings → Sources → Live TV."}</EmptyDescription></EmptyHeader></Empty>}
+    <BrowsePagination page={requested} pages={pages} previous={requested > 1 ? liveTvLocation({ page: requested - 1, filter, group }) : undefined} next={requested < pages ? liveTvLocation({ page: requested + 1, filter, group }) : undefined} disabled={!connected || guide.isFetching || updating} onSelectPage={page => go({ page })}
+      onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ page: Number(new URL(href, location.origin).searchParams.get("page") ?? 1) }); }} />
+    {!none && guide.data && !updating && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No channels match. Try another name or group, or clear the filter.</EmptyDescription></EmptyHeader></Empty>}
   </section>;
 }
 

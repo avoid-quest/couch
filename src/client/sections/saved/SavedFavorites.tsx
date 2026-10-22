@@ -1,22 +1,25 @@
-import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
+import { mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../../../shared/providers";
-import type { RadioStation } from "../../../shared/radio";
+import { stationSources, type RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { majorityShape, providerItemShape, type ArtShape } from "@/art-shape";
 import { usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
+import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
+import { metaLine } from "@/media-caption";
 import { collectionLabel, providerNames } from "@/sections/find/SearchOnlineResults";
 
 export type SavedFavoriteActions = {
@@ -26,11 +29,12 @@ export type SavedFavoriteActions = {
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
+const shapeOf = (favorite: Favorite): ArtShape => favorite.kind === "radio" ? "square" : providerItemShape(providerNames[favorite.item.provider], favorite.item);
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
-const meta = (favorite: Favorite) => (favorite.kind === "provider"
-  ? [providerNames[favorite.item.provider], collectionLabel(favorite.item), mediaSubtitle(favorite.item)]
-  : ["Radio", favorite.item.groupTitle || favorite.item.countryCode]).filter(Boolean).join(" · ");
+const meta = (favorite: Favorite) => favorite.kind === "provider"
+  ? metaLine(providerNames[favorite.item.provider], collectionLabel(favorite.item), mediaSubtitle(favorite.item))
+  : metaLine("Radio", favorite.item.groupTitle || favorite.item.countryCode);
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.
 export function moveFavorite(favorites: Favorite[], favorite: Favorite, offset: number): { kind: Favorite["kind"]; order: string[] } | null {
@@ -45,6 +49,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   // The session invalidates ["providers"] and ["radio"] whenever any remote
   // changes favorites. Enqueue and play stay on the WebSocket session.
   const session = useOptionalSessionGate();
+  const details = useDetailNavigation();
   const queryClient = useQueryClient();
   const credentials = { origin, token };
   const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
@@ -77,6 +82,8 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     ...applyIdOrder(online.data?.favorites ?? [], order("provider"), item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
     ...applyIdOrder(radio.data?.favorites ?? [], order("radio"), item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
   ] : [];
+  // The list takes its majority shape (art-shape.ts); an item of another shape is contained in it.
+  const shape = majorityShape(favorites.map(shapeOf));
   const loadError = connected ? [online.error, radio.error].filter(error => error !== null).map(error => error.message).join(" ") : "";
   const failure = remove.error ? remove.error.message || "Couldn't remove this." : reorder.error ? reorder.error.message || "Couldn't save the order." : "";
   // Play and Queue run on the session, which reports its own errors.
@@ -101,9 +108,10 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
     const blocked = !connected || pending || reorder.isPending;
     const move = (offset: number) => { const plan = moveFavorite(favorites, favorite, offset); if (plan && !blocked) reorder.mutate(plan); };
-    // A station's page holds no Remove or ordering, so the row keeps its "…".
-    return <MediaRow context={favorite.kind === "provider" ? <MediaContext creator={favorite.item.creator} collection={favorite.item.collection} /> : <MediaContext radio={{id: favorite.item.id, title: "Station details"}} />} key={key(favorite)}
-      artFit="contain"
+    // A station's page holds no Remove or ordering, so the row keeps its "…", which opens its Details too.
+    return <MediaRow related={favorite.kind === "provider" ? { creator: favorite.item.creator, collection: favorite.item.collection } : undefined} key={key(favorite)}
+      source={favorite.kind === "provider" ? favorite.item.url : stationSources(favorite.item)}
+      artFit="contain" shape={shape} own={shapeOf(favorite)}
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}
@@ -111,6 +119,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         ? { label: "Open", onClick: () => onOpenProvider(favorite.item as ProviderItem), disabled: !connected || pending }
         : { label: "Play", onClick: () => void enqueue(favorite, true), disabled: !connected || !canPlay || pending }}
       menu={[
+        ...(favorite.kind === "radio" ? [{ label: "Details", run: () => details.open(itemLocation("radio", favorite.item.id)) }] : []),
         ...(browse ? [{ label: "Play", disabled: !connected || !canPlay || pending, run: () => void enqueue(favorite, true) }] : []),
         { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => void enqueue(favorite, true, deviceId) },
         { label: "Queue", disabled: !connected || pending, run: () => void enqueue(favorite, false) },
@@ -119,7 +128,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         { label: "Move down", disabled: blocked || !moveFavorite(favorites, favorite, 1), run: () => move(1) },
         { label: "Remove", disabled: !connected || pending, run: () => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); } },
       ]}>
-      {favorite.kind === "radio" ? <DurationBar live /> : favorite.item.kind === "media" && (favorite.item.duration != null || favorite.item.live) && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}
+      {favorite.kind === "provider" && favorite.item.kind === "media" && favorite.item.duration != null && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}
     </MediaRow>;
   };
 
@@ -128,7 +137,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     <SavedStatus connected={connected} loading={loading} />
     {loadError && <SavedError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !favorites.length && <SavedEmpty title="No saved channels or stations" action={onFind && <Button onClick={onFind}>Discover</Button>}>Choose Save on a channel, collection or radio station to find it here.</SavedEmpty>}
+    {connected && !loading && !loadError && !favorites.length && <SavedEmpty title="No saved channels or stations" action={onFind && <Button onClick={onFind}>Search</Button>}>Choose Save on a channel, collection or radio station to find it here.</SavedEmpty>}
     {!!favorites.length && <MediaList ref={list} aria-label="Channels & stations">{favorites.map(row)}</MediaList>}
   </section>;
 }

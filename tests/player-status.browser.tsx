@@ -71,20 +71,56 @@ export async function runPlayerStatusRegression() {
       });
       if (positions) assert(JSON.stringify(current) === JSON.stringify(positions), `${status}: transport moved`);
       positions = current;
-      assert(document.querySelector('[data-player-band] [data-player-status]'), `${status}: status moved outside band`);
+      // Playing and Paused are the transport's to say; every other status follows the artwork's title, never in the band.
+      if (status === "playing" || status === "paused") assert(!document.querySelector('[data-player-status]'), `${status}: plain status repeats the transport`);
+      else assert(document.querySelector('[data-player-audio-copy] [data-player-status]') && !document.querySelector('[data-player-band] [data-player-status]'), `${status}: status left the artwork's copy`);
       assert(document.querySelector('[data-player-summary]'), `${status}: artwork summary disappeared`);
     }
+    // The band's tools, left to right as shown, and the centre of what is shown in a slot.
+    const phone = innerWidth < 640;
+    const labels = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(button => button.getClientRects().length)
+      .toSorted((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(button => button.getAttribute("aria-label"));
+    const centre = (selector: string) => { const element = [...document.querySelectorAll(selector)].find(item => item.getClientRects().length); if (!element) return NaN; const rect = element.getBoundingClientRect(); return Math.round(rect.left + rect.width / 2); };
+    const topTools = () => labels('[data-player-top] button:not([aria-label^="Back"])');
+    // The band's tools are the bar's, sound, then content, then view: Volume (not on phones), Where it plays, Up next, the
+    // gear. The top line holds no tools. Beside artwork there is no fullscreen, so its last slot stays empty, holding the
+    // bar's x; on phones, whose bar has no tools to line up with, the slot goes and the tools end at the gutter.
+    const barTools = [...phone ? [] : ["Volume"], "Where it plays", "Up next", "Playback"];
+    assert(JSON.stringify(topTools()) === JSON.stringify([]), `Top line tools: ${topTools().join(", ")}`);
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    if (phone) assert(!document.querySelector("[data-player-tools] span[data-player-last]")?.getClientRects().length, "Artwork band keeps an empty slot on a phone");
+    else assert(centre("[data-player-tools] span[data-player-last]") > centre('[data-player-tools] [aria-label="Playback"]'), "Artwork band lost fullscreen's empty slot after the gear");
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {
       const rect = button.getBoundingClientRect();
       assert(rect.left >= 0 && rect.right <= innerWidth, "A player tool requires horizontal scrolling");
     }
     await review.state("loading", {buffering: true, video: true});
-    const controls = [...document.querySelectorAll<HTMLElement>('.player-control-row button')].map(button => button.getBoundingClientRect());
-    assert(controls.every(rect => Math.abs(rect.y - controls[0]!.y) < 1), "Player controls wrap onto another row");
+    // Phones leave Volume out of the row (display: none), so only the shown controls are measured.
+    const controls = [...document.querySelectorAll<HTMLElement>('.player-control-row button')].filter(button => button.getClientRects().length).map(button => button.getBoundingClientRect());
+    // Play/Pause is the band's one large control, so the row is one line by its centres.
+    const middle = (rect: DOMRect) => rect.y + rect.height / 2;
+    assert(controls.every(rect => Math.abs(middle(rect) - middle(controls[0]!)) < 1), "Player controls wrap onto another row");
     assert(controls.every(rect => rect.left >= 0 && rect.right <= innerWidth && rect.width >= 44), "Video controls overflow or shrink touch targets");
     const ordered = controls.toSorted((a, b) => a.left - b.left);
     assert(ordered.every((rect, index) => index === 0 || rect.left >= ordered[index - 1]!.right), "Player touch targets overlap");
-    assert(document.querySelector('[data-player-status]')?.textContent?.includes("Buffering"), "Buffering not announced");
+    // Over a video the band's tools are the now-playing bar's, then fullscreen last, bottom right, in the slot where the
+    // bar has Open player. Subtitles and Audio live in the gear's menu, not a button of their own.
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify([...barTools, "Enter fullscreen"]), `Player tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    assert(JSON.stringify(topTools()) === JSON.stringify([]), `Top line tools: ${topTools().join(", ")}`);
+    // The transport is centred, as in the bar; phones, with no room to centre it beside four tools, lead with it.
+    const transport = [...document.querySelectorAll<HTMLElement>('[aria-label="Playback controls"] button')].map(button => button.getBoundingClientRect());
+    assert(phone ? transport[0]!.left < 16 : Math.abs((transport[0]!.left + transport.at(-1)!.right) / 2 - innerWidth / 2) < 1, "Band transport is out of place");
+    // Over a picture buffering is a spinner centred on it, its words for screen readers only.
+    assert(document.querySelector('.player-page > [data-player-status] [role="status"]')?.textContent?.includes("Buffering") && !document.querySelector('[data-player-band] [data-player-status]'), "Buffering not announced over the picture");
+    // The gear's menu opens above the whole band, and the controls stay up while it is open over a playing video.
+    await review.state("playing", {video: true});
+    const gear = document.querySelector<HTMLButtonElement>('[data-player-tools] button[aria-label="Playback"]')!;
+    gear.click(); await wait(400);
+    assert(document.querySelector('[data-player-menu]')!.getBoundingClientRect().bottom <= document.querySelector('[data-player-band]')!.getBoundingClientRect().top, "Playback menu does not open above the band");
+    await wait(4300);
+    assert(document.querySelector('[data-player-top="shown"]') && document.querySelector('[data-player-band="shown"]'), "Controls hid under the open Playback menu");
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); await wait(300);
+    assert(!document.querySelector('[data-player-menu][data-state="open"]') && document.activeElement === gear, "Esc did not close the menu onto the gear");
     await review.state("loading", {retry: true});
     assert(document.querySelector('[aria-label="Try again"]:not(:disabled)'), "Scheduled retry has no immediate remedy");
     const status = document.querySelector('[data-player-status]')!;

@@ -31,6 +31,8 @@ type SessionOptions = {
 // One Playback (#644 ticket 9): its queue, current item, position, pause state, speed and tracks.
 // `store` is Core's store with this Playback's own saved queue (store.playback(id)).
 export type PlaybackStore = Store & ReturnType<Store["playback"]>;
+// Up next shows this many of the entries Autoplay will play.
+const AUTOPLAY_PREVIEW = 10;
 export function createSession(store: PlaybackStore, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState, clock?: PlaybackClock) => void, options: SessionOptions = {}) {
   const removedEntries = new Map<string, { entry: QueueEntry; index: number; queueIds: string[]; currentEntryId: string | null; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   let audioInterrupted = false;
@@ -63,7 +65,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     queueCursorEntryId: store.queueCursorEntryId(),
     activeProfile,
     preferences: store.playbackPreferences(activeProfile.id),
-    autoplay: { enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false, contextTitle: continuation?.title ?? null, next: continuation?.entries[0] ?? null },
+    autoplay: { enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false, contextTitle: continuation?.title ?? null, upcoming: continuation?.entries.slice(0, AUTOPLAY_PREVIEW) ?? [] },
     player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 100, seekable: false, error: null },
   };
   let published: Omit<SessionState, "player"> | undefined;
@@ -84,10 +86,11 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   };
   const broadcast = (observation = false, suppressClock = false) => {
     const enabled = state.preferences?.profile.autoplay !== false;
-    const next = continuation?.entries[0] ?? null;
+    const upcoming = continuation?.entries.slice(0, AUTOPLAY_PREVIEW) ?? [];
     const pending = continuationResolution !== null;
-    if (state.autoplay?.enabled !== enabled || state.autoplay?.next !== next || state.autoplay?.contextTitle !== (continuation?.title ?? null) || (state.autoplay?.pending === true) !== pending) {
-      state.autoplay = { enabled, contextTitle: continuation?.title ?? null, next, ...(pending ? { pending: true } : {}) };
+    // Ids name continuation entries; equal ids keep the published object, so unchanged autoplay sends no snapshot.
+    if (state.autoplay?.enabled !== enabled || state.autoplay.upcoming.map(entry => entry.id).join() !== upcoming.map(entry => entry.id).join() || state.autoplay.contextTitle !== (continuation?.title ?? null) || (state.autoplay.pending === true) !== pending) {
+      state.autoplay = { enabled, contextTitle: continuation?.title ?? null, upcoming, ...(pending ? { pending: true } : {}) };
     }
     if (state.radioProgramme && (state.radioProgramme.playbackId !== state.player.playbackId || !["playing", "paused"].includes(state.player.status))) state.radioProgramme = null;
     publishState(observation, suppressClock);

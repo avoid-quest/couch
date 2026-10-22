@@ -1,6 +1,6 @@
 # Native Debian TV setup
 
-**Settings > Updates** shows whether the automatic timer is active. A stopped
+The Couch's **Settings → Updates** shows whether the automatic timer is active. A stopped
 or masked timer appears as off; administrators can still use **Update and
 restart** from their paired remote.
 
@@ -9,11 +9,11 @@ the current login, display manager and power policy unchanged.
 
 ## Use an existing desktop installation as a TV
 
-On that computer, choose **This computer**, then open the Couch's **General**
-in Settings and turn on **TV mode**; a paired admin can do the same from its own
+On that computer, choose **This computer**, then open **Settings → TV** and
+turn on **TV mode**; a paired admin can do the same from its own
 device. Confirm **Restart Couch** to save the choice and open fullscreen.
 Playback stops during the restart; the library and paired devices stay saved.
-Turn on **Share on network** in **Settings > Network** to let paired phones use
+Turn on **Share on network** in **Settings → Devices & network** to let paired phones use
 **Remote**. Turn TV mode off in the same place to return to the desktop window.
 A TV launcher's TV mode stays on and shows as set by the launcher.
 
@@ -67,15 +67,15 @@ with the TV's database open and a healthy loopback listener; Another Couch runs
 no Core. The check uses Core's open files and sockets rather than
 `/proc/<pid>/environ`, which Electron can clear when setting process titles. Select this
 computer for TV playback. To pair a phone, turn on **Share on network** in
-**Settings > Network** if the TV is still private, then open **Settings > Devices** and choose **Pair a device**
+**Settings → Devices & network** if the TV is still private, then choose **Pair a device** there
 for the pairing QR and six-digit code. The first device you pair becomes the
 admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
-phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
-**Home** shows what plays now and Up next, **Discover** holds what's on air,
-Live TV and each source's own home, **Saved** holds For later, lists and
+phone's **Settings → Devices & network** under **Admin code** and choose **Become admin**.
+**Home** shows what plays now and what to continue, then what's on air, Live TV
+and what you saved from each source, **Saved** holds For later, lists and
 favorites, the header's search field searches every source, and **Settings**
-the rest. TV **Settings > Display > Text size** offers Default,
+the rest. TV **Settings → TV → Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
@@ -86,7 +86,7 @@ or channel plays, and a saved film or collection opens Details. Continue adds
 one secondary Details stop for its existing History actions, including inspection
 and removal when Resume is unavailable. Holding OK on a media item opens its menu of
 other verbs; a short OK acts on release. The header keeps
-Home, Discover, Saved and Settings between the TV's name and its search field
+Home, Saved and Settings between the TV's name and its search field
 and clock, and stays at the top while the page scrolls; Up from a page's first
 row returns to it. Settings OK moves
 into the selected page's first enabled control. Back closes an overlay and
@@ -95,8 +95,8 @@ or narrow Settings page selector,
 then returns Home. A source page first returns to Sources.
 
 The TV player has the same controls as every screen, without the Back arrow
-and fullscreen button a pointer and a window need. Details lives in Playback. A paused picture shows
-a large Pause glyph and “Paused”. Back hides the controls, then returns to the
+and fullscreen button a pointer and a window need. Details lives in Playback. A paused picture keeps
+the controls up, its transport showing Play. Back hides the controls, then returns to the
 page that opened the player; Back on Home does nothing. Up next and Details
 preserve this route even after the queue changes the player URL. Playback
 continues when browsing.
@@ -114,7 +114,7 @@ OK, OK and pausable Stop is OK, Right, OK.
 Use an isolated Core and data directory, a paired TV renderer (the TV app's
 window, or a browser tab using the [TV override](design/tv.md#see-the-tv-in-a-browser)), a 1920×1080
 viewport and a paused finite direct-media video that supports byte-range seeking (a
-provider's video opens `/collection`, and the Details check wants the Playback sheet's `/item` link). Network
+provider's video opens `/collection`, and the Details check wants the Playback menu's `/item` link). Network
 sharing must be enabled for the pairing-dialog check. Save two direct-media videos
 with only titles (no metadata or known duration yet) as the first two items in For later
 to exercise the Home tile and asynchronous Details check. Their compact controls
@@ -127,7 +127,7 @@ favorites, configure a local Live TV channel the second output can play (serve i
 stream with CORS), and pair a second online shared output for the favorite ordering/Undo
 and Live TV Queue/Play on checks. Queue skips a channel already anywhere in the queue,
 and Play on leaves the TV controlling that output, so before another run remove the
-channel from Up next's Played and bring the video back with Only here. Don't be sharing this device's screen or sound.
+channel from Up next's Played and bring the video back with Move here. Don't be sharing this device's screen or sound.
 Build the browser checks, minified so the bundle fits one preview evaluation:
 
 ```sh
@@ -169,22 +169,9 @@ Store the returned promise's result on `window` and read it separately if the
 preview's evaluation timeout is shorter than the check. Use native preview key
 input as well to verify local keyboard entry and the focus highlight.
 
-For Discover, `runDiscoverNavigationRegression()` checks entry in the saved
-section order, the first section's heading, Customize Discover, the tab bar
-and Back. Run with Radio and Sources enabled, then Sources first, and with an
-existing shared source. Build `tests/discover-customization.browser.ts` the
-same way for `runDiscoverSharingFocusRegression()`: on a paired scratch Couch
-with Radio available and no shares, it publishes source metadata through Core
-(no capture or playback), checks that Radio keeps focus, then checks fresh
-entry and navigation after the source ends. It closes its socket and restores
-Discover preferences. The same bundle's customization and availability checks
-cover hidden/reordered sections, return focus and delayed provider shelves.
-Reload before each `runDiscoverAvailabilityRegression()` run: its fixture arrives
-after 16 seconds, beyond the old focus cutoff but within the provider request's
-30-second deadline. Repeat with `{ cancel: "keyboard" }`, `{ cancel: "pointer" }`
-and `{ cancel: "navigation" }` to check cancellation; `{ delayMs: 350 }` keeps
-the fast-arrival check. Navigation also checks that the old observer cannot focus
-Settings after its own unchanged 15-second cutoff.
+Home's own TV navigation is part of `runTvNavigationRegression()`: its Home
+entry check covers the hero, the board and the shelves, and its Live TV check
+opens Live TV from Home's heading.
 
 Toast lifecycle checks use the real Sonner instance from Vite. In a paired scratch
 TV tab, evaluate `tests/playback-feedback.browser.js` to expose its SessionGate
@@ -224,7 +211,7 @@ browse focus on Back, then releases the response and restores the fixture favori
 
 ## TV maintenance
 
-A paired administrator's **Settings > Updates** updates this TV remotely with
+From a paired administrator's device, the Couch's **Settings → Updates** updates this TV remotely with
 **Update and restart**. A TV in **Another Couch** mode appears by its paired
 Device name in that Couch's Updates page; the request travels over its existing
 connection to the TV app. The TV keeps its saved mode, channel and pairing after
@@ -239,7 +226,7 @@ The retired 0.1.0 AppImage installation is not migrated. Fresh installations use
 the package above; an old AppImage installation stays as it is and its session is
 not switched.
 
-The TV checks for updates like the desktop app and shows them in **Settings >
+The TV checks for updates like the desktop app and shows them in the Couch's **Settings →
 Updates**, but root installs them. `couch-update.timer` runs
 `couch-update.service` roughly 15–75 minutes after boot and daily between 04:00 and 05:00.
 Enabling the timer more than 15 minutes into an existing boot can run it
@@ -271,7 +258,7 @@ The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
 error; `rollback=unavailable` means no previous package was at hand.
-**Settings > Updates** shows the last automatic outcome under **Automatic
+The Couch's **Settings → Updates** shows the last automatic outcome under **Automatic
 updates**, including waiting while media plays, the known failed version it
 skipped, and an up-to-date check. A failed **Restart to update** shows its error
 instead of installing forever.

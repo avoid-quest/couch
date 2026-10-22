@@ -42,6 +42,8 @@ export async function runSaveForLaterRegression() {
     }
     if (url.pathname === "/api/radio/stations") return Response.json({ stations: [station] });
     const provider = url.pathname.split("/")[3];
+    // The film answers first, so it is the closest match whichever source the browser hears from next.
+    if (provider !== "streamingcommunity" && url.pathname.endsWith("/items")) await new Promise(resolve => setTimeout(resolve, 100));
     const results = provider === "streamingcommunity" ? [media[0]] : provider === "youtube" ? [media[1], { id: "channel", provider, kind: "channel", title: "Space channel", url: "https://www.youtube.com/@space" }]
       : provider === "bandcamp" ? [{ id: "track", provider, kind: "media", title: "Space track", url: "https://space.bandcamp.com/track/space", duration: 120 }] : [];
     return Response.json({ items: results, favorites: [], stations: [], playlists: [], programmes: {} });
@@ -51,15 +53,17 @@ export async function runSaveForLaterRegression() {
   const render = (saved = false) => root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}>{saved
     ? <ForLaterSection {...props} />
     : <SearchPanel {...props} active searchState={{ query, source: "All" }} onSearchChange={() => {}} onCommand={gate.run} />}</QueryClientProvider></SessionGateContext>);
-  const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("[data-search-top] button")].find(node => node.textContent === label);
+  // Save is a bookmark toggle: its name stays "Save" and aria-pressed says Saved.
+  const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("[data-search-top] button")].find(node => (node.getAttribute("aria-label") ?? node.textContent) === (label === "Saved" ? "Save" : label) && (label !== "Saved" || node.getAttribute("aria-pressed") === "true") && (label !== "Save" || node.getAttribute("aria-label") !== "Save" || node.getAttribute("aria-pressed") === "false"));
   const menu = async (selector: string, label: string) => {
     const item = host.querySelector<HTMLElement>(selector);
     const trigger = (item?.matches("[data-media-tile]") ? item.parentElement : item)?.querySelector<HTMLButtonElement>("[data-row-options]");
-    assert(trigger && getComputedStyle(trigger).opacity === "1", `Options are hidden on ${selector}`);
+    // A row always shows its "…"; a tile's shows to a pointer over it, so only its presence is checked.
+    assert(trigger && (item!.matches("[data-media-tile]") || getComputedStyle(trigger).opacity === "1"), `Options are hidden on ${selector}`);
     trigger!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse", ctrlKey: false }));
     await wait();
     const action = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === label);
-    assert(action, `Missing ${label} in ${selector}`);
+    assert(action, `Missing ${label} in ${selector}: ${[...document.querySelectorAll('[role^="menuitem"]')].map(node => node.textContent).join()}`);
     action!.click();
     await wait();
   };
@@ -88,9 +92,10 @@ export async function runSaveForLaterRegression() {
     assert(button("Save") && items.length === 1, "Rejected Save falsely showed Saved");
     const before = writes;
     props.connected = false; gate.connected = false; render(); await wait(20);
-    // The closest match still holds its online summary during the 250 ms debounce.
-    assert(button("Save") && !button("Save")!.disabled, "Missed the cached Save interaction window");
-    assert(button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Missed the cached playback interaction window");
+    // Results aren't debounced, so the closest match's Save turns offline with the connection, at once. Play and
+    // Queue stay on the cached result, and a press on any of them in that first moment sends nothing.
+    assert(button("Save")?.disabled, "Cached Save stayed enabled after disconnect");
+    assert(button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Cached Play or Queue left the closest match after disconnect");
     button("Play")!.click(); button("Queue")!.click();
     button("Save")!.click(); await wait();
     assert(writes === before, "Cached Save sent a mutation immediately after disconnect");
@@ -115,7 +120,7 @@ export async function runSaveForLaterRegression() {
     assert(!stationSaved && button("Save"), "Radio Saved did not toggle off");
     const radioWrites = stationsSaved, radioCommands = commands;
     props.connected = false; gate.connected = false; render(); await wait(20);
-    assert(button("Save") && !button("Save")!.disabled && button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Missed the cached radio interaction window");
+    assert(button("Save")?.disabled && button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Cached radio Save stayed enabled, or Play and Queue left, after disconnect");
     button("Play")!.click(); button("Queue")!.click(); button("Save")!.click(); await wait();
     assert(stationsSaved === radioWrites && commands === radioCommands, `Cached radio actions ran after disconnect: ${stationsSaved - radioWrites} Save POSTs, ${commands - radioCommands} commands`);
     assert(button("Save")?.disabled, "Offline radio Save did not become disabled");

@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useState, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,6 +11,7 @@ import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { RangeControl } from "./RangeControl";
 import { useDurationClock } from "./DurationBar";
+import { useBufferedEnd } from "@/session/buffered";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
@@ -32,20 +33,20 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     seekable: !!player?.seekable,
     // Paused live media resumes, so it offers Play rather than a disabled Pause.
     pausable: !live || !!player?.seekable || player?.status === "paused",
-    hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.next || !!state.autoplay.pending)),
+    hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.upcoming.length || !!state.autoplay.pending)),
   };
 }
 
 /**
- * Secondary timing for what plays: "ends 21:42" in clock time, or "Live" for live media; nothing without
- * a length or once it has ended. The duration clock keeps a paused item's end time moving.
+ * Secondary timing for what plays: "ends 21:42" in clock time; nothing for live media, without a length or once
+ * it has ended. The duration clock keeps a paused item's end time moving.
  */
 export function useEndTime(state: ClientSessionState | null | undefined) {
   const playbackClock = usePlaybackClock();
   useDurationClock();
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   if (!state || !current || !["playing", "paused"].includes(state.player.status) && !(state.player.status === "loading" && state.player.buffering)) return undefined;
-  if (current.live || isRadio(current)) return "Live";
+  if (current.live || isRadio(current)) return undefined;
   const length = playbackClock.duration || current.duration || 0;
   return length ? `ends ${formatEndTime((length - playbackClock.position) / (state.player.speed || 1))}` : undefined;
 }
@@ -53,13 +54,14 @@ export function useEndTime(state: ClientSessionState | null | undefined) {
 /**
  * Position, the timeline and "−3:24 ends 20:59", only where a timeline means something: media that seeks,
  * or has a length to seek through once loaded (the slider stays, disabled, meanwhile). Live media that
- * can't seek reads "Live" alone: no bar, no position, no total. A hovering pointer reads the time under it.
+ * can't seek shows nothing: no bar, no position, no total. A hovering pointer reads the time under it.
  */
 export function PlaybackTimeline({ state, connected, run, pageFirst = false, compact = false, className }: Props & { pageFirst?: boolean; compact?: boolean; className?: string }) {
   const playbackClock = usePlaybackClock();
   // Where a hovering pointer is along the bar, from 0 to 1; a drag keeps reporting it through the slider's pointer capture.
   const [hover, setHover] = useState<number | null>(null);
   const player = state.player;
+  const buffered = useBufferedEnd(player.playbackId);
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current) return null;
@@ -67,7 +69,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   const length = playbackClock.duration || current.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
   const canSeek = seekable && !!playbackClock.duration;
-  if (!canSeek && (live || !length)) return live ? <span data-live className={cn("text-sm text-muted-foreground", className)}>Live</span> : null;
+  if (!canSeek && (live || !length)) return null;
   const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0)) ?? [];
   const chapter = player.chapters?.findLast(item => item.position <= playbackClock.position);
   const max = canSeek ? playbackClock.duration! : length;
@@ -75,15 +77,15 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   // Touch has no hover; the TV's remote has none either (tv:hidden).
   const track = (event: PointerEvent<HTMLDivElement>) => { const { left, width } = event.currentTarget.getBoundingClientRect(); if (event.pointerType === "touch" || !width) return; setHover(Math.min(1, Math.max(0, (event.clientX - left) / width))); };
   return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
-    <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled}
+    <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled} buffered={canSeek ? buffered : null}
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
-      {/* The time under the pointer, just clear of the thumb at any target height, centred over the pointer and held
-          inside the bar at either end (100cqw is the bar's width). */}
-      {hover !== null && !disabled && <span data-hover-time aria-hidden="true" className="pointer-events-none absolute bottom-[calc(50%+.875rem)] left-0 bg-background px-2 py-1 text-sm tabular-nums tv:hidden" style={{ translate: `clamp(0px, calc(${hover} * 100cqw - 50%), calc(100cqw - 100%))` }}>{formatDuration(Math.round(hover * max))}</span>}
+      {/* The time under the pointer, right above the line and just clear of its handle, centred over the pointer and
+          held inside the bar at either end (100cqw is the bar's width). */}
+      {hover !== null && !disabled && <span data-hover-time aria-hidden="true" className="pointer-events-none absolute bottom-[calc(50%+.5rem)] left-0 rounded-sm bg-background px-1.5 py-0.5 text-meta tabular-nums tv:hidden" style={{ translate: `clamp(0px, calc(${hover} * 100cqw - 50%), calc(100cqw - 100%))` }}>{formatDuration(Math.round(hover * max))}</span>}
     </div>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
-      <span className="shrink-0">{live ? <span data-live>Live</span> : length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
+      <span className="shrink-0">{!live && length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
     </div>
   </div>;
 }
@@ -140,10 +142,26 @@ export function PlaybackVolume({ state, connected, run, showSlider = true, showV
   </div>;
 }
 
+/**
+ * Where the band's and the now-playing bar's panels open (Volume, Where it plays, the gear's menu): above the whole row,
+ * clear of its timeline, and ending at the tools' right edge (the gutter, as Up next does) whichever tool opened them,
+ * so they line up as one family. Elsewhere a panel just sits above its trigger. Read as the panel opens.
+ */
+export function toolPanel(trigger: HTMLElement | null): { side: "top"; align: "end"; sideOffset?: number; alignOffset?: number } {
+  const tools = trigger?.closest<HTMLElement>("[data-player-tools], [data-bar-tools]"), row = tools?.closest<HTMLElement>("[data-player-band], [data-now-playing]");
+  if (!trigger || !tools || !row) return { side: "top", align: "end" };
+  const at = trigger.getBoundingClientRect(), group = tools.getBoundingClientRect();
+  // The group pulls back past the gutter (-mr-2.5) so its last glyph lines up with the time; its margin box ends at the gutter.
+  return { side: "top", align: "end", sideOffset: at.top - row.getBoundingClientRect().top + 8, alignOffset: at.right - group.right - parseFloat(getComputedStyle(tools).marginRight) };
+}
+
 /** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
 export function VolumeButton({ state, connected, run, className }: Props & { className?: string }) {
-  return <Popover>
-    <PopoverTrigger asChild><Button variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
-    <PopoverContent side="top" align="end" aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
+  const trigger = useRef<HTMLButtonElement>(null);
+  // Controlled, so it places itself as it opens (toolPanel).
+  const [open, setOpen] = useState(false);
+  return <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
+    <PopoverContent {...toolPanel(trigger.current)} aria-label="Volume controls" className="w-72"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
   </Popover>;
 }

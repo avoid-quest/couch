@@ -31,6 +31,9 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
     : state.status === "waiting" ? "Waiting for Share on network. AirPlay listens only while this Couch is shared on the network."
     : state.status === "off" ? "Off. Nothing on the network can find or play to this Couch over AirPlay." : null;
   const failure = state?.error ?? query.error?.message ?? toggle.error?.message ?? renew.error?.message;
+  // Off where it can't run: another platform hides it, a build or computer without the receiver says why in one line.
+  if (state?.status === "unsupported" && !state.enabled) return null;
+  if (state?.status === "unavailable" && !state.enabled) return <SettingsSection title="AirPlay" description={state.error} />;
   return <SettingsSection title="AirPlay" description={description}>
     <SettingsRow label="Receive AirPlay" description="Sound only. It plays a few seconds behind the sending device.">
       <Switch aria-label="Receive AirPlay" checked={toggle.isPending ? toggle.variables : state?.enabled ?? false} disabled={!connected || !state || !usable && !state.enabled || toggle.isPending || renew.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />

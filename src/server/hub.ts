@@ -36,10 +36,13 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
+import { artworkResponse } from "./artwork";
 import { createPassThrough } from "./pass-through";
 import { createForLater } from "./for-later";
+import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createDevices, settingField } from "./devices";
+import { createTvPairing } from "./tv-pairing";
 import type { DeviceIdentity } from "../shared/devices";
 import { defaultDeviceSharing, type DeviceSharing } from "../shared/device-sharing";
 import { buildInfo } from "./build-info";
@@ -306,7 +309,6 @@ export async function createHub(options: HubOptions) {
   const targets = new Map<string, string>();
   // An explicit Remote choice stays on its TV through idle/disconnect/output changes.
   const remoteControllers = new Set<string>();
-  const tvDevices = new Set<string>();
   const tvSocket = (id: string) => { const socket = newest(id); return socket?.data.tv ? socket : undefined; };
   const remote = createTvRemote<Socket<SocketData>>({ current: socket => socket.data.tv && newest(deviceOf(socket)) === socket, send: (socket, message) => send(socket, JSON.stringify(message)), changed: () => broadcast() });
   const shares = (id: string, actor: string) => { try { requireControl(id, actor); return true; } catch { return false; } };
@@ -820,7 +822,7 @@ export async function createHub(options: HubOptions) {
   const sendTo = async (playback: Playback, output: Output, authorize: () => void, actor: string) => {
     const permitted = () => {
       authorize();
-      if (!output.picture && !output.sound) throw new Error("Playback destination was withdrawn. Try Only here again to play it there.");
+      if (!output.picture && !output.sound) throw new Error("Playback destination was withdrawn. Try Move here again to play it there.");
       requireOutput(output, actor); requireReplacement(output.deviceId, actor); requireReceiver(playback, output.deviceId);
     };
     permitted();
@@ -994,7 +996,7 @@ export async function createHub(options: HubOptions) {
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
           ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
-      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
+      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: store.deviceTv(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
       liveSources: live.sources(),
     };
     const views = new Map<string, string>();
@@ -1187,6 +1189,7 @@ export async function createHub(options: HubOptions) {
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => invalidate("providers"), streamingCommunityOrigin: healStreamingCommunity });
+  const hidden = createHidden({ databasePath: options.databasePath, onChange: () => invalidate("hidden") });
   const forLater = createForLater({
     webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
     databasePath: options.databasePath, onChange: () => invalidate("for-later"),
@@ -1248,6 +1251,7 @@ export async function createHub(options: HubOptions) {
   const catalog = createCatalog({ radio, viewing: { store, session: viewing, refreshHistory: metadata.refreshHistory } });
   let pairWindow = Date.now();
   let pairAttempts = 0;
+  const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
     if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
@@ -1281,7 +1285,10 @@ export async function createHub(options: HubOptions) {
     const authorized = () => { if (closed) return false; authorize(); return true; };
     const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
       const title = item.title?.trim();
-      return { entry: { id: item.entryId, source: `web:${item.url}`, title: title || new URL(item.url).hostname, automaticTitle: !title, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...metadata.cached(item.url), ...(item.quality ? { quality: item.quality } : {}) }, fromStart: item.fromStart, ...(!title ? { inspectUrl: item.url } : {}) };
+      // Until the page's own title resolves, the link itself names it ("youtube.com/watch?v=…"), not just its host.
+      const url = new URL(item.url);
+      const linkTitle = `${url.host.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}${url.search}`.slice(0, 200);
+      return { entry: { id: item.entryId, source: `web:${item.url}`, title: title || linkTitle, automaticTitle: !title, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...metadata.cached(item.url), ...(item.quality ? { quality: item.quality } : {}) }, fromStart: item.fromStart, ...(!title ? { inspectUrl: item.url } : {}) };
     };
     const list = async (provider: ProviderId, url: string, quality?: VideoQuality): Promise<Intake> => {
       const page = await loadProviderList(provider, url, shutdown.signal);
@@ -1375,28 +1382,37 @@ export async function createHub(options: HubOptions) {
   // admitted AirPlay sender counts even before anyone plays its source.
   const status = () => all().map(playback => stateOf(playback).player.status).find(value => ["loading", "playing", "paused"].includes(value)) ?? (airplay.active() ? "playing" : "idle");
   const frontend = createFrontend();
+  // Unauthenticated pairing: the LAN's own origins only, while sharing is on, with a JSON body.
+  type Respond = (body: unknown, status?: number) => Response;
+  const publicPairing = (handle: (body: Record<string, unknown>, respond: Respond) => Promise<Response>, throttled = () => false) => async (request: Request) => {
+    if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
+    const respond: Respond = (body, status = 200) => cors(request, json(body, status));
+    if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+    if (throttled()) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
+    if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
+    let body: unknown;
+    try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
+    if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+    if (typeof body !== "object" || body === null) return respond({ error: "Invalid pairing request." }, 400);
+    try { return await handle(body as Record<string, unknown>, respond); } catch (error) {
+      return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500);
+    }
+  };
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
     "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance, tvModeChangeable: !!options.nativeTvMode && !tvAppliance, systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
-    "POST /api/pair": async request => {
-      if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
-      const respond = (body: unknown, status = 200) => cors(request, json(body, status));
-      if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+    "POST /api/pair": publicPairing(async (body, respond) => {
+      if (!("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
+      const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
+      invalidate("devices");
+      return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
+    }, () => {
       if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
-      if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
-      if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
-      let body: unknown;
-      try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
-      if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
-      if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
-      try {
-        const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
-        invalidate("devices");
-        return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
-      } catch (error) {
-        return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500);
-      }
-    },
+      return ++pairAttempts > 20;
+    }),
+    // A TV asks for a code to show, then polls with its secret until an admin approves it (tv-pairing.ts).
+    "POST /api/pair/tv": publicPairing(async (body, respond) => respond(tvPairing.request(body.id, body.name))),
+    "POST /api/pair/tv/poll": publicPairing(async (body, respond) => respond(tvPairing.collect(body.code, body.secret))),
   };
   const api = publishWrites(async (request, upgrade) => {
     const url = new URL(request.url);
@@ -1570,6 +1586,15 @@ export async function createHub(options: HubOptions) {
         return cors(request, json(originSettings()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
     }
+    // Who may see the pairing code may approve a TV: the host or an admin.
+    const tvRequest = /^\/api\/pair\/tv\/(\d{6})$/.exec(url.pathname)?.[1];
+    if (tvRequest) {
+      const refused = administrator();
+      if (refused) return refused;
+      if (request.method !== "GET" && request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try { return cors(request, json(request.method === "GET" ? tvPairing.describe(tvRequest) : tvPairing.approve(tvRequest))); }
+      catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500)); }
+    }
     if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
     if (url.pathname === "/api/devices/me" && request.method === "GET") return cors(request, await devices.handle(request, identity));
     {
@@ -1591,6 +1616,8 @@ export async function createHub(options: HubOptions) {
       if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
+      if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
+      if (!websocket && url.pathname === "/api/artwork") return cors(request, await artworkResponse(request, authorize));
       if (!websocket && url.pathname === "/api/subtitles") return cors(request, await subtitles.handle(request, () => {
         authorize();
         const playback = playing(url.searchParams.get("playbackId") ?? "");
@@ -1641,7 +1668,7 @@ export async function createHub(options: HubOptions) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
         send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
-        if (socket.data.tv) tvDevices.add(deviceOf(socket));
+        store.saveDeviceTv(deviceOf(socket), socket.data.tv);
         log(`device online ${nameOf(deviceOf(socket))}`);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }
@@ -1659,6 +1686,9 @@ export async function createHub(options: HubOptions) {
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
+        // The Device is a TV while its newest tab is; with none left it stays what it last was.
+        const next = newest(deviceOf(socket));
+        if (next) store.saveDeviceTv(deviceOf(socket), next.data.tv);
         // Any receiver of a Direct live input, not only the one reporting, hands its peer to its Device's older tab.
         const receiving = new Set(all().filter(playback => live.receivers(playback.id).includes(socket)));
         live.disconnect(socket);
@@ -1853,14 +1883,14 @@ export async function createHub(options: HubOptions) {
               const allowed = outputFor(action.deviceId, deviceId);
               const output = { ...allowed, picture: allowed.picture && (!target.outputs.length || target.outputs.some(output => output.picture)) };
               if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(action.deviceId)} is not sharing audio.`, 403);
-              // Only here is exclusive, across the queue too: another device's private output, or a publisher's
+              // Move here is exclusive, across the queue too: another device's private output, or a publisher's
               // private output held to return after its source, stays its own, so it is refused, not partial.
               // Checked again where the move lands, after the item resolves for its new Device.
               const exclusive = () => {
                 permitted();
                 const kept = target.outputs.filter(item => item.deviceId !== action.deviceId && !allows(item, deviceId));
-                if (kept.length) throw new ControllerError(`Only here is unavailable while ${kept.map(item => nameOf(item.deviceId)).join(", ")} plays this privately.`, 403);
-                if (target.held && target.held.deviceId !== action.deviceId && !allows(target.held, deviceId)) throw new ControllerError(`Only here is unavailable while ${nameOf(target.held.deviceId)} keeps its place in this playback privately.`, 403);
+                if (kept.length) throw new ControllerError(`Move here is unavailable while ${kept.map(item => nameOf(item.deviceId)).join(", ")} plays this privately.`, 403);
+                if (target.held && target.held.deviceId !== action.deviceId && !allows(target.held, deviceId)) throw new ControllerError(`Move here is unavailable while ${nameOf(target.held.deviceId)} keeps its place in this playback privately.`, 403);
               };
               exclusive();
               const left = target.outputs.map(item => item.deviceId).filter(id => id !== action.deviceId);
@@ -2037,6 +2067,7 @@ export async function createHub(options: HubOptions) {
     subtitles.close();
     playlists.close();
     forLater.close();
+    hidden.close();
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.

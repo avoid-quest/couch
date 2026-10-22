@@ -76,6 +76,11 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     element: element.hasAttribute("data-player-band") ? "player" : "bar", name: getComputedStyle(element).viewTransitionName,
     rendered: element.checkVisibility(),
   }));
+  // Each shared control's own transition name, so it glides from the bar to its place in the band: the gear (couch-gear),
+  // and the bar's Open player into fullscreen's slot (couch-last).
+  const shared = (selector: string) => [...host.querySelectorAll<HTMLElement>(`${selector} button, ${selector} [data-player-last]`)]
+    .filter(element => element.checkVisibility()).map(element => getComputedStyle(element).viewTransitionName).filter(name => name !== "none");
+  let barNames: string[] = [];
   document.startViewTransition = ((update: () => Promise<void>) => {
     snapshots.push({ phase: "before", names: names() });
     const transition = start(async () => { await update(); snapshots.push({ phase: "after", names: names() }); });
@@ -87,12 +92,26 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></SessionGateContext>);
     await wait(500);
     if (!host.querySelector("[data-now-playing]")) throw new Error(`No fixture bar: ${host.textContent}`);
+    // The bar is as tall as its tallest item (the artwork or a 44px control) plus its padding: two tight text lines.
+    const bar = host.querySelector<HTMLElement>("[data-now-playing]")!;
+    const padding = parseFloat(getComputedStyle(bar).paddingTop) + parseFloat(getComputedStyle(bar).paddingBottom) + parseFloat(getComputedStyle(bar).borderTopWidth);
+    const tallest = Math.max(...[...bar.querySelectorAll<HTMLElement>('button[aria-hidden="true"], [data-size="icon-lg"]')].filter(item => item.checkVisibility()).map(item => item.getBoundingClientRect().height));
+    if (bar.getBoundingClientRect().height > tallest + padding + 1) failures.push(`The bar is ${bar.getBoundingClientRect().height}px, taller than its ${tallest}px items`);
     for (let i = 0; i < 3; i++) {
-      host.querySelector<HTMLButtonElement>('[aria-label="Open player: Transition fixture"]')!.click();
+      if (i === 0) barNames = shared("[data-now-playing]");
+      // The title and the bar's last slot open the player alike.
+      host.querySelector<HTMLButtonElement>(i === 1 ? '[data-now-playing] [data-player-last]' : '[aria-label="Open player: Transition fixture"]')!.click();
       await wait();
       await finished(transitions.at(-1));
       if (!host.querySelector("[data-player-band]")) throw new Error(`No fixture player: ${host.textContent}`);
-      if (i === 0) await inspect?.("player");
+      if (i === 0) {
+        const bandNames = shared("[data-player-band]");
+        if (!bandNames.includes("couch-last") || !barNames.includes("couch-last")) failures.push("The bar's Open player and the band's last slot must share couch-last");
+        if (innerWidth >= 640 && !(barNames.includes("couch-gear") && bandNames.includes("couch-gear"))) failures.push("The bar's gear and the band's must share couch-gear");
+        const missing = barNames.filter(name => !bandNames.includes(name));
+        if (missing.length) failures.push(`Bar controls with no place in the band: ${missing.join(", ")}`);
+        await inspect?.("player");
+      }
       await router.navigate({ to: "/", viewTransition: true });
       await finished(transitions.at(-1));
     }
@@ -105,7 +124,9 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     // Remote Up next and Back use ordinary navigation, not a view transition.
     // Observe actual commits/mutations as well as frames; URL and presented matches can differ.
     if (!gate.tvPresentation) {
+      // Remote offers Up next only with something in it (hasUpNext).
       const remoteGate = { ...gate, state: { ...gate.state!, controlling: tvId,
+        queue: [...gate.state!.queue, { id: "n", title: "Next fixture", source: "https://example.com/next.mp4", duration: 60 }],
         devices: [...(gate.state!.devices ?? []), { id: tvId, name: "Fixture TV", tv: true, online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }],
         outputs: [{ deviceId: tvId, picture: true, sound: true }],
         playbacks: gate.state!.playbacks?.map(playback => ({ ...playback, outputs: [{ deviceId: tvId, picture: true, sound: true }] })),

@@ -3,7 +3,7 @@ import { Slider } from "@/components/ui/slider";
 import { isTvPresentation } from "@/session/presentation";
 
 // A remote moves volume and faders 5 per press; the playback position passes its own 10 s step.
-export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = isTvPresentation() ? 5 : 1, pageFirst = false, orientation }: {
+export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = isTvPresentation() ? 5 : 1, pageFirst = false, orientation, buffered }: {
   label: string;
   value: number;
   max: number;
@@ -13,6 +13,7 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
   keyboardStep?: number;
   pageFirst?: boolean;
   orientation?: "horizontal" | "vertical";
+  buffered?: number | null;
 }) {
   const [draft, setDraft] = useState<number | null>(null);
   // A focused keyboard edit keeps its target; command acceptance is not a player observation.
@@ -31,6 +32,7 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
   };
   return <Slider
     orientation={orientation}
+    buffered={buffered}
     data-page-first={pageFirst || undefined}
     aria-label={label}
     aria-valuetext={showValue ? `${Math.round(current)} percent` : `${Math.floor(current / 60)} minutes ${Math.floor(current % 60)} seconds`}

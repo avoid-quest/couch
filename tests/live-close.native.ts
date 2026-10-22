@@ -62,7 +62,7 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
 };
 const step = (name, value) => { evidence.steps.push({ name, ...value }); record(); return value; };
 async function run(w, url) {
-  await loadURL.call(w, new URL('/settings/sources/device-inputs', url).href);
+  await loadURL.call(w, new URL('/settings/device', url).href);
   const js = (code, gesture = false) => w.webContents.executeJavaScript(code, gesture);
   // Observes this page's recordings and the commands it sends Core, without changing them.
   await js(\`(() => {

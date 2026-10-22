@@ -107,7 +107,7 @@ test("In sync moves the receivers to the synchronized group and back to RTC, enc
   } finally { await f.close(); }
 });
 
-test("Only here from an In sync group restores RTC without replacing the queue", { timeout: 15_000 }, async () => {
+test("Move here from an In sync group restores RTC without replacing the queue", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
@@ -458,13 +458,13 @@ test("a relayed receiver's newest tab takes over its stream and plays the next o
   } finally { await f.close(); }
 });
 
-test("Only here grants a fresh peer to a device that can connect, and relays to one that couldn't", { timeout: 15_000 }, async () => {
+test("Move here grants a fresh peer to a device that can connect, and relays to one that couldn't", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
     await until(() => !!f.receiver.load()?.hls);
-    // Only here moves an item once it has started.
+    // Move here moves an item once it has started.
     f.receiver.report();
     await until(() => f.publisher.state.player.status === "playing");
     const other = await f.connect(2, "&audio=1&video=1");

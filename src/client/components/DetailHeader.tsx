@@ -1,23 +1,63 @@
-import { Play } from "lucide-react";
-import type { ReactNode } from "react";
+import { Bookmark, Play } from "lucide-react";
+import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { Stage, StageTitle } from "@/components/Stage";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "@/components/MediaArtwork";
-import { DurationBar } from "@/components/DurationBar";
-import { tileAspect, type TileShape } from "@/components/MediaTile";
+import { ProgressLine } from "@/components/DurationBar";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
+import type { ArtShape } from "@/art-shape";
+import { metaLine, withoutUrls } from "@/media-caption";
+import { formatDuration } from "@/time-format";
 import { cn } from "@/lib/utils";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
 
+/** A header's verbs: on a phone the primary takes the line, and the verb that starts the next pulls back by its padding
+ * so its word or glyph lines up with the title above; a row that starts on a glyph (a channel's Save) pulls it back too. */
+export const verbRow = "flex flex-wrap items-center gap-2 [&>[data-size=icon-lg]:first-child]:-ml-3 max-md:[&>[data-size=lg]:first-child]:w-full max-md:[&>[data-size=lg]:first-child+[data-size=lg]]:-ml-5 max-md:[&>[data-size=lg]:first-child+[data-size=icon-lg]]:-ml-3";
+
+
+/** Save as a bookmark that fills once saved: one fixed-width toggle, so Saved moves nothing beside it. */
+export function SaveToggle({ saved, ...props }: { saved: boolean } & Omit<ComponentProps<typeof Button>, "children">) {
+  return <Button variant="ghost" size="icon-lg" aria-label="Save" aria-pressed={saved} title={saved ? "Saved" : "Save"} {...props}>
+    <Bookmark aria-hidden="true" className={cn(saved && "fill-current")} />
+  </Button>;
+}
+
+/** A synopsis without bare addresses, three lines until More. */
+export function Description({ text, className }: { text?: string | null; className?: string }) {
+  const shown = withoutUrls(text);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const body = useRef<HTMLParagraphElement>(null);
+  const id = useId();
+  // Measured again as its width or font changes (a resize, a rotation, a late font), so More comes and goes with it.
+  useLayoutEffect(() => {
+    const node = body.current;
+    if (!node || open) return;
+    const measure = () => setLong(node.scrollHeight > node.clientHeight + 1);
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    measure();
+    return () => observer.disconnect();
+  }, [shown, open]);
+  if (!shown) return null;
+  return <div className={cn("grid max-w-prose justify-items-start", className)}>
+    <p ref={body} id={id} className={cn("whitespace-pre-line text-sm leading-relaxed break-words text-muted-foreground", !open && "line-clamp-3")}>{shown}</p>
+    {(long || open) && <Button variant="ghost" size="sm" aria-expanded={open} aria-controls={id} className="-ml-2 px-2" onClick={() => setOpen(value => !value)}>{open ? "Less" : "More"}</Button>}
+  </div>;
+}
+
 /**
- * An item or collection page's top, laid out like Home's hero: contained artwork at the left (stacked above on narrow
- * screens), the title at display size, one muted meta line, how far it got, then one row of verbs before the synopsis: Play
- * (or Resume, with From start beside it), Queue, Save and Play on, with anything else in one "…" menu. The row is one
- * focus stop per verb, and its first enabled verb is where the page starts.
+ * An item or collection page's top, a Stage (Stage.tsx) as Home's hero is: the picture at the right under the header,
+ * then at the bottom left the trail, the title at display size, one muted meta line ending in its links ("YouTube,
+ * Blender"; its length too until it's started), how far it got as Home's progress line, then one row of verbs before the synopsis: Play (or Resume, with From start beside it), Queue, Save and Play on, with
+ * anything else in one "…" menu. The row is one focus stop per verb, and its first enabled verb is where the page starts.
  */
-export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", duration, position, play, fromStart, queue, save, playOn, more = [], children }: {
-  title: string; meta?: string; context?: ReactNode; description?: string | null; thumbnail?: string; shape?: TileShape;
+export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", fit, duration, position, play, fromStart, queue, save, playOn, more = [], trail, children }: {
+  title: string; meta?: string; context?: ReactNode; description?: string | null; thumbnail?: string; shape?: ArtShape;
+  /** Logos keep their margins: contain them in the frame. */
+  fit?: "contain";
   duration?: number | null; position?: number;
   /** Play, Resume or Play all; `aria` names what plays when it isn't the title (a station's show). */
   play?: Verb & { aria?: string };
@@ -26,6 +66,8 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   playOn?: { run: (deviceId: string) => void; disabled?: boolean };
   /** Every other verb (Play next, Remove, ordering), in one "…" menu. */
   more?: MenuAction[];
+  /** The page's ancestors (ContentBreadcrumb), above the title. */
+  trail?: ReactNode;
   children?: ReactNode;
 }) {
   const { on } = usePlayOn();
@@ -33,26 +75,28 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
   const first = [!play?.disabled && play && "play", !queue?.disabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
-  return <header className={cn("grid gap-x-8 gap-y-6 md:items-start lg:gap-x-12", thumbnail && (shape === "video" ? "md:grid-cols-[minmax(0,min(42%,28rem))_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,min(36%,18rem))_minmax(0,1fr)]"))}>
-    {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
-    {thumbnail && <div aria-hidden="true" className={cn("min-w-0 [&_img]:bg-transparent", shape === "poster" ? "max-w-48 md:max-w-64" : shape === "square" ? "max-w-64 md:max-w-72" : "w-full")}><MediaArtwork thumbnail={thumbnail} title={title} className={cn("w-full object-contain object-left", tileAspect[shape])} /></div>}
-    <div className="grid min-w-0 content-start gap-2">
-      <h1 tabIndex={-1} className="text-3xl leading-tight md:text-4xl font-semibold tracking-tight break-words outline-none">{title}</h1>
-      {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
-      {context}
-      {duration != null && <DurationBar duration={duration} position={position} />}
-      {verbs && <div data-nav-row className="mt-4 flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full">
-        {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" />{on(play.label)}</Button>}
-        {fromStart && <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>{fromStart.label}</Button>}
-        {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>{queue.label}</Button>}
-        {save && <Button data-page-first={first === "save" || undefined} variant="ghost" size="lg" aria-pressed={save.saved} disabled={save.disabled} onClick={save.run}>{save.saved ? "Saved" : "Save"}</Button>}
-        {/* Play on waits for another device that can play it. */}
-        {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
-        {/* The page's own "…", always shown: the header is no item that reveals it. */}
-        <ItemMenu menu={rest} size="icon-lg" title={title} className="opacity-100" />
-      </div>}
-      {description && <p className="mt-4 max-w-prose whitespace-pre-line text-sm leading-relaxed break-words text-muted-foreground">{description}</p>}
-      {children}
+  const started = !!position && !!duration;
+  const line = metaLine(meta, duration != null && !started && formatDuration(duration));
+  return <Stage data-detail-header thumbnail={thumbnail ?? ""} shape={shape} fit={fit} title={title}>
+    <div className="grid w-full justify-items-start gap-3">
+      {trail}
+      <StageTitle title={title} />
     </div>
-  </header>;
+    {(line || context || started) && <div className="grid w-full justify-items-start gap-2">
+      <p className="detail-meta text-base text-muted-foreground">{line && <span>{line}</span>}{context}</p>
+      {started && <ProgressLine position={position} duration={duration} />}
+    </div>}
+    {verbs && <div data-nav-row className={cn("mt-1 w-full", verbRow)}>
+      {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="fill-current" />{on(play.label)}</Button>}
+      {fromStart && <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>{fromStart.label}</Button>}
+      {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>{queue.label}</Button>}
+      {/* Play on waits for another device that can play it. */}
+      {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
+      {save && <SaveToggle data-page-first={first === "save" || undefined} saved={save.saved} disabled={save.disabled} onClick={save.run} />}
+      {/* The page's own "…", always shown: the header is no item that reveals it. */}
+      <ItemMenu menu={rest} size="icon-lg" title={title} className="opacity-100" />
+    </div>}
+    <Description text={description} />
+    {children}
+  </Stage>;
 }

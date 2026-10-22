@@ -279,7 +279,7 @@ test("Play from a controller cannot pull a device out of, or replace, its privat
   } finally { await f.close(); }
 });
 
-test("Only here is refused, changing nothing, while a device that joined on its own plays privately", { timeout: 15_000 }, async () => {
+test("Move here is refused, changing nothing, while a device that joined on its own plays privately", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
     await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } });
@@ -289,7 +289,7 @@ test("Only here is refused, changing nothing, while a device that joined on its 
     const outputs = f.admin.state.outputs;
     const only = await f.admin.command({ type: "solo", deviceId: f.adminId });
     assert.equal(only.ok, false);
-    assert.equal(only.error, "Only here is unavailable while Device plays this privately.");
+    assert.equal(only.error, "Move here is unavailable while Device plays this privately.");
     assert.deepEqual(f.admin.state.outputs, outputs);
     assert.deepEqual(f.admin.state.outputs?.map(output => [output.deviceId, output.local]), [[f.adminId, false], [f.deviceId, true]]);
   } finally { await f.close(); }

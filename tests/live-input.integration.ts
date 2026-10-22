@@ -259,7 +259,7 @@ test("ordinary Play replaces a live item in the same playback and preserves its 
   } finally { await f.close(); }
 });
 
-test("grouped live pictures use the receiver's HTTPS origin and Only here never plays a capture on its publisher", { timeout: 15_000 }, async () => {
+test("grouped live pictures use the receiver's HTTPS origin and Move here never plays a capture on its publisher", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("screen");
@@ -292,7 +292,7 @@ test("grouped live pictures use the receiver's HTTPS origin and Only here never 
   } finally { await f.close(); }
 });
 
-test("Only here rejects a system-audio input on the same capturing device", { timeout: 15_000 }, async () => {
+test("Move here rejects a system-audio input on the same capturing device", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("system", "system-audio");

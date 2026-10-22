@@ -1,229 +1,393 @@
 # Player
 
-When the player opens: [Shell](shell.md#a-picture-you-start-opens-the-player).
-On a TV: [TV](tv.md#the-tv-player-answers-a-remote).
+The player is `/now` (`PlayerPage`). For when it opens by itself, see
+[Shell](shell.md#a-picture-you-start-opens-the-player). For the TV, see
+[TV](tv.md#the-tv-player).
 
-## The player is one tap away
+Every pattern below follows a reference player, adapted to Couch:
 
-The now-playing bar opens the player through its
-artwork and title ([Shell](shell.md#now-playing-bar)). The bar and the player band hold one control
-order: Play/Pause, Stop and Next, the timeline, volume, Where it plays and Up
-next, then in the band Playback settings (a
-gear opening Playback, separate from the shell's Settings tab; Audio &
-subtitles lives inside) and, on desktop and phones, fullscreen,
-which their window can leave and the TV's never does. The band lays that
-order out around the transport: the timeline on its own row above, then
-Volume and Where it plays at the left, the transport in the middle and Up
-next, Playback and fullscreen at the right, so the band reads as one line
-with Play at its centre. On phones, the same controls remain in one row with 44px targets and no gaps between groups. The control row uses the dock’s edge space on narrow phones so adjacent targets never overlap. The band includes the phone safe-area inset. Up next shows only where it has something to open
-(on wide screens audio keeps the queue beside the artwork), and fullscreen
-only over a picture. F and double-click follow the same rule, while an already
-fullscreen window can always leave it. The phone player keeps transport and secondary tools together; the compact now-playing bar keeps Play/Pause and
-Where it plays. Every control there is an icon with an
-`aria-label` and a matching `title` tooltip, never visible text.
+- **YouTube** was observed live.
+- **Netflix, Prime Video and Apple TV** come from their help pages and from
+  write-ups.
 
-### Transport
+YouTube's web player was observed in October 2026. The other sources are:
 
-The transport is Play/Pause, Stop and Next wherever it appears: the band, the
-now-playing bar, Home's hero and the Remote. Each keeps its slot for every
-kind of media: live media that can't pause keeps Pause, disabled, and Stop is
-enabled whenever something is loading, playing, paused, ended or failed.
-In the band all three are ghost icons at 44px, as in the now-playing bar:
-no disc, no fill, the same control at the same size wherever it appears
-([icon controls](../design.md#scale)). A slot that can't act stays at half
-ink. Up next and Playback are toggles that open a panel: both say
-`aria-expanded` and keep the hover tint while their panel is open, as Volume
-and Where it plays do.
-Stop clears the sequence and offers Undo; it lives in the transport, never
-only in a Sheet. The keyboard and the timeline seek.
+- Netflix's [Audio & Subtitles](https://help.netflix.com/en/node/372) and
+  [speed](https://help.netflix.com/en/node/116584) help pages
+- Apple's [tvOS playback guide](https://support.apple.com/guide/tv/control-video-playback-atvb7944597f/tvos)
+  and the HIG's [Playing video](https://developer.apple.com/design/human-interface-guidelines/playing-video)
+- Prime Video's "Next up" card, from
+  [Amazon's customer Q&A](https://www.amazon.com/ask/questions/Tx2MVM96BJT371B)
 
-### Volume and timeline
+The table at the end of this page sums up which reference each pattern
+follows.
 
-Volume is a speaker icon that opens its slider and Mute in a Popover. A
-timeline shows only where it means something: seekable media, or media with
-a length it will seek through once loaded. Live media that can't seek shows
-no bar, no position and no total; the player's "Live" is in its top band or
-Now playing, as below.
+## The picture
 
-The player says when it ends once on screen: the top band over a video, or
-Now playing's metadata, reads "ends 21:42" (or "Live", with no end
-time), so the band's timeline keeps only its position and the time remaining
-("−3:24"), and live media leaves its slot empty. `useEndTime` is that line,
-in clock time.
+A video fills the window and never shrinks, moves or resizes. All four
+references keep the picture full-bleed and float their controls and panels
+over it. Everything that opens lies over the picture:
 
-A pointer hovering a timeline (the band's, the now-playing bar's or the
-Remote's) reads the time under it in a small label above the bar, in the
-timeline's own format ("1:02:15"), black like the Buffering status. It follows
-the pointer, and through a drag too, centred over it and held inside the bar
-at either end; it goes when the pointer leaves. Touch and the TV's remote have
-no hover, so they never show it, and live media without a timeline has none.
-It is the shadcn Slider as it is plus a label driven by `pointermove`: the
-catalog has no slider with a hover readout.
+- the gear's menu, with Subtitles and Audio
+- Volume
+- Where it plays
+- Up next
+- the Next card
 
-Volume across several Devices: [Where it plays](where-it-plays.md#volume).
+Over a picture, these surfaces are one translucent black,
+`--player-surface` (75%). YouTube's gear menu is 60%. Couch's is a little
+darker so that subtitles behind a panel don't fight its text. There is no
+blur, no shadow and no hairline.
 
-### Layout
+The bars around a contained picture are lit by the item's artwork, as
+YouTube's ambient mode lights its player ([Room](../design.md#room)): its
+first colour glows 8rem out of the picture's edges, over a dark haze of its
+second. The light lies
+behind the video element, so it shows only in the bars, and it is painted
+once: nothing reads or redraws the picture while it plays.
 
-Audio and remote playback place contained artwork beside a persistent
-desktop queue. On phones, Up next replaces the artwork while transport stays
-available. Video uses the full viewport until Up next opens beside it; then the picture is letterboxed, never cropped.
-On phones, Up next replaces the picture too. The top band publishes its
-height as `--player-top`, and toasts sit below it. Opened over a video, Up
-next and the picture start below it too, as it turns solid.
-Queue navigation survives playback changes; track-specific settings reset.
-Up next keeps its heading and Close visible while scrolling, including when
-the current item clears. A row’s start time belongs to its primary Play target.
-Transport, volume and tools share one bottom dock across media modes, divided
-from the stage by a hairline over audio, as the now-playing bar is. Keep
-unavailable controls in their slots so loading and queue changes preserve
-muscle memory (the live timeline is the exception: it gives way to "Live",
-which the player says in its top band or Now playing);
-preserve the single control row at every screen width, with content above the dock.
+The four panels the tools open, Volume, Where it plays, Up next and the gear's
+menu, are one family wherever they open, from the band or the now-playing bar:
 
-### Now playing echoes Home's hero
+- one surface: `--player-surface` over a picture, else the popover black
+  with a hairline, which a black page needs to hold its edge
+- one corner (`rounded-lg`) and one inset: text sits .75rem in
+- two widths: 18rem for Volume and the gear's menu, 32rem for Where it plays
+  and Up next, except Up next summoned over the room beside artwork: 28rem of
+  glass with a shadow ([Up next](#up-next))
+- one place: 8px above the band (or the bar), ending at the gutter, the
+  tools' right edge, whichever tool opened them (`toolPanel`)
+- each grows from the button that opened it
 
-Audio (and media playing elsewhere) shows Now playing as
-[Home's hero](home.md#the-hero) does, one column centred in its stage, its lines starting together at the column's left: the artwork contained at its own
-aspect ratio on black, set down on the copy below it (the box hugs the image up
-to a square, and short screens shrink it whole, never cropping it); the title
-at display size; one muted meta line, which reads the show's station, else the
-subtitle, else the source ("Radio" for a station), then Paused, Finished or
-where it plays ("on Kitchen +1"); then small muted end-time or Live metadata. A station's
-current track follows in muted ink.
+Where it plays' first line doesn't stick over its rows with a second surface:
+its rows scroll under it. The mixer on phones and the TV stays a Sheet.
 
-### Controls over the picture
+## Controls over the picture
 
-Audio keeps its solid controls visible. Over a video, two bands show and hide
-together, like a media centre's on-screen display: the band at the bottom, and
-a top band. The top band holds, at the left, the title (wrapping to two lines
-before it truncates) and the subtitle (series, episode, channel or source) in
-muted ink, with direct creator and collection links below the title and byline.
-The right side holds the end time and, on TV only, the clock. The title opens
-Details; Details also remains available in the Playback sheet. Each row sizes
-itself, leaving the title the remaining width on narrow screens. Paused reads
-in the shared status area above the controls.
+Over a video, there is a bottom band and a top line. They show and hide
+together.
 
-Both bands are an overlay on the picture: one transparent black scrim,
-mirrored, eased so it has no edge that reads as a crop. It rises over `--fade`
-(2.5rem, 1.25rem on short screens) to 60% where their text starts, and to 72%
-at the screen's edge, so the picture shows through the whole band. Their muted
-ink is white at 85%: on a white picture both inks keep 4.5:1 over the scrim,
-and the muted one stays a step below the white. The
-scrim preserves the picture bounds. Hidden bands are inert and
-let pointer input reach the video. The player fits the
-viewport at every interface size. Plain playback glyphs keep artwork central;
-Playback settings use Sheets. Stage CSS handles native video bounds
-and the responsive queue workspace; controls reuse shadcn components.
+**Scrims, not bars.** Each band paints a soft black ramp behind itself and
+past its edge (`::before`). It fades from 82% at the screen's edge to 70%
+where the controls start (white keeps 7:1 over a white frame), then to nothing
+over 4rem. This follows YouTube's
+gradient and Netflix's and Apple's floating controls. There is never a solid
+band.
 
-Subtitles, the video's own text tracks, rise clear of the band while it shows
-and settle back as it hides, moving in step with its 0.2 s fade (at once with
-reduced motion). CSS moves the cue box
-(`video::-webkit-media-text-track-container`) up by the band's height,
-`--bottom-bar`, while the band is `data-player-band="shown"`; the cues keep the
-places their file gives them. Chromium (the TV and desktop apps) and WebKit
-expose that box; Firefox doesn't, so there subtitles stay put under the band.
-A cue placed at the top moves up too, where the top band would cover it
-anyway. Subtitles burnt into the picture, as RaiPlay's for dialect are, are
-part of it and stay under the band, which the lighter scrim lets them read
-through.
+- The band's box is only its controls, about 108 px at 1920 wide.
+  `--bottom-bar` is its height. Subtitles rise above that height
+  while the band shows
+  (`video::-webkit-media-text-track-container`; Firefox doesn't expose it),
+  and panels clear it.
+- The muted ink is white at 85%.
+- Hidden bands are inert.
 
-### The picture holds the keys
+**The top line** follows the fullscreen title of YouTube and Netflix:
 
-On desktop and phones the player opens focused on its picture, as YouTube's
-does, so a key is a shortcut at once
-([Shell](shell.md#keyboard-control-stays-inside-couch)). The picture is one
-focus target covering the stage (`data-player-surface`, `tabindex="-1"`,
-named "Player: {title}"), for video and for audio Now playing alike. Focus
-returns to it whenever the player opens: from the now-playing bar, Home, the
-P key or a picture that starts; Back from Details still restores its opener,
-Playback. A key on the picture shows the controls for a while and leaves focus
-where it is; over a playing video they hide after 4 s while focus is on the
-picture, and stay up while the keyboard is in them or on a toast's action,
-which Back leaves for the control it came from.
+- Back, then the title at `text-3xl` semibold (`text-2xl` on phones), up to
+  two lines, the whole title on hover. The title opens Details.
+- Under the title, at `text-base`, the relationship links (`MediaContext`). A subtitle that
+  the links already name is not repeated (`mediaSubtitle`).
+- At the right, small: the end time ("ends 21:42"), Stop sharing while this
+  device shares, and the clock on the TV.
+- The top line publishes `--player-top`. Toasts and Up next stay below it.
 
-- **A click** on a video plays or pauses; on audio Now playing it does
-  nothing, so a stray click never stops the music. **A double-click**
-  toggles fullscreen and leaves play as it was.
-- **A pointer click in the band** does its job, then returns focus to the
-  picture, so the next key is a shortcut again; a click that opens something
-  (Volume, Where it plays, Playback, Up next) leaves focus there. A keyboard's
-  Enter or Space keeps focus where the keyboard put it.
-- **Tab** from the picture shows the controls and enters them in their order:
-  the top band's Back, then the timeline and the band. Escape behaves as
-  [Back on desktop and phones](#back-on-desktop-and-phones) says.
-- **On phones**, a tap shows or hides the controls; it never plays or pauses.
+**The band** has two rows.
 
-The TV's player opens on the transport when keyboard or Remote navigation is
-already active. Unattended startup uses the picture too, so receiving Play does
-not pin the controls open ([TV](tv.md#the-tv-player-answers-a-remote)).
+The timeline row:
+- Position, a thin line, and the time remaining.
+- The unplayed part is translucent white.
+- As on YouTube, a lighter segment ahead of the playhead shows what this
+  device has already loaded (35% white, here and on the now-playing bar's
+  line). It shows only while this device plays media that seeks.
+- As on YouTube, the line thickens under a pointer and while it is dragged,
+  here, beside artwork and on the now-playing bar alike. Over a picture, and
+  on the bar, its thumb shows only while a pointer or focus is on it.
+- A hovering pointer reads the time under it, on the panel surface.
 
-## Back on desktop and phones
+The control row:
+- Play/Pause, Stop and Next in the middle. They stay centred so the
+  now-playing bar grows into the band without anything changing side. Apple's
+  controls and Prime's centre transport are centred too.
+  Play/Pause is the band's one large control (1.3 times the target, a 2rem
+  glyph), as Apple's and YouTube's fullscreen transports lead with theirs; the
+  bar's smaller one grows into it.
+- The tools at the right, exactly the now-playing bar's, sound first, then
+  content, then view: **Volume, Where it plays, Up next, the Playback gear**,
+  then **the last slot: fullscreen**, bottom right as on every player. The bar
+  has Open player in that slot, so each tool sits at the bar's x.
+- Where nothing can fill the screen (beside artwork, and on the TV, which is
+  always full screen) the slot stays empty rather than holding a fullscreen
+  that can never act. Couch's disabled controls keep their slot while their
+  media might allow them again, as Next does; this one can't, and on the TV an
+  empty slot is no stop for the remote. A window already in fullscreen keeps
+  Exit fullscreen there.
+- Every control is a ghost icon (`icon-lg`), each with an `aria-label` and
+  a matching `title`. Its target is 44px and grows with the interface only to
+  2.25rem: 54px at 1920 wide, the size of YouTube's fullscreen controls
+  (`--player-target`).
+- Phones (below `sm`, the bar's breakpoint) leave Volume out and drop the
+  gaps. A phone has volume keys, as YouTube's and Netflix's phone players
+  assume, and Where it plays leads with the same Volume. A centred transport
+  leaves room for only two tools at 320 wide, so on phones the transport leads,
+  its glyph under the position as fullscreen's is under the time left, and
+  every tool stays: nothing moves into a menu and nothing is dropped. At 320
+  wide the seven 44px targets fill the row exactly, touching with no overlap;
+  at 390 70px separate the transport from the tools. Anything narrower scrolls
+  the row. Beside artwork a phone's band drops the empty last slot, since its
+  bar has no tools to line up with, so the tools end at the gutter.
 
-A pointer has no Back key, so desktop and phones lead the top band with a Back
-arrow ("Back to {section}", or "Back to Remote" for a Remote's player): before
-the title over a video, and leading the band over artwork, where the TV
-shows no top band unless this device shares. It returns to the page that
-opened the player, as Escape and a remote's Back do. A Remote's player keeps
-its TV's status beside it.
+### The band and the now-playing bar
+
+The band is the now-playing bar grown up ([Shell](shell.md#now-playing-bar)).
+They share one set of controls:
+
+- **The same icons, glyphs and targets** at every width: the transport, the
+  lucide Volume, Where it plays (SlidersVertical), Up next (ListMusic) and the
+  gear (Settings), at `--player-target` with a 1.25rem glyph.
+- **The transport at the same x.** Both centre it in a
+  `1fr auto 1fr` grid inside the same gutter.
+- **The same tools at the same x, in the same order:** Volume, Where it
+  plays, Up next, the gear, then the last slot. The band's is fullscreen (or
+  empty); the bar's is **Open player**, a ChevronUp. It is a mini-player's
+  expand arrow, as on YouTube Music: an arrow up, into the player. Maximize2's
+  diagonal arrows would read as fullscreen, which it isn't. It is the same
+  action as the bar's title, "Open player: {title}", so it carries the same
+  verb.
+- **The bar's gear is the player's.** It opens the same Playback menu for
+  whatever plays, here or on another device: Subtitles and Audio where there
+  is a picture, Speed, Quality, Audio delay and Details. Each acts on the
+  playback, not on this window, so none needs the player open. Details closes
+  the menu as it leaves the page.
+- **They move, not cross-fade.** Each shared control has its own view
+  transition name (`couch-play`, `couch-stop`, `couch-next`, `couch-volume`,
+  `couch-where`, `couch-queue`, `couch-gear`, and `couch-last` for the last
+  slot), so it
+  glides from its place in the bar to its place in the band while the band
+  itself grows (`couch-player-band`). Open player glides into fullscreen's
+  slot. The bar's thumbnail travels into the player's artwork, or grows into
+  its picture (`couch-art`), and the bar's title and its line fade out at once
+  rather than stretch over the band's timeline ([Design](../design.md#motion)).
+
+The differences are deliberate:
+
+| Where | Bar | Band | Why |
+|---|---|---|---|
+| Wide screens | Volume, Where it plays, Up next, gear, Open player | the same, then fullscreen at Open player's x | Fullscreen is bottom right on every player. |
+| Beside artwork (audio, or playing elsewhere), from 960px | Up next opens the player's Up next | Up next takes focus into the list beside the artwork, and Close returns (with nothing to come, it opens Up next over the room); the last slot is empty | The list is already on screen; the buttons keep their places. |
+| Phones | Play/Pause and Open player, after the title | the transport at the left, then Where it plays, Up next, the gear and fullscreen | A minimized player needs no mixer; the player has it. Open player sits at fullscreen's x. The band has no room to centre the transport beside four tools. |
+
+Over a playing video, the bands hide 4 s after the last key while focus is on
+the picture. They show and hide together. They stay up:
+- while a panel or menu is open
+- during recovery
+- while the keyboard is in them
+- while this device shares
+
+## Settings
+
+Every setting is in **the Playback gear**, which opens YouTube's menu: a
+small menu above the whole band, aligned to the gear (`PlaybackMenu`,
+`data-player-menu`). The now-playing bar's gear opens the same menu above the
+bar. There is no separate subtitles button, so the band keeps to the transport
+and the bar's tools. C still turns subtitles on and
+off, as on YouTube.
+
+- Each row is a setting with its current value and "›": Subtitles, Audio,
+  Speed, Quality, Chapters and Audio delay. Each shows only where it
+  applies. A Details link ends the menu.
+- **Subtitles** leads the menu, as YouTube's Subtitles/CC row does, and
+  reads "Off" or the chosen track. It shows over video only. Its submenu has:
+  - Off and the tracks, the current one checked
+  - Save subtitles as default, while there are tracks
+  - under a hairline, Add subtitles (SRT or VTT) and the Subtitle delay
+    stepper
+- **Audio** shows only with more than one audio track, as YouTube's Audio
+  track row does. It reads the chosen track. Its submenu has the tracks and
+  Save audio language as default.
+- Speed offers 0.5× to 2×, with Save as default. YouTube puts speed in the
+  gear menu. Netflix has a separate speed button, but on web and mobile only.
+- Quality lists Couch's labels.
+- Audio delay steps by 0.1 s.
+- A row opens its submenu in place, under a Back row (YouTube's submenus).
+  Focus lands on the chosen value. The Back row stays while a long list
+  (subtitle languages, chapters) scrolls under it.
+- Back or Esc in a submenu returns to the menu, on the row that opened it.
+  Back or Esc on the menu closes it and returns to the gear.
+- Volume and Where it plays open their Popovers above the whole band, so
+  nothing covers the timeline.
+
+## Up next
+
+`QueuePanel`. Over a picture, Up next is a panel over it, at the right above
+the band, one of the tools' panels: 32rem wide, full width on phones, and as
+tall as its rows up to the top line. Netflix's episodes panel works this way.
+The rest of the picture stays visible and keeps playing.
+
+With nothing to show (no queued or played row, no Autoplay pick and no
+search for one), Up next isn't offered: its button keeps its slot, disabled,
+with "Nothing queued" as its tooltip, in the band and the bar.
+
+Beside artwork it takes a column only while something is still to come (a
+queued entry after what plays, or Autoplay's picks: `hasQueued`). Played rows
+alone, a radio evening's usual case, leave the artwork the whole room, and Up
+next is summoned from its button as a panel over the room at the right above
+the band (28rem, `rounded-lg`, translucent black glass with a shadow), growing
+from its button; a click on the room closes it.
+
+- Its heading row stays while the list scrolls under it. The row holds the
+  title, the Autoplay switch and Close.
+- A click on the picture while Up next is open closes it, without pausing.
+- Beside artwork, on wide screens, while something is to come, Up next stays
+  on screen, and the band's Up next takes focus into it, with Close to
+  return. On phones it replaces the artwork.
+- **Playing** heads the list only where the player's title is off screen.
+- **Upcoming rows** are board lines:
+  - The title is heavy. The start time is light, at the same size, at the
+    row's end.
+  - The meta line has the length, and "added by {device}" when another
+    device queued it.
+  - A row is one target that plays it. Its "…" holds Details, Play next,
+    ordering, Save for later, Open in browser and Remove.
+  - Removing a row keeps focus on the adjacent row.
+- A status line counts the rows and says when they end ("2 to play, until
+  17:05"), with **Save as list**.
+- **Autoplay** continues only the current series, album or playlist, after the
+  queued rows:
+  - "Then from {context}", then up to ten of its upcoming entries as quieter,
+    display-only rows. Their start times continue the board.
+  - Or "Finding the next item…".
+  - The Autoplay switch shows in the heading row only while something can
+    continue, as YouTube's autoplay switch does. Settings → Playback always
+    holds it.
+- With only played rows: "Nothing queued." above Played.
+- **Played** is collapsed at the end.
+
+### Next, near the end
+
+In the last 30 s of an item with a length, a card waits over the picture at
+the right above the band (`data-next-up`). It combines Prime Video's "Next up"
+card and Netflix's Next Episode.
+
+- It shows what plays next: the next queued row, else Autoplay's first pick.
+- It shows its artwork, "Next" and its title.
+- It is one target, "Next: {title}", that skips to it now.
+- Couch moves on by itself at the end either way, so there is no countdown.
+- It hides while a panel or Up next is open.
+
+## The picture holds the keys
+
+On desktop and phones, the player opens focused on its picture
+(`data-player-surface`, `tabindex="-1"`, "Player: {title}"), so keys are
+shortcuts at once ([Shell](shell.md#keyboard)).
+
+- A key shows the controls and leaves focus where it is.
+- A click on video plays or pauses. On audio it does nothing.
+- A double-click toggles fullscreen.
+- A pointer click in the band returns focus to the picture, unless the click
+  opened something.
+- Tab enters the controls.
+- On phones, a tap shows or hides the controls.
+
+### Back on desktop and phones
+
+A pointer has no Back key. The top line therefore leads with a Back arrow
+("Back to {section}", or "Back to Remote"). It returns to the page that opened
+the player, as Esc does. The TV has no Back arrow.
 
 ## Status and recovery
 
-One status row sits immediately above the timeline and transport for video,
-audio and Remote playback alike. `playbackStatus` supplies Playing, Paused,
-Loading…, Buffering…, Reconnecting…, Finished, Can't play, Player unavailable
-and Offline. It also supplies specific error or reconnect information. Home,
-the compact bar, Remote and Up next use the same vocabulary.
+The words are `playbackStatus`'s. The plain states are left to the
+Play/Pause glyph. Nothing is said in the band.
 
-Artwork and title remain visible during loading and failure. Paused has no
-separate central overlay. Transport keeps Play/Pause, Stop and Next in fixed
-slots: the first becomes Try again after failure or during a scheduled retry,
-and Replay when finished. Next remains available during loading or failure
-when another entry exists. Unavailable playback offers Choose device through
-the existing Where it plays sheet and describes the connection problem; it
-never tells the user to press a disabled Play. Offline keeps controls visible
-while reconnection proceeds. Controls auto-hide only during connected video
-playback, never during recovery.
+**Over a picture**, the status is centred on it (`.player-status`):
 
-## Stop sharing stays on screen
+- **Loading and buffering** show a spinner only. The words are for screen
+  readers. This follows YouTube and Apple's HIG.
+- **Reconnecting and Offline** add their line under the spinner. Offline says
+  "Offline", then only what happens next: "Reconnecting to {Couch}…".
+- **Can't play, Player unavailable and Finished** are a short centred line
+  with its detail and one remedy:
+  - Try again for Can't play
+  - Choose device for Player unavailable (Where it plays)
+  - nothing for Finished, where the transport says Replay
 
-While this device shares its screen or sound, the player's top band keeps
-"Sharing {screen}" and Stop sharing at its right, as the header does while
-browsing ([Live inputs](../live-inputs.md)): just before the clock over a
-video, and at the end of the band's row over artwork, where the TV then shows
-a top band too. Phones show the header's sharing icon, whose press opens the
-status and Stop sharing ([Shell](shell.md#header-and-section-nav)). While it
-shares, the bands don't hide on their own; a TV's Back still hides them, and
-OK shows them again.
+**Beside artwork**, the same status follows the title. The artwork and title
+stay during loading and failure. Next stays available while another entry
+exists.
 
-## Up next is a deliberate list
+## Audio, live and elsewhere
 
-Keep Playing separate and Played collapsed.
-Compact artwork rows are one target that plays the entry, with one menu for
-Details, Play next, ordering, Save for later, Open in browser when the entry
-has an original webpage, and Remove, behind a "…" at the
-row's end, since an entry's page holds only Play and Save
-([Menus](../design.md#menus)). Removal leaves focus on the adjacent row, so a
-keyboard keeps editing: on its "…" when the "…" opened the menu, else on the
-row itself. Each upcoming row is a board line: its name heavy at the row
-title's size (two lines, then it clamps), and at its end the time it starts,
-light at the same size in tabular figures ([Scale](../design.md#scale)). Its
-meta line reads the subtitle and length, and "added by {device}" only when
-another device queued it. The list's status line counts the rows and says
-when the list ends ("2 to play · until 17:05"), with Save as list at its end,
-beside what it saves; Save as list shows while there is something to save,
-asks for a name and preserves errors there for retry. The panel's sections,
-Up next, Autoplay and Played, are headed alike (section titles). Opened over
-the player, the panel closes from an X at the end of its "Up next" heading
-row, as every Sheet does; in Home's Sheet that row is the Sheet's header.
-The Playing row also offers Open in browser when its entry has a webpage. It
-heads the list only where the player's title is off screen,
-a phone's Up next over Now playing: beside the artwork and title, or under a
-video's top band, it would repeat them. shadcn/Radix menus supply keyboard
-navigation and typeahead.
+Audio, and media playing elsewhere, show **Now playing**: one composition in
+the artwork's [room](../design.md#room). On wide screens the artwork stands at
+the left, whole at its own shape (`--art-ratio`), as tall as the room allows
+(up to 36rem and 52% of the width) with its shadow, and the copy beside it
+ends level with its foot. Phones and portrait windows stack them, the artwork
+as wide as the gutters allow. The copy:
 
-Autoplay is a
-separate preview with a profile switch, continuing only the current series,
-album or playlist. Explicit queue entries play first. Stop clears the
-sequence; its end never starts recommendations.
+- the title in the display face, sized by its length and set
+  whole ([Type](../design.md#type))
+- where it plays, when that isn't only this device: "on Kitchen +1", in the
+  ink rather than the muted metadata. It leads the line under the title, so it
+  reads on from the title. The now-playing bar says it the same way, in the
+  same place (`PlaysOn`).
+- the relationship links, on the same line. A station's link shows under its
+  show; without a show the title is the station, and already opens it.
+- a meta line: a show's genre and host ("Bass, Breaks, Goldie B"), as its
+  tile says them, else the subtitle, else the source, then "in a separate
+  window" for a channel that plays in mpv's window
+- the end time
+- a station's current programme or track
 
-The video header follows the shell: a small clock appears only in TV presentation. Desktop and phone headers give that space to the title and content links.
+The room's light pools behind the artwork, never behind the copy, and its
+colours cross-fade when the show or item changes. The band and Up next beside
+it are open, with no ground of their own, so the room reaches the window's
+edges.
+
+**A station's show** is Core's programme for the playback, else the show its
+tile lists (`useStationShow`). The rule is the same on the tile, the
+now-playing bar, Home's hero and the player, loading or playing: the show's
+title and photo while there is a show, else the station's name and logo.
+
+The band sits in the room with no rule, and nothing over a picture. There is
+nothing to fill, so the band's fullscreen slot is empty (a window already in
+fullscreen keeps its Exit fullscreen there). Live media
+that can't seek has no timeline, no time and no label, and its Pause stays
+disabled. On wide screens, the queue sits beside the artwork while something
+is to come. The band includes
+the phone's safe-area inset.
+
+## Stop sharing
+
+While this device shares its screen or sound, the top line keeps "Sharing
+{screen}" and Stop sharing at its right ([Live inputs](../live-inputs.md)), and
+the bands don't hide on their own.
+
+## Transport
+
+Play/Pause, Stop and Next are the same ghost icons wherever they appear: the
+band, the now-playing bar, Home's hero and Remote (`PlaybackTransport`).
+
+- Each control keeps its slot.
+- Live media that can't pause keeps Pause disabled.
+- Stop is enabled whenever something is loaded or has failed. It clears the
+  sequence and offers Undo.
+- After a failure, Play becomes Try again. At the end, it becomes Replay.
+
+## Where each pattern comes from
+
+| Pattern | Reference |
+|---|---|
+| Picture never moves; panels lie over it | All four. Only Apple's PiP shrinks the picture. |
+| Gradient scrims, no bars | YouTube's bottom gradient; Netflix's and Apple's floating controls |
+| Thin timeline that thickens on hover, thumb on hover, hover time | YouTube |
+| Title top-left with Back | YouTube and Netflix fullscreen |
+| Fullscreen at the bottom right | Every reference: YouTube, Netflix, Prime Video |
+| Open player as an up arrow in the now-playing bar | YouTube Music's mini-player |
+| Gear menu with in-place submenus (Subtitles, Audio, Speed, Quality, Chapters, Audio delay) | YouTube, whose gear holds Subtitles/CC and Audio track |
+| No separate subtitles button; C toggles subtitles | YouTube's C key; the owner asked for fewer buttons |
+| Up next as a panel over the picture from its own button | Netflix's episodes panel |
+| Autoplay switch | YouTube |
+| Next card near the end | Prime Video's "Next up"; Netflix's Next Episode |
+| Buffering as a centred spinner | YouTube; Apple's HIG |
+| Translucent panel surface | YouTube's gear menu (60%) |

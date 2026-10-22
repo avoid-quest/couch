@@ -32,7 +32,7 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
 
   return <>
     <SettingsSection>
-      {(state || !error) && <SettingsRow label="Output" description={playing || "Add speakers in Bluetooth."}>
+      {(state || !error) && <SettingsRow label="Output" description={playing || "Add speakers in Bluetooth below."}>
         {state ? state.choices.length ? (
           <Select value={selectedChoice?.key ?? ""} disabled={!connected || pending || !!active || !state.routing} onValueChange={key => {
             const choice = state.choices.find(choice => choice.key === key);
@@ -43,7 +43,7 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
               {"output" in choice ? choice.output.name : `${choice.profile.name} · Pauses playback`}
             </SelectItem>)}</SelectContent>
           </Select>
-        ) : <Empty className="py-0"><EmptyHeader><EmptyDescription>No outputs found. Add speakers in Bluetooth.</EmptyDescription></EmptyHeader></Empty>
+        ) : <Empty className="py-0"><EmptyHeader><EmptyDescription>No outputs found. Add speakers in Bluetooth below.</EmptyDescription></EmptyHeader></Empty>
           : connected && <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</span>}
       </SettingsRow>}
       {unavailableSelected && <Alert><AlertDescription>Output unavailable. Reconnect it or pick another.</AlertDescription></Alert>}

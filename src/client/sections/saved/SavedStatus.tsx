@@ -28,7 +28,7 @@ export function SavedError({ message, onRetry }: { message: string; onRetry?: ()
 
 /** An empty tab: what goes here and the next step. */
 export function SavedEmpty({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
-  return <Empty className="border-t py-8">
+  return <Empty className="py-0">
     <EmptyHeader>{title && <EmptyTitle><h2>{title}</h2></EmptyTitle>}<EmptyDescription>{children}</EmptyDescription></EmptyHeader>
     {action && <EmptyContent>{action}</EmptyContent>}
   </Empty>;

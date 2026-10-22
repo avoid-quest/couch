@@ -101,7 +101,7 @@ test("SoundCloud filters unsafe results and propagates cancellation and invalid 
 
 test("music filters, SoundCloud details, queue commands and history share the provider identity", () => {
   for (const source of ["Bandcamp", "SoundCloud"]) {
-    const state = { query: "arsider", source, kind: "Music" as const };
+    const state = { query: "arsider", source, kind: "music" as const };
     expect(readSearchState(new URL(searchLocation(state), "https://couch.local").search)).toEqual(state);
   }
   const url = soundcloud().webpage_url;

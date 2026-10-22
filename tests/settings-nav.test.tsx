@@ -13,44 +13,73 @@ let gate: object = {};
 mock.module("../src/client/session/session-context", () => ({ useSessionGate: () => gate, useOptionalSessionGate: () => gate, errorText: String }));
 mock.module("../src/client/sections/shell/AppShell", () => ({ useShell: () => ({ credentials: null }) }));
 mock.module("../src/client/session/session", () => ({ createId: () => "id" }));
-const { SettingsNav } = await import("../src/client/sections/settings/SettingsNav");
-const { SoundPage, BluetoothPage } = await import("../src/client/sections/settings/CouchPages");
+const { SettingsIndex, SettingsNav } = await import("../src/client/sections/settings/SettingsNav");
+const { SoundPage } = await import("../src/client/sections/settings/CouchPages");
+const { HomeSettingsPage } = await import("../src/client/sections/settings/ThisDevicePages");
 
 const device = (id: string, name: string, role: "host" | "controller" | "administrator") => ({ id, name, role, createdAt: null, lastSeenAt: null });
-function rail(authority: "host" | "controller" | "administrator", details: object) {
+function look(authority: "host" | "controller" | "administrator", details: object, status = "connected") {
   gate = {
-    localHost: authority === "host", tvPresentation: false,
+    localHost: authority === "host", tvPresentation: false, status,
     identity: { authority, claimAvailable: false, device: authority === "host" ? device("tv", "Living room", "host") : device("phone", "Phone", authority) },
     state: { installationName: "Living room", devices: [] }, details: { name: "Living room", urls: [], player: "idle", ...details },
   };
-  const html = renderToStaticMarkup(<SettingsNav active="network" />);
-  const nav = html.slice(html.indexOf("<nav"));
-  const scope = (id: string) => nav.split(`data-settings-scope="${id}"`)[1]!.split("data-settings-scope")[0]!;
-  const pages = (id: string) => [...scope(id).matchAll(/data-settings-page="([^"]+)"/g)].map(match => match[1]);
-  return { nav, device: pages("device"), couch: pages("couch") };
+}
+/** The rail's groups: each heading, its muted line, and its pages (a locked one ends in "!"). */
+function rail(authority: "host" | "controller" | "administrator", details: object, status?: string) {
+  look(authority, details, status);
+  const html = renderToStaticMarkup(<SettingsNav active="devices" />);
+  return html.split('role="group"').slice(1).map(group => ({
+    title: group.match(/<h2[^>]*>([^<]+)</)?.[1],
+    subtitle: group.match(/<span class="truncate">([^<]+)</)?.[1],
+    pages: [...group.matchAll(/data-settings-page="([^"]+)"[\s\S]*?<\/a>/g)].map(match => match[1] + (match[0].includes("only an admin") ? "!" : "")),
+  }));
 }
 
-test("Settings names its two owners and still offers a controller every shared page", () => {
-  const view = rail("controller", { systemAudio: true, tvPresentation: true, updates: true });
-  expect(view.nav).toContain('aria-label="This device · Phone"');
-  expect(view.nav).toContain('aria-label="Living room · Shared · Only admins change most"');
-  expect(view.nav).toContain("Living room&#x27;s hardware");
-  expect(view.device).toEqual(["general", "connection", "viewing", "home", "discover", "sharing"]);
-  expect(view.couch).toEqual(["couch", "devices", "network", "playback", "sources", "sound", "bluetooth", "display", "updates"]);
+test("Settings names its two owners, and locks what a controller can't change", () => {
+  expect(rail("controller", { systemAudio: true, tvPresentation: true, updates: true })).toEqual([
+    { title: "This device", subtitle: "Phone", pages: ["device", "home"] },
+    { title: "Living room", subtitle: "Connected", pages: ["devices", "playback", "sources", "sound!", "display!", "updates!"] },
+  ]);
+  expect(rail("administrator", {}, "reconnecting")[1]).toEqual({ title: "Living room", subtitle: "Reconnecting, admin", pages: ["devices", "playback", "sources"] });
+  expect(rail("controller", {}, "server-unavailable")[1]?.subtitle).toBe("Offline");
 });
 
-test("Couch hardware follows what the Couch has, not who is looking", () => {
-  expect(rail("administrator", {}).couch).toEqual(["couch", "devices", "network", "playback", "sources"]);
-  const host = rail("host", { updates: true });
-  expect(host.nav).toContain('aria-label="This device · Living room"');
-  expect(host.nav).toContain("Shared · This device runs it");
-  expect(host.couch.at(-1)).toBe("updates");
+test("On the host, the two owners are one Couch", () => {
+  expect(rail("host", { systemAudio: true, updates: true })).toEqual([
+    { title: "Living room", subtitle: "This computer runs it", pages: ["device", "home", "devices", "playback", "sources", "sound", "updates"] },
+  ]);
+  expect(rail("host", { tvPresentation: true })[0]?.subtitle).toBe("This TV runs it");
 });
 
-test("A controller still sees what the Couch's Sound and Bluetooth pages hold", () => {
-  rail("controller", { systemAudio: true });
+test("Below md, Settings lists both owners, and each page names its owner above its title", () => {
+  look("controller", { systemAudio: true });
+  const index = renderToStaticMarkup(<SettingsIndex />);
+  expect([...index.matchAll(/<h2[^>]*>([^<]+)</g)].map(match => match[1])).toEqual(["This device", "Living room"]);
+  const crumb = (html: string) => html.match(/aria-label="Settings path"[\s\S]*?<a[^>]*href="\/settings"[^>]*>([^<]+)</)?.[1];
+  expect(crumb(renderToStaticMarkup(<HomeSettingsPage />))).toBe("This device");
+  expect(crumb(renderToStaticMarkup(<SoundPage />))).toBe("Living room");
+  look("host", {});
+  expect(crumb(renderToStaticMarkup(<HomeSettingsPage />))).toBe("Living room");
+});
+
+test("A controller still sees what the Couch's Sound page holds, Bluetooth included", () => {
+  look("controller", { systemAudio: true });
   const rows = (html: string) => [...html.slice(html.indexOf("data-settings-content")).matchAll(/data-slot="field-(?:label|legend)"[^>]*>([^<]+)</g)].map(match => match[1]);
-  expect(rows(renderToStaticMarkup(<SoundPage />))).toEqual(["Output", "Test &amp; delay", "Audio delay", "Test tone"]);
-  expect(rows(renderToStaticMarkup(<BluetoothPage />))).toEqual(["Add a device", "Devices"]);
-  expect(renderToStaticMarkup(<BluetoothPage />)).toContain("Only an admin can change this.");
+  const html = renderToStaticMarkup(<SoundPage />);
+  expect(rows(html)).toEqual(["Output", "Test &amp; delay", "Audio delay", "Test tone", "Bluetooth"]);
+  expect(html).toContain("Only an admin can change this.");
+});
+
+test("Playback offers subtitles in one row, and the player's speeds", async () => {
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const { PlaybackPreferences } = await import("../src/client/sections/settings/couch/PlaybackPreferences");
+  const profile = { audioLanguage: "", subtitleLanguage: "it", subtitles: "off" as const, speed: 1 };
+  const html = renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>
+    <PlaybackPreferences profile={{ id: "household", name: "Household" }} preferences={{ profile } as never} connected onCommand={async () => true} />
+  </QueryClientProvider>);
+  expect([...html.matchAll(/data-slot="field-label"[^>]*>([^<]+)</g)].map(match => match[1])).toEqual(["Autoplay", "Audio language", "Subtitles", "Speed"]);
+  const choices = (label: string) => [...html.slice(html.indexOf(`aria-label="${label}"`)).split("</div>")[0]!.matchAll(/<button[^>]*aria-checked="(true|false)"[^>]*>[\s\S]*?<\/svg>([^<]+)</g)].map(match => match[2] + (match[1] === "true" ? "*" : ""));
+  expect(choices("Subtitles")).toEqual(["Off*", "Original", "Italiano", "English"]);
+  expect(choices("Speed")).toEqual(["0.5×", "0.75×", "1×*", "1.25×", "1.5×", "2×"]);
 });

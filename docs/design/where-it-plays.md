@@ -1,209 +1,143 @@
 # Where it plays
 
-One surface: the picker, a Sheet for the Playback you control, and the one
-place to choose where it plays. Its rules live in one module without React,
+The mixer for one Couch's devices: where the Playback you control plays,
+picture and sound, on one device or dozens. Its rules live in one module
+without React,
 [`src/client/session/where-it-plays.ts`](../../src/client/session/where-it-plays.ts),
-with a unit test per rule in `tests/where-it-plays-rules.test.ts`. On a TV its
-faders take the arrows only after OK: [TV](tv.md#every-journey-step-works-with-a-remote).
+with a unit test per rule in `tests/where-it-plays-rules.test.ts`.
 
-## Principles
+Rows are devices, one each (a device serves one Playback at a time); the host
+is a device like the others, and its hardware (a display, a sound card, a
+Bluetooth speaker) is chosen in Settings, not listed. The mixer has no header:
+the bar or band it opens from already shows what plays. A row is quiet while
+all is well and names only an exception. A control Core would refuse stays
+visible, disabled, with its reason as its tooltip or at the end of its menu
+item.
 
-People never wonder whether a word names a device, a group or a place.
+## The panel
 
-- **Only devices have names.** A Playback has no name: Couch shows it by its
-  artwork and title, and text refers to it by its title ("Playing avoid
-  radio"). Couch never asks anyone to name or group anything, and Where it
-  plays never says zone, group, room, speaker or Playback.
-- **One device, one row.** The picker lists every paired device once, since
-  Core lets a device serve one Playback at a time.
-- **This device keeps its name.** Its status line starts with "This device".
-- **The host is just a device.** The Couch and its host share one name. In
-  Where it plays that name labels the host's device row, with no separate
-  Couch heading.
-- **Hardware is not a device.** An HDMI display, a sound card or a Bluetooth
-  speaker is part of its device, chosen in Settings under the Couch's name
-  through Display, Sound or Bluetooth, where available; on phones, choose
-  the page from the Settings page menu. It is never listed beside devices.
-- **One level for the whole Playback.** The band's Volume and the picker's top
-  fader are one control, with each device's fader below it. No hidden level
-  silences sound ([Volume](#volume)).
-- **Show what you can't change.** A device you can't change stays listed and
-  dimmed, its check disabled, with a one-word status. Buffered delivery and
-  its failure explain why under the status; the picker has at most one hint line.
-
-## The picker
-
-**Where it plays** is one icon button in the band and the now-playing bar, a
-mixer (`SlidersVertical`) with no device name or DeviceIcon, so it can't be
-mistaken for the header's Couch switch. It opens a bottom Sheet:
+**Where it plays** is its own icon button (`SlidersVertical`) in the
+now-playing bar and the band, beside the separate Volume button. On
+desktop it opens a Popover above the button, so the bar and the transport stay
+usable, while the list fits (10 rows); a longer list opens a right-side Sheet
+from the same button. Phones and the TV open a bottom Sheet sized to its
+content. The kind is chosen as it opens and kept until it closes. A Sheet's
+Close sits at the end of its first line. From the band or the bar its Popover
+opens above the whole row, clear of the timeline, 32rem wide and ending at the
+gutter, one of the tools' panels: over a picture on the player's translucent
+surface, as the player's own menus are. Its rows scroll under the first line;
+a Sheet's first line sticks on the Sheet's ground. Its Sheet is unchanged
+([Player](player.md#the-picture)).
 
 ```
-[art] Montalbano
-      Playing
 [mute] ──────────────●──  72
+Picture 1, Sound 2
+Living room TV      ▣  ♪  ───●───  40  …
+Francesco's phone   ▢  ♪  ──────●  60  …
+This device
 ─────────────────────────────────────
-◉ ▣ Living room TV       ───●───  40  …
-    Picture and sound
-    Sync 40 ms earlier   ──●─────
-◉ ▣ Francesco's phone    ──────●  60  …
-    This device · Sound
-─────────────────────────────────────
-
-Other devices
-─────────────────────────────────────
-○ ▣ Kitchen laptop
-    Playing avoid radio
-○ ▣ Garden
-    Not playing
-○ ▣ Anna's tablet
-    Offline
-─────────────────────────────────────
+Kitchen laptop      ▢  ♪        Move here
+Playing avoid radio
+Offline: Garden, Anna's tablet
 ```
 
-- **Its header** is the Playback's artwork, title and status ("Choose where
-  it plays" while a shared source waits for receivers), then its Close at the
-  row's end, above the rows' "…", as every Sheet closes from the end of its
-  heading row ([icon controls](../design.md#scale)).
-- **Its levels:** the [Volume](#volume), then [In sync](#in-sync) where it
-  applies. On the TV the fader hint, "Press OK to adjust a level, then OK or
-  Back to finish.", follows them, where the faders start; it is the Sheet's
-  one hint line, and elsewhere it has none.
-- **The devices it plays on,** each with its fader and "…", and
-  [Sync](#fader-and-sync) under the fader where it means something.
-- **Other devices,** under that one heading, each saying what it plays now
-  ("Playing avoid radio", "Not playing", "Offline"), offline ones last. The
-  heading shows only beside devices it plays on, so a long list still shows
-  where the faders end; a shared source waiting for receivers lists every
-  device without it.
+- **First line:** the Playback's [Volume](#volume), always. A shared source
+  waiting for receivers says "Choose where {title} plays" instead.
+- **[In sync](#in-sync)** where it applies.
+- **Counts:** one muted line, zeros left out: Picture n, Sound n, In sync n,
+  Behind n, Can't play n, Offline n, from what Core already sends.
+- **Rows:** the devices playing this, then the rest after a plain hairline.
+  Offline devices outside the Playback fold into one muted line that names
+  each once, counting devices that share a name ("Offline: A, Living room
+  TV ×4").
+- **Many devices:** past 8 rows the counts become a filter (shadcn
+  `ToggleGroup`, one at a time, pressed again to clear) and a search field,
+  "Find a device", appears. Both stay at the top while the list scrolls.
+  Filtering never reorders.
 
-Core lets a window act only on the Playback it controls (`control` targets
-only TVs), so a check always means "in this playback": checking a device
-that plays something else moves it here, which its status names before you
-press.
+Rows keep their order while the panel is open: a device that joins or leaves
+stays where it was, and a new device is appended. The order is taken afresh
+the next time it opens.
 
-It replaced an overview page, `/where-it-plays`, that grouped every device
-under the Playback it played. Its address now opens Home, for bookmarks. The
-picker kept its Sync, in each in-sync row; the rest was left out:
-
-- each other Playback's artwork and end time, since a row's status already
-  names what that device plays;
-- a link to Settings → This device → Sharing, since each device gives its
-  own consent on itself, and this device needs none to play here;
-- the list while nothing plays, since there is then no Playback to add a
-  device to, and no now-playing bar to open it from.
-
-`deviceRow` in `sections/shell/Outputs.tsx` renders each row, and the picker
-is called without hooks, so the integration tests find its controls by label
-without a DOM.
-
-## Volume
-
-The first row is the band's Volume (`PlaybackVolume`, Mute and its fader):
-one level for the whole Playback, with each device's fader below it, its
-number in the same column and read the same way, without "%". The picker
-shows it while the Playback plays on two or more devices; with one, that
-device's fader is the level, and a Volume above it would say the same number
-twice (the band's Volume popover still opens it). A saved Playback with a legacy
-trim keeps the master Volume until moving it folds that trim into device levels; a shared source still
-waiting for its first receiver shows none, since there is no sound to set. It acts on the
-Playback's sound that you may control: it shows the loudest level that sound
-plays at and moves it so the loudest reaches the new level, keeping their
-proportion. Another device's private sound neither moves nor counts, so it
-never holds the Volume above where you set it; with only private sound, the
-Volume shows its level and can't change it. At 0 each device's fader reads 0,
-and the Volume remembers their proportion, so raising it again restores it
-rather than levelling them. Its Mute mutes them all and reads muted when they
-all are, and so does M.
-
-Couch had two group levels: this Volume, which scaled device levels, and
-All, a stored trim that kept them. The Volume stays because it needs fewer
-exceptions: on a TV it is the system volume the remote's keys move, and with
-one device it is that device's level, where a trim could never go above it.
-All's trim survives only from older clients and saved Playbacks, so it is
-never a hidden level: the Volume shows the level sound plays at with the trim
-included, and moving it folds the trim into the device levels you may
-control (from a trim at 0, keeping their proportion). Another device's
-private sound keeps its own attenuation, as All always left it.
+`Mixer` in `sections/shell/Outputs.tsx` renders the content without hooks,
+so the tests find its controls by label without a DOM; `WhereItPlays` holds
+the open state, the order and the filters.
 
 ## Device rows
 
-Every device is listed once: the Playback's devices first, then the others
-under Other devices, offline ones last. A row is a check (in or out), the
-DeviceIcon, the device's name and a one-line status; while the device is in,
-its fader with its number and a "…" menu follow, with Sync under the fader
-where it means something. The check is a filled circle with a check
-while the device is in and its empty outline while it is out, so a row reads
-as a device you can add, as AirPlay's list does; a focused row inverts like
-every control, checked or not.
+The same at every scale: the device's name, with the
+[level](../design.md#motion) beside it while its sound is in the Playback
+(moving while sound comes out of it, flat while paused, muted, behind, failing
+or offline), then its **Picture** and
+**Sound** toggles (`Monitor`/`MonitorOff`, `Volume2`/`VolumeOff`), its level
+fader and number while its sound is on, and "…". On phones the fader takes a
+second line under the name. A device is in the Playback while either channel
+is on. While it is the only device sounding (and its fader would move), the
+Volume above is its level, so its row has no fader of its own and the panel
+doesn't say the same number twice (`soleSound`). The TV's rows keep theirs,
+since each row is its own slider.
 
-**The check.** Pressing the row adds the device with picture and sound, as
-its consent and the media allow: picture only where it shares its screen and
-the media has one, sound only where it shares its speakers and the media has
-it, at its own level (50 if that is 0, since 0 would leave its sound out). A
-device busy elsewhere moves here. Pressing it again takes out each channel it
-plays here. This device needs no consent to add itself.
+**Picture and Sound.** Each turns its own channel on or off. Picture is
+enabled only when the media has a picture and the device shares its screen;
+Sound when the media has sound and the device shares its speakers, and it
+joins at the device's own level (50 if that is 0, since 0 would leave it
+out). Turning off a device's last channel takes it out: each channel it plays
+here goes, so each needs its consent. A device busy elsewhere moves here.
+This device needs no consent.
 
-**What it says,** in this order:
+**Move here** (Core's `solo`): the Playback plays only on that device, with
+its picture when it has one. A device not playing this shows it where the
+level would be; a device already playing it never offers it. It isn't offered for the only
+output, where it would change nothing, unless a publisher held out for its
+own capture would return after it. It is unavailable while another device's
+private output plays in the Playback, or such a publisher waits to return.
 
-- "Offline", or "Sharing this source" for a shared source's publisher, which
-  never plays its own capture;
-- in: "Can't play" when its buffered stream failed, "Private" when you may
-  not take one of its channels out, "Buffered", or what it plays here:
-  "Picture and sound", "Sound", "Picture", "Muted", "Picture, muted", or "No
-  picture" for a picture output on media without one. A channel the media
-  lacks plays nothing: on a live input without sound, a device that chose
-  sound reads "Picture", or "No sound" without a picture, its fader at 0;
-- out: "Can't play this channel" while only the host can play it, "Private"
-  when it shares no channel the media uses or plays privately elsewhere, the
-  other Playback's status and title ("Playing Montalbano", "Not playing" once
-  it has stopped), or "Not playing".
+**What it says,** under the name, only when it matters:
 
-This device's starts "This device · ". Statuses describe playback and
-consent, never whether sound can be heard; a busy device names what it plays
-before you press, because moving it interrupts that.
-
-Under "Buffered", the row says "It couldn't connect directly to this source,
-so it plays a few seconds behind." Under "Can't play", a failed buffered
-stream says "It couldn't connect directly to this source, and Couch's buffered
-stream failed: {Core's reason}" in destructive red, instead of the Buffered
-explanation. Either wraps under the status, inside the check, which announces
-it.
+- "This device", muted, on this device's row, joined by a comma to any other;
+- "Behind" while a live input reaches it through Couch's buffered stream;
+- "Can't play: {Core's reason}" in destructive red when that stream failed;
+- "Muted" while its sound plays here muted (muted elsewhere: turning its
+  Sound on or moving its fader unmutes it);
+- "Private" where its consent leaves you nothing to change;
+- "Playing {title}" while it plays another Playback, which moving it
+  interrupts;
+- "Sharing this source" for a shared source's publisher, which never plays
+  its own capture; "Can't play this channel" while only the host can; "Offline"
+  for an offline device still in the Playback.
 
 **Consent.** Every refusal Core makes shows as a disabled control with its
-reason: the check by its status, a menu item by a word at its end
-("Private", "Offline", "No picture", "No sound", "Sharing this source"). A
-private picture disables Picture for other devices, and its shared sound
-still takes the fader and Mute. This device keeps its own controls while
-viewing another Playback.
+reason ("Private", "Offline", "No picture", "No sound", "Sharing this
+source"). A private picture disables Picture for other devices, while its
+shared sound keeps its Sound and fader. This device keeps its own
+controls while viewing another Playback.
 
 ## Fader and Sync
 
-The fader is the device's one volume while its sound is in, else 0 (its
-number reads "–"): 0 takes its sound out and raising it puts it in.
+The fader is the device's one volume; 0 takes its sound out.
 
-"Sync … ms earlier" plays a late speaker sooner (Sendspin's static delay).
-It applies only while the device's sound plays in sync with other devices,
-and few people touch it, so a row shows its Sync line only while its delay
-isn't 0. Outside synchronized playback the saved value is hidden, though
-Core keeps it. At 0, **Sync…** in the row's "…", there while Sync applies,
-reveals the line and moves focus to its slider; Back or Esc on the slider,
-or closing the Sheet, hides it again while the delay is still 0. That
-reveal is the open Sheet's own state, not Core's. The line is part of the
-row's own grid (CSS subgrid): its words under the status, its slider under
-the fader and as long, so the row still reads as one device. On phones it
-takes its own line, words then slider.
-"Delay" read as the opposite, and "Sync" keeps it apart from Playback's
-audio delay against the picture.
+"Sync … ms earlier" (0–500 ms) plays a late speaker sooner (Sendspin's static
+delay). It applies only while the device's sound plays in sync with other
+devices. It reads **Lip sync** while another device shows the picture. A row
+shows its line only while it isn't 0; **Sync…** (or **Lip sync…**) in "…"
+reveals it and moves focus to its slider; Back or Esc there, or closing the
+panel, hides a line still at 0.
 
 ## The "…" menu
 
-**Picture**, **Mute** and **Only here**, each a checked item, then
-**Sync…** while Sync applies ([Fader and Sync](#fader-and-sync)). Only here
-(formerly Solo) keeps the Playback only on that device, with its picture
-when the Playback has one. It is unavailable while another device's private
-output plays in it, or a publisher's private output waits to return after
-its source, since that output would stay. Pressed again it still commits, so
-a publisher held out for its source stays out.
+It holds only **Sync…** (or **Lip sync…**), so a row shows "…" only while Sync
+applies. A row has no Mute: its Sound and fader are its sound, the Volume mutes.
+
+## Volume
+
+The first line is the band's Volume (`PlaybackVolume`, Mute and its fader):
+one level for the whole Playback, its number in line with the rows'. It acts
+on the sound you may control: it shows the loudest level that sound plays at
+and moves it so the loudest reaches the new level, keeping their proportion.
+Another device's private sound neither moves nor counts. At 0 the Volume
+remembers the proportion, so raising it restores it. Its Mute mutes them all.
+A legacy trim from older clients is folded into the device levels the first
+time it moves.
 
 ## In sync
 
@@ -215,36 +149,20 @@ or while it is on.
 ## The chooser
 
 A shared source waiting for receivers opens Where it plays only in the window
-that pressed Play (from Discover, Search, Play on or Up next). **Ask every device
-where a shared source plays**, in the Couch’s General settings, is off by
-default. When on, Core sends the request to every window viewing that playback,
-including when it loses its last usable receiver. The waiting state and source
-discovery are unchanged by the setting. Each new Play request reopens it;
-dismissed, it stays closed through unrelated updates and when the
-now-playing bar gives way to Now Playing, since the session, not the Sheet,
-remembers the dismissal. Play on a source's publisher while the source plays
-opens it only in the window that asked.
+that pressed Play (from Home, Search, Play on or Up next). **Ask every
+device where a shared source plays**, in Settings → Playback, sends
+the request to every window viewing that playback instead. Each new request
+reopens it; dismissed, it stays closed through unrelated updates and when the
+now-playing bar gives way to Now Playing, since the session remembers the
+dismissal.
 
-## On a TV and on phones
+## On a TV
 
-On a TV a row's check is its focus stop; Up and Down move between rows,
-past the Other devices heading. Right reaches the fader, which takes the
-arrows only after OK, then "…"; Down from the fader reaches its Sync line
-when it shows. Sync… in "…" puts focus on that line's slider, a fader like
-the others: OK hands it the arrows and Back ends that; Back again hides a
-line still at 0, with focus back on "…". The Sheet opens on the first device
-you can choose, Up from the first row reaches the Volume, and Back closes it
-with focus back on its button.
-
-On phones the fader and number take a line below the name, with "…" beside
-the name. Names and titles wrap without ellipses, and the Sheet scrolls. Its
-controls and slider tracks have at least a 44px target at the base scale.
-
-The check is a shadcn `Button` with `role="checkbox"` and lucide's
-`CircleCheck` or `Circle`, not the catalog's `Checkbox`: that is a 16px box,
-and the TV needs the whole name and status as one focus stop that inverts
-like every other. The menu's checked items are
-the catalog's `DropdownMenuCheckboxItem`.
+Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
+between rows, Left and Right change its level by 5 at once, with no OK to
+take the arrows. OK opens its options: Picture, Sound and Sync…. Back closes the panel with focus back on its button. It opens on the
+first row. A revealed Sync line is a stop of its own whose slider Left and
+Right move directly.
 
 ## Play on
 
@@ -255,7 +173,7 @@ with only one eligible online target; the primary Play says "Play on
 confirms it. The now-playing bar, the player's summary and Home's hero say
 "on {name}" (+N) whenever the controlled Playback plays anywhere but only here.
 
-Its target rows in menus: [Browse](browse.md#play-on-targets-in-menus).
+Its target rows in menus: [Browse](browse.md#play-on-in-menus).
 
 ## Switching servers
 
@@ -264,14 +182,3 @@ server's own outputs when the previous mix is gone, or this device when
 those are offline. Ordinary Play keeps the mix; Where it plays and explicit
 Play on choose where it plays. Core decides this
 (`tests/server-selection.integration.ts`).
-
-## DeviceIcon
-
-The lucide icon beside every device's name in Where it plays' rows, familiar
-like Spotify's device picker. Device icons stand only for devices: Where it
-plays' opener is a mixer icon and the "on {name}" status line is plain text.
-Picture and sound: `MonitorSpeaker`; picture: `Monitor`; sound: `Volume`,
-`Volume1` or `Volume2` by its volume (0, up to 50, above); muted: `VolumeX`.
-Media without a picture shows no picture, and without sound, no sound. Idle,
-a plain `Monitor` in muted ink; offline, dimmer still. `aria-hidden`. It
-replaced a custom two-cell glyph that people couldn't read.

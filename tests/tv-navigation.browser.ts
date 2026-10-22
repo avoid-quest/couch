@@ -8,7 +8,6 @@ declare global {
   interface Window {
     runSavedBackRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
     runSharingLocalOnlyRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
-    runDiscoverNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
     runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
   }
 }
@@ -87,7 +86,7 @@ window.runSavedBackRegression = async () => {
 // this device's capture, while the TV's own keyboard and pointer still can.
 const sharingLocalOnly = async () => {
   await click('[data-app-nav] a[href="/settings"]');
-  await click('[data-settings-page="sharing"]');
+  await click('[data-settings-page="device"]');
   const choice = (label: string) => [...document.querySelectorAll<HTMLElement>('[aria-label="What to share"] [role="radio"]')].find(item => item.textContent === label);
   const microphone = choice("Microphone or audio input"), screen = choice("Screen");
   assert(microphone && screen && !microphone.matches(":disabled"), "Sharing has no enabled capture choices; stop any existing capture first");
@@ -119,58 +118,6 @@ window.runSharingLocalOnlyRegression = async () => {
   catch (error) { return [{ name: "Remote can't drive this device's capture", passed: false, error: String(error) }]; }
 };
 
-const discoverNavigation = async () => {
-  await click('[data-app-nav] a[href="/"]');
-  await click('[data-app-nav] a[href="/discover"]');
-  await until(() => !!document.activeElement?.matches('[data-page="Discover"] [data-page-first]'));
-  assert(getComputedStyle(control(".app-header")).position === "sticky", "The header is not sticky");
-  const entries = [...document.querySelectorAll<HTMLElement>('[data-page="Discover"] [data-page-first]')]
-    .filter(element => !element.matches(':disabled, [aria-disabled="true"]') && !element.closest('[inert], [aria-hidden="true"]') && element.getClientRects().length > 0);
-  const first = entries[0]!;
-  assert(document.activeElement === first, "Discover entry ignored the first available section in the saved order");
-  assert(new Set(entries.map(element => element.closest('section:not([data-page]), [role="alert"]'))).size === entries.length, "A Discover section has more than one first control");
-  const shared = document.querySelector('[data-page="Discover"] [aria-label="Shared sources"]');
-  if (shared?.contains(first)) {
-    assert(first.getAttribute("aria-label")?.startsWith("Play "), "Shared sources did not start on Play");
-    assert(!document.querySelector('[aria-label="Sources"] button[aria-label^="Play "]'), "Shared sources still appear in Sources");
-    const next = shared.closest("section")?.nextElementSibling;
-    const nextControl = next?.querySelector('header a, [data-page-first]:not(:disabled)');
-    if (nextControl) {
-      await key("ArrowDown");
-      assert(document.activeElement === nextControl, "Down from Shared sources skipped the next section");
-      await key("ArrowUp");
-      assert(document.activeElement === first, "Up from the next section did not return to the shared source");
-    }
-    first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-    await wait(700);
-    assert(document.querySelector('[role="menu"]') && document.activeElement?.closest('[role="menu"]'), "Held OK did not open the shared source's menu");
-    const labels = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent);
-    assert(labels.includes("Play next") && labels.includes("Queue"), "The shared source lost its queue verbs");
-    first.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-    await key("Escape");
-    assert(document.activeElement === first, "The shared source's menu lost its opener");
-  }
-  await key("ArrowUp");
-  const heading = first.closest("section")?.querySelector("header a");
-  if (heading) {
-    assert(document.activeElement === heading, "Up from the first row did not reach its heading");
-    await key("ArrowUp");
-  }
-  assert(document.activeElement?.id === "customize-discover", "Up from the first section skipped Customize Discover");
-  await key("ArrowUp");
-  assert(document.activeElement?.matches('.app-header a[aria-current="page"][href="/discover"]'), "Up did not reach the current tab");
-  await key("ArrowDown");
-  assert(document.activeElement === first, "Down from the header did not return to the page's first control");
-  await key("Escape"); await wait(350);
-  assert(location.pathname === "/", "Back did not take Discover to Home");
-  await key("Escape"); await wait(350);
-  assert(location.pathname === "/", "Back on Home went somewhere");
-};
-
-window.runDiscoverNavigationRegression = async () => {
-  try { await discoverNavigation(); return [{ name: "Discover follows the saved section order and keeps its navigation", passed: true }]; }
-  catch (error) { return [{ name: "Discover follows the saved section order and keeps its navigation", passed: false, error: String(error) }]; }
-};
 
 window.runTvNavigationRegression = async () => {
   const results: { name: string; passed: boolean; error?: string }[] = [];
@@ -226,12 +173,12 @@ window.runTvNavigationRegression = async () => {
     await until(() => location.pathname === "/" && document.activeElement?.getAttribute("aria-label") === label).catch(() => { throw new Error("Back did not return to the tile"); });
   });
   await check("Home starts on the hero's primary verb, and Up from its last shelf passes each shelf and the hero to the current tab", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
+    await click('[data-app-nav] a[href="/saved"]');
     await click('[data-app-nav] a[href="/"]');
     const hero = control("[data-home-hero]");
     assert(document.activeElement === hero.querySelector("[data-page-first]"), "Home entry did not focus the hero's primary verb");
     const shelves = [...document.querySelectorAll<HTMLElement>('[data-page="Home"] ol[data-nav-row]')];
-    assert(shelves.length >= 2, "Home needs two shelves (Radio and the saved videos)");
+    assert(shelves.length >= 1 && document.querySelector('[data-home-board] li[data-nav-row]'), "Home needs a board row and a shelf (the saved videos and Radio)");
     shelves.at(-1)!.querySelector<HTMLElement>("button")!.focus();
     const passed: Element[] = [];
     for (let step = 0; step < 12 && !document.activeElement?.closest(".app-header"); step++) {
@@ -261,7 +208,6 @@ window.runTvNavigationRegression = async () => {
     await leave(tiles(lower).at(-1)!, tiles(lower).at(-1)!, "ArrowUp", upper!);
     await leave(tiles(upper).at(-1)!, tiles(upper).at(-2)!, "ArrowDown", lower!);
   });
-  await check("Discover follows the saved section order and keeps its navigation", discoverNavigation);
   await check("Settings OK enters content; Back restores rail then Home", async () => {
     await click('[data-app-nav] a[href="/settings"]');
     const rail = control('[data-settings-page="devices"]');
@@ -300,7 +246,7 @@ window.runTvNavigationRegression = async () => {
     assert(document.activeElement?.closest('[data-saved-details]'), "Details Back lost Home tile focus");
   });
   await check("TV HUD hides, seeks ten seconds and returns to opener without a Home cycle", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
+    await click('[data-app-nav] a[href="/saved"]');
     await click('[data-now-playing] button[aria-label^="Open player:"]');
     const video = document.querySelector('video')!;
     await until(() => video.readyState >= 2 && video.duration > 20);
@@ -308,29 +254,34 @@ window.runTvNavigationRegression = async () => {
     const pause = document.querySelector<HTMLButtonElement>('.player-page [data-play-button][aria-label="Pause"]');
     if (pause && !pause.disabled) { pause.click(); await until(() => video.paused); }
     assert(video.paused && video.duration > 20, "Pause a seekable video fixture before running");
-    assert(document.querySelector('[data-player-paused]'), "No large paused state");
     assert(!document.querySelector('[data-player-header], .player-page button[aria-label="Enter fullscreen"]'), "TV still has desktop chrome");
+    assert(document.querySelector('[data-player-tools] span[data-player-last]'), "TV lost fullscreen's empty slot");
     await key("Escape");
     assert(control('[data-player-band]').getAttribute('data-player-band') === "hidden", "Back left instead of hiding HUD");
     const before = video.currentTime;
     await key("ArrowRight"); await wait(500);
     assert(video.currentTime >= before + 8 && video.currentTime <= before + 12, "Hidden Right did not seek ten seconds");
     assert(document.activeElement?.getAttribute('aria-label') === "Playback position", "Hidden Right did not focus timeline");
+    // The gear ends the TV's tools: it has no fullscreen, and fullscreen's empty slot is no stop for the remote.
+    const gear = control('[data-player-tools] button[aria-label="Playback"]');
+    gear.focus(); await key("ArrowRight");
+    assert(document.activeElement === gear, "Right left the gear for fullscreen's empty slot");
+    control('[role="slider"][aria-label="Playback position"]').focus();
     await key("Escape"); await key("Escape");
-    assert(location.pathname === "/discover", "Player did not return to its opener");
+    assert(location.pathname === "/saved", "Player did not return to its opener");
     await key("Escape"); await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Back on Home reopened player");
   });
   await check("Up next and Details preserve the player's opener and focus", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
+    await click('[data-app-nav] a[href="/saved"]');
     await click('[data-now-playing] button[aria-label^="Open player:"]');
     await click('.player-page button[aria-label="Up next"]');
     assert(location.search.includes("queue=true"), "Queue URL did not open");
     await key("Escape");
     assert(!location.search.includes("queue=true") && document.activeElement?.getAttribute("aria-label") === "Up next", "Queue Back lost trigger focus");
     await click('.player-page button[aria-label="Playback"]');
-    const entryHref = control('[data-player-sheet] a[href^="/item"]').getAttribute("href");
-    await click('[data-player-sheet] a[href^="/item"]');
+    const entryHref = control('[data-player-menu] a[href^="/item"]').getAttribute("href");
+    await click('[data-player-menu] a[href^="/item"]');
     assert(location.pathname === "/item", "Details did not open");
     assert(document.activeElement?.closest('[data-page="Item"]'), "Details lost page-entry focus");
     await key("Escape");
@@ -339,12 +290,12 @@ window.runTvNavigationRegression = async () => {
     assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Details Back lost Playback opener focus");
     assert(document.querySelector('video')?.paused && document.querySelector('.player-page [data-play-button][aria-label="Play"]'), "Details Back changed paused playback");
     (document.activeElement as HTMLElement).click(); await wait(350);
-    assert(document.querySelector('[data-player-sheet]') && document.querySelector('video')?.paused, "Immediate OK resumed instead of opening Playback");
-    assert(control('[data-player-sheet] a[href^="/item"]').getAttribute("href") === entryHref, "Details Back changed the played entry");
+    assert(document.querySelector('[data-player-menu]') && document.querySelector('video')?.paused, "Immediate OK resumed instead of opening Playback");
+    assert(control('[data-player-menu] a[href^="/item"]').getAttribute("href") === entryHref, "Details Back changed the played entry");
     await key("Escape"); await wait(350);
     assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Playback Back lost opener focus");
     await key("Escape"); await key("Escape");
-    assert(location.pathname === "/discover", "Queue URL or Details lost original opener");
+    assert(location.pathname === "/saved", "Queue URL or Details lost original opener");
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Nested player journey cycled on Home");
   });
@@ -366,51 +317,61 @@ window.runTvNavigationRegression = async () => {
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Volume overlay lost Home opener");
   });
-  await check("Where it plays opens on its first device you can choose, Down walks its devices, and Back returns to its button", async () => {
+  await check("Where it plays opens on its first device, Down walks its devices, Left and Right move a level at once, and Back returns to its button", async () => {
     await click('[data-app-nav] a[href="/"]');
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
-    await until(() => !!document.activeElement && document.activeElement === checks()[0]);
-    assert(checks().length >= 2, "Pair a second online shared output before running");
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-row]')];
+    await until(() => !!document.activeElement && document.activeElement === rows()[0]);
+    assert(rows().length >= 2, "Pair a second online shared output before running");
     await key("ArrowDown");
-    assert(document.activeElement === checks()[1], "Down did not reach the next device");
+    assert(document.activeElement === rows()[1], "Down did not reach the next device");
+    assert(!document.querySelector('[role="menu"]'), "Down opened a row's options");
+    const row = rows().find(item => item.getAttribute("aria-valuetext") !== "No sound");
+    if (row) {
+      row.focus();
+      const level = Number(row.getAttribute("aria-valuenow"));
+      const target = level >= 5 ? level - 5 : level + 5;
+      await key(level >= 5 ? "ArrowLeft" : "ArrowRight");
+      await until(() => Number(row.getAttribute("aria-valuenow")) === target);
+      assert(document.activeElement === row, "A level change moved focus");
+      await key(level >= 5 ? "ArrowRight" : "ArrowLeft");
+    }
     await key("Escape");
     await until(() => !document.querySelector('[role="dialog"][data-state="open"]') && !!document.activeElement?.matches('[data-now-playing] button[aria-label="Where it plays"]'));
   });
-  await check("Down from a device's check passes its Sync line for the next device, and Down from its fader reaches that line", async () => {
+  await check("OK opens a row's options with Picture and Sound, without Mute or Move here; Sync… puts focus on its Sync line, and Back hides a line still at 0", async () => {
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-row]')];
+    const items = () => [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
+    const item = (text: string) => items().find(element => element.textContent?.startsWith(text));
     let name = "", added = false;
-    const device = () => checks().find(item => item.getAttribute("aria-label") === name)!;
-    const sync = (check: HTMLElement) => check.closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");
-    // A line shows while its delay isn't 0; otherwise Sync… in the row's "…" reveals it.
-    const reveal = async (check: () => HTMLElement) => {
-      if (sync(check())) return;
-      check().closest("li")!.querySelector<HTMLElement>('[aria-haspopup="menu"]')!.focus(); await key("Enter");
-      const item = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === "Sync…");
-      await until(() => !!item()).catch(() => undefined);
-      assert(item(), "No Sync… while the sound plays on both devices");
-      item()!.click(); await until(() => !!sync(check()) && document.activeElement === sync(check()));
-    };
-    // Everything after the Sheet opens is undone in finally: the device it added leaves, and the Sheet closes.
+    const device = () => rows().find(row => row.getAttribute("aria-label") === name)!;
+    const sound = () => device()?.getAttribute("aria-valuetext") !== "No sound";
     try {
-      await until(() => document.activeElement === checks()[0]);
-      assert(checks().length >= 2, "Pair a second online shared output before running");
+      await until(() => document.activeElement === rows()[0]);
+      assert(rows().length >= 2, "Pair a second online shared output before running");
       // Sync applies while the sound plays in sync on several devices, so the second device's sound joins.
-      // Joining can take it offline for a moment, its check disabled, so the rows settle first.
-      name = checks()[1]!.getAttribute("aria-label")!;
-      if (checks()[1]!.getAttribute("aria-checked") !== "true") { added = true; device().click(); await until(() => device()?.getAttribute("aria-checked") === "true"); await wait(1500); }
-      const first = () => checks()[0]!;
-      await reveal(first);
-      first().focus(); await key("ArrowDown");
-      assert(document.activeElement === checks()[1], "Down from a check did not reach the next device");
-      first().closest("li")!.querySelector<HTMLElement>("[data-volume]:not([data-sync-line]) [role=slider]")!.focus(); await key("ArrowDown");
-      assert(document.activeElement === sync(first()), "Down from the fader did not reach its Sync line");
-      await reveal(device);
-      device().focus(); await key("ArrowDown");
-      assert(document.activeElement !== sync(device()), "Down from a check reached its own Sync line");
+      name = rows()[1]!.getAttribute("aria-label")!;
+      device().focus(); await key("Enter");
+      await until(() => !!item("Picture") && !!item("Sound"));
+      assert(!item("Mute"), "A row's options offer Mute; its Sound and level are its sound, and the Volume mutes");
+      assert(!item("Move here"), "A row's options offer Move here");
+      if (!sound()) { added = true; item("Sound")!.click(); await until(sound); await wait(1500); }
+      else await key("Escape");
+      const first = () => rows()[0]!;
+      first().focus(); await key("Enter");
+      await until(() => !!item("Sound"));
+      const sync = item("Sync…") ?? item("Lip sync…");
+      assert(sync, "No Sync… while the sound plays on both devices");
+      sync!.click();
+      const line = () => first().closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");
+      await until(() => !!line() && document.activeElement === line());
+      if (line()!.getAttribute("aria-valuenow") === "0") {
+        await key("Escape");
+        await until(() => !line() && document.activeElement === first());
+      }
     } finally {
-      if (added && device()?.getAttribute("aria-checked") === "true") { device().click(); await until(() => device()?.getAttribute("aria-checked") !== "true").catch(() => undefined); }
+      if (added && sound()) { device().focus(); await key("Enter"); await until(() => !!item("Sound")).catch(() => undefined); item("Sound")?.click(); await until(() => !sound()).catch(() => undefined); }
       for (let attempt = 0; attempt < 3 && document.querySelector('[role="dialog"][data-state="open"]'); attempt++) { await key("Escape"); await wait(350); }
     }
   });
@@ -509,9 +470,9 @@ window.runTvNavigationRegression = async () => {
     assert(restored(), "Favorite Undo lost saved order");
   });
   await check("Live TV retains Queue and Play on without a Details destination", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
-    await until(() => !!document.querySelector('[data-page="Discover"] a[href="/discover/live-tv"]'));
-    await click('[data-page="Discover"] a[href="/discover/live-tv"]');
+    await click('[data-app-nav] a[href="/"]');
+    await until(() => !!document.querySelector('[data-page="Home"] a[href="/live-tv"]'));
+    await click('[data-page="Home"] a[href="/live-tv"]');
     await until(() => !!document.querySelector('[aria-label="Live TV channels"] li'));
     const title = control('[aria-label="Live TV channels"] [data-play]').getAttribute("aria-label")!.replace(/^Play /, "");
     control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
@@ -532,12 +493,12 @@ window.runTvNavigationRegression = async () => {
     try { queue!.click(); await until(() => queued); }
     finally { window.fetch = originalFetch; }
     await wait(350);
-    assert(location.pathname === "/discover/live-tv", "Queue left Live TV");
+    assert(location.pathname === "/live-tv", "Queue left Live TV");
     await click('[data-now-playing] button[aria-label="Up next"]');
     await until(() => !!document.querySelector('[data-queue-panel] ul[aria-label="Up next"]'));
     assert(document.querySelector('[data-queue-panel] ul[aria-label="Up next"]')?.textContent?.includes(title), "Live TV Queue did not add the channel");
     await key("Escape"); await key("Escape"); await key("Escape");
-    assert(location.pathname === "/discover/live-tv", "Queue Back lost Live TV opener");
+    assert(location.pathname === "/live-tv", "Queue Back lost Live TV opener");
     control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
     const recipient = [...control('[role="group"][aria-label="Play on"]').querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find(item => item.querySelector("span")?.textContent === targetName);
@@ -546,13 +507,13 @@ window.runTvNavigationRegression = async () => {
     // Where it plays opened before Play on lands closes as the bar moves to the recipient's Playback.
     await until(() => !!document.querySelector('[data-now-playing] button[aria-label="Where it plays"]:not(:disabled)') && !!document.querySelector("[data-now-playing]")?.textContent?.includes(`on ${targetName}`));
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    // The recipient's row is the only one checked, and it shows the picture.
-    const checked = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check][aria-checked="true"]')];
-    await until(() => checked().length === 1 && checked()[0]!.getAttribute("aria-label") === targetName);
-    assert(/^(This device · )?Picture/.test(document.getElementById(checked()[0]!.getAttribute("aria-describedby")!)?.textContent ?? ""), "Play on did not select the recipient's picture");
-    assert(document.querySelector('[role="dialog"]')?.textContent?.includes(title), "Play on did not select the queued channel");
+    // The recipient's row is the only one playing it, and it shows the picture.
+    const playing = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] ul[aria-label="Playing"] [data-device-row]')];
+    await until(() => playing().length === 1 && playing()[0]!.getAttribute("aria-label") === targetName);
+    assert(playing()[0]!.querySelector("svg.lucide-monitor"), "Play on did not select the recipient's picture");
+    assert(document.querySelector("[data-now-playing]")?.textContent?.includes(title), "Play on did not select the queued channel");
     await key("Escape"); await wait(350);
-    assert(location.pathname === "/discover/live-tv", "Play on lost the controller's browse page");
+    assert(location.pathname === "/live-tv", "Play on lost the controller's browse page");
   });
   return results;
 };

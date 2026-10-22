@@ -3,10 +3,13 @@ import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { queueItemLocation } from "@/detail-navigation";
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { devicesQuery } from "@/api/devices";
 import { Link } from "@tanstack/react-router";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/AppShell";
 import { RemotePad } from "@/components/RemotePad";
+import { hasUpNext } from "@/sections/now/QueuePanel";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,8 +22,11 @@ export function RemotePage() {
   const { state, connected, tvPresentation, credentials, run, error, setError } = useSessionGate();
   const shell = useShell();
   const tvs = state?.devices?.filter(device => device.tv) ?? [];
+  // With every TV off, the one seen last.
+  const seen = useQuery({ ...devicesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && tvs.length > 1 && !tvs.some(tv => tv.online) });
+  const lastSeen = (id: string) => seen.data?.find(device => device.id === id)?.lastSeenAt ?? 0;
   const [chosen, setChosen] = useState<string | null>(null);
-  const targetId = chosen ?? tvs.find(tv => tv.id === state?.controlling)?.id ?? tvs.find(tv => tv.online)?.id ?? tvs[0]?.id;
+  const targetId = chosen ?? tvs.find(tv => tv.id === state?.controlling)?.id ?? tvs.find(tv => tv.online)?.id ?? [...tvs].sort((a, b) => lastSeen(b.id) - lastSeen(a.id))[0]?.id;
   const target = tvs.find(tv => tv.id === targetId);
   const allowed = !!target && (target.sharing?.audio === true || target.sharing?.video === true);
   const [binding, setBinding] = useState<string | null>(null);
@@ -35,26 +41,27 @@ export function RemotePage() {
   const ready = connected && allowed && !!target?.online && binding === targetId && state?.controlling === targetId;
   const send = (action: Action) => ready && targetId ? run(action, targetId) : Promise.resolve(false);
   const current = ready ? state?.queue.find(entry => entry.id === state.currentEntryId) : undefined;
+  const status = playbackStatus(state, ready);
   const volumeState = state && target ? { ...state, outputs: [{ deviceId: target.id, sound: true, picture: false }], systemAudio: undefined, player: { ...state.player, volume: target.volume } } : null;
-  if (tvPresentation) return <><PageHeader title="Remote" /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
+  if (tvPresentation) return <><PageHeader title="Remote" hidden /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
   // Laid out like the remote it stands in for: the TV, the pad, what plays, then text.
   return <div data-remote-page className="mx-auto grid w-full max-w-sm gap-8">
-    {/* The current tab names the page, as Home's and Discover's do. */}
-    <PageHeader title="Remote" description="Control playback and browse on your TV." className="mb-0" />
+    {/* The current tab names the page, as Home's does. */}
+    <PageHeader title="Remote" hidden />
     <div className="grid gap-1">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>
         <SelectTrigger aria-label="TV to control" className="min-h-11 w-full"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
-        <SelectContent>{tvs.map(tv => <SelectItem key={tv.id} value={tv.id} className="min-h-11" disabled={!tv.online || !(tv.sharing?.audio || tv.sharing?.video)}>{tv.name}{!tv.online ? " · Offline" : !(tv.sharing?.audio || tv.sharing?.video) ? " · Private" : ""}</SelectItem>)}</SelectContent>
+        <SelectContent>{tvs.map(tv => <SelectItem key={tv.id} value={tv.id} className="min-h-11" disabled={!tv.online || !(tv.sharing?.audio || tv.sharing?.video)}>{tv.name}{!tv.online ? " · Off" : !(tv.sharing?.audio || tv.sharing?.video) ? " · Private" : ""}</SelectItem>)}</SelectContent>
       </Select> : <p className="min-w-0 break-words text-lg font-medium">{target?.name ?? "No TV connected"}</p>}
-      <p className="text-sm text-muted-foreground" role="status">{!target ? "Pair a TV with this Couch to use Remote." : !connected ? "Reconnecting to Couch…" : !target.online ? `${target.name} is offline.` : !allowed ? `${target.name} is private. Enable its sharing to control it.` : !ready ? "Selecting TV…" : "Connected"}</p>
+      <p className="text-sm text-muted-foreground" role="status">{!target ? "Pair a TV with this Couch to use Remote." : !connected ? "Reconnecting to Couch…" : !target.online ? `${target.name} is off.` : !allowed ? `${target.name} is private. Enable its sharing to control it.` : !ready ? "Selecting TV…" : "Connected"}</p>
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
     </div>
     {target && <>
       <RemotePad connected={ready} onNavigate={key => send({ type: "navigate", deviceId: target.id, key })} />
       <section className="grid gap-4 border-t pt-6 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current ? <ContentLink href={queueItemLocation(current)} className="no-underline hover:underline">{current.title}</ContentLink> : ready ? "Nothing playing" : `Playback on ${target.name}`}</h2>{current && <p className="text-sm text-muted-foreground">{playbackStatus(state, ready).label}</p>}</div>
-          <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
+          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current ? <ContentLink href={queueItemLocation(current)} className="no-underline hover:underline">{current.title}</ContentLink> : ready ? "Nothing playing" : `Playback on ${target.name}`}</h2>{current && !status.quiet && <p className="text-sm text-muted-foreground">{status.label}</p>}</div>
+          <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !hasUpNext(state)} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
         </div>
         {current && <MediaContext creator={current.creator} collection={current.collection} radio={current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />}
         {state && credentials && <>

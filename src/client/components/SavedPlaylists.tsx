@@ -1,4 +1,3 @@
-import { MediaContext } from "@/components/MediaContext";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext } from "@dnd-kit/core";
@@ -15,15 +14,16 @@ import { ApiError, apiSend } from "@/api/client";
 import { playlistQuery, playlistsQuery } from "@/api/playlists";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { formatDuration } from "@/time-format";
+import { metaLine } from "@/media-caption";
 import { SavedEmpty, SavedError, SavedStatus } from "@/sections/saved/SavedStatus";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
 
 const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
-const summary = (list: SavedPlaylistSummary) => [
+const summary = (list: SavedPlaylistSummary) => metaLine(
   list.source && providerLabels[list.source.provider],
   `${list.entryCount} ${list.entryCount === 1 ? "item" : "items"}`,
   list.totalDuration != null && formatDuration(list.totalDuration),
-].filter(Boolean).join(" · ");
+);
 const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
 type Write = { path: string; body: unknown; method?: string };
 
@@ -93,22 +93,21 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
     const undoToken = result.undoToken;
     if (undoToken && session) session.offerUndo(text, async () => { await apiSend(credentials, "/api/playlists/restore", { token: undoToken }, "POST", 30_000); });
   };
-  const cannotSave = !queueCount ? "Queue something first." : playlists.length >= 100 ? "100-list limit. Delete one first." : "";
+  const full = playlists.length >= 100;
 
   return <section ref={section} aria-label="Lists">
     {!openId ? <>
-      <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
-      {connected && cannotSave && <p className="mb-4 text-sm text-muted-foreground">{cannotSave}</p>}
+      {/* Save as list waits for something in Up next; with no lists either, the Empty says it all. */}
+      <PageHeader title="Lists" hidden actions={(!!queueCount || !!playlists.length) && <Button disabled={disabled || !queueCount || full} title={!queueCount ? "Queue something first" : undefined} onClick={() => void create()}>Save as list</Button>} />
+      {connected && full && <p className="mb-4 text-sm text-muted-foreground">100-list limit. Delete one first.</p>}
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
       {connected && mutation.error && <SavedError message={mutation.error.message || "Couldn't change this list."} />}
-      {connected && !loading && !loadError && !playlists.length && <SavedEmpty title="No lists yet" action={<Button onClick={onFind}>Discover</Button>}>Queue a few items, then choose Save as list to play them together again.</SavedEmpty>}
+      {connected && !loading && !loadError && !playlists.length && <SavedEmpty title="No lists yet" action={<Button onClick={onFind}>Search</Button>}>Queue a few items, then choose Save as list to play them together again.</SavedEmpty>}
       {!!playlists.length && <MediaList>{playlists.map(item => <MediaRow key={item.id} data-playlist-id={item.id}
         title={item.name}
         meta={summary(item)}
         primary={{ label: "Open", onClick: () => select(item.id), disabled }}
-        // The list's page holds Play, Play on and Queue, so the row needs no "…".
-        menuOnPage
         menu={[
           { label: "Play", disabled: disabled || !canPlay || !item.entryCount, run: () => void load(item, "play") },
           { label: "Play on", disabled: disabled || !canPlay || !item.entryCount, playOn: deviceId => void load(item, "play", deviceId) },
@@ -146,9 +145,9 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
         void write(listPath(playlist.id), { revision: playlist.revision, operation: "move", entryId: String(active.id), beforeEntryId });
       }}>
         <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
-          <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow context={<MediaContext collection={entry.collection} creator={entry.creator} />} ref={drag.setNodeRef} style={drag.style}
+          <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow related={{ collection: entry.collection, creator: entry.creator }} ref={drag.setNodeRef} style={drag.style}
             title={entry.title}
-            meta={entry.live ? "Live" : entry.duration != null ? formatDuration(entry.duration) : undefined}
+            meta={!entry.live && entry.duration != null ? formatDuration(entry.duration) : undefined}
             actions={<>
               <Button variant="ghost" aria-label={`Remove ${entry.title} from list`} disabled={disabled} onClick={() => void write(listPath(playlist.id), { revision: playlist.revision, operation: "remove", entryId: entry.id }).then(ok => {
                 // Focus the row that took this one's place, or Back.

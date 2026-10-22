@@ -115,11 +115,11 @@ function DeviceForm() {
   };
   return <div className="grid gap-6">
     <div className="-mx-3 border-t">
-      <Button autoFocus variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
+      <Button autoFocus variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal text-foreground whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
         <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Host Couch here. Phones, browsers and other computers on your network join it.</span></span>
         <ChevronRight aria-hidden="true" />
       </Button>
-      {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between gap-4 rounded-none border-0 px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}>
+      {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between gap-4 rounded-none border-0 text-foreground px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}>
         <span className="grid gap-0.5"><span className="text-base font-medium">{names[target] || hostOf(target)}</span>{names[target] && <span className="text-sm text-muted-foreground">{hostOf(target)}</span>}</span>
         <ChevronRight aria-hidden="true" />
       </Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
@@ -144,7 +144,7 @@ export function useRememberCouchName(installationName?: string) {
   }, [device?.mode, device?.address, installationName]);
 }
 
-/** Settings → Couch connection in the app: This computer, the Couches it knows, or another Couch's address. */
+/** Settings → This device in the app: This computer, the Couches it knows, or another Couch's address. */
 export function AppCouchChoice({ installationName }: { installationName?: string }) {
   const device = usePlaybackDevice();
   const [dialog, setDialog] = useState<"confirmation" | "forget" | null>(null);
@@ -168,7 +168,7 @@ export function AppCouchChoice({ installationName }: { installationName?: string
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   const inUse = <span className="text-sm text-muted-foreground">In use</span>;
   return <>
-    <SettingsSection title="Couch" description="The Couch this window shows." data-tv-local-only>
+    <SettingsSection title="Connection" description="The Couch this window shows." data-tv-local-only>
       <SettingsRow label="This computer" description="Host Couch here. Phones, browsers and other computers on your network join it.">
         {device.mode === "local" ? inUse : <Button variant="outline" disabled={device.pending} onClick={() => void select("local")}>Switch</Button>}
       </SettingsRow>

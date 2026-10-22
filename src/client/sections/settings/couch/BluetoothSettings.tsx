@@ -50,7 +50,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
     : current.message || (current.kind === "scan" ? "Search done." : "Device updated.");
 
   return <>
-    <SettingsSection>
+    <SettingsSection title="Bluetooth">
       {state?.adapter === "off" && <SettingsRow label="Bluetooth" description="Off">
         <Button disabled={!connected || pending || active} onClick={() => change({ op: "power" })}>Turn on</Button>
       </SettingsRow>}
@@ -66,12 +66,12 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       </div>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{bluetooth.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void bluetooth.refetch()}>Try again</Button></AlertAction>}</Alert>}
     </SettingsSection>
-    {state?.adapter === "available" && <SettingsSection title="Devices" description="After connecting a speaker, pick it in Sound.">
+    {state?.adapter === "available" && <SettingsSection title="Bluetooth devices" description="After connecting a speaker, pick it as the Output above.">
       {state.devices.length === 0 && <Empty className="py-0"><EmptyHeader><EmptyDescription>{active ? "No devices found yet." : "No devices found. Put a device in pairing mode, then Search."}</EmptyDescription></EmptyHeader></Empty>}
       {state.devices.map(device => {
         const outputs = sound.data?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
         const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);
-        const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(" · ");
+        const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(", ");
         return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}</>}>
           <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
           {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}

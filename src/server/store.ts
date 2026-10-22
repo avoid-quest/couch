@@ -124,6 +124,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     const { volume } = db.query<{ volume: number }, []>("SELECT volume FROM session WHERE id = 1").get()!;
     db.exec(`ALTER TABLE ${table} ADD COLUMN volume REAL NOT NULL DEFAULT ${Number(volume)}; ALTER TABLE ${table} ADD COLUMN muted INTEGER NOT NULL DEFAULT 0`);
   }
+  // A Device is a TV as it last connected, so it stays one while it's off and across restarts.
+  for (const table of ["devices", "installation"]) if (!db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().some(column => column.name === "tv")) db.exec(`ALTER TABLE ${table} ADD COLUMN tv INTEGER NOT NULL DEFAULT 0`);
   // Each row is a paired Device; the app window that runs this Couch is the
   // installation's Device, named by the installation name (#644 ticket 5).
   const deviceColumns = "id, name, role, createdAt, lastSeenAt";
@@ -415,6 +417,15 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const sql = "SET volume = coalesce(?, volume), muted = coalesce(?, muted)";
       if (id === (installation().deviceId ?? "host")) db.query(`UPDATE installation ${sql} WHERE id = 1`).run(volume, muted === null ? null : Number(muted));
       else db.query(`UPDATE devices ${sql} WHERE id = ?`).run(volume, muted === null ? null : Number(muted), id);
+    },
+    deviceTv(id: string) {
+      const row = id === (installation().deviceId ?? "host") ? db.query<{ tv: number }, []>("SELECT tv FROM installation WHERE id = 1").get()
+        : db.query<{ tv: number }, [string]>("SELECT tv FROM devices WHERE id = ?").get(id);
+      return !!row?.tv;
+    },
+    saveDeviceTv(id: string, tv: boolean) {
+      if (id === (installation().deviceId ?? "host")) db.query("UPDATE installation SET tv = ? WHERE id = 1").run(Number(tv));
+      else db.query("UPDATE devices SET tv = ? WHERE id = ?").run(Number(tv), id);
     },
     // A speaker's Sendspin static delay as it last reported it; its player keeps the value itself.
     deviceSyncDelay: (id: string) => db.query<{ delay: number }, [string]>("SELECT delay FROM device_sync_delay WHERE id = ?").get(id)?.delay,

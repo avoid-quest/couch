@@ -12,8 +12,8 @@ with Apple devices (see [Validation](#validation)).
 
 ## Turn it on
 
-On the hosting computer or a paired admin's device, open **Settings**, then
-**Sources** under the Couch's name, and turn on **Receive AirPlay**. It starts
+On the hosting computer or a paired admin's device, open **Settings →
+Sources** and turn on **Receive AirPlay**. It starts
 off, and only an admin changes it. AirPlay runs only while **Share on network**
 is on; until then it says it is waiting.
 
@@ -26,7 +26,7 @@ status line says whether AirPlay is ready, who is playing, or why it can't run.
 
 ## Play it
 
-While a device plays to the Couch, **AirPlay · {its name}** leads **Discover**'s
+While a device plays to the Couch, **AirPlay · {its name}** leads **Home**'s
 **Shared sources** and appears in **Search**, like a shared screen or sound.
 Once an admitted sender sends sound, playback starts automatically on the
 computer running Couch, without a separate **Play**. It takes that computer's

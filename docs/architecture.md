@@ -5,7 +5,7 @@ playback intent, authorization and persistent state. A remote never resolves
 private playback URLs or becomes another playback authority.
 
 The app runs in one of two modes, chosen on first run, in the header's Couch
-switch, or in Settings → This device → **Couch connection**:
+switch, or in **Settings → This device**:
 
 - **Full** (`operating-mode.json` `"local"`): Main starts Core in an Electron
   [`utilityProcess`](https://www.electronjs.org/docs/latest/api/utility-process)
@@ -20,11 +20,24 @@ hosts share it in both modes: Main reads it, and saves it with a short-lived
 connection (`app/device-name.ts`) whether or not Core runs, then tells a running
 Core that it was `renamed`. "Couch", the name Core gives a Couch nobody named,
 counts as unnamed. A browser keeps its name in its own storage; older app
-bridges without `deviceName` do the same. General edits the name and pairing asks for
+bridges without `deviceName` do the same. This device edits the name and pairing asks for
 it only while there is none. A connected device gives each Couch its name; an
 unnamed one adopts the name it paired with instead. An administrator
-renames the Couch from any paired device in the Couch's General or Devices
+renames the Couch from any paired device in Devices & network
 (`/api/settings`); every other device names only itself.
+
+A TV pairs without typing (`src/server/tv-pairing.ts`). Unauthenticated, it
+asks `POST /api/pair/tv` with its device ID and name, under the same origin,
+sharing and rate limits as `POST /api/pair` (20 a minute), and gets a six-digit
+code and a 256-bit secret. The request lives in Core's memory for ten minutes.
+Whoever may read the pairing code, the host or an admin, reads the TV's name
+(`GET /api/pair/tv/<code>`) and approves it (`POST`), which pairs the device
+through the same `store.pair` as `/api/pair`. The TV polls
+`POST /api/pair/tv/poll` with its code and secret and collects its token once.
+A device that is already paired can't ask, so an approval never re-keys
+another device. Whether a device last connected as a TV (`/api/ws?tv=1`)
+is kept in its `devices` row (the host's in `installation`), so a TV that's off
+is still one after Core restarts.
 
 Settings that change the Couch for everyone (Share on network, HTTP, network
 address, the live relay, TV mode, sources, hardware, updates) accept the host
@@ -51,14 +64,14 @@ saved name survives reload and Forget, which removes a server connection.
 Pairing credentials and keys remain in their original storage.
 
 Client devices opt into letting other devices use their speakers and screen
-independently in General; both start off. Like the name, the choice belongs to the device: the Couch app keeps one
+independently in This device; both start off. Like the name, the choice belongs to the device: the Couch app keeps one
 in `<data>/device-sharing.json` for every Couch it joins, and a browser keeps it in
 the origin's storage. The authenticated WebSocket advertises it. Core accepts
 changes only from that device's own connection, keeps the last choice while the
 device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
-self-join. Only here is exclusive, across the queue too: Core refuses it, changing
+self-join. Move here (`solo`) is exclusive, across the queue too: Core refuses it, changing
 nothing, while another device's private output, or a publisher's private `held`
 output, would stay behind or return, checking again where the move lands after the
 item resolves. Joining a Playback is allowed only where
@@ -80,8 +93,8 @@ to update or restart the app; that stays with administrators. Full-mode host
 outputs retain the existing server network-sharing policy, and turning it off
 keeps what the host plays; Devices manages server sharing, while the client
 switches appear only when joining one. A Device that shares neither can still
-control playback. Where it plays lists it, this window's own Device included,
-only while it is an output, which Play on can still make it.
+control playback. Where it plays lists every Device; one that shares neither
+offers Picture and Sound only to itself.
 
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
@@ -142,8 +155,8 @@ withdrawn, unpaired) moves its controllers to another output in its mix,
 including controllers away on another server; one that moves to another
 Playback keeps them, and a Playback that ends moves no one.
 `solo` leaves one Device
-with the Playback's picture and sound, and `allSpeakers` is Where it plays' All
-fader: it changes only the Playback's trim, preserving output selection and Device
+with the Playback's picture and sound, and `allSpeakers` is the All fader older
+clients offer: it changes only the Playback's trim, preserving output selection and Device
 levels and mute. A Device that joins reloads the item where it was with its pause
 state, speed, tracks and subtitle delay, and windows controlling a Device the
 Playback left follow it. An output that goes offline

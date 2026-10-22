@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { DiscoverPage } from "../../sections/discover/DiscoverPage";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/discover/")({ component: DiscoverPage });
+// Discover folded into Home.
+export const Route = createFileRoute("/discover/")({ beforeLoad: () => { throw redirect({ href: "/", replace: true }); } });

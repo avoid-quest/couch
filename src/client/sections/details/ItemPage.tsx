@@ -3,12 +3,12 @@ import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
-import { useLocation } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
 import { radioProgrammesQuery } from "@/api/radio";
-import { useStationSave } from "@/sections/discover/on-air";
+import { useStationSave } from "@/sections/home/on-air";
 import { removeFromContinue, undoProgressAction } from "@/api/progress";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
@@ -30,7 +30,7 @@ import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
 import { sourceLabel } from "@/source-label";
 import { usePlayOn } from "@/components/PlayOn";
-import { useDetailNavigation } from "@/detail-navigation";
+import { useDetailNavigation, useOwnSearch } from "@/detail-navigation";
 import { reorderedIds } from "@/lib/dnd";
 import { deviceName, savedNotice } from "@/copy";
 
@@ -59,11 +59,24 @@ async function readDetails(credentials: ApiCredentials, kind: Exclude<Kind, "que
 }
 
 export function ItemPage() {
-  const { search } = useLocation();
-  const { kind, id } = readItemSearch(search);
+  const { kind, id } = useOwnSearch(readItemSearch);
   return <section data-page="Item" className="min-w-0 space-y-6">
-    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <><ContentBreadcrumb title="Item not found" /><PageHeader title="Item not found" /></>}
+    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <ItemNotFound />}
   </section>;
+}
+
+/** An item or collection that is gone, or that its address doesn't name: its title, then the ways on, Search (the
+ * header's field) and Back. */
+export function ItemNotFound({ title = "Item not found" }: { title?: string }) {
+  const { focusSearch, section, sectionUrl } = useShell();
+  const { history } = useRouter();
+  return <>
+    <PageHeader breadcrumb={<ContentBreadcrumb />} title={title} className="mb-6" />
+    <div data-nav-row className="flex flex-wrap gap-2">
+      <Button data-page-first size="lg" onClick={focusSearch}>Search</Button>
+      <Button variant="ghost" size="lg" onClick={() => history.canGoBack() ? history.back() : history.push(sectionUrl(section))}>Back</Button>
+    </div>
+  </>;
 }
 
 function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) {
@@ -83,10 +96,12 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
     queryKey: [kind === "saved" ? "for-later" : kind === "history" ? "progress" : kind, "details", id],
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
-  if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
-    <ContentBreadcrumb title="Details" />
-    {connected && !query.error ? <DetailSkeleton shape={kind === "radio" ? "square" : "video"} /> : <PageHeader title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />}
-    {query.error ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
+  // An address Core can't read (400) names no item, as one that's gone (404) no longer does.
+  const gone = query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400);
+  if (!query.data || gone) return <>
+    {gone ? <ItemNotFound />
+      : connected && !query.error ? <DetailSkeleton trail={<ContentBreadcrumb stage radio={kind === "radio"} />} /> : <PageHeader breadcrumb={<ContentBreadcrumb />} title="Details" />}
+    {query.error && !gone ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
       : !connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this item.</p>}
   </>;
   const detail = query.data;
@@ -97,11 +112,9 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
   }
 }
 
+/** The trail names the collections holding the item, so the header's links leave them out. */
 function DetailLayout({ collection, radio, ...header }: ComponentProps<typeof DetailHeader> & { collection?: PlaybackCollection; radio?: boolean }) {
-  return <>
-    <ContentBreadcrumb title={header.title} collection={collection} radio={radio} />
-    <DetailHeader {...header} />
-  </>;
+  return <DetailHeader {...header} trail={<ContentBreadcrumb stage title={header.title} collection={collection} radio={radio} />} />;
 }
 
 // Core says why a verb failed; without its answer, Couch wasn't reached.
@@ -116,11 +129,11 @@ function QueueDetails({ id }: { id: string }) {
   const action = useDetailAction();
   const item = state?.queue.find(entry => entry.id === id);
   const save = useForLaterToggle(item?.source.startsWith("web:") ? item.source.slice(4) : undefined, () => ({ kind: "queue", id }), action);
-  if (!item) return <><ContentBreadcrumb title="Details" /><PageHeader title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
+  if (!item) return <><PageHeader breadcrumb={<ContentBreadcrumb />} title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
   const radio = isRadio(item);
-  return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
+  return <><DetailLayout context={<MediaContext creator={item.creator} />} title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} more={browserActions(queuePageUrl(item))} />
-    {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
+    {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} creator={item.creator} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
   </>;
 }
 
@@ -153,13 +166,13 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     if (result.undoToken && result.expiresAt && result.expiresAt > Date.now()) session.offerUndo(`Removed ${item.title} from Continue.`, async () => { await undoProgressAction(shell.credentials, result.undoToken!); refresh(); }, result.expiresAt - Date.now());
   };
   const start = (on?: string) => shell.playHistory(item, { fromStart: item.position === 0, on });
-  return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(item.sourceLabel, !!item.collection)} duration={item.duration} position={item.position} meta={[mediaSubtitle(item), item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
+  return <><DetailLayout context={<MediaContext creator={item.creator} />} title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(item.sourceLabel, !!item.collection)} duration={item.duration} position={item.position} meta={[mediaSubtitle(item), item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: item.position > 0 ? "Resume" : "Play", disabled: blocked || !playable, run: () => action.mutate(() => play(() => start())) }}
     fromStart={item.position ? { label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => play(() => shell.playHistory(item, { fromStart: true }))) } : undefined}
     queue={{ label: "Queue", disabled: blocked, run: () => action.mutate(() => session.queue(item.title, () => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id }))) }}
     save={item.url ? save : undefined}
     playOn={{ disabled: blocked || !playable || !item.playable, run: deviceId => action.mutate(() => play(start, deviceId)) }}
-    more={[...browserActions(item.url), ...item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []]} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
+    more={[...browserActions(item.url), ...item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []]} /><RelatedCollection collection={item.collection} creator={item.creator} currentTitle={item.title} /></>;
 }
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
@@ -195,7 +208,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
   // A saved item has no Save: Remove, with Undo, takes it out of For later.
-  return <><DetailLayout context={<MediaContext collection={item.collection} creator={item.creator} />} title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(savedSourceLabel(item), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
+  return <><DetailLayout context={<MediaContext creator={item.creator} />} title={item.title} collection={item.collection} thumbnail={item.thumbnail} shape={tileShape(savedSourceLabel(item), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !connected || !shell.available || action.isPending, run: () => action.mutate(() => play(() => load("play"))) }}
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => load("play", on), deviceId)) }}
@@ -204,7 +217,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
       { label: "Move up", disabled: !connected || action.isPending || index <= 0, run: () => action.mutate(() => move(-1)) },
       { label: "Move down", disabled: !connected || action.isPending || index < 0 || index >= items.length - 1, run: () => action.mutate(() => move(1)) },
       { label: "Remove", disabled: !connected || action.isPending, run: () => action.mutate(remove) },
-    ]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
+    ]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} creator={item.creator} currentUrl={item.url} /></>;
 }
 
 function RadioDetails({ item }: { item: RadioStation }) {
@@ -215,7 +228,7 @@ function RadioDetails({ item }: { item: RadioStation }) {
   const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && item.sourceId === avoidRadioPlaylistId, refetchInterval: 60_000 });
   const save = useStationSave()(item);
   const programme = programmes.data?.[item.id];
-  return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} shape="square" meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre, programme?.artist, programme?.album, programme?.bitrate && `${programme.bitrate} kbps`].filter(Boolean).join(" · ")} description={programme?.description}
+  return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} shape="square" fit={programme?.artworkUrl ? undefined : "contain"} meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre, programme?.artist, programme?.album, programme?.bitrate && `${programme.bitrate} kbps`].filter(Boolean).join(" · ")} description={programme?.description}
     play={{ label: "Play", aria: item.name, disabled: !connected || !shell.available || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, true)) }}
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, false)) }}
     save={{ ...save, disabled: save.disabled || action.isPending }}

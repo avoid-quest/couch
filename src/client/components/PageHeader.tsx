@@ -3,16 +3,21 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Page or sub-page title with an optional back button and trailing actions. */
-export function PageHeader({ title, description, back, actions, as: Heading = "h1", id, className }: { title: ReactNode; description?: ReactNode; back?: { label: string; onClick: () => void }; actions?: ReactNode; as?: "h1" | "h2"; id?: string; className?: string }) {
+/**
+ * A page's h1, with an optional way back or the page's ancestors (ContentBreadcrumb) above it and trailing actions. `hidden` keeps the h1 for screen
+ * readers and focus only: a tab or a rail item that is selected already names the page ("md": from md up, where the rail shows).
+ */
+export function PageHeader({ title, back, breadcrumb, actions, hidden = false, as: Heading = "h1", id, className }: { title: ReactNode; back?: { label: string; onClick: () => void }; breadcrumb?: ReactNode; actions?: ReactNode; hidden?: boolean | "md"; as?: "h1" | "h2"; id?: string; className?: string }) {
+  const heading = <Heading id={id} tabIndex={-1} className={hidden === true ? "sr-only" : cn("min-w-0 flex-1 basis-48 text-page font-semibold break-words outline-none", hidden && "md:sr-only")}>{title}</Heading>;
+  if (hidden === true && !back && !breadcrumb && !actions) return heading;
   return (
-    <header className={cn("mb-8 flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3", back && "max-sm:grid max-sm:grid-cols-1", className)}>
-      {back && <Button variant="ghost" data-back className="-ml-2.5 justify-self-start text-muted-foreground" onClick={back.onClick}><ChevronLeft aria-hidden="true" />{back.label}</Button>}
-      <div className="min-w-0 flex-1 basis-48">
-        <Heading id={id} tabIndex={-1} className="text-3xl font-semibold tracking-tight break-words outline-none">{title}</Heading>
-        {description && <div className="mt-2 max-w-prose text-sm leading-relaxed text-muted-foreground">{description}</div>}
+    <header className={cn("mb-8 grid min-w-0 gap-2", className)}>
+      {back && <Button variant="ghost" data-back className="-ml-3.5 justify-self-start text-muted-foreground" onClick={back.onClick}><ChevronLeft aria-hidden="true" />{back.label}</Button>}
+      {breadcrumb}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3">
+        {heading}
+        {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

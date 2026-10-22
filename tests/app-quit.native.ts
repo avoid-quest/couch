@@ -49,7 +49,7 @@ const loadURL = BrowserWindow.prototype.loadURL;
 BrowserWindow.prototype.loadURL = async function (url, options) {
   await loadURL.call(this, url, options);
   await this.webContents.executeJavaScript('window.couchApp.deviceName("Quit test")');
-  await loadURL.call(this, new URL('/settings/tv', url).href, options);
+  await loadURL.call(this, new URL('/settings/device', url).href, options);
   await this.webContents.executeJavaScript(
     'new Promise((resolve, reject) => { const deadline = Date.now() + 5000; const check = () => { const button = [...document.querySelectorAll("button")].find(button => button.textContent === "Quit Couch"); if (button) resolve(); else if (Date.now() > deadline) reject(new Error("Quit button missing")); else setTimeout(check, 50); }; check(); })'
   );

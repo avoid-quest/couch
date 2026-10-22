@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
@@ -12,7 +11,6 @@ import { isTvPresentation } from "@/session/presentation";
 import { updateApp } from "@/session/native-updates";
 import { useSessionGate } from "@/session/session-context";
 import type { UpdateAction, UpdateChannel, UpdateState, UpdateTarget } from "../../../../shared/updates";
-import { settingsPages } from "../../../../shared/settings-pages";
 import { SettingsLayout } from "../SettingsLayout";
 import { useSettingsScope } from "../settings-scope";
 
@@ -91,23 +89,18 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
   </SettingsSection>;
 }
 
-/** This app's own updater and logs. When this app hosts the Couch, they're on the Couch's Updates page. */
+/** This app's own updater and logs, on a device that doesn't run the Couch (the host's is the Couch's). */
 export function DeviceUpdatesPage() {
-  const { host, couch } = useSettingsScope();
-  return <SettingsLayout section="device-updates">
-    {!couchApp?.updates ? <p className="text-sm text-muted-foreground">Only in the Couch app.</p>
-      : host ? <p className="text-sm text-muted-foreground">This app runs {couch}. Update it in <Link className="underline underline-offset-4" to={settingsPages.updates.path}>{couch} → Updates</Link>.</p>
-      : <UpdateControls name="This app" tv={isTvPresentation()} />}
-  </SettingsLayout>;
+  return <SettingsLayout section="device-updates"><UpdateControls name="This app" tv={isTvPresentation()} /></SettingsLayout>;
 }
 
-/** The Couch's app and the other connected Couch apps, which an admin updates from any paired device. */
-export function CouchUpdatesPage() {
+/** The Couch apps an admin updates from any paired device, the host's among them. */
+export function UpdatesPage() {
   const { credentials, identity, connected } = useSessionGate();
   const { host, couch, administrator } = useSettingsScope();
   const [selected, setSelected] = useState("host");
   const query = useQuery({ queryKey: ["updates", "targets"], enabled: administrator && !!credentials && connected, queryFn: ({ signal }) => apiJson<UpdateTarget[]>(credentials!, "/api/updates/targets", { signal }), refetchInterval: 5_000, retry: false });
-  // This app's own updater is in This device → Updates; the Couch's app is "host", this one where it hosts.
+  // This app's own updater comes first; the Couch's app is "host", this one where it hosts.
   const targets = (query.data ?? []).filter(target => target.id !== identity?.device?.id);
   const target = targets.find(target => target.id === selected) ?? targets[0];
   const local = host && target?.id === "host" && !!couchApp?.updates;

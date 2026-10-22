@@ -51,7 +51,7 @@ test("a page change's first key lands on the first enabled slot", () => {
   expect(first(capture, { status: "error" })).toEqual(["Try again"]);
 });
 
-test("the player's end time reads in clock time, Live for live media, and goes once the item ends", () => {
+test("the player's end time reads in clock time, is absent for live media, and goes once the item ends", () => {
   const endTime = (entry: QueueEntry, player: Partial<PlayerState>) => {
     const state = { queue: [entry], currentEntryId: entry.id, player: { playbackId: "p1", status: "playing", position: 0, duration: null, volume: 50, seekable: false, error: null, ...player } } as unknown as ClientSessionState;
     return renderToStaticMarkup(createElement(function EndTime() { return useEndTime(state) ?? "none"; }));
@@ -60,8 +60,8 @@ test("the player's end time reads in clock time, Live for live media, and goes o
   setSystemTime(new Date("2026-10-17T20:00:30"));
   expect(endTime(film, {})).toBe(`ends ${formatEndTime(6000)}`);
   expect(endTime(film, { speed: 2 })).toBe(`ends ${formatEndTime(3000)}`);
-  expect(endTime(radio, {})).toBe("Live");
-  expect(endTime(channel, { seekable: true })).toBe("Live");
+  expect(endTime(radio, {})).toBe("none");
+  expect(endTime(channel, { seekable: true })).toBe("none");
   expect(endTime(film, { status: "ended" })).toBe("none");
   setSystemTime();
 });

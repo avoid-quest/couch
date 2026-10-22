@@ -11,7 +11,7 @@ and paired remotes.
   programmes and replays), public Bandcamp albums and tracks (including keyword
   search), SoundCloud track search, and pasted links from other sites yt-dlp supports.
 - **StreamingCommunity** catalogue browsing, search, seasons and episodes. An
-  administrator sets its current origin in **Settings > Sources**.
+  administrator sets its current origin in **Settings → Sources**.
 - **123MoviesFree** film and TV-season browsing, search, saved items and episode
   selection. Its direct player integration is experimental: live manifests
   returned HTTP 502 during verification. See [source details](123moviesfree.md).
@@ -22,16 +22,16 @@ and paired remotes.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites.
 - **AirPlay** sound from an iPhone, iPad or Mac, on a Couch that runs on Linux,
-  once an admin turns it on in **Settings > Sources**: [Receive AirPlay](airplay.md).
-- **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
-  Sources > Live TV**. Channels that need custom headers or DRM are skipped.
+  once an admin turns it on in **Settings → Sources**: [Receive AirPlay](airplay.md).
+- **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings →
+  Sources → Live TV**. Channels that need custom headers or DRM are skipped.
   Edit keeps saved URLs unless you type new ones; **Remove guide** drops a
-  source's guide and its programmes. Browse them in **Live**.
+  source's guide and its programmes. Browse them in Home's **Live TV**.
 
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.
 
-Bandcamp and SoundCloud open a search prompt from **Discover > Sources**; they
+Bandcamp and SoundCloud open a search prompt from **Home → Sources**; they
 have no catalogue home or genre feed in Couch. Bandcamp search returns albums
 and tracks in one result list, without a next page. Its catalogue accepts public
 `artist.bandcamp.com/album/...` and `/track/...` links; artist or label homepages,
@@ -66,8 +66,8 @@ a Mac.
   host and no H.264 alternative is available. Remote-only HEVC tries that
   browser's decoder; a decoding failure never adds or starts the host.
   Adding the Linux host to HEVC-only playback takes the same native fallback,
-  leaving only the host. Turning off both channels of a pending Only here destination
-  cancels that move; the original device keeps playing and Only here can be tried again.
+  leaving only the host. Turning off both channels of a pending Move here destination
+  cancels that move; the original device keeps playing and Move here can be tried again.
   Actual HEVC support depends on the browser build and device.
 - Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
   or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV
@@ -84,26 +84,33 @@ a Mac.
 ## Connect a phone
 
 1. On the playback computer choose **This computer**, turn on **Share on
-   network** in **Settings > Network**, then open **Settings > Devices** and
-   choose **Pair a device**.
+   network** in **Settings → Devices & network**, then choose **Pair a device**
+   there.
 2. On the phone, scan the code or open the address shown there. The first time,
    the browser warns that the connection isn't private: continue to the page.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
    device you pair becomes the admin. The dialog closes when the phone pairs,
-   and a message names it, ending in "· admin" for the first.
-3. Open **Search** and type, or paste a link. Searches wait one second after you stop
-   typing; Enter searches immediately. The **Music** filter shows Bandcamp and
-   SoundCloud results. **Play** starts an item now; **Queue** in
-   its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,
-   StreamingCommunity, 123MoviesFree, AnimeSaturn or AnimeUnity link opens its page.
+   and a message names it, ending in "as admin" for the first.
+3. To pair a TV, open Couch on it: it shows a code and a QR code. Scan the QR
+   with a phone that's paired as an admin (or open the address the TV shows and
+   type the code), check the code matches, and choose **Pair**. The TV pairs by
+   itself. A code lasts ten minutes; the TV then shows a new one. **Enter a
+   code instead** on the TV takes the six-digit code as in step 2.
+4. Type in the header's search field and press Enter. To search one kind or
+   source, pick it from the list under the field first, or type its name (`film`,
+   `music`, `yt`) and press Tab. Results are grouped by kind; **Music** holds
+   Bandcamp and SoundCloud. **Play** starts an item now; **Queue** in its **…**
+   menu adds it to Up next. Paste a link and press Enter to play it; a YouTube,
+   Twitch, RaiPlay, Bandcamp, StreamingCommunity, 123MoviesFree, AnimeSaturn or
+   AnimeUnity link can also open its page.
 
-**Settings > This device > Viewing > Online video you start** saves this
+**Settings → This device → Online video quality** saves this
 browser's default quality for online video it starts, wherever it plays (Auto is up to 1080p).
 
 ## Administrator access
 
 The first device you pair becomes the admin. If no paired device is admin later,
-**Settings > Devices** on the host shows a one-use code under **Make a device the
+**Settings → Devices & network** on the host shows a one-use code under **Make a device the
 admin**. Enter it under **Admin code** on a paired device and choose **Become
 admin**. Administrators manage the whole Couch from any paired device: paired
 devices, network sharing and HTTP, the live relay, TV mode, sources, hardware
@@ -126,7 +133,7 @@ bun run app
 unset COUCH_ADMIN_RECOVERY_CODE
 ```
 
-Pair the replacement browser, open **Settings > Devices**, enter that secret
+Pair the replacement browser, open **Settings → Devices & network**, enter that secret
 under **Admin code** and choose **Become admin**. Its ten-minute deadline starts
 when the server first accepts the configured secret. Restarting with the same
 value neither extends that deadline nor makes a consumed secret reusable. An
@@ -182,11 +189,10 @@ bun run app
   version in `package.json` builds Couch Preview. The
   [Package](../.github/workflows/package.yml) workflow builds all three, and
   [releases](ci.md#releases) publish them. The installed app checks for updates
-  at start and every 4 hours. On the app hosting Couch, the Couch's
-  **Settings > Updates** shows them; in **Another Couch** mode, the app's own
-  updates are in **Settings > This device > Updates**.
+  at start and every 4 hours. **Settings → Updates** shows them: the
+  Couch's apps on the host, the app's own in **Another Couch** mode.
 
-From a paired administrator phone, the Couch's **Settings > Updates** lists the host app
+From a paired administrator phone, the Couch's **Settings → Updates** lists the host app
 and connected Couch apps, including TVs in **Another Couch** mode. Choose the
 TV, check for updates, then click **Update and restart** when its update is
 ready. The TV installs and reconnects itself; no keyboard, SSH or physical

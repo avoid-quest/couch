@@ -62,9 +62,10 @@ function RadioResults(props: Props) {
       const saved = !!favorites?.some(item => item.id === station.id);
       const value = programmes.data?.[station.id];
       const programme = avoid && value && value.expiresAt > now ? value : undefined;
-      return { id: `${title}:${station.id}`, source: title, radio: {id: station.id, title: station.name}, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
+      return { id: `${title}:${station.id}`, source: title, radio: {id: station.id, title: station.name, url: station.url}, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
         primary: props.browse ? { label: "Open", href: itemLocation("radio", station.id), run: () => navigation.open(itemLocation("radio", station.id)) } : { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
+          ...(props.browse ? [] : [{ label: "Details", run: () => navigation.open(itemLocation("radio", station.id)) }]),
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
           { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(station, true, deviceId) },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
@@ -73,7 +74,7 @@ function RadioResults(props: Props) {
         ],
       };
     });
-    props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), warning: saveError || undefined, facets: results.map(() => ({ kind: "Radio" })), hits });
+    props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), warning: saveError || undefined, hits });
   }, [title, stations, favorites, programmes.data, now, results.length, loading, error, saveError, busy, props.connected, props.onResults, props.canPlay, props.onCommand, props.browse]);
   return null;
 }

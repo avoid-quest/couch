@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
 import { isValidElement, type ReactNode } from "react";
 import type { PlaybackCommand } from "../src/shared/protocol";
-import { WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { Mixer } from "../src/client/sections/shell/Outputs";
 import { chooserRequest, choosesHere, picker, reopens } from "../src/client/session/where-it-plays";
 import { deviceId } from "../src/client/session/device-id";
 import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
@@ -107,7 +107,7 @@ const consent = (client: Client, id: string) => client.state.devices?.find(devic
 const sound = (client: Client, id: string) => { const device = client.state.devices?.find(device => device.id === id); return { volume: device?.volume, muted: device?.muted }; };
 const lastCommand = (client: Client) => client.messages.flatMap(message => message.type === "player" && message.command.type !== "volume" ? [message.command.type] : []).at(-1);
 // The production Where it plays rows, inspected without a DOM (as in output-controls).
-type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNode; disabled?: boolean; checked?: boolean; onSelect?: () => void; onClick?: () => void; onCommit?: (value: number) => void };
+type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNode; disabled?: boolean; onSelect?: () => void; onClick?: () => void; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => void };
 function control(node: ReactNode, label: string): ControlProps | undefined {
   if (Array.isArray(node)) return node.map(child => control(child, label)).find(Boolean);
   if (!isValidElement<ControlProps>(node)) return;
@@ -362,7 +362,7 @@ test("Play inherits the publisher's mix without it, and the publisher keeps cont
     assert.deepEqual(receivers(f.publisher), [f.receiver.id], "one receiver stays direct");
     assert.equal(f.publisher.state.controlling, f.receiver.id);
     assert.equal(lastCommand(f.publisher), "stop", "the publisher's ordinary item stops where the source replaces it");
-    // Picture, a level or Only here on the publisher are refused before anything changes.
+    // Picture, a level or Move here on the publisher are refused before anything changes.
     const volume = sound(f.publisher, f.publisher.id).volume;
     for (const action of [
       { type: "output", deviceId: f.publisher.id, picture: true },
@@ -375,13 +375,14 @@ test("Play inherits the publisher's mix without it, and the publisher keeps cont
     }
     assert.equal(sound(f.publisher, f.publisher.id).volume, volume);
     assert.deepEqual(receivers(f.publisher), [f.receiver.id]);
-    // Where it plays lists the publisher with its status, and offers nothing that would make it receive: its row is
-    // disabled, and out of the playback it has no fader or menu.
-    const rows = WhereItPlays({ state: f.publisher.state, connected: true, run: async () => true });
+    // Where it plays lists the publisher with its status, and offers nothing that would make it receive: its Picture,
+    // Sound and Move here are disabled, and out of the playback it has no fader or menu.
+    const rows = Mixer({ state: f.publisher.state, connected: true, run: async () => true });
     assert.equal(status(f.publisher, f.publisher.id), "Sharing this source");
-    assert.equal(control(rows, "Publisher")?.disabled, true);
-    for (const label of ["Publisher picture", "Publisher volume", "Only on Publisher"]) assert.equal(control(rows, label), undefined, label);
-    assert.equal(control(rows, "Receiver volume")?.disabled, false);
+    for (const label of ["Publisher picture", "Publisher sound", "Move here: Publisher"]) assert.equal(control(rows, label)?.disabled, true, label);
+    for (const label of ["Publisher volume", "Options for Publisher"]) assert.equal(control(rows, label), undefined, label);
+    // The receiver is the only sound, so the Volume is its level and its row has no fader of its own.
+    assert.equal(control(rows, "Receiver volume"), undefined);
   } finally { await f.close(); }
 });
 
@@ -450,7 +451,7 @@ test("after a queued own source, the next ordinary item returns to the publisher
   } finally { await f.close(); }
 });
 
-test("in a publisher-and-receiver mix, the next ordinary item plays on both again unless Only here moved it", { timeout: 15_000 }, async () => {
+test("in a publisher-and-receiver mix, the next ordinary item plays on both again unless Move here moved it", { timeout: 15_000 }, async () => {
   const f = await liveFixture({ local: true });
   // The publisher is this process's own client device, so Where it plays shows its own rows.
   const publisher = await f.connect(3);
@@ -471,19 +472,17 @@ test("in a publisher-and-receiver mix, the next ordinary item plays on both agai
     await until(() => playingNow(publisher) === "after" && receivers(publisher)?.length === 2);
     assert.deepEqual(receivers(publisher)?.sort(), [publisher.id, f.receiver.id].sort(), "the ordinary mix returns");
     await until(() => !!f.receiver.load()?.follow && f.receiver.load()?.source !== undefined && !("livePeerId" in f.receiver.load()!));
-    // Only here during the source is an explicit exclusive move: the publisher does not come back.
+    // Move here during the source is an explicit exclusive move: the publisher does not come back.
     assert.equal((await publisher.command({ type: "play", entryId: publisher.state.queue[1]!.id })).ok, true);
     await until(() => playingNow(publisher) === "Local · Screen" && receivers(publisher)?.join() === f.receiver.id);
     await until(() => direct(f.receiver.load()) && f.receiver.load()!.playbackId === publisher.state.player.playbackId && f.receiver.state.player.playbackId === f.receiver.load()!.playbackId);
     f.receiver.report();
     await until(() => publisher.state.player.status === "playing");
-    // The receiver is already the only output, so its row shows Only here pressed; pressing it still commits.
-    const results: boolean[] = [];
-    const only = control(WhereItPlays({ state: publisher.state, connected: true, run: async action => { const result = await publisher.command(action); results.push(result.ok); return result.ok; } }), "Only on Receiver")!;
-    assert.deepEqual({ checked: only.checked, disabled: only.disabled }, { checked: true, disabled: false });
-    only.onSelect!();
-    await until(() => results.length === 1);
-    assert.deepEqual(results, [true]);
+    // The receiver plays, so its row offers no Move here. It is already the only output, yet the held publisher would
+    // return, so Move here still commits.
+    assert.equal(control(Mixer({ state: publisher.state, connected: true, run: async () => true }), "Move here: Receiver"), undefined);
+    const only = await publisher.command({ type: "solo", deviceId: f.receiver.id });
+    assert.equal(only.ok, true, only.error);
     assert.equal((await publisher.command({ type: "next", playbackId: publisher.state.player.playbackId! })).ok, true);
     // Playing an entry moves it after the current one, so the next ordinary item is now "last".
     await until(() => playingNow(publisher) === "last" && f.receiver.load()?.playbackId === publisher.state.player.playbackId);
@@ -514,7 +513,7 @@ test("a queued source in a publisher-and-receiver mix plays directly on the rece
   } finally { await f.close(); }
 });
 
-test("This device joins from Where it plays without sharing, and Only here refuses while another device plays privately", { timeout: 15_000 }, async () => {
+test("This device joins from Where it plays without sharing, and Move here refuses while another device plays privately", { timeout: 15_000 }, async () => {
   const f = await liveFixture({ local: true });
   try {
     await f.publish("screen");
@@ -527,14 +526,14 @@ test("This device joins from Where it plays without sharing, and Only here refus
     assert.equal((await local.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
     await until(() => local.state.playback === f.receiver.state.playback);
     assert.equal(local.state.controlling, f.receiver.id);
-    const rows = WhereItPlays({ state: local.state, connected: true, run: async () => true });
-    assert.equal(control(rows, "Local")?.disabled, false);
-    assert.equal(status(local, local.id), "This device · Not playing");
+    const rows = Mixer({ state: local.state, connected: true, run: async () => true });
+    assert.equal(control(rows, "Local sound")?.disabled, false);
+    assert.equal(status(local, local.id), "This device");
     assert.equal((await local.command({ type: "output", deviceId: local.id, level: 30, picture: true })).ok, true);
     await until(() => direct(local.load()));
     assert.deepEqual(receivers(local)?.sort(), [f.receiver.id, local.id].sort());
     assert.deepEqual(consent(local, local.id), { audio: false, video: false }, "receiving grants nothing");
-    // Other joins privately too. Only here would leave Other's private output behind, so it is refused and nothing moves.
+    // Other joins privately too. Move here would leave Other's private output behind, so it is refused and nothing moves.
     const other = await f.connect(2);
     assert.equal((await other.command({ type: "playLive", sourceId: "screen", deviceId: other.id })).ok, true);
     await until(() => receivers(local)?.length === 3);
@@ -542,17 +541,17 @@ test("This device joins from Where it plays without sharing, and Only here refus
     for (const deviceId of [local.id, f.receiver.id]) {
       const only = await local.command({ type: "solo", deviceId });
       assert.equal(only.ok, false);
-      assert.equal(only.error, "Only here is unavailable while Other plays this privately.");
+      assert.equal(only.error, "Move here is unavailable while Other plays this privately.");
     }
     assert.deepEqual(local.state.outputs, outputs);
     assert.equal(f.receiver.load(), load);
     assert.equal(local.load(), localLoad);
-    const blocked = WhereItPlays({ state: local.state, connected: true, run: async () => true });
-    for (const label of ["Only on Local", "Only on Receiver", "Only on Other"]) assert.equal(control(blocked, label)?.disabled, true, `${label} is not offered while it cannot be exclusive`);
-    // Once Other leaves, Local's Only here is exclusive: Receiver shares, so it leaves too.
+    const blocked = Mixer({ state: local.state, connected: true, run: async () => true });
+    // Each of them plays, so no row offers Move here.
+    for (const label of ["Move here: Local", "Move here: Receiver", "Move here: Other"]) assert.equal(control(blocked, label), undefined, label);
+    // Once Other leaves, Local's Move here is exclusive: Receiver shares, so it leaves too.
     assert.equal((await other.command({ type: "output", deviceId: other.id, level: 0, picture: false })).ok, true);
     await until(() => receivers(local)?.length === 2);
-    assert.equal(control(WhereItPlays({ state: local.state, connected: true, run: async () => true }), "Only on Local")?.disabled, false);
     // Each receives it directly; the first one's player reports for the playback.
     f.receiver.report({ position: 1 }); local.report({ position: 1 });
     await until(() => local.state.player.status === "playing" && local.state.player.position > 0);
@@ -562,7 +561,7 @@ test("This device joins from Where it plays without sharing, and Only here refus
   } finally { await f.close(); }
 });
 
-test("Only here goes direct, and sync adjustment keeps its value but applies only in a group", { timeout: 15_000 }, async () => {
+test("Move here goes direct, and sync adjustment keeps its value but applies only in a group", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("screen");
@@ -582,7 +581,7 @@ test("Only here goes direct, and sync adjustment keeps its value but applies onl
     const preferences = f.publisher.state.preferences, volumes = [sound(f.publisher, f.receiver.id), sound(f.publisher, other.id)];
     f.receiver.report(); other.report();
     await until(() => f.publisher.state.player.status === "playing" && f.publisher.state.player.position > 0);
-    // Only here moves the playback exclusively; each single receiver plays directly over WebRTC.
+    // Move here moves the playback exclusively; each single receiver plays directly over WebRTC.
     const only = await f.publisher.command({ type: "solo", deviceId: other.id });
     assert.equal(only.ok, true, only.error);
     await until(() => direct(other.load()));
@@ -607,7 +606,8 @@ test("Only here goes direct, and sync adjustment keeps its value but applies onl
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delayActive === true);
     assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delay, 80);
-    assert.ok(control(WhereItPlays({ state: f.publisher.state, connected: true, run: async () => true }), "Receiver sync"));
+    const synced = Mixer({ state: f.publisher.state, connected: true, run: async () => true });
+    assert.ok(control(synced, "Receiver sync") ?? control(synced, "Receiver lip sync"));
   } finally { await f.close(); }
 });
 
@@ -635,7 +635,8 @@ test("a saved sync adjustment shows on a Direct output after Core restarts, with
     assert.equal(output.delayActive, undefined, "Direct playback stays Direct");
     assert.equal(receiver.load()!.follow, undefined);
     // Sync shows only while the device plays in sync with others.
-    assert.equal(control(WhereItPlays({ state: receiver.state, connected: true, run: async () => true }), "Receiver sync"), undefined, "no operative control while it cannot apply");
+    const alone = Mixer({ state: receiver.state, connected: true, run: async () => true });
+    assert.equal(control(alone, "Receiver sync") ?? control(alone, "Receiver lip sync"), undefined, "no operative control while it cannot apply");
   } finally { await f.close(); }
 });
 
@@ -806,7 +807,7 @@ test("capture alone gives the publisher no control of a separate private playbac
   } finally { await f.close(); }
 });
 
-test("Only here rechecks every output it removes after the item resolves, and refuses when one turned private meanwhile", { timeout: 20_000 }, async () => {
+test("Move here rechecks every output it removes after the item resolves, and refuses when one turned private meanwhile", { timeout: 20_000 }, async () => {
   const f = await liveFixture();
   let block = false;
   const pending: ServerResponse[] = [];
@@ -836,7 +837,7 @@ test("Only here rechecks every output it removes after the item resolves, and re
     pending.splice(0).forEach(respond);
     const refused = await move;
     assert.equal(refused.ok, false);
-    assert.equal(refused.error, "Only here is unavailable while Receiver plays this privately.");
+    assert.equal(refused.error, "Move here is unavailable while Receiver plays this privately.");
     await new Promise(resolve => setTimeout(resolve, 50));
     assert.deepEqual(outputs(), before, "membership is unchanged");
     assert.deepEqual(consent(f.publisher, f.receiver.id), { audio: false, video: false });
@@ -867,7 +868,7 @@ async function establishedPrivate(f: Fixture) {
   return playback;
 }
 
-test("Only here counts a held publisher: refused and not offered while it is private, exclusive across Next once it shares", { timeout: 15_000 }, async () => {
+test("Move here counts a held publisher: refused and not offered while it is private, exclusive across Next once it shares", { timeout: 15_000 }, async () => {
   const f = await liveFixture({ local: true });
   try {
     const local = await f.connect(3, "&audio=1&video=1");
@@ -884,28 +885,24 @@ test("Only here counts a held publisher: refused and not offered while it is pri
     assert.equal((await f.publisher.command({ type: "next", playbackId: f.publisher.state.player.playbackId! })).ok, true);
     await until(() => playingNow(local) === "Publisher · Screen" && receivers(local)?.join() === local.id);
     const outputs = local.state.outputs, load = local.load();
-    // Local is the only current output, yet the publisher returns at Next: Only here cannot be exclusive.
-    const rows = WhereItPlays({ state: local.state, connected: true, run: async () => true });
-    assert.deepEqual({ checked: control(rows, "Only on Local")?.checked, disabled: control(rows, "Only on Local")?.disabled }, { checked: true, disabled: true });
+    // Local plays, so its row offers no Move here. It is the only current output, yet the publisher returns at Next,
+    // so Move here cannot be exclusive.
+    assert.equal(control(Mixer({ state: local.state, connected: true, run: async () => true }), "Move here: Local"), undefined);
     const refused = await local.command({ type: "solo", deviceId: local.id });
     assert.equal(refused.ok, false);
-    assert.equal(refused.error, "Only here is unavailable while Publisher keeps its place in this playback privately.");
+    assert.equal(refused.error, "Move here is unavailable while Publisher keeps its place in this playback privately.");
     assert.deepEqual(local.state.outputs, outputs);
     assert.equal(local.load(), load);
     assert.equal((await local.command({ type: "next", playbackId: local.state.player.playbackId! })).ok, true);
     await until(() => playingNow(local) === "after" && receivers(local)?.length === 2);
     assert.deepEqual(receivers(local)?.sort(), [f.publisher.id, local.id].sort(), "the refused move left the publisher's return as it was");
-    // Shared, the held publisher no longer blocks: the pressed row commits, and Next keeps Local alone.
+    // Shared, the held publisher no longer blocks: Move here commits, and Next keeps Local alone.
     assert.equal((await local.command({ type: "play", entryId: local.state.queue.find(entry => entry.liveSourceId)!.id })).ok, true);
     await until(() => playingNow(local) === "Publisher · Screen" && receivers(local)?.join() === local.id);
     await f.publisher.command({ type: "sharing", sharing: { audio: true, video: true } });
     await until(() => consent(local, f.publisher.id)?.video === true);
-    const results: boolean[] = [];
-    const only = control(WhereItPlays({ state: local.state, connected: true, run: async action => { const result = await local.command(action); results.push(result.ok); return result.ok; } }), "Only on Local")!;
-    assert.deepEqual({ checked: only.checked, disabled: only.disabled }, { checked: true, disabled: false });
-    only.onSelect!();
-    await until(() => results.length === 1);
-    assert.deepEqual(results, [true]);
+    const only = await local.command({ type: "solo", deviceId: local.id });
+    assert.equal(only.ok, true, only.error);
     assert.equal((await local.command({ type: "next", playbackId: local.state.player.playbackId! })).ok, true);
     await until(() => playingNow(local) === "last");
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -1308,15 +1305,15 @@ test("replacing a held publisher needs the consent its held private picture woul
   const f = await liveFixture({ local: true });
   try {
     const local = await heldPrivately(f, { audio: true, video: false });
-    const rows = () => WhereItPlays({ state: local.state, connected: true, run: async () => true });
+    const rows = () => Mixer({ state: local.state, connected: true, run: async () => true });
     const refusal = "Publisher is not sharing video.";
-    // Active: the speakers alone do not let Local take the publisher's private picture output, so its row is disabled.
-    assert.equal(control(rows(), "Publisher")?.disabled, true);
+    // Active: the speakers alone do not let Local take the publisher's private picture output, so its Sound is disabled.
+    assert.equal(control(rows(), "Publisher sound")?.disabled, true);
     assert.equal((await local.command({ type: "output", deviceId: f.publisher.id, level: 50 })).error, refusal);
     const playback = await holdPublisher(f, local);
     const localOutputs = local.state.outputs, localLoad = local.load(), queue = f.publisher.state.queue;
-    // Held, the same: Where it plays, Play on, and Only here are each refused, and the picker agrees.
-    assert.deepEqual([control(rows(), "Publisher")?.disabled, control(rows(), "Publisher picture"), control(rows(), "Only on Publisher")], [true, undefined, undefined]);
+    // Held, the same: Where it plays, Play on, and Move here are each refused, and the picker agrees.
+    assert.deepEqual(["Publisher sound", "Publisher picture", "Move here: Publisher"].map(label => control(rows(), label)?.disabled), [true, true, true]);
     assert.equal((await local.command({ type: "output", deviceId: f.publisher.id, level: 50 })).error, refusal);
     assert.equal((await local.command({ type: "enqueue", entry: ordinary(f, "taken"), playNow: true, deviceId: f.publisher.id })).error, refusal);
     assert.equal((await local.command({ type: "solo", deviceId: f.publisher.id })).error, refusal);
@@ -1349,9 +1346,9 @@ test("a held publisher that shares every channel it holds can be moved to anothe
     const local = await heldPrivately(f, { audio: true, video: true });
     const playback = await holdPublisher(f, local);
     const results: boolean[] = [];
-    const row = control(WhereItPlays({ state: local.state, connected: true, run: async action => { const result = await local.command(action); results.push(result.ok); return result.ok; } }), "Publisher")!;
+    const row = control(Mixer({ state: local.state, connected: true, run: async action => { const result = await local.command(action); results.push(result.ok); return result.ok; } }), "Publisher sound")!;
     assert.equal(row.disabled, false);
-    row.onClick!();
+    row.onPressedChange!(true);
     await until(() => results.length === 1);
     assert.deepEqual(results, [true]);
     await until(() => receivers(local)?.length === 2);

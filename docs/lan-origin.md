@@ -1,7 +1,7 @@
 # Named LAN address
 
 This guide covers the Debian 13 app's direct LAN listener. Locally, open
-**Settings → Network → Share on network** and enable sharing, then verify the IP
+**Settings → Devices & network → Share on network** and enable sharing, then verify the IP
 address shown when pairing before adding a name. Couch uses HTTPS with its own
 self-signed certificate on port 4100 by default; plain HTTP on the LAN redirects
 there unless **Allow HTTP connections** is enabled. Sharing off leaves only the
@@ -44,8 +44,8 @@ around playback.
 
 HTTPS remains the default. Some TV browsers cannot bypass a self-signed
 certificate warning. On the computer running Couch or a paired admin, open
-**Settings → Network** and enable **Allow HTTP connections**. The choice is saved and applies immediately.
-Enable **Share on network** in **Settings → Network**, then open the
+**Settings → Devices & network** and enable **Allow HTTP connections**. The choice is saved and applies immediately.
+Enable **Share on network** in **Settings → Devices & network**, then open the
 `http://<LAN-IP>:4100` address shown when pairing (use `COUCH_PORT` if customized). HTTPS and the
 HTTPS QR code remain available. The separate port 80 listener still redirects to HTTPS, so include
 Couch's port in the HTTP address. A new browser origin requires pairing again.
@@ -88,7 +88,7 @@ available, and a missing or incorrect automatic name does not raise a setup warn
 The detected name still uses Couch's self-signed certificate; naming the server
 does not make that certificate trusted by a TV browser.
 
-**Settings → Network → Network address** shows the detected name. Save a
+**Settings → Devices & network → Network address** shows the detected name. Save a
 different address to override it; clearing the field restores automatic selection.
 `COUCH_ADVERTISE_URLS` also takes precedence, and setting it to an empty string
 disables automatic names. Names use Couch's port, so automatic selection needs no
@@ -102,7 +102,7 @@ make the name work on the LAN.
 
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
 The name must work from the TV and each phone that will use it. From the
-playback computer or a paired Administrator, open **Settings → Network →
+playback computer or a paired Administrator, open **Settings → Devices & network →
 Network address**. Enter `http://couch.home` for port 80, or
 `http://couch.home:4100` when port 80 is unavailable. A bare `couch.home` also
 uses port 80, which redirects to `https://couch.home:4100`. Couch checks DNS

@@ -10,11 +10,12 @@ import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
-import { type RadioStation } from "../../../shared/radio";
+import { isRadio, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
+import { metaLine } from "@/media-caption";
 
 /**
- * The stations on air, for Home's Radio shelf and Discover's: `first` (Home's recents), then the saved
- * stations, then the built-in ones, each once and with its current show.
+ * The stations on air: `first` (this device's recents), then the saved stations, then the built-in ones, each once and
+ * with its current show.
  */
 export function useOnAir(enabled = true, first: RadioStation[] = []) {
   const { credentials, current } = useShell();
@@ -23,17 +24,21 @@ export function useOnAir(enabled = true, first: RadioStation[] = []) {
   const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && enabled });
   // Built-in stations fill the shelf, so a fresh Couch opens on something playable.
   const builtIn = useQuery({ ...radioSearchQuery(credentials, "avoid radio", ""), enabled: connected && enabled });
-  const stations = [...first, ...favorites.data?.favorites ?? [], ...builtIn.data?.stations ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index);
+  const once = (stations: RadioStation[]) => stations.filter((station, index, all) => all.findIndex(other => other.id === station.id) === index);
+  const mine = once([...first, ...favorites.data?.favorites ?? []]);
+  const stations = once([...mine, ...builtIn.data?.stations ?? []]);
   const programmesShown = connected && enabled;
   const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: programmesShown, refetchInterval: 60_000 });
-  // A show's expiresAt is when its data refreshes (about every 15 minutes), not when it ends, so on air reads "Live".
+  // A show's expiresAt is when its data refreshes (about every 15 minutes), not when it ends, so a show shows no end time.
   const show = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
   const playing = (station: RadioStation) => current?.kind === "radio" && (current.source === `radio:${station.id}` || current.source === station.url);
   return {
     stations, show, playing, favorites, builtIn,
     pending: enabled && (favorites.isPending || builtIn.isPending || programmesShown && programmes.isPending),
+    /** The stations themselves are still loading; their shows may follow (a tile keeps room for one). */
+    loading: enabled && (favorites.isPending || builtIn.isPending),
     /** Playing, then the show and its genre. */
-    meta: (station: RadioStation) => [playing(station) && playbackStatus(state, connected).label, show(station.id)?.title, show(station.id)?.genre].filter(Boolean).join(" · "),
+    meta: (station: RadioStation) => metaLine(playing(station) && playbackStatus(state, connected).label, show(station.id)?.title, show(station.id)?.genre),
   };
 }
 
@@ -76,4 +81,19 @@ export function useStationMenu() {
       { label: "Play on", disabled: !available, playOn: deviceId => void play(on => enqueueRadio(station, true, on), deviceId) },
     ];
   };
+}
+
+/**
+ * A playing station's show: Core's programme for the playback, else the show its tile shows, so its title and artwork
+ * (the show's photo, else the station's logo) are the same on the tile, the now-playing bar, Home's hero and the player,
+ * while it loads as while it plays. Null for anything but a station on air.
+ */
+export function useStationShow(): RadioProgrammeDetails | null {
+  const { credentials, current, programme } = useShell();
+  const { connected, state } = useSessionGate();
+  const station = isRadio(current) && current?.source.startsWith("radio:") ? current.source.slice(6) : null;
+  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && !!station, refetchInterval: 60_000 });
+  if (programme && programme.playbackId === state?.player.playbackId) return programme;
+  const listed = station ? programmes.data?.[station] : undefined;
+  return listed && listed.expiresAt > Date.now() ? listed : null;
 }

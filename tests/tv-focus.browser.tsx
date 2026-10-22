@@ -29,20 +29,47 @@ export async function runTvFocusRegression() {
       const style = getComputedStyle(document.activeElement!);
       assert(style.backgroundColor === 'rgb(255, 255, 255)' && style.color === 'rgb(0, 0, 0)', "Remote focus has no visible inversion");
     });
+    await check("A focused text link inverts past its words, and a focused tile lifts, without moving the layout", async () => {
+      await audit.go('/');
+      control('.app-header a[href="/"]').focus(); await remote('right');
+      // Relationships are links on the Stage; a tile keeps them in its menu (next check).
+      const link = control('[data-home-hero] [data-media-context] a');
+      const before = link.getBoundingClientRect();
+      link.focus(); await wait(200);
+      const after = link.getBoundingClientRect();
+      assert(getComputedStyle(link).boxShadow.includes('rgb(255, 255, 255)'), "A focused text link has no room around its words");
+      assert(before.left === after.left && before.width === after.width, "Focusing a text link moved it");
+      // Home's own rows are a board of lists; its shelves (Radio, the sources) hold tiles.
+      const tile = control('[data-page="Home"] [data-shelf-row] [data-media-tile]');
+      tile.focus(); await wait(300);
+      assert(getComputedStyle(tile.closest('[data-tile]')!).scale === '1.05', "A focused tile did not lift");
+      assert(parseFloat(getComputedStyle(tile.querySelector('[data-tile-art]')!).outlineWidth) >= 4, "A focused tile's outline stayed thin");
+    });
     await check("Horizontal boundaries do not jump to unrelated rows", async () => {
       await audit.go('/');
       const home = control('.app-header a[href="/"]');
       home.focus(); await remote('left');
       assert(document.activeElement === home, "Left from Home jumped into the page");
-      const links = [...document.querySelectorAll<HTMLElement>('[aria-label="For later"] [data-media-context] a')];
+      const links = [...document.querySelectorAll<HTMLElement>('[data-home-hero] [data-media-context] a')];
       assert(links.length >= 2, "Missing relationship fixture");
       links.at(-1)!.focus(); await remote('right');
-      assert(document.activeElement === links.at(-1), "Right from the last relationship jumped up to its tile");
+      assert(document.activeElement === links.at(-1), "Right from the last relationship jumped to another row");
       await remote('left');
       assert(document.activeElement === links[0], "Left did not reach the adjacent relationship");
     });
+    await check("A row's relationships are the last verbs in its menu, not links under it", async () => {
+      await audit.go('/');
+      const row = control('[aria-label="For later"] li[data-nav-row]');
+      assert(!row.querySelector('[data-media-context]'), "A row still shows relationship links");
+      row.querySelector<HTMLElement>('[data-play]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await wait();
+      const items = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent ?? '');
+      assert(items.some(item => item.startsWith('Go to ')), `The row's menu has no Go to: ${items.join(', ')}`);
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await wait();
+    });
     await check("Back restores the exact relationship link, including repeated destinations", async () => {
-      for (const selector of ['[data-home-hero] [data-media-context] a', '[aria-label="For later"] [data-media-context] a']) {
+      for (const selector of ['[data-home-hero] [data-media-context] a']) {
         await audit.go('/');
         const link = control(selector);
         const href = link.getAttribute('href');
@@ -54,14 +81,14 @@ export async function runTvFocusRegression() {
       }
     });
     await check("The TV BrowserBack key closes a picker without leaving its page", async () => {
-      await audit.go('/discover/radio');
-      const source = control('button[aria-label="Source"]');
+      await audit.go('/live-tv');
+      const source = control('button[aria-label="Group"]');
       source.focus(); await remote('select');
-      assert(document.querySelector('[role="listbox"]'), "Source did not open");
+      assert(document.querySelector('[role="listbox"]'), "Group did not open");
       document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'BrowserBack', bubbles: true, cancelable: true }));
       await wait();
       assert(!document.querySelector('[role="listbox"]') && document.activeElement === source, "BrowserBack trapped focus in the picker");
-      assert(audit.router.state.location.pathname === '/discover/radio', "Closing the picker also left its page");
+      assert(audit.router.state.location.pathname === '/live-tv', "Closing the picker also left its page");
     });
     await check("Saved rails enter content and return to the selected section", async () => {
       for (const tab of ['later', 'channels', 'lists', 'played']) {
@@ -90,7 +117,7 @@ export async function runTvFocusRegression() {
       assert(audit.router.state.location.pathname === '/', "Settings Back did not reach Home");
     });
     await check("Settings vertical movement visits recovery actions before the next section", async () => {
-      await audit.go('/settings/couch/network');
+      await audit.go('/settings/couch/devices');
       control('[aria-label="Share on network"]').focus();
       await remote('down');
       assert(document.activeElement?.textContent === 'Try again', "Down skipped the first relay recovery action");
@@ -150,12 +177,29 @@ export async function runTvFocusRegression() {
         return response;
       };
       try {
-        await audit.go('/discover', { fresh: true });
+        await audit.go('/', { fresh: true });
         await remote('up');
         const deliberate = document.activeElement;
         release(); await wait(700);
         assert(document.activeElement === deliberate, "Late catalogue stole deliberate focus");
       } finally { release(); window.fetch = originalFetch; }
+    });
+    await check("Search's kinds and sources take the arrows and OK, and keep the focus", async () => {
+      await audit.go('/search?q=concert', { fresh: true });
+      (document.activeElement as HTMLElement | null)?.blur(); await remote('down');
+      assert(document.activeElement?.matches('[data-search-top] [data-page-first]'), "Search did not start on its top result");
+      const all = control('[role="radiogroup"][aria-label="Kind"] [aria-checked="true"]');
+      // Up passes the top result's own links on its way.
+      for (let step = 0; step < 6 && document.activeElement !== all && !document.activeElement?.closest('.app-header'); step++) await remote('up');
+      assert(document.activeElement === all && all.firstChild?.textContent === "All", "Up from the top result missed the kinds");
+      await remote('right'); await remote('select');
+      const films = document.activeElement as HTMLElement;
+      assert(films.firstChild?.textContent === "Films & series" && films.getAttribute("aria-checked") === "true" && audit.router.state.location.searchStr.includes("kind=films"), "OK did not choose the focused kind, or lost the focus");
+      await remote('down');
+      const source = document.activeElement as HTMLElement;
+      assert(source.closest('[aria-label="Source"]'), "Down from a kind missed its sources");
+      await remote('select');
+      assert(document.activeElement === source && source.getAttribute("aria-pressed") === "true" && audit.router.state.location.searchStr.includes("source="), "OK did not press the focused source, or lost the focus");
     });
   } finally { audit.close(); }
   return results;
@@ -165,7 +209,7 @@ export async function runTvFocusRegression() {
 export async function runTvFocusReachability() {
   const audit = await mountUiAudit();
   const { settingsPages } = await import('../src/shared/settings-pages');
-  const browse = ['/', '/discover', '/search?q=concert', '/discover/radio', '/discover/live-tv', '/saved', '/saved?tab=channels', '/saved?tab=lists', '/saved?tab=played', '/collection?provider=youtube&url=https%3A%2F%2Fwww.youtube.com%2F%40nprmusic', '/item?kind=saved&id=concert'];
+  const browse = ['/', '/search?q=concert', '/radio', '/live-tv', '/saved', '/saved?tab=channels', '/saved?tab=lists', '/saved?tab=played', '/collection?provider=youtube&url=https%3A%2F%2Fwww.youtube.com%2F%40nprmusic', '/item?kind=saved&id=concert'];
   const cases = [
     ...[...browse, ...Object.values(settingsPages).map(page => page.path), '/remote', '/where-it-plays'].map(href => ({ href, mode: 'loaded' as const })),
     ...(['loading', 'empty', 'error'] as const).flatMap(mode => browse.map(href => ({ href, mode }))),

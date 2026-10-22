@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { defaultStringifySearch, useLocation, useRouter } from "@tanstack/react-router";
+import { defaultStringifySearch, useLocation, useRouter, useSearch } from "@tanstack/react-router";
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { QueueEntry } from "../shared/protocol";
 import { isTvPresentation } from "./session/presentation";
@@ -17,6 +17,12 @@ export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url" |
   ...(search.cursors?.length ? { cursors: search.cursors } : {}), ...(search.page && search.page > 1 ? { page: search.page } : {}), ...(search.filter ? { filter: search.filter } : {}) })}`;
 
 /** An item or collection page's address, carrying the section it opens in (`from`) unless it already has one. */
+/**
+ * A Details or collection page's own search: its route match's, not the location's, which while a navigation away is
+ * pending (Play opening the player) already names the next page, so the page would flash "Item not found".
+ */
+export const useOwnSearch = <T,>(read: (search: Record<string, unknown>) => T) => read(useSearch({ strict: false }));
+
 export function keepSection(href: string, section: string | undefined) {
   const from = detailFrom(section);
   return from && /^\/(?:item|collection)\?/.test(href) && !/[?&]from=/.test(href) ? `${href}&from=${from}` : href;
@@ -54,7 +60,7 @@ export function restoreDetailFocus(target?: FocusTarget) {
 export function useDetailNavigation() {
   const router = useRouter({ warn: false });
   return {
-    open(href: string, focusSelector?: string, viewTransition = false) {
+    open(href: string, focusSelector?: string, viewTransition: boolean | { types: string[] } = false) {
       if (!router) return;
       const location = router.state.location;
       const focus = opener(focusSelector);
@@ -84,10 +90,10 @@ export function DetailFocusRestoration() {
   const location = useLocation();
   const previousPage = useRef<string | null>(null);
   useEffect(() => {
-    const filterable = ["/search", "/collection", "/discover/radio", "/discover/live-tv"].includes(location.pathname);
+    const filterable = ["/search", "/collection", "/radio", "/live-tv"].includes(location.pathname);
     const params = new URLSearchParams(location.searchStr);
     if (filterable) {
-      for (const name of ["filter", "page", "radioSource", "group", ...location.pathname === "/search" ? ["source", "until", "kind", "length"] : []]) params.delete(name);
+      for (const name of ["filter", "page", "radioSource", "group", ...location.pathname === "/search" ? ["source", "kind"] : []]) params.delete(name);
     }
     params.sort();
     const pageKey = location.pathname + "?" + params;
@@ -101,7 +107,7 @@ export function DetailFocusRestoration() {
     if (location.pathname === "/now" && !target) return;
     if (!target && !tv) return;
     const returning = !!location.state.detailFocus;
-    const discover = tv && !returning && location.pathname === "/discover";
+    const home = tv && !returning && location.pathname === "/";
     let fallbackFocus: Element | null = null;
     const restore = () => {
       if (tv && !returning) {
@@ -123,20 +129,20 @@ export function DetailFocusRestoration() {
     };
     // Cached results can briefly restore an opener that a fresh result removes.
     // Keep watching for lost focus until input, navigation or the timeout.
-    // Fresh Discover entry waits until input or navigation, even for slow catalogues.
+    // Fresh Home entry waits until input or navigation, even for slow catalogues.
     restore();
     const observer = new MutationObserver(() => {
-      // Discover's reordered shelves can load out of order. Until input, an earlier
+      // Home's reordered shelves can load out of order. Until input, an earlier
       // shelf's first tile takes precedence over a later shelf's provisional entry.
-      const discoverEntry = discover && document.activeElement?.matches("[data-page-first]");
-      if (document.activeElement !== document.body && document.activeElement !== fallbackFocus && !discoverEntry) return;
+      const homeEntry = home && document.activeElement?.matches("[data-page-first]");
+      if (document.activeElement !== document.body && document.activeElement !== fallbackFocus && !homeEntry) return;
       // Sharing is intentional, not a delayed catalogue response: its arrival keeps the current tile.
-      if (discoverEntry && document.querySelector('[data-page="Discover"] [data-page-first]:not(:disabled)')?.closest('[aria-label="Shared sources"]')) return;
+      if (homeEntry && document.querySelector('[data-page="Home"] [data-page-first]:not(:disabled)')?.closest('[aria-label="Shared sources"]')) return;
       // Loading can replace the first control; settle again if it lost focus.
       restore();
     });
     const stop = () => { observer.disconnect(); clearTimeout(timer); window.removeEventListener("keydown", stop, true); window.removeEventListener("pointerdown", stop, true); };
-    const timer = discover ? undefined : setTimeout(stop, 15_000);
+    const timer = home ? undefined : setTimeout(stop, 15_000);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert"] });
     window.addEventListener("keydown", stop, true);
     window.addEventListener("pointerdown", stop, true);

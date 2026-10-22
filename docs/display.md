@@ -3,7 +3,7 @@
 In TV presentation (`COUCH_TV_PRESENTATION=1`) the app window is frameless and
 fullscreen, and it returns to fullscreen if anything takes it out.
 
-An administrator opens Settings → Display on a paired phone. Core forwards the
+An administrator opens Settings → TV on a paired phone. Core forwards the
 request to the app's main process, which lists screens with Electron's
 [`screen`](https://www.electronjs.org/docs/latest/api/screen) API (name, pixel
 size, position and refresh) and moves the fullscreen window.

@@ -1,84 +1,116 @@
 # Home
 
-## Home starts with the media
-
-Home opens on one large item, the hero, then shelves of tiles, the way Apple
-TV and Infuse do. Discover is its sibling, built of the same shelves and
-tiles ([Browse](browse.md#discover)). The TV, the desktop window and phones render the same tree
-(`HomePage`) with the same layout; narrow screens stack the hero (`md:`), and
-a pointer gets the shelves' scrollbars, which the TV hides.
+Home (`HomePage`) is one large item, the hero, on Home's
+[Stage](../design.md#stage), then your own rows as one board of short lists,
+then the sources. Narrow screens stack the Stage (`md:`) and the board; the TV
+hides the shelves' scrollbars.
 
 ## The hero
 
-The hero pairs contained artwork with a large title. Small metadata supplies
-context; related content is directly linked below the title. Runtime or Live
-follows quietly, then the actions. Artwork stays intact on black, without a
-blurred backdrop. A divider separates the hero from the shelves. Its item is the first of:
+The Stage at Home's height (`min(39.375vw, 70vh)`), in its picture's room:
+the picture at the right, whole at its own shape as an object (a video's
+frame, a cover, a logo, a poster; [Stage](../design.md#stage)), as on every
+Details page; at the bottom left the title in the display face, sized by its
+length and set whole
+([Type](../design.md#type)), one muted meta line with its relationship links,
+how far it got as a slim line beside what's left, and the verbs. Phones put
+the picture at the top of the column (centred; a wide one across it)
+and the copy under it, the primary verb growing along the verbs' one line. Its
+item is the first of:
 
-1. what you control, playing now: its meta reads the station or subtitle (else
-   the source, or "Radio" for a station, as the player's does, never a stream's
-   hostname), Paused or Loading…, and "on {device}" (+N) as the now-playing
-   bar does; its verbs are Open player, then the player's
-   [transport](player.md#transport);
-2. the first Continue item: Resume, From start and Details (Continue's Details
-   stop, below);
-3. the first station on air: Play.
+1. **What you control, playing now.** Meta: the station or subtitle, its
+   source, a status only when it isn't plain playing or paused, and "on
+   {device}" when it plays elsewhere. A slim progress line advances as it plays
+   beside "4:27 left, ends 22:01". No verbs: the now-playing bar right below
+   holds the transport and Open player, so the Stage doesn't repeat them. Its
+   title is the one stop (`data-page-first`, "Open player: {title}") and opens
+   the player, as its picture does under a pointer.
+2. **The first Continue item**: its progress line beside "10:32 left", as
+   Details shows it (it isn't playing, so no end time); Resume, From start,
+   Details.
+3. **The first station on air**: Play.
 
-Radio and live media read "Live": a station's programme data says when it
-expires (about every 15 minutes), not when the show ends, so on air has no
-"until" time. Continue leads only while its shelf is shown, and a station only
-while Radio is. The primary verb carries `data-page-first`, so page entry lands
-on it, and when Resume or From start plays where Home stays open, focus moves
-to the playing hero's Open player. Below `md` the hero stacks artwork, text,
-then verbs, with the primary verb full-width. It waits for the data that decides it (the session, then
-history, then the stations) so it never swaps under the focus while loading,
-and the shelves wait with it.
+An episode leads with its series ("Phony", then "S1 E1, Episodio 1" on the
+meta line). Radio and live media show no progress or time. The primary verb,
+or the playing title, carries `data-page-first`. The hero waits for the data
+that decides it (session, history, stations) so it never swaps under the
+focus, and the rows wait with it.
 
-## Shelves
+## Sections
 
-The shelves follow in Settings → Home's per-device order and visibility:
-Continue, For later, Radio, Played recently and Up next (off by default; it
-stays reachable from the now-playing bar and the player band). Saved
-visibility always applies. A shelf appears only with something in it, and Radio
-always has the built-in stations, so a fresh Couch opens on something playable.
-Home ends with its content; with none at all it says "Find something to play"
-and offers Discover.
+Continue, For later, Played recently, Up next (off by default), Shared
+sources, Radio, Live TV, one per source with a home (Twitch,
+StreamingCommunity, RaiPlay, 123MoviesFree, AnimeSaturn, AnimeUnity) and
+Sources, in the order and visibility chosen in Settings → Home
+([Settings](settings.md)). They are `gap-section` apart. A section shows only
+with something in it; one still loading holds its place, so nothing moves
+under the focus, and one that fails says "Couldn't load {what}." with Try
+again.
 
-Each shelf's heading names it, then adds quiet context: "3
-unfinished", "On air now", "2 saved", "4 titles", "until 23:10" (Up next ends
-then). A shelf holds at most twelve; where the rest has a page, the heading is
-a link with a chevron that opens it: Continue and Played recently open
-Saved's Played, For later opens Saved, and Radio opens Discover's every
-station. It is one focus stop between its shelf and the one above, so Up
-from a shelf meets its heading, then the shelf above. Up next's heading has
-no link: its shelf ends with "N more" when it holds more than fits, which
-opens Up next beside Home.
+Lists and shelves keep their order while Home stays open and never hold the
+hero's item: the one that led Home when it opened, nor the one leading it now
+(after Stop, the next hero's item leaves Continue).
 
-A shelf takes its order once its data and the hero are known, and keeps it
-while Home stays open, so nothing moves under the focus. It leaves out the
-item that led Home then, so the hero's item never repeats below it. A station
-that starts playing stays where it is, marked Playing, and the hero that
-replaces the old one doesn't bring it back; the next visit to Home composes
-afresh.
+TV page entry goes to the hero's primary verb, or without a hero to the first
+available section's first control, and moves to an earlier section that
+finishes loading until the user acts; a shared source that appears meanwhile
+doesn't take the focus.
 
-## Tiles everywhere
+## The board
 
-Every item is one [`MediaTile`](browse.md#mediatile), one primary target on every
-screen, and its press does its main verb: Continue resumes, a station plays,
-an Up next entry plays now, everything else opens its page, which holds every
-verb. Related content has visible sibling links. Its other actions (From start,
-Queue, Save, Play on…) are its one
-menu, behind the "…" in its caption ([Menus](../design.md#menus)). Continue
-alone adds a sibling secondary Details button (at least 44px): Resume's
-playback destination lacks its history actions, and a remote reaches it
-without a held OK. It opens History Details without playing, even when
-Resume is unavailable. Up next tiles read their length and the clock time
-each ends ("4:52, ends 21:47").
+Your own rows that follow each other in the saved order (Continue, For later,
+Played recently, Up next) are one board (`HomeBoard`): short lists of compact
+[`MediaRow`s](browse.md#rows-and-tiles) side by side, sharing the page's width
+(`repeat(auto-fit, minmax(min(100%, 20rem), 1fr))`, 3rem apart), so two lists
+take half the page each and their titles and meta lines are read whole. Phones stack them; the
+TV keeps the columns, and its arrows move down a list and across to the next.
 
-Shelves are plain overflow rows (`data-nav-row`); a pointer scrolls them by
-their thin scrollbar or the Previous/Next controls beside the heading.
-Touch swipes and TV focus scrolling use the same native overflow row.
-The paging controls are hidden on touch and TV. How the TV walks them: [TV](tv.md#every-journey-step-works-with-a-remote).
+A list holds its first four. Its heading (`ShelfHeading`) is its name, with no
+count and no rule under it (Up next adds "until 23:10"); where the rest has a
+page it links there with a chevron: Continue and Played recently → Saved's
+Played, For later → Saved's For later. Up next ends with "N more", opening Up
+next.
 
-Shelf menus share [Open in browser](browse.md#open-in-browser) when the item
-has an original page, including Continue, Played recently, For later and Up next.
+A row's press does its main verb: Continue resumes, an Up next entry plays
+now, For later and Played recently open Details. Other verbs, and where the
+item leads ("Go to Stanford"), are its menu; on Continue its first verb is
+Details. Continue's progress is a line along the thumbnail's foot, and its
+meta ends with what's left ("YouTube, 4:11 left"). Up next rows read their
+length and end time ("4:52, ends 21:47"). Each list takes its items' majority
+shape. Without a hero, a remote starts on the board's first row.
+
+## The sources
+
+- **Shared sources**, while devices share screen or sound: a line of chips;
+  pressing one plays it, its menu holds Play on, Play next and Queue.
+- **Radio**: one shelf of up to twelve stations, yours first (those this
+  device played lately, then the saved ones), then Couch's built-in ones, each
+  with its current show, never the hero's station. A tile plays; its menu
+  holds Details. The heading opens every station
+  ([Radio](browse.md#radio-and-live-tv), `/radio`). Stations a device has
+  loaded show at once, before their shows; a tile without a show stays level
+  with the rest.
+- **Live TV**, while a Live TV source has channels: the guide's first twelve.
+  A tile plays its channel; the heading opens every channel (`/live-tv`).
+- **One shelf per source with a home**: the channels and series saved from
+  it, in Saved's order, live channels first. Core asks Twitch which saved
+  channels are live as it lists them (a query per 100 channels, at most every
+  20 s); an offline channel stays, its artwork dimmed, reading "Offline". A page's
+  section (RaiPlay's "In Diretta", `#block=`) belongs to that page, which the
+  heading opens: it stays out of the shelf, and Save isn't offered for one
+  (one saved before keeps Saved, to remove it). The heading (the source's
+  name) opens the source's own home. A source with nothing saved has no
+  shelf.
+- **Sources**, always there: every source as one line of `secondary` pill
+  chips. A source with a home opens it; YouTube, Bandcamp and SoundCloud scope
+  the header's search to themselves. A source whose latest answer here failed
+  (its home, a page or a search) is muted over "Couldn't load"; it still
+  opens, to try again.
+
+Shelves are plain overflow rows (`data-nav-row`) without paging buttons: a
+pointer scrolls them, touch swipes, keyboard and remote move focus, and Up and
+Down go shelf to shelf. Each item is one
+[`MediaTile`](browse.md#rows-and-tiles) whose press does its main verb: a
+station or channel plays, a saved channel or series opens its page. Each shelf
+takes its items' majority shape; station art is square and fills its tile.
+The tile or row of what plays carries the [level](../design.md#motion).

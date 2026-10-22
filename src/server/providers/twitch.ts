@@ -133,8 +133,9 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
     if (data.user === null) throw new ProviderError("Twitch channel not found.", 404);
     const item = channel(data.user);
     if (!item || !object(data.user)) throw unavailable();
+    // The page is the channel, so it shows the round avatar; a live channel's row keeps the 16:9 stream preview.
     const broadcasts = items(data.user.videos, video).map(broadcast => ({...broadcast, creator: {title: item.title, url: item.url}}));
-    return withProviderItem("twitch", item.url, "channel", { title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] });
+    return withProviderItem("twitch", item.url, "channel", { title: item.title, thumbnail: thumbnail(data.user.profileImageURL) ?? item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] });
   }
   if (target.kind === "categories") {
     const data = await query(`{ games(first:20) { edges { node { ${categoryFields} } } } }`, {}, signal);
@@ -149,4 +150,24 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
   const data = await query(`{ streams(first:20) { ${streamEdges} } }`, {}, signal);
   const page: ProviderPage = { title: "Live on Twitch", items: items(data.streams, streamItem) };
   return request.url ? withProviderItem("twitch", "https://www.twitch.tv/directory/all", "collection", page) : page;
+}
+
+const savedLogin = (item: ProviderItem) => item.provider === "twitch" && item.kind === "channel" ? /^https:\/\/www\.twitch\.tv\/([a-z\d_]{1,25})$/.exec(item.url)?.[1] : undefined;
+
+/**
+ * Whether saved channels are live now, in a public query per 100 channels: a saved channel keeps the "Offline" it was
+ * saved with otherwise. Returns each answered channel's live state and subtitle by URL.
+ */
+export async function liveTwitchChannels(items: ProviderItem[], signal?: AbortSignal): Promise<Map<string, Pick<ProviderItem, "live" | "subtitle">>> {
+  const logins = [...new Set(items.flatMap(item => savedLogin(item) ?? []))];
+  const now = new Map<string, Pick<ProviderItem, "live" | "subtitle">>();
+  const batches = Array.from({ length: Math.ceil(logins.length / 100) }, (_, index) => logins.slice(index * 100, index * 100 + 100));
+  const answers = await Promise.all(batches.map(logins => query("query Live($logins:[String!]) { users(logins:$logins) { login stream { id viewersCount game { name } } } }", { logins }, signal)));
+  for (const user of answers.flatMap(data => Array.isArray(data.users) ? data.users : [])) {
+    if (!object(user) || typeof user.login !== "string" || !loginPattern.test(user.login)) continue;
+    const stream = object(user.stream) ? user.stream : null;
+    const game = stream && object(stream.game) ? text(stream.game.name) : "";
+    now.set(`https://www.twitch.tv/${user.login.toLowerCase()}`, { live: !!stream, subtitle: stream ? [game, viewers(stream.viewersCount)].filter(Boolean).join(" · ") : "Offline" });
+  }
+  return now;
 }
