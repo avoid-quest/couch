@@ -35,6 +35,8 @@ meta line). Radio and live media show no progress or time. The primary verb,
 or the playing title, carries `data-page-first`. The hero waits for the data
 that decides it (session, history, stations) so it never swaps under the
 focus, and the rows wait with it.
+When Play or Resume becomes the playing title, focus moves to that title if
+the removed verb lost it, and stays put if the user moved to another control.
 
 ## Sections
 

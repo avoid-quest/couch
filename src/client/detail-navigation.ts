@@ -47,6 +47,11 @@ function opener(selector?: string): FocusTarget | undefined {
   selector = id ? `#${CSS.escape(id)}` : label ? `${active.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]`
     : href ? `a[href="${CSS.escape(href)}"]` : undefined;
   if (!selector) return;
+  // The persistent bar may hold the same link before the returning page mounts.
+  // Keep its occurrence within its own page or bar, rather than the whole document.
+  const page = active.closest<HTMLElement>("[data-page]")?.dataset.page;
+  const scope = page ? `[data-page="${CSS.escape(page)}"]` : active.closest("[data-now-playing]") ? "[data-now-playing]" : "";
+  if (scope) selector = `${scope} ${selector}`;
   return { selector, index: [...document.querySelectorAll(selector)].indexOf(active) };
 }
 

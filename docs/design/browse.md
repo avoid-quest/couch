@@ -304,6 +304,9 @@ Details page's Stage, a trail that would only name the tab it opened in
 (Radio, Live TV) keeps its "Home" as its way up. One line of small
 muted text; out of room, the longest crumbs truncate first. Esc and the TV's Back
 still go back in history, restoring focus.
+That is the exact opener in the page or bar, including when both have an
+identical link and the page's one appears later. Check with
+`tests/home-focus.browser.ts` on an empty Vite fixture at `?tv=0` and `?tv=1`.
 
 ## Play on in menus
 

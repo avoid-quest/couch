@@ -203,6 +203,13 @@ a focused tile keeps its caption and rings its picture in white (2px, offset
 the tile 5% ([TV](design/tv.md)); a focused row's text inverts. A text link's
 inversion reaches a little past its words (a shadow, so nothing moves).
 
+Content navigation restores the exact opener in its page or the now-playing
+bar, even when both link to the same destination and the page loads later.
+When Home's Play becomes the playing title, lost focus follows it; a control
+the user moved to while playback started keeps its focus.
+When Stop removes the focused bar, lost focus returns to the same page's
+primary control; navigation and a control chosen while Stop finishes keep theirs.
+
 **One hover language.** A pointer brightens; only the keys invert. Media
 lights up: a pointer over a tile or a row makes its picture glow in its own
 first colour (`--item-light`, read the first time a pointer or focus reaches

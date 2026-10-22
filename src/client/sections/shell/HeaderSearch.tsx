@@ -153,6 +153,8 @@ export function HeaderSearch({ className }: { className?: string }) {
             // The keys take the palette's selection back from the pointer (index.css: cmdk).
             list.current?.removeAttribute("data-pointer");
             const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+            // cmdk consumes modified Up/Down too; keep text selection and caret shortcuts native.
+            if (!plain && event.key.startsWith("Arrow")) { event.stopPropagation(); return; }
             if (event.key === "Enter") {
               if (event.nativeEvent.isComposing || composing.current || event.nativeEvent.keyCode === 229) { event.preventDefault(); return; }
               // Closed, Enter submits without the Search button, as Type on TV does; the TV's OK opens the palette instead.

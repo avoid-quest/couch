@@ -21,12 +21,12 @@ window.runDesktopInteractionsRegression = () => {
     (document.activeElement as HTMLElement)?.blur();
     assert(!key(document.body, "ArrowRight", { shiftKey: true }).defaultPrevented, "Shift+Arrow was prevented");
   });
-  check("Modified Down stays in the search field", () => {
+  check("Modified arrows stay native in the search field", () => {
     const input = document.querySelector<HTMLInputElement>("#media-search")!;
     assert(!!input, "Pair a scratch Couch first");
-    for (const modifier of ["shiftKey", "ctrlKey", "metaKey", "altKey"]) {
+    for (const modifier of ["shiftKey", "ctrlKey", "metaKey", "altKey"]) for (const arrow of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) {
       input.focus();
-      assert(!key(input, "ArrowDown", { [modifier]: true }).defaultPrevented && document.activeElement === input, `${modifier}+Down left search`);
+      assert(!key(input, arrow, { [modifier]: true }).defaultPrevented && document.activeElement === input, `${modifier}+${arrow} was consumed or left search`);
     }
     input.blur();
   });
