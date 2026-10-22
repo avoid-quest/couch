@@ -35,8 +35,10 @@ export function useItemLight(thumbnail?: string | ((item: HTMLElement) => string
   const credentials = useContext(SessionGateContext)?.credentials;
   const ask = (event: SyntheticEvent<HTMLElement>) => {
     const item = event.currentTarget, src = typeof thumbnail === "function" ? thumbnail(item) : thumbnail;
+    // No picture now (a row's image failed to its cover): no light, not the last picture's.
+    if (!src || !/^(https?|blob):/.test(src)) { delete item.dataset.itemLight; item.style.removeProperty("--item-light"); return; }
     // Lit already for this picture, or reading it; a read that failed is tried again on the next hover.
-    if (!src || !/^(https?|blob):/.test(src) || item.dataset.itemLight === src) return;
+    if (item.dataset.itemLight === src) return;
     item.dataset.itemLight = src;
     const paint = (art: Art | null) => {
       // An item showing another picture by the time this one is read keeps its own.
