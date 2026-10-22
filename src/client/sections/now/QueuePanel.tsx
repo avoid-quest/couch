@@ -182,9 +182,9 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       })}</ul></>}
       {/* What Autoplay picked continues the list, quieter than what someone queued. */}
       {autoplayUpcoming.length > 0 && <><h3 className={cn("text-sm text-muted-foreground", upNext.length > 0 && "pt-4")}>Then from {autoplay!.contextTitle}</h3>
-        <ul aria-label="Autoplay" className="m-0 list-none divide-y border-y p-0 opacity-60">{autoplayUpcoming.map(entry => {
+        <ul aria-label="Autoplay" className="m-0 list-none divide-y border-y p-0">{autoplayUpcoming.map(entry => {
           const { time, length } = board(entry);
-          return <QueueRow key={entry.id} entry={entry} meta={length ?? undefined} time={time} />;
+          return <QueueRow key={entry.id} entry={entry} meta={length ?? undefined} time={time} quiet />;
         })}</ul></>}
       {autoplayFinding && <p className="text-sm text-muted-foreground">Finding the next item…</p>}
     </div> : <p className="text-sm text-muted-foreground">Nothing queued.</p>}
@@ -198,11 +198,12 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
 
 // One target that plays the entry, with its other verbs in its menu. An entry's page holds only Play and Save, so the
 // row keeps its "…". Its start time ends the row as a board line does: the name heavy, the time light (docs/design.md).
-function QueueRow({ entry, meta, time, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; time?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
+// `quiet` mutes its title (what Autoplay picked), leaving its meta and links at their contrast.
+function QueueRow({ entry, meta, time, onPlay, disabled, verbs, quiet = false }: { entry: QueueEntry; meta?: string; time?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps; quiet?: boolean }) {
   const actions = useQueueActions(verbs);
   const options = useItemMenu(verbs ? actions : browserActions(queuePageUrl(entry)));
   meta = metaLine(entry.subtitle, meta);
-  const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className="line-clamp-2 text-base font-medium break-words">{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
+  const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className={cn("line-clamp-2 text-base font-medium break-words", quiet && "text-muted-foreground")}>{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 flex-wrap items-center gap-2 py-3", options.item.className)}>
     {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}${time ? ` at ${time}` : ""}`} disabled={disabled} onClick={onPlay} className="text-foreground h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
     <ItemMenu menu={options} title={entry.title} />
