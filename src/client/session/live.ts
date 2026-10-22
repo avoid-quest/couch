@@ -5,7 +5,7 @@ import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 
 type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
-type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
+type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; descriptions: number; ice: number };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 // The browser's own capture errors are terse ("Permission denied", which Chromium also throws when the picker is
@@ -28,6 +28,11 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   let publication: Publication | undefined;
   let receiver: Receiver | undefined;
   const publishers = new Map<string, Peer>();
+  const waiting = new Map<string, LivePeer>();
+  // Closing a peer need not settle its pending browser operation. Count it
+  // until settlement, including across publication stop/start in this session.
+  let negotiating = 0;
+  let negotiationTimer: ReturnType<typeof setTimeout> | undefined;
   const closeReceiver = () => {
     const current = receiver;
     receiver = undefined;
@@ -51,7 +56,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   };
   const makePeer = (peerId: string): Peer => {
     const connection = new RTCPeerConnection({ iceServers: options.iceServers });
-    const peer: Peer = { connection, candidates: [], work: Promise.resolve() };
+    const peer: Peer = { connection, candidates: [], work: Promise.resolve(), descriptions: 0, ice: 0 };
     connection.onicecandidate = event => {
       if (!closed && (receiver?.peer === peer || publishers.get(peerId) === peer)) options.send({ type: "liveSignal", peerId, signal: { candidate: event.candidate ? { ...event.candidate.toJSON(), candidate: event.candidate.candidate } : null } });
     };
@@ -62,6 +67,13 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     const peer = current?.peer ?? publishers.get(message.peerId);
     if (!peer) return;
     const active = () => !closed && (receiver?.peer === peer || publishers.get(message.peerId) === peer);
+    // Bound browser work for this grant even when an operation stalls. Reconnects get a new peer.
+    const excess = message.signal.description ? ++peer.descriptions > 4 : ++peer.ice > 64;
+    if (excess) {
+      const reason = new Error("Too much signaling for this live peer.");
+      if (current) failReceiver(current, reason); else failPublisher(message.peerId, peer, reason);
+      return;
+    }
     peer.work = peer.work.then(async () => {
       if (!active()) return;
       const { description, candidate } = message.signal;
@@ -98,10 +110,25 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (active()) failPublisher(target.peerId, peer, reason);
     }
   };
+  // Start at most four offers per 100 ms, with four browser operations in flight.
+  // A 100-listener burst reaches its last offer in about 2.5 s without blocking commands.
+  const negotiate = () => {
+    negotiationTimer = undefined;
+    for (const [id, target] of waiting) {
+      if (negotiating >= 4) break;
+      waiting.delete(id);
+      negotiating++;
+      void startPublisher(target).finally(() => { negotiating--; });
+    }
+    if (waiting.size || negotiating) negotiationTimer = setTimeout(negotiate, 100);
+  };
   const closePublication = () => {
     generation++;
     const current = publication;
     publication = undefined;
+    clearTimeout(negotiationTimer);
+    negotiationTimer = undefined;
+    waiting.clear();
     for (const peer of publishers.values()) peer.connection.close();
     publishers.clear();
     if (current) { stopUpload(current); stopTracks(current.capture); }
@@ -180,7 +207,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       }
       const wanted = new Set(message.peers.map(peer => peer.peerId));
       for (const [id, peer] of publishers) if (!wanted.has(id)) { publishers.delete(id); peer.connection.close(); }
-      for (const target of message.peers) void startPublisher(target);
+      for (const id of waiting.keys()) if (!wanted.has(id)) waiting.delete(id);
+      for (const target of message.peers) if (!publishers.has(target.peerId)) waiting.set(target.peerId, target);
+      if (negotiationTimer === undefined && waiting.size) negotiate();
     },
     play(command: PlaybackCommand): boolean {
       if (closed) return false;

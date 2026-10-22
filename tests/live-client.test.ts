@@ -241,6 +241,101 @@ test("the capture can publish to another tab on the same device", () => check(`
   assert.equal(signals[0].peerId, "other-tab");
 `));
 
+test("a hundred requested peers negotiate in paced batches and repeated announcements do not duplicate offers", () => check(`
+  const source = await session.start({ kind: "microphone" });
+  const targets = Array.from({ length: 100 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: false, sound: true }));
+  const announcement = { type: "livePeers", sourceId: source.id, peers: targets };
+  session.receive(announcement);
+  session.receive(announcement);
+  await flush();
+  assert.equal(peers.length, 4, "the burst cannot create every browser connection at once");
+  assert.equal(signals.length, 4);
+  advance(99); await flush();
+  assert.equal(peers.length, 4, "a completed offer still observes the pacing interval");
+  advance(1); await flush();
+  assert.equal(signals.length, 8);
+  for (let i = 0; i < 24; i++) { advance(100); await flush(); }
+  assert.equal(signals.length, 100);
+  assert.equal(new Set(signals.map(message => message.peerId)).size, 100);
+  assert.ok(peers.every(peer => peer.tracks.length === 1 && peer.tracks[0].kind === "audio"));
+  assert.equal(unreachable().length, 0);
+  // These are mocked browser operations, not evidence of 100 negotiated media paths.
+`));
+
+for (const operation of ["createOffer", "setLocalDescription"]) for (const cancellation of ["peer removal", "publication restart"])
+  test(`${operation} retains canceled work in the limit through ${cancellation}`, () => check(`
+  let source = await session.start({ kind: "microphone" });
+  const pending = [];
+  let active = 0, peak = 0;
+  RTCPeerConnection.prototype[${JSON.stringify(operation)}] = function () {
+    const work = Promise.withResolvers();
+    pending.push(work); peak = Math.max(peak, ++active);
+    // close() deliberately does not settle an outstanding browser promise.
+    return work.promise.finally(() => active--);
+  };
+  const announce = round => session.receive({ type: "livePeers", sourceId: source.id,
+    peers: Array.from({ length: 4 }, (_, i) => ({ peerId: "round-" + round + "-" + i, deviceId: "device-" + i, picture: false, sound: true })) });
+  announce(0); await flush();
+  advance(5000); await flush();
+  assert.equal(pending.length, 4);
+  for (let round = 1; round <= 3; round++) {
+    if (${JSON.stringify(cancellation)} === "publication restart") {
+      await session.end();
+      assert.ok(captures.at(-1).getTracks().every(track => track.stopped));
+      source = await session.start({ kind: "microphone" });
+    }
+    announce(round); advance(100); await flush();
+    assert.equal(active, 4, "canceling a target must not release its unsettled operation");
+    assert.equal(pending.length, 4);
+    assert.ok(peers.every(peer => peer.connectionState === "closed"));
+  }
+  pending[0].resolve({ type: "offer", sdp: "stale" }); await flush();
+  assert.equal(active, 3);
+  advance(99); await flush();
+  assert.equal(pending.length, 4, "settlement still respects offer pacing");
+  advance(1); await flush();
+  assert.equal(pending.length, 5, "one settled operation releases exactly one slot");
+  assert.equal(active, 4);
+  pending[1].reject(new Error("canceled browser operation")); await flush();
+  advance(100); await flush();
+  assert.equal(pending.length, 6, "rejection also releases exactly one slot");
+  assert.equal(active, 4);
+  assert.equal(unreachable().length, 0, "late canceled failures cannot fail a replacement");
+  await session.end();
+  for (const work of pending) work.resolve({ type: "offer", sdp: "stale" });
+  await flush(); advance(10000); await flush();
+  assert.equal(active, 0);
+  assert.equal(peak, 4);
+  assert.equal(peers.length, 6);
+  assert.equal(signals.length, 0, "canceled offers cannot revive an ended publication");
+  assert.ok(peers.every(peer => peer.connectionState === "closed"));
+  assert.equal(timers.size, 0);
+`));
+
+test("excess signaling fails only that peer even when a browser operation is stalled", () => check(`
+  const source = await session.start({ kind: "microphone" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "healthy", deviceId: "other", picture: false, sound: true }] });
+  await flush();
+  session.play(direct());
+  let release;
+  peers[1].setRemoteDescription = () => new Promise(resolve => { release = resolve; });
+  session.receive({ type: "liveSignal", peerId: "peer", signal: { description: { type: "offer", sdp: "slow" } } });
+  await flush();
+  for (let i = 0; i < 1000; i++) session.receive({ type: "liveSignal", peerId: "peer", signal: { candidate: { candidate: "candidate" } } });
+  assert.equal(unreachable().length, 1, "a flood reports one bounded failure");
+  assert.equal(unreachable()[0].peerId, "peer");
+  assert.equal(peers[1].connectionState, "closed");
+  assert.notEqual(peers[0].connectionState, "closed", "the independent publication remains alive");
+  release();
+  for (let i = 0; i < 100; i++) await flush();
+  assert.equal(peers[1].candidates.length, 0, "closed peers discard pending browser work");
+  assert.equal(unreachable().length, 1);
+  session.play(direct({ livePeerId: "reconnected" }));
+  session.receive({ type: "liveSignal", peerId: "reconnected", signal: { description: { type: "offer", sdp: "valid" } } });
+  await flush();
+  assert.equal(signals.at(-1).signal.description.type, "answer");
+`));
+
 test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () => check(`
   const source = await session.start({ kind: "screen" });
   assert.equal(uploads.length, 0, "Publish starts no recording");
