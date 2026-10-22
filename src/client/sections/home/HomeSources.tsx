@@ -121,8 +121,10 @@ export function SourcesLine() {
 function SourceChip({ title, meta, failing = false, href, onClick, menu = [], ...props }: { title: string; meta?: string; failing?: boolean; href?: string; onClick: () => void; menu?: MenuAction[] } & Omit<ComponentProps<typeof Button>, "title" | "onClick" | "children">) {
   const options = useItemMenu(menu);
   const body = <><span className={cn(failing && "text-muted-foreground")}>{title}</span>{(failing || meta) && <span className="font-normal text-muted-foreground">{failing ? "Couldn't load" : meta}</span>}</>;
+  // A label replaces the chip's words, so it says the failure too.
+  const label = props["aria-label"] && failing ? `${props["aria-label"]}, couldn't load` : props["aria-label"];
   return <li {...options.item} className={cn("relative flex", options.item.className)}>
-    <Button variant="secondary" {...options.target} {...props} asChild={!!href} className={cn("text-body font-normal", options.shown.length && "pr-10")} onClick={(event: MouseEvent<HTMLElement>) => {
+    <Button variant="secondary" {...options.target} {...props} aria-label={label} asChild={!!href} className={cn("text-body font-normal", options.shown.length && "pr-10")} onClick={(event: MouseEvent<HTMLElement>) => {
       if (href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
       event.preventDefault();
       onClick();
