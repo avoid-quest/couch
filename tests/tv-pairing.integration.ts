@@ -147,3 +147,31 @@ test("a paired TV is still a TV after Core restarts", async () => {
     assert.deepEqual([seen?.online, seen?.tv], [false, true]);
   } finally { await hub.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+test("a Device is a TV again when a plain tab newer than its TV tab closes", async () => {
+  const f = await fixture();
+  const sockets: WebSocket[] = [];
+  try {
+    const request = await f.ask();
+    assert.equal((await f.approve(request.code, f.admin)).status, 200);
+    const { token } = await (await f.poll(request.code, request.secret)).json() as { token: string };
+    const open = (tv: boolean) => { const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&device=${request.id}${tv ? "&tv=1" : ""}`, { headers: { Origin: f.hub.origin } }); sockets.push(socket); return socket; };
+    // Resolves once the socket is told this Device's TV flag is `tv`.
+    const told = (socket: WebSocket, tv: boolean) => new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`The Device was never told tv: ${tv}.`)), 5_000);
+      const read = (data: WebSocket.RawData) => {
+        const message = JSON.parse(String(data)) as ServerMessage;
+        if (message.type === "state" && message.state.devices?.find(device => device.id === request.id)?.tv === tv) { clearTimeout(timer); socket.off("message", read); resolve(); }
+      };
+      socket.on("message", read);
+    });
+    const tv = open(true);
+    await told(tv, true);
+    const plainSeen = told(tv, false);
+    const plain = open(false);
+    await plainSeen;
+    const back = told(tv, true);
+    plain.close();
+    await back;
+  } finally { for (const socket of sockets) socket.terminate(); await f.close(); }
+});

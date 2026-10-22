@@ -1686,6 +1686,9 @@ export async function createHub(options: HubOptions) {
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
+        // The Device is a TV while its newest tab is; with none left it stays what it last was.
+        const next = newest(deviceOf(socket));
+        if (next) store.saveDeviceTv(deviceOf(socket), next.data.tv);
         // Any receiver of a Direct live input, not only the one reporting, hands its peer to its Device's older tab.
         const receiving = new Set(all().filter(playback => live.receivers(playback.id).includes(socket)));
         live.disconnect(socket);
