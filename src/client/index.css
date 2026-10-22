@@ -142,6 +142,14 @@ body { min-width: 0; }
   [data-media-tile]:where(:not(.tv-presentation *)):not(:disabled, :focus-visible):hover [data-tile-caption] { background: rgb(255 255 255 / 10%); }
 }
 [data-media-tile]:where(:not(.tv-presentation *)):not(:disabled, :focus-visible):active [data-tile-caption] { background: rgb(255 255 255 / 20%); }
+/* A shelf lays its tiles on one grid (Shelf.tsx): artwork, caption, links, then a sibling such as Continue's Details,
+   each row as tall as its tallest tile (subgrid). Captions end level and the links line up without reserving room for a
+   second title line no tile in the shelf has; each meta line still follows its own title. */
+[data-shelf-row] { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; grid-template-rows: repeat(4, auto); row-gap: 0; }
+[data-shelf-row] > li { grid-row: span 4; display: grid; grid-template-rows: subgrid; row-gap: 0; }
+[data-shelf-row] > li > [data-tile] { grid-row: span 3; display: grid; grid-template-rows: subgrid; row-gap: 0; }
+[data-shelf-row] [data-media-tile] { grid-row: span 2; display: grid; grid-template-rows: subgrid; row-gap: .75rem; }
+[data-shelf-row] [data-tile-caption] { min-height: 0; }
 @media (hover: hover) and (pointer: fine) {
   [data-tile-menu]:where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
   [data-tile]:is(:hover, :focus-within) [data-tile-menu] { opacity: 1; }

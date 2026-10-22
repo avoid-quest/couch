@@ -226,11 +226,14 @@ page, or a station's `radio:` source and stream), matched against what the
 looked-at Playback plays.
 
 **`MediaTile`**: one Button around `MediaArtwork` at its shelf's shape
-(`--tile-art` sets the height: posters 18rem, frames 11rem, squares 12rem,
-circles 10rem), a title of up to two lines and one meta line, plus a
-`DurationBar` on Continue. The caption always keeps the room of two title
-lines and a meta line, so a shelf's tiles end level while each meta line
-follows its own title. A pointer over a tile draws a hairline round its
+(`--tile-art` sets the height: posters 18rem, frames 11rem, or half the column on a
+narrow phone, squares 12rem, circles 10rem), a title of up to two lines and
+one meta line, plus a `DurationBar` on Continue. A shelf lays its tiles on one
+grid (artwork, caption, links, a sibling such as Continue's Details; CSS
+subgrid), each row as tall as its tallest tile: captions end level and links
+line up, with no room kept for a second title line no tile has, while each
+meta line follows its own title. Outside a shelf (a wrapping grid) the caption
+keeps the room of two title lines and a meta line. A pointer over a tile draws a hairline round its
 artwork and tints its caption ([Hover](../design.md#tokens)); where the press
 plays or resumes, the artwork also dims under a white Play disc, for a pointer
 or keyboard focus. The "…" sits over the end of the

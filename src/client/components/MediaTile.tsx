@@ -12,8 +12,11 @@ import { ArtLevel, useLevel } from "./Level";
 export { artAspect as tileAspect, type ArtShape as TileShape };
 /** A media item's shape (art-shape.ts): an episode is a frame, the rest go by their source. */
 export const tileShape = (source: string | undefined, episode: boolean) => artShape(source, episode ? "episode" : "media");
-// A tile's artwork height by its shelf's shape, so posters, frames and squares carry about the same weight.
-const tileHeight = { poster: "[--tile-art:18rem]", square: "[--tile-art:12rem]", video: "[--tile-art:11rem]", round: "[--tile-art:10rem]" } as const satisfies Record<ArtShape, string>;
+// A tile's artwork height by its shelf's shape, so posters, frames and squares carry about the same weight; a frame on a
+// 320px phone stays narrower than the column, so its "…" and the next tile show.
+const tileHeight = { poster: "[--tile-art:18rem]", square: "[--tile-art:12rem]", video: "[--tile-art:min(11rem,calc((100vw-2*var(--gutter))*.5))]", round: "[--tile-art:10rem]" } as const satisfies Record<ArtShape, string>;
+// Its width follows from that height, set outright so a shelf's grid sizes its columns by it.
+const tileWidth = { poster: "w-[calc(var(--tile-art)*2/3)]", square: "w-(--tile-art)", video: "w-[calc(var(--tile-art)*16/9)]", round: "w-(--tile-art)" } as const satisfies Record<ArtShape, string>;
 
 /**
  * One media item as a single focus stop whose press does its main verb: contained artwork, a title
@@ -48,7 +51,7 @@ export function MediaTile({ title, meta, context, thumbnail, shape, own = shape,
   const options = useItemMenu(menu);
   const level = useLevel(source);
   const body = <>
-    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background", artAspect[shape], dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
+    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden bg-background", artAspect[shape], tileWidth[shape], dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
       <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover")} />
       {/* Where the press plays, a pointer or keyboard focus dims the artwork under a Play disc (index.css); never on the TV. */}
       {plays && <span data-tile-hover aria-hidden="true" className="absolute inset-0 grid place-items-center"><span className="grid size-12 place-items-center rounded-full bg-foreground text-background"><Play className="size-5 translate-x-px fill-current" /></span></span>}

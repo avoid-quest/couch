@@ -24,6 +24,6 @@ export function Shelf({ title, label = title, time, href, loading = false, child
       {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}
     </header>
     {/* It scrolls by wheel, trackpad, scrollbar or focus; the TV, which moves by focus, hides the scrollbar. */}
-    <ol data-nav-row aria-label={label} className="-m-1 flex scroll-px-1 gap-4 overflow-x-auto p-1 pb-3 [scrollbar-width:thin] tv:-m-4 tv:scroll-px-4 tv:p-4 tv:[scrollbar-width:none]">{children}</ol>
+    <ol data-nav-row data-shelf-row aria-label={label} className="-m-1 flex scroll-px-1 gap-4 overflow-x-auto p-1 pb-3 [scrollbar-width:thin] tv:-m-4 tv:scroll-px-4 tv:p-4 tv:[scrollbar-width:none]">{children}</ol>
   </section>;
 }

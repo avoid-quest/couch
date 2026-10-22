@@ -192,7 +192,7 @@ export function HomePage() {
           aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)}>
           <DurationBar duration={item.duration} position={item.position} />
         </MediaTile>
-        <ContentLink className="inline-flex min-h-11 items-center text-sm" href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`}>Details</ContentLink>
+        <ContentLink className="ml-1 inline-flex min-h-11 items-center text-sm" href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`}>Details</ContentLink>
       </li>)}
     </Shelf>,
 
