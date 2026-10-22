@@ -218,8 +218,8 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 .player-band { padding-bottom: max(.5rem, env(safe-area-inset-bottom)); position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
 /* Over a picture the controls sit on scrims only, as YouTube's, Netflix's and Apple's do: a soft black ramp drawn
    behind each band and past its edge (::before), never a solid bar, so the band's own box is just its controls, and
-   --bottom-bar, which subtitles and panels clear, is their height. The ramp eases from 70% at the screen's edge to 50%
-   where the controls start (white text keeps 4:1 on a white frame) and out to nothing over 4rem. Their muted ink is
+   --bottom-bar, which subtitles and panels clear, is their height. The ramp eases from 82% at the screen's edge to 70%
+   where the controls start (white text keeps 7:1 on a white frame) and out to nothing over 4rem. Their muted ink is
    the white ink made translucent, 85% white. Everything that opens over the picture (menus, Up next, the mixer's
    Popover, the Next card) is one translucent black, --player-surface, as YouTube's gear menu is (60%): the picture shows through,
    a little darker than YouTube's so subtitles behind a panel don't fight its text. */
@@ -229,7 +229,11 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 /* The band's and the now-playing bar's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
 :root { --player-target: max(44px, 2.25rem); }
 .player-video-controls { --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; isolation: isolate; }
-.player-video-controls::before { content: ""; position: absolute; inset-inline: 0; z-index: -1; pointer-events: none; --ramp: rgb(0 0 0 / 70%), rgb(0 0 0 / 50%) calc(100% - 4rem), rgb(0 0 0 / 30%) calc(100% - 3rem), rgb(0 0 0 / 13%) calc(100% - 1.75rem), rgb(0 0 0 / 3%) calc(100% - .75rem), transparent; }
+.player-video-controls::before { content: ""; position: absolute; inset-inline: 0; z-index: -1; pointer-events: none; --ramp: rgb(0 0 0 / 82%), rgb(0 0 0 / 70%) calc(100% - 4rem), rgb(0 0 0 / 42%) calc(100% - 3rem), rgb(0 0 0 / 18%) calc(100% - 1.75rem), rgb(0 0 0 / 4%) calc(100% - .75rem), transparent; }
+/* The band's Play/Pause is the player's one large control, as Apple's and YouTube's fullscreen transports lead with
+   theirs; the bar's grows into it as the bar becomes the band. */
+.player-band button[data-play-button] { width: calc(var(--player-target) * 1.3); height: calc(var(--player-target) * 1.3); }
+.player-band button[data-play-button] svg { width: 2rem; height: 2rem; }
 .player-band.player-video-controls::before { bottom: 0; height: calc(100% + 4rem); background: linear-gradient(to top, var(--ramp)); }
 .player-top.player-video-controls::before { top: 0; height: calc(100% + 4rem); background: linear-gradient(to bottom, var(--ramp)); }
 .player-video-controls > * { pointer-events: auto; }

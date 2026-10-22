@@ -265,9 +265,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>}
       {osd && <div data-player-heading className={cn("drag-region window-controls-inset grid items-center gap-x-3 px-(--gutter)", back ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]")}>
         {back}
-        <h1 title={title} className="min-w-0 truncate text-lg font-semibold tracking-tight">{linkedTitle}</h1>
-        <div className="flex shrink-0 items-baseline gap-4 text-sm text-muted-foreground tabular-nums">{sharing && <LiveSharingStatus />}{ends && <p data-player-ends>{ends}</p>}{tvPresentation && <DigitalClock />}</div>
-        {(byline || context) && <div className={cn("-mt-1.5 flex min-w-0 items-baseline gap-x-3 text-sm text-muted-foreground", back ? "col-start-2 col-end-4" : "col-span-full")}>{byline && <p className="min-w-0 truncate">{byline}</p>}{context}</div>}
+        <h1 title={title} className="min-w-0 truncate text-2xl leading-tight font-semibold tracking-[-.02em] md:text-3xl">{linkedTitle}</h1>
+        <div className="flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">{sharing && <LiveSharingStatus />}{ends && <p data-player-ends>{ends}</p>}{tvPresentation && <DigitalClock />}</div>
+        {(byline || context) && <div className={cn("flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base", back ? "col-start-2 col-end-4" : "col-span-full")}>{byline && <p className="min-w-0 truncate">{byline}</p>}{context}</div>}
       </div>}
     </div>
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
@@ -276,7 +276,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         <div ref={art} data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         {/* The media title leads; related content and secondary metadata follow, then what's wrong, if anything. */}
         <div data-player-audio-copy className="grid min-w-0 gap-2">
-          <h1 className="min-w-0 line-clamp-2 text-4xl font-semibold tracking-tight break-words md:text-5xl" title={title}>{linkedTitle}</h1>
+          <h1 className="min-w-0 line-clamp-2 text-4xl leading-[.98] font-semibold tracking-[-.035em] break-words md:text-6xl" title={title}>{linkedTitle}</h1>
           {/* Where it plays leads the line under the title, as in the now-playing bar. */}
           {elsewhere && at ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"><PlaysOn at={at} />{context}</div> : context}
           {meta && <p className="truncate text-sm text-muted-foreground">{meta}</p>}

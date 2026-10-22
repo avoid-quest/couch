@@ -97,7 +97,9 @@ export async function runPlayerStatusRegression() {
     await review.state("loading", {buffering: true, video: true});
     // Phones leave Volume out of the row (display: none), so only the shown controls are measured.
     const controls = [...document.querySelectorAll<HTMLElement>('.player-control-row button')].filter(button => button.getClientRects().length).map(button => button.getBoundingClientRect());
-    assert(controls.every(rect => Math.abs(rect.y - controls[0]!.y) < 1), "Player controls wrap onto another row");
+    // Play/Pause is the band's one large control, so the row is one line by its centres.
+    const middle = (rect: DOMRect) => rect.y + rect.height / 2;
+    assert(controls.every(rect => Math.abs(middle(rect) - middle(controls[0]!)) < 1), "Player controls wrap onto another row");
     assert(controls.every(rect => rect.left >= 0 && rect.right <= innerWidth && rect.width >= 44), "Video controls overflow or shrink touch targets");
     const ordered = controls.toSorted((a, b) => a.left - b.left);
     assert(ordered.every((rect, index) => index === 0 || rect.left >= ordered[index - 1]!.right), "Player touch targets overlap");
