@@ -102,8 +102,10 @@ type MixerProps = Props & { tv?: boolean; order?: Order; filter?: Filter | null;
  */
 export function Mixer({ state, connected, run, tv = false, order, filter = null, query = "", onFilter, onQuery, close }: MixerProps) {
   const { choose, inSync, rows } = picker(state, { here: deviceId() });
-  const { playing, rest, offline, listed } = arrange(rows, order, filter, query);
-  const summary = counts(rows), many = listed > crowded;
+  // The filter and search apply only while their controls show: a device going offline or a count clearing drops them.
+  const summary = counts(rows), many = arrange(rows, order).listed > crowded;
+  const offered = many && summary.some(item => item.filter === filter) ? filter : null;
+  const { playing, rest, offline } = arrange(rows, order, offered, many ? query : "");
   // One device sounding: the Volume above is its level, so its row doesn't repeat the fader.
   const sole = soleSound(rows);
   const sounds = sounding(state, connected);
@@ -119,7 +121,7 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
       </div>
       {inSync !== undefined && <div data-nav-row className="flex min-h-11 items-center justify-between gap-4"><Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">In sync</Label><Switch id="where-it-plays-in-sync" checked={inSync} onCheckedChange={on => void run({ type: "inSync", inSync: on })} /></div>}
       {summary.length > 0 && (many
-        ? <ToggleGroup data-nav-row type="single" aria-label="Show" spacing={1} value={filter ?? ""} onValueChange={next => onFilter?.(next ? next as Filter : null)} className="-ml-2 max-w-full flex-wrap">
+        ? <ToggleGroup data-nav-row type="single" aria-label="Show" spacing={1} value={offered ?? ""} onValueChange={next => onFilter?.(next ? next as Filter : null)} className="-ml-2 max-w-full flex-wrap">
           {summary.map(item => <ToggleGroupItem key={item.filter} value={item.filter} className="rounded-none border-b-2 border-transparent px-2 font-normal text-muted-foreground data-[state=on]:border-foreground data-[state=on]:bg-transparent data-[state=on]:text-foreground">{item.label} <span className="tabular-nums">{item.count}</span></ToggleGroupItem>)}
         </ToggleGroup>
         : <p data-mixer-summary className="text-sm text-muted-foreground tabular-nums">{summary.map(item => `${item.label} ${item.count}`).join(", ")}</p>)}

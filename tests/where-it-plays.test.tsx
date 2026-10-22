@@ -207,3 +207,14 @@ test("past eight devices the counts filter the list and a search field finds a d
   expect(all.filter(item => item.type === "li").length).toBe(1);
   expect(elements(Mixer({ state, connected: true, run: async () => true, query: "speaker 1" })).filter(item => item.type === "li").length).toBe(1);
 });
+
+test("a filter or search whose control has gone no longer filters the list", () => {
+  const many = Array.from({ length: 10 }, (_, index) => ({ id: `d${index}`, name: `Speaker ${index}`, online: index < 8, volume: 50, muted: false, sharing: { audio: true, video: true } }));
+  const outputs = [{ deviceId: "d4", picture: false, sound: true }];
+  const state = { ...waiting(0), devices: many, outputs, playbacks: [{ id: "p", status: "playing", outputs }], liveSources: [] } as unknown as ClientSessionState;
+  const rows = (props: { filter?: "sound" | "behind"; query?: string }) => elements(Mixer({ state, connected: true, run: async () => true, ...props })).filter(item => item.type === "li").length;
+  expect(rows({ filter: "sound" })).toBe(8);
+  expect(rows({ query: "speaker 1" })).toBe(8);
+  const crowded = { ...state, devices: many.map(device => ({ ...device, online: true })) } as ClientSessionState;
+  expect(elements(Mixer({ state: crowded, connected: true, run: async () => true, filter: "behind" })).filter(item => item.type === "li").length).toBe(10);
+});
