@@ -43,6 +43,9 @@ test("a picture read before comes from Core's memory, not its host, and still on
   // What isn't a picture is never kept: the next read asks the host again.
   await artworkResponse(ask("https://img.example/page"), paired, picture("text/html"), cache);
   expect((await artworkResponse(ask("https://img.example/page"), paired, picture("image/jpeg"), cache)).status).toBe(200);
+  // Nor is an empty picture, which is no picture at all.
+  expect((await artworkResponse(ask("https://img.example/empty.png"), paired, picture("image/png", new Uint8Array()), cache)).status).toBe(502);
+  expect(cache.get("https://img.example/empty.png")).toBeUndefined();
 });
 
 test("the cache keeps the newest pictures within its byte budget", () => {

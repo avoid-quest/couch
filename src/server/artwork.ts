@@ -51,6 +51,7 @@ export async function artworkResponse(request: Request, authorize: () => void, f
     const type = upstream.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
     if (!upstream.ok || !pictures.has(type)) { await upstream.body?.cancel(); return Response.json({ error: "That address has no picture." }, { status: 502 }); }
     const bytes = await boundedBytes(upstream, artworkSizeLimit, signal);
+    if (!bytes.byteLength) return Response.json({ error: "That address has no picture." }, { status: 502 });
     cache.set(target.href, type, bytes);
     return picture(type, bytes);
   } catch {
