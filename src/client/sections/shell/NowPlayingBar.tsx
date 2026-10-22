@@ -82,7 +82,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
         keeps its own links, so they sit outside the title's button. Those links drop their row height here and keep a
         24px hit area that doesn't push the line apart. */}
     <div className="relative flex min-w-0 items-center gap-3.5 max-sm:pr-4">
-      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-12 max-w-24 min-w-12 shrink-0 items-center justify-center overflow-hidden bg-background hover:opacity-80 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-24 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
+      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-12 max-w-24 min-w-12 shrink-0 items-center justify-center overflow-hidden bg-background [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-24 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
       <div data-bar-title className="grid min-w-0 flex-1">
         <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start p-0 text-left text-[.9375rem] leading-5 font-medium text-foreground touch:min-h-0" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span>{sounding(state, connected) && <Level moving className="ml-2 shrink-0 text-[.875rem]" />}</Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}

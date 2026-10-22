@@ -4,12 +4,12 @@ import { cn } from "cn"
 import { Toggle as TogglePrimitive } from "radix-ui"
 
 const toggleVariants = cva(
-  "group/toggle inline-flex items-center justify-center gap-1 rounded-md text-sm font-medium whitespace-nowrap transition-all motion-reduce:transition-none outline-none hover:bg-foreground/15 hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 aria-pressed:bg-muted data-[state=on]:bg-muted dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/toggle inline-flex items-center justify-center gap-1 rounded-md text-sm font-medium whitespace-nowrap transition-colors motion-reduce:transition-none outline-none text-foreground/80 hover:text-foreground active:text-foreground/60 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20  aria-pressed:text-foreground data-[state=on]:text-foreground dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default: "bg-transparent",
-        outline: "border border-input bg-transparent hover:bg-foreground/15",
+        outline: "border border-input bg-transparent hover:border-foreground/40",
       },
       size: {
         default:

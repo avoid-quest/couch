@@ -150,6 +150,8 @@ export function HeaderSearch({ className }: { className?: string }) {
           onChange={event => type(event.target.value)}
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={event => { composing.current = false; type(event.currentTarget.value); }}
           onKeyDown={event => {
+            // The keys take the palette's selection back from the pointer (index.css: cmdk).
+            list.current?.removeAttribute("data-pointer");
             const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
             if (event.key === "Enter") {
               if (event.nativeEvent.isComposing || composing.current || event.nativeEvent.keyCode === 229) { event.preventDefault(); return; }
@@ -181,7 +183,7 @@ export function HeaderSearch({ className }: { className?: string }) {
       {/* On a desktop, the field's own list: under it, its width and its left edge, on the menus' ground. On a phone and
           the TV, the whole screen under the header. A press keeps the field focused (a tap or a Safari click would blur
           it first and take the list away). */}
-      {open && <CommandList ref={list} label="Suggestions" onPointerDown={event => event.preventDefault()}
+      {open && <CommandList ref={list} label="Suggestions" onPointerDown={event => event.preventDefault()} onPointerMove={event => { if (event.pointerType === "mouse" && !isTvPresentation()) event.currentTarget.setAttribute("data-pointer", ""); }}
         className="absolute inset-x-0 top-full z-30 mt-1 max-h-[min(36rem,calc(100dvh-var(--top-bar,4rem)-1rem))] rounded-md bg-popover p-1 touch:fixed touch:top-(--top-bar) touch:bottom-0 touch:mt-0 touch:max-h-none touch:rounded-none touch:bg-background touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:top-(--top-bar) tv:bottom-0 tv:mt-0 tv:max-h-none tv:rounded-none tv:bg-background tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
         {text
           ? <Typed text={text} link={link} scope={scope} labels={labels} recents={recents} connected={connected}
@@ -256,7 +258,9 @@ function useHeld() {
 function Empty({ scope, recents, onScope, onRecent, onOpen }: { scope: SearchScope; recents: string[]; onScope: (scope: Scope) => void; onRecent: (query: string) => void; onOpen: (href: string) => void }) {
   const { played } = useHeld();
   const recent = recents.slice(0, 6), continuing = played.slice(0, 6);
-  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-1.5 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:bg-muted **:[[cmdk-item]]:px-3 **:[[cmdk-item]]:data-[checked=true]:bg-foreground **:[[cmdk-item]]:data-[checked=true]:text-background tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:px-2 tv:**:[[cmdk-item]]:data-[selected=false]:bg-transparent tv:**:[[cmdk-item]]:data-[selected=false]:text-foreground";
+  // The kinds as chips (Design → Chips): a quiet fill that steps up under the pointer, the chosen one checked as a
+  // ChoiceGroup's is, and the keys' selection inverted as every focus is. On the TV, rows.
+  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-2 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:min-h-8 **:[[cmdk-item]]:gap-1.5 **:[[cmdk-item]]:rounded-full **:[[cmdk-item]]:bg-secondary **:[[cmdk-item]]:px-3.5 **:[[cmdk-item]]:data-[selected=true]:bg-fill-hover **:[[cmdk-item]]:[&>svg]:order-first **:[[cmdk-item]]:[&>svg]:-ml-1 tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:rounded-md tv:**:[[cmdk-item]]:px-2 tv:**:[[cmdk-item]]:bg-transparent";
   return <div className="grid gap-y-2 tv:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] tv:gap-x-8">
     <div data-palette-column data-palette-kinds className={chips}><CommandGroup heading="Search in"><ScopeRows items={kindScopes} scope={scope} onScope={onScope} /></CommandGroup></div>
     {(recent.length > 0 || continuing.length > 0) && <div data-palette-column className="grid content-start gap-2">
