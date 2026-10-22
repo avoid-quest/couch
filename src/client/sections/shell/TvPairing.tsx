@@ -54,7 +54,7 @@ export function TvPairing({ status, onEnterCode }: { status: ReactNode; onEnterC
       <CouchMark className="size-10" />
       <h1 id={titleId} className="text-3xl font-semibold tracking-tight">Pair with {name}</h1>
       {code
-        ? <p data-tv-pairing-code aria-label={`Code ${code.split("").join(" ")}`} className="-my-4 text-[7rem] leading-none font-semibold tracking-tight whitespace-pre tabular-nums">{groupedCode(code)}</p>
+        ? <p aria-label={`Code ${code.split("").join(" ")}`} className="-my-4 text-[7rem] leading-none font-semibold tracking-tight whitespace-pre tabular-nums">{groupedCode(code)}</p>
         : !request.isError && <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner role="presentation" aria-hidden="true" aria-label={undefined} />Getting a code…</p>}
       {code && <p className="max-w-[34rem] text-muted-foreground">Scan with a phone paired with {name}, or open <span className="text-foreground">{base.origin}/pair/tv</span> and enter the code.</p>}
       {status}

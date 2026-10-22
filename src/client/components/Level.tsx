@@ -60,5 +60,5 @@ export function useLevel(sources: string | readonly (string | undefined)[] | und
  */
 export function ArtLevel({ level, className }: { level: "moving" | "flat" | null; className?: string }) {
   if (level !== "moving") return null;
-  return <span data-art-level className={cn("absolute bottom-0 left-0 z-10 grid size-7 place-items-center bg-background text-sm text-foreground", className)}><Level moving /></span>;
+  return <span className={cn("absolute bottom-0 left-0 z-10 grid size-7 place-items-center bg-background text-sm text-foreground", className)}><Level moving /></span>;
 }

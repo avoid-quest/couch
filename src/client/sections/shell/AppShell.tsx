@@ -393,7 +393,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
 function HeaderOffline() {
   const { nativeHost, localHost, status } = useSessionGate();
   if (!isOffline(status) || (nativeHost && !localHost)) return null;
-  return <span data-header-offline className="mr-3 flex shrink-0 items-center gap-2 text-sm text-muted-foreground tv:text-base">
+  return <span className="mr-3 flex shrink-0 items-center gap-2 text-sm text-muted-foreground tv:text-base">
     <Spinner role="presentation" aria-hidden="true" aria-label={undefined} className="size-3.5" />
     <span aria-hidden="true" className="max-sm:hidden">Reconnecting…</span>
   </span>;

@@ -10,7 +10,7 @@ export function SectionRowsSettings<Id extends string>({ page, labels, layout }:
   page: string; labels: Record<Id, string>; layout: ReturnType<typeof useSectionRows<Id>>;
 }) {
   return (
-    <SettingsSection data-section-rows={page.toLowerCase()}>
+    <SettingsSection>
       <ol aria-label={`${page} shelves`} className="mt-0!">
         {layout.rows.map((row, index) => <li key={row.id}>
           <Field orientation="horizontal" className="gap-3 border-b py-2">

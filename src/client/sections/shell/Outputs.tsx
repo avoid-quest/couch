@@ -124,14 +124,14 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
         ? <ToggleGroup data-nav-row type="single" aria-label="Show" spacing={1} value={offered ?? ""} onValueChange={next => onFilter?.(next ? next as Filter : null)} className="-ml-2 max-w-full flex-wrap">
           {summary.map(item => <ToggleGroupItem key={item.filter} value={item.filter} className="rounded-none border-b-2 border-transparent px-2 font-normal text-muted-foreground data-[state=on]:border-foreground data-[state=on]:bg-transparent data-[state=on]:text-foreground">{item.label} <span className="tabular-nums">{item.count}</span></ToggleGroupItem>)}
         </ToggleGroup>
-        : <p data-mixer-summary className="text-sm text-muted-foreground tabular-nums">{summary.map(item => `${item.label} ${item.count}`).join(", ")}</p>)}
+        : <p className="text-sm text-muted-foreground tabular-nums">{summary.map(item => `${item.label} ${item.count}`).join(", ")}</p>)}
       {many && <div data-nav-row className="flex pt-1"><FilterInput label="Find a device" placeholder="Find a device" value={query} onChange={value => onQuery?.(value)} className="sm:max-w-none" /></div>}
     </div>
     {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}
-    <div data-mixer-rows className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3">
+    <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3">
       {playing.length > 0 && <ul aria-label="Playing" className="grid">{playing.map(row)}</ul>}
       {rest.length > 0 && <ul aria-label="Not playing" className={cn("grid", playing.length > 0 && "mt-2 border-t pt-2")}>{rest.map(row)}</ul>}
-      {offline.length > 0 && <p data-offline className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">Offline: {offlineNames(offline)}</p>}
+      {offline.length > 0 && <p className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">Offline: {offlineNames(offline)}</p>}
     </div>
   </>;
 }
@@ -243,7 +243,7 @@ const Why = ({ reason }: Control) => reason ? <span className="ml-auto pl-6 text
  * player say it the same way: first under the title, so it reads on from it, in the ink, not the muted metadata.
  */
 export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> }) {
-  return <span data-plays-on className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>;
+  return <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>;
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:

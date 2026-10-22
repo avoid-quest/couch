@@ -118,7 +118,7 @@ export function AmbientLight({ src, anchor, className }: { src?: string; anchor:
     return () => { observer.disconnect(); for (const name of events) frame?.removeEventListener(name, place, true); };
   }, [lit, anchor, src]);
   if (!lit) return null;
-  return <div ref={layer} aria-hidden="true" data-ambient-light className={cn("ambient-light", className)}>
+  return <div ref={layer} aria-hidden="true" className={cn("ambient-light", className)}>
     {frames.map(({ id, light, leaving, still }) => light && <div key={id} data-leaving={leaving || undefined} data-still={still || undefined} className="ambient-frame"
       style={{ "--light-a": `rgb(${light.a.join(" ")})`, "--light-b": `rgb(${light.b.join(" ")})` } as CSSProperties}>
       <div className="ambient-haze" /><div className="ambient-backlight" />
