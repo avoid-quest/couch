@@ -15,6 +15,7 @@ import { queueItemLocation } from "@/detail-navigation";
 import { useShell } from "./shell-context";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "./Outputs";
@@ -52,6 +53,8 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const programme = useStationShow();
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
+  // The glass takes the playing artwork's colour (docs/design.md, Glass).
+  const light = useArtworkLight(programme?.artworkUrl || current?.thumbnail);
   if (!current) return null;
   const playback = state.playbacks?.find(item => item.id === state.playback);
   const settings = state.preferences ? { entry: current, player, ready: playbackCapabilities(state, connected).transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
@@ -69,17 +72,20 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   // (--player-target) and x; the timeline is the line along its top edge. Phones (below sm) keep Play/Pause and Open
   // player: a minimized player needs no mixer, and the player has the rest.
   const desktop = "max-sm:hidden";
-  // The bar is the player's band, minimized, on a solid surface of its own (--bar) so nothing of the page or the
-  // artwork's colour shows through it; its picture, title and controls are as large as a mini-player's.
-  return <footer data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 bg-bar px-(--gutter) py-3 [--muted-foreground:rgb(255_255_255/72%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2.5 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
-    <PlaybackTimeline state={state} connected={connected} run={run} className="bar-timeline absolute inset-x-0 top-0 z-10 -translate-y-1/2 [&_[data-time-labels]]:hidden" />
+  // The bar is the player's band, minimized: a capsule of tinted glass floating over the page, its corners and its
+  // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
+  return <div data-bar-dock className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5">
+  <footer data-now-playing aria-label="Now playing" style={roomStyle(light)} className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
+    <PlaybackTimeline state={state} connected={connected} run={run} className="bar-timeline absolute inset-x-5 top-0 z-10 -translate-y-1/2 max-sm:inset-x-4 [&_[data-time-labels]]:hidden" />
     {/* Two lines beside the artwork at its own shape, as a mini-player's. The title is the control, across the whole
         line, and the artwork a pointer target for it; the line under it keeps its own links, so they sit outside the
         title's button. Those links drop their row height here and keep a 24px hit area that doesn't push the line apart. */}
     <div className="relative flex min-w-0 items-center gap-4 max-sm:gap-3 max-sm:pr-4">
-      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-14 max-w-28 min-w-14 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-background max-sm:h-12 max-sm:min-w-12 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-28 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
+      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-14 max-w-28 min-w-14 shrink-0 items-center justify-center overflow-hidden rounded-md shadow-[0_.375rem_1rem_rgb(0_0_0/45%)] bg-black/40 max-sm:h-12 max-sm:min-w-12 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-28 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
       <div data-bar-title className="grid min-w-0 flex-1 gap-1">
-        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title font-medium text-foreground touch:min-h-0 max-sm:text-body" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span>{sounding(state, connected) && <Level moving className="ml-2 shrink-0 text-[.875rem]" />}</Button>
+        <Button variant="link" className="group/title h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title leading-tight font-medium whitespace-normal text-foreground touch:min-h-0 max-sm:text-body" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
+          {/* Two lines on wide screens; one on a phone, where the bar is narrow. Focus shows it whole. */}
+          <span className="line-clamp-2 break-words max-sm:line-clamp-1 group-focus-visible/title:line-clamp-none" title={title}>{title}</span>{sounding(state, connected) && <Level moving className="ml-2 shrink-0 text-[.875rem]" />}</Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}
         <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-meta text-muted-foreground">
           {at?.elsewhere && <PlaysOn at={at} />}
@@ -101,5 +107,6 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
       {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. */}
       <Button data-player-last variant="ghost" size="icon-lg" aria-label="Open player" title="Open player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
     </div>
-  </footer>;
+  </footer>
+  </div>;
 }
