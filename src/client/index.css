@@ -447,11 +447,12 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
    properties) over 600 ms. Without colour (a white cover, a black-and-white logo) the room is a neutral graphite. */
 @property --room-a { syntax: "<color>"; inherits: true; initial-value: #171717; }
 @property --room-b { syntax: "<color>"; inherits: true; initial-value: #0b0b0b; }
+@property --light-a { syntax: "<color>"; inherits: true; initial-value: #222; }
 @property --tone { syntax: "<color>"; inherits: true; initial-value: #1c1c1e; }
 .room { position: absolute; inset: 0; z-index: -3; pointer-events: none; overflow: hidden;
-  background: radial-gradient(55% 75% at var(--room-x, 78%) var(--room-y, 42%), color-mix(in srgb, var(--light-a, #222) 70%, var(--room-a)) , var(--room-a) 38%, transparent 82%),
+  background: radial-gradient(55% 75% at var(--room-x, 78%) var(--room-y, 42%), color-mix(in srgb, var(--light-a) 70%, var(--room-a)) , var(--room-a) 38%, transparent 82%),
     radial-gradient(70% 90% at 100% 0%, var(--room-b), transparent 70%), linear-gradient(var(--room-b), #000);
-  transition: --room-a .6s var(--ease-out), --room-b .6s var(--ease-out); }
+  transition: --room-a .6s var(--ease-out), --room-b .6s var(--ease-out), --light-a .6s var(--ease-out); }
 .room::after { content: ""; position: absolute; inset: 0; background: var(--grain); opacity: .06; }
 @media (prefers-reduced-motion: reduce) { .room { transition: none; } }
 :root { --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
