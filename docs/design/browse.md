@@ -240,8 +240,8 @@ its own, hashed from the title (OKLCH lightness .3, so white keeps 7:1, and an
 item keeps its tone everywhere), with the title large (semibold, 12% of the
 frame's width, four lines at most) at its bottom left, so a shelf of missing
 artwork isn't a row of grey squares; a frame under 8rem (a row's, the bar's or
-a suggestion's thumbnail) holds the title's first letter instead, and a
-collection a folder. An address that has loaded once in the page shows at once
+a suggestion's thumbnail) or a round one (a channel's) holds the title's first
+letter instead, since a circle would cut its words, and a collection a folder. An address that has loaded once in the page shows at once
 wherever it appears again (a tab switch, Back); only a first load fades in.
 
 ### Artwork shapes
