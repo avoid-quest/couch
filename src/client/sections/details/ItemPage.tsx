@@ -3,7 +3,7 @@ import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
-import { useRouter, useSearch } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
@@ -30,7 +30,7 @@ import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
 import { sourceLabel } from "@/source-label";
 import { usePlayOn } from "@/components/PlayOn";
-import { useDetailNavigation } from "@/detail-navigation";
+import { useDetailNavigation, useOwnSearch } from "@/detail-navigation";
 import { reorderedIds } from "@/lib/dnd";
 import { deviceName, savedNotice } from "@/copy";
 
@@ -59,9 +59,7 @@ async function readDetails(credentials: ApiCredentials, kind: Exclude<Kind, "que
 }
 
 export function ItemPage() {
-  // The page's own match, not the location: while a navigation away is pending (Play opening the player) the location
-  // is already the next page's, which names no item.
-  const { kind, id } = readItemSearch(useSearch({ strict: false }));
+  const { kind, id } = useOwnSearch(readItemSearch);
   return <section data-page="Item" className="min-w-0 space-y-6">
     {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <ItemNotFound />}
   </section>;
@@ -97,10 +95,12 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
     queryKey: [kind === "saved" ? "for-later" : kind === "history" ? "progress" : kind, "details", id],
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
-  if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
-    {query.error instanceof ApiError && query.error.status === 404 ? <ItemNotFound />
+  // An address Core can't read (400) names no item, as one that's gone (404) no longer does.
+  const gone = query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400);
+  if (!query.data || gone) return <>
+    {gone ? <ItemNotFound />
       : connected && !query.error ? <><ContentBreadcrumb radio={kind === "radio"} /><DetailSkeleton shape={kind === "radio" ? "square" : "video"} /></> : <PageHeader breadcrumb={<ContentBreadcrumb />} title="Details" />}
-    {query.error && !(query.error instanceof ApiError && query.error.status === 404) ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
+    {query.error && !gone ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
       : !connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this item.</p>}
   </>;
   const detail = query.data;

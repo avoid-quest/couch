@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { defaultStringifySearch, useLocation, useRouter } from "@tanstack/react-router";
+import { defaultStringifySearch, useLocation, useRouter, useSearch } from "@tanstack/react-router";
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { QueueEntry } from "../shared/protocol";
 import { isTvPresentation } from "./session/presentation";
@@ -17,6 +17,12 @@ export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url" |
   ...(search.cursors?.length ? { cursors: search.cursors } : {}), ...(search.page && search.page > 1 ? { page: search.page } : {}), ...(search.filter ? { filter: search.filter } : {}) })}`;
 
 /** An item or collection page's address, carrying the section it opens in (`from`) unless it already has one. */
+/**
+ * A Details or collection page's own search: its route match's, not the location's, which while a navigation away is
+ * pending (Play opening the player) already names the next page, so the page would flash "Item not found".
+ */
+export const useOwnSearch = <T,>(read: (search: Record<string, unknown>) => T) => read(useSearch({ strict: false }));
+
 export function keepSection(href: string, section: string | undefined) {
   const from = detailFrom(section);
   return from && /^\/(?:item|collection)\?/.test(href) && !/[?&]from=/.test(href) ? `${href}&from=${from}` : href;

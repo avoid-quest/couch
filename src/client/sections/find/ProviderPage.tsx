@@ -2,9 +2,9 @@ import { DetailSkeleton, MediaRowsSkeleton, MediaTilesSkeleton } from "@/compone
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
-import { collectionLocation, keepSection } from "@/detail-navigation";
+import { collectionLocation, keepSection, useOwnSearch } from "@/detail-navigation";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -28,8 +28,7 @@ import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 
 export function ProviderPage() {
-  // The page's own match, not the location, which is already the next page's while a navigation away is pending.
-  const state = readCollectionSearch(useSearch({ strict: false }));
+  const state = useOwnSearch(readCollectionSearch);
   if (!state.provider) return <section data-page="Collection">
     <PageHeader breadcrumb={<ContentBreadcrumb />} title="Collection unavailable" />
     <p className="text-muted-foreground">This collection link is incomplete or unsupported.</p>

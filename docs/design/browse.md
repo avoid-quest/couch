@@ -143,8 +143,10 @@ the rules with Remove, under a "Hide a word" field.
 
 ## Details
 
-An item that is gone reads "Item not found" with Search (the header's field)
-and Back.
+An item that is gone, or whose address names none, reads "Item not found"
+with Search (the header's field) and Back. A Details or collection page reads
+its own route's search (`useOwnSearch`), so while Play opens the player it
+stays itself (`tests/details-pending.browser.tsx`).
 
 Item pages (`/item`: History, For later, a station, an Up next entry) and
 collection pages (`/collection`: a source's home, a series, season, album,
