@@ -200,8 +200,10 @@ inversion reaches a little past its words (a shadow, so nothing moves).
 **One hover language.** A pointer brightens; only the keys invert. Media
 lights up: a pointer over a tile or a row makes its picture glow in its own
 first colour (`--item-light`, read the first time a pointer or focus reaches
-it; faint white until then) and brings its meta line up to white, over
-300 ms; its "…" appears with it, at once (a fade would start and end an animation on every row a scroll passes under the pointer). Everything else brightens: ink comes up to
+it; faint white until then) at once, and brings its meta line up to white; its
+"…" appears with it, also at once (fading the glow or the "…" would repaint, or
+start an animation, under every row a scroll passes under the pointer).
+Everything else brightens: ink comes up to
 white (a ghost control or a toggle rests at 80% white and a press dims it to
 60%), a fill steps up one notch (`secondary` to `fill-hover`; the white button
 to 85%), and an outline's edge comes up. One whose panel is open
@@ -308,8 +310,8 @@ arrives, 600 ms for colour that follows what plays.
 - When what plays changes, the room's colours and the bar's tone cross-fade
   over 600 ms, as do a letterbox's light ([Room](#room)). Reduced motion swaps
   them at once.
-- Media lights up over 300 ms (its glow, ease-out); reduced motion lands it at
-  once.
+- Media lights up at once: its glow is a shadow, and nothing animates
+  `box-shadow`; only the focus ring around it eases (150 ms).
 - No scroll entrances, staggers or scaling tiles (but the TV's lifted focus),
   nothing animates `filter` or `box-shadow`, and no loops but one:
   the **level**, three bars that rise and fall while sound comes out

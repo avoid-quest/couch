@@ -168,8 +168,10 @@ body { min-width: 0; }
    backlight's luminance (0.07), so the white caption over its edge keeps 7:1. */
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { background: none; color: inherit; }
 :is([data-tile-art], [data-row-art]) { --glow: transparent; box-shadow: 0 .75rem 2.75rem -.5rem var(--glow); outline: 0 solid var(--foreground); outline-offset: .1875rem; }
-/* The ring answers as a control does (150 ms); the glow comes up more slowly, as light does (300 ms). */
-@media (prefers-reduced-motion: no-preference) { :is([data-tile-art], [data-row-art]) { transition: box-shadow .3s var(--ease-out), outline-width .15s var(--ease-out); } }
+/* The ring answers as a control does (150 ms); the glow is there at once. A transitioned shadow repaints its blur on
+   every frame of the fade, under every tile or row the pointer (or a scroll under it) passes; a fade of a shadow on its
+   own layer cost more again, in layers and raster. */
+@media (prefers-reduced-motion: no-preference) { :is([data-tile-art], [data-row-art]) { transition: outline-width .15s var(--ease-out); } }
 :is([data-tile], [data-nav-row]):is(:has([data-media-tile]:focus-visible, [data-play]:focus-visible), :where(.tv-presentation *):has(:focus)) :is([data-tile-art], [data-row-art]) { --glow: var(--item-light, rgb(255 255 255 / 14%)); }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-art] { outline-width: .125rem; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-meta] { color: var(--foreground); }
