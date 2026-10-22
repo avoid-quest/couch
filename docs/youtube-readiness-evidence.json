@@ -1,0 +1,312 @@
+{
+  "auditDate": "2026-10-23",
+  "baseline": "8941565c967c02706ed41fcdbc3a77fd47149a81",
+  "toolchain": {
+    "bun": "1.4.2",
+    "node": "24.21.0",
+    "ytDlp": "2026.10.21",
+    "quickJs": "v0.17.0",
+    "ffmpeg": "9.0.2"
+  },
+  "pastedPlay": {
+    "beforeRevision": "c6633d5c960a4523697a9fa3110963e98b6d2433",
+    "afterRevision": "8463efac1a29b2607da96756a44c609be6380284",
+    "source": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    "before": {
+      "label": "before",
+      "loadMs": 10665.26513,
+      "processes": [
+        {
+          "inspect": false,
+          "stdoutBytes": 85431,
+          "cpuSeconds": 1.07,
+          "peakRssKiB": 117080,
+          "ms": 10431.70799,
+          "exitCode": 0
+        },
+        {
+          "inspect": true,
+          "stdoutBytes": 84931,
+          "cpuSeconds": 1.08,
+          "peakRssKiB": 116932,
+          "ms": 10526.846502,
+          "exitCode": 0
+        }
+      ],
+      "extractions": 2,
+      "totalHelperCpuSeconds": 2.1500000000000004,
+      "totalStdoutBytes": 170362,
+      "metadata": {
+        "title": "Me at the zoo",
+        "duration": 19,
+        "creator": {
+          "title": "jawed",
+          "url": "https://www.youtube.com/channel/UC4QobU6STFB0P71PMvOGN5A"
+        },
+        "thumbnail": true
+      }
+    },
+    "after": {
+      "label": "after",
+      "loadMs": 10871.723193,
+      "processes": [
+        {
+          "inspect": false,
+          "stdoutBytes": 86159,
+          "cpuSeconds": 1.05,
+          "peakRssKiB": 109360,
+          "ms": 10565.974559999999,
+          "exitCode": 0
+        }
+      ],
+      "extractions": 1,
+      "totalHelperCpuSeconds": 1.05,
+      "totalStdoutBytes": 86159,
+      "metadata": {
+        "title": "Me at the zoo",
+        "duration": 19,
+        "creator": {
+          "title": "jawed",
+          "url": "https://www.youtube.com/channel/UC4QobU6STFB0P71PMvOGN5A"
+        },
+        "thumbnail": true
+      }
+    },
+    "method": "Real Core, WebSocket intake, managed helpers and guarded network; synthetic renderer acknowledges load; 20ms /proc sampling; parent-helper CPU only. One live pair, no startup-speed claim."
+  },
+  "catalogSamples": [
+    {
+      "name": "search cold",
+      "ms": 2679,
+      "count": 24,
+      "status": 200,
+      "nextCursor": "24"
+    },
+    {
+      "name": "search warm",
+      "ms": 1,
+      "count": 24,
+      "status": 200,
+      "nextCursor": "24"
+    },
+    {
+      "name": "search page2",
+      "ms": 3202,
+      "count": 24,
+      "status": 200,
+      "nextCursor": "48"
+    },
+    {
+      "name": "channel",
+      "ms": 1080,
+      "count": 4,
+      "status": 200,
+      "nextCursor": null
+    },
+    {
+      "name": "channel videos",
+      "ms": 1210,
+      "count": 24,
+      "status": 200,
+      "nextCursor": "24"
+    },
+    {
+      "name": "playlist",
+      "ms": 1876,
+      "count": 24,
+      "status": 200,
+      "nextCursor": "24"
+    }
+  ],
+  "channelQueueLive": {
+    "passed": true,
+    "ms": 3087,
+    "title": "3Blue1Brown - Videos",
+    "count": 153,
+    "allMedia": true,
+    "first": "There's never been a better time to go into math",
+    "last": "e to the pi i, a nontraditional take (old version)"
+  },
+  "browserLargePlaylist": {
+    "syntheticPositions": 2400,
+    "renderedRows": 24,
+    "domElements": 429,
+    "readOffsets": [
+      0,
+      24,
+      2376
+    ],
+    "warmBackReads": 0,
+    "equivalentSnapshotReads": 0,
+    "method": "Production routes/query/cache with parser-shaped deterministic responses, not live provider or CPU latency."
+  },
+  "limits": [
+    "Linux/Chromium only; viewport TV/phone checks are not physical hardware",
+    "Current live stream manifest only, not segment decoding",
+    "No Safari/native mobile codec playback or release packaging",
+    "No authenticated/region-restricted source workarounds",
+    "No long-lived signed URL soak or real multi-device hardware synchronization"
+  ],
+  "reviewedHead": "7596d02113779531be02df745d7334f3d44e5a05",
+  "pullRequests": [
+    {
+      "number": 867,
+      "branch": "youtube/channel-queues",
+      "head": "c6633d5c960a4523697a9fa3110963e98b6d2433",
+      "checkRun": 39866139593,
+      "checkConclusion": "success"
+    },
+    {
+      "number": 868,
+      "branch": "youtube/pasted-playback",
+      "head": "8463efac1a29b2607da96756a44c609be6380284",
+      "checkRun": 39866691811,
+      "checkConclusion": "success"
+    },
+    {
+      "number": 869,
+      "branch": "youtube/playlist-context",
+      "head": "5bf93028bc413409d00a68936f09366cd79c327d",
+      "checkRun": 39868225411,
+      "checkConclusion": "success"
+    },
+    {
+      "number": 870,
+      "branch": "youtube/playback-quality",
+      "head": "eb55d5475a204c178d390f86ce490d534bdc4680",
+      "checkRun": 39868604521,
+      "checkConclusion": "success"
+    },
+    {
+      "number": 871,
+      "branch": "youtube/catalog-contracts",
+      "head": "7596d02113779531be02df745d7334f3d44e5a05",
+      "checkRun": 39869096411,
+      "checkConclusion": "success"
+    }
+  ],
+  "checks": {
+    "countsOverlap": true,
+    "hostedCheckScope": [
+      "frozen install",
+      "source/scripts/app typecheck",
+      "production build"
+    ],
+    "combinedCatalogResumeHub": {
+      "passed": 29,
+      "failed": 0
+    },
+    "realYtDlpOfflineSelector": {
+      "passed": 51,
+      "failed": 0,
+      "helper": "yt-dlp 2026.10.21",
+      "missingHelperBehavior": "8 pass, 43 skip; skipped cases are not selector coverage"
+    },
+    "selectedContextBrowser": {
+      "desktop": "5 neighbour + 9 action groups pass",
+      "phone": "5 neighbour + 9 action groups pass",
+      "tv": "5 neighbour + 9 action groups pass",
+      "tvFocus": "14 existing cases pass",
+      "scope": "Deterministic API data with production route tree, controls and command boundary"
+    },
+    "sourceTypechecks": "pass",
+    "productionBuild": "pass",
+    "retainedBenchmarkTypecheckAndBundle": "pass"
+  },
+  "reviews": {
+    "standards": {
+      "model": "GPT-6-Astra",
+      "reasoning": "high",
+      "findingCount": 0,
+      "scope": "Production diff plus audit drafts",
+      "optionalImprovement": "Record source revision and actual helper versions in future benchmark output; implemented in retained harness"
+    },
+    "spec": {
+      "model": "GPT-6.1-Sol",
+      "reasoning": "xhigh",
+      "findingCount": 0,
+      "repairsReviewed": 12,
+      "integrationTests": {
+        "passed": 80,
+        "failed": 0,
+        "skipped": 0
+      },
+      "channelTests": {
+        "passed": 7,
+        "failed": 0
+      },
+      "browserGroups": {
+        "passed": 42,
+        "viewports": [
+          "1280x800 desktop",
+          "390x844 phone",
+          "1920x1080 TV"
+        ]
+      },
+      "aliasBrowserJourney": {
+        "setup": "Production UI and actual isolated Core; fixture extractor; outbound server fetch disabled",
+        "favoriteReadStatus": 200,
+        "detailsDeleteStatus": 204,
+        "saveAgainStatus": 200,
+        "savedMenuDeleteStatus": 204,
+        "canonicalFavoriteCountAfterRemoval": 0,
+        "saveRemainedPressedAfterNormalization": true,
+        "canonicalSectionLinks": 4,
+        "channelExtractions": 1
+      },
+      "limits": "Offline selectors and fixture media; not physical-device or live adaptive playback qualification",
+      "cleanup": "Owned Core and Vite PIDs gone; owned tab closed; production source unchanged"
+    }
+  },
+  "benchmarkHarnessSmoke": {
+    "result": {
+      "revision": "7596d02113779531be02df745d7334f3d44e5a05",
+      "toolchain": {
+        "node": "v24.21.0",
+        "platform": "linux",
+        "arch": "x64",
+        "helpers": {
+          "yt-dlp": {
+            "version": "2026.10.21",
+            "origin": "managed"
+          },
+          "qjs": {
+            "version": "v0.17.0",
+            "origin": "managed"
+          },
+          "ffmpeg": {
+            "version": "9.0.2",
+            "origin": "managed"
+          }
+        }
+      },
+      "sampledAt": "2026-10-22T23:05:34.361Z",
+      "sampleIntervalMs": 20,
+      "label": "final-harness-smoke",
+      "loadMs": 11440.458728,
+      "processes": [
+        {
+          "inspect": false,
+          "stdoutBytes": 86183,
+          "cpuSeconds": 1.05,
+          "peakRssKiB": 113680,
+          "ms": 10507.793255,
+          "exitCode": 0
+        }
+      ],
+      "extractions": 1,
+      "totalHelperCpuSeconds": 1.05,
+      "totalStdoutBytes": 86183,
+      "metadata": {
+        "title": "Me at the zoo",
+        "duration": 19,
+        "creator": {
+          "title": "jawed",
+          "url": "https://www.youtube.com/channel/UC4QobU6STFB0P71PMvOGN5A"
+        },
+        "thumbnail": true
+      }
+    },
+    "method": "Single final-harness validation, not an additional before/after pair. Owned Core closed, port 43731 closed and generated database removed."
+  }
+}
