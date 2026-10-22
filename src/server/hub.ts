@@ -86,6 +86,7 @@ type HubOptions = {
   liveTurn?: RTCIceServer;
   relayExecutable?: string;
   airplayExecutable?: string;
+  streamingCommunityFetch?: typeof fetch;
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -179,7 +180,7 @@ export async function createHub(options: HubOptions) {
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   // Checked at start so saved pages load from the current address; afterwards only
   // StreamingCommunity requests wait for the check.
-  const healStreamingCommunity = () => healStreamingCommunityOrigin(store, shutdown.signal);
+  const healStreamingCommunity = () => healStreamingCommunityOrigin(store, shutdown.signal, options.streamingCommunityFetch);
   const startupOrigin = healStreamingCommunity();
   void startupOrigin.catch(error => { if (error !== shutdown.signal.reason) console.error("Couch: StreamingCommunity address check failed.", error); });
   const streamingCommunityOrigin = async (url: string) => providerForUrl(url) === "streamingcommunity" ? healStreamingCommunity() : undefined;
