@@ -191,8 +191,8 @@ body { min-width: 0; }
 /* A shelf's tiles keep their own heights; their captions start level under artwork of one height. */
 [data-shelf-row] { align-items: start; }
 /* An item's "…" waits for the pointer or focus, so a shelf or a long list isn't a row or column of them; touch and the
-   TV always show it. */
-:is([data-tile-menu], [data-row-menu]) { @apply motion-safe:transition-opacity; }
+   TV always show it. It appears at once: a fade starts and ends an animation on every row a scroll passes under the
+   pointer. */
 @media (hover: hover) and (pointer: fine) {
   :is([data-tile-menu], [data-row-menu]):where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
   [data-tile]:is(:hover, :focus-within) [data-tile-menu], [data-nav-row]:is(:hover, :focus-within) > * [data-row-menu] { opacity: 1; }

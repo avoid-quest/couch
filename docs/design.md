@@ -201,7 +201,7 @@ inversion reaches a little past its words (a shadow, so nothing moves).
 lights up: a pointer over a tile or a row makes its picture glow in its own
 first colour (`--item-light`, read the first time a pointer or focus reaches
 it; faint white until then) and brings its meta line up to white, over
-300 ms; its "…" appears with it. Everything else brightens: ink comes up to
+300 ms; its "…" appears with it, at once (a fade would start and end an animation on every row a scroll passes under the pointer). Everything else brightens: ink comes up to
 white (a ghost control or a toggle rests at 80% white and a press dims it to
 60%), a fill steps up one notch (`secondary` to `fill-hover`; the white button
 to 85%), and an outline's edge comes up. One whose panel is open
