@@ -127,7 +127,9 @@ without a home (YouTube, Bandcamp, SoundCloud) scopes the field to itself
 saved or played title opens its Details; a station plays; a pasted link's
 first row plays it ("Open page" and "Choose how to play" follow), then the
 field empties and lets go. Until the page's title resolves, a played link is
-named by its address ("youtube.com/watch?v=…"). Every submission closes the
+named by its address ("youtube.com/watch?v=…"). Playback supplies its title and
+artwork; queued links and failed playback still resolve those details separately.
+Every submission closes the
 palette, and a page that changes under it (a played link opening the player)
 closes it too. A Spinner replaces the Search icon while sources answer.
 

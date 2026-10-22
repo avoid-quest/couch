@@ -1344,7 +1344,15 @@ export async function createHub(options: HubOptions) {
         if (inspectUrl) {
           const controller = new AbortController();
           inspections.set(entry.id, controller);
-          void streamingCommunityOrigin(inspectUrl).then(origin => inspectWebMedia(inspectUrl, controller.signal, origin)).then(metadata => {
+          // A pasted Play already extracts its title with the stream. Queue-only entries,
+          // failed or cancelled playback still get their independent metadata inspection.
+          const state = stateOf(playback);
+          const resolving = state.currentEntryId === entry.id && playback.resolved?.playbackId === state.player.playbackId ? playback.resolved.media : undefined;
+          void (async () => {
+            const metadata = await resolving?.then(media => media.metadata, () => undefined);
+            controller.signal.throwIfAborted();
+            return metadata ?? inspectWebMedia(inspectUrl, controller.signal, await streamingCommunityOrigin(inspectUrl));
+          })().then(metadata => {
             if (!closed && !controller.signal.aborted) { authorize(); holding(entry.id)?.session.enrichEntry(entry.id, entry.source, metadata); }
           }).catch(() => {}).finally(() => {
             if (inspections.get(entry.id) === controller) inspections.delete(entry.id);
