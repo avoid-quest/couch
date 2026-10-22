@@ -62,10 +62,10 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
       {progress != null && <span data-tile-progress aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-black/60"><span className="block h-full bg-foreground" style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} /></span>}
       <ArtLevel level={level} className={cn("size-8 text-base", progress != null && "bottom-1")} />
     </span>
-    {/* A title of up to two lines and one meta line, as wide as the artwork; nothing under it. */}
+    {/* The title and its meta line, as wide as the artwork and wrapped whole (a shelf's tiles keep their own heights); nothing under them. */}
     <span data-tile-caption className="relative grid w-0 min-w-full content-start gap-caption">
-      <span className={cn("line-clamp-2 text-body break-words", options.shown.length && "pr-8 touch:pr-11")}>{title}</span>
-      {meta && <span data-tile-meta className="truncate text-meta text-muted-foreground">{meta}</span>}
+      <span className={cn("text-body text-pretty break-words", options.shown.length && "pr-8 touch:pr-11")}>{title}</span>
+      {meta && <span data-tile-meta className="text-meta text-pretty break-words text-muted-foreground">{meta}</span>}
     </span>
   </>;
   return <div data-tile {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} style={light.style} className={cn("relative flex w-fit flex-col", tileHeight[shape], options.item.className, className)}>

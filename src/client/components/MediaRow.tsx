@@ -69,9 +69,9 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
   const shape = frame ?? (compact ? "square" : "video");
   const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
   const body = <>
-    {number != null ? <span className="flex w-full items-baseline gap-4"><span className="line-clamp-2 min-w-0 flex-1 text-body">{title}</span>{meta && <span className="shrink-0 text-meta text-muted-foreground tabular-nums">{meta}</span>}</span>
-      : <span className="line-clamp-2 w-full text-body">{title}</span>}
-    {meta && number == null && <span className="w-full truncate text-meta text-muted-foreground">{meta}</span>}
+    {number != null ? <span className="flex w-full items-baseline gap-4"><span className="min-w-0 flex-1 text-body text-pretty break-words">{title}</span>{meta && <span className="shrink-0 text-meta text-muted-foreground tabular-nums">{meta}</span>}</span>
+      : <span className="w-full text-body text-pretty break-words">{title}</span>}
+    {meta && number == null && <span className="w-full text-meta text-pretty break-words text-muted-foreground">{meta}</span>}
     {children}
     {description && <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-meta text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
   </>;

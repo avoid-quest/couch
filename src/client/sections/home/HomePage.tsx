@@ -18,7 +18,6 @@ import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
 import { useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
-import { PlaybackTransport } from "@/components/PlaybackTransport";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
@@ -174,11 +173,9 @@ export function HomePage() {
   const heroCaption = hero?.kind === "continue" ? historyCaption(hero.item) : undefined;
 
   const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
-      progress={!live && length ? <HeroProgress position={playbackClock.position ?? 0} duration={length} label={remaining != null ? `${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}` : undefined} /> : undefined}>
-      <Button data-page-first size="lg" onClick={() => shell.changeSection("Now")}>Open player</Button>
-      {/* The transport follows the player's verb on its line, its first glyph a gap away, as one group of verbs. */}
-      {state && <PlaybackTransport state={state} connected={connected} run={run} className="ml-2" />}
-    </HomeHero>
+      progress={!live && length ? <HeroProgress position={playbackClock.position ?? 0} duration={length} label={remaining != null ? `${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}` : undefined} /> : undefined}
+      // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
+      open={() => shell.changeSection("Now")} />
     : hero.kind === "continue" && heroCaption ? <HomeHero context={<MediaContext collection={hero.item.collection} creator={hero.item.creator} />} thumbnail={hero.item.thumbnail} shape={historyShape(hero.item)} title={heroCaption.title} meta={heroCaption.meta}
       // Not playing, it has no end time: how much is left, as Details says it.
       progress={hero.item.duration ? <HeroProgress position={hero.item.position} duration={hero.item.duration} /> : undefined}>
@@ -290,14 +287,17 @@ function HeroProgress({ position, duration, label = `${formatDuration(Math.max(0
 /**
  * The board's top line, Home's Stage (Stage.tsx): the picture at the right under the header, the title large at the
  * bottom left, one muted meta line and its links, how far it got, then its verbs. Its verbs are a row, so Up and Down
- * pass between it and the shelves.
+ * pass between it and the shelves. While something plays (`open`), the now-playing bar holds the transport, so the
+ * Stage has no verbs: its title is the one stop and opens the player, as its picture does under a pointer.
  */
-function HomeHero({ thumbnail, shape, title, meta, context, progress, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; children: ReactNode }) {
-  return <Stage data-home-hero size="home" label={title} thumbnail={thumbnail ?? ""} shape={shape} title={title}>
-    <StageTitle as="h2" title={title} />
+function HomeHero({ thumbnail, shape, title, meta, context, progress, open, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; open?: () => void; children?: ReactNode }) {
+  return <Stage data-home-hero size="home" label={title} thumbnail={thumbnail ?? ""} shape={shape} title={title} onPicture={open}>
+    {open
+      ? <div data-nav-row className="w-full"><StageTitle as="h2" title={title}><button type="button" data-page-first aria-label={`Open player: ${title}`} className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]" onClick={open}>{title}</button></StageTitle></div>
+      : <StageTitle as="h2" title={title} />}
     {/* The meta line and its links read as one block under the title. */}
     {(meta || context) && <div className="grid justify-items-start">{meta && <p className="text-base leading-relaxed break-words text-muted-foreground">{meta}</p>}{context}</div>}
     {progress}
-    <div data-nav-row className="mt-2 flex flex-wrap items-center gap-2 max-md:w-full max-md:[&>[data-page-first]]:flex-1">{children}</div>
+    {children && <div data-nav-row className="mt-2 flex flex-wrap items-center gap-2 max-md:w-full max-md:[&>[data-page-first]]:flex-1">{children}</div>}
   </Stage>;
 }

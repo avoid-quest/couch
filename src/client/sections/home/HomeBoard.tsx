@@ -5,12 +5,11 @@ import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { ShelfHeading } from "@/components/Shelf";
 
 /**
- * Your own rows (Continue, For later, Played recently, Up next) as one board: short lists side by side in columns of
- * one width, whatever their count, so a few items read as a composed list rather than a shelf of leftovers. Phones
- * stack them. Each list holds its first few; its heading opens the rest.
+ * Your own rows (Continue, For later, Played recently, Up next) as one board: short lists side by side, sharing the
+ * page's width in columns of at least 20rem, so their titles have the room to be read whole. Phones stack them. Each list holds its first few; its heading opens the rest.
  */
 export function Board({ children }: { children: ReactNode }) {
-  return <div data-home-board className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] items-start gap-x-12 gap-y-10">{children}</div>;
+  return <div data-home-board className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] items-start gap-x-12 gap-y-10">{children}</div>;
 }
 
 export function BoardList({ title, href, time, loading = false, more, children }: { title: string; href?: string; time?: string; loading?: boolean; more?: ReactNode; children?: ReactNode }) {
