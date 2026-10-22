@@ -10,10 +10,12 @@ import { providerNames } from "@/sections/find/SearchOnlineResults";
 
 /**
  * A content page's ancestors above its h1, each a link: the section it opened in (the shell's tab), Radio or its source's home,
- * then the collections holding it. The h1 names the page, so the trail stops before it. One quiet line: out of room, the
+ * then the collections holding it. The h1 names the page, so the trail stops before it. Over a Details page's Stage
+ * (`stage`), a trail that would only name the tab it opened in says nothing the header's tabs (and Back) don't, so there
+ * is none; a list page (Radio, Live TV) keeps it as its way up. One quiet line: out of room, the
  * longest crumbs truncate first (grid tracks share the room evenly up to each one's width), usually the middle ones. Esc and the TV's Back go back in history (navigation.ts), not up the trail.
  */
-export function ContentBreadcrumb({ title, collection, provider, radio = false }: { title?: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean }) {
+export function ContentBreadcrumb({ title, collection, provider, radio = false, stage = false }: { title?: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean; stage?: boolean }) {
   const { section, sectionUrl } = useShell();
   const source = provider ?? (collection ? providerForUrl(collection.url) : undefined);
   const trail = [
@@ -22,6 +24,7 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
       : source && (title !== providerNames[source] || collection) ? [{ label: providerNames[source], to: keepSection(collectionLocation({ provider: source, url: "" }), section) }] : [],
     ...collectionLinks(collection).map(item => ({ label: item.title, to: keepSection(collectionLocation(item), section) })),
   ];
+  if (stage && trail.length < 2) return null;
   return <Breadcrumb aria-label="Content path" className="min-w-0">
     <BreadcrumbList className="grid auto-cols-[minmax(0,max-content)] grid-flow-col justify-start text-sm">
       {/* Each crumb leads on to the next, the last to the h1 below; none is the page itself, so none is current and

@@ -294,7 +294,10 @@ Turning a page moves focus to the list's top.
 `ContentBreadcrumb` (shadcn's Breadcrumb) puts a sub-page's ancestors above its
 h1 (on a Details page, inside the Stage's copy, over the title), each a link: the section it opened in, Radio or the source's home, then
 the collections holding it ("Home › StreamingCommunity › Series"), then
-the h1, which names the page; no separator follows the last crumb. One line of small
+the h1, which names the page; no separator follows the last crumb. Over a
+Details page's Stage, a trail that would only name the tab it opened in
+("Home") isn't shown: the header's tabs and Back already say it. A list page
+(Radio, Live TV) keeps its "Home" as its way up. One line of small
 muted text; out of room, the longest crumbs truncate first. Esc and the TV's Back
 still go back in history, restoring focus.
 
