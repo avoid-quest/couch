@@ -133,8 +133,9 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
     if (data.user === null) throw new ProviderError("Twitch channel not found.", 404);
     const item = channel(data.user);
     if (!item || !object(data.user)) throw unavailable();
+    // The page is the channel, so it shows the round avatar; a live channel's row keeps the 16:9 stream preview.
     const broadcasts = items(data.user.videos, video).map(broadcast => ({...broadcast, creator: {title: item.title, url: item.url}}));
-    return withProviderItem("twitch", item.url, "channel", { title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] });
+    return withProviderItem("twitch", item.url, "channel", { title: item.title, thumbnail: thumbnail(data.user.profileImageURL) ?? item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] });
   }
   if (target.kind === "categories") {
     const data = await query(`{ games(first:20) { edges { node { ${categoryFields} } } } }`, {}, signal);
