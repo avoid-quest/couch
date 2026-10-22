@@ -60,8 +60,8 @@ test("Where it plays' overview became the picker alone, so its address opens Hom
   expect(sectionForPath("/where-it-plays")).toBeUndefined();
 });
 
-test("Core serves the sections, Home's pages and the earlier addresses that redirect to them", () => {
-  for (const path of ["/radio", "/live-tv", "/discover", "/discover/radio", "/discover/live-tv", "/saved", "/search", "/live", "/library", "/where-it-plays", "/find"]) expect(frontendPaths).toContain(path);
+test("Core serves the sections, Home's pages, TV pairing and the earlier addresses that redirect to them", () => {
+  for (const path of ["/radio", "/live-tv", "/pair/tv", "/discover", "/discover/radio", "/discover/live-tv", "/saved", "/search", "/live", "/library", "/where-it-plays", "/find"]) expect(frontendPaths).toContain(path);
   expect(sectionForPath("/saved/")).toBe("Saved");
   expect(sectionForPath("/collection")).toBe("Home");
   expect(pathForSection("For later")).toBe("/saved");

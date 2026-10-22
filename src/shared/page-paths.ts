@@ -6,11 +6,13 @@ export const pagePaths: Record<string, string> = {
 };
 // Home's own pages: every station, and every Live TV channel.
 export const browsePaths = ["/radio", "/live-tv"];
+// Where a TV's pairing code leads an admin's phone (routes/pair/tv.tsx), before that phone has opened Couch.
+const pairingPaths = ["/pair/tv"];
 // Earlier pages, served so bookmarks reach their redirects (routes/find.tsx, live.tsx, library.tsx, where-it-plays.tsx,
 // discover/): Discover folded into Home.
 const earlierPaths = ["/find", "/live", "/library", "/where-it-plays", "/discover", "/discover/radio", "/discover/live-tv"];
 
-export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...browsePaths, ...earlierPaths, ...Object.values(settingsPages).map(page => page.path), ...Object.keys(settingsAliases)];
+export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...browsePaths, ...pairingPaths, ...earlierPaths, ...Object.values(settingsPages).map(page => page.path), ...Object.keys(settingsAliases)];
 
 // An item or collection page belongs to the section that opened it, which its URL carries as `from`, so its tab
 // and breadcrumb survive a refresh. Without one (or from Discover, which folded into Home), it belongs to Home, where
