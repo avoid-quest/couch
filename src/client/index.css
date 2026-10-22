@@ -6,6 +6,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter-tight";
+/* The display face (docs/design.md, Type): Archivo's latin file, its width and weight axes. OFL (fonts/OFL.txt). */
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url("./fonts/archivo-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 @layer components {
 /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (now-playing bar, phone tabs). */
@@ -38,6 +40,7 @@ body { min-width: 0; }
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Inter Tight Variable', sans-serif;
+    --font-display: 'Archivo', 'Inter Tight Variable', sans-serif;
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -111,10 +114,10 @@ body { min-width: 0; }
     --secondary: rgb(255 255 255 / 10%);
     --secondary-foreground: #fff;
     --fill-hover: rgb(255 255 255 / 16%);
-    /* The now-playing bar's own surface: solid, one step above the page, so it reads as a bar over whatever scrolls under it. */
-    --bar: #141414;
+    /* The now-playing bar's glass where the playing artwork gives no tone (docs/design.md, Glass). */
+    --bar: #1c1c1e;
     --muted: #171717;
-    --muted-foreground: #a3a3a3;
+    --muted-foreground: #bdbdbd;
     /* A list's row under the pointer (menus, the palette, a Select): a quiet fill, the ink unchanged. Keys invert it. */
     --accent: rgb(255 255 255 / 10%);
     --accent-foreground: #fff;
@@ -274,6 +277,11 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 :root { --player-target: max(44px, 2.25rem); }
 .player-video-controls { --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; isolation: isolate; }
 .player-video-controls::before { content: ""; position: absolute; inset-inline: 0; z-index: -1; pointer-events: none; --ramp: rgb(0 0 0 / 82%), rgb(0 0 0 / 70%) calc(100% - 4rem), rgb(0 0 0 / 42%) calc(100% - 3rem), rgb(0 0 0 / 18%) calc(100% - 1.75rem), rgb(0 0 0 / 4%) calc(100% - .75rem), transparent; }
+/* The transport answers a press: its glyph dips and springs back, so Play, Pause, Stop and Next feel struck. */
+@media (prefers-reduced-motion: no-preference) {
+  :is([data-now-playing], .player-band) [aria-label="Playback controls"] button { transition: scale .15s var(--ease-out), color .15s var(--ease-out), background-color .15s var(--ease-out), opacity .15s var(--ease-out); }
+  :is([data-now-playing], .player-band) [aria-label="Playback controls"] button:not(:disabled):active { scale: .9; }
+}
 /* The band's Play/Pause is the player's one large control, as Apple's and YouTube's fullscreen transports lead with
    theirs; the bar's grows into it as the bar becomes the band. */
 .player-band button[data-play-button] { width: calc(var(--player-target) * 1.3); height: calc(var(--player-target) * 1.3); }
@@ -293,10 +301,19 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 :is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
 .player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
-/* The bar's timeline is its top edge: a hairline that thickens and shows its handle under a pointer, with a hit area
-   taller than the line, centred on it. */
+/* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
+   tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
+   before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
+   tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page. */
+.bar-glass { border-radius: 1.25rem; background: color-mix(in srgb, var(--tone) 80%, transparent); -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(.5); backdrop-filter: blur(28px) saturate(1.5) brightness(.5); box-shadow: 0 1rem 2.5rem -.75rem rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 9%); transition: --tone .6s var(--ease-out); }
+@media (max-width: 39.99rem) { .bar-glass { border-radius: 1rem; } }
+@media (prefers-reduced-motion: reduce) { .bar-glass { transition: none; } }
+/* The bar's timeline runs along its top edge between its corners: a rounded line whose played part glows a little,
+   that thickens and shows its handle under a pointer, with a hit area taller than the line, centred on it. */
 .bar-timeline [data-slot="slider"] { padding-block: .5rem; }
-.bar-timeline [data-slot="slider-track"] { border-radius: 0; background: rgb(255 255 255 / 18%); }
+.bar-timeline [data-slot="slider-track"] { border-radius: 999px; background: rgb(255 255 255 / 18%); overflow: visible; }
+.bar-timeline :is([data-slot="slider-range"], [data-slot="slider-buffered"]) { border-radius: inherit; }
+.bar-timeline [data-slot="slider-range"] { box-shadow: 0 0 .5rem rgb(255 255 255 / 55%); }
 .bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
 :is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] { @apply motion-safe:transition-[scale]; }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
@@ -316,15 +333,25 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-page[data-osd][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); width: min(32rem, calc(100% - 2 * var(--gutter))); max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem); padding: .25rem .75rem .75rem; border-radius: var(--radius-lg); }
 .player-next-up { position: absolute; z-index: 20; right: var(--gutter); bottom: calc(var(--bottom-bar, 0px) + 8px); @apply motion-safe:transition-[bottom]; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
-[data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
-.player-summary { display: flex; flex-direction: column; gap: 1.5rem; width: min(32rem, 100%); min-height: 0; flex: 0 1 auto; pointer-events: auto; }
-.player-art { width: 100%; min-height: 0; max-height: 24rem; flex: 0 1 auto; }
-/* Artwork as it comes, contained on black and set down on the copy below it: the box hugs it up to a square, and short screens shrink it whole. */
-.player-art > :not(svg), .player-art img { width: 100%; height: auto; max-height: 100%; min-height: 0; min-width: 0; object-fit: contain; object-position: left bottom; background: transparent; }
+/* Now playing beside artwork (docs/design/player.md): one composition in the artwork's room. The artwork stands whole
+   at its own shape (--art-ratio) as an object with its shadow, as tall as the room allows; the copy beside it ends
+   level with its foot, its title set whole in the display face. Phones stack them. */
+[data-artwork-stage] .player-main { display: grid; place-items: center; container-type: size; }
+.player-summary { --art-h: min(36rem, 92cqh); display: grid; grid-template-columns: auto minmax(0, 40rem); align-items: end; justify-content: center; gap: clamp(2rem, 4.5cqi, 4.5rem); width: 100%; min-height: 0; pointer-events: auto;
+  --title-short: 5.5rem; --title-medium: 4.5rem; --title-long: 3.5rem; --title-xlong: 2.75rem; }
+.player-art { min-width: 0; min-height: 0; }
+.player-art > :not(svg), .player-art img { display: block; width: min(52cqi, calc(var(--art-h) * var(--art-ratio, 1))); height: auto; aspect-ratio: var(--art-ratio, 1); object-fit: cover; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
 .player-art > svg { width: 4rem; height: 4rem; }
-/* MediaArtwork's own 16:9 box would letterbox square and portrait art, so the image keeps its ratio. */
-.player-art img { aspect-ratio: auto; }
-[data-player-audio-copy] { flex: 0 0 auto; }
+[data-player-audio-copy] { container-type: inline-size; padding-bottom: .25rem; }
+/* The room's light pools behind the artwork, never behind the copy. */
+.player-page > .room { --room-x: 30%; --room-y: 50%; }
+@media (max-width: 959px), (max-aspect-ratio: 5/4) {
+  .player-summary { --art-h: calc(100cqh - 14rem); grid-template-columns: minmax(0, 1fr); align-content: center; justify-items: start; gap: 1.5rem; height: 100%;
+    --title-short: 3.25rem; --title-medium: 2.625rem; --title-long: 2.125rem; --title-xlong: 1.75rem; }
+  .player-art > :not(svg), .player-art img { width: min(100cqi, calc(var(--art-h) * var(--art-ratio, 1))); }
+  [data-player-audio-copy] { width: 100%; }
+  .player-page > .room { --room-x: 50%; --room-y: 32%; }
+}
 .player-timeline:has([role="slider"]) { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
 .player-timeline:has([role="slider"]) > .relative { grid-column: 2; grid-row: 1; }
 .player-timeline:has([role="slider"]) [data-time-labels] { display: contents; }
@@ -339,9 +366,11 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-control-row > .player-transport { grid-column: 2; justify-self: center; }
 .player-control-row > [data-player-tools] { grid-column: 3; justify-self: end; }
 @media (min-width: 960px) {
-  /* Up next sits beside the artwork while it has something to show; otherwise the artwork has the stage. */
-  [data-artwork-stage] .player-workspace:has(> .player-queue) { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
-  [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
+  /* Up next sits beside the artwork while something is still to come; otherwise the artwork has the room, and Up next,
+     summoned from its button, is a panel over the room at the right above the band, as it is over a picture. */
+  [data-artwork-stage] .player-workspace:has(> .player-queue[data-beside]) { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
+  [data-artwork-stage] .player-queue[data-beside] { display: flex; }
+  .player-page[data-artwork-stage][data-queue-open] .player-queue:not([data-beside]) { display: flex; position: absolute; z-index: 30; right: 0; bottom: 0; width: min(28rem, 100%); max-height: 100%; padding: .25rem .75rem .75rem; border-radius: var(--radius-lg); background: rgb(12 12 12 / 82%); -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 70%); }
 }
 @media (max-width: 959px) {
   /* On phones audio's Up next replaces the artwork. */
@@ -408,50 +437,81 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
     .level[data-level="moving"] > span:nth-child(3) { animation-duration: 1.1s; animation-delay: -.5s; }
   }
 }
+/* The room (Stage.tsx, the player's Now playing; docs/design.md, Room): what a picture stands in, painted with its own
+   colours, sampled and dimmed so muted ink keeps 7:1 anywhere on it (artwork-light.ts, roomPeak). Its first colour pools
+   behind the picture, its second falls from the top corner, and a fine grain keeps the gradients from banding and gives
+   the dark a surface. All static: painted once, and when the picture changes its colours cross-fade (registered custom
+   properties) over 600 ms. Without colour (a white cover, a black-and-white logo) the room is a neutral graphite. */
+@property --room-a { syntax: "<color>"; inherits: true; initial-value: #171717; }
+@property --room-b { syntax: "<color>"; inherits: true; initial-value: #0b0b0b; }
+@property --tone { syntax: "<color>"; inherits: true; initial-value: #1c1c1e; }
+.room { position: absolute; inset: 0; z-index: -3; pointer-events: none; overflow: hidden;
+  background: radial-gradient(55% 75% at var(--room-x, 78%) var(--room-y, 42%), color-mix(in srgb, var(--light-a, #222) 70%, var(--room-a)) , var(--room-a) 38%, transparent 82%),
+    radial-gradient(70% 90% at 100% 0%, var(--room-b), transparent 70%), linear-gradient(var(--room-b), #000);
+  transition: --room-a .6s var(--ease-out), --room-b .6s var(--ease-out); }
+.room::after { content: ""; position: absolute; inset: 0; background: var(--grain); opacity: .06; }
+@media (prefers-reduced-motion: reduce) { .room { transition: none; } }
+:root { --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+/* What stands in the room: an object casts a soft, deep shadow onto it, as a sleeve on a shelf; a mark casts none. */
+:root { --object-shadow: 0 2rem 4rem -1rem rgb(0 0 0 / 72%), 0 .5rem 1.25rem rgb(0 0 0 / 38%); }
+
+/* Display type (docs/design.md, Type): Archivo, a grotesque in the American tradition of jazz sleeves and gig posters,
+   whose width follows the title's length (titleLength in Stage.tsx): short titles run wide and heavy, long ones
+   condense and step down, so a title of any length is set whole. Its size never lets its longest word (--word, in
+   characters; --glyph is a character's width at that stretch, in em) overflow its column (cqi), so a word never
+   breaks or clips; only a word longer than any column could hold breaks. */
+.display-title { font-family: var(--font-display); font-weight: 760; line-height: .94; letter-spacing: -.012em; overflow-wrap: break-word; font-size: min(var(--title-size), calc(100cqi / (var(--word, 10) * var(--glyph)))); font-stretch: var(--title-width); }
+.display-title[data-length="short"] { --title-size: var(--title-short, 5rem); --title-width: 112%; --glyph: .7; }
+.display-title[data-length="medium"] { --title-size: var(--title-medium, 4.25rem); --title-width: 96%; --glyph: .62; }
+.display-title[data-length="long"] { --title-size: var(--title-long, 3.5rem); --title-width: 82%; --glyph: .55; line-height: .96; }
+.display-title[data-length="xlong"] { --title-size: var(--title-xlong, 2.75rem); --title-width: 74%; --glyph: .5; line-height: 1; }
+
+/* Page titles and the headings of shelves, lists and sections are display type too, at their own sizes and normal width. */
+:is(h1, h2):is(.text-heading, .text-page), :is(h1, h2).text-heading .text-heading { font-family: var(--font-display); font-stretch: 100%; }
+
 /* Unlayered, so a page's spacing utilities (space-y) never undo the stage's reach under the header. */
-/* The Stage (Stage.tsx, docs/design.md): Couch's one bold thing. It reaches up under the header and out to the
-   window's edges; the picture stands at the right at its own shape and the stage's height, and dissolves leftwards
-   and downwards (a mask) into its own light (its first colour, brightest at the picture's heart and gone before
-   the copy) and then the black room. The copy sits at the bottom left, where the picture has gone: under the title
-   at most a third of it shows, under muted ink less than a tenth, so both keep 7:1 over the brightest picture. A
-   scrim at the top keeps the header's ink at 7:1 over it. A logo or a channel stands whole, contained, in its light. */
-.stage { --stage-h: min(39.375vw, 70vh); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
-.stage[data-stage="details"] { --stage-h: min(33vw, 60vh); }
-.stage::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: calc(var(--top-bar, 4rem) + 4rem); background: linear-gradient(rgb(0 0 0 / 96%) var(--top-bar, 4rem), transparent); pointer-events: none; }
-.stage-picture { position: absolute; inset: 0 0 auto; z-index: -2; display: flex; justify-content: flex-end; height: var(--stage-h); mask-image: linear-gradient(90deg, transparent 40vw, rgb(0 0 0 / 30%) 50vw, #000 66vw), linear-gradient(0deg, transparent, rgb(0 0 0 / 40%) 18%, #000 45%); mask-composite: intersect; }
-/* The frame: the picture at the stage's height and its shape (a poster a little cropped, to carry the right side), its own
-   left edge soft where the window's mask doesn't reach it. */
-.stage-frame { position: relative; height: 100%; max-width: 72vw; flex-shrink: 0; mask-image: linear-gradient(90deg, transparent, #000 10rem); }
-.stage-picture[data-shape="video"] .stage-frame { aspect-ratio: 16 / 9; }
-.stage-picture:is([data-shape="square"], [data-shape="round"]) .stage-frame { aspect-ratio: 1; }
-.stage-picture[data-shape="poster"] .stage-frame { aspect-ratio: 4 / 5; }
+/* The Stage (Stage.tsx, docs/design.md): Couch's one bold thing. It reaches up under the header and out to the window's
+   edges, in the picture's room. A frame (a wide photograph) enters from the right edge at the stage's height and
+   dissolves leftwards and downwards (a mask) into the room; an object (a cover, a poster, an avatar, a logo on its own
+   ground) stands whole at the right at a generous size, crisp, with its shadow; a mark (a logo on nothing) without one.
+   The copy sits at the bottom left: over a frame at most a third of the picture shows under the title and less than a
+   tenth under muted ink; an object never lies under it. A scrim at the top keeps the header's ink at 7:1. */
+.stage { --stage-h: min(39.375vw, 70vh); --object-h: calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
+.stage[data-stage="details"] { --stage-h: min(33vw, 60vh); --title-short: 4.5rem; --title-medium: 3.75rem; --title-long: 3.125rem; --title-xlong: 2.5rem; }
+.stage[data-form="frame"]::before, .stage:not([data-form])::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: calc(var(--top-bar, 4rem) + 4rem); background: linear-gradient(rgb(0 0 0 / 90%) var(--top-bar, 4rem), transparent); pointer-events: none; }
+/* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the next section). */
+.stage > .room { mask-image: linear-gradient(#000 50%, transparent); }
+.stage[data-form="frame"] > .room { --room-x: 60%; }
+.stage-picture { position: absolute; inset: 0 0 auto; z-index: -2; display: flex; justify-content: flex-end; height: var(--stage-h); }
+.stage[data-form="frame"] .stage-picture { mask-image: linear-gradient(90deg, transparent 40vw, rgb(0 0 0 / 30%) 50vw, #000 66vw), linear-gradient(0deg, transparent, rgb(0 0 0 / 40%) 18%, #000 45%); mask-composite: intersect; }
+/* The frame: the picture at the stage's height and its own shape, its left edge soft where the window's mask doesn't reach it. */
+.stage-frame { position: relative; height: 100%; max-width: 72vw; flex-shrink: 0; aspect-ratio: var(--art-ratio); mask-image: linear-gradient(90deg, transparent, #000 10rem); }
 .stage-frame > .media-artwork { object-position: 50% 30%; }
-.stage-picture[data-whole] .stage-frame { mask-image: none; padding: calc(var(--top-bar, 4rem) + 1.5rem) calc(var(--gutter) + 2rem) 2.5rem; }
-/* The light: the first colour at the picture's heart and the second around it, spreading left of the picture; the
-   window's mask takes it away before the copy, as it does the picture. */
-.stage-picture::before { content: ""; position: absolute; inset: -10% 0 -40% 25vw; background: radial-gradient(farthest-side at 75% 45%, var(--light-a, transparent), color-mix(in srgb, var(--light-b, transparent) 80%, transparent) 60%, transparent); animation: couch-fade-in .6s var(--ease-out) both; }
-@media (prefers-reduced-motion: reduce) { .stage-picture::before { animation: none; } }
-.stage-copy { position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; max-width: min(44rem, 38vw); padding-bottom: 2.5rem; }
-.stage-title { font-size: 4.5rem; line-height: .95; letter-spacing: -.035em; }
-.stage-title[data-length="medium"] { font-size: 3.75rem; }
-.stage-title[data-length="long"] { font-size: 3rem; line-height: 1; }
-.stage[data-stage="details"] .stage-title { font-size: 3.75rem; }
-.stage[data-stage="details"] .stage-title[data-length="long"] { font-size: 2.75rem; }
-/* Phones and narrow windows: the picture spans the column at the top, under the header, and fades downwards; the copy
-   starts over its foot. */
+/* An object or a mark: whole, at its own shape, as tall as the stage allows under the header and no wider than 40vw,
+   at the right of the copy, and above the room's light. */
+.stage:not([data-form="frame"]) .stage-picture { inset: calc(var(--top-bar, 4rem) + 1.5rem) calc(var(--gutter) + 3vw) auto auto; height: var(--object-h); align-items: center; }
+.stage-object { width: min(40vw, calc(var(--object-h) * var(--art-ratio))); height: auto; aspect-ratio: var(--art-ratio); object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
+/* A picture that loads cold settles into its place as it fades in, once; one already shown is there at once. */
+@media (prefers-reduced-motion: no-preference) { .stage-object { transition: opacity .2s var(--ease-out), translate .45s var(--ease-out); } .stage-object:not([data-loaded]) { translate: 0 .75rem; } }
+.stage[data-form="mark"] .stage-object { box-shadow: none; border-radius: 0; background: transparent; }
+.stage:not([data-form="frame"]) > .room { --room-x: 80%; }
+.stage-copy { position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; width: 100%; max-width: min(46rem, 42vw); padding-bottom: 2.5rem; container-type: inline-size; }
+.stage[data-form="frame"] .stage-copy { max-width: min(44rem, 38vw); }
+/* Phones and narrow windows: the picture leads the column at the top, under the header; a frame spans it and fades
+   downwards with the copy over its foot, an object stands centred above the copy. */
 @media (max-width: 47.99rem) {
-  .stage { min-height: 0; padding-top: 0; align-content: start; }
-  .stage-picture { position: relative; inset: auto; height: auto; max-height: 62vh; margin-inline: calc(-1 * var(--gutter)); mask-image: linear-gradient(0deg, transparent, transparent 10%, rgb(0 0 0 / 35%) 30%, #000 60%); }
-  .stage-frame { width: 100%; height: auto; max-width: none; max-height: 62vh; mask-image: none; }
+  .stage { min-height: 0; padding-top: 0; align-content: start; --title-short: 3rem; --title-medium: 2.5rem; --title-long: 2.125rem; --title-xlong: 1.875rem; }
+  .stage[data-stage="details"] { --title-short: 2.75rem; --title-medium: 2.375rem; --title-long: 2rem; --title-xlong: 1.75rem; }
+  .stage-picture, .stage:not([data-form="frame"]) .stage-picture { position: relative; inset: auto; height: auto; margin-inline: calc(-1 * var(--gutter)); }
+  .stage[data-form="frame"] .stage-picture { max-height: 62vh; mask-image: linear-gradient(0deg, transparent, transparent 10%, rgb(0 0 0 / 35%) 30%, #000 60%); }
+  .stage-frame { width: 100%; height: auto; max-width: none; max-height: 62vh; mask-image: none; aspect-ratio: 4 / 3; }
   .stage-picture[data-shape="poster"] .stage-frame { aspect-ratio: 4 / 5; }
-  /* A frame would sit mostly under the header at the column's width, so a phone crops it to 4:3. */
-  .stage-picture[data-shape="video"] .stage-frame { aspect-ratio: 4 / 3; }
-  .stage-picture[data-whole] .stage-frame { padding: calc(var(--top-bar, 4rem) + 1rem) 20% 3rem; }
-  .stage-picture::before { inset: 0; background: radial-gradient(farthest-side at 50% 45%, var(--light-a, transparent), color-mix(in srgb, var(--light-b, transparent) 80%, transparent) 60%, transparent); }
-  .stage-copy { max-width: none; margin-top: -2.5rem; padding-bottom: 1.5rem; }
-  .stage-title, .stage-title[data-length], .stage[data-stage="details"] .stage-title { font-size: 2.5rem; line-height: 1; }
-  .stage-title[data-length="medium"] { font-size: 2.125rem; }
-  .stage-title[data-length="long"], .stage[data-stage="details"] .stage-title[data-length="long"] { font-size: 1.75rem; line-height: 1.05; }
+  .stage:not([data-form="frame"]) .stage-picture { justify-content: center; padding: calc(var(--top-bar, 4rem) + 1.25rem) var(--gutter) 0; }
+  .stage-object { width: min(72vw, 22rem, calc(46vh * var(--art-ratio))); }
+  .stage > .room { --room-x: 50%; --room-y: 25%; }
+  .stage-copy, .stage[data-form="frame"] .stage-copy { max-width: none; padding-bottom: 1.5rem; }
+  .stage[data-form="frame"] .stage-copy { margin-top: -2.5rem; }
+  .stage:not([data-form="frame"]) .stage-copy { margin-top: 1.75rem; }
 }
 /* Over a stage, while the page is at its top, the header is see-through, its ink kept by the stage's scrim; scrolled, black again. */
 html[data-stage-under-header] .app-header { background: transparent; }

@@ -63,6 +63,17 @@ export function hasUpNext(state: ClientSessionState | null | undefined) {
 }
 
 /**
+ * Whether anything is still to come: a queued entry after what plays, or Autoplay's picks. Only then does Up next take
+ * a column beside the artwork; played rows alone (a radio evening) leave the artwork the whole stage, and Up next is
+ * summoned from its button.
+ */
+export function hasQueued(state: ClientSessionState | null | undefined) {
+  if (!state) return false;
+  const index = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
+  return state.queue.length > index + 1 || !!state.autoplay?.upcoming.length;
+}
+
+/**
  * Up next's button in the band and the now-playing bar. While there is nothing to show it keeps its slot, disabled, and
  * says so as its tooltip (a disabled button takes no pointer, so its slot holds the tooltip).
  */

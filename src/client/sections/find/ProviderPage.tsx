@@ -48,7 +48,8 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   // A channel's tab sits under its channel, which is the page itself: the trail stops before it.
   const holder = search.context ?? page?.item?.collection ?? page?.parent;
   const trail = holder && !("parent" in holder && holder.parent) && holder.title === collection.title ? undefined : holder;
-  const channel = page?.item?.kind === "channel" || isChannelTab(reportedCollection.title);
+  // A Twitch page that isn't its directory is a channel, whose picture is its avatar.
+  const channel = page?.item?.kind === "channel" || isChannelTab(reportedCollection.title) || provider === "twitch" && !!url && !new URL(url).pathname.startsWith("/directory");
   // The page's own shape: a channel is round, an album square, a series a poster, an episode a frame.
   const shape = artShape(providerNames[provider], channel ? "channel" : collection.single ? (search.context ?? page?.item?.collection ? "episode" : "media") : "collection");
   const cold = connected && (!summary || summary.loading) && !page;

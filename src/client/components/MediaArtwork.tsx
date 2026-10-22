@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -44,4 +44,26 @@ export function MediaArtwork({ thumbnail, title, collection = false, className =
           </>}
       </span>
     </span>;
+}
+
+const href = (src: string | undefined) => { try { return new URL(src ?? "").href; } catch { return ""; } };
+/**
+ * The picture's own proportions (width over height), read from the image inside the element once it has loaded, so
+ * the Stage and the player size it whole at its true shape; `fallback` (its kind's shape) until then, or when the
+ * picture tells none (a vector logo without a size).
+ */
+export function useArtRatio(src: string | undefined, fallback: number) {
+  const [measured, setMeasured] = useState<{ src: string; ratio: number }>();
+  const ref = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    const read = () => {
+      const image = element.querySelector("img");
+      if (image?.complete && image.naturalWidth && image.naturalHeight) setMeasured({ src: image.src, ratio: image.naturalWidth / image.naturalHeight });
+    };
+    // A load doesn't bubble, but it passes the element on its way down.
+    element.addEventListener("load", read, true);
+    read();
+    return () => element.removeEventListener("load", read, true);
+  }, []);
+  return [ref, measured && measured.src === href(src) ? measured.ratio : fallback] as const;
 }
