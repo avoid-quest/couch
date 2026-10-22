@@ -11,11 +11,13 @@ it adds is for a remote with only arrows, OK and Back:
 - no hover (the `hover` variant never applies), shelf scrollbars, Back arrows,
   fullscreen or pointer time readout. Toasts ignore a parked pointer.
 
-Focus inversion is the only highlight. Remote input makes focus visible even
-after a pointer was used. From the sofa a thin outline is too faint, so a
-focused tile also lifts (scale 1.05, easing over 150 ms unless reduced motion is
-on), its "…" and links with it, and its artwork's outline
-thickens to .25rem. A shelf's padding and the tile's scroll margin keep the
+Focus inversion is the highlight for controls; a focused tile rings its
+picture in white and lights it in its own colour, its meta line coming up to
+white. Remote input makes focus visible even after a pointer was used. From the
+sofa a thin ring is too faint, so a focused tile also lifts (scale 1.05, easing
+over 150 ms unless reduced motion is on), its "…" with it, and its ring
+thickens to .25rem. Short shelves don't sit side by side on the TV, so Up and
+Down always go shelf to shelf. A shelf's padding and the tile's scroll margin keep the
 lifted tile clear of the clip and the screen's edge.
 
 ## Pairing

@@ -1,30 +1,34 @@
 # Home
 
-Home (`HomePage`) is one large item, the hero, then shelves of tiles. Narrow
-screens stack the hero (`md:`); the TV hides the shelves' scrollbars.
+Home (`HomePage`) is one large item, the hero, on Home's
+[Stage](../design.md#stage), then shelves of tiles. Narrow screens stack the
+Stage (`md:`); the TV hides the shelves' scrollbars.
 
 ## The hero
 
-The artwork large at its [true shape](browse.md#artwork-shapes) (a set height,
-`min(26rem, 52vh)`, up to 55% of the row for a frame, 50% for a square, 40% for
-a poster) beside the title at display size, then one muted meta line with its
-relationship links, how far it got, and the verbs. Phones stack it, all at the
-text's left edge: a frame takes the column's width, a square or a poster a set
-height, and the primary verb grows along the verbs' one line. Its item is the
+The Stage at Home's height (`min(39.375vw, 70vh)`): the picture at the right
+at its [true shape](browse.md#artwork-shapes), reaching up under the
+see-through header and out to the window's edge, dissolving into its own light
+and then black; at the bottom left the title at display size (4.5rem, 3.75rem
+past 22 characters, 3rem past 44; phones 2.5rem down to 1.75rem), one muted
+meta line with its relationship links, how far it got as a slim line beside
+what's left, and the verbs. Phones put the picture across the column at the top
+and start the copy over its foot, the primary verb growing along the verbs'
+one line. Its item is the
 first of:
 
 1. **What you control, playing now.** Meta: the station or subtitle, its
    source, a status only when it isn't plain playing or paused, and "on
    {device}" when it plays elsewhere. A slim progress line advances as it plays
-   over "4:27 left, ends 22:01". Verbs: Open player, then the
+   beside "4:27 left, ends 22:01". Verbs: Open player, then the
    [transport](player.md#transport) on the same line. While this hero is on
    screen the now-playing bar hides; scrolled away, the bar returns.
-2. **The first Continue item**: its progress line over "10:32 left", as
+2. **The first Continue item**: its progress line beside "10:32 left", as
    Details shows it (it isn't playing, so no end time); Resume, From start,
    Details.
 3. **The first station on air**: Play.
 
-The hero's artwork lights the board's top ([Light](../design.md#light)),
+The hero's picture lights the board's top ([Light](../design.md#light)),
 whichever item it shows. An episode leads with its series ("Phony", then "S1 E1, Episodio 1" on the
 meta line). Radio and live media show no progress or time. The primary verb
 carries `data-page-first`. The hero waits for the data that decides it
@@ -49,14 +53,20 @@ Shelves keep their order while Home stays open and never hold the hero's item:
 the one that led Home when it opened, nor the one leading it now (after Stop,
 the next hero's item leaves Continue).
 They are plain overflow rows (`data-nav-row`) without paging buttons: a
-pointer scrolls them, touch swipes, keyboard and remote move focus.
+pointer scrolls them, touch swipes, keyboard and remote move focus. A shelf of
+one or two tiles takes only their width (`sparse`), so short shelves sit side by
+side ("Continue", "For later" and "Radio" on one line) rather than stacking a
+column of lone tiles; a full shelf takes the line, and the TV keeps one shelf
+per row so Up and Down still go shelf to shelf.
 
 ## Tiles
 
 Each item is one [`MediaTile`](browse.md#rows-and-tiles) whose press does its
 main verb: Continue resumes, a station plays, an Up next entry plays now,
-everything else opens Details. Other verbs are its menu. Continue adds a
-sibling Details button (44px) so a remote reaches History's verbs without a
-held OK. Up next tiles read their length and end time ("4:52, ends 21:47").
+everything else opens Details. Other verbs, and where the item leads ("Go to
+Stanford"), are its menu; on Continue its first verb is Details, which a remote
+reaches with a held OK. Continue's progress is a line on the artwork's foot,
+its meta ends with what's left ("YouTube, 4:11 left"). Up next tiles read their
+length and end time ("4:52, ends 21:47").
 Each shelf takes its items' majority shape; station art is square and fills
 its tile. The tile of what plays carries the [level](../design.md#motion).

@@ -30,9 +30,14 @@ trail above their h1 ([Browse](browse.md#breadcrumbs)).
 
 One sticky row: the Couch switch (or, on a TV, its own name) and the section
 tabs at the left; search, the sharing control and, on desktop, Keyboard
-shortcuts at the right; the TV adds a small clock. The current tab is
-underlined. The header publishes its height as `--top-bar` so scroll padding
-keeps focus clear of it. Below `lg` a TV centres its tabs on a second row.
+shortcuts at the right; the TV adds a small clock. No hairline under it: it is
+ink on the room. The current tab is white with a short white rule under its
+name, the others muted until a pointer brings them up. The search field is a
+translucent white (10%) rather than a grey box. Over a [Stage](../design.md#stage),
+while the page is at its top, the header is see-through and the Stage's scrim
+keeps its ink at 7:1; once the page scrolls it is black again. The header
+publishes its height as `--top-bar` so scroll padding keeps focus clear of it
+and the Stage reaches up under it. Below `lg` a TV centres its tabs on a second row.
 
 Its geometry holds from page to page: the search field fills the right column
 (up to 22rem with Keyboard shortcuts), tokens or not, and on Remote, whose keys
@@ -135,7 +140,8 @@ nothing changes side as it grows into the band
 ([Player](player.md#the-band-and-the-now-playing-bar)).
 
 - **At the left, what plays,** as compact as a mini-player's (YouTube Music,
-  Spotify and Apple Music run about 56–64px): a 2.5rem artwork, with the
+  Spotify and Apple Music run about 56–64px): the artwork 3rem tall at its own
+  shape (a frame 16:9, up to 6rem wide), with the
   [level](../design.md#motion) at its bottom-left corner, and two tight lines, so the bar is as tall as its 44px controls plus its padding: 61px on
   phones, 64px at 1440 wide. The title is the control across its whole line,
   with the artwork a pointer target for it. Under the title, one line that
@@ -145,7 +151,10 @@ nothing changes side as it grows into the band
   playing or paused. A station shows its show's title and photo while it has
   a show, else its name and logo, as its tile and the player do. Those links sit outside the title's button and drop their row
   height here, keeping a 24px hit area that doesn't push the line apart. The
-  player says where it plays the same way (`PlaysOn`).
+  player says where it plays the same way (`PlaysOn`). The picture's first
+  colour lights the bar's left end and is gone before its middle, so the line
+  under the title takes the band's ink (white 85%) and keeps 7:1. No hairline:
+  the timeline along the bar's top edge (a white 15% track) is its edge.
 - **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
 - **At the right, Volume, Where it plays, Up next and the Playback gear,**
   the band's own tools at the band's x, then **Open player** (ChevronUp, a

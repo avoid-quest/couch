@@ -55,8 +55,7 @@ The rail has one group per owner, each a heading over a muted line: **This
 device** over this device's name, then the Couch's own name over a dot and
 Connected, Reconnecting or Offline, with "admin" when this device is one. The
 current entry has a left rule and white ink, as the header's tab has its
-underline, and no ground, so a pointer's tint on another entry never reads as
-current. A page this device can't change at all (Sound, TV and the Couch's Updates for a non-admin) ends in a
+short rule, and no ground; a pointer only brings another entry's ink up. A page this device can't change at all (Sound, TV and the Couch's Updates for a non-admin) ends in a
 small lock, and still opens and shows its values. On the host the two groups
 are one, headed by the Couch's name over "This computer runs it" (or "This TV
 runs it").

@@ -1,8 +1,10 @@
 # Couch design system
 
 Couch is one app on three kinds of screen: the TV (a remote), a desktop window
-(mouse and keyboard) and phones (touch). It looks media-led: black ground,
-white ink, contained artwork, open typography and quiet dividers. The picture
+(mouse and keyboard) and phones (touch). It is a dark living room whose only
+light is the picture: black ground, white ink, artwork shown as pictures, never
+in boxes, and type used large. Home and every Details page open on a
+[Stage](#stage), the one bold thing; everything else is quiet. The picture
 brings the colour.
 
 Everything on screen comes from one model: **Devices**, the **Playback** each
@@ -19,17 +21,23 @@ bar for thumb reach.
 ## Principles
 
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
-  panels, shadows, gradients or blur; only the player's bands shade a picture,
-  with a scrim, and what opens over a picture is one translucent black.
+  panels, shadows, gradients or blur; only scrims shade a picture (the
+  player's bands, the Stage's top and its dissolve), and what opens over a
+  picture is one translucent black. A tile is a picture and a caption: no fill,
+  outline or links around it.
 - **The artwork lights the room**, the one exception to Flat
-  ([Light](#light)). Behind the large artwork (the player's Now playing, a
-  video's letterbox, Details and Home's hero) its own two colours glow and fall
-  to black. It is light, never chrome: no surface, border or control takes its
-  colour, ink stays white and controls black and white.
+  ([Light](#light)). Behind the large artwork (the Stage, the player's Now
+  playing, a video's letterbox) its own two colours glow and fall to black; a
+  hovered or focused tile or row glows in its own colour, and the now-playing
+  bar's left end takes its picture's. It is light, never chrome: no surface,
+  border or control takes its colour, ink stays white and controls black and
+  white.
 - **One primary target per item, one menu.** Pressing a row or tile does its
-  main verb; its other verbs are its one menu ([Menus](#menus)). Related
-  channels, albums, series and stations are separate visible links, never
-  nested in the target.
+  main verb; its other verbs are its one menu ([Menus](#menus)). Where it
+  leads (its channel, album, series, season, station, source) is the last
+  verbs of that menu, "Go to Phony", and visible links where the item has the
+  room: the Stage, the player and the now-playing bar. Never nested in the
+  target.
 - **Real content only.** Browse pages show what a source returns; Couch picks
   nothing. Discover is built from what the Couch saved.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress
@@ -59,8 +67,36 @@ wide. Both lie under the page's content and never move or size anything.
 - **The letterbox** is lit around the contained picture, as YouTube's ambient
   mode: the item's artwork gives the colours, painted once, so a playing video
   costs nothing per frame and a cross-origin video lights too.
+- **Tiles, rows and the bar** take the first colour alone, at the backlight's
+  brightness: a hovered or focused tile's or row's glow under its picture
+  (`useItemLight`), and the now-playing bar's left end. The Stage paints its
+  own light inside its mask ([Stage](#stage)).
 - **Not light:** a gradient wash on a page, colour on a surface, a blurred
   copy of the picture, or light without artwork behind it.
+
+## Stage
+
+`Stage` (`components/Stage.tsx`) opens Home (the hero) and every Details page
+(`DetailHeader`). It reaches up under the header and out to the window's edges.
+The picture stands at the right at the stage's height and its shape (a poster
+cropped to 4:5), and dissolves leftwards and downwards (a mask in the window's
+coordinates: nothing of it shows left of 40vw, all of it right of 66vw) into
+its own light, its first colour at the picture's heart and its second around
+it, and then the black room; a narrow picture also softens its own left edge.
+A logo or a channel's circle stands whole, contained, in that light. The copy
+sits at the bottom left, at most 38vw wide, in the dark: the trail, the title
+at display size, one muted meta line and its links, progress, the verbs, the
+synopsis. A scrim holds the header's ink at 7:1 over the picture, and the
+header is see-through while the page is at its top and black once it scrolls.
+
+- **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. Below
+  `md` the picture spans the column at the top (a frame cropped to 4:3, a
+  poster 4:5), fades downwards, and the copy starts over its foot.
+- **7:1, measured.** Over the brightest picture each run of copy keeps 7:1 (the
+  muted ink 8.3:1 at 1440, 7.5:1 at 390), as does the header's ink.
+- **Not a backdrop.** No blur, no copy of the picture, no gradient where no
+  picture is; a page without artwork gets the room's black and its cover in
+  type.
 
 ## Brand mark
 
@@ -81,28 +117,30 @@ Tailwind names, never hex values in components.
 | --- | --- | --- |
 | `background` | `#000` | page, bars, sheets |
 | `foreground` / `primary` | `#fff` | text, bars, primary button |
-| `muted` / `secondary` | `#171717` | inputs, artwork placeholders |
+| `muted` / `secondary` | `#171717` | loading artwork, skeletons |
 | `muted-foreground` | `#a3a3a3` (white 85% in the player's bands) | metadata |
 | `border` | white 16% | hairlines and row dividers |
 | `accent` | `#fff` / `#000` | menu highlight (inverts like focus) |
 | `radius` | `.25rem` | controls |
 
-**Focus inverts** the focused control to white with black ink; it is the only
-focus treatment, and the TV's only highlight. White controls (slider, Switch,
-Checkbox, RadioGroupItem) take a 2px foreground outline instead; a tile's
-caption inverts and its artwork takes a thin outline, which the TV thickens
-while it lifts the tile 5% ([TV](design/tv.md)). A text link's inversion
-reaches a little past its words (a shadow, so nothing moves).
+**Focus inverts** the focused control to white with black ink, and the TV's
+highlight is the same. White controls (slider, Switch, Checkbox,
+RadioGroupItem) take a 2px foreground outline instead. Media is the exception:
+a focused tile keeps its caption and rings its picture in white (2px, offset
+3px), lit in its own colour, and the TV thickens the ring to 4px while it lifts
+the tile 5% ([TV](design/tv.md)); a focused row's text inverts. A text link's
+inversion reaches a little past its words (a shadow, so nothing moves).
 
-**Hover is focus, quietly**, and a press is the step between them: a pointer
-tints the ground focus would invert (white 15% on a control, 10% on a row or
-a tile's caption), a press deepens it at once (25%, 20%; the white button
-greys), and focus inverts it. A tile's artwork takes focus's outline as a
-hairline; where its press plays, the artwork also dims under a white Play
-disc, which keyboard focus shows too. Nothing scales, lifts or slides under a
-pointer, and whatever a press acts on shows the hand. Never on the TV, which
-lifts its focus instead. A row tints whole. A ghost button whose panel is open
-(`aria-expanded`: Volume, Where it plays, Up next, Playback) keeps the tint.
+**Two hovers, nothing else.** Media lights up: a pointer over a tile or a row
+makes its picture glow in its own first colour (`--item-light`, read the first
+time a pointer or focus reaches it; faint white until then) and brings its meta
+line up to white, over 300 ms; its "…" appears with it. Controls brighten: a
+ghost control rests at 80% white ink and comes up to white under the pointer,
+a press dims it to 60% (the white button greys), and one whose panel is open
+(`aria-expanded`) stays white. Nothing tints, outlines, dims, scales or slides
+under a pointer, and whatever a press acts on shows the hand. Never on the TV,
+which lifts its focus instead. The header's tabs mark the current section with
+a short white rule under its name.
 
 ## Scale
 
@@ -113,9 +151,11 @@ first paint is already in it.
 
 | Role | Classes |
 | --- | --- |
-| Hero, Now playing, Details | `text-3xl`–`text-5xl font-semibold tracking-tight` |
-| Page title (`PageHeader`) | `text-3xl font-semibold tracking-tight` |
-| Shelf title | `text-xl font-semibold tracking-tight` |
+| Stage title (`StageTitle`) | 4.5rem, 3.75rem past 22 characters, 3rem past 44 (Details 3.75rem / 2.75rem; phones 2.5rem to 1.75rem), semibold, leading .95, tracking −.035em |
+| Now playing (audio), player title | `text-6xl` / `text-3xl` semibold, tight tracking |
+| Page title (`PageHeader`) | `text-4xl font-semibold`, tracking −.025em |
+| Shelf title | `text-lg font-semibold tracking-tight` |
+| Tile title | .9375rem `font-medium`, two lines |
 | Row title, settings label | `text-base` (media rows add `font-medium`) |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |
 | Body, controls, metadata | `text-sm` (metadata `text-muted-foreground`) |
@@ -159,7 +199,10 @@ control, 200 ms for what arrives.
   skips them.
 - The light cross-fades over 600 ms when the artwork changes, the one slow
   move ([Light](#light)). Reduced motion swaps it at once, still lit.
-- No scroll entrances, staggers, springs or scaling tiles, and no loops but one:
+- Media lights up over 300 ms (its glow, ease-out) and the Stage's light fades
+  in with its picture; reduced motion lands both at once.
+- No scroll entrances, staggers, springs or scaling tiles (but the TV's lifted
+  focus), and no loops but one:
   the **level**, three bars that rise and fall while sound comes out
   (`Level`). It says the player's state, not the sound's loudness: it moves
   only while what plays is playing, and lies flat while paused, buffering or
@@ -175,8 +218,8 @@ control, 200 ms for what arrives.
 shadcn components live in `src/client/components/ui` and are owned by Couch.
 Changes from the Mira defaults: `text-sm` controls at `h-8`, a flat left-rule
 `Alert`, a left-aligned borderless `Empty`, no shadows, a 1.25rem glyph in
-`icon-lg`, Select items that reserve room for their check, and the open-state
-hover tint on ghost buttons. Check the
+`icon-lg`, Select items that reserve room for their check, and ghost buttons
+that rest at 80% white ink and brighten rather than tint. Check the
 [catalog](https://ui.shadcn.com/docs/components) before building anything
 custom.
 
@@ -196,6 +239,7 @@ Shared building blocks in `src/client/components`:
   actions; `hidden` keeps an `sr-only` h1 where the tab or rail already names
   the page. `ContentBreadcrumb` is a content page's trail of ancestors.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
+- `Stage` and `StageTitle` ([Stage](#stage)).
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
   one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for
@@ -205,15 +249,16 @@ Shared building blocks in `src/client/components`:
   `metaLine` give captions one rhythm: an episode leads with its series, and
   meta parts are joined by commas; `withoutUrls` takes bare addresses out of
   descriptions.
-- `DetailHeader`: an item or collection page's header
-  ([Browse](design/browse.md#details)), with `SaveToggle` (Save as a bookmark
+- `DetailHeader`: an item or collection page's header, a Stage with the
+  trail inside it ([Browse](design/browse.md#details)), with `SaveToggle` (Save as a bookmark
   that fills, fixed width) and `Description` (three lines, then More), which
   Search's closest match uses too.
 - `ContentFilters` (`FilterBar`, `FilterChoice`, `FilterSelect`, `FilterInput`)
   and `BrowsePagination` ([Browse](design/browse.md#filters-and-pages));
   Search's own `SearchFilters` ([Browse](design/browse.md#search)).
 - `ContentLink` / `MediaContext`: relationship links with Back and focus
-  restoration.
+  restoration; `useRelatedMenu` gives the same relationships as a tile's or a
+  row's "Go to …" verbs.
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
   ([Player](design/player.md)).
 - `playbackStatus`: one status vocabulary for Home, the player, the
@@ -222,8 +267,8 @@ Shared building blocks in `src/client/components`:
   loading, problems and the end.
 - `RowMenu` (`useItemMenu`, `ItemMenu`): an item's one menu.
 
-Custom compositions, and the gap each fills: `MediaTile`, `MediaRow` and
-`DetailHeader` (the catalog has no media tile or header, and Card isn't flat);
+Custom compositions, and the gap each fills: `MediaTile`, `MediaRow`, `Stage`
+and `DetailHeader` (the catalog has no media tile or header, and Card isn't flat);
 `Shelf` as a plain overflow row (Carousel's arrow handling fights spatial
 navigation); the timeline's hover readout (Slider has none); the Remote's pad
 (no direction pad); toasts on sonner's `unstyled` option (its default surface

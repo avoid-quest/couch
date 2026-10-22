@@ -67,8 +67,9 @@ Over a video, there is a bottom band and a top line. They show and hide
 together.
 
 **Scrims, not bars.** Each band paints a soft black ramp behind itself and
-past its edge (`::before`). It fades from 70% at the screen's edge to 50%
-where the controls start, then to nothing over 4rem. This follows YouTube's
+past its edge (`::before`). It fades from 82% at the screen's edge to 70%
+where the controls start (white keeps 7:1 over a white frame), then to nothing
+over 4rem. This follows YouTube's
 gradient and Netflix's and Apple's floating controls. There is never a solid
 band.
 
@@ -82,8 +83,9 @@ band.
 
 **The top line** follows the fullscreen title of YouTube and Netflix:
 
-- Back, then the title at `text-lg` semibold. The title opens Details.
-- Under the title, the relationship links (`MediaContext`). A subtitle that
+- Back, then the title at `text-3xl` semibold (`text-2xl` on phones), one
+  line. The title opens Details.
+- Under the title, at `text-base`, the relationship links (`MediaContext`). A subtitle that
   the links already name is not repeated (`mediaSubtitle`).
 - At the right, small: the end time ("ends 21:42"), Stop sharing while this
   device shares, and the clock on the TV.
@@ -106,6 +108,9 @@ The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the
   now-playing bar grows into the band without anything changing side. Apple's
   controls and Prime's centre transport are centred too.
+  Play/Pause is the band's one large control (1.3 times the target, a 2rem
+  glyph), as Apple's and YouTube's fullscreen transports lead with theirs; the
+  bar's smaller one grows into it.
 - The tools at the right, exactly the now-playing bar's, sound first, then
   content, then view: **Volume, Where it plays, Up next, the Playback gear**,
   then **the last slot: fullscreen**, bottom right as on every player. The bar
