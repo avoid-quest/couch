@@ -6,8 +6,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter-tight";
-/* The display face (docs/design.md, Type): Archivo, with its width and weight axes. */
-@import "@fontsource-variable/archivo/wdth.css";
+/* The display face (docs/design.md, Type): Mona Sans, with its width and weight axes. */
+@import "@fontsource-variable/mona-sans/wdth.css";
 
 @layer components {
 /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (now-playing bar, phone tabs). */
@@ -40,7 +40,7 @@ body { min-width: 0; }
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Inter Tight Variable', sans-serif;
-    --font-display: 'Archivo Variable', 'Inter Tight Variable', sans-serif;
+    --font-display: 'Mona Sans Variable', 'Inter Tight Variable', sans-serif;
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -455,9 +455,8 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 /* What stands in the room: an object casts a soft, deep shadow onto it, as a sleeve on a shelf; a mark casts none. */
 :root { --object-shadow: 0 2rem 4rem -1rem rgb(0 0 0 / 72%), 0 .5rem 1.25rem rgb(0 0 0 / 38%); }
 
-/* Display type (docs/design.md, Type): Archivo, a grotesque in the American tradition of jazz sleeves and gig posters,
-   whose width follows the title's length (titleLength in Stage.tsx): short titles run wide and heavy, long ones
-   condense and step down, so a title of any length is set whole. Its size never lets its longest word (--word, in
+/* Display type (docs/design.md, Type): Mona Sans, a grotesque whose width follows the title's length (titleLength in
+   Stage.tsx): short titles run wide and heavy, long ones condense and step down, so a title of any length is set whole. Its size never lets its longest word (--word, in
    characters; --glyph is a character's width at that stretch, in em) overflow its column (cqi), so a word never
    breaks or clips; only a word longer than any column could hold breaks. */
 .display-title { font-family: var(--font-display); font-weight: 760; line-height: .94; letter-spacing: -.012em; overflow-wrap: break-word; font-size: min(var(--title-size), calc(100cqi / (var(--word, 10) * var(--glyph)))); font-stretch: var(--title-width); }

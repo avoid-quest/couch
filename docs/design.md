@@ -223,9 +223,8 @@ sets as a mouse moves over it and a key removes.
 `html` font size is `clamp(16px, 1.25vw, 24px)`, so rem sizes scale every
 screen alike. Two faces, clearly apart:
 
-- **Archivo** (display, `font-display`, `@fontsource-variable/archivo` with its width axis):
-  a grotesque in the American tradition of jazz sleeves and gig posters, with
-  width (62–125%) and weight axes. It sets the Stage's and the player's titles
+- **Mona Sans** (display, `font-display`, `@fontsource-variable/mona-sans` with its width axis):
+  a warm grotesque with width (75–125%) and weight axes. It sets the Stage's and the player's titles
   (`.display-title`, weight 760), page titles and the headings of shelves,
   lists and sections (normal width, semibold). `index.html` preloads its latin
   file.
@@ -250,8 +249,8 @@ width, against the column's `cqi`), so a word never breaks.
 | --- | --- |
 | Stage and Now playing title | `.display-title` (above), leading .94 to 1 |
 | The player's title over a video | `text-3xl` semibold, two lines, then the whole title on hover |
-| Page title (`PageHeader`) | `text-page font-semibold` in Archivo |
-| Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` in Archivo |
+| Page title (`PageHeader`) | `text-page font-semibold` in Mona Sans |
+| Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` in Mona Sans |
 | The bar's title, the palette's query row | `text-title font-medium`; the bar's wraps to two lines (one on phones, whole on focus) |
 | Item title (tiles, rows), settings label, the search palette's rows | `text-body`, wrapped whole |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |

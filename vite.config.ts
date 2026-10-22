@@ -18,9 +18,9 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, packaged: false });
   }
 })();
-// index.html preloads the latin Inter Tight and Archivo so the first paint is in them. The build resolves those paths to
+// index.html preloads the latin Inter Tight and Mona Sans so the first paint is in them. The build resolves those paths to
 // the assets the stylesheet uses; the dev server serves them where the stylesheet asks, under /@fs/.
-const fonts = ["node_modules/@fontsource-variable/inter-tight/files/inter-tight-latin-wght-normal.woff2", "node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2"];
+const fonts = ["node_modules/@fontsource-variable/inter-tight/files/inter-tight-latin-wght-normal.woff2", "node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-wdth-normal.woff2"];
 export default defineConfig(({ command }) => ({
   clearScreen: false,
   root: "src/client",
