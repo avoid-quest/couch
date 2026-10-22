@@ -11,7 +11,9 @@ export function bufferedEnd(ranges: Pick<TimeRanges, "length" | "start" | "end">
   return null;
 }
 
+// In whole seconds: the media element reports it on every progress and timeupdate, and each change renders the timeline.
 export function setBuffered(next: typeof loaded) {
+  if (next) next = { ...next, end: Math.floor(next.end) };
   if (next?.playbackId === loaded?.playbackId && next?.end === loaded?.end) return;
   loaded = next;
   for (const listener of listeners) listener();
