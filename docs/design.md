@@ -1,11 +1,13 @@
 # Couch design system
 
 Couch is one app on three kinds of screen: the TV (a remote), a desktop window
-(mouse and keyboard) and phones (touch). It is a dark living room whose only
-light is the picture: black ground, white ink, artwork shown as pictures, never
-in boxes, and type used large. Home and every Details page open on a
-[Stage](#stage), the one bold thing; everything else is quiet. The picture
-brings the colour.
+(mouse and keyboard) and phones (touch). It is a dark living room lit by what
+plays. Every picture is an object you could hold (a sleeve, a poster, a logo),
+shown whole and crisp in a room painted with its own colours; only a wide
+photograph fills the stage as a backdrop. Type is set large and whole, in a
+display face whose width follows its words. Home and every Details page open
+on a [Stage](#stage), the one bold thing, and what plays floats over every page
+in a capsule of tinted [glass](#glass).
 
 Everything on screen comes from one model: **Devices**, the **Playback** each
 one serves, and **Where it plays**, a Playback's Devices with their picture and
@@ -20,83 +22,128 @@ bar for thumb reach.
 
 ## Principles
 
-- **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
-  panels, shadows, gradients or blur; only scrims shade a picture (the
-  player's bands, the Stage's top and its dissolve), and what opens over a
-  picture is one translucent black. A tile is a picture and a caption: no fill,
-  outline or links around it.
-- **The artwork lights the room**, the one exception to Flat
-  ([Light](#light)). Behind the large artwork (the Stage, the player's Now
-  playing, a video's letterbox) its own two colours glow and fall to black; a
-  hovered or focused tile or row glows in its own colour. It is light, never
-  chrome: no surface, border or control takes its colour (the now-playing bar
-  is a solid surface of its own), ink stays white and controls black and
-  white.
+- **Show the whole picture.** Artwork keeps its true shape everywhere. On the
+  Stage and in the player a wide photograph (a video's frame, a show's photo)
+  is a **frame** that fills the stage as a backdrop; anything else (a square
+  cover, a poster, an avatar, a logo on its own ground) is an **object** that
+  stands whole at a generous size with a shadow under it; a logo on nothing
+  (a vector, see-through edges) is a **mark** that stands whole without one.
+  Nothing is cropped into a band, and white artwork stays white
+  ([Stage](#stage)).
+- **The room takes the picture's colour** ([Room](#room)). Behind a Stage and
+  the player's Now playing, the room is painted with two colours read from the
+  artwork, with a fine grain, and the now-playing bar's glass takes its tone.
+  Colour from the artwork is the only colour besides danger's red.
+- **Set the words whole.** Titles wrap and their type adapts to their length
+  rather than ellipsing where there is room: the Stage's and the player's
+  titles, Home's rows, tiles and captions. Text truncates only where space is
+  truly scarce (a phone's bar, the line over a video, a breadcrumb), with the
+  whole text on hover and focus.
+- **Depth means something.** What floats casts a shadow: the bar, an object
+  on the Stage, the player's artwork, Up next summoned over the room. Pages,
+  rows, tiles and shadcn's menus are flat: no Cards or bordered
+  panels, open typography, whitespace and divided rows. A tile is a picture
+  and a caption, with no fill, outline or links around it.
 - **One primary target per item, one menu.** Pressing a row or tile does its
   main verb; its other verbs are its one menu ([Menus](#menus)). Where it
   leads (its channel, album, series, season, station, source) is the last
   verbs of that menu, "Go to Phony", and visible links where the item has the
   room: the Stage, the player and the now-playing bar. Never nested in the
   target.
+- **Say each thing once.** The bar holds the transport, so Home's Stage
+  doesn't repeat it while something plays; Up next takes room beside the
+  artwork only while something is still to come.
 - **Real content only.** Browse pages show what a source returns; Couch picks
   nothing. Home's sources are built from what the Couch saved.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress
-  and end times are small muted metadata. Live media shows no time and no
-  label.
-- **Colour only for danger.** Destructive red is the only colour.
+  and end times are small muted metadata. Live media that can't seek has no
+  timeline.
 - **Undo, not confirm**, for shared actions; destructive admin actions confirm
   inline or in an AlertDialog.
 - **Disabled keeps its place.** A control that can't act stays in its slot at
   half ink (`disabled:opacity-50`); nothing shrinks or moves.
 
-## Light
+## Room
 
-`AmbientLight` reads two colours from the artwork on screen: a 16×16 copy,
-once per address (`artwork-light.ts`). Core fetches the picture for the read
-(`/api/artwork`, raster pictures only), since most artwork hosts don't let a
-page read theirs; artwork it can't read gives no light, and the picture on
-screen is never touched. A picture's answer is kept per address; a read that
-failed (Core out of reach) is tried again the next time the artwork shows. The first colour is a **backlight** that hugs the
-picture's edges and is gone 3rem out; the second a **haze**, three pictures
-wide. Both lie under the page's content and never move or size anything.
+`artwork-light.ts` reads a 16×16 copy of the artwork, once per address. Core
+fetches the picture for the read (`/api/artwork`, raster pictures only), since
+most artwork hosts don't let a page read theirs; artwork it can't read gives
+no colour, and the picture on screen is never touched. A read that failed
+(Core out of reach) is tried again the next time the artwork shows. It picks
+the picture's strongest hue and a second one at least 60° from it (a picture
+with hardly any colour gives its grey; black and white give none), and learns
+whether the picture's edge is see-through (a logo on nothing).
 
-- **7:1 at the brightest.** The backlight is at most luminance 0.07, so white
-  ink over it keeps 7:1; only titles come that close to artwork. The haze, which
-  may lie under any text, is at most 0.004, so muted ink keeps 7:1 over it
-  with room for the backlight's last trace.
-- **The letterbox** is lit around the contained picture, as YouTube's ambient
-  mode: the item's artwork gives the colours, painted once, so a playing video
-  costs nothing per frame and a cross-origin video lights too.
-- **Tiles and rows** take the first colour alone, at the backlight's
-  brightness: a hovered or focused tile's or row's glow under its picture
-  (`useItemLight`). The Stage paints its own light inside its mask
-  ([Stage](#stage)).
-- **Not light:** a gradient wash on a page, colour on a surface, a blurred
-  copy of the picture, or light without artwork behind it.
+Each colour is set to a luminance, keeping its hue, so ink keeps 7:1 over it:
+
+| Colour | Luminance at most | Use |
+| --- | --- | --- |
+| `room` (first) | .022 | the room under the copy: muted ink (`#bdbdbd`) keeps 7.8:1 or more, measured |
+| `deep` (second) | .01 | the room's second pool and its fall to black |
+| `a` (backlight) | .07 | the light pooled behind the picture, never behind copy; a hovered tile's glow |
+| `b` (haze) | .004 | the letterbox's haze around a playing video |
+| `tone` | .03 | the now-playing bar's glass |
+
+The **room** (`.room`) lies behind a Stage and the player's Now playing: the
+first colour pools behind the picture (mixed with the backlight at its heart),
+the second falls from the top corner, then black, with a static grain tile at
+6% so the dark has a surface and the gradients don't band. Without colour (a
+white cover, a black-and-white logo) the room is a neutral graphite. The
+colours are registered custom properties, so when the artwork changes they
+cross-fade over 600 ms; reduced motion swaps them at once. Everything is
+painted once: no blurred copy of the picture, nothing animated.
+
+Elsewhere the light stays as it was: a playing video's letterbox is lit around
+the contained picture as YouTube's ambient mode (`AmbientLight`: a backlight
+hugging its edges and a haze three pictures wide, painted once, so a playing
+video costs nothing per frame), and a hovered or focused tile or row glows
+under its picture in its first colour (`useItemLight`).
+
+## Glass
+
+The now-playing bar is a capsule of glass floating over the page
+(`.bar-glass`): `rounded` 1.25rem (1rem on phones), inset from the window's
+edges so its content lines up with the page's gutter, with a deep shadow under
+it and a 1px highlight along its top. Its backdrop is blurred (28px),
+saturated (1.5) and halved in brightness, and the playing artwork's `tone`
+lies over it at 80% (`--bar`, `#1c1c1e`, without one). Over pure white behind
+it, its white ink keeps 10.4:1 and its muted ink (white 80%) 7.3:1 for every
+hue, measured. The tone cross-fades over 600 ms when what plays changes. It is
+the one backdrop filter on a page (Up next, summoned over the player's room,
+is the other, on the player).
 
 ## Stage
 
 `Stage` (`components/Stage.tsx`) opens Home (the hero) and every Details page
-(`DetailHeader`). It reaches up under the header and out to the window's edges.
-The picture stands at the right at the stage's height and its shape (a poster
-cropped to 4:5), and dissolves leftwards and downwards (a mask in the window's
-coordinates: nothing of it shows left of 40vw, all of it right of 66vw) into
-its own light, its first colour at the picture's heart and its second around
-it, and then the black room; a narrow picture also softens its own left edge.
-A logo or a channel's circle stands whole, contained, in that light. The copy
-sits at the bottom left, at most 38vw wide, in the dark: the trail, the title
-at display size, one muted meta line and its links, progress, the verbs, the
-synopsis. A scrim holds the header's ink at 7:1 over the picture, and the
-header is see-through while the page is at its top and black once it scrolls.
+(`DetailHeader`). It reaches up under the header and out to the window's
+edges, in its picture's [room](#room), which fades into the page's black at
+its foot. The picture's form (`artForm`) comes from its own proportions, read
+once it loads (`useArtRatio`; its kind's shape until then), and from its read:
+
+- **Frame**, a photograph at least 1.3 times wider than tall: it stands at the
+  right at the stage's height and its own shape, and dissolves leftwards and
+  downwards (a mask in the window's coordinates: nothing of it shows left of
+  40vw, all of it right of 66vw) into the room. A scrim holds the header's ink
+  at 7:1 over it, and the copy is at most 38vw wide.
+- **Object**, anything else: whole at the right, as tall as the stage allows
+  under the header (`--object-h`) and no wider than 40vw, `rounded-sm`, with
+  its shadow (`--object-shadow`); a channel's avatar is a circle. A picture
+  that loads cold settles into place (.75rem, 450 ms) as it fades in.
+- **Mark**, a vector or a picture with see-through edges: whole, without a
+  shadow or a corner, which would outline its box.
+
+The copy sits at the bottom left, at most 42vw wide: the trail, the title at
+display size ([Type](#type)), one muted meta line and its links, progress, the
+verbs, the synopsis. The header is see-through while the page is at its top
+and black once it scrolls.
 
 - **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. Below
-  `md` the picture spans the column at the top (a frame cropped to 4:3, a
-  poster 4:5), fades downwards, and the copy starts over its foot.
-- **7:1, measured.** Over the brightest picture each run of copy keeps 7:1 (the
-  muted ink 8.3:1 at 1440, 7.5:1 at 390), as does the header's ink.
-- **Not a backdrop.** No blur, no copy of the picture, no gradient where no
-  picture is; a page without artwork gets the room's black and its cover in
-  type.
+  `md` the picture leads the column at the top: a frame spans it (cropped to
+  4:3, a poster 4:5) and fades downwards with the copy over its foot; an
+  object stands centred (at most 72vw, 22rem or 46vh tall) above the copy.
+- **7:1, measured.** Over the brightest frame each run of copy keeps 7:1; over
+  a room the copy sits where it is at most luminance .022.
+- **Without artwork** a page gets the room's graphite and its cover in type.
 
 ## Brand mark
 
@@ -120,12 +167,14 @@ Tailwind names, never hex values in components.
 | `secondary` | white 10% | a chip's or a filled control's ground; a rail's current page |
 | `fill-hover` | white 16% | that ground under a pointer |
 | `muted` | `#171717` | loading artwork, skeletons, the search field |
-| `muted-foreground` | `#a3a3a3` (white 85% in the player's bands, 72% on the bar) | metadata |
+| `muted-foreground` | `#bdbdbd` (white 85% in the player's bands, 80% on the bar) | metadata: 7:1 over any room |
 | `accent` | white 10% / `#fff` | a menu's, Select's or the palette's row under the pointer |
-| `bar` | `#141414` | the now-playing bar's surface |
+| `bar` | `#1c1c1e` | the now-playing bar's glass where the artwork gives no tone ([Glass](#glass)) |
 | `border` | white 14% | hairlines and row dividers |
 | `input` | white 16% | the edge of fields and outline toggles |
 | `radius` | `.5rem` | shadcn's base; Couch's own scale follows |
+| `--object-shadow` | two soft black shadows | what stands in a room: an object on the Stage, the player's artwork |
+| `--grain` | a static noise tile | the room's surface, at 6% |
 
 Couch's scales are Tailwind theme tokens (the `@theme` block "Couch's scales"
 in `index.css`), and `cn` (`lib/utils.ts`) knows them, so `text-meta` merges
@@ -133,9 +182,9 @@ as a size and `h-control` as a height.
 
 | Scale | Steps | Use |
 | --- | --- | --- |
-| Radius | `xs` .125rem, `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's and the bar's thumbnail `rounded-sm`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg` |
+| Radius | `xs` .125rem, `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's and the bar's thumbnail `rounded-sm`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg`; the now-playing bar 1.25rem (1rem on phones) |
 | Control height | `control-sm` 1.75rem, `control` 2rem, `control-lg` 2.75rem, `field` 3rem | `size="sm"`; the default; the Stage's verbs (`size="lg"`); the header's search field. `touch:` raises each to 44px |
-| Type | `caption` .75rem, `meta` .8125rem, `body` .9375rem, `title` 1.125rem, `heading` 1.25rem, `page` 2.25rem | [Scale](#scale) |
+| Type | `caption` .75rem, `meta` .8125rem, `body` .9375rem, `title` 1.125rem, `heading` 1.25rem, `page` 2.25rem | [Type](#type) |
 | Spacing | `caption` .125rem, `stack` .75rem, `item` 1rem, `section` 3.5rem | inside a caption; a heading to its content; between items; between sections |
 
 **Focus inverts** the focused control to white with black ink, and the TV's
@@ -155,8 +204,9 @@ white (a ghost control or a toggle rests at 80% white and a press dims it to
 60%), a fill steps up one notch (`secondary` to `fill-hover`; the white button
 to 85%), and an outline's edge comes up. One whose panel is open
 (`aria-expanded`) stays lit. Ink never turns dark under a pointer, and nothing
-tints, dims, scales or moves: a press doesn't nudge, and links and the bar's
-artwork keep their ink. Whatever a press acts on shows the hand, sliders
+tints, dims, scales or moves under it; links and the bar's artwork keep their
+ink. A press on the transport (Play, Pause, Stop, Next) dips its glyph to 90%
+and lets it spring back ([Motion](#motion)). Whatever a press acts on shows the hand, sliders
 included (the arrow while disabled). Never on the TV, which lifts its focus
 instead. The header's tabs mark the current section with a short white rule
 under its name.
@@ -168,25 +218,45 @@ focuses the pointer's row, which Chromium calls `:focus-visible`); the
 palette's rows only while its list lacks `data-pointer`, which `HeaderSearch`
 sets as a mouse moves over it and a key removes.
 
-## Scale
+## Type
 
 `html` font size is `clamp(16px, 1.25vw, 24px)`, so rem sizes scale every
-screen alike. Inter Tight throughout, regular but for headings and display
-sizes (semibold) and the bar's title (medium); metadata small, muted and
-tabular. `index.html` preloads its latin file, so the first paint is already
-in it.
+screen alike. Two faces, clearly apart:
+
+- **Archivo** (display, `font-display`, vendored in `src/client/fonts`, OFL):
+  a grotesque in the American tradition of jazz sleeves and gig posters, with
+  width (62–125%) and weight axes. It sets the Stage's and the player's titles
+  (`.display-title`, weight 760), page titles and the headings of shelves,
+  lists and sections (normal width, semibold). `index.html` preloads its latin
+  file.
+- **Inter Tight** (everything else): regular, but for the bar's title
+  (medium); metadata small, muted and tabular. `index.html` preloads its latin
+  file too.
+
+A display title's size and width follow its length (`titleLength`): short
+titles run wide and large, long ones condense and step down, so a title of
+any length is set whole, never clipped. Its size is also capped so its longest
+word fits its column (`titleFit`: `--word` characters at the stretch's glyph
+width, against the column's `cqi`), so a word never breaks.
+
+| Length | Width | Home | Details | Now playing | Phones (Home, Details, Now playing) |
+| --- | --- | --- | --- | --- | --- |
+| up to 14 characters | 112% | 5rem | 4.5rem | 5.5rem | 3rem, 2.75rem, 3.25rem |
+| up to 26 | 96% | 4.25rem | 3.75rem | 4.5rem | 2.5rem, 2.375rem, 2.625rem |
+| up to 44 | 82% | 3.5rem | 3.125rem | 3.5rem | 2.125rem, 2rem, 2.125rem |
+| longer | 74% | 2.75rem | 2.5rem | 2.75rem | 1.875rem, 1.75rem, 1.75rem |
 
 | Role | Classes |
 | --- | --- |
-| Stage title (`StageTitle`) | 4.5rem, 3.75rem past 22 characters, 3rem past 44 (Details 3.75rem / 2.75rem; phones 2.5rem to 1.75rem), semibold, leading .95, tracking −.035em |
-| Now playing (audio), player title | `text-6xl` / `text-3xl` semibold, tight tracking |
-| Page title (`PageHeader`) | `text-page font-semibold` (tracking −.025em) |
-| Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` (tracking −.015em) |
-| The bar's title, the palette's query row | `text-title font-medium` |
-| Item title (tiles, rows), settings label, the search palette's rows | `text-body`, tiles and rows two lines |
+| Stage and Now playing title | `.display-title` (above), leading .94 to 1 |
+| The player's title over a video | `text-3xl` semibold, two lines, then the whole title on hover |
+| Page title (`PageHeader`) | `text-page font-semibold` in Archivo |
+| Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` in Archivo |
+| The bar's title, the palette's query row | `text-title font-medium`; the bar's wraps to two lines (one on phones, whole on focus) |
+| Item title (tiles, rows), settings label, the search palette's rows | `text-body`, wrapped whole |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |
 | Controls | `text-sm` (the Stage's verbs `text-body`) |
-| Metadata | `text-meta text-muted-foreground` |
+| Metadata | `text-meta text-muted-foreground`, wrapped whole |
 | Caption | `text-caption text-muted-foreground` |
 
 The page gutter is `px-(--gutter)` (`clamp(1rem, 4vw, 3rem)`); the shell gives
@@ -203,20 +273,25 @@ full-width primary (`verbRow`).
 
 ## Motion
 
-Things ease; nothing performs. One easing (`ease-out`, the default for every
-`transition-*` in `index.css`) and two durations: 150 ms for what answers a
-control, 200 ms for what arrives.
+Motion answers what people do and what plays; nothing performs on its own.
+One easing (`ease-out`, the default for every `transition-*` in `index.css`)
+and three durations: 150 ms for what answers a control, 200 ms for what
+arrives, 600 ms for colour that follows what plays.
 
 - Colour changes (hover, selection, the tab underline) ease both ways.
 - Focus inversion arrives at once and fades out, so a held arrow never passes
   through grey.
+- A press on the transport, in the bar and the band, dips its glyph to 90%
+  over 150 ms and springs back as it lifts, so Play and Pause feel struck.
 - Menus and popovers grow from the button that opened them (a zoom from 90%,
   its origin at the trigger's centre: an arrow that draws nothing gives Radix
   the point), and leave at once so focus is back before the next key. Up next
-  over the picture grows from its button the same way. Dialogs use shadcn's
-  short fade and zoom. Sheets fade and rise (200 ms).
+  over the picture, or summoned over the player's room, grows from its button
+  the same way. Dialogs use shadcn's short fade and zoom. Sheets fade and rise
+  (200 ms).
 - Routes appear immediately with cached content; artwork fades only on a cold
-  load; the player's bands fade together with the subtitles they lift.
+  load, and a Stage's object settles .75rem into place as it does (450 ms);
+  the player's bands fade together with the subtitles they lift.
 - One spatial story for what plays: the now-playing bar grows into the player
   band with a view transition (`couch-player-band`, 320 ms), and the artwork
   travels with it (`couch-art`, 280 ms, ease-out): the bar's thumbnail becomes
@@ -226,12 +301,13 @@ control, 200 ms for what arrives.
   rather than stretch over the band's timeline (`couch-bar-title`). These
   are view transitions, so they are composited snapshots, and reduced motion
   skips them.
-- The light cross-fades over 600 ms when the artwork changes, the one slow
-  move ([Light](#light)). Reduced motion swaps it at once, still lit.
-- Media lights up over 300 ms (its glow, ease-out) and the Stage's light fades
-  in with its picture; reduced motion lands both at once.
-- No scroll entrances, staggers, springs or scaling tiles (but the TV's lifted
-  focus), and no loops but one:
+- When what plays changes, the room's colours and the bar's tone cross-fade
+  over 600 ms, as do a letterbox's light ([Room](#room)). Reduced motion swaps
+  them at once.
+- Media lights up over 300 ms (its glow, ease-out); reduced motion lands it at
+  once.
+- No scroll entrances, staggers or scaling tiles (but the TV's lifted focus),
+  nothing animates `filter` or `box-shadow`, and no loops but one:
   the **level**, three bars that rise and fall while sound comes out
   (`Level`). It says the player's state, not the sound's loudness: it moves
   only while what plays is playing, and lies flat while paused, buffering or
@@ -271,7 +347,7 @@ Shared building blocks in `src/client/components`:
   actions; `hidden` keeps an `sr-only` h1 where the tab or rail already names
   the page. `ContentBreadcrumb` is a content page's trail of ancestors.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
-- `Stage` and `StageTitle` ([Stage](#stage)).
+- `Stage`, `StageTitle`, `artForm`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
   one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for
@@ -300,7 +376,7 @@ Shared building blocks in `src/client/components`:
 - `RowMenu` (`useItemMenu`, `ItemMenu`): an item's one menu.
 
 Custom compositions, and the gap each fills: `MediaTile`, `MediaRow`, `Stage`
-and `DetailHeader` (the catalog has no media tile or header, and Card isn't flat);
+and `DetailHeader` (the catalog has no media tile or header, and Cards are what Couch avoids);
 `Shelf` as a plain overflow row (Carousel's arrow handling fights spatial
 navigation); the timeline's hover readout (Slider has none); the Remote's pad
 (no direction pad); toasts on sonner's `unstyled` option (its default surface

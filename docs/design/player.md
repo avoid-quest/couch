@@ -40,7 +40,7 @@ darker so that subtitles behind a panel don't fight its text. There is no
 blur, no shadow and no hairline.
 
 The bars around a contained picture are lit by the item's artwork, as
-YouTube's ambient mode lights its player ([Light](../design.md#light)): its
+YouTube's ambient mode lights its player ([Room](../design.md#room)): its
 first colour glows 8rem out of the picture's edges, over a dark haze of its
 second. The light lies
 behind the video element, so it shows only in the bars, and it is painted
@@ -173,7 +173,7 @@ The differences are deliberate:
 | Where | Bar | Band | Why |
 |---|---|---|---|
 | Wide screens | Volume, Where it plays, Up next, gear, Open player | the same, then fullscreen at Open player's x | Fullscreen is bottom right on every player. |
-| Beside artwork (audio, or playing elsewhere), from 960px | Up next opens the player's Up next | Up next takes focus into the list beside the artwork, and Close returns; the last slot is empty | The list is already on screen; the buttons keep their places. |
+| Beside artwork (audio, or playing elsewhere), from 960px | Up next opens the player's Up next | Up next takes focus into the list beside the artwork, and Close returns (with nothing to come, it opens Up next over the room); the last slot is empty | The list is already on screen; the buttons keep their places. |
 | Phones | Play/Pause and Open player, after the title | the transport at the left, then Where it plays, Up next, the gear and fullscreen | A minimized player needs no mixer; the player has it. Open player sits at fullscreen's x. The band has no room to centre the transport beside four tools. |
 
 Over a playing video, the bands hide 4 s after the last key while focus is on
@@ -225,15 +225,21 @@ The rest of the picture stays visible and keeps playing.
 
 With nothing to show (no queued or played row, no Autoplay pick and no
 search for one), Up next isn't offered: its button keeps its slot, disabled,
-with "Nothing queued" as its tooltip, in the band and the bar, and beside
-artwork its column goes, so the artwork has the stage.
+with "Nothing queued" as its tooltip, in the band and the bar.
+
+Beside artwork it takes a column only while something is still to come (a
+queued entry after what plays, or Autoplay's picks: `hasQueued`). Played rows
+alone, a radio evening's usual case, leave the artwork the whole room, and Up
+next is summoned from its button as a panel over the room at the right above
+the band (28rem, `rounded-lg`, translucent black glass with a shadow), growing
+from its button; a click on the room closes it.
 
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
 - A click on the picture while Up next is open closes it, without pausing.
-- Beside artwork, on wide screens, Up next stays on screen, and the band's Up
-  next takes focus into it, with Close to return. On phones it replaces the
-  artwork.
+- Beside artwork, on wide screens, while something is to come, Up next stays
+  on screen, and the band's Up next takes focus into it, with Close to
+  return. On phones it replaces the artwork.
 - **Playing** heads the list only where the player's title is off screen.
 - **Upcoming rows** are board lines:
   - The title is heavy. The start time is light, at the same size, at the
@@ -311,10 +317,15 @@ exists.
 
 ## Audio, live and elsewhere
 
-Audio, and media playing elsewhere, show **Now playing** as Home's hero does:
+Audio, and media playing elsewhere, show **Now playing**: one composition in
+the artwork's [room](../design.md#room). On wide screens the artwork stands at
+the left, whole at its own shape (`--art-ratio`), as tall as the room allows
+(up to 36rem and 52% of the width) with its shadow, and the copy beside it
+ends level with its foot. Phones and portrait windows stack them, the artwork
+as wide as the gutters allow. The copy:
 
-- contained artwork, as wide as the gutters allow on phones
-- the title
+- the title in the display face, sized and narrowed by its length and set
+  whole ([Type](../design.md#type))
 - where it plays, when that isn't only this device: "on Kitchen +1", in the
   ink rather than the muted metadata. It leads the line under the title, so it
   reads on from the title. The now-playing bar says it the same way, in the
@@ -327,21 +338,22 @@ Audio, and media playing elsewhere, show **Now playing** as Home's hero does:
 - the end time
 - a station's current programme or track
 
-The artwork lights the stage ([Light](../design.md#light)): a backlight in its
-first colour around its edges and a dark haze of its second, cross-fading when
-the show or item changes. The band and Up next beside it are open, with no
-ground of their own, so the light reaches the window's edges.
+The room's light pools behind the artwork, never behind the copy, and its
+colours cross-fade when the show or item changes. The band and Up next beside
+it are open, with no ground of their own, so the room reaches the window's
+edges.
 
 **A station's show** is Core's programme for the playback, else the show its
 tile lists (`useStationShow`). The rule is the same on the tile, the
 now-playing bar, Home's hero and the player, loading or playing: the show's
 title and photo while there is a show, else the station's name and logo.
 
-The band sits on black with no rule, and nothing over a picture. There is
+The band sits in the room with no rule, and nothing over a picture. There is
 nothing to fill, so the band's fullscreen slot is empty (a window already in
 fullscreen keeps its Exit fullscreen there). Live media
 that can't seek has no timeline, no time and no label, and its Pause stays
-disabled. On wide screens, the queue sits beside the stage. The band includes
+disabled. On wide screens, the queue sits beside the artwork while something
+is to come. The band includes
 the phone's safe-area inset.
 
 ## Stop sharing

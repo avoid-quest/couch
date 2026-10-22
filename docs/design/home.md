@@ -7,34 +7,34 @@ hides the shelves' scrollbars.
 
 ## The hero
 
-The Stage at Home's height (`min(39.375vw, 70vh)`): the picture at the right
-at its [true shape](browse.md#artwork-shapes), reaching up under the
-see-through header and out to the window's edge, dissolving into its own light
-and then black; at the bottom left the title at display size (4.5rem, 3.75rem
-past 22 characters, 3rem past 44; phones 2.5rem down to 1.75rem), one muted
-meta line with its relationship links, how far it got as a slim line beside
-what's left, and the verbs. Phones put the picture across the column at the top
-and start the copy over its foot, the primary verb growing along the verbs'
-one line. Its item is the
-first of:
+The Stage at Home's height (`min(39.375vw, 70vh)`), in its picture's room:
+the picture at the right at its own shape, a wide photograph as a backdrop
+dissolving into the room, anything else (a cover, a logo, a poster) whole as
+an object ([Stage](../design.md#stage)); at the bottom left the title in the
+display face, sized and narrowed by its length and set whole
+([Type](../design.md#type)), one muted meta line with its relationship links,
+how far it got as a slim line beside what's left, and the verbs. Phones put
+the picture at the top of the column (a frame across it, an object centred)
+and the copy under it, the primary verb growing along the verbs' one line. Its
+item is the first of:
 
 1. **What you control, playing now.** Meta: the station or subtitle, its
    source, a status only when it isn't plain playing or paused, and "on
    {device}" when it plays elsewhere. A slim progress line advances as it plays
-   beside "4:27 left, ends 22:01". Verbs: Open player, then the
-   [transport](player.md#transport) on the same line. The now-playing bar
-   shows too, as on every page.
+   beside "4:27 left, ends 22:01". No verbs: the now-playing bar right below
+   holds the transport and Open player, so the Stage doesn't repeat them. Its
+   title is the one stop (`data-page-first`, "Open player: {title}") and opens
+   the player, as its picture does under a pointer.
 2. **The first Continue item**: its progress line beside "10:32 left", as
    Details shows it (it isn't playing, so no end time); Resume, From start,
    Details.
 3. **The first station on air**: Play.
 
-The hero's picture lights the page's top ([Light](../design.md#light)),
-whichever item it shows. An episode leads with its series ("Phony", then "S1 E1, Episodio 1" on the
-meta line). Radio and live media show no progress or time. The primary verb
-carries `data-page-first`. The hero waits for the data that decides it
-(session, history, stations) so it never swaps under the focus, and the rows
-wait with it.
+An episode leads with its series ("Phony", then "S1 E1, Episodio 1" on the
+meta line). Radio and live media show no progress or time. The primary verb,
+or the playing title, carries `data-page-first`. The hero waits for the data
+that decides it (session, history, stations) so it never swaps under the
+focus, and the rows wait with it.
 
 ## Sections
 
@@ -60,9 +60,9 @@ doesn't take the focus.
 
 Your own rows that follow each other in the saved order (Continue, For later,
 Played recently, Up next) are one board (`HomeBoard`): short lists of compact
-[`MediaRow`s](browse.md#rows-and-tiles) side by side in columns of one width
-(`repeat(auto-fill, minmax(min(100%, 20rem), 1fr))`, 3rem apart), whatever
-their count, so a few items read as a composed list. Phones stack them; the
+[`MediaRow`s](browse.md#rows-and-tiles) side by side, sharing the page's width
+(`repeat(auto-fit, minmax(min(100%, 20rem), 1fr))`, 3rem apart), so two lists
+take half the page each and their titles and meta lines are read whole. Phones stack them; the
 TV keeps the columns, and its arrows move down a list and across to the next.
 
 A list holds its first four. Its heading (`ShelfHeading`) is its name, with no

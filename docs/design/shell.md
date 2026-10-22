@@ -37,9 +37,9 @@ ink on the room. The current tab is white with a short white rule under its
 name, the others muted until a pointer brings them up. The search field keeps
 a solid fill (`muted`), so artwork under the see-through header never shows
 through its text. Over a [Stage](../design.md#stage), while the page is at its
-top, the header is see-through and the Stage's scrim (96% black to the
-header's foot)
-keeps its ink at 7:1; once the page scrolls it is black again. The header
+top, the header is see-through: over a frame the Stage's scrim (90% black to
+the header's foot) keeps its ink at 7:1, and over a room, dark enough for
+muted ink, it needs none; once the page scrolls it is black again. The header
 publishes its height as `--top-bar` so scroll padding keeps focus clear of it
 and the Stage reaches up under it. Below `lg` a TV centres its tabs on a second row.
 
@@ -145,17 +145,19 @@ device. It reuses Settings → This device's choice. After a switch:
 
 ## Now-playing bar
 
-`NowPlayingBar`, one row above the page (and the phone tab bar) on a solid
-surface of its own (`bar`, `#141414`), is the player's band made small: it shares the band's grid, controls and sizes, so
+`NowPlayingBar`, a capsule of tinted [glass](../design.md#glass) floating
+over the page (and above the phone tab bar), inset from the window's edges so
+its content lines up with the gutter, is the player's band made small: it shares the band's grid, controls and sizes, so
 nothing changes side as it grows into the band
 ([Player](player.md#the-band-and-the-now-playing-bar)).
 
 - **At the left, what plays,** as large as a mini-player's (YouTube Music,
   Spotify and Apple Music run about 56–64px): the artwork 3.5rem tall (3rem on
   phones) at its own shape (a frame 16:9, up to 7rem wide, `rounded-sm`), and
-  two lines, the title (`text-title font-medium`, `text-body` on phones)
-  followed by the [level](../design.md#motion) while sound comes out, over a
-  `text-meta` line. The title is the control across its whole line, with the
+  two lines, the title (`text-title font-medium`, `text-body` on phones, up
+  to two lines and one on phones, whole while it has focus, with the whole
+  title on hover) followed by the [level](../design.md#motion) while sound
+  comes out, over a `text-meta` line. The title is the control across its whole line, with the
   artwork a pointer target for it; neither dims under a pointer. Under the title, one line that
   doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its
   collection or station link (a station's only under its show, since without
@@ -176,9 +178,10 @@ nothing changes side as it grows into the band
   while it has nothing to show.
 - Every control is the band's ghost icon at `--player-target` (44px, 54px at
   1920 wide) with the same 1.25rem glyph.
-- Its timeline is a slim line along its top edge, none for live media. Its
-  hit area is a .5rem padding centred on that edge; under the pointer the line
-  thickens to .375rem and shows its handle, and the time under the pointer
+- Its timeline is a slim rounded line along its top edge between its
+  corners, none for live media: a white 18% track whose played part glows
+  softly. Its hit area is a .5rem padding centred on that edge; under the
+  pointer (the hand) the line thickens to .375rem and shows its handle, and the time under the pointer
   (`text-meta`, `rounded-sm`) sits .5rem above the line's centre.
 - Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause and
   Open player, at fullscreen's x: a minimized player needs no mixer, and the

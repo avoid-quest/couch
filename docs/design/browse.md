@@ -120,14 +120,15 @@ channel, film or episode) have their own URLs, so refresh and Back restore
 them with scroll and focus.
 
 They open on `DetailHeader`, a [Stage](../design.md#stage) as Home's hero
-is, shorter (`min(33vw, 60vh)`): the picture at the right, under the header,
-dissolving into its own light; at the bottom left the trail, the title at
-display size (3.75rem, 2.75rem past 44 characters), one meta line, its links (a
-creator; the collections holding it are already the trail, so they aren't
-repeated), a `DurationBar` when the length is known (a video's "9:07"), one row
-of verbs, then the synopsis without bare addresses (a line that only labelled
-one goes too), three lines until More. A poster is cropped to 4:5 there so it
-carries the right of the stage; a station's logo stands whole in its light. A
+is, shorter (`min(33vw, 60vh)`), in its picture's room: a wide photograph at
+the right dissolving into the room, anything else whole as an object (a
+poster, an album, a station's logo, a channel's circle) or a mark (a logo on
+nothing); at the bottom left the trail, the title in the display face, sized
+and narrowed by its length and set whole ([Type](../design.md#type)), one meta
+line, its links (a creator; the collections holding it are already the trail,
+so they aren't repeated), a `DurationBar` when the length is known (a video's
+"9:07"), one row of verbs, then the synopsis without bare addresses (a line
+that only labelled one goes too), three lines until More. A
 channel's tab ("Stanford - Videos") is titled as the channel, a circle, and its
 trail stops before it.
 
@@ -180,7 +181,8 @@ hits, else Open or Details), with the row's menu behind a "…" at the end of th
 title's line, which a pointer sees while over the row or focus is in it (touch
 and the TV always see it). A row is never tinted: hovered, its thumbnail lights
 up as a tile's does ([Hover](../design.md#tokens)). Rows are dense (`py-2`),
-the title `text-body` over a `text-meta` line. The thumbnail (`rounded-sm`)
+the title `text-body` over a `text-meta` line, both wrapped whole rather than
+ellipsed. The thumbnail (`rounded-sm`)
 takes the list's majority shape at about one height (a compact square is
 3.5rem, a compact frame 6rem wide; a regular frame 5rem, 6rem from `@md`), and a word every row shares (RaiPlay's "Programme") is left
 out, in a row or a shelf. Where a row leads (its source, creator, series,
@@ -202,8 +204,9 @@ looked-at Playback plays.
 **`MediaTile`**: a picture with a caption, never a box. One Button around
 `MediaArtwork` at its shelf's shape (`--tile-art` sets the height: posters
 15rem, frames 9rem or half the column on a narrow phone, squares 10.5rem,
-circles 9rem; the picture `rounded-md`), then a title of up to two lines
-(`text-body`) and one meta line (`text-meta`), and nothing else: no fill,
+circles 9rem; the picture `rounded-md`), then its title (`text-body`) and its
+meta line (`text-meta`), both wrapped whole at the picture's width (a shelf's
+tiles keep their own heights, their captions starting level), and nothing else: no fill,
 outline or links. How far it got is a white line along the artwork's foot,
 with what's left in the meta line ("YouTube, 4:11 left"). Where it leads (`related`: its series, season, channel, station,
 source) is the last verbs of its menu ("Go to Stanford"), and Details, where
