@@ -32,13 +32,14 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
     const id = row.dataset.historyDetails!;
     const resume = row.querySelector<HTMLElement>('[data-media-tile]')!;
     // A Continue tile is one stop, Resume; Details is the first verb in its menu (a held OK), as every tile's other
-    // verbs are, and its "…" is no stop on the TV (tabindex -1).
-    assert(row.querySelectorAll('button:not([tabindex="-1"]),a[href]').length === 1 && !resume.querySelector('button,a[href]'), "Continue must have only its Resume tile as a stop");
+    // verbs are, and its "…" is no stop on the TV (tabindex -1). Unavailable, Resume is disabled and the "…" is the stop.
+    const stop = unavailable ? row.querySelector<HTMLElement>('[data-tile-menu]')! : resume;
+    assert(row.querySelectorAll('button:not([tabindex="-1"]):not(:disabled),a[href]').length === 1 && !resume.querySelector('button,a[href]'), "Continue must have only one stop");
     assert(resume.getAttribute("aria-label")?.startsWith("Resume "), "Continue lost primary Resume");
     assert(!unavailable || resume.matches(":disabled"), "Use an unavailable Continue fixture");
     const paused = document.querySelector('video')?.paused;
-    resume.focus();
-    resume.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); await wait();
+    stop.focus();
+    stop.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); await wait();
     const details = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === "Details");
     assert(details && usable(details), "Continue's menu lacks reachable History Details");
     details!.click();
@@ -47,7 +48,7 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
     assert(document.querySelector('video')?.paused === paused, "Inspection started playback");
     await press("Escape"); await wait();
     const opener = document.activeElement as HTMLElement;
-    assert(opener?.getAttribute("aria-label") === resume.getAttribute("aria-label") && usable(opener), "Back lost the Continue tile that opened Details");
+    assert(opener?.getAttribute("aria-label") === stop.getAttribute("aria-label") && usable(opener), "Back lost the Continue tile that opened Details");
     // Back on Home, its Details again, through the menu.
     opener.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); await wait();
     [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === "Details")!.click();
