@@ -323,6 +323,8 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[data-osd] :is(.player-queue, .player-next-up) { background: var(--player-surface); box-shadow: none; }
+/* Next Up hides while a panel is open; Volume and Where it plays keep their open state to themselves. */
+html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
 /* The top line or Now playing says when it ends, so the band's timeline doesn't repeat it. */
 .player-band [data-end-time] { display: none; }
 /* Status over a picture is the picture's: centred on it, above the scrims and below the panels. */
