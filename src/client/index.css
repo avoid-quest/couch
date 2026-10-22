@@ -172,7 +172,9 @@ body { min-width: 0; }
    every frame of the fade, under every tile or row the pointer (or a scroll under it) passes; a fade of a shadow on its
    own layer cost more again, in layers and raster. */
 @media (prefers-reduced-motion: no-preference) { :is([data-tile-art], [data-row-art]) { transition: outline-width .15s var(--ease-out); } }
-:is([data-tile], [data-nav-row]):is(:has([data-media-tile]:focus-visible, [data-play]:focus-visible), :where(.tv-presentation *):has(:focus)) :is([data-tile-art], [data-row-art]) { --glow: var(--item-light, rgb(255 255 255 / 14%)); }
+/* A tile by its own wrapper and a row by its own line: a shelf is a nav row too, and would light every tile in it. */
+[data-tile]:is(:has([data-media-tile]:focus-visible), :where(.tv-presentation *):has(:focus)) [data-tile-art],
+[data-nav-row]:is(:has([data-play]:focus-visible), :where(.tv-presentation *):has(:focus)) [data-row-art] { --glow: var(--item-light, rgb(255 255 255 / 14%)); }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-art] { outline-width: .125rem; }
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-meta] { color: var(--foreground); }
 @media (hover: hover) {
