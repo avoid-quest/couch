@@ -15,7 +15,9 @@ export type HomeRowId = keyof typeof homeRowLabels;
 export type HomeRow = { id: HomeRowId; shown: boolean };
 /** Your own rows, which Home sets as one board of short lists rather than shelves. */
 export const boardRows: readonly HomeRowId[] = ["continue", "later", "recent", "upNext"];
-export const defaultHomeRows: HomeRow[] = (Object.keys(homeRowLabels) as HomeRowId[]).map(id => ({ id, shown: id !== "upNext" }));
+const sourceRows: HomeRow[] = (Object.keys(homeRowLabels) as HomeRowId[]).filter(id => !boardRows.includes(id)).map(id => ({ id, shown: true }));
+// A device that ordered or hid Discover's sources before they moved here keeps that choice (couch.discover-rows).
+export const defaultHomeRows: HomeRow[] = [...boardRows.map(id => ({ id, shown: id !== "upNext" })), ...readSectionRows("couch.discover-rows", sourceRows)];
 export const readHomeRows = (storage?: Pick<Storage, "getItem">) => readSectionRows("couch.home-rows", defaultHomeRows, storage);
 export const useHomeRows = () => useSectionRows("couch.home-rows", defaultHomeRows);
 
