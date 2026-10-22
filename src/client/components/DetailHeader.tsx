@@ -12,6 +12,10 @@ import { AmbientLight } from "@/components/AmbientLight";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
 
+/** A header's verbs: on a phone the primary takes the line, and the verb that starts the next pulls back by its padding
+ * so its word or glyph lines up with the title above. */
+export const verbRow = "flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full max-md:[&>:nth-child(2)[data-size=lg]]:-ml-5 max-md:[&>:nth-child(2)[data-size=icon-lg]]:-ml-3";
+
 
 /** Save as a bookmark that fills once saved: one fixed-width toggle, so Saved moves nothing beside it. */
 export function SaveToggle({ saved, ...props }: { saved: boolean } & Omit<ComponentProps<typeof Button>, "children">) {
@@ -76,7 +80,7 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
       {meta && <p className="text-sm text-muted-foreground">{metaLine(meta)}</p>}
       {context}
       {duration != null && <DurationBar duration={duration} position={position} />}
-      {verbs && <div data-nav-row className="mt-4 flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full">
+      {verbs && <div data-nav-row className={cn("mt-4", verbRow)}>
         {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" />{on(play.label)}</Button>}
         {fromStart && <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>{fromStart.label}</Button>}
         {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>{queue.label}</Button>}

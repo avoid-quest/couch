@@ -34,7 +34,7 @@ import { ArtLevel, useLevel } from "@/components/Level";
 import { DurationBar } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SaveToggle } from "@/components/DetailHeader";
+import { SaveToggle, verbRow } from "@/components/DetailHeader";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 
 export type Props = {
@@ -230,7 +230,7 @@ function TopResult({ hit }: { hit: SearchHit }) {
       <HitSource hit={hit} />
     </div>
     <div className="col-span-2 grid min-w-0 gap-4 md:col-span-1 md:col-start-2">
-      <div data-nav-row className="flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full">
+      <div data-nav-row className={verbRow}>
         <Button data-page-first data-play size="lg" asChild={!!hit.primary.href && !hit.primary.disabled} disabled={hit.primary.disabled} onClick={event => {
           if (hit.primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
           if (hit.primary.href) event.preventDefault();

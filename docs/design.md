@@ -128,7 +128,8 @@ Volume, Where it plays, Up next, Playback, fullscreen, Open player, Back, a Shee
 are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target. The
 player's band and the now-playing bar share `--player-target`, which grows to
 2.25rem. At a row's end they pull back (`-ml-2.5`/`-mr-2.5`) so the glyph lines
-up with the text.
+up with the text. So does the verb that starts a header's second line on a phone, under the
+full-width primary (`verbRow`).
 
 ## Motion
 
