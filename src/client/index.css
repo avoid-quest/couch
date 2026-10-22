@@ -81,7 +81,7 @@ body { min-width: 0; }
     --spacing-item: 1rem;
     --spacing-section: 3.5rem;
     /* Type: caption, meta, body (titles of items, controls), title (what plays, in the bar), heading (a shelf, a section), page; the Stage's display
-       sizes live with it (.stage-title). Weights: 400 for everything but headings (600) and display (600). */
+       sizes live with it (.stage-title). Weights: 400 for everything but headings (600) and display (680 to 760, by length). */
     --text-caption: .75rem;
     --text-caption--line-height: 1rem;
     --text-meta: .8125rem;
@@ -338,7 +338,7 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
    level with its foot, its title set whole in the display face. Phones stack them. */
 [data-artwork-stage] .player-main { display: grid; place-items: center; container-type: size; }
 .player-summary { --art-h: min(36rem, 92cqh); display: grid; grid-template-columns: auto minmax(0, 40rem); align-items: end; justify-content: center; gap: clamp(2rem, 4.5cqi, 4.5rem); width: 100%; min-height: 0; pointer-events: auto;
-  --title-short: 5.5rem; --title-medium: 4.5rem; --title-long: 3.5rem; --title-xlong: 2.75rem; }
+  --title-short: 5.5rem; --title-medium: 4.25rem; --title-long: 3.25rem; --title-xlong: 2.5rem; }
 .player-art { min-width: 0; min-height: 0; }
 .player-art > :not(svg), .player-art img { display: block; width: min(52cqi, calc(var(--art-h) * var(--art-ratio, 1))); height: auto; aspect-ratio: var(--art-ratio, 1); object-fit: cover; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
 .player-art > svg { width: 4rem; height: 4rem; }
@@ -347,7 +347,7 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-page > .room { --room-x: 30%; --room-y: 50%; }
 @media (max-width: 959px), (max-aspect-ratio: 5/4) {
   .player-summary { --art-h: calc(100cqh - 14rem); grid-template-columns: minmax(0, 1fr); align-content: center; justify-items: start; gap: 1.5rem; height: 100%;
-    --title-short: 3.25rem; --title-medium: 2.625rem; --title-long: 2.125rem; --title-xlong: 1.75rem; }
+    --title-short: 3.25rem; --title-medium: 2.5rem; --title-long: 2rem; --title-xlong: 1.625rem; }
   .player-art > :not(svg), .player-art img { width: min(100cqi, calc(var(--art-h) * var(--art-ratio, 1))); }
   [data-player-audio-copy] { width: 100%; }
   .player-page > .room { --room-x: 50%; --room-y: 32%; }
@@ -455,15 +455,16 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 /* What stands in the room: an object casts a soft, deep shadow onto it, as a sleeve on a shelf; a mark casts none. */
 :root { --object-shadow: 0 2rem 4rem -1rem rgb(0 0 0 / 72%), 0 .5rem 1.25rem rgb(0 0 0 / 38%); }
 
-/* Display type (docs/design.md, Type): Mona Sans, a grotesque whose width follows the title's length (titleLength in
-   Stage.tsx): short titles run wide and heavy, long ones condense and step down, so a title of any length is set whole. Its size never lets its longest word (--word, in
-   characters; --glyph is a character's width at that stretch, in em) overflow its column (cqi), so a word never
-   breaks or clips; only a word longer than any column could hold breaks. */
-.display-title { font-family: var(--font-display); font-weight: 760; line-height: .94; letter-spacing: -.012em; overflow-wrap: break-word; font-size: min(var(--title-size), calc(100cqi / (var(--word, 10) * var(--glyph)))); font-stretch: var(--title-width); }
-.display-title[data-length="short"] { --title-size: var(--title-short, 5rem); --title-width: 112%; --glyph: .7; }
-.display-title[data-length="medium"] { --title-size: var(--title-medium, 4.25rem); --title-width: 96%; --glyph: .62; }
-.display-title[data-length="long"] { --title-size: var(--title-long, 3.5rem); --title-width: 82%; --glyph: .55; line-height: .96; }
-.display-title[data-length="xlong"] { --title-size: var(--title-xlong, 2.75rem); --title-width: 74%; --glyph: .5; line-height: 1; }
+/* Display type (docs/design.md, Type): Mona Sans at its normal width for every title, so short and long read as one
+   voice. Length (titleLength in Stage.tsx) steps the size and, a little, the weight down: a long title wraps to more
+   lines instead of condensing. Its size never lets its longest word (--word, in characters; --glyph is a lowercase
+   character's width in em at this width, measured on real titles) overflow its column (cqi), so a word never breaks
+   or clips; only a word longer than any column could hold breaks. */
+.display-title { --glyph: .7; font-family: var(--font-display); font-weight: var(--title-weight); font-stretch: 100%; line-height: .94; letter-spacing: -.012em; overflow-wrap: break-word; font-size: min(var(--title-size), calc(100cqi / (var(--word, 10) * var(--glyph)))); }
+.display-title[data-length="short"] { --title-size: var(--title-short, 5rem); --title-weight: 760; }
+.display-title[data-length="medium"] { --title-size: var(--title-medium, 4rem); --title-weight: 740; line-height: .96; }
+.display-title[data-length="long"] { --title-size: var(--title-long, 3.125rem); --title-weight: 700; line-height: 1; }
+.display-title[data-length="xlong"] { --title-size: var(--title-xlong, 2.5rem); --title-weight: 680; line-height: 1.04; }
 
 /* Page titles and the headings of shelves, lists and sections are display type too, at their own sizes and normal width. */
 :is(h1, h2):is(.text-heading, .text-page), :is(h1, h2).text-heading .text-heading { font-family: var(--font-display); font-stretch: 100%; }
@@ -476,7 +477,7 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
    The copy sits at the bottom left: over a frame at most a third of the picture shows under the title and less than a
    tenth under muted ink; an object never lies under it. A scrim at the top keeps the header's ink at 7:1. */
 .stage { --stage-h: min(39.375vw, 70vh); --object-h: calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
-.stage[data-stage="details"] { --stage-h: min(33vw, 60vh); --title-short: 4.5rem; --title-medium: 3.75rem; --title-long: 3.125rem; --title-xlong: 2.5rem; }
+.stage[data-stage="details"] { --stage-h: min(33vw, 60vh); --title-short: 4.5rem; --title-medium: 3.5rem; --title-long: 2.75rem; --title-xlong: 2.25rem; }
 .stage[data-form="frame"]::before, .stage:not([data-form])::before { content: ""; position: absolute; inset: 0 0 auto; z-index: -1; height: calc(var(--top-bar, 4rem) + 4rem); background: linear-gradient(rgb(0 0 0 / 90%) var(--top-bar, 4rem), transparent); pointer-events: none; }
 /* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the next section). */
 .stage > .room { mask-image: linear-gradient(#000 50%, transparent); }
@@ -499,8 +500,8 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 /* Phones and narrow windows: the picture leads the column at the top, under the header; a frame spans it and fades
    downwards with the copy over its foot, an object stands centred above the copy. */
 @media (max-width: 47.99rem) {
-  .stage { min-height: 0; padding-top: 0; align-content: start; --title-short: 3rem; --title-medium: 2.5rem; --title-long: 2.125rem; --title-xlong: 1.875rem; }
-  .stage[data-stage="details"] { --title-short: 2.75rem; --title-medium: 2.375rem; --title-long: 2rem; --title-xlong: 1.75rem; }
+  .stage { min-height: 0; padding-top: 0; align-content: start; --title-short: 3rem; --title-medium: 2.375rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
+  .stage[data-stage="details"] { --title-short: 2.75rem; --title-medium: 2.25rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
   .stage-picture, .stage:not([data-form="frame"]) .stage-picture { position: relative; inset: auto; height: auto; margin-inline: calc(-1 * var(--gutter)); }
   .stage[data-form="frame"] .stage-picture { max-height: 62vh; mask-image: linear-gradient(0deg, transparent, transparent 10%, rgb(0 0 0 / 35%) 30%, #000 60%); }
   .stage-frame { width: 100%; height: auto; max-width: none; max-height: 62vh; mask-image: none; aspect-ratio: 4 / 3; }

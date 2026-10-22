@@ -324,7 +324,7 @@ the left, whole at its own shape (`--art-ratio`), as tall as the room allows
 ends level with its foot. Phones and portrait windows stack them, the artwork
 as wide as the gutters allow. The copy:
 
-- the title in the display face, sized and narrowed by its length and set
+- the title in the display face, sized by its length and set
   whole ([Type](../design.md#type))
 - where it plays, when that isn't only this device: "on Kitchen +1", in the
   ink rather than the muted metadata. It leads the line under the title, so it

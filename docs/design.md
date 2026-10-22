@@ -225,29 +225,32 @@ screen alike. Two faces, clearly apart:
 
 - **Mona Sans** (display, `font-display`, `@fontsource-variable/mona-sans` with its width axis):
   a warm grotesque with width (75–125%) and weight axes. It sets the Stage's and the player's titles
-  (`.display-title`, weight 760), page titles and the headings of shelves,
+  (`.display-title`, weight 680 to 760), page titles and the headings of shelves,
   lists and sections (normal width, semibold). `index.html` preloads its latin
   file.
 - **Inter Tight** (everything else): regular, but for the bar's title
   (medium); metadata small, muted and tabular. `index.html` preloads its latin
   file too.
 
-A display title's size and width follow its length (`titleLength`): short
-titles run wide and large, long ones condense and step down, so a title of
-any length is set whole, never clipped. Its size is also capped so its longest
-word fits its column (`titleFit`: `--word` characters at the stretch's glyph
-width, against the column's `cqi`), so a word never breaks.
+A display title is always Mona Sans at its normal width (100%), so short and
+long titles read in one voice; condensed below about 92% it reads as another,
+cheaper face. Its length (`titleLength`) steps its size and, a little, its
+weight down, and a long title wraps to more lines instead, set whole, never
+clipped. Its size is also capped so its longest word fits its column
+(`titleFit`: `--word` characters at `--glyph` .7em, a lowercase character's
+width measured on real titles, against the column's `cqi`), so a word never
+breaks; a longer all-caps word may.
 
-| Length | Width | Home | Details | Now playing | Phones (Home, Details, Now playing) |
+| Length | Weight, leading | Home | Details | Now playing | Phones (Home, Details, Now playing) |
 | --- | --- | --- | --- | --- | --- |
-| up to 14 characters | 112% | 5rem | 4.5rem | 5.5rem | 3rem, 2.75rem, 3.25rem |
-| up to 26 | 96% | 4.25rem | 3.75rem | 4.5rem | 2.5rem, 2.375rem, 2.625rem |
-| up to 44 | 82% | 3.5rem | 3.125rem | 3.5rem | 2.125rem, 2rem, 2.125rem |
-| longer | 74% | 2.75rem | 2.5rem | 2.75rem | 1.875rem, 1.75rem, 1.75rem |
+| up to 14 characters | 760, .94 | 5rem | 4.5rem | 5.5rem | 3rem, 2.75rem, 3.25rem |
+| up to 26 | 740, .96 | 4rem | 3.5rem | 4.25rem | 2.375rem, 2.25rem, 2.5rem |
+| up to 44 | 700, 1 | 3.125rem | 2.75rem | 3.25rem | 1.875rem, 1.875rem, 2rem |
+| longer | 680, 1.04 | 2.5rem | 2.25rem | 2.5rem | 1.625rem, 1.625rem, 1.625rem |
 
 | Role | Classes |
 | --- | --- |
-| Stage and Now playing title | `.display-title` (above), leading .94 to 1 |
+| Stage and Now playing title | `.display-title` (above), leading .94 to 1.04 |
 | The player's title over a video | `text-3xl` semibold, two lines, then the whole title on hover |
 | Page title (`PageHeader`) | `text-page font-semibold` in Mona Sans |
 | Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` in Mona Sans |

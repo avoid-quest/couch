@@ -71,8 +71,9 @@ export function Stage({ thumbnail, shape, fit, title, size = "details", label, c
 }
 
 /**
- * How long a title is, which sets its size and its width (index.css, .display-title): a short one runs wide and large,
- * a long one condenses and steps down, so a title of any length is set whole, never clipped.
+ * How long a title is, which sets its size and weight (index.css, .display-title): a short one runs large and heavy, a
+ * long one steps down a size and a little weight and wraps to more lines, at the same width, so every title reads in
+ * one voice and is set whole, never clipped.
  */
 export const titleLength = (title: string) => title.length > 44 ? "xlong" : title.length > 26 ? "long" : title.length > 14 ? "medium" : "short";
 /** The title's longest word, in characters, which caps its size so that word fits its column whole (index.css). */
