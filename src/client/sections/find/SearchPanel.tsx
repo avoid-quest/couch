@@ -15,6 +15,7 @@ import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
+import { stationSources } from "../../../shared/radio";
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { SearchOnlineResults, providerNames, type SearchHit, type SearchResultSummary } from "./SearchOnlineResults";
 import { Shelf } from "@/components/Shelf";
@@ -264,8 +265,8 @@ function SearchSkeleton() {
   </div>;
 }
 
-/** A hit's addresses, for the level while it plays: its page, or its station. */
-const hitSources = (hit: SearchHit) => [hit.url, hit.radio && `radio:${hit.radio.id}`];
+/** A hit's addresses, for the level while it plays: its page, or its station (by its source or its stream). */
+const hitSources = (hit: SearchHit) => [hit.url, ...hit.radio ? stationSources(hit.radio) : []];
 
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
 function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { hit: SearchHit; shape: ArtShape; showCollection?: boolean; pageFirst: boolean; className?: string }) {

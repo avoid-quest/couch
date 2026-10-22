@@ -28,7 +28,7 @@ export type SearchHit = {
   kind: "Video" | "Music" | "Live" | "Radio" | "Channels"; duration?: number | null;
   id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
-  radio?: {id: string; title: string}; context?: MediaCollection; creator?: import("../../../shared/media").CollectionLink;
+  radio?: {id: string; title: string; url: string}; context?: MediaCollection; creator?: import("../../../shared/media").CollectionLink;
   /** What an openable hit is, shown instead of a length. */
   collection?: "Channel" | "List" | "Album" | "Series" | "Season" | "Programme";
   thumbnail?: string; video?: boolean;
