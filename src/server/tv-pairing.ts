@@ -50,6 +50,8 @@ export function createTvPairing(store: Store, onPaired: () => void) {
       const request = find(code);
       if (request.token || store.device(request.id)) throw new ControllerError(`${request.name} is already paired.`, 409);
       request.token = store.pair(request.id, request.name);
+      // An approval near expiry still gives the TV a minute to collect, or it would be paired without its token.
+      request.expiresAt = Math.max(request.expiresAt, Date.now() + 60_000);
       onPaired();
       return { device: store.deviceForToken(request.token) };
     },

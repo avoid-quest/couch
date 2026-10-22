@@ -68,6 +68,18 @@ test("a request expires after ten minutes", async () => {
   } finally { mock.timers.reset(); await f.close(); }
 });
 
+test("a TV approved just before its request expires still has a minute to collect", async () => {
+  const f = await fixture();
+  try {
+    mock.timers.enable({ apis: ["Date"], now: Date.now() });
+    const request = await f.ask();
+    mock.timers.tick(TV_PAIRING_TTL - 1_000);
+    assert.equal((await f.approve(request.code, f.admin)).status, 200);
+    mock.timers.tick(30_000);
+    assert.ok((await (await f.poll(request.code, request.secret)).json()).token);
+  } finally { mock.timers.reset(); await f.close(); }
+});
+
 test("a wrong secret collects nothing", async () => {
   const f = await fixture();
   try {
