@@ -11,6 +11,7 @@ const image = `${origin}/wp-content/uploads/2026/04/OnePieceElbafPic-1.png`;
 const player = (source: string) => `${origin}/wp-content/themes/animestream-child/player/?${new URLSearchParams({ source, url: source === "animesaturn_live" ? "/episode/one-piece-PmTvj/ep-1180" : "aGVsbG8=", poster: image })}`;
 const live = player("animesaturn_live"), mega = player("megavid_panel");
 const liveStream = "https://srv30.sake.streampeaker.org/_t/1792273767/hWH05TYyXI6TUWHunF-qCw/DDL/ANIME/OnePiece/1180/playlist.m3u8";
+const progressive = "https://srv30.sake.streampeaker.org/DDL/ANIME/Suikoden/01.mp4?token=fixture";
 const embed = "https://cdn2.megaplay.su/e/6cc193a4facd7d3d177fc90079bc86cec5da770737cc838d?autoplay=1";
 const megaStream = "https://cdn2.megaplay.su/hls/20260927_203701_5d832541/master.m3u8";
 // Public player responses captured on 2026-10-17, reduced to the fields used
@@ -19,13 +20,14 @@ const frame = (url: string) => `<iframe src="${url.replaceAll("&", "&#038;")}" a
 const html = `<meta property="og:image" content="${image}"><article itemtype="http://schema.org/Episode"><a href="${collection}"><span itemprop="name">One Piece Sub ITA</span></a><h1 class="entry-title">One Piece Sub ITA Episode 1180</h1>${frame(mega)}<button onclick="loadMi({ value: '${Buffer.from(frame(live)).toString("base64")}' });">HD</button></article>`;
 const manifest = "#EXTM3U\r\n#EXT-X-VERSION:3\r\n#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1280x720\r\n./720p/playlist_720p.m3u8\r\n";
 
-const fixture = (route: (url: string) => string | Response, requests: string[] = []) => (async (input: RequestInfo | URL, init?: RequestInit) => {
+const fixture = (route: (url: string, init?: RequestInit) => string | Response, requests: string[] = []) => (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   requests.push(url);
   assert.equal(init?.redirect, "error");
   assert.equal(init?.credentials, "omit");
   assert.equal((init?.headers as Record<string, string>)["User-Agent"], "Mozilla/5.0");
-  const body = route(url);
+  assert.equal((init?.headers as Record<string, string>).Referer, `${origin}/`);
+  const body = route(url, init);
   return body instanceof Response ? body : new Response(body);
 }) as typeof fetch;
 
@@ -44,33 +46,99 @@ test("HD extraction reads public literals, validates HLS and preserves page meta
   assert.deepEqual(result.subtitles, []);
 });
 
-test("HD progressive MP4 goes to playback without downloading the media as text", async () => {
-  const requests: string[] = [];
-  const progressive = "https://srv30.sake.streampeaker.org/DDL/ANIME/Suikoden/01.mp4?token=fixture";
-  const result = await resolveAnimeSaturnLink(page, undefined, fixture(url => {
-    if (url === page) return html;
-    assert.equal(url, live, "extraction must stop at the public player response");
-    return `<script>var src = ${JSON.stringify(progressive)}; var isHls = false;</script>`;
-  }, requests));
-  assert.deepEqual(requests, [page, live]);
-  assert.equal(result.url, progressive);
-  assert.deepEqual(result.metadata, { title: "One Piece Sub ITA Episode 1180", thumbnail: image });
-  assert.deepEqual(result.headers, { "User-Agent": "Mozilla/5.0", Referer: `${origin}/` });
-  assert.deepEqual(result.subtitles, []);
+test("HD progressive MP4 checks a binary range and cancels without reading the full media", async t => {
+  for (const status of [206, 200]) await t.test(`HTTP ${status}`, async t => {
+    const requests: string[] = [];
+    let pulls = 0, cancelled = false;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      pull(controller) { pulls++; controller.enqueue(new Uint8Array(status === 206 ? 1 : 64 * 1024)); },
+      cancel() { cancelled = true; },
+    }, { highWaterMark: 0 }), { status, headers: { "Content-Type": "video/mp4", "Content-Length": status === 206 ? "1" : "10000000000" } });
+    t.mock.method(response, "text", () => assert.fail("MP4 must not be read as text"));
+    t.mock.method(response, "arrayBuffer", () => assert.fail("MP4 must not be read in full"));
+    const result = await resolveAnimeSaturnLink(page, undefined, fixture((url, init) => {
+      if (url === page) return html;
+      if (url === live) return `<script>var src = ${JSON.stringify(progressive)}; var isHls = false;</script>`;
+      assert.equal(url, progressive);
+      assert.equal(new Headers(init?.headers).get("Range"), "bytes=0-0");
+      return response;
+    }, requests));
+    assert.deepEqual(requests, [page, live, progressive]);
+    assert.equal(pulls, 1);
+    assert.equal(cancelled, true);
+    assert.equal(response.body?.locked, false);
+    assert.equal(result.url, progressive);
+    assert.deepEqual(result.metadata, { title: "One Piece Sub ITA Episode 1180", thumbnail: image });
+    assert.deepEqual(result.headers, { "User-Agent": "Mozilla/5.0", Referer: `${origin}/` });
+    assert.deepEqual(result.subtitles, []);
+  });
 });
 
-test("Mega remains available through one allowlisted iframe when HD fails", async () => {
-  const requests: string[] = [];
-  const result = await resolveAnimeSaturnLink(page, undefined, fixture(url => {
-    if (url === page) return html;
-    if (url === live) return new Response("Unavailable", { status: 503 });
-    if (url === mega) return frame(embed);
-    if (url === embed) return `<script>var primary = ${JSON.stringify(megaStream)};</script>`;
-    assert.equal(url, megaStream);
-    return manifest;
-  }, requests));
-  assert.equal(result.url, megaStream);
-  assert.deepEqual(requests, [page, live, mega, embed, megaStream]);
+test("Mega remains available when the HD player or its progressive MP4 is unavailable", async t => {
+  for (const failure of ["player", "HTTP 503", "transport", "body error", "empty body", "no body"]) await t.test(failure, async () => {
+    const requests: string[] = [];
+    let cancelled = false;
+    const result = await resolveAnimeSaturnLink(page, undefined, fixture(url => {
+      if (url === page) return html;
+      if (url === live) return failure === "player" ? new Response("Unavailable", { status: 503 }) : `<script>var src = ${JSON.stringify(progressive)};</script>`;
+      if (url === progressive) {
+        if (failure === "transport") throw new TypeError("fixture connection failed");
+        if (failure === "no body") return new Response(null, { status: 204 });
+        if (failure === "empty body") return new Response(new Uint8Array());
+        return new Response(new ReadableStream({
+          pull(controller) { controller.error(new TypeError("fixture body failed")); },
+          cancel() { cancelled = true; },
+        }, { highWaterMark: 0 }), { status: failure === "HTTP 503" ? 503 : 200 });
+      }
+      if (url === mega) return frame(embed);
+      if (url === embed) return `<script>var primary = ${JSON.stringify(megaStream)};</script>`;
+      assert.equal(url, megaStream);
+      return manifest;
+    }, requests));
+    assert.equal(result.url, megaStream);
+    assert.deepEqual(requests, [page, live, ...(failure === "player" ? [] : [progressive]), mega, embed, megaStream]);
+    if (failure === "HTTP 503") assert.equal(cancelled, true);
+  });
+});
+
+test("MP4 probing disposes the body on cancellation and obeys per-request and overall deadlines", async t => {
+  for (const cause of ["caller", "request timeout", "overall timeout"]) for (const stage of ["headers", "body"]) await t.test(`${cause} after ${stage}`, async t => {
+    const caller = new AbortController(), deadline = new AbortController();
+    let timeout: AbortController;
+    t.mock.method(AbortSignal, "timeout", (delay: number) => {
+      assert.ok(delay === 12_000 || delay === 25_000);
+      if (delay === 25_000) return deadline.signal;
+      timeout = new AbortController();
+      return timeout.signal;
+    });
+    const abort = () => cause === "caller" ? caller.abort() : (cause === "request timeout" ? timeout : deadline).abort(new DOMException("fixture timeout", "TimeoutError"));
+    const requests: string[] = [];
+    let cancelled = false;
+    const pending = resolveAnimeSaturnLink(page, caller.signal, fixture(url => {
+      if (url === page) return html;
+      if (url === live) return `<script>var src = ${JSON.stringify(progressive)};</script>`;
+      if (url === progressive) {
+        const response = new Response(new ReadableStream({
+          pull() { abort(); },
+          cancel() { cancelled = true; },
+        }, { highWaterMark: 0 }));
+        if (stage === "headers") abort();
+        return response;
+      }
+      if (url === mega) return frame(embed);
+      if (url === embed) return `<script>var primary = ${JSON.stringify(megaStream)};</script>`;
+      assert.equal(url, megaStream);
+      return manifest;
+    }, requests));
+    if (cause === "request timeout") {
+      assert.equal((await pending).url, megaStream);
+      assert.deepEqual(requests, [page, live, progressive, mega, embed, megaStream]);
+    } else {
+      await assert.rejects(() => pending, cause === "caller" ? error => error instanceof DOMException && error.name === "AbortError" : /took too long/);
+      assert.deepEqual(requests, [page, live, progressive]);
+    }
+    assert.equal(cancelled, true);
+  });
 });
 
 test("unaccepted public embeds, stream hosts and invalid HLS responses are rejected", async () => {

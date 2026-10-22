@@ -40,8 +40,11 @@ Couch reads those literals without running site scripts or loading player
 libraries. It tries HD first, then Mega, validates HLS manifests, and
 passes a browser user agent and AnimeSaturn referer to playback. Hostnames,
 embed paths, requests, response sizes, and timeouts are bounded. Redirects
-are rejected. Progressive MP4 goes directly to the guarded playback resolver;
-the page resolver never downloads the media file as text. The observed
+are rejected. Before selecting progressive MP4, the page resolver requests a
+one-byte binary range and cancels the response after the first data, even when
+the server ignores Range. An unavailable or empty MP4 falls through to Mega;
+the probe shares the per-request timeout and overall deadline. The page resolver
+never downloads the media file as text. The observed
 episodes are labelled Sub ITA; these player pages
 expose no separate subtitle tracks.
 

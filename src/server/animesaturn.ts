@@ -27,6 +27,27 @@ async function playerText(url: string, maximum: number, signal: AbortSignal, req
   return readProviderText(response, maximum, cancellation, unavailable());
 }
 
+async function probeProgressive(url: string, signal: AbortSignal, request: typeof fetch): Promise<void> {
+  const cancellation = AbortSignal.any([signal, AbortSignal.timeout(12_000)]);
+  cancellation.throwIfAborted();
+  const response = await request(url, { signal: cancellation, credentials: "omit", redirect: "error", headers: { ...headers, Range: "bytes=0-0" } });
+  const reader = response.body?.getReader();
+  if (!reader) throw unavailable();
+  const abort = () => { void reader.cancel().catch(() => {}); };
+  cancellation.addEventListener("abort", abort, { once: true });
+  try {
+    cancellation.throwIfAborted();
+    if (!response.ok) throw unavailable();
+    // Read only the first binary data, then cancel even if Range was ignored.
+    for (;;) {
+      const { value, done } = await reader.read();
+      cancellation.throwIfAborted();
+      if (done) throw unavailable();
+      if (value.length) return;
+    }
+  } finally { cancellation.removeEventListener("abort", abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
 // Both public players publish JSON string literals. Read those values without
 // downloading their libraries or evaluating any JavaScript (docs/animesaturn.md).
 function directStream(html: string): URL | undefined {
@@ -61,12 +82,10 @@ export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal
           stream = directStream(html);
           if (!stream || stream.origin !== embed.origin) continue;
         }
-        // Like AnimeUnity's progressive fallback, MP4 goes straight to the guarded
-        // playback resolver. Reading it here as text could download the whole film.
         if (stream.pathname.endsWith(".m3u8")) {
           const manifest = await playerText(stream.href, 512 * 1024, cancellation, request);
           if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) continue;
-        }
+        } else await probeProgressive(stream.href, cancellation, request);
         cancellation.throwIfAborted();
         const { title: name, thumbnail, duration } = title.item;
         return { url: stream.href, headers: { ...headers }, metadata: { title: name, ...(thumbnail ? { thumbnail } : {}), ...(duration !== undefined ? { duration } : {}) }, subtitles: [] };
