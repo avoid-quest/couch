@@ -77,7 +77,7 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
     try {
       await startLive({ kind, videoQuality, includeAudio, ...(choosesSource ? { sourceId } : {}), ...(kind === "microphone" && audioDeviceId !== "default" ? { audioDeviceId } : {}) });
       onAdded?.();
-      void navigate({ to: "/discover" });
+      void navigate({ to: "/" });
     }
     catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setPending(false); }
@@ -94,7 +94,7 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
 
   // Capture runs with this device's authority, so a paired phone's Remote never drives it on a TV.
   return <SettingsSection title={title} description="Add this device's screen or sound as a source for everyone on this Couch." data-tv-local-only>
-    {sharedName ? <SettingsRow label={sharedName} description="Shown in Discover and Search while this device is sharing.">
+    {sharedName ? <SettingsRow label={sharedName} description="Shown on Home and in Search while this device is sharing.">
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
       <SettingsRow label="What to share">
@@ -125,7 +125,7 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
           <Switch id="live-include-audio" checked={includeAudio} disabled={!available} onCheckedChange={setIncludeAudio} />
         </SettingsRow>
       </>}
-      <SettingsRow label="Share with Couch" description="Shown in Discover and Search until you stop sharing.">
+      <SettingsRow label="Share with Couch" description="Shown on Home and in Search until you stop sharing.">
         <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
         {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>

@@ -80,14 +80,14 @@ export async function runTvFocusRegression() {
       }
     });
     await check("The TV BrowserBack key closes a picker without leaving its page", async () => {
-      await audit.go('/discover/live-tv');
+      await audit.go('/live-tv');
       const source = control('button[aria-label="Group"]');
       source.focus(); await remote('select');
       assert(document.querySelector('[role="listbox"]'), "Group did not open");
       document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'BrowserBack', bubbles: true, cancelable: true }));
       await wait();
       assert(!document.querySelector('[role="listbox"]') && document.activeElement === source, "BrowserBack trapped focus in the picker");
-      assert(audit.router.state.location.pathname === '/discover/live-tv', "Closing the picker also left its page");
+      assert(audit.router.state.location.pathname === '/live-tv', "Closing the picker also left its page");
     });
     await check("Saved rails enter content and return to the selected section", async () => {
       for (const tab of ['later', 'channels', 'lists', 'played']) {
@@ -176,7 +176,7 @@ export async function runTvFocusRegression() {
         return response;
       };
       try {
-        await audit.go('/discover', { fresh: true });
+        await audit.go('/', { fresh: true });
         await remote('up');
         const deliberate = document.activeElement;
         release(); await wait(700);
@@ -208,7 +208,7 @@ export async function runTvFocusRegression() {
 export async function runTvFocusReachability() {
   const audit = await mountUiAudit();
   const { settingsPages } = await import('../src/shared/settings-pages');
-  const browse = ['/', '/discover', '/search?q=concert', '/discover/radio', '/discover/live-tv', '/saved', '/saved?tab=channels', '/saved?tab=lists', '/saved?tab=played', '/collection?provider=youtube&url=https%3A%2F%2Fwww.youtube.com%2F%40nprmusic', '/item?kind=saved&id=concert'];
+  const browse = ['/', '/search?q=concert', '/radio', '/live-tv', '/saved', '/saved?tab=channels', '/saved?tab=lists', '/saved?tab=played', '/collection?provider=youtube&url=https%3A%2F%2Fwww.youtube.com%2F%40nprmusic', '/item?kind=saved&id=concert'];
   const cases = [
     ...[...browse, ...Object.values(settingsPages).map(page => page.path), '/remote', '/where-it-plays'].map(href => ({ href, mode: 'loaded' as const })),
     ...(['loading', 'empty', 'error'] as const).flatMap(mode => browse.map(href => ({ href, mode }))),

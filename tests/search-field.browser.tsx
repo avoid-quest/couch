@@ -48,7 +48,7 @@ export async function runSearchFieldRegression() {
     return <SessionGateContext value={gate}><QueryClientProvider client={client}><ShellContext value={{ searchScope, setSearchScope, changeSearch, recentRadio: [] } as unknown as ShellValue}><HeaderSearch /><main data-page tabIndex={-1}>{route.pathname === "/search" && <SearchPanel origin={location.origin} token="fixture" connected canPlay active searchState={readSearchState(route.searchStr)} onSearchChange={changeSearch} onCommand={gate.run} />}</main></ShellContext></QueryClientProvider></SessionGateContext>;
   }
   const rootRoute = createRootRoute({ component: Fixture });
-  const routeTree = rootRoute.addChildren(["search", "discover", "saved"].map(path => createRoute({ getParentRoute: () => rootRoute, path })));
+  const routeTree = rootRoute.addChildren(["/", "search", "radio", "saved"].map(path => createRoute({ getParentRoute: () => rootRoute, path })));
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ["/search?q=old"] }) });
   const field = () => host.querySelector<HTMLInputElement>("#media-search")!;
   const input = async (value: string) => {
@@ -140,11 +140,11 @@ export async function runSearchFieldRegression() {
     await navigate("/search?q=second&source=YouTube");
     await wait(600);
     assert(query() === "second", "Pending query hijacked query/history navigation");
-    await navigate("/discover");
+    await navigate("/radio");
     await input("old provider draft");
     setScope({ source: "Bandcamp" });
     await wait(650);
-    assert(router.state.location.pathname === "/discover", "Pending draft searched under a newly selected provider");
+    assert(router.state.location.pathname === "/radio", "Pending draft searched under a newly selected provider");
     assert(host.querySelector("form")?.getAttribute("aria-busy") === "false", "Cancelled search left a permanent busy indicator");
     await navigate("/search?q=x");
     const page = host.querySelector<HTMLElement>("main")!;
@@ -183,12 +183,12 @@ export async function runSearchFieldRegression() {
       await press("Escape");
       assert(!host.querySelector("[cmdk-list]") && document.activeElement !== field(), "Escape in an empty field did not close the palette and leave it");
     }
-    await navigate("/discover");
+    await navigate("/radio");
     setScope({ source: "Bandcamp" });
     await wait();
     await input("  local music  ");
     await wait(650);
-    assert(router.state.location.pathname === "/discover" && tokens() === "Bandcamp", "Scoped draft navigated early or lost its source");
+    assert(router.state.location.pathname === "/radio" && tokens() === "Bandcamp", "Scoped draft navigated early or lost its source");
     host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
     await wait();
     assert(query() === "local music" && new URLSearchParams(router.state.location.searchStr).get("source") === "Bandcamp", "Submission lost trimming or source scope");
@@ -200,7 +200,7 @@ export async function runSearchFieldRegression() {
     await input("unsaved history draft");
     router.history.back();
     await wait();
-    assert(router.state.location.pathname === "/discover" && field().value === "", "Back did not restore the originating page");
+    assert(router.state.location.pathname === "/radio" && field().value === "", "Back did not restore the originating page");
     router.history.forward();
     await wait();
     assert(query() === "next album" && field().value === "next album", "Forward did not restore the submitted query");
@@ -219,11 +219,11 @@ export async function runSearchFieldRegression() {
     await input("   ");
     field().form!.requestSubmit();
     await wait();
-    assert(router.state.location.pathname === "/discover", "Empty submission did not open Discover");
+    assert(router.state.location.pathname === "/", "Empty submission did not open Home");
     await navigate("/search?q=clear");
     host.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]')!.click();
     await wait();
-    assert(router.state.location.pathname === "/discover" && document.activeElement === field(), "Clear lost Discover or field focus");
+    assert(router.state.location.pathname === "/" && document.activeElement === field(), "Clear lost Home or field focus");
     if (isTvPresentation()) {
       let focus: TextFocus | null = null;
       remote = connectRemoteText(next => { focus = next; });
@@ -231,7 +231,7 @@ export async function runSearchFieldRegression() {
       const send = (text: string, submit = false) => remote!.receive({ type: "text", requestId: "fixture", token: focus!.token, text, submit });
       assert(await send("remote draft"), "Remote Send was rejected");
       await wait(650);
-      assert(router.state.location.pathname === "/discover" && field().value === "remote draft", "Remote Send submitted its draft");
+      assert(router.state.location.pathname === "/" && field().value === "remote draft", "Remote Send submitted its draft");
       assert(await send("remote search", true), "Remote Enter was rejected");
       await wait();
       assert(query() === "remote search", "Remote Enter did not submit");
@@ -240,7 +240,7 @@ export async function runSearchFieldRegression() {
       assert(query() === "remote search" && field().value === "", "Remote Clear navigated before submission");
       assert(await send("", true), "Remote empty Enter was rejected");
       await wait();
-      assert(router.state.location.pathname === "/discover", "Remote empty Enter did not open Discover");
+      assert(router.state.location.pathname === "/", "Remote empty Enter did not open Home");
       assert(await send("old", true), "Remote search was rejected");
       await wait(650);
       const beforeRepeat = plays;

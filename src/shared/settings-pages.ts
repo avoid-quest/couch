@@ -2,7 +2,7 @@
 // and the Updates pages appear when there is that hardware or updater (settings-scope.ts).
 export const settingsPages = {
   device: { owner: "device", label: "General", path: "/settings/device" },
-  home: { owner: "device", label: "Home & Discover", path: "/settings/device/home" },
+  home: { owner: "device", label: "Home", path: "/settings/device/home" },
   "device-updates": { owner: "device", label: "Updates", path: "/settings/device/updates" },
   devices: { owner: "couch", label: "Devices & network", path: "/settings/couch/devices" },
   playback: { owner: "couch", label: "Playback", path: "/settings/couch/playback" },

@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { AmbientLight } from "@/components/AmbientLight";
 import { Link, useLocation } from "@tanstack/react-router";
 import { isRadio } from "../../../shared/radio";
-import { useStationShow } from "@/sections/discover/on-air";
+import { useStationShow } from "@/sections/home/on-air";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
 
 type Panel = "settings";

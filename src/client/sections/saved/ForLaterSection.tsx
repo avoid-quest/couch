@@ -76,7 +76,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     <SavedStatus connected={connected} loading={loading} />
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !items.length && <SavedEmpty title="Nothing saved for later" action={onFind && <Button onClick={onFind}>Discover</Button>}>Choose Save on a film, video or track to find it here.</SavedEmpty>}
+    {connected && !loading && !loadError && !items.length && <SavedEmpty title="Nothing saved for later" action={onFind && <Button onClick={onFind}>Search</Button>}>Choose Save on a film, video or track to find it here.</SavedEmpty>}
     {!!items.length && <MediaList ref={list} aria-label="For later">
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));

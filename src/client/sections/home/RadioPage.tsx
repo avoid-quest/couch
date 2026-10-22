@@ -20,7 +20,7 @@ import { BrowsePagination } from "@/components/BrowsePagination";
 // the public directory.
 const sourceLabels = { "avoid radio": "Built-in", "Radio playlists": "Playlists", "Radio directory": "Directory" } as const satisfies Record<typeof radioBrowseSources[number], string>;
 
-/** Every station, which Discover's Radio heading opens: its source and Filter, then the stations and, past one page, a pager. */
+/** Every station, which Home's Radio heading opens: its source and Filter, then the stations and, past one page, a pager. */
 export function RadioPage() {
   const { credentials, available } = useShell();
   const { state, connected, run } = useSessionGate();

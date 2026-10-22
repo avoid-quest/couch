@@ -103,7 +103,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
       {connected && mutation.error && <SavedError message={mutation.error.message || "Couldn't change this list."} />}
-      {connected && !loading && !loadError && !playlists.length && <SavedEmpty title="No lists yet" action={<Button onClick={onFind}>Discover</Button>}>Queue a few items, then choose Save as list to play them together again.</SavedEmpty>}
+      {connected && !loading && !loadError && !playlists.length && <SavedEmpty title="No lists yet" action={<Button onClick={onFind}>Search</Button>}>Queue a few items, then choose Save as list to play them together again.</SavedEmpty>}
       {!!playlists.length && <MediaList>{playlists.map(item => <MediaRow key={item.id} data-playlist-id={item.id}
         title={item.name}
         meta={summary(item)}

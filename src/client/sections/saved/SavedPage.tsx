@@ -6,7 +6,7 @@ import { useSessionGate } from "@/session/session-context";
 const route = getRouteApi("/saved");
 
 export function SavedPage() {
-  const { credentials, available, changeSection, enqueueProvider, enqueueRadio, openProvider } = useShell();
+  const { credentials, available, focusSearch, enqueueProvider, enqueueRadio, openProvider } = useShell();
   const { state, connected } = useSessionGate();
   const { tab } = route.useSearch();
   const navigate = route.useNavigate();
@@ -14,7 +14,7 @@ export function SavedPage() {
     <section data-page="Saved">
       <SavedSections state={state} credentials={credentials} connected={connected} canPlay={available} tab={tab}
         onTabChange={next => void navigate({ search: { tab: next }, replace: true })}
-        onFind={() => changeSection("Discover")} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} />
+        onFind={focusSearch} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} />
     </section>
   );
 }

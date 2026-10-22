@@ -8,7 +8,6 @@ declare global {
   interface Window {
     runSavedBackRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
     runSharingLocalOnlyRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
-    runDiscoverNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
     runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
   }
 }
@@ -119,56 +118,6 @@ window.runSharingLocalOnlyRegression = async () => {
   catch (error) { return [{ name: "Remote can't drive this device's capture", passed: false, error: String(error) }]; }
 };
 
-const discoverNavigation = async () => {
-  await click('[data-app-nav] a[href="/"]');
-  await click('[data-app-nav] a[href="/discover"]');
-  await until(() => !!document.activeElement?.matches('[data-page="Discover"] [data-page-first]'));
-  assert(getComputedStyle(control(".app-header")).position === "sticky", "The header is not sticky");
-  const entries = [...document.querySelectorAll<HTMLElement>('[data-page="Discover"] [data-page-first]')]
-    .filter(element => !element.matches(':disabled, [aria-disabled="true"]') && !element.closest('[inert], [aria-hidden="true"]') && element.getClientRects().length > 0);
-  const first = entries[0]!;
-  assert(document.activeElement === first, "Discover entry ignored the first available section in the saved order");
-  assert(new Set(entries.map(element => element.closest('section:not([data-page]), [role="alert"]'))).size === entries.length, "A Discover section has more than one first control");
-  const shared = document.querySelector('[data-page="Discover"] [aria-label="Shared sources"]');
-  if (shared?.contains(first)) {
-    assert(first.getAttribute("aria-label")?.startsWith("Play "), "Shared sources did not start on Play");
-    assert(!document.querySelector('[aria-label="Sources"] button[aria-label^="Play "]'), "Shared sources still appear in Sources");
-    const next = shared.closest("section")?.nextElementSibling;
-    const nextControl = next?.querySelector('header a, [data-page-first]:not(:disabled)');
-    if (nextControl) {
-      await key("ArrowDown");
-      assert(document.activeElement === nextControl, "Down from Shared sources skipped the next section");
-      await key("ArrowUp");
-      assert(document.activeElement === first, "Up from the next section did not return to the shared source");
-    }
-    first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-    await wait(700);
-    assert(document.querySelector('[role="menu"]') && document.activeElement?.closest('[role="menu"]'), "Held OK did not open the shared source's menu");
-    const labels = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent);
-    assert(labels.includes("Play next") && labels.includes("Queue"), "The shared source lost its queue verbs");
-    first.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-    await key("Escape");
-    assert(document.activeElement === first, "The shared source's menu lost its opener");
-  }
-  await key("ArrowUp");
-  const heading = first.closest("section")?.querySelector("header a");
-  if (heading) {
-    assert(document.activeElement === heading, "Up from the first row did not reach its heading");
-    await key("ArrowUp");
-  }
-  assert(document.activeElement?.matches('.app-header a[aria-current="page"][href="/discover"]'), "Up did not reach the current tab");
-  await key("ArrowDown");
-  assert(document.activeElement === first, "Down from the header did not return to the page's first control");
-  await key("Escape"); await wait(350);
-  assert(location.pathname === "/", "Back did not take Discover to Home");
-  await key("Escape"); await wait(350);
-  assert(location.pathname === "/", "Back on Home went somewhere");
-};
-
-window.runDiscoverNavigationRegression = async () => {
-  try { await discoverNavigation(); return [{ name: "Discover follows the saved section order and keeps its navigation", passed: true }]; }
-  catch (error) { return [{ name: "Discover follows the saved section order and keeps its navigation", passed: false, error: String(error) }]; }
-};
 
 window.runTvNavigationRegression = async () => {
   const results: { name: string; passed: boolean; error?: string }[] = [];
@@ -224,12 +173,12 @@ window.runTvNavigationRegression = async () => {
     await until(() => location.pathname === "/" && document.activeElement?.getAttribute("aria-label") === label).catch(() => { throw new Error("Back did not return to the tile"); });
   });
   await check("Home starts on the hero's primary verb, and Up from its last shelf passes each shelf and the hero to the current tab", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
+    await click('[data-app-nav] a[href="/saved"]');
     await click('[data-app-nav] a[href="/"]');
     const hero = control("[data-home-hero]");
     assert(document.activeElement === hero.querySelector("[data-page-first]"), "Home entry did not focus the hero's primary verb");
     const shelves = [...document.querySelectorAll<HTMLElement>('[data-page="Home"] ol[data-nav-row]')];
-    assert(shelves.length >= 2, "Home needs two shelves (Radio and the saved videos)");
+    assert(shelves.length >= 1 && document.querySelector('[data-home-board] li[data-nav-row]'), "Home needs a board row and a shelf (the saved videos and Radio)");
     shelves.at(-1)!.querySelector<HTMLElement>("button")!.focus();
     const passed: Element[] = [];
     for (let step = 0; step < 12 && !document.activeElement?.closest(".app-header"); step++) {
@@ -259,7 +208,6 @@ window.runTvNavigationRegression = async () => {
     await leave(tiles(lower).at(-1)!, tiles(lower).at(-1)!, "ArrowUp", upper!);
     await leave(tiles(upper).at(-1)!, tiles(upper).at(-2)!, "ArrowDown", lower!);
   });
-  await check("Discover follows the saved section order and keeps its navigation", discoverNavigation);
   await check("Settings OK enters content; Back restores rail then Home", async () => {
     await click('[data-app-nav] a[href="/settings"]');
     const rail = control('[data-settings-page="devices"]');
@@ -298,7 +246,7 @@ window.runTvNavigationRegression = async () => {
     assert(document.activeElement?.closest('[data-saved-details]'), "Details Back lost Home tile focus");
   });
   await check("TV HUD hides, seeks ten seconds and returns to opener without a Home cycle", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
+    await click('[data-app-nav] a[href="/saved"]');
     await click('[data-now-playing] button[aria-label^="Open player:"]');
     const video = document.querySelector('video')!;
     await until(() => video.readyState >= 2 && video.duration > 20);
@@ -320,12 +268,12 @@ window.runTvNavigationRegression = async () => {
     assert(document.activeElement === gear, "Right left the gear for fullscreen's empty slot");
     control('[role="slider"][aria-label="Playback position"]').focus();
     await key("Escape"); await key("Escape");
-    assert(location.pathname === "/discover", "Player did not return to its opener");
+    assert(location.pathname === "/saved", "Player did not return to its opener");
     await key("Escape"); await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Back on Home reopened player");
   });
   await check("Up next and Details preserve the player's opener and focus", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
+    await click('[data-app-nav] a[href="/saved"]');
     await click('[data-now-playing] button[aria-label^="Open player:"]');
     await click('.player-page button[aria-label="Up next"]');
     assert(location.search.includes("queue=true"), "Queue URL did not open");
@@ -347,7 +295,7 @@ window.runTvNavigationRegression = async () => {
     await key("Escape"); await wait(350);
     assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Playback Back lost opener focus");
     await key("Escape"); await key("Escape");
-    assert(location.pathname === "/discover", "Queue URL or Details lost original opener");
+    assert(location.pathname === "/saved", "Queue URL or Details lost original opener");
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Nested player journey cycled on Home");
   });
@@ -522,9 +470,9 @@ window.runTvNavigationRegression = async () => {
     assert(restored(), "Favorite Undo lost saved order");
   });
   await check("Live TV retains Queue and Play on without a Details destination", async () => {
-    await click('[data-app-nav] a[href="/discover"]');
-    await until(() => !!document.querySelector('[data-page="Discover"] a[href="/discover/live-tv"]'));
-    await click('[data-page="Discover"] a[href="/discover/live-tv"]');
+    await click('[data-app-nav] a[href="/"]');
+    await until(() => !!document.querySelector('[data-page="Home"] a[href="/live-tv"]'));
+    await click('[data-page="Home"] a[href="/live-tv"]');
     await until(() => !!document.querySelector('[aria-label="Live TV channels"] li'));
     const title = control('[aria-label="Live TV channels"] [data-play]').getAttribute("aria-label")!.replace(/^Play /, "");
     control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
@@ -545,12 +493,12 @@ window.runTvNavigationRegression = async () => {
     try { queue!.click(); await until(() => queued); }
     finally { window.fetch = originalFetch; }
     await wait(350);
-    assert(location.pathname === "/discover/live-tv", "Queue left Live TV");
+    assert(location.pathname === "/live-tv", "Queue left Live TV");
     await click('[data-now-playing] button[aria-label="Up next"]');
     await until(() => !!document.querySelector('[data-queue-panel] ul[aria-label="Up next"]'));
     assert(document.querySelector('[data-queue-panel] ul[aria-label="Up next"]')?.textContent?.includes(title), "Live TV Queue did not add the channel");
     await key("Escape"); await key("Escape"); await key("Escape");
-    assert(location.pathname === "/discover/live-tv", "Queue Back lost Live TV opener");
+    assert(location.pathname === "/live-tv", "Queue Back lost Live TV opener");
     control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
     const recipient = [...control('[role="group"][aria-label="Play on"]').querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find(item => item.querySelector("span")?.textContent === targetName);
@@ -565,7 +513,7 @@ window.runTvNavigationRegression = async () => {
     assert(playing()[0]!.querySelector("svg.lucide-monitor"), "Play on did not select the recipient's picture");
     assert(document.querySelector("[data-now-playing]")?.textContent?.includes(title), "Play on did not select the queued channel");
     await key("Escape"); await wait(350);
-    assert(location.pathname === "/discover/live-tv", "Play on lost the controller's browse page");
+    assert(location.pathname === "/live-tv", "Play on lost the controller's browse page");
   });
   return results;
 };

@@ -18,7 +18,7 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
   const source = provider ?? (collection ? providerForUrl(collection.url) : undefined);
   const trail = [
     { label: section, to: sectionUrl(section) },
-    ...radio ? [{ label: "Radio", to: keepSection("/discover/radio", section) }]
+    ...radio ? [{ label: "Radio", to: keepSection("/radio", section) }]
       : source && (title !== providerNames[source] || collection) ? [{ label: providerNames[source], to: keepSection(collectionLocation({ provider: source, url: "" }), section) }] : [],
     ...collectionLinks(collection).map(item => ({ label: item.title, to: keepSection(collectionLocation(item), section) })),
   ];

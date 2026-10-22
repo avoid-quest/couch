@@ -36,7 +36,7 @@ const sourceOf = (url?: string) => { const provider = url ? providerForUrl(url) 
  * in, recent searches and what was played; typing suggests only what the client already holds.
  * A scope becomes a token in the field (pick it, or type its name and Tab; Backspace removes it), and on the results
  * page the token is the page's kind and source, both ways. Enter on the query opens /search?q=…&kind=…&source=…; Enter on
- * a suggestion opens it, or plays a station or a pasted link. An empty query is Discover. It is the TV's Search field
+ * a suggestion opens it, or plays a station or a pasted link. An empty query is Home. It is the TV's Search field
  * too, which a phone's Remote types into (Type on TV), and `/` focuses it.
  */
 export function HeaderSearch({ className }: { className?: string }) {
@@ -70,7 +70,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   const scope: SearchScope = route ? { kind: route.kind, source: route.source } : shell.searchScope ?? { source: "All" };
   const rescope = (next: SearchScope) => route ? shell.changeSearch({ ...route, kind: next.kind, source: next.source }) : shell.setSearchScope(hasScope(next) ? next : null);
   useEffect(() => { if (results) shell.setSearchScope(null); }, [results]);
-  // A source that scopes the field (Discover's YouTube) opens it, on the TV too.
+  // A source that scopes the field (Home's YouTube) opens it, on the TV too.
   useEffect(() => { if (shell.searchScope && !open && document.activeElement === input.current) show(); }, [shell.searchScope]);
   // The palette belongs to the focused field: a page that changes under it (a played link opens the player, which hides
   // the header without blurring the field) closes it.
@@ -79,7 +79,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   useEffect(() => { setRecents(installationId ? readSearchRecents(installationId) : []); }, [installationId]);
   const search = (query: string, action: "clear" | "submit" | "enter" = "clear") => {
     if (!query && !results) return;
-    const href = query ? searchLocation({ query, ...isLink(query) ? { source: "All" } : scope }) : "/discover";
+    const href = query ? searchLocation({ query, ...isLink(query) ? { source: "All" } : scope }) : "/";
     if (query && !isLink(query) && installationId) setRecents(rememberSearch(installationId, query));
     if (action !== "clear") setOpen(false);
     // Submission goes on to the results; clearing keeps focus here (on the TV too).

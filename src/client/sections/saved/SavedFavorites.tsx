@@ -133,7 +133,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     <SavedStatus connected={connected} loading={loading} />
     {loadError && <SavedError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !favorites.length && <SavedEmpty title="No saved channels or stations" action={onFind && <Button onClick={onFind}>Discover</Button>}>Choose Save on a channel, collection or radio station to find it here.</SavedEmpty>}
+    {connected && !loading && !loadError && !favorites.length && <SavedEmpty title="No saved channels or stations" action={onFind && <Button onClick={onFind}>Search</Button>}>Choose Save on a channel, collection or radio station to find it here.</SavedEmpty>}
     {!!favorites.length && <MediaList ref={list} aria-label="Channels & stations">{favorites.map(row)}</MediaList>}
   </section>;
 }

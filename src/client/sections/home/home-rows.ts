@@ -1,15 +1,21 @@
 import { useState } from "react";
 import { readSectionRows, useSectionRows } from "../section-rows";
 
-// Home's shelves, in the order a fresh device shows them. Each device keeps its own choice. What plays
-// is not one: it leads Home as its hero, and a saved "now" row is dropped as unknown.
-export const homeRowLabels = { continue: "Continue", later: "For later", radio: "Radio", recent: "Played recently", upNext: "Up next" } as const;
+// Home's sections, in the order a fresh device shows them: yours first (what you were watching, saved for later and
+// played, which share one board), then the sources (Discover folded into Home). Each device keeps its own choice.
+// What plays is not one: it leads Home as its Stage, and a saved "now" row is dropped as unknown. Source IDs stay
+// independent of their availability, contents and display names.
+export const homeRowLabels = {
+  continue: "Continue", later: "For later", recent: "Played recently", upNext: "Up next",
+  shared: "Shared sources", radio: "Radio", "live-tv": "Live TV", twitch: "Twitch",
+  streamingcommunity: "StreamingCommunity", raiplay: "RaiPlay", movies123: "123MoviesFree",
+  animesaturn: "AnimeSaturn", animeunity: "AnimeUnity", sources: "Sources",
+} as const;
 export type HomeRowId = keyof typeof homeRowLabels;
 export type HomeRow = { id: HomeRowId; shown: boolean };
-export const defaultHomeRows: HomeRow[] = [
-  { id: "continue", shown: true }, { id: "later", shown: true },
-  { id: "radio", shown: true }, { id: "recent", shown: true }, { id: "upNext", shown: false },
-];
+/** Your own rows, which Home sets as one board of short lists rather than shelves. */
+export const boardRows: readonly HomeRowId[] = ["continue", "later", "recent", "upNext"];
+export const defaultHomeRows: HomeRow[] = (Object.keys(homeRowLabels) as HomeRowId[]).map(id => ({ id, shown: id !== "upNext" }));
 export const readHomeRows = (storage?: Pick<Storage, "getItem">) => readSectionRows("couch.home-rows", defaultHomeRows, storage);
 export const useHomeRows = () => useSectionRows("couch.home-rows", defaultHomeRows);
 

@@ -59,7 +59,7 @@ type Props = {
 
 /**
  * Media row: thumbnail, title, meta and the length bar, as one target whose press does its main verb; its other
- * verbs wait in its menu, behind a "…" at its end, and on its page. Used by Search, Saved and Discover's pages; Up next has its own compact rows.
+ * verbs wait in its menu, behind a "…" at its end, and on its page. Used by Search, Saved, Home's board and its own pages; Up next has its own compact rows.
  */
 export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta, related, children, description, primary, menu = [], menuOnPage = false, actions, compact = false, pageFirst = false, number, source, className, ...props }: Props) {
   const options = useItemMenu([...menu, ...useRelatedMenu(related)]);

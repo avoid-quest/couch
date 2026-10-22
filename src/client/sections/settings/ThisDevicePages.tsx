@@ -4,7 +4,6 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { discoverRowLabels, useDiscoverRows } from "../discover/discover-rows";
 import { SectionRowsSettings } from "./SectionRowsSettings";
 import { Switch } from "@/components/ui/switch";
 import { homeRowLabels, useHomeRows } from "@/sections/home/home-rows";
@@ -54,11 +53,9 @@ export function ThisDevicePage() {
   </SettingsLayout>;
 }
 
-export function HomeDiscoverPage() {
+export function HomeSettingsPage() {
   const home = useHomeRows();
-  const discover = useDiscoverRows();
   return <SettingsLayout section="home">
     <SectionRowsSettings page="Home" labels={homeRowLabels} layout={home} />
-    <SectionRowsSettings page="Discover" labels={discoverRowLabels} layout={discover} />
   </SettingsLayout>;
 }

@@ -15,7 +15,7 @@ mock.module("../src/client/sections/shell/AppShell", () => ({ useShell: () => ({
 mock.module("../src/client/session/session", () => ({ createId: () => "id" }));
 const { SettingsIndex, SettingsNav } = await import("../src/client/sections/settings/SettingsNav");
 const { SoundPage } = await import("../src/client/sections/settings/CouchPages");
-const { HomeDiscoverPage } = await import("../src/client/sections/settings/ThisDevicePages");
+const { HomeSettingsPage } = await import("../src/client/sections/settings/ThisDevicePages");
 
 const device = (id: string, name: string, role: "host" | "controller" | "administrator") => ({ id, name, role, createdAt: null, lastSeenAt: null });
 function look(authority: "host" | "controller" | "administrator", details: object, status = "connected") {
@@ -57,10 +57,10 @@ test("Below md, Settings lists both owners, and each page names its owner above 
   const index = renderToStaticMarkup(<SettingsIndex />);
   expect([...index.matchAll(/<h2[^>]*>([^<]+)</g)].map(match => match[1])).toEqual(["This device", "Living room"]);
   const crumb = (html: string) => html.match(/aria-label="Settings path"[\s\S]*?<a[^>]*href="\/settings"[^>]*>([^<]+)</)?.[1];
-  expect(crumb(renderToStaticMarkup(<HomeDiscoverPage />))).toBe("This device");
+  expect(crumb(renderToStaticMarkup(<HomeSettingsPage />))).toBe("This device");
   expect(crumb(renderToStaticMarkup(<SoundPage />))).toBe("Living room");
   look("host", {});
-  expect(crumb(renderToStaticMarkup(<HomeDiscoverPage />))).toBe("Living room");
+  expect(crumb(renderToStaticMarkup(<HomeSettingsPage />))).toBe("Living room");
 });
 
 test("A controller still sees what the Couch's Sound page holds, Bluetooth included", () => {

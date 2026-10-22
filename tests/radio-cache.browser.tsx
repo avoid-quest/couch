@@ -29,7 +29,7 @@ export async function runRadioCacheRegression(keepMounted = false) {
   host.className = "mx-auto max-w-6xl p-6 text-foreground font-sans";
   const root = createRoot(host);
   const gate = { connected: true, run: async () => true, state: { devices: [], liveSources: [] } } as unknown as SessionGateValue;
-  const shell = { credentials: { origin: location.origin, token: "fixture" }, available: true, section: "Discover", sectionUrl: () => "/discover", enqueueRadio: async () => true } as unknown as ShellValue;
+  const shell = { credentials: { origin: location.origin, token: "fixture" }, available: true, section: "Home", sectionUrl: () => "/", enqueueRadio: async () => true } as unknown as ShellValue;
   let client: QueryClient | undefined;
   const dispose = () => { root.unmount(); client?.clear(); host.remove(); window.fetch = originalFetch; };
   try {

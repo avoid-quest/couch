@@ -8,7 +8,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Play, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
@@ -39,12 +38,17 @@ import { avoidRadioPlaylistId, isRadio, stationSources, type RadioProgrammeDetai
 import type { HistoryItem } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
-import { useOnAir, useStationMenu, useStationShow } from "@/sections/discover/on-air";
-import { useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
+import { useOnAir, useStationMenu, useStationShow } from "./on-air";
+import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
+import { Failed, LiveTvShelf, SavedSourceShelf, SharedSources, SourcesLine, sourceHomes } from "./HomeSources";
+import { iptvSourcesQuery } from "@/api/iptv";
+import { providerFavoritesQuery } from "@/api/providers";
+import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
+import type { ProviderId } from "../../../shared/providers";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
 
-// A shelf scrolls, so it holds more than fits; its heading opens the rest in Discover or Saved.
+// A shelf scrolls, so it holds more than fits; its heading opens the rest.
 const shelfLength = 12;
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 const entryShape = (entry: QueueEntry): ArtShape => isRadio(entry) ? "square" : artShape(sourceLabel(entry.source), entry.collection ? "episode" : "media");
@@ -76,7 +80,7 @@ export function HomePage() {
   const historyShown = hasRow("continue") || hasRow("recent");
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
-  const { stations: allStations, mine: myStations, show: onAir, playing: playingStation, meta: showMeta, pending: radioPending, favorites, builtIn } = useOnAir(hasRow("radio"), shell.recentRadio);
+  const { stations: allStations, show: onAir, playing: playingStation, meta: showMeta, pending: radioPending, favorites, builtIn } = useOnAir(hasRow("radio"), shell.recentRadio);
   const resume = useMutation({
     mutationFn: ({ item, fromStart, deviceId }: { item: HistoryItem; fromStart: boolean; deviceId?: string }) => play(on => shell.playHistory(item, { fromStart, on }), deviceId),
   });
@@ -141,15 +145,19 @@ export function HomePage() {
   }, [hero?.kind]);
   // Shelves keep the order Home opened with, less the item that led it then, so nothing moves under the focus: a station that starts playing stays where it is, marked Playing.
   const historyReady = hero !== undefined && !history.isPending;
-  const continued = useKeptOrder(unfinished, item => item.mediaId, historyReady, hero?.kind === "continue" ? hero.item.mediaId : playingMedia).slice(0, shelfLength);
-  const recent = useKeptOrder(past.filter(item => !(item.position > 0 && !item.watched)), item => item.mediaId, historyReady, playingMedia).slice(0, shelfLength);
-  // Home's Radio holds your stations, played here lately and saved; Discover's holds the rest (on-air.ts).
-  const listed = useKeptOrder(myStations, station => station.id, hero !== undefined && !radioPending, hero?.kind === "radio" ? hero.station.id : myStations.find(playingStation)?.id).slice(0, shelfLength);
+  const continued = useKeptOrder(unfinished, item => item.mediaId, historyReady, hero?.kind === "continue" ? hero.item.mediaId : playingMedia);
+  const recent = useKeptOrder(past.filter(item => !(item.position > 0 && !item.watched)), item => item.mediaId, historyReady, playingMedia);
+  // One Radio shelf: your stations (played here lately, saved) first, then the rest on air (on-air.ts).
+  const stations = useKeptOrder(allStations, station => station.id, hero !== undefined && !radioPending, hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id).slice(0, shelfLength);
+  const onAirPending = favorites.isPending || builtIn.isPending;
   const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [], item => item.id, hero !== undefined && !later.isPending);
   const stationMeta = (station: RadioStation) => metaLine(showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode));
-  const queries = [...(historyShown ? [history] : []), ...(hasRow("later") ? [later] : []), ...(hasRow("radio") ? [favorites] : [])];
-  const filled: Record<HomeRowId, boolean> = { upNext: !!upcoming.length, continue: !!continued.length, radio: !!listed.length, later: !!savedMedia.length, recent: !!recent.length };
-  const empty = hero === null && !builtIn.isLoading && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
+  // The sources: shared inputs, Live TV while a source has channels, and what's saved from each source with a home.
+  const sharedSources = useLiveSourceHits("");
+  const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected && hasRow("live-tv") });
+  const shownHomes = sourceHomes.filter(hasRow);
+  const sourceFavorites = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected && shownHomes.length > 0 });
+  const saved = (provider: ProviderId) => sourceFavorites.data?.favorites.filter(item => item.provider === provider) ?? [];
 
   const live = !!(current?.live || current?.kind === "radio");
   const at = playsOn(state);
@@ -184,9 +192,9 @@ export function HomePage() {
   const upNextShape = majorityShape(upcoming.slice(0, shelfLength).map(entryShape));
   const laterShape = majorityShape(savedMedia.slice(0, shelfLength).map(savedShape));
   const recentShape = majorityShape(recent.map(historyShape));
-  const shelves: Record<HomeRowId, ReactNode> = {
+  const lists: Partial<Record<HomeRowId, ReactNode>> = {
     continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played" sparse={continued.length < 3}>
-      {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
+      {continued.slice(0, shelfLength).map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
         <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={continueShape} own={historyShape(item)} {...continueCaption(item)} thumbnail={item.thumbnail} source={item.url}
           progress={item.duration ? item.position / item.duration : undefined}
           aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)} />
@@ -201,13 +209,6 @@ export function HomePage() {
       {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
     </Shelf>,
 
-    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio" sparse={listed.length < 3}>
-      {listed.map(station => <li key={station.id} className="shrink-0">
-        <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
-          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
-      </li>)}
-    </Shelf>,
-
     later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later" sparse={savedMedia.length < 3}>
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail} source={item.url}
@@ -216,28 +217,51 @@ export function HomePage() {
     </Shelf>,
 
     recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played" sparse={recent.length < 3}>
-      {recent.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
+      {recent.slice(0, shelfLength).map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
         <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} thumbnail={item.thumbnail} source={item.url}
           href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
       </li>)}
     </Shelf>,
-  };
 
-  return <section data-page="Home" aria-label="Home" className="grid gap-12">
+    shared: !!sharedSources.length && <SharedSources hits={sharedSources} />,
+
+    // Every station on air, yours (played here lately, saved) first; the heading opens every station.
+    radio: !!stations.length && <Shelf title="Radio" label="Radio stations" href="/radio">
+      {stations.map((station, index) => <li key={station.id} className="flex shrink-0">
+        {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
+        <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
+          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
+      </li>)}
+    </Shelf>,
+
+    "live-tv": iptv.data?.sources.some(source => source.channelCount) ? <LiveTvShelf /> : iptv.error && !iptv.data ? <Failed what="Live TV" retry={() => void iptv.refetch()} /> : null,
+    // Saved channels fail once, where the first source shelf would be.
+    ...Object.fromEntries(sourceHomes.map(provider => [provider, provider === shownHomes[0] && sourceFavorites.error && !sourceFavorites.data
+      ? <Failed what="saved channels" retry={() => void sourceFavorites.refetch()} />
+      : <SavedSourceShelf provider={provider} items={saved(provider)} />])),
+    sources: <SourcesLine />,
+  };
+  // A list or shelf still loading holds its place, so nothing moves under the focus when it arrives.
+  const pending = (id: HomeRowId) => connected && (id === "later" ? later.isPending : id === "continue" || id === "recent" ? history.isPending : id === "radio" ? onAirPending : false);
+  const section = (id: HomeRowId) => lists[id] || (pending(id) && <Shelf title={homeRowLabels[id]} loading><MediaTilesSkeleton shape={id === "radio" ? "square" : "video"} /></Shelf>);
+  // Consecutive rows of your own share one board of short shelves; every other row is a section of its own.
+  const groups = onHome.reduce<HomeRowId[][]>((all, row) => {
+    const last = all.at(-1);
+    if (last && boardRows.includes(row.id) && boardRows.includes(last[0]!)) last.push(row.id); else all.push([row.id]);
+    return all;
+  }, []);
+
+  return <section data-page="Home" aria-label="Home" className="grid gap-section">
     <PageHeader title="Home" hidden />
     {historyShown && history.error && <Alert variant="destructive"><AlertDescription>{hasRow("continue") ? "Couldn't load Continue." : "Couldn't load Played recently."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
-    {hasRow("radio") && favorites.error && <Alert variant="destructive"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {hasRow("radio") && !stations.length && (favorites.error || builtIn.error) && <Alert variant="destructive"><AlertDescription>Couldn't load Radio.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void Promise.all([favorites.refetch(), builtIn.refetch()])}>{TRY_AGAIN}</Button></AlertAction></Alert>}
 
     {hero === undefined && <DetailSkeleton home />}
     {lead}
-    {/* Short shelves sit side by side (Shelf's sparse); a full one takes the line. */}
-    {hero !== undefined && <div className="flex flex-wrap items-start gap-x-16 gap-y-12">{onHome.map(row => <Fragment key={row.id}>{shelves[row.id] || (connected && (row.id === "later" ? later.isPending : row.id === "radio" ? favorites.isPending : ["continue", "recent"].includes(row.id) && history.isPending) && <Shelf title={row.id === "later" ? "For later" : row.id === "radio" ? "Radio" : row.id === "continue" ? "Continue" : "Played recently"} loading><MediaTilesSkeleton shape={row.id === "radio" ? "square" : "video"} /></Shelf>)}</Fragment>)}</div>}
-
-    {empty && <Empty className="items-start py-12 text-left">
-      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
-      <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Discover")}>Discover</Button></EmptyContent>
-    </Empty>}
+    {hero !== undefined && groups.map(group => boardRows.includes(group[0]!)
+      ? group.some(id => lists[id] || pending(id)) && <div key={group.join(" ")} className="flex flex-wrap items-start gap-x-16 gap-y-12">{group.map(id => <Fragment key={id}>{section(id)}</Fragment>)}</div>
+      : <Fragment key={group[0]}>{section(group[0]!)}</Fragment>)}
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
       <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false}>

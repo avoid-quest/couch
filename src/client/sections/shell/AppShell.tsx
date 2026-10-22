@@ -1,7 +1,7 @@
 import { defaultStringifySearch, Link, Outlet, useLocation, useMatches, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren, type ReactNode, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { BookmarkIcon, CompassIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
+import { BookmarkIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -19,7 +19,7 @@ import { readSearchState, searchLocation, type SearchRouteState } from "@/search
 import type { SearchScope } from "@/search-palette";
 import { createId } from "@/session/session";
 import { knownConnections } from "@/session/connection";
-import { discoverPaths, pathForSection, sectionForPath } from "../../../shared/page-paths";
+import { browsePaths, pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -45,7 +45,7 @@ import { hear, onBlocked } from "@/session/renderer";
 import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id";
 
 // The sections in tab order, with their icons in the phone tab bar. Search is the header's field, not a tab.
-const sections: [string, LucideIcon][] = [["Home", HouseIcon], ["Discover", CompassIcon], ["Saved", BookmarkIcon], ["Remote", TvIcon], ["Settings", SettingsIcon]];
+const sections: [string, LucideIcon][] = [["Home", HouseIcon], ["Saved", BookmarkIcon], ["Remote", TvIcon], ["Settings", SettingsIcon]];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 const reducedMotion = () => window.matchMedia(reducedMotionQuery).matches;
 function subscribeReducedMotion(onChange: () => void) {
@@ -146,8 +146,8 @@ function useShellValue() {
     if (to !== at) router.history.replace(to);
   };
   useNavigation(() => {
-    // A detail page, and Discover's own pages (every station, every channel), go back to what opened them.
-    if (["/collection", "/item", ...discoverPaths].includes(location.pathname)) { detailNavigation.back(pathForSection(section)); return; }
+    // A detail page, and Home's own pages (every station, every channel), go back to what opened them.
+    if (["/collection", "/item", ...browsePaths].includes(location.pathname)) { detailNavigation.back(pathForSection(section)); return; }
     if (section === "Now") leavePlayer();
     else if (section !== "Home") changeSection("Home");
   });

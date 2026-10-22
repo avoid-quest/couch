@@ -10,7 +10,7 @@ import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { isAudioOnly } from "@/sections/now/player-presentation";
 import { UpNextButton } from "@/sections/now/QueuePanel";
-import { useStationShow } from "@/sections/discover/on-air";
+import { useStationShow } from "@/sections/home/on-air";
 import { queueItemLocation } from "@/detail-navigation";
 import { useShell } from "./shell-context";
 import { Button } from "@/components/ui/button";

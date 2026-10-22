@@ -17,7 +17,7 @@ function relatedLinks({ collection, creator, radio, source }: Related) {
   const creatorProvider = creator && providerForUrl(creator.url);
   const provider = (Object.keys(providerNames) as ProviderId[]).find(id => providerNames[id] === source);
   const radioSource = radioBrowseSources.find(value => value === source);
-  const sourceHref = provider ? collectionLocation({ provider, url: "" }) : radioSource || source === "Radio" ? radioBrowseLocation(radioSource) : source === "Live TV" ? "/discover/live-tv" : undefined;
+  const sourceHref = provider ? collectionLocation({ provider, url: "" }) : radioSource || source === "Radio" ? radioBrowseLocation(radioSource) : source === "Live TV" ? "/live-tv" : undefined;
   const links = [
     ...(source && sourceHref ? [{ title: source, href: sourceHref }] : []),
     ...(creator && creatorProvider ? [{ title: creator.title, href: ["bandcamp", "soundcloud"].includes(creatorProvider) ? searchLocation({query: creator.title, source: providerNames[creatorProvider]}) : collectionLocation({ provider: creatorProvider, url: creator.url }) }] : []),

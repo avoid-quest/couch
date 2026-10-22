@@ -16,15 +16,16 @@ import { Route as FindRouteImport } from './routes/find'
 import { Route as ItemRouteImport } from './routes/item'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as LiveRouteImport } from './routes/live'
+import { Route as LiveTvRouteImport } from './routes/live-tv'
 import { Route as NowRouteImport } from './routes/now'
+import { Route as RadioRouteImport } from './routes/radio'
 import { Route as RemoteRouteImport } from './routes/remote'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as WhereItPlaysRouteImport } from './routes/where-it-plays'
 import { Route as DiscoverIndexRouteImport } from './routes/discover/index'
-import { Route as DiscoverLiveTvRouteImport } from './routes/discover/live-tv'
-import { Route as DiscoverRadioRouteImport } from './routes/discover/radio'
+import { Route as DiscoverSplatRouteImport } from './routes/discover/$'
 import { Route as PairTvRouteImport } from './routes/pair/tv'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsSplatRouteImport } from './routes/settings/$'
@@ -78,9 +79,19 @@ const LiveRoute = LiveRouteImport.update({
   path: '/live',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LiveTvRoute = LiveTvRouteImport.update({
+  id: '/live-tv',
+  path: '/live-tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NowRoute = NowRouteImport.update({
   id: '/now',
   path: '/now',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RadioRoute = RadioRouteImport.update({
+  id: '/radio',
+  path: '/radio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RemoteRoute = RemoteRouteImport.update({
@@ -113,14 +124,9 @@ const DiscoverIndexRoute = DiscoverIndexRouteImport.update({
   path: '/discover/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DiscoverLiveTvRoute = DiscoverLiveTvRouteImport.update({
-  id: '/discover/live-tv',
-  path: '/discover/live-tv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DiscoverRadioRoute = DiscoverRadioRouteImport.update({
-  id: '/discover/radio',
-  path: '/discover/radio',
+const DiscoverSplatRoute = DiscoverSplatRouteImport.update({
+  id: '/discover/$',
+  path: '/discover/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PairTvRoute = PairTvRouteImport.update({
@@ -221,14 +227,15 @@ export interface FileRoutesByFullPath {
   '/item': typeof ItemRoute
   '/library': typeof LibraryRoute
   '/live': typeof LiveRoute
+  '/live-tv': typeof LiveTvRoute
   '/now': typeof NowRoute
+  '/radio': typeof RadioRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
   '/where-it-plays': typeof WhereItPlaysRoute
-  '/discover/live-tv': typeof DiscoverLiveTvRoute
-  '/discover/radio': typeof DiscoverRadioRoute
+  '/discover/$': typeof DiscoverSplatRoute
   '/pair/tv': typeof PairTvRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings/device': typeof SettingsDeviceRouteWithChildren
@@ -256,13 +263,14 @@ export interface FileRoutesByTo {
   '/item': typeof ItemRoute
   '/library': typeof LibraryRoute
   '/live': typeof LiveRoute
+  '/live-tv': typeof LiveTvRoute
   '/now': typeof NowRoute
+  '/radio': typeof RadioRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/where-it-plays': typeof WhereItPlaysRoute
-  '/discover/live-tv': typeof DiscoverLiveTvRoute
-  '/discover/radio': typeof DiscoverRadioRoute
+  '/discover/$': typeof DiscoverSplatRoute
   '/pair/tv': typeof PairTvRoute
   '/settings/$': typeof SettingsSplatRoute
   '/discover': typeof DiscoverIndexRoute
@@ -289,14 +297,15 @@ export interface FileRoutesById {
   '/item': typeof ItemRoute
   '/library': typeof LibraryRoute
   '/live': typeof LiveRoute
+  '/live-tv': typeof LiveTvRoute
   '/now': typeof NowRoute
+  '/radio': typeof RadioRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
   '/where-it-plays': typeof WhereItPlaysRoute
-  '/discover/live-tv': typeof DiscoverLiveTvRoute
-  '/discover/radio': typeof DiscoverRadioRoute
+  '/discover/$': typeof DiscoverSplatRoute
   '/pair/tv': typeof PairTvRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings/device': typeof SettingsDeviceRouteWithChildren
@@ -326,14 +335,15 @@ export interface FileRouteTypes {
     | '/item'
     | '/library'
     | '/live'
+    | '/live-tv'
     | '/now'
+    | '/radio'
     | '/remote'
     | '/saved'
     | '/search'
     | '/settings'
     | '/where-it-plays'
-    | '/discover/live-tv'
-    | '/discover/radio'
+    | '/discover/$'
     | '/pair/tv'
     | '/settings/$'
     | '/settings/device'
@@ -361,13 +371,14 @@ export interface FileRouteTypes {
     | '/item'
     | '/library'
     | '/live'
+    | '/live-tv'
     | '/now'
+    | '/radio'
     | '/remote'
     | '/saved'
     | '/search'
     | '/where-it-plays'
-    | '/discover/live-tv'
-    | '/discover/radio'
+    | '/discover/$'
     | '/pair/tv'
     | '/settings/$'
     | '/discover'
@@ -393,14 +404,15 @@ export interface FileRouteTypes {
     | '/item'
     | '/library'
     | '/live'
+    | '/live-tv'
     | '/now'
+    | '/radio'
     | '/remote'
     | '/saved'
     | '/search'
     | '/settings'
     | '/where-it-plays'
-    | '/discover/live-tv'
-    | '/discover/radio'
+    | '/discover/$'
     | '/pair/tv'
     | '/settings/$'
     | '/settings/device'
@@ -429,14 +441,15 @@ export interface RootRouteChildren {
   ItemRoute: typeof ItemRoute
   LibraryRoute: typeof LibraryRoute
   LiveRoute: typeof LiveRoute
+  LiveTvRoute: typeof LiveTvRoute
   NowRoute: typeof NowRoute
+  RadioRoute: typeof RadioRoute
   RemoteRoute: typeof RemoteRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   WhereItPlaysRoute: typeof WhereItPlaysRoute
-  DiscoverLiveTvRoute: typeof DiscoverLiveTvRoute
-  DiscoverRadioRoute: typeof DiscoverRadioRoute
+  DiscoverSplatRoute: typeof DiscoverSplatRoute
   PairTvRoute: typeof PairTvRoute
   DiscoverIndexRoute: typeof DiscoverIndexRoute
 }
@@ -492,11 +505,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/live-tv': {
+      id: '/live-tv'
+      path: '/live-tv'
+      fullPath: '/live-tv'
+      preLoaderRoute: typeof LiveTvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/now': {
       id: '/now'
       path: '/now'
       fullPath: '/now'
       preLoaderRoute: typeof NowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/radio': {
+      id: '/radio'
+      path: '/radio'
+      fullPath: '/radio'
+      preLoaderRoute: typeof RadioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/remote': {
@@ -541,18 +568,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DiscoverIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/discover/live-tv': {
-      id: '/discover/live-tv'
-      path: '/discover/live-tv'
-      fullPath: '/discover/live-tv'
-      preLoaderRoute: typeof DiscoverLiveTvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/discover/radio': {
-      id: '/discover/radio'
-      path: '/discover/radio'
-      fullPath: '/discover/radio'
-      preLoaderRoute: typeof DiscoverRadioRouteImport
+    '/discover/$': {
+      id: '/discover/$'
+      path: '/discover/$'
+      fullPath: '/discover/$'
+      preLoaderRoute: typeof DiscoverSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pair/tv': {
@@ -747,14 +767,15 @@ const rootRouteChildren: RootRouteChildren = {
   ItemRoute: ItemRoute,
   LibraryRoute: LibraryRoute,
   LiveRoute: LiveRoute,
+  LiveTvRoute: LiveTvRoute,
   NowRoute: NowRoute,
+  RadioRoute: RadioRoute,
   RemoteRoute: RemoteRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRouteWithChildren,
   WhereItPlaysRoute: WhereItPlaysRoute,
-  DiscoverLiveTvRoute: DiscoverLiveTvRoute,
-  DiscoverRadioRoute: DiscoverRadioRoute,
+  DiscoverSplatRoute: DiscoverSplatRoute,
   PairTvRoute: PairTvRoute,
   DiscoverIndexRoute: DiscoverIndexRoute,
 }

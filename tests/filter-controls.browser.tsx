@@ -86,7 +86,7 @@ export async function runFilterControlsRegression() {
     assert(document.activeElement?.getAttribute("aria-checked") === "true" && document.activeElement.firstChild?.textContent === "All", "Focus was lost with the source line");
     assert(audit.calls.length === searchReads, "Filtering unnecessarily refetched cached results");
 
-    await audit.go('/discover/radio');
+    await audit.go('/radio');
     assert(!button("Clear filter"), "An empty filter offered to clear itself");
     const radioReads = audit.calls.length;
     type("Filter stations", "  NTS  "); await wait();
@@ -125,7 +125,7 @@ export async function runFilterControlsRegression() {
     assert(JSON.stringify(audit.router.state.location.search.cursors) === '["next-page"]', "Filtering lost the provider cursor");
     assert(document.querySelector('a[aria-label="Previous page"]'), "No matches hid the route to other pages");
 
-    await audit.go('/discover/live-tv');
+    await audit.go('/live-tv');
     holdGuide = true;
     type("Filter channels", "A"); await wait(20);
     type("Filter channels", "Ar"); await wait(20);

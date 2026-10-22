@@ -5,12 +5,12 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import type { useSectionRows } from "../section-rows";
 
-/** Home and Discover's device-owned visibility and order controls: each shelf's Switch beside its name, its moves at the row's end. */
+/** Home's device-owned visibility and order controls: each section's Switch beside its name, its moves at the row's end. The page names it, so the list has no heading of its own. */
 export function SectionRowsSettings<Id extends string>({ page, labels, layout }: {
   page: string; labels: Record<Id, string>; layout: ReturnType<typeof useSectionRows<Id>>;
 }) {
   return (
-    <SettingsSection title={page} data-section-rows={page.toLowerCase()}>
+    <SettingsSection data-section-rows={page.toLowerCase()}>
       <ol aria-label={`${page} shelves`} className="mt-0!">
         {layout.rows.map((row, index) => <li key={row.id}>
           <Field orientation="horizontal" className="gap-3 border-b py-2">

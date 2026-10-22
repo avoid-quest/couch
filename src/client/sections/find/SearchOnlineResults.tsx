@@ -106,7 +106,7 @@ function OnlineResults(props: Props) {
   const kept = useQuery({ ...providerFavoritesQuery(props), enabled: props.connected, retry: false });
   const favorites = kept.error ? null : kept.data?.favorites ?? null;
   const later = useQuery({ ...forLaterQuery(props), enabled: props.connected, retry: false });
-  // The one place provider items become hits, so Hide reaches Search, source pages and Discover alike.
+  // The one place provider items become hits, so Hide reaches Search, source pages and Home alike.
   const { isHidden, hide } = useHidden(props, props.connected);
   const history = useQuery({ ...historyQuery(props, provider), enabled: props.connected && !!props.url && !!props.onPlayHistory });
   // A series of seasons starts from the season its latest played episode is in, else the first: its next episode plays.

@@ -37,7 +37,7 @@ export function PlayedSection({ origin, token, connected, onFind }: Credentials 
   return <section aria-label="Played">
     <SavedStatus connected={connected} loading={loading} />
     {connected && history.error && <SavedError message={history.error.message || "Couldn't load Played."} onRetry={() => void history.refetch()} />}
-    {connected && !loading && !history.error && !items.length && <SavedEmpty title="Nothing played yet" action={onFind && <Button onClick={onFind}>Discover</Button>}>Your watching and listening history will appear here.</SavedEmpty>}
+    {connected && !loading && !history.error && !items.length && <SavedEmpty title="Nothing played yet" action={onFind && <Button onClick={onFind}>Search</Button>}>Your watching and listening history will appear here.</SavedEmpty>}
     {!!items.length && <MediaList aria-label="Played">
       {items.map(item => {
         const href = itemLocation("history", item.mediaId);

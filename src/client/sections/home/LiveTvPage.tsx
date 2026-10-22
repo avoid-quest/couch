@@ -26,7 +26,7 @@ import type { GuideChannel, GuideRow } from "../../../shared/iptv";
 import { searchError } from "@/sections/find/SearchOnlineResults";
 
 type LiveTvSearch = { page?: number; filter?: string; group?: string };
-const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) => `/discover/live-tv${defaultStringifySearch({ group: group || undefined, page: page > 1 ? page : undefined, filter: filter || undefined })}`;
+const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) => `/live-tv${defaultStringifySearch({ group: group || undefined, page: page > 1 ? page : undefined, filter: filter || undefined })}`;
 // Guide groups are display text without control characters, so this can't name one.
 const allGroups = "\u0000";
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -68,7 +68,7 @@ export function useChannelLogo(channel: GuideChannel) {
   return src;
 }
 
-/** Every Live TV channel, which Discover's Live TV heading opens: the guide's channels with what's on now and next, a page at a time. */
+/** Every Live TV channel, which Home's Live TV heading opens: the guide's channels with what's on now and next, a page at a time. */
 export function LiveTvPage() {
   const { credentials } = useShell();
   const { connected, state } = useSessionGate();
