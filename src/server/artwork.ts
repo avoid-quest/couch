@@ -6,11 +6,12 @@ export const artworkSizeLimit = 8 * 1024 * 1024;
 const pictures = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 
 /**
- * The pictures Core read lately, newest last, within a byte budget, so a picture lit on several pages or Devices is
- * fetched from its host once. Only whole, valid pictures are kept; one over a quarter of the budget never is.
+ * The pictures Core read lately, newest last, within a byte budget that counts each address and picture, so a picture
+ * lit on several pages or Devices is fetched from its host once. Only whole, valid pictures are kept; an empty one, or
+ * one over a quarter of the budget, never is.
  */
 export function createArtworkCache(budget = 24 * 1024 * 1024) {
-  const entries = new Map<string, { type: string; bytes: Uint8Array }>();
+  const entries = new Map<string, { type: string; bytes: Uint8Array; cost: number }>();
   let size = 0;
   return {
     get(key: string) {
@@ -20,11 +21,13 @@ export function createArtworkCache(budget = 24 * 1024 * 1024) {
       return entry;
     },
     set(key: string, type: string, bytes: Uint8Array) {
-      if (bytes.byteLength > budget / 4) return;
+      const cost = key.length + bytes.byteLength;
+      if (!bytes.byteLength || cost > budget / 4) return;
       const old = entries.get(key);
-      if (old) { entries.delete(key); size -= old.bytes.byteLength; }
-      entries.set(key, { type, bytes }); size += bytes.byteLength;
-      for (const [oldest, entry] of entries) { if (size <= budget) break; entries.delete(oldest); size -= entry.bytes.byteLength; }
+      if (old) { entries.delete(key); size -= old.cost; }
+      // A copy of its own, so a small picture doesn't hold on to the shared buffer it was read into.
+      entries.set(key, { type, bytes: new Uint8Array(bytes), cost }); size += cost;
+      for (const [oldest, entry] of entries) { if (size <= budget) break; entries.delete(oldest); size -= entry.cost; }
     },
     get size() { return size; },
   };

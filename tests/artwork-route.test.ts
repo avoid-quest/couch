@@ -48,18 +48,31 @@ test("a picture read before comes from Core's memory, not its host, and still on
   expect(cache.get("https://img.example/empty.png")).toBeUndefined();
 });
 
-test("the cache keeps the newest pictures within its byte budget", () => {
-  const cache = createArtworkCache(400);
+test("the cache keeps the newest pictures within its byte budget, counting their addresses", () => {
+  // Each entry costs its one-letter address and its 100 bytes.
+  const cache = createArtworkCache(404);
   cache.set("a", "image/png", new Uint8Array(100));
   cache.set("b", "image/png", new Uint8Array(100));
   cache.set("c", "image/png", new Uint8Array(100));
   cache.get("a");
   cache.set("d", "image/png", new Uint8Array(100));
   cache.set("e", "image/png", new Uint8Array(100));
-  expect(cache.size).toBe(400);
+  expect(cache.size).toBe(404);
   expect(cache.get("b")).toBeUndefined();
   for (const key of ["a", "c", "d", "e"]) expect(cache.get(key)).toBeDefined();
-  // A picture over a quarter of the budget is never kept.
-  cache.set("big", "image/png", new Uint8Array(101));
-  expect(cache.get("big")).toBeUndefined();
+  // Replacing a picture counts it once.
+  cache.set("e", "image/png", new Uint8Array(100));
+  expect(cache.size).toBe(404);
+  // A picture over a quarter of the budget, address included, is never kept; nor is an empty one.
+  cache.set("big", "image/png", new Uint8Array(99));
+  cache.set("f", "image/png", new Uint8Array());
+  expect([cache.get("big"), cache.get("f"), cache.size]).toEqual([undefined, undefined, 404]);
+});
+
+test("a kept picture is a copy of its own, not a view of the buffer it was read into", () => {
+  const cache = createArtworkCache();
+  const pool = new Uint8Array(8192);
+  cache.set("a", "image/png", pool.subarray(0, 3));
+  const kept = cache.get("a")!.bytes;
+  expect([kept.byteLength, kept.buffer.byteLength]).toEqual([3, 3]);
 });
