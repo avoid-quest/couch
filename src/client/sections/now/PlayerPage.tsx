@@ -2,7 +2,7 @@ import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { ArrowLeft, ChevronRight, Maximize, Minimize, Music2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,16 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   // Up next takes a column beside the artwork only while something is still to come; else it is summoned over the room.
   const besideQueue = queueBeside && hasQueued(state);
+  // Removing the last upcoming row beside the artwork takes the column away with the focus in it: Up next, else the
+  // transport, takes it.
+  const wasBeside = useRef(besideQueue);
+  useLayoutEffect(() => {
+    const was = wasBeside.current;
+    wasBeside.current = besideQueue;
+    if (!was || besideQueue || queueOpen || document.activeElement !== document.body) return;
+    const trigger = queueTrigger.current;
+    (trigger && !trigger.disabled && trigger.getClientRects().length ? trigger : firstTransport())?.focus({ preventScroll: true });
+  }, [besideQueue, queueOpen]);
   const sharing = !!localLiveSourceId;
   // While this device shares, the bands stay up, so the top band's Stop sharing stays on screen.
   const autoHide = connected && playing && !artworkStage && !sharing;
