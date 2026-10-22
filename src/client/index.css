@@ -57,6 +57,7 @@ body { min-width: 0; }
     --color-foreground: var(--foreground);
     --color-background: var(--background);
     --color-fill-hover: var(--fill-hover);
+    --color-bar: var(--bar);
 }
 /* Couch's scales (Design → Tokens). Radius: what you press or type into is a capsule (rounded-full); a picture or a row
    inside a surface has a soft corner (sm, md); a surface that opens over the page has a larger one (lg, xl). */
@@ -76,7 +77,7 @@ body { min-width: 0; }
     --spacing-stack: .75rem;
     --spacing-item: 1rem;
     --spacing-section: 3.5rem;
-    /* Type: caption, meta, body (titles of items, controls), heading (a shelf, a section), page; the Stage's display
+    /* Type: caption, meta, body (titles of items, controls), title (what plays, in the bar), heading (a shelf, a section), page; the Stage's display
        sizes live with it (.stage-title). Weights: 400 for everything but headings (600) and display (600). */
     --text-caption: .75rem;
     --text-caption--line-height: 1rem;
@@ -84,6 +85,8 @@ body { min-width: 0; }
     --text-meta--line-height: 1.125rem;
     --text-body: .9375rem;
     --text-body--line-height: 1.3125rem;
+    --text-title: 1.125rem;
+    --text-title--line-height: 1.5rem;
     --text-heading: 1.25rem;
     --text-heading--line-height: 1.75rem;
     --text-heading--letter-spacing: -.015em;
@@ -108,6 +111,8 @@ body { min-width: 0; }
     --secondary: rgb(255 255 255 / 10%);
     --secondary-foreground: #fff;
     --fill-hover: rgb(255 255 255 / 16%);
+    /* The now-playing bar's own surface: solid, one step above the page, so it reads as a bar over whatever scrolls under it. */
+    --bar: #141414;
     --muted: #171717;
     --muted-foreground: #a3a3a3;
     /* A list's row under the pointer (menus, the palette, a Select): a quiet fill, the ink unchanged. Keys invert it. */
@@ -285,6 +290,12 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 :is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
 .player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
+/* The bar's timeline is its top edge: a hairline that thickens and shows its handle under a pointer, with a hit area
+   taller than the line, centred on it. */
+.bar-timeline [data-slot="slider"] { padding-block: .5rem; }
+.bar-timeline [data-slot="slider-track"] { border-radius: 0; background: rgb(255 255 255 / 18%); }
+.bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
+:is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] { @apply motion-safe:transition-[scale]; }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
 .player-video-controls [data-hover-time] { background: var(--player-surface); }
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
@@ -363,8 +374,6 @@ html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[dat
 .player-page[data-player-idle] .player-main { display: none; }
 .player-page[data-player-idle][data-queue-open] .player-queue { display: flex; width: 100%; max-width: 48rem; border: 0; padding: 0; }
 
-/* Home's hero stands in for the now-playing bar while it shows what plays on screen (HomePage.tsx). */
-html[data-hero-playing] [data-now-playing] { display: none; }
 
 /* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
 html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }

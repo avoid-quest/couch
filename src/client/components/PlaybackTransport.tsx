@@ -79,9 +79,9 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
     <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled} buffered={canSeek ? buffered : null}
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
-      {/* The time under the pointer, just clear of the thumb at any target height, centred over the pointer and held
-          inside the bar at either end (100cqw is the bar's width). */}
-      {hover !== null && !disabled && <span data-hover-time aria-hidden="true" className="pointer-events-none absolute bottom-[calc(50%+.875rem)] left-0 bg-background px-2 py-1 text-sm tabular-nums tv:hidden" style={{ translate: `clamp(0px, calc(${hover} * 100cqw - 50%), calc(100cqw - 100%))` }}>{formatDuration(Math.round(hover * max))}</span>}
+      {/* The time under the pointer, right above the line and just clear of its handle, centred over the pointer and
+          held inside the bar at either end (100cqw is the bar's width). */}
+      {hover !== null && !disabled && <span data-hover-time aria-hidden="true" className="pointer-events-none absolute bottom-[calc(50%+.5rem)] left-0 rounded-sm bg-background px-1.5 py-0.5 text-meta tabular-nums tv:hidden" style={{ translate: `clamp(0px, calc(${hover} * 100cqw - 50%), calc(100cqw - 100%))` }}>{formatDuration(Math.round(hover * max))}</span>}
     </div>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>

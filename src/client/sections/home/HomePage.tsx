@@ -161,7 +161,7 @@ export function HomePage() {
   const playingMeta = metaLine(playing?.lead, playing?.subtitle, current && !isRadio(current) && sourceLabel(current.source), !status.quiet && status.label, at?.elsewhere && `on ${at.name}`);
   const heroCaption = hero?.kind === "continue" ? historyCaption(hero.item) : undefined;
 
-  const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero playing context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
+  const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
       progress={!live && length ? <HeroProgress position={playbackClock.position ?? 0} duration={length} label={remaining != null ? `${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}` : undefined} /> : undefined}>
       <Button data-page-first size="lg" onClick={() => shell.changeSection("Now")}>Open player</Button>
       {/* The transport follows the player's verb on its line, its first glyph a gap away, as one group of verbs. */}
@@ -267,16 +267,7 @@ function HeroProgress({ position, duration, label = `${formatDuration(Math.max(0
  * bottom left, one muted meta line and its links, how far it got, then its verbs. Its verbs are a row, so Up and Down
  * pass between it and the shelves.
  */
-function HomeHero({ thumbnail, shape, title, meta, context, progress, playing = false, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; playing?: boolean; children: ReactNode }) {
-  // While it shows what plays, on screen, it stands in for the now-playing bar, which hides (index.css) until it scrolls away.
-  useEffect(() => {
-    const hero = document.querySelector("[data-home-hero]");
-    if (!playing || !hero) return;
-    const html = document.documentElement;
-    const observer = new IntersectionObserver(([entry]) => html.toggleAttribute("data-hero-playing", !!entry?.isIntersecting));
-    observer.observe(hero);
-    return () => { observer.disconnect(); html.removeAttribute("data-hero-playing"); };
-  }, [playing]);
+function HomeHero({ thumbnail, shape, title, meta, context, progress, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; children: ReactNode }) {
   return <Stage data-home-hero size="home" label={title} thumbnail={thumbnail ?? ""} shape={shape} title={title}>
     <StageTitle as="h2" title={title} />
     {/* The meta line and its links read as one block under the title. */}

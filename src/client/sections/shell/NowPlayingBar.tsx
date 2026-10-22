@@ -15,8 +15,6 @@ import { queueItemLocation } from "@/detail-navigation";
 import { useShell } from "./shell-context";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { useArtworkLight } from "@/components/AmbientLight";
-import type { CSSProperties } from "react";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "./Outputs";
@@ -54,7 +52,6 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const programme = useStationShow();
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
-  const light = useArtworkLight(programme?.artworkUrl ?? current?.thumbnail);
   if (!current) return null;
   const playback = state.playbacks?.find(item => item.id === state.playback);
   const settings = state.preferences ? { entry: current, player, ready: playbackCapabilities(state, connected).transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
@@ -72,23 +69,21 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   // (--player-target) and x; the timeline is the line along its top edge. Phones (below sm) keep Play/Pause and Open
   // player: a minimized player needs no mixer, and the player has the rest.
   const desktop = "max-sm:hidden";
-  // The bar is the player's band, minimized: its picture at its own shape lights the bar's left end in its own colour,
-  // which is gone before the bar's middle, so its line under the title takes the band's ink (white 85%) and keeps 7:1.
-  return <footer data-now-playing aria-label="Now playing" style={light ? { "--bar-light": `rgb(${light.a.join(" ")})` } as CSSProperties : undefined} className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 bg-background px-(--gutter) py-2.5 [--muted-foreground:rgb(255_255_255/85%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
-    <span aria-hidden="true" data-bar-light className="pointer-events-none absolute inset-y-0 left-0 w-[min(60vw,32rem)] bg-[linear-gradient(90deg,var(--bar-light,transparent),transparent)] opacity-90 motion-safe:transition-opacity motion-safe:duration-600" />
-    <PlaybackTimeline state={state} connected={connected} run={run} className="bar-timeline absolute inset-x-0 top-0 z-10 -translate-y-1/2 [&_[data-time-labels]]:hidden [&_[data-slot=slider-track]]:rounded-none [&_[data-slot=slider-track]]:bg-foreground/15 [&_[data-slot=slider-thumb]]:opacity-0 hover:[&_[data-slot=slider-thumb]]:opacity-100 focus-within:[&_[data-slot=slider-thumb]]:opacity-100" />
-    {/* Two tight lines beside the artwork at its own shape, as a mini-player's: the bar is as tall as its 44px controls.
-        The title is the control, across the whole line, and the artwork a pointer target for it; the line under it
-        keeps its own links, so they sit outside the title's button. Those links drop their row height here and keep a
-        24px hit area that doesn't push the line apart. */}
-    <div className="relative flex min-w-0 items-center gap-3.5 max-sm:pr-4">
-      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-12 max-w-24 min-w-12 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-background [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-24 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
-      <div data-bar-title className="grid min-w-0 flex-1">
-        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start p-0 text-left text-[.9375rem] leading-5 font-medium text-foreground touch:min-h-0" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span>{sounding(state, connected) && <Level moving className="ml-2 shrink-0 text-[.875rem]" />}</Button>
+  // The bar is the player's band, minimized, on a solid surface of its own (--bar) so nothing of the page or the
+  // artwork's colour shows through it; its picture, title and controls are as large as a mini-player's.
+  return <footer data-now-playing aria-label="Now playing" className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 bg-bar px-(--gutter) py-3 [--muted-foreground:rgb(255_255_255/72%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2.5 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
+    <PlaybackTimeline state={state} connected={connected} run={run} className="bar-timeline absolute inset-x-0 top-0 z-10 -translate-y-1/2 [&_[data-time-labels]]:hidden" />
+    {/* Two lines beside the artwork at its own shape, as a mini-player's. The title is the control, across the whole
+        line, and the artwork a pointer target for it; the line under it keeps its own links, so they sit outside the
+        title's button. Those links drop their row height here and keep a 24px hit area that doesn't push the line apart. */}
+    <div className="relative flex min-w-0 items-center gap-4 max-sm:gap-3 max-sm:pr-4">
+      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-14 max-w-28 min-w-14 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-background max-sm:h-12 max-sm:min-w-12 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-28 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
+      <div data-bar-title className="grid min-w-0 flex-1 gap-1">
+        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title font-medium text-foreground touch:min-h-0 max-sm:text-body" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span>{sounding(state, connected) && <Level moving className="ml-2 shrink-0 text-[.875rem]" />}</Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}
-        <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-xs leading-4 text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-meta text-muted-foreground">
           {at?.elsewhere && <PlaysOn at={at} />}
-          <MediaContext creator={current.creator} collection={current.collection} radio={radio && programme && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} className="min-w-0 shrink flex-nowrap overflow-x-clip text-xs whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1" />
+          <MediaContext creator={current.creator} collection={current.collection} radio={radio && programme && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} className="min-w-0 shrink flex-nowrap overflow-x-clip text-meta whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1" />
           <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
         </div>
       </div>
