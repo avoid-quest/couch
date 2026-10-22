@@ -38,6 +38,8 @@ export function useHidden(credentials: ApiCredentials, connected: boolean) {
           .finally(() => client.invalidateQueries({ queryKey: query.queryKey }));
       });
     } catch (reason) {
+      // Offline the refetch below can't replace the guess, so it goes here.
+      client.setQueryData(query.queryKey, current => current && { rules: current.rules.filter(rule => rule.id !== pending.id) });
       failed(`Couldn't hide ${item.title}.`, reason);
     } finally {
       await client.invalidateQueries({ queryKey: query.queryKey });
