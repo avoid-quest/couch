@@ -223,7 +223,7 @@ sets as a mouse moves over it and a key removes.
 `html` font size is `clamp(16px, 1.25vw, 24px)`, so rem sizes scale every
 screen alike. Two faces, clearly apart:
 
-- **Archivo** (display, `font-display`, vendored in `src/client/fonts`, OFL):
+- **Archivo** (display, `font-display`, `@fontsource-variable/archivo` with its width axis):
   a grotesque in the American tradition of jazz sleeves and gig posters, with
   width (62–125%) and weight axes. It sets the Stage's and the player's titles
   (`.display-title`, weight 760), page titles and the headings of shelves,

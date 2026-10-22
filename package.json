@@ -164,5 +164,8 @@
       "repo": "couch"
     },
     "afterPack": "./scripts/after-pack.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0"
   }
 }
