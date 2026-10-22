@@ -1,5 +1,5 @@
 import { playbackStatus, sounding } from "@/playback-status";
-import { ArtLevel } from "@/components/Level";
+import { Level } from "@/components/Level";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -82,9 +82,9 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
         keeps its own links, so they sit outside the title's button. Those links drop their row height here and keep a
         24px hit area that doesn't push the line apart. */}
     <div className="relative flex min-w-0 items-center gap-3.5 max-sm:pr-4">
-      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-12 max-w-24 min-w-12 shrink-0 items-center justify-center overflow-hidden bg-background hover:opacity-80 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-24 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}<ArtLevel level={sounding(state, connected) ? "moving" : "flat"} className="size-[1.125rem]! text-[.625rem]" /></button>
+      <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-12 max-w-24 min-w-12 shrink-0 items-center justify-center overflow-hidden bg-background hover:opacity-80 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-24 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
       <div data-bar-title className="grid min-w-0 flex-1">
-        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start p-0 text-left text-[.9375rem] leading-5 font-medium text-foreground touch:min-h-0" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
+        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start p-0 text-left text-[.9375rem] leading-5 font-medium text-foreground touch:min-h-0" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>{sounding(state, connected) && <Level moving className="mr-2 text-[.875rem]" />}<span className="truncate" title={title}>{title}</span></Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}
         <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-xs leading-4 text-muted-foreground">
           {at?.elsewhere && <PlaysOn at={at} />}

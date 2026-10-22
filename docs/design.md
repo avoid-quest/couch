@@ -208,8 +208,9 @@ control, 200 ms for what arrives.
   only while what plays is playing, and lies flat while paused, buffering or
   loading, as short thin bars that can't be read as a "…". It sits on the playing item's artwork (a black square in its
   bottom-left corner) wherever it is listed, in place of a playing track's
-  number, on the now-playing bar's thumbnail and beside each device in Where
-  it plays whose sound is in. Its bars move by transforms only. Reduced motion
+  number, before the now-playing bar's title while sound comes out (never on
+  its thumbnail, where a corner chip read as a "…"; paused, the bar's Play
+  glyph says so) and beside each device in Where it plays whose sound is in. Its bars move by transforms only. Reduced motion
   holds them still at three heights while it plays.
 - New motion is `motion-safe:`; reduced motion stills everything.
 
