@@ -65,7 +65,6 @@ body { min-width: 0; }
 /* Couch's scales (Design → Tokens). Radius: what you press or type into is a capsule (rounded-full); a picture or a row
    inside a surface has a soft corner (sm, md); a surface that opens over the page has a larger one (lg, xl). */
 @theme {
-    --radius-xs: .125rem;
     --radius-sm: .25rem;
     --radius-md: .5rem;
     --radius-lg: .75rem;
@@ -81,7 +80,7 @@ body { min-width: 0; }
     --spacing-item: 1rem;
     --spacing-section: 3.5rem;
     /* Type: caption, meta, body (titles of items, controls), title (what plays, in the bar), heading (a shelf, a section), page; the Stage's display
-       sizes live with it (.stage-title). Weights: 400 for everything but headings (600) and display (680 to 760, by length). */
+       sizes live with it (.display-title). Weights: 400 for everything but headings (600) and display (680 to 760, by length). */
     --text-caption: .75rem;
     --text-caption--line-height: 1rem;
     --text-meta: .8125rem;
@@ -114,7 +113,7 @@ body { min-width: 0; }
     --secondary: rgb(255 255 255 / 10%);
     --secondary-foreground: #fff;
     --fill-hover: rgb(255 255 255 / 16%);
-    /* The now-playing bar's glass where the playing artwork gives no tone (docs/design.md, Glass). */
+    /* Toasts' ground; the same colour as the bar's glass without a tone (@property --tone). */
     --bar: #1c1c1e;
     --muted: #171717;
     --muted-foreground: #bdbdbd;
@@ -125,7 +124,6 @@ body { min-width: 0; }
     --border: rgb(255 255 255 / 14%);
     --input: rgb(255 255 255 / 16%);
     --ring: #fff;
-    --radius: .5rem;
     --gutter: clamp(1rem, 4vw, 3rem);
     color-scheme: dark;
 }
@@ -275,8 +273,6 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
    Popover, the Next card) is one translucent black, --player-surface, as YouTube's gear menu is (60%): the picture shows through,
    a little darker than YouTube's so subtitles behind a panel don't fight its text. */
 :root { --player-surface: rgb(0 0 0 / 75%); }
-/* The player's icon targets are 44px and grow with the interface only to 2.25rem (54px at 1920 wide), the size of
-   YouTube's fullscreen controls, so the band stays as small as the references' on a large window. */
 /* The band's and the now-playing bar's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
 :root { --player-target: max(44px, 2.25rem); }
 .player-video-controls { --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; isolation: isolate; }
@@ -308,7 +304,7 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 /* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
    tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
    before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
-   tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page. */
+   tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page (Up next over the player's room is the other). */
 .bar-glass { border-radius: 1.25rem; background: color-mix(in srgb, var(--tone) 80%, transparent); -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(.5); backdrop-filter: blur(28px) saturate(1.5) brightness(.5); box-shadow: var(--float-shadow); transition: --tone .6s var(--ease-out); }
 @media (max-width: 39.99rem) { .bar-glass { border-radius: 1rem; } }
 @media (prefers-reduced-motion: reduce) { .bar-glass { transition: none; } }
@@ -395,8 +391,6 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
   .player-control-row > [data-player-tools] { grid-column: 2; }
   /* The bar keeps only Open player on phones, so the band's empty last slot has no x to keep: the tools end at the gutter. */
   .player-control-row span[data-player-last] { display: none; }
-  /* Artwork takes the gutter's width as far as the height allows, not 24rem. */
-  .player-art { max-height: none; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 @media (max-height: 500px) {
@@ -405,12 +399,12 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
   .player-header { padding-block: .25rem; }
   .player-control-row { column-gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
-  [data-player-audio-copy] :is(h1, [data-player-ends]) { font-size: 1.125rem; -webkit-line-clamp: 1; }
+  [data-player-audio-copy] :is(h1, [data-player-ends]) { font-size: 1.125rem; }
 }
 
 .player-page[data-player-idle][data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) 1rem; display: flex; justify-content: center; }
 .player-page[data-player-idle] .player-main { display: none; }
-.player-page[data-player-idle][data-queue-open] .player-queue { display: flex; width: 100%; max-width: 48rem; border: 0; padding: 0; }
+.player-page[data-player-idle][data-queue-open] .player-queue { display: flex; width: 100%; max-width: 48rem; padding: 0; }
 
 
 /* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
@@ -418,17 +412,17 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 
 /* Ambient light (AmbientLight.tsx, docs/design.md): the one layer of gradient and soft edge in Couch, behind artwork
    and only there. A backlight in the artwork's first colour hugs the picture (a ring around it, so nothing shows through
-   transparent art) and is gone --glow out; a haze in its second colour, far darker, spreads three pictures wide. Both
+   transparent art) and is gone --backlight out; a haze in its second colour, far darker, spreads three pictures wide. Both
    are painted once and only cross-fade (opacity) when the artwork changes; the newest frame lies over the one it
    replaces, which fades out only when nothing replaces it. Reduced motion swaps them at once. */
 @layer components {
-  .ambient-light { --glow: 3rem; position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow-x: clip; }
+  .ambient-light { --backlight: 3rem; position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow-x: clip; }
   .ambient-frame { position: absolute; inset: 0; animation: couch-fade-in .6s var(--ease-out) both; }
   .ambient-frame:is([data-still], [data-leaving]) { animation: none; }
   .ambient-frame[data-leaving]:last-child { animation: couch-fade-out .6s var(--ease-out) both; }
   @media (prefers-reduced-motion: reduce) { .ambient-frame { animation: none !important; } .ambient-frame[data-leaving]:last-child { display: none; } }
   .ambient-haze { position: absolute; left: calc(var(--light-x) + var(--light-w) / 2); top: calc(var(--light-y) + var(--light-h) / 2); width: calc(3 * max(var(--light-w), var(--light-h))); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, var(--light-b), color-mix(in srgb, var(--light-b) 55%, transparent) 50%, transparent); }
-  .ambient-backlight { position: absolute; left: calc(var(--light-x) - var(--glow)); top: calc(var(--light-y) - var(--glow)); width: calc(var(--light-w) + 2 * var(--glow)); height: calc(var(--light-h) + 2 * var(--glow)); padding: var(--glow); background: radial-gradient(closest-side, var(--light-a) 55%, color-mix(in srgb, var(--light-a) 25%, transparent) 80%, transparent); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude; }
+  .ambient-backlight { position: absolute; left: calc(var(--light-x) - var(--backlight)); top: calc(var(--light-y) - var(--backlight)); width: calc(var(--light-w) + 2 * var(--backlight)); height: calc(var(--light-h) + 2 * var(--backlight)); padding: var(--backlight); background: radial-gradient(closest-side, var(--light-a) 55%, color-mix(in srgb, var(--light-a) 25%, transparent) 80%, transparent); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude; }
 
   /* The level (Level.tsx): Couch's one loop. Three bars rise and fall while sound comes out, each at its own pace, as
      transforms, in steps; paused, buffering or loading they lie flat, as short thin bars, never three dots that read as a "…". Reduced motion holds them still at three heights. */

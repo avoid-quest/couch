@@ -74,5 +74,5 @@ export const titleFit = (title: string) => ({ "--word": Math.max(4, ...title.spl
 /** The Stage's title, in the display face, set by its length so a long one still reads as type, never a paragraph. */
 export function StageTitle({ title, as: Heading = "h1", className, children }: { title: string; as?: "h1" | "h2"; className?: string; children?: ReactNode }) {
   return <Heading tabIndex={-1} data-length={titleLength(title)} style={titleFit(title)}
-    className={cn("stage-title display-title text-balance outline-none", className)}>{children ?? title}</Heading>;
+    className={cn("display-title text-balance outline-none", className)}>{children ?? title}</Heading>;
 }

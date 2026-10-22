@@ -185,7 +185,7 @@ as a size and `h-control` as a height.
 
 | Scale | Steps | Use |
 | --- | --- | --- |
-| Radius | `xs` .125rem, `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's and the bar's thumbnail `rounded-sm`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg`; the now-playing bar 1.25rem (1rem on phones) |
+| Radius | `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's and the bar's thumbnail `rounded-sm`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg`; the now-playing bar 1.25rem (1rem on phones) |
 | Control height | `control-sm` 1.75rem, `control` 2rem, `control-lg` 2.75rem, `field` 3rem | `size="sm"`; the default; the Stage's verbs (`size="lg"`); the header's search field. `touch:` raises each to 44px |
 | Type | `caption` .75rem, `meta` .8125rem, `body` .9375rem, `title` 1.125rem, `heading` 1.25rem, `page` 2.25rem | [Type](#type) |
 | Spacing | `caption` .125rem, `stack` .75rem, `item` 1rem, `section` 3.5rem | inside a caption; a heading to its content; between items; between sections |
