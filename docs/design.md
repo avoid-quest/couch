@@ -496,4 +496,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - Cold loads use shadcn Skeleton in the destination's geometry, outside the
   focus order. Refreshes keep current data on screen; metadata is never shared
   across connections.
+- Equivalent session snapshots reuse provider collections' derived hits and
+  actions. Changes to their data, visibility, playback availability or action
+  inputs update them, including the current profile, credentials and Play on
+  destination (`tests/collection-rendering.browser.ts`).
 - A surface's doc changes with its code.
