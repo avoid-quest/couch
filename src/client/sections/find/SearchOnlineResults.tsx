@@ -211,10 +211,11 @@ function OnlineResults(props: Props) {
     const animeResume = selected && ["animesaturn", "animeunity"].includes(provider) ? seriesResumeFor(selected, historyItems) : undefined;
     const progress = animeResume ?? (start ? progressFor(start, historyItems) : selected ? seriesResumeFor(selected, historyItems) : undefined);
     const resume = progress?.playable && !progress.watched && progress.position > 0 ? progress : undefined;
-    // History plays by media ID, so a different selected list/occurrence must enter with its own context.
-    const resumeInSelection = resume && selected?.kind === "media" && start?.collection && props.onCommand && (start.collection.url !== resume.collection?.url || start.collection.index != null && start.collection.index !== resume.collection?.index);
+    // Keep the saved source identity even when Details selects another list/occurrence.
+    const resumeSelection = resume && selected?.kind === "media" && start?.collection && (start.collection.url !== resume.collection?.url || start.collection.index != null && start.collection.index !== resume.collection?.index)
+      ? { collection: start.collection, ...(!music ? { quality: props.quality } : {}) } : undefined;
     const startItem = (fromStart = false, deviceId?: string) => {
-      if (resume && props.onPlayHistory && !resumeInSelection) void action(`Couldn't play ${resume.title}.`, () => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on }), deviceId));
+      if (resume && props.onPlayHistory) void action(`Couldn't play ${resume.title}.`, () => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on, ...(resumeSelection ? { selection: resumeSelection } : {}) }), deviceId));
       else if (start) play(start, true, undefined, deviceId, fromStart);
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));

@@ -5,6 +5,7 @@ import { BookmarkIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type Lucide
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
+import type { HistorySelection } from "../../../shared/viewing";
 import { DigitalClock } from "@/components/DigitalClock";
 import { CouchMark } from "@/components/CouchMark";
 import { playOnQuery } from "@/components/PlayOn";
@@ -173,13 +174,13 @@ function useShellValue() {
   const openProvider = useCallback((item: ProviderItem, focusSelector?: string) => detailNavigation.open(collectionLocation(item), focusSelector), [detailNavigation]);
 
   const { mutateAsync: playProgress } = useMutation({
-    mutationFn: ({ mediaId, on, ...body }: { mediaId: string; on?: string; fromStart: boolean; profileId: string }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play${playOnQuery(on)}`, body, "POST", 35_000),
+    mutationFn: ({ mediaId, on, ...body }: { mediaId: string; on?: string; fromStart: boolean; profileId: string; selection?: HistorySelection }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play${playOnQuery(on)}`, body, "POST", 35_000),
   });
   const profileId = state?.activeProfile.id;
   const playHistory = useCallback<HistoryPlayback>(async (item, options) => {
     if (item.playable && credentials && profileId !== undefined) {
       setError(null);
-      try { await playProgress({ mediaId: item.mediaId, on: options.on, fromStart: options.fromStart === true, profileId }); return true; }
+      try { await playProgress({ mediaId: item.mediaId, on: options.on, fromStart: options.fromStart === true, profileId, ...(options.selection ? { selection: options.selection } : {}) }); return true; }
       catch (reason) { setError(errorText(reason)); return false; }
     }
     // Only REST history plays carry Play on, so items that are only in the queue offer plain Play.

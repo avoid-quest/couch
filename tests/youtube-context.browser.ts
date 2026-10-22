@@ -78,8 +78,12 @@ export async function runYouTubeNeighboursRegression() {
 export async function runYouTubeDetailActionsRegression() {
   const results: { name: string; commands: Action[]; writes: unknown[] }[] = [];
   const selectedList = { ...list, title: "Selected list", url: "https://www.youtube.com/playlist?list=PLselected123", index: 2 };
-  const cases: { name: string; url?: string; selected?: MediaCollection; history?: boolean; changed?: boolean }[] = [
+  const cases: { name: string; url?: string; selected?: MediaCollection; history?: boolean; changed?: boolean; source?: string }[] = [
     ...[video, "https://youtu.be/vWLJeqLPfSU", "https://www.youtube.com/shorts/vWLJeqLPfSU", `${video}&t=12`].map(url => ({ name: `canonical Queue: ${url}`, url })),
+    ...["https://youtu.be/vWLJeqLPfSU", "https://www.youtube.com/shorts/vWLJeqLPfSU"].flatMap(source => [
+      { name: `alias history in another playlist: ${source}`, source, selected: selectedList, history: true, changed: true },
+      { name: `alias history at a later duplicate: ${source}`, source, selected: { ...list, index: 2 }, history: true, changed: true },
+    ]),
     { name: "selected other playlist", selected: selectedList, history: true, changed: true },
     { name: "selected later duplicate", selected: { ...list, index: 2 }, history: true, changed: true },
     { name: "same occurrence", selected: list, history: true },
@@ -87,7 +91,7 @@ export async function runYouTubeDetailActionsRegression() {
     { name: "fresh selected Play", selected: selectedList },
   ];
   for (const scenario of cases) {
-    const audit = await mountUiAudit(), commands: Action[] = [], writes: { path: string; body: { fromStart?: boolean; profileId?: string } }[] = [];
+    const audit = await mountUiAudit(), commands: Action[] = [], writes: { path: string; body: { fromStart?: boolean; profileId?: string; selection?: { collection: MediaCollection; quality?: string } } }[] = [];
     const fixtureFetch = window.fetch;
     window.fetch = async (input, init) => {
       const target = new URL(String(input), location.href);
@@ -96,25 +100,32 @@ export async function runYouTubeDetailActionsRegression() {
     };
     try {
       const url = scenario.url ?? video;
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`web:${scenario.source ?? video}`));
+      const mediaId = `media:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("")}`;
       audit.client.setQueryData(key(url), { item, title: item.title, items: [item] });
-      audit.client.setQueryData(["progress", "history", "youtube"], { items: scenario.history ? [{ ...item, mediaId: "audit-history", position: 120, duration: 900, watched: false, playable: true, collection: list }] : [] });
+      audit.client.setQueryData(["progress", "history", "youtube"], { items: scenario.history ? [{ ...item, mediaId, position: 120, duration: 900, watched: false, playable: true, collection: list }] : [] });
       await audit.go(collectionLocation({ ...item, url, collection: scenario.selected }));
       await audit.updateSession(current => ({ ...current, run: async action => { commands.push(action); return true; }, videoQualityPreference: { ...current.videoQualityPreference, quality: "720p" } }));
       button(scenario.history ? "Resume" : "Play").click(); await wait();
-      if (scenario.changed || !scenario.history) {
+      if (!scenario.history) {
         const play = commands.at(-1);
         assert(play?.type === "enqueueProvider" && play.url === video && play.playNow && play.quality === "720p", `${scenario.name}: Play retained old identity, handler or quality`);
         assert(JSON.stringify(play.collection) === JSON.stringify(scenario.selected), `${scenario.name}: selected occurrence missed the command boundary`);
         assert(writes.length === 0, `${scenario.name}: used the historical media-ID endpoint`);
-      } else assert(writes.at(-1)?.path.includes("audit-history/play") && writes.at(-1)?.body.fromStart === false, `${scenario.name}: history Resume changed`);
+      } else {
+        const resumed = writes.at(-1);
+        assert(resumed && resumed.path.includes(`${encodeURIComponent(mediaId)}/play`) && resumed.body.fromStart === false, `${scenario.name}: Resume lost historical media identity`);
+        assert(commands.length === 0, `${scenario.name}: Resume re-enqueued canonical media`);
+        assert(JSON.stringify(resumed.body.selection) === JSON.stringify(scenario.changed ? { collection: scenario.selected, quality: "720p" } : undefined), `${scenario.name}: history Resume lost selected occurrence or quality`);
+      }
       button("Queue").click(); await wait();
       const queued = commands.at(-1);
       assert(queued?.type === "enqueueProvider" && queued.url === video && !queued.playNow && queued.quality === "720p", `${scenario.name}: Queue lost canonical identity or fresh quality`);
       if (scenario.history) {
         button("From start").click(); await wait();
         if (scenario.changed) {
-          const restarted = commands.at(-1);
-          assert(restarted?.type === "enqueueProvider" && restarted.fromStart === true && restarted.collection?.index === scenario.selected?.index && restarted.collection?.url === scenario.selected?.url, `${scenario.name}: From start lost selected context or restart intent`);
+          const restarted = writes.at(-1);
+          assert(restarted?.body.fromStart === true && JSON.stringify(restarted.body.selection) === JSON.stringify({ collection: scenario.selected, quality: "720p" }), `${scenario.name}: From start lost selected context or restart intent`);
           const trigger = button(`Play ${item.title} on`);
           trigger.focus();
           if (isTvPresentation()) applyTvNavigation("select"); else trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -122,8 +133,8 @@ export async function runYouTubeDetailActionsRegression() {
           const destination = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === "Living room TV");
           assert(destination, `Missing Play on destination: ${[...document.querySelectorAll('[role="menuitem"]')].map(node => node.textContent)}`);
           destination!.click(); await wait();
-          const remote = commands.at(-1);
-          assert(remote?.type === "enqueueProvider" && remote.deviceId === "audit-tv" && remote.quality === "720p" && !remote.fromStart && remote.collection?.index === scenario.selected?.index, `${scenario.name}: Play on lost resume, destination, quality or occurrence`);
+          const remote = writes.at(-1);
+          assert(remote?.path.includes("on=audit-tv") && remote.body.fromStart === false && JSON.stringify(remote.body.selection) === JSON.stringify({ collection: scenario.selected, quality: "720p" }), `${scenario.name}: Play on lost resume, destination, quality or occurrence`);
         } else assert(writes.at(-1)?.body.fromStart === true, `${scenario.name}: history From start changed`);
       }
       const count = commands.length + writes.length;

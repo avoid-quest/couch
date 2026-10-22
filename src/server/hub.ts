@@ -1113,13 +1113,13 @@ export async function createHub(options: HubOptions) {
       invalidate("progress");
     },
     loadQueue: (entries, mode, authorize, playedBy) => { const playback = mediaPlayback(playedBy, mode === "play"); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId()), playedBy); },
-    playHistory: (mediaId, fromStart, authorize, playedBy) => {
+    playHistory: (mediaId, fromStart, authorize, playedBy, selection) => {
       // Checked before Play on moves its Device; the Session checks the rest.
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const saved = all().flatMap(playback => stateOf(playback).queue).find(entry => playbackMediaId(entry) === mediaId) ?? store.historySource(mediaId);
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
       const playback = own(playedBy);
-      playback.session.playHistory(mediaId, fromStart, authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId()), playedBy);
+      playback.session.playHistory(mediaId, fromStart, authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId()), playedBy, selection);
     },
   };
   const mpv = createMpv(player => mpvPlayback?.session.observe(player));

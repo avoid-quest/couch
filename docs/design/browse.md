@@ -144,7 +144,10 @@ saved (one fixed-width toggle, `aria-pressed`, named Save), then "…" for the
 rest (Remove from Continue, Move up/down, Play next, Open in browser…). The
 primary verb carries `data-page-first`. A video's Play and Queue use its
 displayed canonical item; Resume keeps the selected containing list and
-occurrence while resuming its saved position (From start resets it). A series
+occurrence while resuming its saved position (From start resets it). History
+keeps the original media identity when its public page uses a canonical alias,
+including youtu.be and Shorts; choosing another playlist or occurrence preserves
+that history and uses the selected list for continuation. A series
 names the episode its Play
 starts: "Resume S1 E1" while one is part watched, else "Play S1 E2", the next
 unwatched episode of the season last played (the first season otherwise); a

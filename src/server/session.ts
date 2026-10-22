@@ -1,5 +1,5 @@
 import type { Action, Domain, PlaybackActor, ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
-import type { WatchingProfile } from "../shared/viewing";
+import type { HistorySelection, WatchingProfile } from "../shared/viewing";
 import type { Store } from "./store";
 import { createProgress, playbackMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
@@ -662,16 +662,16 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       assertCurrentPlay(intent);
       play(entryId, fromStart, "play", authorize, playedBy, selectedEntryIds);
     },
-    playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
+    playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selection?: HistorySelection) {
       authorize();
       available();
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
       const saved = existing ?? store.historySource(mediaId);
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
-      if (!existing && state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
-      const entry = existing ?? { ...saved, id: crypto.randomUUID() };
-      if (existing) play(entry.id, fromStart, "play", authorize, playedBy);
+      if ((!existing || selection) && state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
+      const entry = existing && !selection ? existing : { ...saved, id: crypto.randomUUID(), ...(selection ? { collection: selection.collection, ...(selection.quality ? { quality: selection.quality } : {}) } : {}) };
+      if (existing && !selection) play(entry.id, fromStart, "play", authorize, playedBy);
       else playNewEntries([entry], { fromStart, authorize, playedBy });
     },
     close() { if (!quiescing) end(false); },
