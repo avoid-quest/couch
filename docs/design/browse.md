@@ -2,6 +2,10 @@
 
 ## Search
 
+Search keeps its submitted query and filters while the next page loads. Leaving
+it never starts an empty search across the sources or flashes unfiltered results
+(`tests/search-navigation.browser.tsx`).
+
 The header's palette ([Shell](shell.md#search-field)) submits to
 `/search?q=…&kind=…&source=…`; an empty query is Home. Every source is asked
 at once and answers independently. Counts and "still asking" are a

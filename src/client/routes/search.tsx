@@ -4,6 +4,10 @@ import { readSearchState } from "../search";
 
 // An empty query is Home: what you were watching, the sources and what's on air.
 export const Route = createFileRoute("/search")({
-  beforeLoad: ({ location }) => { if (!readSearchState(location.searchStr).query) throw redirect({ href: "/", replace: true }); },
+  beforeLoad: ({ location }) => {
+    const searchState = readSearchState(location.searchStr);
+    if (!searchState.query) throw redirect({ href: "/", replace: true });
+    return { searchState };
+  },
   component: SearchPage,
 });
