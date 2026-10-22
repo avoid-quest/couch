@@ -10,8 +10,8 @@ import { ArtLevel, useLevel } from "./Level";
 import { useItemLight } from "./AmbientLight";
 import { useRelatedMenu, type Related } from "./MediaContext";
 
-// A channel keeps its circle in a frame of another shape: a circle the frame's height, centred.
-export const roundInFrame = "mx-auto aspect-square! h-full w-auto! rounded-full object-cover";
+// A channel keeps its circle in a frame of another shape: as large as the frame's shorter side, centred.
+export const roundInFrame = "mx-auto aspect-square! h-auto! w-[min(100%,var(--tile-art))]! rounded-full object-cover";
 export { artAspect as tileAspect, type ArtShape as TileShape };
 /** A media item's shape (art-shape.ts): an episode is a frame, the rest go by their source. */
 export const tileShape = (source: string | undefined, episode: boolean) => artShape(source, episode ? "episode" : "media");
@@ -57,7 +57,7 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
   const level = useLevel(source);
   const light = useItemLight(thumbnail);
   const body = <>
-    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden rounded-md bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
+    <span data-tile-art className={cn("relative block h-(--tile-art) overflow-hidden rounded-md bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", own === "round" && shape !== "round" && "flex items-center", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
       <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && fillsFrame(own, shape) && "rounded-full", fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover", own === "round" && shape !== "round" && roundInFrame)} />
       {progress != null && <span data-tile-progress aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-black/60"><span className="block h-full bg-foreground" style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} /></span>}
       <ArtLevel level={level} className={cn("size-8 text-base", progress != null && "bottom-1")} />
