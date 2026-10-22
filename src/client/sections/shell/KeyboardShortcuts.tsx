@@ -3,6 +3,7 @@ import { useSessionGate } from "@/session/session-context";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { muted, playbackCapabilities } from "@/components/PlaybackTransport";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { hasUpNext } from "@/sections/now/QueuePanel";
 import { useShell } from "./shell-context";
 
 const help = [
@@ -48,7 +49,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
     { hotkey: "/", action: shell.focusSearch },
     { hotkey: ",", action: () => shell.changeSection("Settings") },
     { hotkey: "P", enabled: !!current, action: () => shell.openPlayer() },
-    { hotkey: "Q", action: () => shell.openPlayer("queue") },
+    { hotkey: "Q", enabled: hasUpNext(state), action: () => shell.openPlayer("queue") },
     { hotkey: "Shift+?", action: () => onOpenChange(true) },
   ]);
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Shortcuts work in the player, and while browsing. Typing and open panels keep their own keys, and Space and the arrows leave a focused control alone.</DialogDescription></DialogHeader>

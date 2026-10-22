@@ -9,6 +9,7 @@ import { Link } from "@tanstack/react-router";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/AppShell";
 import { RemotePad } from "@/components/RemotePad";
+import { hasUpNext } from "@/sections/now/QueuePanel";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -60,7 +61,7 @@ export function RemotePage() {
       <section className="grid gap-4 border-t pt-6 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0"><h2 className="truncate text-base font-medium">{current ? <ContentLink href={queueItemLocation(current)} className="no-underline hover:underline">{current.title}</ContentLink> : ready ? "Nothing playing" : `Playback on ${target.name}`}</h2>{current && !status.quiet && <p className="text-sm text-muted-foreground">{status.label}</p>}</div>
-          <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
+          <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !hasUpNext(state)} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
         </div>
         {current && <MediaContext creator={current.creator} collection={current.collection} radio={current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />}
         {state && credentials && <>
