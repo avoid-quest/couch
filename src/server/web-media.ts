@@ -3,7 +3,7 @@ import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
-import { resolveWithYtDlp, runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import { ExtractionError, resolveWithYtDlp, runYtDlp, type YtDlpOptions } from "./yt-dlp";
 import { providerForUrl } from "../shared/providers";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
@@ -133,11 +133,13 @@ function sourceSubtitles(info: Metadata, preferred: string): ExternalSubtitle[] 
 // Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it).
 const playable = "[protocol!*=dash]";
 
-function formatSelector(quality: VideoQuality): string {
-  if (quality === "best") return `bv*${playable}+ba${playable}/b${playable}`;
-  if (!["1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
-  const filter = `[height<=?${quality.slice(0, -1)}]`;
-  return `bv*${filter}${playable}+ba${playable}/b${filter}${playable}`;
+function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): string {
+  if (!["best", "1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
+  const filter = youtube || quality === "best" ? "" : `[height<=?${quality.slice(0, -1)}]`;
+  const selector = `bv*${filter}${playable}+ba${playable}/b${filter}${playable}`;
+  // Filter every branch, including muxed fallback and separate audio. A codec preference
+  // can still select an incompatible stream when no H.264/AAC format exists.
+  return youtube && !vp9 ? `(${selector})[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']` : selector;
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
@@ -152,11 +154,23 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       : isAnimeSaturnHost(host) ? await resolveAnimeSaturnLink(source, signal)
       : isAnimeUnityHost(host) ? await resolveAnimeUnityLink(source, signal) : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
-    const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
+    // yt-dlp's res uses the smaller dimension, including portrait Shorts.
+    const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
+    const sort = youtube ? ["--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
     // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
-    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
+    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
       const info = parseInfo(output);
+      // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
+      // maximum instead; formats with no known dimensions remain eligible.
+      if (youtube && selectedQuality !== "best") {
+        const selected = Array.isArray(info.requested_formats) ? info.requested_formats : [info];
+        for (const stream of selected) {
+          if (!object(stream) || stream.vcodec === "none") continue;
+          const dimensions = [stream.width, stream.height].filter((size): size is number => typeof size === "number" && size > 0);
+          if (dimensions.length && Math.min(...dimensions) > Number(selectedQuality.slice(0, -1))) throw new ExtractionError("This website offers no format Couch can play yet.");
+        }
+      }
       if (info._has_drm === true) await rejectDrm(info, signal);
       const media = parseMedia(info, subtitleLanguage);
       media.publicNetwork = true;
