@@ -72,9 +72,9 @@ export function HeaderSearch({ className }: { className?: string }) {
   useEffect(() => { if (results) shell.setSearchScope(null); }, [results]);
   // A source that scopes the field (Home's YouTube) opens it, on the TV too.
   useEffect(() => { if (shell.searchScope && !open && document.activeElement === input.current) show(); }, [shell.searchScope]);
-  // The palette belongs to the focused field: a page that changes under it (a played link opens the player, which hides
-  // the header without blurring the field) closes it.
-  useEffect(() => { if (document.activeElement !== input.current) setOpen(false); }, [pathname]);
+  // The palette belongs to the focused field: a page that changes under it closes it, and so does the player, which hides
+  // the header without blurring the field (a played link, or a picture opening it by itself).
+  useEffect(() => { if (pathname === "/now" || document.activeElement !== input.current) setOpen(false); }, [pathname]);
   const [recents, setRecents] = useState<string[]>([]);
   useEffect(() => { setRecents(installationId ? readSearchRecents(installationId) : []); }, [installationId]);
   const search = (query: string, action: "clear" | "submit" | "enter" = "clear") => {
