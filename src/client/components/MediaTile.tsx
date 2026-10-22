@@ -16,7 +16,7 @@ export { artAspect as tileAspect, type ArtShape as TileShape };
 export const tileShape = (source: string | undefined, episode: boolean) => artShape(source, episode ? "episode" : "media");
 // A tile's artwork height by its shelf's shape, so posters, frames and squares carry about the same weight; a frame on a
 // 320px phone stays narrower than the column, so its "…" and the next tile show.
-const tileHeight = { poster: "[--tile-art:18rem]", square: "[--tile-art:12rem]", video: "[--tile-art:min(11rem,calc((100vw-2*var(--gutter))*.5))]", round: "[--tile-art:10rem]" } as const satisfies Record<ArtShape, string>;
+const tileHeight = { poster: "[--tile-art:18rem]", square: "[--tile-art:12rem]", video: "[--tile-art:min(11rem,calc((100vw_-_2*var(--gutter))*.5))]", round: "[--tile-art:10rem]" } as const satisfies Record<ArtShape, string>;
 // Its width follows from that height, set outright so a shelf's grid sizes its columns by it.
 const tileWidth = { poster: "w-[calc(var(--tile-art)*2/3)]", square: "w-(--tile-art)", video: "w-[calc(var(--tile-art)*16/9)]", round: "w-(--tile-art)" } as const satisfies Record<ArtShape, string>;
 
