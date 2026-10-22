@@ -303,6 +303,20 @@ Sources include live device inputs, AirPlay senders and external internet media:
 IPTV playlists.
 Couch serves no local files.
 
+YouTube channel metadata supplies a validated `/channel/UC…` identity for new
+channel Saves and section links, with the requested address as the fallback.
+Favorites reads do not resolve existing alias bookmarks. Opening a saved alias
+normalizes that bookmark only after its channel resolves, preserving its position
+or merging an already saved canonical channel. A metadata failure keeps the alias
+and its Saved/Remove state. Other aliases stay as saved until they resolve.
+Only a channel's own Videos, Shorts and Live streams inherit its verified creator
+when flat entries omit it; playlist owners never stand in for video creators.
+Full playlists retain each occurrence's containing list and zero-based index
+after completeness and availability validation, including repeated videos.
+Browsing still offers the page at offset 2400; its final index, 2423, is accepted
+by Details routes, Save and playback commands. Whole-list loading keeps its
+500-video limit.
+
 SoundCloud Details reuse track metadata from Core's one-minute provider cache.
 Its bundled [yt-dlp extractor plugin](https://github.com/yt-dlp/yt-dlp#developing-plugins)
 uses SoundCloud's known JPEG artwork sizes, up to 500px, instead of probing each

@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ForLaterReference } from "../shared/for-later";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
+import { maxCollectionIndex } from "../shared/providers";
 import { ControllerError, settingField } from "./devices";
 import { capturePlaylistEntries } from "./playlists";
 import { CHANGED_ELSEWHERE, PLAY_CANCELED } from "./messages";
@@ -60,7 +61,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
               if (!["http:", "https:"].includes(thumbnail.protocol) || thumbnail.username || thumbnail.password) throw new ControllerError("Choose an item to save.");
             }
             if (reference.duration !== undefined && (typeof reference.duration !== "number" || !Number.isFinite(reference.duration) || reference.duration < 0 || reference.duration > 86_400)) throw new ControllerError("Choose an item to save.");
-            if (reference.collection !== undefined && (!reference.collection || typeof reference.collection !== "object" || typeof reference.collection.url !== "string" || reference.collection.url.length > 2048 || reference.collection.index !== undefined && (!Number.isSafeInteger(reference.collection.index) || reference.collection.index < 0 || reference.collection.index > 2400))) throw new ControllerError("Choose an item to save.");
+            if (reference.collection !== undefined && (!reference.collection || typeof reference.collection !== "object" || typeof reference.collection.url !== "string" || reference.collection.url.length > 2048 || reference.collection.index !== undefined && (!Number.isSafeInteger(reference.collection.index) || reference.collection.index < 0 || reference.collection.index > maxCollectionIndex))) throw new ControllerError("Choose an item to save.");
             entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}`, ...(reference.thumbnail ? { thumbnail: reference.thumbnail } : {}), ...(reference.duration !== undefined ? { duration: reference.duration } : {}), ...webMetadata?.(reference.url, reference.collection) };
           } else {
             if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || (reference as ForLaterReference).kind !== "queue" || typeof (reference as { id?: unknown }).id !== "string" || !/^[\w-]{1,80}$/.test((reference as { id: string }).id)) throw new ControllerError("Choose a queue item to save.");

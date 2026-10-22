@@ -1,8 +1,8 @@
-import { providerForUrl, type ProviderId } from "../shared/providers";
+import { maxCollectionIndex, providerPageSize, providerForUrl, type ProviderId } from "../shared/providers";
 import type { CollectionLink, MediaCollection } from "../shared/media";
 import { readFrom } from "../shared/page-paths";
 
-export const collectionPageSize = 24;
+export const collectionPageSize = providerPageSize;
 export function readCollectionSearch(search: Record<string, unknown>) {
   const url = typeof search.url === "string" && search.url.length <= 4096 ? search.url : undefined;
   const provider = ["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123", "animesaturn", "animeunity"].includes(String(search.provider)) && (search.url === undefined || search.url === "" || !!url && providerForUrl(url) === search.provider) ? search.provider as ProviderId : undefined;
@@ -14,7 +14,7 @@ export function readCollectionSearch(search: Record<string, unknown>) {
   const value = search.context;
   const context: MediaCollection | undefined = validLink(value) ? { title: value.title, url: value.url,
     ...("parent" in value && validLink(value.parent) ? { parent: value.parent } : {}),
-    ...("index" in value && typeof value.index === "number" && Number.isSafeInteger(value.index) && value.index >= 0 && value.index <= 2400 ? { index: value.index } : {}) } : undefined;
+    ...("index" in value && typeof value.index === "number" && Number.isSafeInteger(value.index) && value.index >= 0 && value.index <= maxCollectionIndex ? { index: value.index } : {}) } : undefined;
   const from = readFrom(search.from);
   return { provider, url, cursors, page, filter, ...(context ? { context } : {}), ...(from ? { from } : {}) };
 }

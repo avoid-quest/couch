@@ -1,11 +1,10 @@
 import { mediaCreator } from "../media-creator";
-import { isYouTubePlaylistUrl } from "../../shared/providers";
+import { isYouTubePlaylistUrl, providerPageSize as pageSize, youtubeMaxOffset as maxOffset } from "../../shared/providers";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
+import type { CollectionLink } from "../../shared/media";
 import { runYtDlp } from "../yt-dlp";
 import { ProviderError, providerItemId, withProviderItem } from "./http";
 
-const pageSize = 24;
-const maxOffset = 2_400;
 const videoId = /^[A-Za-z0-9_-]{11}$/;
 const hosts = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"]);
 type Target = { url: string; kind: ProviderItem["kind"] | "search" };
@@ -52,7 +51,20 @@ function thumbnail(info: Metadata, source: Target): string | undefined {
   return source.kind === "media" ? `https://i.ytimg.com/vi/${new URL(source.url).searchParams.get("v")}/hqdefault.jpg` : undefined;
 }
 
-function item(info: unknown): ProviderItem | null {
+function canonicalChannelUrl(info: Metadata): string | undefined {
+  if (typeof info.channel_url !== "string") return;
+  try {
+    const source = target(info.channel_url);
+    if (source.kind === "channel" && source.url.startsWith("https://www.youtube.com/channel/")) return source.url;
+  } catch { /* Keep the requested channel identity when metadata is unavailable. */ }
+}
+
+function channelCreator(info: Metadata): CollectionLink | undefined {
+  const title = label(info.channel) ?? label(info.uploader), url = canonicalChannelUrl(info);
+  return title && url ? { title, url } : undefined;
+}
+
+function item(info: unknown, inheritedCreator?: CollectionLink): ProviderItem | null {
   if (!object(info) || ["private", "premium_only", "subscriber_only", "needs_auth"].includes(String(info.availability))) return null;
   const title = label(info.title) ?? label(info.channel);
   if (!title || ["[Private video]", "[Deleted video]"].includes(title)) return null;
@@ -64,9 +76,10 @@ function item(info: unknown): ProviderItem | null {
   if (source.kind === "search") return null;
   const image = thumbnail(info, source);
   const description = label(info.description, 1_000);
-  const subtitle = label(info.channel, 200) ?? label(info.uploader, 200);
+  const creator = mediaCreator(info) ?? (source.kind === "media" ? inheritedCreator : undefined);
+  const subtitle = label(info.channel, 200) ?? label(info.uploader, 200) ?? creator?.title;
   return {
-    creator: mediaCreator(info),
+    creator,
     id: providerItemId("youtube", source.url), provider: "youtube", kind: source.kind, title, url: source.url,
     ...(image ? { thumbnail: image } : {}), ...(description ? { description } : {}), ...(subtitle ? { subtitle } : {}),
     ...(typeof info.duration === "number" && Number.isFinite(info.duration) && info.duration >= 0 ? { duration: info.duration } : {}),
@@ -82,13 +95,14 @@ async function channelPage(url: string, run: typeof runYtDlp, signal?: AbortSign
     const parsed: unknown = JSON.parse(await run(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", "0", "--", url], { signal }));
     if (object(parsed)) info = parsed;
   } catch { signal?.throwIfAborted(); }
-  return {
+  url = canonicalChannelUrl(info) ?? url;
+  return withProviderItem("youtube", url, "channel", {
     title: label(info.channel) ?? label(info.uploader) ?? label(decodeURIComponent(new URL(url).pathname.split("/").at(-1)!)),
     thumbnail: thumbnail(info, { url, kind: "channel" }),
     items: [["videos", "Videos"], ["playlists", "Playlists"], ["shorts", "Shorts"], ["streams", "Live streams"]].map(([tab, title]) => ({
       id: providerItemId("youtube", `${url}/${tab}`), provider: "youtube", kind: "collection", title: title!, url: `${url}/${tab}`,
     })),
-  };
+  });
 }
 
 export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
@@ -107,7 +121,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     const source = target(request.url || (/^https?:\/\//i.test(query) ? query : query.startsWith("@") ? `https://www.youtube.com/${encodeURIComponent(query).replace(/^%40/, "@")}` : searchUrl(query)));
     if (source.kind === "channel") {
       if (offset) throw new ProviderError("Invalid YouTube page. Open a channel section first.", 400);
-      return withProviderItem("youtube", source.url, "channel", await channelPage(source.url, run, signal));
+      return channelPage(source.url, run, signal);
     }
     if (source.kind === "media" && offset) throw new ProviderError("Invalid YouTube page. Start a new search.", 400);
     const output = await run(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", `${offset + 1}:${offset + pageSize + 1}`, "--", source.url], { signal });
@@ -116,12 +130,13 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     try { info = JSON.parse(output); } catch { throw new Error("YouTube returned invalid catalog information. Update yt-dlp and try again."); }
     if (!object(info) || (info.entries !== undefined && !Array.isArray(info.entries))) throw new Error("YouTube returned invalid catalog information.");
     const entries = Array.isArray(info.entries) ? info.entries : [info];
+    const creator = /\/(?:videos|shorts|streams)$/.test(new URL(source.url).pathname) ? channelCreator(info) : undefined;
     const page: ProviderPage = {
       title: label(info.title) ?? "YouTube",
-      ...(/\/(?:videos|shorts|streams|playlists)$/.test(new URL(source.url).pathname) ? { parent: { title: label(info.channel) ?? label(info.uploader) ?? "Channel", url: source.url.replace(/\/(?:videos|shorts|streams|playlists)$/, "") } } : {}),
+      ...(/\/(?:videos|shorts|streams|playlists)$/.test(new URL(source.url).pathname) ? { parent: { title: label(info.channel) ?? label(info.uploader) ?? "Channel", url: canonicalChannelUrl(info) ?? source.url.replace(/\/(?:videos|shorts|streams|playlists)$/, "") } } : {}),
       ...(source.kind === "collection" ? { thumbnail: thumbnail(info, source), description: label(info.description, 2000), subtitle: label(info.channel) ?? label(info.uploader) } : {}),
       items: entries.slice(0, pageSize).map((raw, index) => {
-        const entry = item(raw);
+        const entry = item(raw, creator);
         return entry?.kind === "media" && isYouTubePlaylistUrl(source.url) ? { ...entry, collection: { title: label(info.title) ?? "YouTube playlist", url: source.url, index: offset + index } } : entry;
       }).filter((entry): entry is ProviderItem => entry !== null),
       ...(entries.length > pageSize && offset < maxOffset ? { nextCursor: String(offset + pageSize) } : {}),
@@ -153,10 +168,12 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
       const sameChannel = channelSection && returned.replace(/\/(?:videos|shorts|streams)$/, "") === source.url.replace(/\/(?:videos|shorts|streams)$/, "");
       if (returned !== source.url && !sameChannel) throw new ProviderError("YouTube returned a different playlist.");
     }
-    const items = info.entries.map(item);
+    const creator = channelSection ? channelCreator(info) : undefined;
+    const items = info.entries.map(raw => item(raw, creator));
     if (!items.length) throw new ProviderError("This playlist is empty.");
     if (items.some(entry => !entry || entry.kind !== "media")) throw new ProviderError("Some videos in this playlist are unavailable. Add the available videos individually.");
-    return { title: label(info.title) ?? (channelSection ? "YouTube channel" : "YouTube playlist"), items: items as ProviderItem[] };
+    const title = label(info.title) ?? (channelSection ? "YouTube channel" : "YouTube playlist");
+    return { title, items: (items as ProviderItem[]).map((entry, index) => isYouTubePlaylistUrl(source.url) ? { ...entry, collection: { title, url: source.url, index } } : entry) };
   };
 }
 

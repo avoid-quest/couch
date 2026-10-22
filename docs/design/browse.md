@@ -175,6 +175,9 @@ the app) and never travels through Remote.
 channels, playlists, albums and series, then favourite stations), Lists and
 Played (History, newest first). A saved YouTube channel's Play, Play on and
 Queue read its Videos section, with the same 500-video limit as other lists.
+Channel Details use the canonical address when available; opening an older
+saved alias keeps its Saved/Remove state and merges an already saved canonical
+channel. Playlist Queue all retains each occurrence's list and position.
 A rail on wide screens (white ink on a
 `secondary` capsule for the current entry; a pointer only brings another
 entry's ink up; no heading; counts only when not zero) and a Select on phones
