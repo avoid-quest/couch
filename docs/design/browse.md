@@ -131,8 +131,8 @@ trail, so they aren't repeated), with the length ("0:30") until it's started;
 once started, Home's progress line, the bar with "5:00 left" beside it; one row
 of verbs; then the synopsis without bare addresses (a line that only labelled
 one goes too), three lines until More. A
-channel's tab ("Stanford - Videos") is titled as the channel, a circle, and its
-trail stops before it.
+YouTube channel's tab ("Stanford - Videos") is titled as the channel, a circle,
+and its trail stops before it.
 
 The verbs: Play (Play all; Resume with From start once partly watched), Queue,
 Play on while another device can play it, Save as a bookmark that fills once
@@ -253,8 +253,8 @@ and Live TV; squares for music (Bandcamp, SoundCloud) and stations; circles for
 channels and artists (YouTube, Twitch). A shelf or a list takes its majority
 shape (`majorityShape`): art of that shape fills it, art of another shape (and
 a channel logo) is contained in it, unclipped by a circle it doesn't fill; a
-channel's avatar stays a circle, the frame's height, in a frame of another
-shape. Artwork still loading holds the muted fill rather than black. Details and Search's closest match draw the
+channel's avatar (or its cover, without one) stays a circle, as large as the
+frame's shorter side and centred, in a frame of another shape. Artwork still loading holds the muted fill rather than black. Details and Search's closest match draw the
 item's own shape ([Details](#details)).
 
 Every named relationship with a known destination (channel, artist, album,

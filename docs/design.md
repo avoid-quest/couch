@@ -140,7 +140,8 @@ see-through while the page is at its top and black once it scrolls.
 
 - **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
   Details page with nothing under its stage fills the window above the bar
-  and centres its copy and picture in it (from `md`). Below `md` the picture
+  and centres its copy and picture in it (from `md`); its skeleton keeps the
+  regular height. Below `md` the picture
   leads the column at the top, centred above the copy (at most 72vw, 22rem or
   46vh tall); a wide one spans the column.
 - **7:1, measured.** The copy and the header sit only on the room, where it is
