@@ -7,7 +7,7 @@ a video's frame), shown whole and crisp in a room painted with its own colours.
 Type is set large and whole, in one display face at one width, stepping down in
 size as a title grows. Home and every Details page open
 on a [Stage](#stage), the one bold thing, and what plays floats over every page
-in a capsule of tinted [glass](#glass).
+but the player and Remote in a capsule of tinted [glass](#glass).
 
 Everything on screen comes from one model: **Devices**, the **Playback** each
 one serves, and **Where it plays**, a Playback's Devices with their picture and
@@ -94,7 +94,7 @@ colours are registered custom properties, so when the artwork changes they
 cross-fade over 600 ms; reduced motion swaps them at once. Everything is
 painted once: no blurred copy of the picture, nothing animated.
 
-Elsewhere the light stays as it was: a playing video's letterbox is lit around
+Elsewhere the artwork lights its surroundings: a playing video's letterbox is lit around
 the contained picture as YouTube's ambient mode (`AmbientLight`: a backlight
 hugging its edges and a haze three pictures wide, painted once, so a playing
 video costs nothing per frame), and a hovered or focused tile or row glows
@@ -107,7 +107,7 @@ The now-playing bar is a capsule of glass floating over the page
 edges so its content lines up with the page's gutter, with a deep shadow under
 it and a 1px highlight along its top. Its backdrop is blurred (28px),
 saturated (1.5) and halved in brightness, and the playing artwork's `tone`
-lies over it at 80% (`--bar`, `#1c1c1e`, without one). Over pure white behind
+lies over it at 80% (`#1c1c1e`, `--tone`'s initial value, without one). Over pure white behind
 it, its white ink keeps 10.4:1 and its muted ink (white 80%) 7.3:1 for every
 hue, measured. The tone cross-fades over 600 ms when what plays changes. It is
 the one backdrop filter on a page (Up next, summoned over the player's room,
@@ -185,7 +185,7 @@ as a size and `h-control` as a height.
 
 | Scale | Steps | Use |
 | --- | --- | --- |
-| Radius | `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's and the bar's thumbnail `rounded-sm`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg`; the now-playing bar 1.25rem (1rem on phones) |
+| Radius | `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's thumbnail `rounded-sm`; the bar's `rounded-md`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg`; the now-playing bar 1.25rem (1rem on phones) |
 | Control height | `control-sm` 1.75rem, `control` 2rem, `control-lg` 2.75rem, `field` 3rem | `size="sm"`; the default; the Stage's verbs (`size="lg"`); the header's search field. `touch:` raises each to 44px |
 | Type | `caption` .75rem, `meta` .8125rem, `body` .9375rem, `title` 1.125rem, `heading` 1.25rem, `page` 2.25rem | [Type](#type) |
 | Spacing | `caption` .125rem, `stack` .75rem, `item` 1rem, `section` 3.5rem | inside a caption; a heading to its content; between items; between sections |
@@ -209,8 +209,9 @@ white (a ghost control or a toggle rests at 80% white and a press dims it to
 60%), a fill steps up one notch (`secondary` to `fill-hover`; the white button
 to 85%), and an outline's edge comes up. One whose panel is open
 (`aria-expanded`) stays lit. Ink never turns dark under a pointer, and nothing
-tints, dims, scales or moves under it; links and the bar's artwork keep their
-ink. A press on the transport (Play, Pause, Stop, Next) dips its glyph to 90%
+tints, dims, scales or moves under it; the bar's artwork keeps its ink, and a
+text link's ink and underline come up to white. A press dims a tile's picture
+to 80%. A press on the transport (Play, Pause, Stop, Next) dips its glyph to 90%
 and lets it spring back ([Motion](#motion)). Whatever a press acts on shows the hand, sliders
 included (the arrow while disabled). Never on the TV, which lifts its focus
 instead. The header's tabs mark the current section with a short white rule
@@ -314,8 +315,8 @@ arrives, 600 ms for colour that follows what plays.
 - Media lights up at once: its glow is a shadow, and nothing animates
   `box-shadow`; only the focus ring around it eases (150 ms).
 - No scroll entrances, staggers or scaling tiles (but the TV's lifted focus),
-  nothing animates `filter` or `box-shadow`, and no loops but one:
-  the **level**, three bars that rise and fall while sound comes out
+  nothing animates `filter`, and no loops but the loading indicators (Spinner,
+  Skeleton) and the **level**, three bars that rise and fall while sound comes out
   (`Level`). It says the player's state, not the sound's loudness: it moves
   only while what plays is playing, and lies flat while paused, buffering or
   loading, as short thin bars that can't be read as a "…". It sits on the playing item's artwork (a black square in its
@@ -333,7 +334,8 @@ arrives, 600 ms for colour that follows what plays.
 shadcn components live in `src/client/components/ui` and are owned by Couch.
 Changes from the Mira defaults: capsule `text-sm` controls at `h-control`
 ([Tokens](#tokens)), a flat left-rule `Alert`, a left-aligned borderless
-`Empty`, no shadows, a 1.25rem glyph in `icon-lg`, Select items that reserve
+`Empty`, no shadows but the floating surfaces' (`--float-shadow`: the bar,
+toasts), a 1.25rem glyph in `icon-lg`, Select items that reserve
 room for their check, and ghost buttons that rest at 80% white ink and
 brighten rather than tint. Check the
 [catalog](https://ui.shadcn.com/docs/components) before building anything
@@ -356,7 +358,7 @@ Shared building blocks in `src/client/components`:
   actions; `hidden` keeps an `sr-only` h1 where the tab or rail already names
   the page. `ContentBreadcrumb` is a content page's trail of ancestors.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
-- `Stage`, `StageTitle`, `artForm`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
+- `Stage`, `StageTitle`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
   one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for
@@ -389,8 +391,7 @@ and `DetailHeader` (the catalog has no media tile or header, and Cards are what 
 `Shelf` as a plain overflow row (Carousel's arrow handling fights spatial
 navigation); the timeline's hover readout (Slider has none); the Remote's pad
 (no direction pad); toasts on sonner's `unstyled` option (its default surface
-is bordered); release notes with `react-markdown` (GFM, no raw HTML; no
-Markdown renderer); Search's kind and source lines, `SearchFilters`, on Toggle
+is bordered); Search's kind and source lines, `SearchFilters`, on Toggle
 Group and Button (a Select or tabs offer fixed choices; Search offers only what
 its results hold, as it finds them).
 

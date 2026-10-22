@@ -17,9 +17,12 @@ hand, and the Couch everyone shares, its hardware included:
 | TV | Couch | `/settings/couch/tv` | TV mode, Start on boot, Screen, text size (where the Couch is or can be a TV) |
 | Updates | Couch | `/settings/couch/updates` | the Couch apps an admin updates (where there is an updater) |
 
-Wide screens and the TV open Settings on General. The stack's flat paths
-(`/settings/home`, `/settings/devices`, `/settings/sound`, …) and main's older
-ones redirect through `settingsAliases`. The player's gear opens the player's
+Wide screens and the TV open Settings on General. Earlier paths
+(`/settings/home`, `/settings/devices`, `/settings/sound`,
+`/settings/couch/general|network|bluetooth|display`,
+`/settings/device/general|connection|viewing|sharing|discover`, …) redirect
+through `settingsAliases`; the old `/settings/updates` opens this app's own
+updater on an app connected to another Couch. The player's gear opens the player's
 own Playback menu, not this page.
 
 Online video quality offers Best, 1080p, 720p and 480p: Auto plays 1080p, so

@@ -152,7 +152,7 @@ nothing changes side as it grows into the band
 
 - **At the left, what plays,** as large as a mini-player's (YouTube Music,
   Spotify and Apple Music run about 56–64px): the artwork 3.5rem tall (3rem on
-  phones) at its own shape (a frame 16:9, up to 7rem wide, `rounded-sm`), and
+  phones) at its own shape (a frame 16:9, up to 7rem wide, `rounded-md`, with a soft shadow), and
   two lines, the title (`text-title font-medium`, `text-body` on phones, up
   to two lines and one on phones, whole while it has focus, with the whole
   title on hover) followed by the [level](../design.md#motion) while sound
@@ -165,8 +165,9 @@ nothing changes side as it grows into the band
   a show, else its name and logo, as its tile and the player do. Those links sit outside the title's button and drop their row
   height here, keeping a 24px hit area that doesn't push the line apart. The
   player says where it plays the same way (`PlaysOn`). The line under the
-  title is white 72%. No artwork colour reaches the bar, and no hairline: the
-  timeline along the bar's top edge (a white 18% track) is its edge.
+  title is white 80%. The glass takes the playing artwork's tone
+  ([Glass](../design.md#glass)); the timeline runs along its top edge (a white
+  18% track).
 - **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
 - **At the right, Volume, Where it plays, Up next and the Playback gear,**
   the band's own tools at the band's x, then **Open player** (ChevronUp, a

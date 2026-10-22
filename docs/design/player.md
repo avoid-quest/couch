@@ -53,7 +53,8 @@ menu, are one family wherever they open, from the band or the now-playing bar:
   with a hairline, which a black page needs to hold its edge
 - one corner (`rounded-lg`) and one inset: text sits .75rem in
 - two widths: 18rem for Volume and the gear's menu, 32rem for Where it plays
-  and Up next
+  and Up next, except Up next summoned over the room beside artwork: 28rem of
+  glass with a shadow ([Up next](#up-next))
 - one place: 8px above the band (or the bar), ending at the gutter, the
   tools' right edge, whichever tool opened them (`toolPanel`)
 - each grows from the button that opened it
@@ -73,8 +74,8 @@ over 4rem. This follows YouTube's
 gradient and Netflix's and Apple's floating controls. There is never a solid
 band.
 
-- The band's box is only its controls, about 108 px at 1920 wide, down
-  from 186. `--bottom-bar` is its height. Subtitles rise above that height
+- The band's box is only its controls, about 108 px at 1920 wide.
+  `--bottom-bar` is its height. Subtitles rise above that height
   while the band shows
   (`video::-webkit-media-text-track-container`; Firefox doesn't expose it),
   and panels clear it.
@@ -83,8 +84,8 @@ band.
 
 **The top line** follows the fullscreen title of YouTube and Netflix:
 
-- Back, then the title at `text-3xl` semibold (`text-2xl` on phones), one
-  line. The title opens Details.
+- Back, then the title at `text-3xl` semibold (`text-2xl` on phones), up to
+  two lines, the whole title on hover. The title opens Details.
 - Under the title, at `text-base`, the relationship links (`MediaContext`). A subtitle that
   the links already name is not repeated (`mediaSubtitle`).
 - At the right, small: the end time ("ends 21:42"), Stop sharing while this

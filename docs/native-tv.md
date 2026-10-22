@@ -1,6 +1,6 @@
 # Native Debian TV setup
 
-**Settings → Updates** shows whether the automatic timer is active. A stopped
+The Couch's **Settings → Updates** shows whether the automatic timer is active. A stopped
 or masked timer appears as off; administrators can still use **Update and
 restart** from their paired remote.
 
@@ -211,7 +211,7 @@ browse focus on Back, then releases the response and restores the fixture favori
 
 ## TV maintenance
 
-A paired administrator's **Settings > Updates** updates this TV remotely with
+From a paired administrator's device, the Couch's **Settings → Updates** updates this TV remotely with
 **Update and restart**. A TV in **Another Couch** mode appears by its paired
 Device name in that Couch's Updates page; the request travels over its existing
 connection to the TV app. The TV keeps its saved mode, channel and pairing after
@@ -226,7 +226,7 @@ The retired 0.1.0 AppImage installation is not migrated. Fresh installations use
 the package above; an old AppImage installation stays as it is and its session is
 not switched.
 
-The TV checks for updates like the desktop app and shows them in **Settings >
+The TV checks for updates like the desktop app and shows them in the Couch's **Settings →
 Updates**, but root installs them. `couch-update.timer` runs
 `couch-update.service` roughly 15–75 minutes after boot and daily between 04:00 and 05:00.
 Enabling the timer more than 15 minutes into an existing boot can run it
@@ -258,7 +258,7 @@ The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
 error; `rollback=unavailable` means no previous package was at hand.
-**Settings > Updates** shows the last automatic outcome under **Automatic
+The Couch's **Settings → Updates** shows the last automatic outcome under **Automatic
 updates**, including waiting while media plays, the known failed version it
 skipped, and an up-to-date check. A failed **Restart to update** shows its error
 instead of installing forever.
