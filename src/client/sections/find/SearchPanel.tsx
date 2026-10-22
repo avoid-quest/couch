@@ -203,8 +203,11 @@ const hitContext = (hit: SearchHit) => metaLine(...hit.meta.split(" · ").filter
 const hitMeta = (hit: SearchHit, showCollection = true) => metaLine(hitContext(hit), showCollection && hit.collection, !hit.live && !hit.collection && hit.duration != null && formatDuration(hit.duration));
 
 /** Sources stay readable even when a long artist or programme name fills the context line. */
-function HitSource({ hit, showSource = true, shared }: { hit: SearchHit; showSource?: boolean; shared?: { context: boolean; creator: boolean } }) {
-  return <MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={shared?.context ? undefined : hit.context} creator={shared?.creator ? undefined : hit.creator} />;
+/** Where a hit leads: its source's home, its creator, series or season, its station. */
+const hitRelated = (hit: SearchHit, showSource = true, shared?: { context: boolean; creator: boolean }) =>
+  ({ radio: hit.radio?.title !== hit.title ? hit.radio : undefined, source: showSource ? hit.source : undefined, collection: shared?.context ? undefined : hit.context, creator: shared?.creator ? undefined : hit.creator });
+function HitSource({ hit }: { hit: SearchHit }) {
+  return <MediaContext {...hitRelated(hit)} />;
 }
 
 /**
@@ -223,9 +226,9 @@ function TopResult({ hit }: { hit: SearchHit }) {
   const level = useLevel(hitSources(hit));
   return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3">
     {/* Its shape's frame at a set height, as Details draws it. */}
-    <div aria-hidden="true" className={cn("relative h-20 max-w-[36vw] overflow-hidden bg-muted md:row-span-2 md:h-48 md:max-w-[40vw]", artAspect[shapeOf(hit)])}><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className="aspect-auto size-full object-cover" /><ArtLevel level={level} className="max-md:size-6 max-md:text-xs" /></div>
+    <div aria-hidden="true" className={cn("relative h-20 max-w-[36vw] overflow-hidden md:row-span-2 md:h-56 md:max-w-[40vw]", artAspect[shapeOf(hit)])}><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className="aspect-auto size-full object-cover" /><ArtLevel level={level} className="max-md:size-6 max-md:text-xs" /></div>
     <div className="grid min-w-0 gap-1 md:self-end">
-      <h2 className="break-words text-lg leading-snug font-semibold tracking-tight md:text-2xl">{hit.primary.href ? <ContentLink href={hit.primary.href} className="no-underline hover:underline">{hit.title}</ContentLink> : hit.title}</h2>
+      <h2 className="break-words text-xl leading-tight font-semibold tracking-tight md:text-4xl md:leading-[1.02] md:tracking-[-.03em]">{hit.primary.href ? <ContentLink href={hit.primary.href} className="no-underline hover:underline">{hit.title}</ContentLink> : hit.title}</h2>
       {meta && <p className="text-sm text-muted-foreground break-words tabular-nums">{meta}</p>}
       <HitSource hit={hit} />
     </div>
@@ -250,7 +253,7 @@ function TopResult({ hit }: { hit: SearchHit }) {
 function SearchSkeleton() {
   return <div role="status" aria-label="Loading search results…" data-loading="search" className="space-y-8">
     <div aria-hidden="true" className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3">
-      <Skeleton className="size-20 rounded-none md:row-span-2 md:size-48" />
+      <Skeleton className="size-20 rounded-none md:row-span-2 md:size-56" />
       <div className="grid gap-2 md:self-end"><Skeleton className="h-7 w-3/5 max-w-96 md:h-8" /><Skeleton className="h-4 w-2/5 max-w-64" /></div>
       <div className="col-span-2 flex flex-wrap gap-2 md:col-span-1 md:col-start-2"><Skeleton className="h-11 w-28 max-md:w-full" /><Skeleton className="h-11 w-20" /><Skeleton className="size-10" /></div>
     </div>
@@ -268,7 +271,7 @@ const hitSources = (hit: SearchHit) => [hit.url, hit.radio && `radio:${hit.radio
 function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { hit: SearchHit; shape: ArtShape; showCollection?: boolean; pageFirst: boolean; className?: string }) {
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
-  return <MediaTile context={<HitSource hit={hit} />} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} plays={primary.label === "Play" || primary.label === "Resume"} title={hit.title} meta={hitMeta(hit, showCollection)} thumbnail={hit.thumbnail} source={hitSources(hit)} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
+  return <MediaTile related={hitRelated(hit)} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} title={hit.title} meta={metaLine(hitMeta(hit, showCollection), hit.source)} thumbnail={hit.thumbnail} source={hitSources(hit)} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
     href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]} />;
 }
 
@@ -293,9 +296,9 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
       const track = numbered != null;
       // An episode in its series' own list goes by its name, "S1 E1" leading its meta.
       const episode = onPage ? episodeRow(hit.title) : { title: hit.title };
-      return <MediaRow context={track ? undefined : <HitSource hit={hit} showSource={showSource} shared={shared} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
+      return <MediaRow related={track ? undefined : hitRelated(hit, showSource, shared)} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
       number={track ? numbered + index : undefined}
-      meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? metaLine(episode.lead, hitMeta(hit, !sameKind)) : metaLine(hitContext(hit), !sameKind && hit.collection)}
+      meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? metaLine(episode.lead, hitMeta(hit, !sameKind), showSource && hit.source) : metaLine(hitContext(hit), !sameKind && hit.collection, showSource && hit.source)}
       description={!compact ? withoutUrls(hit.description) || undefined : undefined} shape={shape} own={shapeOf(hit)}
       art={track ? undefined : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}

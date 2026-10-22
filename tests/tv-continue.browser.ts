@@ -31,25 +31,26 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
     assert(row, "Stop two real finite videos before completion");
     const id = row.dataset.historyDetails!;
     const resume = row.querySelector<HTMLElement>('[data-media-tile]')!;
-    const details = row.querySelector<HTMLElement>('button[aria-label^="Details "]')!;
-    assert(details && usable(details), "Continue lacks reachable History Details");
-    // Its tile's "…" is no stop on the TV (tabindex -1).
-    assert(row.querySelectorAll('button:not([tabindex="-1"]),a[href]').length === 2 && !resume.querySelector('button,a[href]'), "Continue must have only sibling Resume and Details controls");
-    assert(details.getBoundingClientRect().height >= 44, "Continue Details target is smaller than 44px");
+    // A Continue tile is one stop, Resume; Details is the first verb in its menu (a held OK), as every tile's other
+    // verbs are, and its "…" is no stop on the TV (tabindex -1).
+    assert(row.querySelectorAll('button:not([tabindex="-1"]),a[href]').length === 1 && !resume.querySelector('button,a[href]'), "Continue must have only its Resume tile as a stop");
     assert(resume.getAttribute("aria-label")?.startsWith("Resume "), "Continue lost primary Resume");
     assert(!unavailable || resume.matches(":disabled"), "Use an unavailable Continue fixture");
     const paused = document.querySelector('video')?.paused;
-    details.focus(); details.click();
+    resume.focus();
+    resume.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); await wait();
+    const details = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === "Details");
+    assert(details && usable(details), "Continue's menu lacks reachable History Details");
+    details!.click();
     await until(() => !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
     assert(new URLSearchParams(location.search).get("kind") === "history" && new URLSearchParams(location.search).get("id") === id, "Details opened the wrong history item");
     assert(document.querySelector('video')?.paused === paused, "Inspection started playback");
     await press("Escape"); await wait();
     const opener = document.activeElement as HTMLElement;
-    assert(opener?.getAttribute("aria-label") === details.getAttribute("aria-label") && usable(opener), "Back lost the usable Continue Details opener");
-    await press("Enter");
-    // Synthetic Enter is for spatial navigation/menu activation; native buttons
-    // need click to activate without the browser's trusted default action.
-    if (location.pathname === "/") opener.click();
+    assert(opener?.getAttribute("aria-label") === resume.getAttribute("aria-label") && usable(opener), "Back lost the Continue tile that opened Details");
+    // Back on Home, its Details again, through the menu.
+    opener.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); await wait();
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === "Details")!.click();
     await until(() => !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
     const options = async () => { document.querySelector<HTMLElement>('[data-page="Item"] button[aria-label^="Options"]')!.focus(); await press("Enter"); };
     const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === label);

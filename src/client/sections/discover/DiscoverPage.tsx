@@ -1,5 +1,4 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext } from "@/components/MediaContext";
 import { type ComponentProps, type MouseEvent, type ReactNode, Fragment, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery, iptvSourcesQuery } from "@/api/iptv";
@@ -91,7 +90,7 @@ function OnAir() {
   return <Shelf loading={onAir.loading} title="Radio" label="Radio stations" href="/discover/radio">
     {onAir.loading ? <MediaTilesSkeleton shape="square" /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-      <MediaTile data-page-first={index === 0 || undefined} shape="square" plays title={station.name} meta={onAir.meta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : metaLine(station.groupTitle || station.countryCode)) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
+      <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : metaLine(station.groupTitle || station.countryCode)) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
     </li>)}
   </Shelf>;
@@ -113,7 +112,7 @@ function LiveTv() {
 
 function ChannelTile({ channel, disabled, play, menu, first }: { first: boolean; channel: GuideRow; disabled: boolean; play: () => void; menu: MenuAction[] }) {
   const { on } = usePlayOn();
-  return <MediaTile data-page-first={first || undefined} shape="video" fit="contain" plays title={channel.name} meta={channelMeta(channel) || undefined} thumbnail={useChannelLogo(channel)} source={`iptv:${channel.id}`} aria-label={on(`Play ${channel.name}`)} disabled={disabled} onClick={play} menu={menu} />;
+  return <MediaTile data-page-first={first || undefined} shape="video" fit="contain" title={channel.name} meta={channelMeta(channel) || undefined} thumbnail={useChannelLogo(channel)} source={`iptv:${channel.id}`} aria-label={on(`Play ${channel.name}`)} disabled={disabled} onClick={play} menu={menu} />;
 }
 
 /**
@@ -130,7 +129,7 @@ function SavedShelf({ provider, items: saved }: { provider: ProviderId; items: P
   const frame = majorityShape(items.map(shape));
   return <Shelf title={name} href={collectionLocation({ provider, url: "" })}>
     {items.map((item, index) => <li key={item.id} className="shrink-0">
-      <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} data-page-first={index === 0 || undefined} shape={frame} own={shape(item)} dim={item.kind === "channel" && item.live === false} title={item.title} meta={metaLine(item.subtitle)} thumbnail={item.thumbnail} source={item.url} aria-label={`Open ${item.title}`}
+      <MediaTile related={{ collection: item.collection, creator: item.creator }} data-page-first={index === 0 || undefined} shape={frame} own={shape(item)} dim={item.kind === "channel" && item.live === false} title={item.title} meta={metaLine(item.subtitle)} thumbnail={item.thumbnail} source={item.url} aria-label={`Open ${item.title}`}
         menu={browserActions(item.url)} href={collectionLocation(item)} onClick={() => openProvider(item)} />
     </li>)}
   </Shelf>;
@@ -140,7 +139,7 @@ function SavedShelf({ provider, items: saved }: { provider: ProviderId; items: P
 function SharedSources({ hits }: { hits: SearchHit[] }) {
   const { on } = usePlayOn();
   return <section aria-labelledby="discover-shared-sources" className="grid min-w-0 gap-3">
-    <h2 id="discover-shared-sources" className="flex min-h-11 items-center text-xl font-semibold tracking-tight">Shared sources</h2>
+    <h2 id="discover-shared-sources" className="flex min-h-11 items-center text-lg font-semibold tracking-tight">Shared sources</h2>
     <ul data-nav-row aria-label="Shared sources" className="-ml-2.5 flex flex-wrap gap-x-4 gap-y-2">
       {hits.map((hit, index) => <SourceButton key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={on(`Play ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== "Play")} />)}
     </ul>
@@ -174,7 +173,7 @@ function Sources() {
   const details = useDetailNavigation();
   const failing = useFailingSources();
   return <section aria-labelledby="discover-sources" className="grid min-w-0 gap-3">
-    <h2 id="discover-sources" className="flex min-h-11 items-center text-xl font-semibold tracking-tight">Sources</h2>
+    <h2 id="discover-sources" className="flex min-h-11 items-center text-lg font-semibold tracking-tight">Sources</h2>
     <ul data-nav-row aria-label="Sources" className="-ml-2.5 flex flex-wrap gap-x-2 gap-y-1">
       {homes.map((provider, index) => <SourceButton data-page-first={index === 0 || undefined} key={provider} title={providerNames[provider]} failing={failing(provider)} aria-label={`Open ${providerNames[provider]}`} href={collectionLocation({ provider, url: "" })} onClick={() => details.open(collectionLocation({ provider, url: "" }))} />)}
       {searches.map(provider => <SourceButton key={provider} title={providerNames[provider]} failing={failing(provider)} aria-label={`Search ${providerNames[provider]}`} onClick={() => scopeSearch(providerNames[provider])} />)}

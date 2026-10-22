@@ -3,14 +3,17 @@ import { searchLocation } from "@/search";
 import { providerNames } from "../../shared/providers";
 import type { ProviderId } from "../../shared/providers";
 import { collectionLinks } from "@/collection-target";
-import { collectionLocation, itemLocation } from "@/detail-navigation";
+import { collectionLocation, itemLocation, useDetailNavigation } from "@/detail-navigation";
+import type { MenuAction } from "./RowMenu";
 import { ContentLink } from "./ContentLink";
 import type { CollectionLink, MediaCollection } from "../../shared/media";
 import { providerForUrl } from "../../shared/providers";
 import { cn } from "@/lib/utils";
 
-/** Named relationships are destinations, never a string hidden in an item menu. */
-export function MediaContext({ collection, creator, radio, source, className }: { source?: string; collection?: MediaCollection; creator?: CollectionLink; radio?: { id: string; title: string }; className?: string }) {
+export type Related = { source?: string; collection?: MediaCollection; creator?: CollectionLink; radio?: { id: string; title: string } };
+
+/** An item's named relationships (its source, creator, series and season, station) as destinations. */
+function relatedLinks({ collection, creator, radio, source }: Related) {
   const creatorProvider = creator && providerForUrl(creator.url);
   const provider = (Object.keys(providerNames) as ProviderId[]).find(id => providerNames[id] === source);
   const radioSource = radioBrowseSources.find(value => value === source);
@@ -21,6 +24,23 @@ export function MediaContext({ collection, creator, radio, source, className }: 
     ...collectionLinks(collection).map(item => ({ title: item.title, href: collectionLocation(item) })),
     ...(radio ? [{ title: radio.title, href: itemLocation("radio", radio.id) }] : []),
   ].filter((link, index, all) => all.findIndex(other => other.href === link.href) === index);
+  return { links, sourceHref };
+}
+
+/**
+ * A tile's or a row's relationships, as the last verbs in its menu ("Go to Phony"): a shelf or a list is pictures and
+ * titles, and the item's own page and its menu hold where it leads.
+ */
+export function useRelatedMenu(related: Related | undefined): MenuAction[] {
+  const navigation = useDetailNavigation();
+  if (!related) return [];
+  return relatedLinks(related).links.map(link => ({ label: `Go to ${link.title}`, run: () => navigation.open(link.href) }));
+}
+
+/** Named relationships as visible links, where an item has the room (a Stage, the player, the now-playing bar). */
+export function MediaContext({ className, ...related }: Related & { className?: string }) {
+  const { source } = related;
+  const { links, sourceHref } = relatedLinks(related);
   if (!links.length && !source) return null;
   return <span data-media-context className={cn("flex min-w-0 flex-wrap items-center gap-x-3 text-sm text-muted-foreground", className)}>
     {source && !sourceHref && <span>{source}</span>}

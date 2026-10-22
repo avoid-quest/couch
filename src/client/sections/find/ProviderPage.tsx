@@ -1,7 +1,7 @@
 import { DetailSkeleton, MediaRowsSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
 import { collectionLocation, keepSection, useOwnSearch } from "@/detail-navigation";
@@ -100,10 +100,8 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     onSelectPage={page => goToPage(locationFor({ page }))} />;
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
-    <div className="grid gap-3">
-      <ContentBreadcrumb title={collection.title} provider={provider} collection={trail} />
-      {cold && url ? <DetailSkeleton shape={artShape(providerNames[provider], "collection")} /> : <CollectionHeader collection={collection} canPlay={available} shape={shape} />}
-    </div>
+    {cold && url ? <DetailSkeleton trail={<ContentBreadcrumb title={collection.title} provider={provider} collection={trail} />} />
+      : <CollectionHeader collection={collection} canPlay={available} shape={shape} trail={<ContentBreadcrumb title={collection.title} provider={provider} collection={trail} />} />}
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
@@ -126,7 +124,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
         {hits.slice(paging.start, paging.end).map((hit, index) => {
           const item = page?.items.find(item => item.url === hit.url);
           return item && <li key={hit.id} className="@container min-w-0">
-            <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={metaLine(mediaSubtitle(item))} thumbnail={hit.thumbnail} source={hit.url} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
+            <MediaTile related={{ collection: item.collection, creator: item.creator }} className="w-full [--tile-art:150cqi] [&_[data-media-tile]]:w-full [&_[data-tile-art]]:w-full" data-page-first={index === 0 || undefined} title={hit.title} meta={metaLine(mediaSubtitle(item))} thumbnail={hit.thumbnail} source={hit.url} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
               href={collectionLocation(item)} onClick={() => openProvider(item)} />
           </li>;
         })}
@@ -143,11 +141,11 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
 // Filter shows once a list holds more than about a screen of rows.
 const filterAfter = 20;
 
-function CollectionHeader({ collection: c, canPlay, shape }: { collection: SearchCollection; canPlay: boolean; shape: ArtShape }) {
+function CollectionHeader({ collection: c, canPlay, shape, trail }: { collection: SearchCollection; canPlay: boolean; shape: ArtShape; trail: ReactNode }) {
   const disabled = !canPlay || c.disabled;
   // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
   const creator = c.creator && c.creator.url !== c.url && !collectionLinks(c.context).some(link => link.url === c.creator!.url) ? c.creator : undefined;
-  return <DetailHeader context={<MediaContext creator={creator} />} title={c.title} meta={mediaSubtitle({ subtitle: c.subtitle, creator: c.creator, collection: c.context })} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.duration}
+  return <DetailHeader trail={trail} context={<MediaContext creator={creator} />} title={c.title} meta={mediaSubtitle({ subtitle: c.subtitle, creator: c.creator, collection: c.context })} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.duration}
     play={c.playAll && { label: c.playLabel ?? (c.single ? "Play" : "Play all"), run: c.playAll, disabled }}
     fromStart={c.fromStart && { label: "From start", run: c.fromStart, disabled }}
     queue={c.queueAll && { label: c.single ? "Queue" : "Queue all", run: c.queueAll, disabled: c.disabled }}

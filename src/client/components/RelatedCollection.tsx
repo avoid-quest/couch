@@ -29,7 +29,7 @@ function RelatedItems({ target, collection, currentUrl, currentTitle }: { target
   const cursor = collection ? providerCollectionCursor(target.provider, collection) : undefined;
   const title = collection ? `More from ${collection.title}` : `Browse ${target.title}`;
   return <section aria-label={title} hidden={!!summary && !summary.loading && !summary.error && !nearby.length} className="mt-10 min-w-0 space-y-4">
-    <h2 className="text-xl font-semibold tracking-tight"><Link data-text-link to={keepSection(collectionLocation(target), section)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">{title}</Link></h2>
+    <h2 className="text-lg font-semibold tracking-tight"><Link data-text-link to={keepSection(collectionLocation(target), section)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">{title}</Link></h2>
     <SearchOnlineResults provider={target.provider} query="" url={target.url} cursor={cursor} paged onResults={report} onOpenCollection={openProvider} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this list.</p>}
     {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}

@@ -32,7 +32,7 @@ export function CouchSwitch({ credentials, connected, status, installationName, 
     </PopoverTrigger>
     <PopoverContent align="start" className="max-h-(--radix-popover-content-available-height) w-96 max-w-[calc(100vw-1rem)] overflow-y-auto [&_[data-slot=field]]:grid-cols-1" onOpenAutoFocus={event => { event.preventDefault(); (event.currentTarget as HTMLElement).focus(); }}>
       <CouchChoice credentials={credentials} installationName={installationName} />
-      {canPair && <Button variant="ghost" className="h-auto w-full justify-start gap-3 px-2.5 py-2 font-normal" onClick={() => { setOpen(false); setPairing(true); }}><Plus aria-hidden="true" />Pair a device</Button>}
+      {canPair && <Button variant="ghost" className="h-auto w-full justify-start gap-3 px-2.5 py-2 font-normal text-foreground" onClick={() => { setOpen(false); setPairing(true); }}><Plus aria-hidden="true" />Pair a device</Button>}
     </PopoverContent>
   </Popover>
   {canPair && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={pairing} onOpenChange={setPairing} openerRef={trigger} />}

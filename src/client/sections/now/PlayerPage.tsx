@@ -350,7 +350,7 @@ function NextUp({ state, run }: { state: ClientSessionState; run: (action: Actio
   const length = playbackClock.duration || current?.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
   if (!current || !next || current.live || isRadio(current) || !length || remaining > 30 || remaining <= 0 || !player.playbackId || !["playing", "paused"].includes(player.status)) return null;
-  return <Button data-next-up variant="ghost" aria-label={`Next: ${next.title}`} className="player-next-up h-auto w-[min(22rem,calc(100%-2*var(--gutter)))] justify-start gap-3 rounded-md p-2 text-left font-normal whitespace-normal"
+  return <Button data-next-up variant="ghost" aria-label={`Next: ${next.title}`} className="player-next-up h-auto text-foreground w-[min(22rem,calc(100%-2*var(--gutter)))] justify-start gap-3 rounded-md p-2 text-left font-normal whitespace-normal"
     onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}>
     <span aria-hidden="true" className="aspect-video w-28 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={next.thumbnail} title={next.title} /></span>
     <span className="grid min-w-0 gap-0.5"><span className="text-sm text-muted-foreground">Next</span><span className="line-clamp-2 font-medium break-words">{next.title}</span></span>

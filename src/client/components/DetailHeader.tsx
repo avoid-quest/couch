@@ -1,14 +1,13 @@
 import { Bookmark, Play } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { Stage, StageTitle } from "@/components/Stage";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
-import { artAspect, detailArt, type ArtShape } from "@/art-shape";
+import type { ArtShape } from "@/art-shape";
 import { metaLine, withoutUrls } from "@/media-caption";
 import { cn } from "@/lib/utils";
-import { AmbientLight } from "@/components/AmbientLight";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
 
@@ -43,12 +42,12 @@ export function Description({ text, className }: { text?: string | null; classNa
 }
 
 /**
- * An item or collection page's top, laid out like Home's hero: artwork in its shape at the left (stacked above on narrow
- * screens), the title at display size, one muted meta line, how far it got, then one row of verbs before the synopsis: Play
- * (or Resume, with From start beside it), Queue, Save and Play on, with anything else in one "…" menu. The row is one
- * focus stop per verb, and its first enabled verb is where the page starts.
+ * An item or collection page's top, a Stage (Stage.tsx) as Home's hero is: the picture at the right under the header,
+ * then at the bottom left the trail, the title at display size, one muted meta line and its links, how far it got, then
+ * one row of verbs before the synopsis: Play (or Resume, with From start beside it), Queue, Save and Play on, with
+ * anything else in one "…" menu. The row is one focus stop per verb, and its first enabled verb is where the page starts.
  */
-export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", fit, duration, position, play, fromStart, queue, save, playOn, more = [], children }: {
+export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", fit, duration, position, play, fromStart, queue, save, playOn, more = [], trail, children }: {
   title: string; meta?: string; context?: ReactNode; description?: string | null; thumbnail?: string; shape?: ArtShape;
   /** Logos keep their margins: contain them in the frame. */
   fit?: "contain";
@@ -60,6 +59,8 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   playOn?: { run: (deviceId: string) => void; disabled?: boolean };
   /** Every other verb (Play next, Remove, ordering), in one "…" menu. */
   more?: MenuAction[];
+  /** The page's ancestors (ContentBreadcrumb), above the title. */
+  trail?: ReactNode;
   children?: ReactNode;
 }) {
   const { on } = usePlayOn();
@@ -67,31 +68,27 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
   const first = [!play?.disabled && play && "play", !queue?.disabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
-  const art = useRef<HTMLDivElement>(null);
-  // The cover lights the page around it, out to the window's edges (AmbientLight), and falls away above it, where the
-  // trail's muted links sit close.
-  return <header className={cn("relative grid gap-x-8 gap-y-6 md:items-start lg:gap-x-12", thumbnail && "md:grid-cols-[fit-content(45%)_minmax(0,1fr)]")}>
-    {thumbnail && <AmbientLight src={thumbnail} anchor={art} className="-inset-x-(--gutter) -bottom-16 [mask-image:linear-gradient(transparent,#000_1.5rem,#000_calc(100%-3rem),transparent)]" />}
-    {thumbnail && <div ref={art} data-detail-art aria-hidden="true" className={cn("max-w-full overflow-hidden bg-muted", artAspect[shape], detailArt[shape])}>
-      <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full", fit === "contain" ? "object-contain" : "object-cover")} />
-    </div>}
-    <div className="grid min-w-0 content-start gap-2">
-      <h1 tabIndex={-1} className="text-3xl leading-tight md:text-4xl font-semibold tracking-tight break-words outline-none">{title}</h1>
-      {meta && <p className="text-sm text-muted-foreground">{metaLine(meta)}</p>}
+  return <Stage data-detail-header thumbnail={thumbnail ?? ""} shape={shape} fit={fit} title={title}>
+    <div className="grid w-full justify-items-start gap-3">
+      {trail}
+      <StageTitle title={title} />
+    </div>
+    {(meta || context || duration != null) && <div className="grid justify-items-start gap-1">
+      {meta && <p className="text-base text-muted-foreground">{metaLine(meta)}</p>}
       {context}
       {duration != null && <DurationBar duration={duration} position={position} />}
-      {verbs && <div data-nav-row className={cn("mt-4", verbRow)}>
-        {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" />{on(play.label)}</Button>}
-        {fromStart && <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>{fromStart.label}</Button>}
-        {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>{queue.label}</Button>}
-        {/* Play on waits for another device that can play it. */}
-        {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
-        {save && <SaveToggle data-page-first={first === "save" || undefined} saved={save.saved} disabled={save.disabled} onClick={save.run} />}
-        {/* The page's own "…", always shown: the header is no item that reveals it. */}
-        <ItemMenu menu={rest} size="icon-lg" title={title} className="opacity-100" />
-      </div>}
-      <Description text={description} className="mt-4" />
-      {children}
-    </div>
-  </header>;
+    </div>}
+    {verbs && <div data-nav-row className={cn("mt-1 w-full", verbRow)}>
+      {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="fill-current" />{on(play.label)}</Button>}
+      {fromStart && <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>{fromStart.label}</Button>}
+      {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>{queue.label}</Button>}
+      {/* Play on waits for another device that can play it. */}
+      {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
+      {save && <SaveToggle data-page-first={first === "save" || undefined} saved={save.saved} disabled={save.disabled} onClick={save.run} />}
+      {/* The page's own "…", always shown: the header is no item that reveals it. */}
+      <ItemMenu menu={rest} size="icon-lg" title={title} className="opacity-100" />
+    </div>}
+    <Description text={description} />
+    {children}
+  </Stage>;
 }

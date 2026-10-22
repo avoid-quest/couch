@@ -1,4 +1,3 @@
-import { MediaContext } from "@/components/MediaContext";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext } from "@dnd-kit/core";
@@ -146,7 +145,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
         void write(listPath(playlist.id), { revision: playlist.revision, operation: "move", entryId: String(active.id), beforeEntryId });
       }}>
         <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
-          <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow context={<MediaContext collection={entry.collection} creator={entry.creator} />} ref={drag.setNodeRef} style={drag.style}
+          <MediaList aria-label="List items">{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => <MediaRow related={{ collection: entry.collection, creator: entry.creator }} ref={drag.setNodeRef} style={drag.style}
             title={entry.title}
             meta={!entry.live && entry.duration != null ? formatDuration(entry.duration) : undefined}
             actions={<>

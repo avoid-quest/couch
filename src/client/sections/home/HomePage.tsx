@@ -1,6 +1,5 @@
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaContext } from "@/components/MediaContext";
-import { ContentLink } from "@/components/ContentLink";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
@@ -11,15 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { AmbientLight } from "@/components/AmbientLight";
-import { MediaArtwork } from "@/components/MediaArtwork";
+import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
 import { Progress } from "@/components/ui/progress";
-import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
+import { artShape, majorityShape, type ArtShape } from "@/art-shape";
 import { historyCaption, mediaCaption, metaLine, savedCaption } from "@/media-caption";
 import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
-import { DurationBar, useDurationClock } from "@/components/DurationBar";
+import { useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { PlaybackTransport } from "@/components/PlaybackTransport";
 import { usePlayOn } from "@/components/PlayOn";
@@ -41,7 +39,6 @@ import { avoidRadioPlaylistId, isRadio, stationSources, type RadioProgrammeDetai
 import type { HistoryItem } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
-import { cn } from "@/lib/utils";
 import { useOnAir, useStationMenu, useStationShow } from "@/sections/discover/on-air";
 import { useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 
@@ -54,6 +51,8 @@ const entryShape = (entry: QueueEntry): ArtShape => isRadio(entry) ? "square" : 
 const historyShape = (item: HistoryItem) => artShape(item.sourceLabel, item.collection ? "episode" : "media");
 const savedShape = (item: ForLaterItem) => artShape(savedSourceLabel(item), item.collection ? "episode" : "media");
 const recentCaption = (item: HistoryItem) => { const caption = historyCaption(item); return { ...caption, meta: metaLine(caption.meta, item.duration ? formatDuration(item.duration) : null) }; };
+// Continue says how much is left where Played recently says how long it is; the line on the artwork shows how far it got.
+const continueCaption = (item: HistoryItem) => { const caption = historyCaption(item); return { ...caption, meta: metaLine(caption.meta, item.duration ? `${formatDuration(Math.max(0, item.duration - item.position))} left` : null) }; };
 
 type Hero = { kind: "playing" } | { kind: "continue"; item: HistoryItem } | { kind: "radio"; station: RadioStation; show: RadioProgrammeDetails };
 
@@ -186,17 +185,15 @@ export function HomePage() {
   const laterShape = majorityShape(savedMedia.slice(0, shelfLength).map(savedShape));
   const recentShape = majorityShape(recent.map(historyShape));
   const shelves: Record<HomeRowId, ReactNode> = {
-    continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played">
-      {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="flex shrink-0 flex-col items-start gap-1">
-        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={continueShape} own={historyShape(item)} {...historyCaption(item)} thumbnail={item.thumbnail} source={item.url} plays
-          aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)}>
-          <DurationBar duration={item.duration} position={item.position} />
-        </MediaTile>
-        <ContentLink className="ml-1 inline-flex min-h-11 items-center text-sm" href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`}>Details</ContentLink>
+    continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played" sparse={continued.length < 3}>
+      {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
+        <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={continueShape} own={historyShape(item)} {...continueCaption(item)} thumbnail={item.thumbnail} source={item.url}
+          progress={item.duration ? item.position / item.duration : undefined}
+          aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)} />
       </li>)}
     </Shelf>,
 
-    upNext: !!upcoming.length && <Shelf title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : undefined}>
+    upNext: !!upcoming.length && <Shelf title="Up next" sparse={upcoming.length < 3} time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : undefined}>
       {plan.slice(0, shelfLength).map(({ entry, starts, seconds }, index) => <li key={entry.id} className="shrink-0">
         <UpNextTile entry={entry} shape={upNextShape} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? undefined : metaLine(formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`)}
           verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />
@@ -204,23 +201,23 @@ export function HomePage() {
       {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
     </Shelf>,
 
-    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio">
+    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio" sparse={listed.length < 3}>
       {listed.map(station => <li key={station.id} className="shrink-0">
-        <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)} plays
+        <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>,
 
-    later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later">
+    later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later" sparse={savedMedia.length < 3}>
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
-        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail} source={item.url}
+        <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} thumbnail={item.thumbnail} source={item.url}
           href={itemLocation("saved", item.id)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,
 
-    recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played">
+    recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played" sparse={recent.length < 3}>
       {recent.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
-        <MediaTile context={<MediaContext collection={item.collection} creator={item.creator} />} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} thumbnail={item.thumbnail} source={item.url}
+        <MediaTile related={{ collection: item.collection, creator: item.creator }} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} thumbnail={item.thumbnail} source={item.url}
           href={itemLocation("history", item.mediaId)} aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
       </li>)}
     </Shelf>,
@@ -234,7 +231,8 @@ export function HomePage() {
 
     {hero === undefined && <DetailSkeleton home />}
     {lead}
-    {hero !== undefined && onHome.map(row => <Fragment key={row.id}>{shelves[row.id] || (connected && (row.id === "later" ? later.isPending : row.id === "radio" ? favorites.isPending : ["continue", "recent"].includes(row.id) && history.isPending) && <Shelf title={row.id === "later" ? "For later" : row.id === "radio" ? "Radio" : row.id === "continue" ? "Continue" : "Played recently"} loading><MediaTilesSkeleton shape={row.id === "radio" ? "square" : "video"} /></Shelf>)}</Fragment>)}
+    {/* Short shelves sit side by side (Shelf's sparse); a full one takes the line. */}
+    {hero !== undefined && <div className="flex flex-wrap items-start gap-x-16 gap-y-12">{onHome.map(row => <Fragment key={row.id}>{shelves[row.id] || (connected && (row.id === "later" ? later.isPending : row.id === "radio" ? favorites.isPending : ["continue", "recent"].includes(row.id) && history.isPending) && <Shelf title={row.id === "later" ? "For later" : row.id === "radio" ? "Radio" : row.id === "continue" ? "Continue" : "Played recently"} loading><MediaTilesSkeleton shape={row.id === "radio" ? "square" : "video"} /></Shelf>)}</Fragment>)}</div>}
 
     {empty && <Empty className="items-start py-12 text-left">
       <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
@@ -253,47 +251,37 @@ export function HomePage() {
 /** An Up next entry's tile: its press plays it now, and its menu holds what its Up next row's does. */
 function UpNextTile({ entry, shape, meta, disabled, onPlay, verbs }: { entry: QueueEntry; shape: ArtShape; meta?: string; disabled: boolean; onPlay: () => void; verbs: QueueActionsProps }) {
   const caption = mediaCaption(entry);
-  return <MediaTile context={<MediaContext collection={entry.collection} creator={entry.creator} />} shape={shape} own={entryShape(entry)} title={caption.title} thumbnail={entry.thumbnail} meta={metaLine(caption.lead, meta)} plays aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} menu={useQueueActions(verbs)} />;
+  return <MediaTile related={{ collection: entry.collection, creator: entry.creator }} shape={shape} own={entryShape(entry)} title={caption.title} thumbnail={entry.thumbnail} meta={metaLine(caption.lead, meta)} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} menu={useQueueActions(verbs)} />;
 }
 
-/** How far it got as a slim line, which advances while it plays, over how much is left (and, playing, when it ends). */
+/** How far it got as a slim line, which advances while it plays, beside how much is left (and, playing, when it ends). */
 function HeroProgress({ position, duration, label = `${formatDuration(Math.max(0, duration - position))} left` }: { position: number; duration: number; label?: string }) {
-  return <div className="grid max-w-md gap-2 text-sm text-muted-foreground tabular-nums">
-    <Progress className="h-1 rounded-none" value={Math.min(100, Math.max(0, position / duration * 100))} aria-label={`Playback progress: ${label}`} />
-    <span>{label}</span>
+  return <div className="flex w-full max-w-md items-center gap-4 text-sm text-muted-foreground tabular-nums">
+    <Progress className="h-0.5 flex-1 rounded-none bg-foreground/25" value={Math.min(100, Math.max(0, position / duration * 100))} aria-label={`Playback progress: ${label}`} />
+    <span className="shrink-0">{label}</span>
   </div>;
 }
 
-// The hero's artwork at its true shape and a set height (Home's one large picture); a phone gives a frame the
-// column's width and a square or a poster a set height, at the text's left edge.
-const heroArt = { video: "w-full md:w-auto md:max-w-[55%]", square: "h-64 max-w-full md:max-w-[50%]", round: "h-64 max-w-full md:max-w-[50%]", poster: "h-80 max-w-full md:max-w-[40%]" } as const satisfies Record<ArtShape, string>;
-
 /**
- * The board's top line, the one place Home spends boldness: the artwork large at its own shape, the title at display
- * size, one muted meta line, how far it got, then its verbs. Narrow screens stack it, left-aligned like the page, with
- * the primary verb growing along its line. Its verbs are a row, so Up and Down pass between it and the shelves.
+ * The board's top line, Home's Stage (Stage.tsx): the picture at the right under the header, the title large at the
+ * bottom left, one muted meta line and its links, how far it got, then its verbs. Its verbs are a row, so Up and Down
+ * pass between it and the shelves.
  */
 function HomeHero({ thumbnail, shape, title, meta, context, progress, playing = false, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; playing?: boolean; children: ReactNode }) {
   // While it shows what plays, on screen, it stands in for the now-playing bar, which hides (index.css) until it scrolls away.
-  const root = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (!playing || !root.current) return;
+    const hero = document.querySelector("[data-home-hero]");
+    if (!playing || !hero) return;
     const html = document.documentElement;
     const observer = new IntersectionObserver(([entry]) => html.toggleAttribute("data-hero-playing", !!entry?.isIntersecting));
-    observer.observe(root.current);
+    observer.observe(hero);
     return () => { observer.disconnect(); html.removeAttribute("data-hero-playing"); };
   }, [playing]);
-  const art = useRef<HTMLDivElement>(null);
-  return <section ref={root} data-home-hero aria-label={title} className="relative grid gap-x-12 gap-y-6 border-b pb-8 [--hero-art:min(26rem,52vh)] md:flex md:items-center md:pb-12">
-    {/* Its artwork lights the board's top, as it lights Details and the player (AmbientLight). */}
-    <AmbientLight src={thumbnail} anchor={art} className="-inset-x-(--gutter)" />
-    <div ref={art} aria-hidden="true" className={cn("shrink-0 overflow-hidden bg-muted md:h-(--hero-art)", artAspect[shape], heroArt[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full object-cover", shape === "round" && "rounded-full")} /></div>
-    <div className="grid min-w-0 flex-1 gap-4">
-      <h2 title={title} className="line-clamp-4 text-3xl leading-[1.08] font-semibold tracking-tight text-balance break-words md:text-5xl">{title}</h2>
-      {/* The meta line and its links read as one block under the title. */}
-      {(meta || context) && <div className="-mt-1 grid justify-items-start">{meta && <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>}{context}</div>}
-      {progress}
-      <div data-nav-row className="mt-2 flex flex-wrap items-center gap-2 max-md:[&>[data-page-first]]:flex-1">{children}</div>
-    </div>
-  </section>;
+  return <Stage data-home-hero size="home" label={title} thumbnail={thumbnail ?? ""} shape={shape} title={title}>
+    <StageTitle as="h2" title={title} />
+    {/* The meta line and its links read as one block under the title. */}
+    {(meta || context) && <div className="grid justify-items-start">{meta && <p className="text-base leading-relaxed break-words text-muted-foreground">{meta}</p>}{context}</div>}
+    {progress}
+    <div data-nav-row className="mt-2 flex flex-wrap items-center gap-2 max-md:w-full max-md:[&>[data-page-first]]:flex-1">{children}</div>
+  </Stage>;
 }

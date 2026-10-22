@@ -32,7 +32,8 @@ export async function runTvFocusRegression() {
     await check("A focused text link inverts past its words, and a focused tile lifts, without moving the layout", async () => {
       await audit.go('/');
       control('.app-header a[href="/"]').focus(); await remote('right');
-      const link = control('[aria-label="For later"] [data-media-context] a');
+      // Relationships are links on the Stage; a tile keeps them in its menu (next check).
+      const link = control('[data-home-hero] [data-media-context] a');
       const before = link.getBoundingClientRect();
       link.focus(); await wait(200);
       const after = link.getBoundingClientRect();
@@ -48,15 +49,26 @@ export async function runTvFocusRegression() {
       const home = control('.app-header a[href="/"]');
       home.focus(); await remote('left');
       assert(document.activeElement === home, "Left from Home jumped into the page");
-      const links = [...document.querySelectorAll<HTMLElement>('[aria-label="For later"] [data-media-context] a')];
+      const links = [...document.querySelectorAll<HTMLElement>('[data-home-hero] [data-media-context] a')];
       assert(links.length >= 2, "Missing relationship fixture");
       links.at(-1)!.focus(); await remote('right');
-      assert(document.activeElement === links.at(-1), "Right from the last relationship jumped up to its tile");
+      assert(document.activeElement === links.at(-1), "Right from the last relationship jumped to another row");
       await remote('left');
       assert(document.activeElement === links[0], "Left did not reach the adjacent relationship");
     });
+    await check("A tile's relationships are the last verbs in its menu, not links under it", async () => {
+      await audit.go('/');
+      const tile = control('[aria-label="For later"] [data-tile]');
+      assert(!tile.querySelector('[data-media-context]'), "A tile still shows relationship links");
+      tile.querySelector<HTMLElement>('[data-media-tile]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await wait();
+      const items = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent ?? '');
+      assert(items.some(item => item.startsWith('Go to ')), `The tile's menu has no Go to: ${items.join(', ')}`);
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await wait();
+    });
     await check("Back restores the exact relationship link, including repeated destinations", async () => {
-      for (const selector of ['[data-home-hero] [data-media-context] a', '[aria-label="For later"] [data-media-context] a']) {
+      for (const selector of ['[data-home-hero] [data-media-context] a']) {
         await audit.go('/');
         const link = control(selector);
         const href = link.getAttribute('href');

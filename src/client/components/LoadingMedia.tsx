@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { artAspect, detailArt, type ArtShape } from "@/art-shape";
+import type { ReactNode } from "react";
+import { artAspect, type ArtShape } from "@/art-shape";
 import { cn } from "@/lib/utils";
 
 // One line of type as a bar at its own height, so a skeleton row or tile is as tall as what replaces it.
@@ -17,19 +18,21 @@ export function MediaRowsSkeleton({ compact = false, shape = compact ? "square" 
   </div>;
 }
 
-/** Direct children of Shelf's ordered list, in MediaTile's geometry: its artwork's height and a caption of two title lines and a meta line. */
+/** Direct children of Shelf's ordered list, in MediaTile's geometry: its artwork's height, a title line and a meta line. */
 export function MediaTilesSkeleton({ shape = "video", count = 6, fluid = false }: { shape?: ArtShape; count?: number; fluid?: boolean }) {
-  return <>{Array.from({ length: count }, (_, index) => <li key={index} aria-hidden="true" className="grid shrink-0 content-start gap-3" data-loading="tile">
-    <Skeleton className={cn("rounded-none", artAspect[shape], fluid ? "w-full" : { poster: "h-72", square: "h-48", video: "h-44", round: "h-40" }[shape])} />
-    <div className="grid min-h-[4.375rem] content-start gap-0.5 px-1 pb-1">{line("h-[1.375rem]", "h-4 w-4/5")}{line("h-5", "h-3.5 w-3/5")}</div>
+  return <>{Array.from({ length: count }, (_, index) => <li key={index} aria-hidden="true" className="grid shrink-0 content-start gap-2.5" data-loading="tile">
+    <Skeleton className={cn("rounded-none", artAspect[shape], fluid ? "w-full" : { poster: "h-60", square: "h-42", video: "h-36", round: "h-36" }[shape])} />
+    <div className="grid content-start gap-0.5">{line("h-[1.3rem]", "h-4 w-4/5")}{line("h-5", "h-3.5 w-3/5")}</div>
   </li>)}</>;
 }
 
-export function DetailSkeleton({ shape = "video", home = false }: { shape?: ArtShape; home?: boolean }) {
-  return <div role="status" aria-label={home ? "Loading your Home…" : "Loading details…"} data-loading="details" className={cn("grid gap-x-8 gap-y-6 lg:gap-x-12", home ? "border-b pb-8 md:flex md:items-center md:gap-12 md:pb-12" : "md:grid-cols-[fit-content(45%)_minmax(0,1fr)]")}>
-    {/* Home's hero most often leads with a frame, at the hero's height; Details draws its shape's geometry. */}
-    <Skeleton className={cn("rounded-none", home ? "aspect-video w-full shrink-0 md:h-[min(26rem,52vh)] md:w-auto md:max-w-[55%]" : cn("max-w-full", artAspect[shape], detailArt[shape]))} />
-    <div aria-hidden="true" className="grid min-w-0 flex-1 content-start gap-4"><Skeleton className="h-10 w-4/5" /><Skeleton className="h-5 w-2/5" /><div className="mt-4 flex flex-wrap gap-2"><Skeleton className="h-11 w-28 max-md:w-full" /><Skeleton className="h-11 w-20" /><Skeleton className="h-11 w-20" /></div><Skeleton className="mt-4 h-4 w-full" /><Skeleton className="h-4 w-4/5" /></div>
+/** Home's or a Details page's Stage while it loads: the dark room with the copy's bars at the bottom left, no picture yet. */
+export function DetailSkeleton({ home = false, trail }: { shape?: ArtShape; home?: boolean; trail?: ReactNode }) {
+  return <div role="status" aria-label={home ? "Loading your Home…" : "Loading details…"} data-loading="details" data-stage={home ? "home" : "details"} className="stage">
+    <div className="stage-copy w-full">
+      {trail}
+      <div aria-hidden="true" className="grid w-full gap-4"><Skeleton className="h-14 w-4/5" /><Skeleton className="h-5 w-2/5" /><div className="mt-2 flex flex-wrap gap-2"><Skeleton className="h-11 w-28 max-md:w-full" /><Skeleton className="h-11 w-20" /><Skeleton className="h-11 w-20" /></div></div>
+    </div>
   </div>;
 }
 

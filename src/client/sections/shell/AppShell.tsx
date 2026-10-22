@@ -345,7 +345,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. Unpaired there is none: the pairing page stands alone. */}
-          {paired && <header ref={header} hidden={onPlayer} className="app-header group/header drag-region window-controls-inset sticky top-0 z-30 grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_minmax(14rem,22rem)] items-center gap-x-8 border-b bg-background px-(--gutter) py-3 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
+          {paired && <header ref={header} hidden={onPlayer} className="app-header group/header drag-region window-controls-inset sticky top-0 z-30 grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_minmax(14rem,22rem)] items-center gap-x-8 bg-background px-(--gutter) py-3 motion-safe:transition-colors motion-safe:duration-200 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
             {/* On a phone the open search takes the whole row. */}
             <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
@@ -375,7 +375,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
                 the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
             <div ref={footer} className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}>
               {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
-              <SectionTabs bar className="hidden border-t bg-background touch:flex tv:hidden" />
+              <SectionTabs bar className="hidden bg-background touch:flex tv:hidden" />
             </div>
           </>}
           {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
@@ -419,7 +419,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   // A TV that's off still has its Remote.
   const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
   return <nav data-app-nav aria-label="Main navigation" className={className}>
-    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 border-t-2 border-b-0 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs" : "min-h-11 min-w-11 border-t-0 border-b-2 px-3 text-base")}>
+    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("relative rounded-none border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100", bar ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs after:top-0 after:w-6" : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4")}>
       <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
     </Button>)}
   </nav>;

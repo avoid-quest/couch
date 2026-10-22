@@ -1,10 +1,10 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject, type SyntheticEvent } from "react";
 import { cachedLight, readLight, type Light } from "@/artwork-light";
 import { SessionGateContext } from "@/session/gate-context";
 import { cn } from "@/lib/utils";
 
 /** The light of the artwork at `src`, at once when this page has read it before; null while reading or without any. */
-function useArtworkLight(src: string | undefined) {
+export function useArtworkLight(src: string | undefined) {
   const credentials = useContext(SessionGateContext)?.credentials;
   const usable = !!src && /^(https?|blob):/.test(src);
   const [light, setLight] = useState<Light | null>(() => usable ? cachedLight(src) : null);
@@ -16,6 +16,18 @@ function useArtworkLight(src: string | undefined) {
     return () => { live = false; };
   }, [src, usable]);
   return light;
+}
+
+/**
+ * A tile's or a row's light (Design → Hover), read the first time a pointer or focus reaches it: `--item-light`, the
+ * artwork's first colour, which index.css lets glow under the picture while it is hovered or focused. `thumbnail` is
+ * the address, or finds it in the item (a row's artwork is its caller's node).
+ */
+export function useItemLight(thumbnail?: string | ((item: HTMLElement) => string | undefined)) {
+  const [src, setSrc] = useState<string>();
+  const light = useArtworkLight(src);
+  const ask = (event: SyntheticEvent<HTMLElement>) => setSrc(typeof thumbnail === "function" ? thumbnail(event.currentTarget) : thumbnail);
+  return { onPointerEnter: ask, onFocus: ask, style: light ? { "--item-light": `rgb(${light.a.join(" ")})` } as CSSProperties : undefined };
 }
 
 type Frame = { id: number; light: Light | null; leaving: boolean; still: boolean };
