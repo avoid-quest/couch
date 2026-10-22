@@ -369,7 +369,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage status={status} /> : <>
             {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             {/* Cached routes appear immediately; the player keeps its separate band transition. The page is its own layer,
-                so artwork's light (AmbientLight) lies under its content and over the shell's black. */}
+                so a Stage's room lies under its content and over the shell's black. */}
             <div className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
             {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
                 the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
