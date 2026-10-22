@@ -19,6 +19,18 @@ test("saved Twitch channels are asked about in one query and say whether they ar
   expect(now.get("https://www.twitch.tv/asleep")).toEqual({ live: false, subtitle: "Offline" });
 });
 
+test("more than 100 saved Twitch channels are asked about 100 at a time", async () => {
+  const asked: string[][] = [];
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    const { logins } = JSON.parse(String(init.body)).variables as { logins: string[] };
+    asked.push(logins);
+    return Response.json({ data: { users: logins.map(login => ({ login, stream: null })) } });
+  }) as typeof fetch;
+  const now = await liveTwitchChannels(Array.from({ length: 250 }, (_, index) => channel(`c${index}`)));
+  expect(asked.map(logins => logins.length)).toEqual([100, 100, 50]);
+  expect(now.get("https://www.twitch.tv/c249")).toEqual({ live: false, subtitle: "Offline" });
+});
+
 test("saved items keep what they were saved with when Twitch doesn't answer, and Twitch is asked once meanwhile", async () => {
   let asked = 0;
   const providers = createProviders({ databasePath: ":memory:", liveChannels: async () => { asked++; throw new Error("Unavailable"); } });

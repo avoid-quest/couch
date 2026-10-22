@@ -94,8 +94,8 @@ shape. Without a hero, a remote starts on the board's first row.
   A tile plays its channel; the heading opens every channel (`/live-tv`).
 - **One shelf per source with a home**: the channels and series saved from
   it, in Saved's order, live channels first. Core asks Twitch which saved
-  channels are live as it lists them (one query, at most every 20 s); an
-  offline channel stays, its artwork dimmed, reading "Offline". A page's
+  channels are live as it lists them (a query per 100 channels, at most every
+  20 s); an offline channel stays, its artwork dimmed, reading "Offline". A page's
   section (RaiPlay's "In Diretta", `#block=`) belongs to that page, which the
   heading opens: it stays out of the shelf, and Save isn't offered for one
   (one saved before keeps Saved, to remove it). The heading (the source's
