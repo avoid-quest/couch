@@ -11,7 +11,7 @@ import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { isAudioOnly } from "@/sections/now/player-presentation";
 import { UpNextButton } from "@/sections/now/QueuePanel";
 import { useStationShow } from "@/sections/home/on-air";
-import { queueItemLocation } from "@/detail-navigation";
+import { detailHref, queueItemLocation, useDetailNavigation } from "@/detail-navigation";
 import { useShell } from "./shell-context";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -50,6 +50,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const { credentials } = useShell();
   const [menu, setMenu] = useState(false);
   const gear = useRef<HTMLButtonElement>(null);
+  const detailNavigation = useDetailNavigation();
   const programme = useStationShow();
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
@@ -58,7 +59,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   if (!current) return null;
   const playback = state.playbacks?.find(item => item.id === state.playback);
   const settings = state.preferences ? { entry: current, player, ready: playbackCapabilities(state, connected).transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
-  const detailHref = current.liveSourceId ? undefined : queueItemLocation(current);
+  const details = current.liveSourceId ? undefined : queueItemLocation(current);
   const radio = isRadio(current);
   // The player's words, less the title shown right above them and the plain states the transport already shows.
   // The status line says where it reconnects.
@@ -102,7 +103,12 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
       {/* The player's own Playback menu, for whatever plays, here or on another device. */}
       <Popover open={menu} onOpenChange={setMenu}>
         <PopoverTrigger asChild><Button ref={gear} data-panel="settings" variant="ghost" size="icon-lg" className={desktop} aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
-        {settings && <PlaybackMenu {...settings} trigger={gear.current} tracks={!isAudioOnly(playback, current, player.tracks)} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={() => setMenu(false)}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
+        {settings && <PlaybackMenu {...settings} trigger={gear.current} tracks={!isAudioOnly(playback, current, player.tracks)} details={details && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref(details)} aria-label="Details" onClick={event => {
+          // As the player's own Details: in the section it was opened from, and Back returns to the gear.
+          setMenu(false);
+          if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault(); detailNavigation.open(details, '[data-now-playing] button[aria-label="Playback"]');
+        }}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
       </Popover>
       {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. */}
       <Button data-player-last variant="ghost" size="icon-lg" aria-label="Open player" title="Open player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
