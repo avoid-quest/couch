@@ -20,7 +20,7 @@ import { SearchOnlineResults, providerNames, type SearchHit, type SearchResultSu
 import { Shelf } from "@/components/Shelf";
 import { MediaTile } from "@/components/MediaTile";
 import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
-import { metaLine, withoutUrls } from "@/media-caption";
+import { episodeRow, metaLine, withoutUrls } from "@/media-caption";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
@@ -203,8 +203,8 @@ const hitContext = (hit: SearchHit) => metaLine(...hit.meta.split(" · ").filter
 const hitMeta = (hit: SearchHit, showCollection = true) => metaLine(hitContext(hit), showCollection && hit.collection, !hit.live && !hit.collection && hit.duration != null && formatDuration(hit.duration));
 
 /** Sources stay readable even when a long artist or programme name fills the context line. */
-function HitSource({ hit, showSource = true }: { hit: SearchHit; showSource?: boolean }) {
-  return <MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={hit.context} creator={hit.creator} />;
+function HitSource({ hit, showSource = true, shared }: { hit: SearchHit; showSource?: boolean; shared?: { context: boolean; creator: boolean } }) {
+  return <MediaContext radio={hit.radio?.title !== hit.title ? hit.radio : undefined} source={showSource ? hit.source : undefined} collection={shared?.context ? undefined : hit.context} creator={shared?.creator ? undefined : hit.creator} />;
 }
 
 /**
@@ -282,14 +282,20 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
   // The list takes its majority shape; a word every row shares ("Programme") says nothing, so it goes.
   const shape = majorityShape(hits.map(shapeOf), compact ? "square" : "video");
   const sameKind = hits.length > 1 && hits.every(hit => hit.collection && hit.collection === hits[0]!.collection);
+  // On a page's own list, a link every row shares (the season, the channel) is the page's header or trail already.
+  const onPage = !showSource && hits.length > 1;
+  const same = (urls: (string | undefined)[]) => { const found = urls.filter(Boolean); return onPage && found.length > 1 && found.every(url => url === found[0]); };
+  const shared = { context: same(hits.map(hit => hit.context?.url)), creator: same(hits.map(hit => hit.creator?.url)) };
   return <div className="min-w-0">
     <MediaList aria-label={label}>{hits.map((hit, index) => {
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
       const track = numbered != null;
-      return <MediaRow context={track ? undefined : <HitSource hit={hit} showSource={showSource} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={hit.title}
+      // An episode in its series' own list goes by its name, "S1 E1" leading its meta.
+      const episode = onPage ? episodeRow(hit.title) : { title: hit.title };
+      return <MediaRow context={track ? undefined : <HitSource hit={hit} showSource={showSource} shared={shared} />} key={hit.id} compact={compact} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} source={hitSources(hit)} title={episode.title}
       number={track ? numbered + index : undefined}
-      meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? hitMeta(hit, !sameKind) : metaLine(hitContext(hit), !sameKind && hit.collection)}
+      meta={track ? !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined : compact ? metaLine(episode.lead, hitMeta(hit, !sameKind)) : metaLine(hitContext(hit), !sameKind && hit.collection)}
       description={!compact ? withoutUrls(hit.description) || undefined : undefined} shape={shape} own={shapeOf(hit)}
       art={track ? undefined : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}

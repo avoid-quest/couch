@@ -175,7 +175,9 @@ starts: "Resume S1 E1" while one is part watched, else "Play S1 E2", the next
 unwatched episode of the season last played (the first season otherwise); a
 series of seasons reads that season's episodes for it, and until it can, Play
 plays the first season from its start ("Play S1 E1"). Seasons, episodes and
-nearby items follow as divided rows; an album's tracks are a tracklist of
+nearby items follow as divided rows: an episode goes by its name ("Episodio
+1", "S1 E1, 36:00" on its meta line), and a link every row shares (its season,
+its channel) is left to the header and the trail; an album's tracks are a tracklist of
 number, title and time, with nothing the page already says (cover, artist,
 album). A page ends with its own content.
 

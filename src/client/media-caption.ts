@@ -50,6 +50,14 @@ export const pageTitle = (title: string) => title.replace(channelTab, "");
 /** The page is one of a channel's tabs. */
 export const isChannelTab = (title: string) => channelTab.test(title);
 
+/** An episode in its own series' list: its name ("Episodio 1", or "S1 E1" without one) and "S1 E1" to lead its meta. */
+export function episodeRow(title: string): { title: string; lead?: string } {
+  const episode = episodeTitle.exec(title);
+  if (!episode) return { title };
+  const label = `S${Number(episode[1])} E${Number(episode[2])}`;
+  return episode[3] ? { title: episode[3], lead: label } : { title: label };
+}
+
 /** "S1 E2" for an episode, from its title ("S01E02 · …") or its place in a numbered season; nothing otherwise. */
 export function episodeLabel({ title, collection }: { title: string; collection?: MediaCollection | null }) {
   const episode = episodeTitle.exec(title);

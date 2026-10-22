@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { artShape, fillsFrame, majorityShape } from "../src/client/art-shape";
-import { episodeLabel, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
+import { episodeLabel, episodeRow, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
 
 test("each kind of item has one artwork shape", () => {
   expect(artShape("StreamingCommunity")).toBe("poster");
@@ -30,6 +30,12 @@ test("an episode leads with its series, then its number and name", () => {
   expect(mediaCaption({ title: "S01E01 · Episodio 1", subtitle: "Phony", collection })).toEqual({ title: "Phony", lead: "S1 E1, Episodio 1", subtitle: undefined });
   expect(mediaCaption({ title: "S02E10", collection })).toEqual({ title: "Phony", lead: "S2 E10", subtitle: undefined });
   expect(mediaCaption({ title: "Big Buck Bunny", subtitle: "Blender" })).toEqual({ title: "Big Buck Bunny", subtitle: "Blender" });
+});
+
+test("an episode in its series' own list goes by its name, its number leading the meta", () => {
+  expect(episodeRow("S01E01 · Episodio 1")).toEqual({ title: "Episodio 1", lead: "S1 E1" });
+  expect(episodeRow("S29E02")).toEqual({ title: "S29 E2" });
+  expect(episodeRow("Big Buck Bunny")).toEqual({ title: "Big Buck Bunny" });
 });
 
 test("a meta line has one separator", () => {
