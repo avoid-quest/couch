@@ -1,7 +1,7 @@
 # Live event audio: implementation and measured limits
 
-2026-10-20, measurements captured before committing the implementation, from a
-worktree based on `1dcfb69`. The no-phone
+2026-10-20, baseline and subsequent measurements on a stack rooted at
+`1dcfb69`. Artifact hashes and the original failures are retained. The no-phone
 lab and admission improvements are implemented. **A 50-listener event below
 100 ms is not qualified.** The two-browser software gate is still the prerequisite
 for selecting and exposing an event audio path.
@@ -93,18 +93,110 @@ grid; it did not splice time across the gap. Earlier native attempts exposed
 this packet-assembly defect and an inadequate single-point clock estimate;
 regressions cover both fixes. Their startup/invalid artifacts remain recorded.
 
-These two runs establish an unsupported source-clock condition on this
+Those two initial runs establish an unsupported source-clock condition on that
 PulseAudio/Chromium backend. They establish **no PCM output latency or skew**.
 The smaller 512-frame experiment also exceeded its initial clock estimate and
 stopped. A more stable low-latency backend or a capture path with suitable
 timestamps needs separate measurement; these results do not prove that every
 browser or native route is infeasible. Output-compensation on/off comparisons,
-PCM through N0/N1, and meaningful 10/20 ms output-latency comparisons remain
-unmeasured because source-clock acquisition did not qualify.
+PCM through N0/N1, and meaningful 10/20 ms output-latency comparisons were
+blocked in that initial configuration. The follow-ups below retain those
+failures and change the backend explicitly.
 
-The C3 decision is therefore **blocked capability**, with no production audio
-architecture selected. The narrow WebRTC buffer alternative above did not supply
-a qualifying fallback. The acceptance limits remain unchanged.
+## Backend and network follow-ups
+
+Pulse's default rate was 44.1 kHz despite the browser's 48 kHz request. The lab
+now pins its private Pulse server to 48 kHz and gives the publisher a dedicated
+silent output sink. Chromium's supported `audio-buffer-size` switch then lets
+the fixture request smaller input/output buffers. These are **Electron backend
+controls unavailable to an ordinary phone webpage**. The source's original
+10 ms clock-uncertainty limit remains enforced.
+
+| Configuration | Complete markers | Raw maxima / skew | Outcome |
+| --- | --- | --- | --- |
+| Dedicated source sink, default browser buffers, compensation off | 60/60 each | 109.63 / 109.67 ms; 0.04 ms skew | Latency above target |
+| Receiver buffers 128, source default, compensation off | 60/60 each | 71.73 / 72.60 ms; 0.88 ms skew | Latency above target |
+| Receiver buffers 128, source default, compensation on | 39/60 and 40/60 | 59.29 / 59.25 ms; 0.25 ms skew | Delivery failure |
+| Source and receiver buffers 128, 10 ms packets, 40 ms lead | 60/60 each | 44.33 / 44.23 ms; 0.10 ms skew | Raw short-run targets met; formal qualification incomplete |
+| Same configuration, 30 s | 280/280 each | 41.75 / 41.69 ms; 0.15 ms skew | Raw targets met; 44/280 unmatched activity samples remain unresolved |
+| Same 40 ms lead, 20 ms packets | 0/60 each | Unmeasured | Delivery failure; silence is not a latency sample |
+| TLS-backed N0, 10 ms packets, 40 ms lead | 14/60 and 1/60 | 40.21 / 39.38 ms; no complete skew pairs | Delivery failure despite zero reported renderer underruns |
+| TLS-backed N0, 10 ms packets, 50 ms lead | 60/60 each | 51.15 / 51.81 ms; 0.67 ms skew | Raw targets met; 23 unmatched activity samples on one output |
+| TLS-backed N1, same 50 ms lead | 60/60 and 23/60 | Not qualified | Two graph xruns invalidate timing; incomplete output also retained |
+
+All rows except N1 reported zero graph xruns/overflow. Changing quantum and
+source sink together in the first stable-clock experiment does not isolate
+their individual contribution. Later browser-buffer changes were sequential.
+Known-delay calibration at quantum 128 and 256 separately recovered exactly
+20/80/150 ms; it still does not establish the browser output boundary.
+
+The 50 ms lead is an explicit scheduling experiment within the unchanged
+60 ms acceptance budget. It is not a correction subtracted from measured
+latency. The N0/N1 TLS runs retain actual socket endpoints and increasing PCM
+sender counters on both shaped receiver links; the publisher-to-ingress hop
+stays local. Exact source/page-origin authorization and encryption stay active.
+
+Chromium playback counters advanced and reported zero renderer underruns.
+Review found that the initial coverage assessor mixed rendered and underrun
+durations and did not cover the complete recording tail; those initial
+`measured` coverage verdicts are not qualification evidence. The failed N0
+40 ms run also shows that zero reported renderer underruns do not prove
+continuous delivery: scheduler drops and source gaps need waveform evidence.
+Independent absolute-frame output recording, between-marker identity, and
+critical-thread headroom remain necessary. Unknown capture, acoustic, and
+device-clock behavior remains unknown.
+
+The C3 decision remains **blocked capability**: there is now a promising named
+software configuration, but no qualified production event path. N1, continuous
+delivery, calibration and sustained capacity have not passed the full contract.
+
+## Independent output and continuous-evidence follow-up
+
+The recorder now retains complete framed callbacks with absolute JACK sample
+addresses. A separate input-only witness taps the same source and actual Pulse
+output ports. Exact port connections and browser-to-sink ownership are checked.
+Analysis runs after recording, and stream/diagnostic retention is bounded.
+
+Known-delay calibration with this instrumentation passed: 50 markers per output
+at exactly 20/80/150 ms, exact witness/reference comparisons, and zero xruns or
+overflow. Its first attempt is retained as invalid: a final `jack_lsp` inspection
+registered a temporary client while the witness was armed. Final topology
+inspection now follows capture closure; topology-event checks remain enabled.
+
+Two direct-recorder browser attempts delivered 60/60 markers per output with
+raw maxima around 41.6–41.8 ms, but each reported nonzero xrun callbacks. They
+remain invalid. The successful **128-frame recorder-only FIFO control** delivered
+60/60 markers per output, with raw maxima 45.021/44.833 ms including the inserted
+delay. Each receiver had 288,000 exact sample comparisons at the expected offset
+and 288,000 mismatches under the deliberately wrong zero-offset assumption.
+Graph and witness both reported zero xruns, overflow or topology changes. An
+earlier control with stopped publication and xruns remains retained too.
+
+This establishes that the control can distinguish the sample-address displacement
+at the named software ports. It does not qualify a physical output offset or the
+complete software event gate. Direct zero-offset browser runs still need healthy
+repeatable capture. Formal presentation corrections and worker headroom remain
+unknown; raw latency never subtracts the inserted delay or virtual capture.
+
+The continuous fixture adds unique between-marker PCM and a frozen 5 ms identity
+model. Synthetic faults cover mute, repeat, deletion, insertion, compensating
+edits, resampling, capture defects and stale tails. Qualification requires an
+independent matching route calibration; backend identity now includes hashes of
+the actual loaded JACK/Pulse binaries and modules, collected before browser clock
+acquisition. Writer failures invalidate measurement without double-counting cells.
+
+The new TLS N0/N1 continuous attempts **did not qualify**. Recorded N0 and N1
+attempts had graph xruns, invalidated source clocks and 0/60 accepted markers on
+both outputs; all 288,000 post-warmup frames per receiver remain unresolved. A
+second N0 attempt stopped at the source-clock check before recording. These are
+not continuous-path calibration or network-capacity results. The frozen model
+has not yet been established on a healthy real route.
+
+Corrected renderer counters cover the complete original context interval,
+including the recording tail, with one bounded 1.5-second drain. Even measured
+zero renderer underruns coexisted with absent PCM in these attempts. Waveform,
+source-clock and graph-health checks remain independent. The retained JSON
+includes all nine new attempts and hashes; no failed run was replaced by its retry.
 
 ## Admission and recovery
 
@@ -115,11 +207,14 @@ publisher. This uses synthetic SDP/ICE, not 50 real media decoders. The reconnec
 number also exceeds the plan's 5 s recovery allocation, though this protocol
 fixture does not measure the full audio recovery interval.
 
-100 initial protocol exchanges worked, but simultaneous 100-peer socket
-replacement did not deliver all initial states within 45 s. Repeated Core
-routing/state work during joins and departures is the observed bottleneck;
-raising the signaling allowance does not resolve it. The opt-in stress case is
-explicitly unqualified (`COUCH_LIVE_STRETCH=1`).
+Initially, simultaneous 100-peer socket replacement did not deliver all states
+within 45 s. A scoped follow-up caches playback levels and decorated outputs
+within each synchronous state flush, retaining recipient controls and ordering.
+Two real-hub regressions verify reduced reads and freshness/permissions.
+With the original timeouts unchanged, 50-peer setup/reconnect took 1.972/2.675 s,
+and 100 took 8.531/15.284 s. All replacement sockets received state and peers;
+there were no socket errors. **100 still exceeds the 5 s recovery allocation.**
+These protocol results do not establish real-browser or audio recovery.
 
 Pairing now allows 128 successes/minute, at most two per identity, while retaining
 the global 20-invalid-attempt lockout. Signaling has independent bounded socket
@@ -129,18 +224,17 @@ restricted audience controls remain separate product work.
 
 ## What must happen before an event claim
 
-1. Resolve the measured capture-clock limitation on a suitable backend and
-   establish the two-output PCM result and scheduling comparison. A failed or
+1. Qualify the candidate backend's two-output PCM result and scheduling behavior.
+   The original capture-clock failure has a measured desktop workaround. A failed or
    invalid result blocks production integration; it does not justify weakening
    the gate.
 2. Separately calibrate the actual capture/output path and resolve renderer
    scheduling, output compensation and clock uncertainty. Add speech/music,
    stereo/clipping and continuous dropout measurements.
 3. Complete known-ahead music and 10-client baseline measurements, then run
-   N0/N1 on the candidate path after resolving the capture-clock gate. TLS/WSS
-   network integration is implemented with the scratch certificate and pinned
-   receiver trust; successful integration alone does not qualify delivery.
-4. Address bulk routing/state fanout and measure real browser negotiation.
+   N0/N1 on the candidate path. TLS/WSS network integration is implemented;
+   complete delivery under N1 still needs valid repeat evidence.
+4. Measure real browser negotiation and further bulk recovery where needed.
    Increase rendering workers through 2 → 10 → 25 → 50 with output evidence for
    every listener and measured worker headroom. Qualify 100 separately.
 5. Complete N2–N7 recovery, clock, overload and churn checks, then the three

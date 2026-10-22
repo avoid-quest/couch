@@ -148,6 +148,13 @@ new runs; older result distributions cannot reconstruct these observations.
 contract. Unknown fields remain unknown. A process exit without errors is not
 an audio acceptance pass; inspect the report's individual gates.
 
+`recording.complete` requires successful recorder/witness closure, an exact
+software-boundary comparison through the declared output tail, complete PCM
+coverage, every reference/output marker without duplicates or reordering, and
+no clipping. The CLI exits unsuccessfully for incomplete recordings **after**
+exporting their diagnostics. This prerequisite does not qualify audio quality;
+calibration, continuous identity and headroom remain separate gates.
+
 The raw latency runs from the graph source to the downstream graph output. It
 includes the virtual capture pipeline. No guessed capture or output delay is
 subtracted. The dedicated calibration verifies common-graph sample timing; it
@@ -162,11 +169,58 @@ before ordinary playback runs. Missing markers after warmup are retained as
 failures, never discarded latency samples. The graph also reports deviation
 between its sample progression and JACK's monotonic time.
 
-The native recorder uses a bounded ring buffer and streams PCM to analysis;
-failure snippets are bounded. It keeps no full output recording. Source PCM is
-bounded by the run duration. Markers and quiet tones verify identity and timing;
-they do not establish speech/music fidelity, stereo channel mapping or
-perceptual quality.
+The native recorder and an independent input-only JACK witness retain complete
+framed PCM in `recorder.pcmstream` and `witness.pcmstream`. Each callback carries
+its absolute JACK frame address; both are aligned to the source's declared first
+frame. Analysis runs after capture so correlation work cannot disturb playback.
+Retention is capped at 256 MiB per stream, including headers, with an additional
+decoded copy in memory. This short-run recorder is not the later soak recorder.
+Capture retains its `seconds + 150` wall deadline. Once streams and telemetry
+are drained, owned audio/browser processes close before offline scoring starts.
+Scoring has a separate ten-minute budget, checked synchronously between channel
+blocks; its actual elapsed time is recorded. Include that budget in any outer
+network-wrapper wall limit. This changes neither playback nor acceptance limits.
+
+Replay retained samples with the current evaluators, without starting audio:
+
+```sh
+bun tests/live-audio-replay.ts /path/to/retained-run /path/to/new-replay-directory
+```
+
+The output directory must be new. Replay hashes its inputs and evaluator files,
+rechecks both framed streams and the full declared output tail, and exports a
+separate result plus marker observations. Originals remain untouched. Exit 1
+means incomplete recording; malformed artifacts also fail with diagnostics.
+Replay cannot recover missing process-exit, routing or build provenance, and
+does not turn earlier exploratory recordings into qualification evidence.
+
+The witness taps the same actual Pulse output ports as the recorder, with exact
+topology and browser-to-sink ownership checks. `presentation.json` reports exact
+sample comparisons, health and scope. `COUCH_LAB_RECORDER_DELAY_FRAMES=128` adds
+a private one-quantum FIFO only on the recorder's receiver inputs (quantum 128
+required). The witness remains direct; the expected 128-frame comparison must
+pass and the zero-delay assumption must fail. Latency results retain this added
+delay. Calibration mode instead taps known-delay fixture ports and cannot
+qualify a browser's Pulse output boundary. See the
+[framing and witness contract](../tests/audio-lab/presentation.md).
+
+Route identity includes SHA-256 fingerprints of the executable objects actually
+loaded by JACK, Pulse and the graph, including the selected modules and libjack.
+Hashing finishes before browser clock acquisition. Backend-prefix or module
+overrides therefore cannot silently reuse calibration for different binaries.
+It also fingerprints the built Core, every served frontend asset, the bundled
+worker and (when selected) ingress bundles. A git SHA or package version alone
+does not identify an uncommitted or stale build. Source must still be rebuilt
+before a fresh comparison; hashes identify what ran, not what was intended.
+
+`COUCH_LAB_FIXTURE=continuous` replaces the quiet tone bed with an identifiable
+continuous signal in `ingress` mode. The independent marker analyzer still
+measures latency/skew. The [continuous analyzer](../tests/audio-lab/continuous.md)
+verifies the recorded reference and every output under a frozen timing/error
+model; its bounded diagnostics go to `continuous.ndjson`. Exploratory runs omit
+route calibration and cannot qualify continuous delivery. Overall evidence now
+requires this gate too; passing sparse markers alone is insufficient. Neither
+fixture establishes speech/music fidelity, stereo mapping or perceptual quality.
 
 The activity checker conservatively flags energy outside matched marker spans.
 On a lossy or uncalibrated path, codec/filter tails may cause such activity; it
