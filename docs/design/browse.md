@@ -193,7 +193,8 @@ title and its time at the end of the title's line, without artwork.
 
 **What plays** carries the [level](../design.md#motion) wherever it is listed
 (Home, Search, Saved, Radio, a source's pages): a black square at its
-artwork's bottom-left corner with the bars in white, or, in a tracklist, in
+artwork's bottom-left corner with the bars in white while sound comes out
+(paused, the chip goes, since its flat bars read as a "…"), or, in a tracklist, in
 place of its number. A row or tile knows it by its addresses (`source`: its
 page, or a station's `radio:` source and stream), matched against what the
 looked-at Playback plays.

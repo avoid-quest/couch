@@ -236,7 +236,7 @@ control, 200 ms for what arrives.
   (`Level`). It says the player's state, not the sound's loudness: it moves
   only while what plays is playing, and lies flat while paused, buffering or
   loading, as short thin bars that can't be read as a "…". It sits on the playing item's artwork (a black square in its
-  bottom-left corner) wherever it is listed, in place of a playing track's
+  bottom-left corner, only while sound comes out, since a paused chip read as a "…") wherever it is listed, in place of a playing track's
   number, after the now-playing bar's title while sound comes out, so the title never shifts (never on
   its thumbnail, where a corner chip read as a "…"; paused, the bar's Play
   glyph says so) and beside each device in Where it plays whose sound is in. Its bars move by transforms only. Reduced motion

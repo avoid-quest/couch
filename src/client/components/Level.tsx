@@ -20,9 +20,9 @@ export function useLevel(sources: string | readonly (string | undefined)[] | und
 
 /**
  * The level on a playing item's artwork: a black square in its bottom-left corner with the bars in white, flat like
- * every other surface. `className` sizes it.
+ * every other surface. `className` sizes it. Only while sound comes out: a paused chip's flat bars read as a "…".
  */
 export function ArtLevel({ level, className }: { level: "moving" | "flat" | null; className?: string }) {
-  if (!level) return null;
+  if (level !== "moving") return null;
   return <span data-art-level className={cn("absolute bottom-0 left-0 z-10 grid size-7 place-items-center bg-background text-sm text-foreground", className)}><Level moving={level === "moving"} /></span>;
 }
