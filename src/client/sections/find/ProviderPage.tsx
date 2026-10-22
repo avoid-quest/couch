@@ -9,13 +9,13 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
-import { PageHeader } from "@/components/PageHeader";
 import { FilterBar, FilterInput } from "@/components/ContentFilters";
 import { Button } from "@/components/ui/button";
 import { BrowsePagination } from "@/components/BrowsePagination";
 import { MediaTile } from "@/components/MediaTile";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { HitList, SourceProblems } from "./SearchPanel";
+import { ItemNotFound } from "@/sections/details/ItemPage";
 import { providerNames, SearchOnlineResults, type SearchCollection, type SearchResultSummary } from "./SearchOnlineResults";
 import { DetailHeader } from "@/components/DetailHeader";
 import { artShape, type ArtShape } from "@/art-shape";
@@ -29,10 +29,7 @@ import { movies123Origin } from "../../../shared/movies123";
 
 export function ProviderPage() {
   const state = useOwnSearch(readCollectionSearch);
-  if (!state.provider) return <section data-page="Collection">
-    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Collection unavailable" />
-    <p className="text-muted-foreground">This collection link is incomplete or unsupported.</p>
-  </section>;
+  if (!state.provider) return <section data-page="Collection"><ItemNotFound title="Collection not found" /></section>;
   return <CollectionPage key={`${state.provider}:${state.url}`} provider={state.provider} url={state.url ?? ""} search={state} />;
 }
 

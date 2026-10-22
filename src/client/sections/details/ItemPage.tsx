@@ -65,12 +65,13 @@ export function ItemPage() {
   </section>;
 }
 
-/** An item that is gone: its title, then the ways on, Search (the header's field) and Back. */
-function ItemNotFound() {
+/** An item or collection that is gone, or that its address doesn't name: its title, then the ways on, Search (the
+ * header's field) and Back. */
+export function ItemNotFound({ title = "Item not found" }: { title?: string }) {
   const { focusSearch, section, sectionUrl } = useShell();
   const { history } = useRouter();
   return <>
-    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Item not found" className="mb-6" />
+    <PageHeader breadcrumb={<ContentBreadcrumb />} title={title} className="mb-6" />
     <div data-nav-row className="flex flex-wrap gap-2">
       <Button data-page-first size="lg" onClick={focusSearch}>Search</Button>
       <Button variant="ghost" size="lg" onClick={() => history.canGoBack() ? history.back() : history.push(sectionUrl(section))}>Back</Button>
