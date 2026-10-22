@@ -307,7 +307,7 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
    tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
    before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
    tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page. */
-.bar-glass { border-radius: 1.25rem; background: color-mix(in srgb, var(--tone) 80%, transparent); -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(.5); backdrop-filter: blur(28px) saturate(1.5) brightness(.5); box-shadow: 0 1rem 2.5rem -.75rem rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 9%); transition: --tone .6s var(--ease-out); }
+.bar-glass { border-radius: 1.25rem; background: color-mix(in srgb, var(--tone) 80%, transparent); -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(.5); backdrop-filter: blur(28px) saturate(1.5) brightness(.5); box-shadow: var(--float-shadow); transition: --tone .6s var(--ease-out); }
 @media (max-width: 39.99rem) { .bar-glass { border-radius: 1rem; } }
 @media (prefers-reduced-motion: reduce) { .bar-glass { transition: none; } }
 /* The bar's timeline runs along its top edge between its corners: a rounded line whose played part glows a little,
@@ -453,6 +453,8 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 :root { --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 /* What stands in the room: an object casts a soft, deep shadow onto it, as a sleeve on a shelf; a mark casts none. */
 :root { --object-shadow: 0 2rem 4rem -1rem rgb(0 0 0 / 72%), 0 .5rem 1.25rem rgb(0 0 0 / 38%); }
+/* What floats over the page (the bar, toasts): a deep shadow under it and a 1px highlight along its top. */
+:root { --float-shadow: 0 1rem 2.5rem -.75rem rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 9%); }
 
 /* Display type (docs/design.md, Type): Mona Sans at its normal width for every title, so short and long read as one
    voice. Length (titleLength in Stage.tsx) steps the size and, a little, the weight down: a long title wraps to more

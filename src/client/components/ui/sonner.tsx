@@ -37,11 +37,13 @@ const Toaster = ({ tvPresentation = false, ...props }: ToasterProps & { tvPresen
         toastOptions={{
           unstyled: true,
           classNames: {
-            // The same flat left rule as Alert; it hugs its message (index.css), which wraps, with the verb beside it.
-            toast: "flex items-center gap-4 border-l-2 border-foreground/40 bg-background px-4 py-3 text-sm has-[[data-button]]:pr-3 text-foreground shadow-none data-[type=error]:border-destructive",
+            // Floats like the bar: its solid surface and shadow, no backdrop filter (docs/design.md, Glass). It hugs its
+            // message (index.css), which wraps, with the verb beside it as a small capsule; an error leads with its icon.
+            toast: "flex items-center gap-3 rounded-xl bg-bar py-3 pr-4 pl-4 text-sm text-foreground shadow-(--float-shadow) has-[[data-button]]:py-2 has-[[data-button]]:pr-2 has-[[data-icon]]:pl-3",
+            icon: "flex shrink-0",
             content: "min-w-0",
             title: "font-medium leading-snug wrap-anywhere",
-            actionButton: buttonVariants(),
+            actionButton: buttonVariants({ size: "sm" }),
           },
         }}
         {...props}

@@ -111,7 +111,8 @@ lies over it at 80% (`--bar`, `#1c1c1e`, without one). Over pure white behind
 it, its white ink keeps 10.4:1 and its muted ink (white 80%) 7.3:1 for every
 hue, measured. The tone cross-fades over 600 ms when what plays changes. It is
 the one backdrop filter on a page (Up next, summoned over the player's room,
-is the other, on the player).
+is the other, on the player). Toasts float in the same family, on its solid
+surface and shadow (`--float-shadow`) without the filter.
 
 ## Stage
 
@@ -401,8 +402,10 @@ its results hold, as it finds them).
   and at most one action; a repeat updates the one showing. Routine actions,
   and playback activity from other devices, stay quiet. A new item or
   controlled device retires old Queue and Undo feedback; switching Couch
-  clears all. Toasts are flat rows with Alert's left rule that hug their words,
-  the action beside them, two at most: top right below the header (or the
+  clears all. Toasts float like the bar ([Glass](#glass)): its solid
+  surface (`bar`, `rounded-xl`) and shadow, without a backdrop filter. They hug
+  their words, an error leading with its red icon and the action beside them
+  as a small white capsule, two at most: top right below the header (or the
   player's top band), and on phones at the bottom, just above the footer or the
   player's band, so they never cover the artwork at the top. A toast never takes focus:
   Up from the top of the page reaches the newest one's action, and any other
