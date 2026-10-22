@@ -185,10 +185,10 @@ export function HomePage() {
     </HomeHero> : null;
 
   // A list takes its items' majority shape; an item of another shape is contained in that frame.
-  const continueShape = majorityShape(continued.map(historyShape));
+  const continueShape = majorityShape(continued.slice(0, boardLength).map(historyShape));
   const upNextShape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
   const laterShape = majorityShape(savedMedia.slice(0, boardLength).map(savedShape));
-  const recentShape = majorityShape(recent.map(historyShape));
+  const recentShape = majorityShape(recent.slice(0, boardLength).map(historyShape));
   // With no Stage, a remote starts on the board's first row.
   const firstBoard = !hero && onHome.find(row => boardRows.includes(row.id) && filled[row.id])?.id;
   const lists: Partial<Record<HomeRowId, ReactNode>> = {
