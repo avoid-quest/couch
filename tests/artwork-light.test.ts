@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { atLuminance, clearEdges, contrast, deepPeak, haze, lightFrom, luminance, peak, pickLight, readLight, roomPeak, tonePeak, type Rgb } from "../src/client/artwork-light";
+import { atLuminance, clearEdges, contrast, deepPeak, haze, lightFrom, luminance, peak, pickLight, readArt, roomPeak, tonePeak, type Rgb } from "../src/client/artwork-light";
 
 // A 16×16 read as getImageData gives it: RGBA, one pixel after another.
 const pixels = (...parts: [Rgb, number][]) => new Uint8ClampedArray(parts.flatMap(([[r, g, b], count]) => Array.from({ length: count }, () => [r, g, b, 255]).flat()));
@@ -68,9 +68,9 @@ test("a read that failed isn't kept as no light: the next showing reads the pict
   const blue = Array.from({ length: 16 * 16 }, () => [30, 60, 220, 255]).flat();
   globals.document = { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: blue }) }) }) };
   try {
-    expect(await readLight(src)).toBeNull();
+    expect(await readArt(src)).toBeNull();
     reachable = true;
-    expect((await readLight(src))?.key).toBe(src);
+    expect((await readArt(src))?.light?.key).toBe(src);
   } finally { Object.assign(globals, saved); }
 });
 

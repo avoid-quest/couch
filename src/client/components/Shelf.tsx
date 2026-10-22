@@ -8,9 +8,9 @@ import { detailHref, useDetailNavigation } from "@/detail-navigation";
  * the focus outline, and on the TV the lifted tile, clear of the clip. A heading with `href` opens all of what the shelf samples (a source's home,
  * every station, Saved), as one focus stop between it and the shelf above.
  */
-export function Shelf({ title, label = title, time, href, loading = false, children }: { title: string; label?: string; time?: string; href?: string; loading?: boolean; children: ReactNode }) {
+export function Shelf({ title, label = title, href, loading = false, children }: { title: string; label?: string; href?: string; loading?: boolean; children: ReactNode }) {
   return <section aria-label={title} aria-busy={loading || undefined} className="grid min-w-0 gap-2">
-    <ShelfHeading title={title} href={href} time={time} loading={loading} />
+    <ShelfHeading title={title} href={href} loading={loading} />
     {/* It scrolls by wheel, trackpad, scrollbar or focus, out to the window's edges, so a long shelf runs off the right
         of the screen rather than stopping at the gutter; its padding holds a lit tile's glow, its ring and, on the TV, the
         lifted tile, clear of the clip. The TV, which moves by focus, hides the scrollbar. */}

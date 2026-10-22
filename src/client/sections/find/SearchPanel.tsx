@@ -73,8 +73,7 @@ const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "Anime
 const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List" || hit.source === "RaiPlay" && !!hit.collection ? "films"
   : hit.kind === "Radio" ? "radio" : hit.kind === "Live" ? "live" : hit.kind === "Music" ? "music" : hit.collection ? "channels" : "videos";
 /** A hit's own artwork shape (art-shape.ts). */
-export const hitShape = (hit: SearchHit): ArtShape => artShape(hit.source, hit.kind === "Radio" ? "station" : hit.collection === "Channel" ? "channel" : hit.collection ? "collection" : hit.context ? "episode" : "media");
-const shapeOf = hitShape;
+const shapeOf = (hit: SearchHit): ArtShape => artShape(hit.source, hit.kind === "Radio" ? "station" : hit.collection === "Channel" ? "channel" : hit.collection ? "collection" : hit.context ? "episode" : "media");
 // One kind's tiles wrap as ProviderPage's posters do, each as wide as its column.
 const gridColumns = { poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]", square: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]", round: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]", video: "grid-cols-[repeat(auto-fill,minmax(14rem,1fr))]" } as const satisfies Record<ArtShape, string>;
 const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]", round: "[--tile-art:100cqi]", video: "[--tile-art:56.25cqi]" } as const satisfies Record<ArtShape, string>;

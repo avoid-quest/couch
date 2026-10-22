@@ -18,8 +18,7 @@ const snapshot = () => now;
 export function useDurationClock() { return useSyncExternalStore(subscribe, snapshot, snapshot); }
 
 /** Runtime is metadata, and live media has none. Only an item already started needs a progress bar. */
-export function DurationBar({ duration, position = 0, live = false, collection = false }: { duration?: number | null; position?: number; live?: boolean; collection?: boolean }) {
-  if (collection) return <span className="block text-sm text-muted-foreground">Channel</span>;
+export function DurationBar({ duration, position = 0, live = false }: { duration?: number | null; position?: number; live?: boolean }) {
   if (live || duration == null) return null;
   const left = Math.max(0, duration - position);
   const started = position > 0 && duration > 0;

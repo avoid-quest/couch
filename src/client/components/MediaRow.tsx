@@ -42,8 +42,6 @@ type Props = {
   primary?: { label: string; onClick: () => void; disabled?: boolean; href?: string };
   /** The row's other verbs (Queue, Save, Play on, Remove…), in its menu: its "…", right-click, a long press or a held OK. */
   menu?: MenuAction[];
-  /** The page the row opens holds every verb in its menu, so the row shows no "…"; its shortcuts still open the menu. */
-  menuOnPage?: boolean;
   /** Controls shown on the row itself, for rows with no main verb (a list's entries): revealed on hover or focus in
    * wide lists; in narrow lists (container queries on MediaList) and on touch they sit under the title. */
   actions?: ReactNode;
@@ -61,7 +59,7 @@ type Props = {
  * Media row: thumbnail, title, meta and the length bar, as one target whose press does its main verb; its other
  * verbs wait in its menu, behind a "…" at its end, and on its page. Used by Search, Saved, Home's board and its own pages; Up next has its own compact rows.
  */
-export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta, related, children, description, primary, menu = [], menuOnPage = false, actions, compact = false, pageFirst = false, number, source, className, ...props }: Props) {
+export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta, related, children, description, primary, menu = [], actions, compact = false, pageFirst = false, number, source, className, ...props }: Props) {
   const options = useItemMenu([...menu, ...useRelatedMenu(related)]);
   const level = useLevel(source);
   const light = useItemLight(item => item.querySelector<HTMLImageElement>("[data-row-art] img")?.currentSrc || undefined);
@@ -94,7 +92,7 @@ export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta
           {primary.href && !primary.disabled ? <a href={detailHref(primary.href)}>{body}</a> : body}
         </Button> : <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-caption px-2.5 py-1.5">{body}</div>}
         </div>
-        <ItemMenu data-row-menu menu={options} title={title} hidden={menuOnPage} className="mt-1.5" />
+        <ItemMenu data-row-menu menu={options} title={title} className="mt-1.5" />
       </div>
       {actions && <ItemActions className={compact ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center" : cn("flex-wrap gap-0.5 motion-safe:transition-opacity @3xl:row-start-1 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 @3xl:col-start-auto")}>{actions}</ItemActions>}
     </li>

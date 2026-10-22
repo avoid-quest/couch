@@ -92,8 +92,6 @@ export function clearEdges(pixels: ArrayLike<number>, side = 16) {
 
 const size = 16;
 const cache = new Map<string, Art>();
-/** The light already read for an address, if any. */
-export const cachedLight = (src: string) => cache.get(src)?.light ?? null;
 /** What was already read of a picture, if it was. */
 export const cachedArt = (src: string) => cache.get(src) ?? null;
 const pending = new Map<string, Promise<Art | null>>();
@@ -103,13 +101,10 @@ const picture = async (src: string, credentials: ApiCredentials | null | undefin
   (src.startsWith("blob:") || !credentials ? await fetch(src, { referrerPolicy: "no-referrer" }) : await apiFetch(credentials, `/api/artwork?${new URLSearchParams({ url: src })}`)).blob();
 
 /**
- * One read per address, apart from the shown image, so the picture on screen is never changed or broken by it. A
- * picture's answer is kept, light or none; a read that failed (Core unreachable, a host that timed out) isn't, so the
- * next time the artwork shows it is read again.
+ * The picture's light and edges: one read per address, apart from the shown image, so the picture on screen is never
+ * changed or broken by it. A picture's answer is kept, light or none; a read that failed (Core unreachable, a host that
+ * timed out) isn't, so the next time the artwork shows it is read again.
  */
-export const readLight = (src: string, credentials?: ApiCredentials | null): Promise<Light | null> => readArt(src, credentials).then(art => art?.light ?? null);
-
-/** The picture's light and edges; null while Core can't read it (it is read again next time). */
 export function readArt(src: string, credentials?: ApiCredentials | null): Promise<Art | null> {
   if (cache.has(src)) return Promise.resolve(cache.get(src)!);
   let read = pending.get(src);

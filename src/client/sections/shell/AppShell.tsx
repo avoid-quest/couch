@@ -55,7 +55,7 @@ function subscribeReducedMotion(onChange: () => void) {
 }
 
 export type ShellValue = ReturnType<typeof useShellValue>;
-export { useShell, useOptionalShell } from "./shell-context";
+export { useShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {

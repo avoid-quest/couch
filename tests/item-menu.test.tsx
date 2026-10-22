@@ -43,7 +43,7 @@ test("a row or tile with verbs shows one \"…\", and its primary target is mark
   expect(tile({ menu: queue })).toContain("data-item-menu");
 });
 
-test("no \"…\" without verbs, for Play on alone with no other device, or on a row whose page holds its verbs", () => {
+test("no \"…\" without verbs, or for Play on alone with no other device", () => {
   const playOn = [{ label: "Play on", playOn: () => {} }];
   for (const html of [row({}), tile({}), row({ menu: playOn }), tile({ menu: playOn })]) {
     expect(options(html)).toEqual([]);
@@ -54,8 +54,4 @@ test("no \"…\" without verbs, for Play on alone with no other device, or on a 
     expect(options(row({ menu: playOn }))).toHaveLength(1);
     expect(options(tile({ menu: playOn }))).toHaveLength(1);
   } finally { devices = devices.filter(device => device !== mac); }
-  // Its menu still opens from the row (right-click, a long press, a held OK), anchored to the row.
-  const onPage = row({ menu: [{ label: "Queue", run: () => {} }], menuOnPage: true });
-  expect(options(onPage)).toEqual([]);
-  expect(onPage).toContain("data-item-menu");
 });
