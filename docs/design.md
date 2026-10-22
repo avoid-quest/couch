@@ -75,6 +75,10 @@ the picture's strongest hue and a second one at least 60° from it (a picture
 with hardly any colour gives its grey; black and white give none), and learns
 whether the picture's edge is see-through (a logo on nothing).
 
+Devices reading the same new picture share Core's download as well as its
+completed cache. Leaving a page cancels only that reader; Core cancels the
+download when its last reader leaves. Failed reads can be retried immediately.
+
 Each colour is set to a luminance, keeping its hue, so ink keeps 7:1 over it:
 
 | Colour | Luminance at most | Use |

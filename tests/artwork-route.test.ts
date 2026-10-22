@@ -76,3 +76,53 @@ test("a kept picture is a copy of its own, not a view of the buffer it was read 
   const kept = cache.get("a")!.bytes;
   expect([kept.byteLength, kept.buffer.byteLength]).toEqual([3, 3]);
 });
+
+test("devices reading the same cold artwork share its download and keep separate response bodies", async () => {
+  const cache = createArtworkCache();
+  let fetches = 0;
+  let finish!: () => void;
+  const ready = new Promise<void>(resolve => { finish = resolve; });
+  const fetcher = (async () => { fetches++; await ready; return picture("image/png")("https://img.example/shared.png"); }) as unknown as typeof fetch;
+  const reads = Array.from({ length: 12 }, () => artworkResponse(ask("https://img.example/shared.png"), paired, fetcher, cache));
+  finish();
+  const responses = await Promise.all(reads);
+  expect(fetches).toBe(1);
+  for (const response of responses) expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1, 2, 3]);
+});
+
+test("leaving one page does not cancel another device's artwork read", async () => {
+  const cache = createArtworkCache(), leaving = new AbortController();
+  let fetches = 0;
+  let upstream!: AbortSignal;
+  let finish!: () => void;
+  const ready = new Promise<void>(resolve => { finish = resolve; });
+  const fetcher = (async (_input, init) => {
+    fetches++; upstream = init!.signal!;
+    await ready;
+    upstream.throwIfAborted();
+    return picture("image/png")("https://img.example/shared.png");
+  }) as typeof fetch;
+  const first = artworkResponse(ask("https://img.example/shared.png", { signal: leaving.signal }), paired, fetcher, cache);
+  const second = artworkResponse(ask("https://img.example/shared.png"), paired, fetcher, cache);
+  leaving.abort();
+  finish();
+  expect((await first).status).toBe(502);
+  expect((await second).status).toBe(200);
+  expect(upstream.aborted).toBe(false);
+  expect(fetches).toBe(1);
+});
+
+test("the last artwork reader cancels its download and a new reader can retry immediately", async () => {
+  const cache = createArtworkCache(), leaving = new AbortController();
+  let upstream!: AbortSignal;
+  const fetcher = (async (_input, init) => {
+    upstream = init!.signal!;
+    await new Promise((_, reject) => upstream.addEventListener("abort", () => reject(upstream.reason), { once: true }));
+    return picture("image/png")("https://img.example/retry.png");
+  }) as typeof fetch;
+  const first = artworkResponse(ask("https://img.example/retry.png", { signal: leaving.signal }), paired, fetcher, cache);
+  leaving.abort();
+  expect((await first).status).toBe(502);
+  expect(upstream.aborted).toBe(true);
+  expect((await artworkResponse(ask("https://img.example/retry.png"), paired, picture("image/png"), cache)).status).toBe(200);
+});
