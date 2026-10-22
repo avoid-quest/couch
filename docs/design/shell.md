@@ -222,4 +222,4 @@ description, the address then Change, which opens the Couch switch; a TV picks
 its Couch in Settings once paired. A TV shows a code and a QR instead, which an
 admin's phone approves ([TV](tv.md#pairing)). The pairing dialog warns about Couch's self-signed
 certificate and closes when a device pairs, with a toast naming it ("Phone
-paired · admin").
+paired as admin").

@@ -34,8 +34,8 @@ export function DisplaySettings({ credentials, connected, title }: { credentials
       {state?.outputs.map(output => (
         <SettingsRow key={output.id} label={output.name} description={[
           state.current === output.id && "Current", state.saved === output.id && "Saved",
-          !output.connected ? "Disconnected" : !output.width ? "Off in desktop settings" : `${output.width} × ${output.height}${output.refresh === null ? "" : ` · ${output.refresh} Hz`}`,
-        ].filter(Boolean).join(" · ")}>
+          !output.connected ? "Disconnected" : !output.width ? "Off in desktop settings" : `${output.width} × ${output.height}${output.refresh === null ? "" : `, ${output.refresh} Hz`}`,
+        ].filter(Boolean).join(", ")}>
           <Button variant="outline" aria-label={`Try ${output.name}`} disabled={!connected || pending || !!state.preview || !output.connected || !output.width} onClick={() => change("preview", { output: output.id })}>Try</Button>
         </SettingsRow>
       ))}

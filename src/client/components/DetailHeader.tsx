@@ -6,7 +6,7 @@ import { DurationBar } from "@/components/DurationBar";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { artAspect, detailArt, type ArtShape } from "@/art-shape";
-import { withoutUrls } from "@/media-caption";
+import { metaLine, withoutUrls } from "@/media-caption";
 import { cn } from "@/lib/utils";
 import { AmbientLight } from "@/components/AmbientLight";
 
@@ -73,7 +73,7 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
     </div>}
     <div className="grid min-w-0 content-start gap-2">
       <h1 tabIndex={-1} className="text-3xl leading-tight md:text-4xl font-semibold tracking-tight break-words outline-none">{title}</h1>
-      {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
+      {meta && <p className="text-sm text-muted-foreground">{metaLine(meta)}</p>}
       {context}
       {duration != null && <DurationBar duration={duration} position={position} />}
       {verbs && <div data-nav-row className="mt-4 flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full">

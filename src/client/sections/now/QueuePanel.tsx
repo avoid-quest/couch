@@ -1,3 +1,4 @@
+import { metaLine } from "@/media-caption";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { queueItemLocation } from "@/detail-navigation";
@@ -160,11 +161,11 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {upNext.length || autoplayUpcoming.length || autoplayFinding ? <div className="grid gap-2">
       {/* The list's status line, with the verb that saves it. */}
-      {upNext.length > 0 && <><div className="flex items-center justify-between gap-4"><h3 className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
+      {upNext.length > 0 && <><div className="flex items-center justify-between gap-4"><h3 className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : `, until ${formatEndTime(doneIn)}`}</h3>
         <DialogTrigger asChild><Button variant="ghost" className="-mr-2.5" disabled={!connected} onClick={() => { keep.reset(); setListName(""); }}>Save as list</Button></DialogTrigger></div>
       <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">{upNext.map((entry, index) => {
         const { time, length } = board(entry);
-        const meta = [length, entry.addedBy && entry.addedBy.deviceId !== deviceId() && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
+        const meta = [length, entry.addedBy && entry.addedBy.deviceId !== deviceId() && `added by ${entry.addedBy.name}`].filter(Boolean).join(", ");
         return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} time={time} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           verbs={{ credentials, entry, index: cursorIndex + 1 + index, queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />;
       })}</ul></>}
@@ -189,7 +190,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
 function QueueRow({ entry, meta, time, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; time?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
   const actions = useQueueActions(verbs);
   const options = useItemMenu(verbs ? actions : browserActions(queuePageUrl(entry)));
-  meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
+  meta = metaLine(entry.subtitle, meta);
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className="line-clamp-2 text-base font-medium break-words">{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 flex-wrap items-center gap-2 py-3", options.item.className)}>
     {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}${time ? ` at ${time}` : ""}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}

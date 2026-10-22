@@ -138,7 +138,7 @@ describe("exceptions", () => {
     const live = (output: Output) => row(session({ outputs: [output], film: { liveSourceId: "s" }, liveSources: [screen] }), "tv");
     expect(live(both("tv", { buffered: true }))).toMatchObject({ status: "Behind", failed: false });
     for (const buffered of [true, undefined]) expect(live(both("tv", { buffered, error: "The encoder stopped." }))).toMatchObject({ status: "Can't play: The encoder stopped.", failed: true });
-    expect(picker(session({ outputs: [both("tv", { buffered: true })], film: { liveSourceId: "s" }, liveSources: [screen] }), { here: "tv" }).rows[0]!.status).toBe("This device · Behind");
+    expect(picker(session({ outputs: [both("tv", { buffered: true })], film: { liveSourceId: "s" }, liveSources: [screen] }), { here: "tv" }).rows[0]!.status).toBe("This device, Behind");
   });
 
   test("a device busy elsewhere names what it plays there before you move it", () => {
@@ -149,7 +149,7 @@ describe("exceptions", () => {
 
   test("this device says so", () => {
     expect(row(session(), here).status).toBe("This device");
-    expect(row(session({ devices: [device(here), device("mac")], film: { liveSourceId: "s" }, liveSources: [{ ...screen, deviceId: here }] }), here).status).toBe("This device · Sharing this source");
+    expect(row(session({ devices: [device(here), device("mac")], film: { liveSourceId: "s" }, liveSources: [{ ...screen, deviceId: here }] }), here).status).toBe("This device, Sharing this source");
   });
 
   test("rows name only devices, never the Couch, a playback or a group", () => {
@@ -178,7 +178,7 @@ describe("consent", () => {
 
   test("this device keeps its own controls while viewing another playback, its private output included", () => {
     const own = session({ devices: [device(here, { sharing: { audio: false, video: false } }), device("tv")], outputs: [both("tv")], others: [{ id: "mine", title: "Mine", status: "playing", outputs: [both(here, { local: true })] }] });
-    expect(row(own, here)).toMatchObject({ mine: true, status: "This device · Playing Mine", picture: { enabled: true }, sound: { enabled: true }, move: { enabled: true } });
+    expect(row(own, here)).toMatchObject({ mine: true, status: "This device, Playing Mine", picture: { enabled: true }, sound: { enabled: true }, move: { enabled: true } });
   });
 
   test("a device that doesn't share its speakers offers others no fader, and one without a shared screen offers no Picture", () => {

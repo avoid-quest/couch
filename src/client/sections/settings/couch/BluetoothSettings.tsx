@@ -71,7 +71,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       {state.devices.map(device => {
         const outputs = sound.data?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
         const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);
-        const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(" · ");
+        const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(", ");
         return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}</>}>
           <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
           {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}

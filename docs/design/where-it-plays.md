@@ -31,7 +31,7 @@ a Sheet's first line sticks on the Sheet's ground. Its Sheet is unchanged
 
 ```
 [mute] ──────────────●──  72
-Picture 1 · Sound 2
+Picture 1, Sound 2
 Living room TV      ▣  ♪  ───●───  40  …
 Francesco's phone   ▢  ♪  ──────●  60  …
 This device
@@ -44,8 +44,8 @@ Offline: Garden, Anna's tablet
 - **First line:** the Playback's [Volume](#volume), always. A shared source
   waiting for receivers says "Choose where {title} plays" instead.
 - **[In sync](#in-sync)** where it applies.
-- **Counts:** one muted line, zeros left out: Picture n · Sound n · In sync n ·
-  Behind n · Can't play n · Offline n, from what Core already sends.
+- **Counts:** one muted line, zeros left out: Picture n, Sound n, In sync n,
+  Behind n, Can't play n, Offline n, from what Core already sends.
 - **Rows:** the devices playing this, then the rest after a plain hairline.
   Offline devices outside the Playback fold into one muted line that names
   each once, counting devices that share a name ("Offline: A, Living room
@@ -94,7 +94,7 @@ private output plays in the Playback, or such a publisher waits to return.
 
 **What it says,** under the name, only when it matters:
 
-- "This device", muted, on this device's row, joined by " · " to any other;
+- "This device", muted, on this device's row, joined by a comma to any other;
 - "Behind" while a live input reaches it through Couch's buffered stream;
 - "Can't play: {Core's reason}" in destructive red when that stream failed;
 - "Muted" while its sound plays here muted (muted elsewhere: turning its

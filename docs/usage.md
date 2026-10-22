@@ -90,7 +90,7 @@ a Mac.
    the browser warns that the connection isn't private: continue to the page.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
    device you pair becomes the admin. The dialog closes when the phone pairs,
-   and a message names it, ending in "· admin" for the first.
+   and a message names it, ending in "as admin" for the first.
 3. To pair a TV, open Couch on it: it shows a code and a QR code. Scan the QR
    with a phone that's paired as an admin (or open the address the TV shows and
    type the code), check the code matches, and choose **Pair**. The TV pairs by

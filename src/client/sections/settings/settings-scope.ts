@@ -41,6 +41,6 @@ export function useSettingsGroups(): SettingsGroup[] {
   const connection = status === "connected" ? "Connected" : ["connecting", "syncing", "reconnecting"].includes(status) ? "Reconnecting" : "Offline";
   return [
     { title: "This device", subtitle: device, pages: pages("device") },
-    { title: couch, subtitle: administrator ? `${connection} · admin` : connection, connected: status === "connected", pages: pages("couch") },
+    { title: couch, subtitle: administrator ? `${connection}, admin` : connection, connected: status === "connected", pages: pages("couch") },
   ];
 }

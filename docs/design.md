@@ -275,7 +275,9 @@ opener. A verb that removes its item leaves focus on the neighbour.
 
 ## Copy
 
-Sentence case, short, no filler: say what happened and what to do next.
+Sentence case, short, no filler: say what happened and what to do next. A
+line of parts (a caption, Details' meta, a device's status, Where it plays'
+counts) joins them with commas, never middle dots (`metaLine`).
 Shared strings live in `src/client/copy.ts` (`Try again`, `Only an admin can
 change this.`, `Offline. Reconnecting to {name}…`). Couch's own words: a
 device's name (or "This device"), Where it plays, Move here, Play on {name},

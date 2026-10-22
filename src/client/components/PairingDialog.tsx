@@ -15,7 +15,7 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
     if (!open || !state?.devices) { before.current = null; return; }
     const paired = before.current && state.devices.find(device => !before.current!.ids.has(device.id));
     if (paired) {
-      notice(`${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " · admin" : ""}`);
+      notice(`${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " as admin" : ""}`);
       onOpenChange(false);
     }
     before.current = { ids: new Set(state.devices.map(device => device.id)), admin: state.administratorClaimed };

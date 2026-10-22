@@ -42,7 +42,7 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
   const queries = [iptv, ...(canManage ? [radio, streaming] : [])];
   const failed = queries.filter(query => query.isError);
   const status: Record<(typeof sourcePages)[number], string | undefined> = {
-    iptv: iptv.data && (iptv.data.sources.length ? `${plural(iptv.data.sources.length, "list")} · ${plural(iptv.data.sources.reduce((total, item) => total + item.channelCount, 0), "channel")}` : "Not set up"),
+    iptv: iptv.data && (iptv.data.sources.length ? `${plural(iptv.data.sources.length, "list")}, ${plural(iptv.data.sources.reduce((total, item) => total + item.channelCount, 0), "channel")}` : "Not set up"),
     radio: !canManage ? "Admin only" : radioSources && (radioSources.length ? plural(radioSources.length, "playlist") : "Built in only"),
     "streaming-community": !canManage ? "Admin only" : streaming.data?.origin,
   };

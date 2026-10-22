@@ -119,7 +119,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     const locked = !picture.enabled && !sound.enabled && (picture.reason === "Private" || sound.reason === "Private") && "Private";
     const status = current && offline || sharing || hostOnly && lock || (current?.error ? `Can't play: ${current.error}` : current?.buffered ? "Behind" : locked || (soundOn && device.muted ? "Muted" : busy ? `Playing ${busy.title ?? "something else"}` : ""));
     return {
-      device, output: current, mine, status: mine ? ["This device", status].filter(Boolean).join(" · ") : status, failed: !!current?.error,
+      device, output: current, mine, status: mine ? ["This device", status].filter(Boolean).join(", ") : status, failed: !!current?.error,
       picture, sound,
       level: { value: soundOn ? device.volume : 0, sound: soundOn, ...control(soundReason) },
       move: alone ? undefined : control(lock || sharing || (!audio && !video || privateOutput && !mine || privately.some(item => item.deviceId !== device.id)) && "Private"),

@@ -31,7 +31,7 @@ const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}
 const allGroups = "\u0000";
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 /** What's on a channel now and next, then its group where the list mixes them. */
-export const channelMeta = (channel: GuideRow, group = "") => [channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(" · ");
+export const channelMeta = (channel: GuideRow, group = "") => [channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(", ");
 
 /** A channel has no page: its press plays it, and its menu holds Play on and Queue. */
 export function useChannelActions() {

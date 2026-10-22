@@ -41,7 +41,7 @@ test("Settings names its two owners, and locks what a controller can't change", 
     { title: "This device", subtitle: "Phone", pages: ["device", "home"] },
     { title: "Living room", subtitle: "Connected", pages: ["devices", "playback", "sources", "sound!", "display!", "updates!"] },
   ]);
-  expect(rail("administrator", {}, "reconnecting")[1]).toEqual({ title: "Living room", subtitle: "Reconnecting · admin", pages: ["devices", "playback", "sources"] });
+  expect(rail("administrator", {}, "reconnecting")[1]).toEqual({ title: "Living room", subtitle: "Reconnecting, admin", pages: ["devices", "playback", "sources"] });
   expect(rail("controller", {}, "server-unavailable")[1]?.subtitle).toBe("Offline");
 });
 

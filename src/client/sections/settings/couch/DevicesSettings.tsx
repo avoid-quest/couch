@@ -86,7 +86,7 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
           {devices.data.map(device => (
             <SettingsRow key={device.id} data-device={device.id} data-stale={stale.includes(device) || undefined}
               label={<DeviceName kind={kind(device)} online={device.role === "host" || isOnline(device)}>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this device)</span>}</DeviceName>}
-              description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", isOnline(device) ? "Online" : device.lastSeenAt ? `Seen ${formatSeen(device.lastSeenAt)}` : "Never seen", stale.includes(device) && "Older duplicate"].filter(Boolean).join(" · ")}>
+              description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", isOnline(device) ? "Online" : device.lastSeenAt ? `Seen ${formatSeen(device.lastSeenAt)}` : "Never seen", stale.includes(device) && "Older duplicate"].filter(Boolean).join(", ")}>
               {!host && manager && device.role === "host" && <RenameCouch credentials={credentials} connected={connected} name={device.name} onRenamed={refreshDevices} />}
               {manager && device.role !== "host" && device.id !== selfId && <>
                 {/* A left-behind duplicate offers only Forget. */}

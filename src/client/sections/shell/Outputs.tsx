@@ -122,7 +122,7 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
         ? <ToggleGroup data-nav-row type="single" aria-label="Show" spacing={1} value={filter ?? ""} onValueChange={next => onFilter?.(next ? next as Filter : null)} className="-ml-2 max-w-full flex-wrap">
           {summary.map(item => <ToggleGroupItem key={item.filter} value={item.filter} className="rounded-none border-b-2 border-transparent px-2 font-normal text-muted-foreground data-[state=on]:border-foreground data-[state=on]:bg-transparent data-[state=on]:text-foreground">{item.label} <span className="tabular-nums">{item.count}</span></ToggleGroupItem>)}
         </ToggleGroup>
-        : <p data-mixer-summary className="text-sm text-muted-foreground tabular-nums">{summary.map(item => `${item.label} ${item.count}`).join(" · ")}</p>)}
+        : <p data-mixer-summary className="text-sm text-muted-foreground tabular-nums">{summary.map(item => `${item.label} ${item.count}`).join(", ")}</p>)}
       {many && <div data-nav-row className="flex pt-1"><FilterInput label="Find a device" placeholder="Find a device" value={query} onChange={value => onQuery?.(value)} className="sm:max-w-none" /></div>}
     </div>
     {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}

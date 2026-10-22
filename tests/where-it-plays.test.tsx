@@ -129,7 +129,7 @@ test("the mixer shows the Volume, the counts, then the playback's devices with P
   // The Volume always leads, with one device or many; there is no header repeating what plays.
   expect(all.filter(item => item.type === PlaybackVolume).length).toBe(1);
   expect(text(tree)).not.toContain("Mac · Screen");
-  expect(text(tree)).toContain("Picture 1 · Sound 1 · In sync 1 · Offline 1");
+  expect(text(tree)).toContain("Picture 1, Sound 1, In sync 1, Offline 1");
   // The playback's devices, then the rest after a hairline with no heading, offline ones folded into one line.
   const lists = all.filter(item => item.type === "ul");
   expect(lists.map(item => [item.props["aria-label"], elements(item.props.children).filter(child => child.type === "li").map(child => (child.props as { "data-device"?: string })["data-device"])])).toEqual([["Playing", ["tv"]], ["Not playing", ["mac", "phone"]]]);

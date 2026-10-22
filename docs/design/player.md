@@ -238,7 +238,7 @@ artwork its column goes, so the artwork has the stage.
   - A row is one target that plays it. Its "…" holds Details, Play next,
     ordering, Save for later, Open in browser and Remove.
   - Removing a row keeps focus on the adjacent row.
-- A status line counts the rows and says when they end ("2 to play · until
+- A status line counts the rows and says when they end ("2 to play, until
   17:05"), with **Save as list**.
 - **Autoplay** continues only the current series, album or playlist, after the
   queued rows:
