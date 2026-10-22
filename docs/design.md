@@ -319,8 +319,10 @@ arrives, 600 ms for colour that follows what plays.
   bottom-left corner, only while sound comes out, since a paused chip read as a "…") wherever it is listed, in place of a playing track's
   number, after the now-playing bar's title while sound comes out, so the title never shifts (never on
   its thumbnail, where a corner chip read as a "…"; paused, the bar's Play
-  glyph says so) and beside each device in Where it plays whose sound is in. Its bars move by transforms only. Reduced motion
-  holds them still at three heights while it plays.
+  glyph says so) and beside each device in Where it plays whose sound is in. Its bars move by transforms only, in
+  steps, about eight a second, from one clock for every level on the page (`Level`): a continuous animation would have
+  the browser draw every frame for as long as anything plays, and the bar's glass blur what lies under it again on each
+  of them. Reduced motion holds them still at three heights while it plays.
 - New motion is `motion-safe:`; reduced motion stills everything.
 
 ## Components
