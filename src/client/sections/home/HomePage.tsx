@@ -11,12 +11,11 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
-import { Progress } from "@/components/ui/progress";
 import { artShape, majorityShape, type ArtShape } from "@/art-shape";
 import { historyCaption, mediaCaption, metaLine, savedCaption } from "@/media-caption";
 import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
-import { useDurationClock } from "@/components/DurationBar";
+import { ProgressLine, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
@@ -173,12 +172,12 @@ export function HomePage() {
   const heroCaption = hero?.kind === "continue" ? historyCaption(hero.item) : undefined;
 
   const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
-      progress={!live && length ? <HeroProgress position={playbackClock.position ?? 0} duration={length} label={remaining != null ? `${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}` : undefined} /> : undefined}
+      progress={!live && length ? <ProgressLine position={playbackClock.position ?? 0} duration={length} label={remaining != null ? `${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}` : undefined} /> : undefined}
       // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
       open={() => shell.changeSection("Now")} />
     : hero.kind === "continue" && heroCaption ? <HomeHero context={<MediaContext collection={hero.item.collection} creator={hero.item.creator} />} thumbnail={hero.item.thumbnail} shape={historyShape(hero.item)} title={heroCaption.title} meta={heroCaption.meta}
       // Not playing, it has no end time: how much is left, as Details says it.
-      progress={hero.item.duration ? <HeroProgress position={hero.item.position} duration={hero.item.duration} /> : undefined}>
+      progress={hero.item.duration ? <ProgressLine position={hero.item.position} duration={hero.item.duration} /> : undefined}>
       <Button data-page-first size="lg" aria-label={on(`Resume ${hero.item.title}`)} disabled={!resumable(hero.item)} onClick={() => playHero(hero.item, false)}><Play aria-hidden="true" />{on("Resume")}</Button>
       <Button variant="ghost" size="lg" disabled={!resumable(hero.item)} onClick={() => playHero(hero.item, true)}>From start</Button>
       {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
@@ -274,14 +273,6 @@ export function HomePage() {
 function UpNextRow({ entry, shape, meta, disabled, onPlay, verbs, pageFirst }: { entry: QueueEntry; shape: ArtShape; meta?: string; disabled: boolean; onPlay: () => void; verbs: QueueActionsProps; pageFirst: boolean }) {
   const caption = mediaCaption(entry);
   return <MediaRow compact pageFirst={pageFirst} related={{ collection: entry.collection, creator: entry.creator }} shape={shape} own={entryShape(entry)} title={caption.title} art={<BoardArt thumbnail={entry.thumbnail} title={entry.title} />} meta={metaLine(caption.lead, meta)} primary={{ label: "Play", disabled, onClick: onPlay }} menu={useQueueActions(verbs)} />;
-}
-
-/** How far it got as a slim line, which advances while it plays, beside how much is left (and, playing, when it ends). */
-function HeroProgress({ position, duration, label = `${formatDuration(Math.max(0, duration - position))} left` }: { position: number; duration: number; label?: string }) {
-  return <div className="flex w-full max-w-md items-center gap-4 text-sm text-muted-foreground tabular-nums">
-    <Progress className="h-0.5 flex-1 rounded-none bg-foreground/25" value={Math.min(100, Math.max(0, position / duration * 100))} aria-label={`Playback progress: ${label}`} />
-    <span className="shrink-0">{label}</span>
-  </div>;
 }
 
 /**

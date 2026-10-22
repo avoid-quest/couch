@@ -2,18 +2,19 @@ import { Bookmark, Play } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Stage, StageTitle } from "@/components/Stage";
 import { Button } from "@/components/ui/button";
-import { DurationBar } from "@/components/DurationBar";
+import { ProgressLine } from "@/components/DurationBar";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import type { ArtShape } from "@/art-shape";
 import { metaLine, withoutUrls } from "@/media-caption";
+import { formatDuration } from "@/time-format";
 import { cn } from "@/lib/utils";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
 
 /** A header's verbs: on a phone the primary takes the line, and the verb that starts the next pulls back by its padding
- * so its word or glyph lines up with the title above. */
-export const verbRow = "flex flex-wrap items-center gap-2 max-md:[&>:first-child]:w-full max-md:[&>:nth-child(2)[data-size=lg]]:-ml-5 max-md:[&>:nth-child(2)[data-size=icon-lg]]:-ml-3";
+ * so its word or glyph lines up with the title above; a row that starts on a glyph (a channel's Save) pulls it back too. */
+export const verbRow = "flex flex-wrap items-center gap-2 [&>[data-size=icon-lg]:first-child]:-ml-3 max-md:[&>[data-size=lg]:first-child]:w-full max-md:[&>[data-size=lg]:first-child+[data-size=lg]]:-ml-5 max-md:[&>[data-size=lg]:first-child+[data-size=icon-lg]]:-ml-3";
 
 
 /** Save as a bookmark that fills once saved: one fixed-width toggle, so Saved moves nothing beside it. */
@@ -43,8 +44,8 @@ export function Description({ text, className }: { text?: string | null; classNa
 
 /**
  * An item or collection page's top, a Stage (Stage.tsx) as Home's hero is: the picture at the right under the header,
- * then at the bottom left the trail, the title at display size, one muted meta line and its links, how far it got, then
- * one row of verbs before the synopsis: Play (or Resume, with From start beside it), Queue, Save and Play on, with
+ * then at the bottom left the trail, the title at display size, one muted meta line ending in its links ("YouTube,
+ * Blender"; its length too until it's started), how far it got as Home's progress line, then one row of verbs before the synopsis: Play (or Resume, with From start beside it), Queue, Save and Play on, with
  * anything else in one "…" menu. The row is one focus stop per verb, and its first enabled verb is where the page starts.
  */
 export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", fit, duration, position, play, fromStart, queue, save, playOn, more = [], trail, children }: {
@@ -68,15 +69,16 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
   const first = [!play?.disabled && play && "play", !queue?.disabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
+  const started = !!position && !!duration;
+  const line = metaLine(meta, duration != null && !started && formatDuration(duration));
   return <Stage data-detail-header thumbnail={thumbnail ?? ""} shape={shape} fit={fit} title={title}>
     <div className="grid w-full justify-items-start gap-3">
       {trail}
       <StageTitle title={title} />
     </div>
-    {(meta || context || duration != null) && <div className="grid justify-items-start gap-1">
-      {meta && <p className="text-base text-muted-foreground">{metaLine(meta)}</p>}
-      {context}
-      {duration != null && <DurationBar duration={duration} position={position} />}
+    {(line || context || started) && <div className="grid w-full justify-items-start gap-2">
+      <p className="detail-meta text-base text-muted-foreground">{line && <span>{line}</span>}{context}</p>
+      {started && <ProgressLine position={position} duration={duration} />}
     </div>}
     {verbs && <div data-nav-row className={cn("mt-1 w-full", verbRow)}>
       {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="fill-current" />{on(play.label)}</Button>}

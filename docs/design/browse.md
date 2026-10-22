@@ -120,15 +120,17 @@ channel, film or episode) have their own URLs, so refresh and Back restore
 them with scroll and focus.
 
 They open on `DetailHeader`, a [Stage](../design.md#stage) as Home's hero
-is, shorter (`min(33vw, 60vh)`), in its picture's room: a wide photograph at
-the right dissolving into the room, anything else whole as an object (a
-poster, an album, a station's logo, a channel's circle) or a mark (a logo on
-nothing); at the bottom left the trail, the title in the display face, sized
-and narrowed by its length and set whole ([Type](../design.md#type)), one meta
-line, its links (a creator; the collections holding it are already the trail,
-so they aren't repeated), a `DurationBar` when the length is known (a video's
-"9:07"), one row of verbs, then the synopsis without bare addresses (a line
-that only labelled one goes too), three lines until More. A
+is, shorter (`min(33vw, 60vh)`), in its picture's room: every picture whole at
+the right as an object (a video's 16:9 frame, a poster, an album, a station's
+logo, a channel's circle) or a mark (a logo on nothing), so a thumbnail's own
+lettering never ghosts beside the title; without one, the room alone. At the
+bottom left: the trail, the title in the display face, sized by its length
+and set whole ([Type](../design.md#type)); one meta line ending in its links,
+"YouTube, Blender" (a creator; the collections holding it are already the
+trail, so they aren't repeated), with the length ("0:30") until it's started;
+once started, Home's progress line, the bar with "5:00 left" beside it; one row
+of verbs; then the synopsis without bare addresses (a line that only labelled
+one goes too), three lines until More. A
 channel's tab ("Stanford - Videos") is titled as the channel, a circle, and its
 trail stops before it.
 

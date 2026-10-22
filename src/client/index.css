@@ -466,6 +466,12 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 .display-title[data-length="long"] { --title-size: var(--title-long, 3.125rem); --title-weight: 700; line-height: 1; }
 .display-title[data-length="xlong"] { --title-size: var(--title-xlong, 2.5rem); --title-weight: 680; line-height: 1.04; }
 
+/* A Details page's one meta line: what it is, then its links, "YouTube, Blender" (DetailHeader). */
+.detail-meta { display: flex; flex-wrap: wrap; align-items: center; column-gap: .3em; }
+.detail-meta:empty { display: none; }
+.detail-meta > span:first-child:not(:last-child)::after { content: ","; }
+.detail-meta > [data-media-context] { font-size: inherit; }
+
 /* Page titles and the headings of shelves, lists and sections are display type too, at their own sizes and normal width. */
 :is(h1, h2):is(.text-heading, .text-page), :is(h1, h2).text-heading .text-heading { font-family: var(--font-display); font-stretch: 100%; }
 
