@@ -67,7 +67,7 @@ body { min-width: 0; }
     --radius-md: .5rem;
     --radius-lg: .75rem;
     --radius-xl: 1rem;
-    /* Control heights: a chip, a control, a verb, the header's search field. Touch raises each to 44px. */
+    /* Control heights: a small control, a control (chips too), a verb, the header's search field. Touch raises each to 44px. */
     --spacing-control-sm: 1.75rem;
     --spacing-control: 2rem;
     --spacing-control-lg: 2.75rem;

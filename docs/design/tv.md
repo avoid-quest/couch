@@ -16,8 +16,8 @@ picture in white and lights it in its own colour, its meta line coming up to
 white. Remote input makes focus visible even after a pointer was used. From the
 sofa a thin ring is too faint, so a focused tile also lifts (scale 1.05, easing
 over 150 ms unless reduced motion is on), its "…" with it, and its ring
-thickens to .25rem. Short shelves don't sit side by side on the TV, so Up and
-Down always go shelf to shelf. A shelf's padding and the tile's scroll margin keep the
+thickens to .25rem. Each shelf takes its own line, so Up and Down always go
+shelf to shelf. A shelf's padding and the tile's scroll margin keep the
 lifted tile clear of the clip and the screen's edge.
 
 ## Pairing
@@ -51,11 +51,11 @@ that Remote in another browser profile.
 ## Remote navigation
 
 - **Page entry.** After a page change focus goes to the page's first control
-  (`data-page-first`); when that renders late (Home's hero, Discover's first
+  (`data-page-first`); when that renders late (Home's hero or its first
   section, a collection's Play) focus moves to it as it appears, unless a key
   or pointer came first. On Details it is the primary verb.
 - **Back** closes an overlay, then leaves a sub-page for its opener with focus
-  restored (Radio and Live TV return to Discover's heading), then takes any
+  restored (Radio and Live TV return to Home's heading), then takes any
   section to Home, where it does nothing. Esc and BrowserBack do the same.
 - **Arrows.** Left and Right stay on a visual line and stop at its edge. Up and
   Down from a row (`data-nav-row`: a shelf, the hero's or Details' verbs, a

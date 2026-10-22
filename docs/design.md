@@ -28,9 +28,9 @@ bar for thumb reach.
 - **The artwork lights the room**, the one exception to Flat
   ([Light](#light)). Behind the large artwork (the Stage, the player's Now
   playing, a video's letterbox) its own two colours glow and fall to black; a
-  hovered or focused tile or row glows in its own colour, and the now-playing
-  bar's left end takes its picture's. It is light, never chrome: no surface,
-  border or control takes its colour, ink stays white and controls black and
+  hovered or focused tile or row glows in its own colour. It is light, never
+  chrome: no surface, border or control takes its colour (the now-playing bar
+  is a solid surface of its own), ink stays white and controls black and
   white.
 - **One primary target per item, one menu.** Pressing a row or tile does its
   main verb; its other verbs are its one menu ([Menus](#menus)). Where it
@@ -39,7 +39,7 @@ bar for thumb reach.
   room: the Stage, the player and the now-playing bar. Never nested in the
   target.
 - **Real content only.** Browse pages show what a source returns; Couch picks
-  nothing. Discover is built from what the Couch saved.
+  nothing. Home's sources are built from what the Couch saved.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress
   and end times are small muted metadata. Live media shows no time and no
   label.
@@ -67,10 +67,10 @@ wide. Both lie under the page's content and never move or size anything.
 - **The letterbox** is lit around the contained picture, as YouTube's ambient
   mode: the item's artwork gives the colours, painted once, so a playing video
   costs nothing per frame and a cross-origin video lights too.
-- **Tiles, rows and the bar** take the first colour alone, at the backlight's
+- **Tiles and rows** take the first colour alone, at the backlight's
   brightness: a hovered or focused tile's or row's glow under its picture
-  (`useItemLight`), and the now-playing bar's left end. The Stage paints its
-  own light inside its mask ([Stage](#stage)).
+  (`useItemLight`). The Stage paints its own light inside its mask
+  ([Stage](#stage)).
 - **Not light:** a gradient wash on a page, colour on a surface, a blurred
   copy of the picture, or light without artwork behind it.
 
@@ -115,13 +115,28 @@ Tailwind names, never hex values in components.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `background` | `#000` | page, bars, sheets |
-| `foreground` / `primary` | `#fff` | text, bars, primary button |
-| `muted` / `secondary` | `#171717` | loading artwork, skeletons |
-| `muted-foreground` | `#a3a3a3` (white 85% in the player's bands) | metadata |
-| `border` | white 16% | hairlines and row dividers |
-| `accent` | `#fff` / `#000` | menu highlight (inverts like focus) |
-| `radius` | `.25rem` | controls |
+| `background` | `#000` | page, header, sheets |
+| `foreground` / `primary` | `#fff` | ink, the primary button, focus |
+| `secondary` | white 10% | a chip's or a filled control's ground; a rail's current page |
+| `fill-hover` | white 16% | that ground under a pointer |
+| `muted` | `#171717` | loading artwork, skeletons, the search field |
+| `muted-foreground` | `#a3a3a3` (white 85% in the player's bands, 72% on the bar) | metadata |
+| `accent` | white 10% / `#fff` | a menu's, Select's or the palette's row under the pointer |
+| `bar` | `#141414` | the now-playing bar's surface |
+| `border` | white 14% | hairlines and row dividers |
+| `input` | white 16% | the edge of fields and outline toggles |
+| `radius` | `.5rem` | shadcn's base; Couch's own scale follows |
+
+Couch's scales are Tailwind theme tokens (the `@theme` block "Couch's scales"
+in `index.css`), and `cn` (`lib/utils.ts`) knows them, so `text-meta` merges
+as a size and `h-control` as a height.
+
+| Scale | Steps | Use |
+| --- | --- | --- |
+| Radius | `xs` .125rem, `sm` .25rem, `md` .5rem, `lg` .75rem, `xl` 1rem | what you press or type into is a capsule (`rounded-full`): buttons of every size, inputs, Select triggers, input groups, toggles, tabs, chips, the search field, Switch, a slider's thumb and track, progress; a tile's picture and a menu's or the palette's row `rounded-md`; a row's and the bar's thumbnail `rounded-sm`; a surface that opens over the page (menus, popovers, the palette, Select content, dialogs, Up next over the picture) `rounded-lg` |
+| Control height | `control-sm` 1.75rem, `control` 2rem, `control-lg` 2.75rem, `field` 3rem | `size="sm"`; the default; the Stage's verbs (`size="lg"`); the header's search field. `touch:` raises each to 44px |
+| Type | `caption` .75rem, `meta` .8125rem, `body` .9375rem, `title` 1.125rem, `heading` 1.25rem, `page` 2.25rem | [Scale](#scale) |
+| Spacing | `caption` .125rem, `stack` .75rem, `item` 1rem, `section` 3.5rem | inside a caption; a heading to its content; between items; between sections |
 
 **Focus inverts** the focused control to white with black ink, and the TV's
 highlight is the same. White controls (slider, Switch, Checkbox,
@@ -131,41 +146,55 @@ a focused tile keeps its caption and rings its picture in white (2px, offset
 the tile 5% ([TV](design/tv.md)); a focused row's text inverts. A text link's
 inversion reaches a little past its words (a shadow, so nothing moves).
 
-**Two hovers, nothing else.** Media lights up: a pointer over a tile or a row
-makes its picture glow in its own first colour (`--item-light`, read the first
-time a pointer or focus reaches it; faint white until then) and brings its meta
-line up to white, over 300 ms; its "…" appears with it. Controls brighten: a
-ghost control rests at 80% white ink and comes up to white under the pointer,
-a press dims it to 60% (the white button greys), and one whose panel is open
-(`aria-expanded`) stays white. Nothing tints, outlines, dims, scales or slides
-under a pointer, and whatever a press acts on shows the hand. Never on the TV,
-which lifts its focus instead. The header's tabs mark the current section with
-a short white rule under its name.
+**One hover language.** A pointer brightens; only the keys invert. Media
+lights up: a pointer over a tile or a row makes its picture glow in its own
+first colour (`--item-light`, read the first time a pointer or focus reaches
+it; faint white until then) and brings its meta line up to white, over
+300 ms; its "…" appears with it. Everything else brightens: ink comes up to
+white (a ghost control or a toggle rests at 80% white and a press dims it to
+60%), a fill steps up one notch (`secondary` to `fill-hover`; the white button
+to 85%), and an outline's edge comes up. One whose panel is open
+(`aria-expanded`) stays lit. Ink never turns dark under a pointer, and nothing
+tints, dims, scales or moves: a press doesn't nudge, and links and the bar's
+artwork keep their ink. Whatever a press acts on shows the hand, sliders
+included (the arrow while disabled). Never on the TV, which lifts its focus
+instead. The header's tabs mark the current section with a short white rule
+under its name.
+
+In menus, Selects and the palette the row under the pointer takes a quiet fill
+(`accent`) with its ink unchanged, and only the row the keys reach inverts. A
+Radix menu's or Select's row inverts only under `html[data-keyboard]` (Radix
+focuses the pointer's row, which Chromium calls `:focus-visible`); the
+palette's rows only while its list lacks `data-pointer`, which `HeaderSearch`
+sets as a mouse moves over it and a key removes.
 
 ## Scale
 
 `html` font size is `clamp(16px, 1.25vw, 24px)`, so rem sizes scale every
-screen alike. Inter Tight throughout; titles semibold with tight tracking,
-metadata small, muted and tabular. `index.html` preloads its latin file, so the
-first paint is already in it.
+screen alike. Inter Tight throughout, regular but for headings and display
+sizes (semibold) and the bar's title (medium); metadata small, muted and
+tabular. `index.html` preloads its latin file, so the first paint is already
+in it.
 
 | Role | Classes |
 | --- | --- |
 | Stage title (`StageTitle`) | 4.5rem, 3.75rem past 22 characters, 3rem past 44 (Details 3.75rem / 2.75rem; phones 2.5rem to 1.75rem), semibold, leading .95, tracking −.035em |
 | Now playing (audio), player title | `text-6xl` / `text-3xl` semibold, tight tracking |
-| Page title (`PageHeader`) | `text-4xl font-semibold`, tracking −.025em |
-| Shelf title | `text-lg font-semibold tracking-tight` |
-| Tile title | .9375rem `font-medium`, two lines |
-| Row title, settings label | `text-base` (media rows add `font-medium`) |
+| Page title (`PageHeader`) | `text-page font-semibold` (tracking −.025em) |
+| Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` (tracking −.015em) |
+| The bar's title, the palette's query row | `text-title font-medium` |
+| Item title (tiles, rows), settings label, the search palette's rows | `text-body`, tiles and rows two lines |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |
-| Body, controls, metadata | `text-sm` (metadata `text-muted-foreground`) |
-| Caption | `text-xs text-muted-foreground` |
+| Controls | `text-sm` (the Stage's verbs `text-body`) |
+| Metadata | `text-meta text-muted-foreground` |
+| Caption | `text-caption text-muted-foreground` |
 
 The page gutter is `px-(--gutter)` (`clamp(1rem, 4vw, 3rem)`); the shell gives
-the one top offset (`pt-8`). Two-column pages (Saved, Settings) use a `12rem`
-rail and `gap-12`. Controls are `h-8 text-sm`; `touch:` (phones and windows
-narrower than 960px) raises them to 44px. Playback icon controls (transport,
-Volume, Where it plays, Up next, Playback, fullscreen, Open player, Back, a Sheet's Close)
+the one top offset (`pt-8`), and a page's sections are `gap-section` apart.
+Two-column pages (Saved, Settings) use a `12rem` rail and `gap-12`. Controls
+are capsules, `h-control text-sm`; `touch:` (phones and windows narrower than
+960px) raises them to 44px. Playback icon controls (transport, Volume, Where
+it plays, Up next, Playback, fullscreen, Open player, Back, a Sheet's Close)
 are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target. The
 player's band and the now-playing bar share `--player-target`, which grows to
 2.25rem. At a row's end they pull back (`-ml-2.5`/`-mr-2.5`) so the glyph lines
@@ -217,10 +246,11 @@ control, 200 ms for what arrives.
 ## Components
 
 shadcn components live in `src/client/components/ui` and are owned by Couch.
-Changes from the Mira defaults: `text-sm` controls at `h-8`, a flat left-rule
-`Alert`, a left-aligned borderless `Empty`, no shadows, a 1.25rem glyph in
-`icon-lg`, Select items that reserve room for their check, and ghost buttons
-that rest at 80% white ink and brighten rather than tint. Check the
+Changes from the Mira defaults: capsule `text-sm` controls at `h-control`
+([Tokens](#tokens)), a flat left-rule `Alert`, a left-aligned borderless
+`Empty`, no shadows, a 1.25rem glyph in `icon-lg`, Select items that reserve
+room for their check, and ghost buttons that rest at 80% white ink and
+brighten rather than tint. Check the
 [catalog](https://ui.shadcn.com/docs/components) before building anything
 custom.
 
@@ -229,9 +259,10 @@ custom.
 suggests as you type needs a listbox the focus never leaves, which a menu or a
 Popover over a field can't give a remote typing into it. Couch's copy has no
 surface of its own (the header search gives it the menus' ground under the
-field, or the screen's), `h-8 text-sm` rows (44px on touch),
-headings as the menus' labels, and a selected row that inverts like a menu's
-highlight, at once. The field is Couch's own input as the combobox, not
+field, or the screen's), `min-h-control` rows at `rounded-md` (44px on
+touch), headings as the menus' labels, and a row the keys select that inverts
+as focus does, at once, while the row under a pointer takes the menus' quiet
+fill ([Tokens](#tokens)). The field is Couch's own input as the combobox, not
 `CommandInput`, so the TV's Type on TV and the `#media-search` hooks keep it.
 
 Shared building blocks in `src/client/components`:
@@ -330,16 +361,16 @@ Shared strings live in `src/client/copy.ts` (`Try again`, `Only an admin can
 change this.`, `Offline. Reconnecting to {name}…`). Couch's own words: a
 device's name (or "This device"), Where it plays, Move here, Play on {name},
 Remote, Share on network, admin, Up next (the list) and Queue (the verb),
-Save / Saved, Discover. Verbs are the same everywhere: Play, Pause, Stop,
+Save / Saved. Verbs are the same everywhere: Play, Pause, Stop,
 Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 
 ## Surfaces
 
 - [Shell](design/shell.md): sections and paths, the header and search, tab
   bars, the Couch switch, the now-playing bar, keyboard, first run.
-- [Home](design/home.md): the hero and shelves.
-- [Browse](design/browse.md): Search, Discover, Hide, Details, Saved, rows and
-  tiles, filters and pages, breadcrumbs.
+- [Home](design/home.md): the hero, your own rows and the sources.
+- [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
+  rows and tiles, filters and pages, breadcrumbs.
 - [Player](design/player.md): the picture, scrims, the band, settings, Up next,
   status.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.

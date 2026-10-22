@@ -51,7 +51,7 @@ menu, are one family wherever they open, from the band or the now-playing bar:
 
 - one surface: `--player-surface` over a picture, else the popover black
   with a hairline, which a black page needs to hold its edge
-- one corner (`rounded-md`) and one inset: text sits .75rem in
+- one corner (`rounded-lg`) and one inset: text sits .75rem in
 - two widths: 18rem for Volume and the gear's menu, 32rem for Where it plays
   and Up next
 - one place: 8px above the band (or the bar), ending at the gutter, the
@@ -100,8 +100,8 @@ The timeline row:
   device has already loaded (35% white, here and on the now-playing bar's
   line). It shows only while this device plays media that seeks.
 - As on YouTube, the line thickens under a pointer and while it is dragged,
-  here, beside artwork and on the now-playing bar alike. Over a picture its
-  thumb shows only while a pointer or focus is on it.
+  here, beside artwork and on the now-playing bar alike. Over a picture, and
+  on the bar, its thumb shows only while a pointer or focus is on it.
 - A hovering pointer reads the time under it, on the panel surface.
 
 The control row:

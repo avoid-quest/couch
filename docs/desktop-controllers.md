@@ -13,8 +13,8 @@ Docker or a native Couch package on the controller computer.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
    and enter the TV's six-digit pairing code. The first device you pair becomes
    the admin.
-3. **Home** shows what plays and what to continue. **Discover** shows what's on
-   air, Live TV and what you saved from each source; the header's **Search** finds a
+3. **Home** shows what plays and what to continue, then what's on air, Live TV
+   and what you saved from each source; the header's **Search** finds a
    title or opens a link. **Play** starts now; **Queue**
    in its **…** menu adds to Up next. **Saved** holds For later, lists and
    favorites, and **Settings** the rest. Closing your browser leaves playback running on the

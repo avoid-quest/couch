@@ -72,8 +72,8 @@ for the pairing QR and six-digit code. The first device you pair becomes the
 admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
 phone's **Settings → Devices & network** under **Admin code** and choose **Become admin**.
-**Home** shows what plays now and what to continue, **Discover** holds what's on air,
-Live TV and what you saved from each source, **Saved** holds For later, lists and
+**Home** shows what plays now and what to continue, then what's on air, Live TV
+and what you saved from each source, **Saved** holds For later, lists and
 favorites, the header's search field searches every source, and **Settings**
 the rest. TV **Settings → TV → Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
@@ -86,7 +86,7 @@ or channel plays, and a saved film or collection opens Details. Continue adds
 one secondary Details stop for its existing History actions, including inspection
 and removal when Resume is unavailable. Holding OK on a media item opens its menu of
 other verbs; a short OK acts on release. The header keeps
-Home, Discover, Saved and Settings between the TV's name and its search field
+Home, Saved and Settings between the TV's name and its search field
 and clock, and stays at the top while the page scrolls; Up from a page's first
 row returns to it. Settings OK moves
 into the selected page's first enabled control. Back closes an overlay and
@@ -169,22 +169,9 @@ Store the returned promise's result on `window` and read it separately if the
 preview's evaluation timeout is shorter than the check. Use native preview key
 input as well to verify local keyboard entry and the focus highlight.
 
-For Discover, `runDiscoverNavigationRegression()` checks entry in the saved
-section order, the first section's heading, the tab bar
-and Back. Run with Radio and Sources enabled, then Sources first, and with an
-existing shared source. Build `tests/discover-customization.browser.ts` the
-same way for `runDiscoverSharingFocusRegression()`: on a paired scratch Couch
-with Radio available and no shares, it publishes source metadata through Core
-(no capture or playback), checks that Radio keeps focus, then checks fresh
-entry and navigation after the source ends. It closes its socket and restores
-Discover preferences. The same bundle's customization and availability checks
-cover hidden/reordered sections, return focus and delayed provider shelves.
-Reload before each `runDiscoverAvailabilityRegression()` run: its fixture arrives
-after 16 seconds, beyond the old focus cutoff but within the provider request's
-30-second deadline. Repeat with `{ cancel: "keyboard" }`, `{ cancel: "pointer" }`
-and `{ cancel: "navigation" }` to check cancellation; `{ delayMs: 350 }` keeps
-the fast-arrival check. Navigation also checks that the old observer cannot focus
-Settings after its own unchanged 15-second cutoff.
+Home's own TV navigation is part of `runTvNavigationRegression()`: its Home
+entry check covers the hero, the board and the shelves, and its Live TV check
+opens Live TV from Home's heading.
 
 Toast lifecycle checks use the real Sonner instance from Vite. In a paired scratch
 TV tab, evaluate `tests/playback-feedback.browser.js` to expose its SessionGate

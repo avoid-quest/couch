@@ -149,7 +149,7 @@ or while it is on.
 ## The chooser
 
 A shared source waiting for receivers opens Where it plays only in the window
-that pressed Play (from Discover, Search, Play on or Up next). **Ask every
+that pressed Play (from Home, Search, Play on or Up next). **Ask every
 device where a shared source plays**, in Settings → Playback, sends
 the request to every window viewing that playback instead. Each new request
 reopens it; dismissed, it stays closed through unrelated updates and when the

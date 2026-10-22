@@ -4,25 +4,27 @@
 
 | Section | Path | Holds |
 | --- | --- | --- |
-| Home | `/` | one hero, then shelves ([Home](home.md)) |
-| Discover | `/discover` | shared sources, Radio, Live TV, each source's saved channels and series, Sources ([Browse](browse.md#discover)) |
+| Home | `/` | one hero, your own rows as one board, then shared sources, Radio, Live TV, each source's saved channels and series, Sources ([Home](home.md)) |
 | Saved | `/saved` | For later, Channels & stations, Lists, Played (`?tab=`) |
 | Remote | `/remote` | drives a TV; on other devices while the Couch has one |
 | Settings | `/settings` | [Settings](settings.md) |
 
 Search is the header's field; its results are `/search?q=…`, and `/search`
-without a query opens Discover. Discover's own pages are `/discover/radio` and
-`/discover/live-tv`. `/item` and `/collection` keep the section that opened
-them in `from` (`home`, `discover`, `search`, `saved`; Discover by default),
-so the tab, the breadcrumb and a refresh keep it. `/now` is the player. Where
+without a query opens Home. Home's own pages are `/radio` (every station) and
+`/live-tv` (every channel), under the Home tab. `/item` and `/collection` keep
+the section that opened them in `from` (`home`, `search`, `saved`; Home by
+default), so the tab, the breadcrumb and a refresh keep it. `/now` is the player. Where
 it plays has no page.
 
-Earlier addresses redirect with their query: `/live` → `/discover`,
-`/library` → `/saved`, `/find` → `/search` (its `browse=radio|live-tv` →
-Discover's pages), `/where-it-plays` → `/`, and old Settings paths through
-`settingsAliases`. Core serves every path in `src/shared/page-paths.ts`.
+Earlier addresses redirect with their query: `/discover` → `/`,
+`/discover/radio` → `/radio`, `/discover/live-tv` → `/live-tv`, `/live` → `/`
+(or Radio's or Live TV's page when its query names them), `/library` →
+`/saved`, `/find` → `/search` (its `browse=radio|live-tv` → `/radio` or
+`/live-tv`), `/where-it-plays` → `/`, and old Settings paths through
+`settingsAliases`. `from=discover` belongs to Home. Core serves every path in
+`src/shared/page-paths.ts`.
 
-Tab pages (Home, Discover, Saved, Settings, Remote) have no visible title: the
+Tab pages (Home, Saved, Settings, Remote) have no visible title: the
 current tab names them, and an `sr-only` h1 remains. Sub-pages carry their
 trail above their h1 ([Browse](browse.md#breadcrumbs)).
 
@@ -42,7 +44,8 @@ publishes its height as `--top-bar` so scroll padding keeps focus clear of it
 and the Stage reaches up under it. Below `lg` a TV centres its tabs on a second row.
 
 Its geometry holds from page to page: the search field fills the right column
-(up to 22rem with Keyboard shortcuts), tokens or not, and on Remote, whose keys
+(16rem to 30rem, Keyboard shortcuts included; on the TV up to 20rem, 24rem
+with a token), tokens or not, and on Remote, whose keys
 drive the TV, Keyboard shortcuts keeps its slot unseen. Remote shows while the
 Couch has a TV, on or off.
 
@@ -53,8 +56,8 @@ screen readers. Nothing pushes the page down. Only the app pointed at another
 Couch keeps a line under the header, for its Try again and Use this computer.
 An updated Couch and a player error keep their line too.
 
-**Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Discover, Saved,
-Remote while the Couch has a TV, Settings; lucide icons over labels), and the
+**Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Saved, Remote
+while the Couch has a TV, Settings; lucide icons over labels), and the
 top bar is the Couch switch then the search field. A narrow TV undoes
 `touch:` with `tv:`. **The Mac window** puts its buttons and drag region in the
 header (`[data-window-controls]`). Unpaired there is no header (see First run
@@ -68,15 +71,20 @@ publishing device: another device's Remote can't use it.
 ## Search field
 
 `HeaderSearch`: a shadcn `InputGroup` with a Search button, filling the
-header's right column, and a shadcn `Command` (cmdk) palette under it. `/`
+header's right column as a capsule at the `field` height (3rem), its text at
+`text-title` and its glyph 1.25rem, and a shadcn `Command` (cmdk) palette
+under it. `/`
 focuses it from any page; a fine pointer sees a `/` hint. Focused, it inverts;
-while the palette is open the field keeps a white edge instead and the
-palette's selected row is the one white thing (focus stays in the field; the
-row is its `aria-activedescendant`).
+while the palette is open the field keeps a white edge instead and the row
+the keys select is the one white thing (focus stays in the field; the row is
+its `aria-activedescendant`). The row under a mouse takes the menus' quiet
+fill instead ([Hover](../design.md#tokens)).
 
-**Where it opens.** On a desktop the palette is the field's own list: 4px
+**Where it opens.** On a desktop the palette is the field's own list: 8px
 under it, at its left edge and width, on the menus' ground (`bg-popover`,
-rounded, no border or shadow), so the eye stays where the typing is. On a phone
+`rounded-lg`, `p-2`, no border or shadow), so the eye stays where the typing
+is. Its rows are `min-h-10` at `text-body` with `rounded-sm` thumbnails
+(`size-10`), its headings `text-meta`, and the query row `text-title`. On a phone
 it fills the screen under the header, the field takes the whole row and Cancel
 closes it.
 On the TV it fills the screen too: OK on the field opens it (arrows pass a
@@ -84,10 +92,11 @@ closed field, which is a plain field to the remote), a phone's Remote types
 into it ([Type on TV](remote.md#type-on-tv)), and the typed query reads large
 in its first row.
 
-**Empty**, it lists Search in (the kinds, as a wrapping line of chips that
-Left and Right move along), Recent searches (the last six of eight,
+**Empty**, it lists Search in (the kinds, as a wrapping line of pill chips on
+`secondary` at the `control` height, a step up to `fill-hover` under the
+pointer and a check on the chosen one, that Left and Right move along), Recent searches (the last six of eight,
 `search-recents.ts`) and Continue (recently played, with artwork). The sources
-aren't listed, since Discover has them; typing a source's name offers it. On
+aren't listed, since Home has them; typing a source's name offers it. On
 the TV they are columns the arrows cross (Up/Down within, Left/Right between).
 Nothing is selected until an arrow, so Enter still submits.
 
@@ -136,27 +145,27 @@ device. It reuses Settings → This device's choice. After a switch:
 
 ## Now-playing bar
 
-`NowPlayingBar`, one row above the page (and the phone tab bar), is the
-player's band made small: it shares the band's grid, controls and sizes, so
+`NowPlayingBar`, one row above the page (and the phone tab bar) on a solid
+surface of its own (`bar`, `#141414`), is the player's band made small: it shares the band's grid, controls and sizes, so
 nothing changes side as it grows into the band
 ([Player](player.md#the-band-and-the-now-playing-bar)).
 
-- **At the left, what plays,** as compact as a mini-player's (YouTube Music,
-  Spotify and Apple Music run about 56–64px): the artwork 3rem tall at its own
-  shape (a frame 16:9, up to 6rem wide), and two tight lines, the title's led by
-  the [level](../design.md#motion) while sound comes out, so the bar is as tall as its 44px controls plus its padding: 61px on
-  phones, 64px at 1440 wide. The title is the control across its whole line,
-  with the artwork a pointer target for it. Under the title, one line that
+- **At the left, what plays,** as large as a mini-player's (YouTube Music,
+  Spotify and Apple Music run about 56–64px): the artwork 3.5rem tall (3rem on
+  phones) at its own shape (a frame 16:9, up to 7rem wide, `rounded-sm`), and
+  two lines, the title (`text-title font-medium`, `text-body` on phones)
+  followed by the [level](../design.md#motion) while sound comes out, over a
+  `text-meta` line. The title is the control across its whole line, with the
+  artwork a pointer target for it; neither dims under a pointer. Under the title, one line that
   doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its
   collection or station link (a station's only under its show, since without
   one the title is the station), then a status only when it isn't plain
   playing or paused. A station shows its show's title and photo while it has
   a show, else its name and logo, as its tile and the player do. Those links sit outside the title's button and drop their row
   height here, keeping a 24px hit area that doesn't push the line apart. The
-  player says where it plays the same way (`PlaysOn`). The picture's first
-  colour lights the bar's left end and is gone before its middle, so the line
-  under the title takes the band's ink (white 85%) and keeps 7:1. No hairline:
-  the timeline along the bar's top edge (a white 15% track) is its edge.
+  player says where it plays the same way (`PlaysOn`). The line under the
+  title is white 72%. No artwork colour reaches the bar, and no hairline: the
+  timeline along the bar's top edge (a white 18% track) is its edge.
 - **In the middle, Play/Pause, Stop and Next,** at the same x as the band's.
 - **At the right, Volume, Where it plays, Up next and the Playback gear,**
   the band's own tools at the band's x, then **Open player** (ChevronUp, a
@@ -167,8 +176,10 @@ nothing changes side as it grows into the band
   while it has nothing to show.
 - Every control is the band's ghost icon at `--player-target` (44px, 54px at
   1920 wide) with the same 1.25rem glyph.
-- Its timeline is a slim line along its top edge that thickens under a
-  pointer, none for live media.
+- Its timeline is a slim line along its top edge, none for live media. Its
+  hit area is a .5rem padding centred on that edge; under the pointer the line
+  thickens to .375rem and shows its handle, and the time under the pointer
+  (`text-meta`, `rounded-sm`) sits .5rem above the line's centre.
 - Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause and
   Open player, at fullscreen's x: a minimized player needs no mixer, and the
   player has it.
@@ -182,8 +193,8 @@ artwork or picture (`couch-art`); the title and its line fade out at once
 rather than stretch over the band's timeline, and fade back in once the band
 has shrunk into the bar.
 
-It hides on the player, on Remote, and while Home's playing hero is on screen
-(`html[data-hero-playing]`). With the phone tab bar it forms the footer, whose
+It shows on every page whenever something is loaded, Home included, and hides
+only on the player and on Remote. With the phone tab bar it forms the footer, whose
 height is `--bottom-bar`. The footer is fixed, and the shell keeps that height
 free below the page. It isn't sticky: Chromium centres a focused control that
 sits inside the page's scroll padding, which the footer itself fills, so focus

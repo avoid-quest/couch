@@ -8,7 +8,7 @@ hand, and the Couch everyone shares, its hardware included:
 | Page | Owner | Path | Holds |
 | --- | --- | --- | --- |
 | General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Connection (which Couch it shows), what it lets other devices use, Share screen or sound, Quit Couch (app) |
-| Home & Discover | This device | `/settings/device/home` | Home's shelves, then Discover's sections |
+| Home | This device | `/settings/device/home` | Home's sections, one list |
 | Updates | This device | `/settings/device/updates` | this app's updates and logs (a desktop app that doesn't run the Couch) |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
 | Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays |
@@ -25,10 +25,11 @@ own Playback menu, not this page.
 Online video quality offers Best, 1080p, 720p and 480p: Auto plays 1080p, so
 it is the 1080p choice.
 
-Home & Discover lists each section as a Switch beside its name, with Move
-up/down at the row's end (no drag), saved per device; each list ends in an
-outline Reset to default. A Move that reaches an end returns focus to the
-row's Switch.
+Home lists each of Home's sections ([Home](home.md#sections)) as a Switch
+beside its name, with Move up/down at the row's end (no drag), saved per
+device; the page names the list, which has no heading of its own, and it ends
+in an outline Reset to default. `/settings/device/discover` opens it. A Move
+that reaches an end returns focus to the row's Switch.
 
 ## Rows
 
@@ -54,8 +55,8 @@ more a last row offers Forget all. Forget asks first in an AlertDialog.
 The rail has one group per owner, each a heading over a muted line: **This
 device** over this device's name, then the Couch's own name over a dot and
 Connected, Reconnecting or Offline, with "admin" when this device is one. The
-current entry has a left rule and white ink, as the header's tab has its
-short rule, and no ground; a pointer only brings another entry's ink up. A page this device can't change at all (Sound, TV and the Couch's Updates for a non-admin) ends in a
+current entry is white ink on a `secondary` capsule; a pointer only brings
+another entry's ink up. A page this device can't change at all (Sound, TV and the Couch's Updates for a non-admin) ends in a
 small lock, and still opens and shows its values. On the host the two groups
 are one, headed by the Couch's name over "This computer runs it" (or "This TV
 runs it").

@@ -26,7 +26,7 @@ status line says whether AirPlay is ready, who is playing, or why it can't run.
 
 ## Play it
 
-While a device plays to the Couch, **AirPlay · {its name}** leads **Discover**'s
+While a device plays to the Couch, **AirPlay · {its name}** leads **Home**'s
 **Shared sources** and appears in **Search**, like a shared screen or sound.
 Once an admitted sender sends sound, playback starts automatically on the
 computer running Couch, without a separate **Play**. It takes that computer's

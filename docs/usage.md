@@ -26,12 +26,12 @@ and paired remotes.
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings →
   Sources → Live TV**. Channels that need custom headers or DRM are skipped.
   Edit keeps saved URLs unless you type new ones; **Remove guide** drops a
-  source's guide and its programmes. Browse them in Discover's **Live TV**.
+  source's guide and its programmes. Browse them in Home's **Live TV**.
 
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.
 
-Bandcamp and SoundCloud open a search prompt from **Discover → Sources**; they
+Bandcamp and SoundCloud open a search prompt from **Home → Sources**; they
 have no catalogue home or genre feed in Couch. Bandcamp search returns albums
 and tracks in one result list, without a next page. Its catalogue accepts public
 `artist.bandcamp.com/album/...` and `/track/...` links; artist or label homepages,

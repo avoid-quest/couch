@@ -3,7 +3,7 @@
 ## Search
 
 The header's palette ([Shell](shell.md#search-field)) submits to
-`/search?q=…&kind=…&source=…`; an empty query is Discover. Every source is asked
+`/search?q=…&kind=…&source=…`; an empty query is Home. Every source is asked
 at once and answers independently. Counts and "still asking" are a
 screen-reader status; on screen the header's Spinner and a skeleton in the
 results' geometry (a closest match, then a shelf of tiles; one kind's grid when
@@ -75,54 +75,19 @@ play" in the palette); Enter in the palette plays it at once.
 
 Twitch results refresh every 20 s while visible and connected.
 
-## Discover
+## Radio and Live TV
 
-`/discover`: shelves of tiles under linked headings, with no hero and no
-visible title. Its sections, in the order and visibility chosen in Settings →
-Home & Discover:
-
-- **Shared sources**, while devices share screen or sound: a row of names;
-  pressing one plays it, its menu holds Play on, Play next and Queue.
-- **Radio**: the stations Home's Radio doesn't hold (Couch's built-in ones you
-  haven't played here or saved), each with its current show; with every
-  station on Home, or Home's Radio hidden, every station, so the heading stays.
-  A tile plays; its menu holds Details. The heading opens `/discover/radio`.
-  Stations a device has loaded show at once, before their shows: a tile keeps
-  room for its show's line.
-- **Live TV**, while a Live TV source has channels: the guide's first twelve.
-  A tile plays its channel; the heading opens `/discover/live-tv`.
-- **One shelf per source with a home** (Twitch, StreamingCommunity, RaiPlay,
-  123MoviesFree, AnimeSaturn, AnimeUnity): the channels and series saved from
-  it, in Saved's order, live channels first. Core asks Twitch which saved
-  channels are live as it lists them (one query, at most every 20 s); an
-  offline channel stays, its artwork dimmed, reading "Offline". A page's
-  section (RaiPlay's "In Diretta", `#block=`) belongs to that page, which the
-  heading opens: it stays out of the shelf, and Save isn't offered for one
-  (one saved before keeps Saved, to remove it). The heading (the source's
-  name) opens the source's own home. A source with nothing saved has no shelf;
-  with nothing saved anywhere, one line says to save channels or series to see
-  them here.
-- **Sources**: every source as one row of names, white 80% until a pointer brings one up. A source with a home opens
-  it; YouTube, Bandcamp and SoundCloud scope the header's search to themselves.
-  A source whose latest answer here failed (its home, a page or a search) is
-  muted over "Couldn't load"; it still opens, to try again.
-
-Shelves load side by side at a fixed height so nothing below moves; one that
-fails says "Couldn't load {source}." with Try again. TV page entry goes to the
-first available section's first control, and moves to an earlier section that
-finishes loading until the user acts. With every section hidden or empty, an
-Empty links to Settings (`#customize-discover`).
-
-**Radio** (`/discover/radio`) and **Live TV** (`/discover/live-tv`) are lists
-with a breadcrumb to Discover and the filter row: Radio's source choice
-(`radioSource`: Built-in, Couch's own station list; Playlists; Directory) and
-Filter; Live TV's group (`group`) and Filter, with each channel's now and next
-from the XMLTV guide on its meta line. Filters and page live in the URL. A
-channel has no page: pressing it plays, its menu holds Play on and Queue. Live
-TV shows its filters once the guide answers; with no channels at all, an admin
-gets "No channels yet" with Add a playlist (Settings → Sources → Live TV) and
-anyone else one line, "No channels yet. An admin can add a playlist."; Radio's
-empty Playlists does the same.
+Home's sources ([Home](home.md#the-sources)) sample what Couch can play; two
+of their headings open pages of their own. **Radio** (`/radio`) and **Live
+TV** (`/live-tv`) are lists with a breadcrumb to Home and the filter row:
+Radio's source choice (`radioSource`: Built-in, Couch's own station list;
+Playlists; Directory) and Filter; Live TV's group (`group`) and Filter, with
+each channel's now and next from the XMLTV guide on its meta line. Filters and
+page live in the URL. A channel has no page: pressing it plays, its menu holds
+Play on and Queue. Live TV shows its filters once the guide answers; with no
+channels at all, an admin gets "No channels yet" with Add a playlist
+(Settings → Sources → Live TV) and anyone else one line, "No channels yet. An
+admin can add a playlist."; Radio's empty Playlists does the same.
 
 Catalogue homes (StreamingCommunity, 123MoviesFree, AnimeSaturn, AnimeUnity)
 are poster grids sized by the available width; other source pages are rows.
@@ -138,7 +103,7 @@ the rules (`/api/hidden`, `src/server/hidden.ts`) as an item (source and
 address) or a word matched in the title, subtitle, creator or collection.
 Rules apply where provider items become hits (`SearchOnlineResults`), so
 Search and source pages drop them; radio stations, Live TV channels and
-Discover's saved shelves are not filtered. Settings → Sources → Hidden lists
+Home's saved shelves are not filtered. Settings → Sources → Hidden lists
 the rules with Remove, under a "Hide a word" field.
 
 ## Details
@@ -190,8 +155,8 @@ the app) and never travels through Remote.
 
 `/saved`, one section per `?tab=`: For later, Channels & stations (saved
 channels, playlists, albums and series, then favourite stations), Lists and
-Played (History, newest first). A rail on wide screens (left rule and
-white ink on the current entry, with no ground; a pointer only brings another
+Played (History, newest first). A rail on wide screens (white ink on a
+`secondary` capsule for the current entry; a pointer only brings another
 entry's ink up; no heading; counts only when not zero) and a Select on phones
 choose the section; the rail names the page. Without a `?tab=`, Saved opens the
 first section that holds something (For later when all are empty), then names
@@ -203,8 +168,9 @@ holding the row's verbs (Played: Play or Resume, Play on, Queue, Open in
 browser); Details holds the rest. Lists shows Save as list at its top once
 Up next holds something or a list exists; with neither, only the Empty speaks.
 A list keeps its own title and verbs. An empty tab says what goes there and
-offers Discover. Removing says "Removed … from Saved." with Undo. Artwork this
-page has already shown appears at once on every tab; only a cold load fades.
+offers Search, which focuses the header's field. Removing says "Removed …
+from Saved." with Undo. Artwork this page has already shown appears at once on
+every tab; only a cold load fades.
 
 ## Rows and tiles
 
@@ -213,9 +179,10 @@ target whose press does the main verb (Play for stations, channels and live
 hits, else Open or Details), with the row's menu behind a "…" at the end of the
 title's line, which a pointer sees while over the row or focus is in it (touch
 and the TV always see it). A row is never tinted: hovered, its thumbnail lights
-up as a tile's does ([Hover](../design.md#tokens)). The thumbnail takes the
-list's majority shape at about one height (a compact square is 4rem, a compact
-frame 7rem wide), and a word every row shares (RaiPlay's "Programme") is left
+up as a tile's does ([Hover](../design.md#tokens)). Rows are dense (`py-2`),
+the title `text-body` over a `text-meta` line. The thumbnail (`rounded-sm`)
+takes the list's majority shape at about one height (a compact square is
+3.5rem, a compact frame 6rem wide; a regular frame 5rem, 6rem from `@md`), and a word every row shares (RaiPlay's "Programme") is left
 out, in a row or a shelf. Where a row leads (its source, creator, series,
 station: `related`) is the last verbs of its menu, "Go to Phony", never links
 under it; Search names a hit's source in its meta line instead. A row whose
@@ -225,7 +192,7 @@ Remove and a drag handle. A tracklist row (`number`) is the track's number, its
 title and its time at the end of the title's line, without artwork.
 
 **What plays** carries the [level](../design.md#motion) wherever it is listed
-(Home, Discover, Search, Saved, Radio, a source's pages): a black square at its
+(Home, Search, Saved, Radio, a source's pages): a black square at its
 artwork's bottom-left corner with the bars in white, or, in a tracklist, in
 place of its number. A row or tile knows it by its addresses (`source`: its
 page, or a station's `radio:` source and stream), matched against what the
@@ -234,10 +201,10 @@ looked-at Playback plays.
 **`MediaTile`**: a picture with a caption, never a box. One Button around
 `MediaArtwork` at its shelf's shape (`--tile-art` sets the height: posters
 15rem, frames 9rem or half the column on a narrow phone, squares 10.5rem,
-circles 9rem), then a title of up to two lines and one meta line, and nothing
-else: no fill, outline or links. How far it got is a white line along the
-artwork's foot (Continue), with what's left in the meta line ("YouTube, 4:11
-left"). Where it leads (`related`: its series, season, channel, station,
+circles 9rem; the picture `rounded-md`), then a title of up to two lines
+(`text-body`) and one meta line (`text-meta`), and nothing else: no fill,
+outline or links. How far it got is a white line along the artwork's foot,
+with what's left in the meta line ("YouTube, 4:11 left"). Where it leads (`related`: its series, season, channel, station,
 source) is the last verbs of its menu ("Go to Stanford"), and Details, where
 the press plays, the first. Hovered or focused, the picture lights up in its
 own colour and the meta line comes up to white; focus adds a white ring, which
@@ -255,10 +222,8 @@ wherever tiles, rows or the hero show it.
 row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll
 work natively. The row runs out to the window's edges, so a long shelf runs off
 the right of the screen, and its padding holds a lit tile's glow and the TV's
-lifted tile. A `sparse` shelf (one or two tiles) takes only their width from `md`
-up, off the TV, so Home sets short shelves side by side; phones and the TV keep
-one shelf per row.
-Search kinds and Discover's shelves use it too.
+lifted tile. Its heading, `ShelfHeading` (`text-heading`), also heads Home's
+board lists. Search kinds and Home's sources use it too.
 
 **`MediaArtwork`** fills its frame when the art matches the frame's shape and
 is contained otherwise. Without any it is a cover set in type: a deep tone of
@@ -319,7 +284,7 @@ Turning a page moves focus to the list's top.
 
 `ContentBreadcrumb` (shadcn's Breadcrumb) puts a sub-page's ancestors above its
 h1 (on a Details page, inside the Stage's copy, over the title), each a link: the section it opened in, Radio or the source's home, then
-the collections holding it ("Discover › StreamingCommunity › Series"), then
+the collections holding it ("Home › StreamingCommunity › Series"), then
 the h1, which names the page; no separator follows the last crumb. One line of small
 muted text; out of room, the longest crumbs truncate first. Esc and the TV's Back
 still go back in history, restoring focus.
