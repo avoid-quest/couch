@@ -42,14 +42,15 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const report = useCallback((_: string, summary: SearchResultSummary) => setReported({ cursor, summary }), [cursor]);
   const summary = reported?.cursor === cursor ? reported?.summary : undefined;
   const reportedCollection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
-  // A channel's tab ("Stanford - Videos") is the channel.
-  const collection = { ...reportedCollection, title: pageTitle(reportedCollection.title) };
+  // A YouTube channel's tab ("Stanford - Videos") is the channel; another source's "… - Live" album keeps its name.
+  const tab = provider === "youtube" && isChannelTab(reportedCollection.title);
+  const collection = { ...reportedCollection, title: tab ? pageTitle(reportedCollection.title) : reportedCollection.title };
   const page = summary?.page;
   // A channel's tab sits under its channel, which is the page itself: the trail stops before it.
   const holder = search.context ?? page?.item?.collection ?? page?.parent;
   const trail = holder && !("parent" in holder && holder.parent) && holder.title === collection.title ? undefined : holder;
   // A Twitch page that isn't its directory is a channel, whose picture is its avatar.
-  const channel = page?.item?.kind === "channel" || isChannelTab(reportedCollection.title) || provider === "twitch" && !!url && !new URL(url).pathname.startsWith("/directory");
+  const channel = page?.item?.kind === "channel" || tab || provider === "twitch" && !!url && !new URL(url).pathname.startsWith("/directory");
   // The page's own shape: a channel is round, an album square, a series a poster, an episode a frame.
   const shape = artShape(providerNames[provider], channel ? "channel" : collection.single ? (search.context ?? page?.item?.collection ? "episode" : "media") : "collection");
   const cold = connected && (!summary || summary.loading) && !page;
