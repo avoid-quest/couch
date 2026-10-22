@@ -124,7 +124,9 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     // Remote Up next and Back use ordinary navigation, not a view transition.
     // Observe actual commits/mutations as well as frames; URL and presented matches can differ.
     if (!gate.tvPresentation) {
+      // Remote offers Up next only with something in it (hasUpNext).
       const remoteGate = { ...gate, state: { ...gate.state!, controlling: tvId,
+        queue: [...gate.state!.queue, { id: "n", title: "Next fixture", source: "https://example.com/next.mp4", duration: 60 }],
         devices: [...(gate.state!.devices ?? []), { id: tvId, name: "Fixture TV", tv: true, online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }],
         outputs: [{ deviceId: tvId, picture: true, sound: true }],
         playbacks: gate.state!.playbacks?.map(playback => ({ ...playback, outputs: [{ deviceId: tvId, picture: true, sound: true }] })),
