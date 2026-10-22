@@ -143,7 +143,10 @@ body { min-width: 0; }
 
 /* Couch focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
    Unlayered on purpose so it wins over component rings and hover backgrounds. */
-:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
+:is(button, a, [data-slot="input"], [role="tab"], [role="slider"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus),
+/* A menu's or a Select's row takes the focus under the pointer too (Radix), and Chromium calls that :focus-visible, so
+   only the keys' row inverts (data-keyboard, navigation.ts); the pointer's keeps the quiet fill (--accent). */
+:where([data-keyboard]) :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus) { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
 [data-slot="input"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { color-scheme: light; }
 [data-slot="input"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)::placeholder { color: color-mix(in srgb, var(--background) 65%, transparent); }
 [data-slot="button"][data-variant="default"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus), [data-sonner-toast] [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus),
@@ -154,7 +157,7 @@ body { min-width: 0; }
    and one under the pointer takes the menus' quiet fill (--accent) with its ink unchanged (HeaderSearch marks the list
    data-pointer while a pointer moves over it). */
 [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] { background: var(--foreground); color: var(--background); box-shadow: none; }
-:is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground, [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
+:is(button, a):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground, :where([data-keyboard]) :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus) .text-muted-foreground, [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
 /* Media lights up (Design → Hover). A tile or a row is a picture, never a box: nothing tints, outlines or dims it.
    Hovered or focused, its picture glows in its own first colour (--item-light, AmbientLight.tsx's useItemLight; a
    faint white until the colour is read) and its meta line comes up to white; that is the one hover. Focus adds a white
