@@ -9,7 +9,7 @@ mock.module("../src/client/session/session-context", () => ({ useSessionGate: ga
 mock.module("../src/client/sections/shell/shell-context", () => ({ useShell: () => ({ credentials: { origin: "http://localhost", token: "test" }, available: true }) }));
 let favorites: ProviderItem[] = [];
 let failedQueries: { queryKey: unknown[]; state: { status: string; dataUpdatedAt: number; errorUpdatedAt: number } }[] = [];
-mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) => options, infiniteQueryOptions: (options: unknown) => options,
+mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) => options, infiniteQueryOptions: (options: unknown) => options, notifyManager: { batchCalls: (callback: unknown) => callback },
   useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.join("/") === "providers/favorites" ? { favorites } : { sources: [] } }),
   useQueryClient: () => ({ getQueryCache: () => ({ findAll: () => failedQueries, subscribe: () => () => {} }) }) }));
 mock.module("../src/client/components/PlayOn", () => ({ PlayOnGroup: () => null, usePlayOn: () => ({ devices: [], on: (label: string) => label }) }));

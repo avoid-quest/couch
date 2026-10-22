@@ -1,6 +1,6 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { type ComponentProps, type MouseEvent, useSyncExternalStore } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -95,7 +95,8 @@ function useFailingSources() {
     }
     return [...latest].filter(([, answer]) => answer.failed).map(([provider]) => provider).sort().join(" ");
   };
-  const failing = useSyncExternalStore(listener => client.getQueryCache().subscribe(listener), read, read);
+  // Batched as useQuery's own subscriptions are, so a query Home creates while it renders doesn't update this line mid-render.
+  const failing = useSyncExternalStore(listener => client.getQueryCache().subscribe(notifyManager.batchCalls(listener)), read, read);
   return (provider: ProviderId) => failing.split(" ").includes(provider);
 }
 
