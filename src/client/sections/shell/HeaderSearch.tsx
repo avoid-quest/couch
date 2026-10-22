@@ -135,10 +135,10 @@ export function HeaderSearch({ className }: { className?: string }) {
     <Command label="Search or paste a link" shouldFilter={false} loop={false} vimBindings={false} value={selected} onValueChange={setSelected} className="relative min-w-0 flex-1">
       {/* InputGroup keeps its input/addon behavior; the header gives search a quiet filled surface. Focused, it inverts
           at once; while the palette is open its selected row is the one white thing, so the field takes a white edge instead. */}
-      <InputGroup className={cn("h-11 rounded-md border-transparent bg-muted transition-colors dark:bg-muted has-[[data-slot=input-group-control]:focus-visible]:ring-0",
+      <InputGroup className={cn("h-field rounded-full border-transparent bg-muted transition-colors dark:bg-muted has-[[data-slot=input-group-control]:focus-visible]:ring-0",
         open ? "border-foreground" : "has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0")}>
-        <InputGroupAddon className={cn("min-w-0 shrink pl-2.5", !open && "group-has-[input:focus]/input-group:text-background/65")}>
-          <InputGroupButton type="submit" size="icon-xs" className="shrink-0 touch:size-11" aria-label="Search" title="Search">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupButton>
+        <InputGroupAddon className={cn("min-w-0 shrink pl-3", !open && "group-has-[input:focus]/input-group:text-background/65")}>
+          <InputGroupButton type="submit" size="icon-sm" className="shrink-0 touch:size-11 [&_svg]:size-5!" aria-label="Search" title="Search">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupButton>
           {/* The scope's tokens: a press removes one (the keyboard's Backspace, the TV's own row in the palette). */}
           {labels.map(label => <button key={label} type="button" tabIndex={-1} data-search-token aria-label={`Remove ${label}`} title={`Remove ${label}`} onPointerDown={event => event.preventDefault()}
             onClick={() => { rescope(label === scope.source ? { kind: scope.kind, source: "All" } : { source: scope.source }); input.current?.focus(); }}
@@ -146,7 +146,7 @@ export function HeaderSearch({ className }: { className?: string }) {
         </InputGroupAddon>
         <span id={tokens} hidden>{labels.length ? `In ${labels.join(", ")}` : ""}</span>
         <PaletteInput ref={input} open={open} id="media-search" data-remote-field="find" type="search" aria-label="Search or paste a link" aria-describedby={labels.length ? tokens : undefined} placeholder="Search" maxLength={4096} autoComplete="off"
-          className={cn("h-full min-w-16 text-base md:text-base caret-current focus:duration-0 focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden", !open && "group-has-[input:focus]/input-group:placeholder:text-background/65")} value={value}
+          className={cn("h-full min-w-16 text-title md:text-title caret-current focus:duration-0 focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden", !open && "group-has-[input:focus]/input-group:placeholder:text-background/65")} value={value}
           onChange={event => type(event.target.value)}
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={event => { composing.current = false; type(event.currentTarget.value); }}
           onKeyDown={event => {
@@ -177,14 +177,14 @@ export function HeaderSearch({ className }: { className?: string }) {
               if (page) { event.preventDefault(); focusPageControl(page); }
             }
           }} />
-        {!value && !labels.length && <InputGroupAddon align="inline-end" className="hidden pointer-fine:flex touch:hidden group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
-        {(value || labels.length > 0) && <InputGroupAddon align="inline-end" className={cn("pr-2.5", !open && "group-has-[input:focus]/input-group:text-background/65")}><InputGroupButton size="icon-xs" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
+        {!value && !labels.length && <InputGroupAddon align="inline-end" className="hidden pr-4 pointer-fine:flex touch:hidden group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
+        {(value || labels.length > 0) && <InputGroupAddon align="inline-end" className={cn("pr-3", !open && "group-has-[input:focus]/input-group:text-background/65")}><InputGroupButton size="icon-sm" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
       </InputGroup>
       {/* On a desktop, the field's own list: under it, its width and its left edge, on the menus' ground. On a phone and
           the TV, the whole screen under the header. A press keeps the field focused (a tap or a Safari click would blur
           it first and take the list away). */}
       {open && <CommandList ref={list} label="Suggestions" onPointerDown={event => event.preventDefault()} onPointerMove={event => { if (event.pointerType === "mouse" && !isTvPresentation()) event.currentTarget.setAttribute("data-pointer", ""); }}
-        className="absolute inset-x-0 top-full z-30 mt-1.5 max-h-[min(36rem,calc(100dvh-var(--top-bar,4rem)-1rem))] rounded-lg bg-popover p-1.5 touch:fixed touch:top-(--top-bar) touch:bottom-0 touch:mt-0 touch:max-h-none touch:rounded-none touch:bg-background touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:top-(--top-bar) tv:bottom-0 tv:mt-0 tv:max-h-none tv:rounded-none tv:bg-background tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
+        className="absolute inset-x-0 top-full z-30 mt-2 max-h-[min(40rem,calc(100dvh-var(--top-bar,4rem)-1rem))] rounded-lg bg-popover p-2 **:[[cmdk-item]]:min-h-10 **:[[cmdk-item]]:text-body **:[[cmdk-group-heading]]:text-meta touch:fixed touch:top-(--top-bar) touch:bottom-0 touch:mt-0 touch:max-h-none touch:rounded-none touch:bg-background touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:top-(--top-bar) tv:bottom-0 tv:mt-0 tv:max-h-none tv:rounded-none tv:bg-background tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
         {text
           ? <Typed text={text} link={link} scope={scope} labels={labels} recents={recents} connected={connected}
             onSearch={() => search(text, "enter")} onScope={next => choose(next)} onRecent={pick}
@@ -225,8 +225,8 @@ function ScopeRows({ items, scope, onScope, hint }: { items: Scope[]; scope: Sea
 /** A title the client already holds: its artwork, then the title over where it comes from. */
 function TitleRow({ value, title, detail, thumbnail, onSelect }: { value: string; title: string; detail?: string; thumbnail?: string; onSelect: () => void }) {
   return <CommandItem value={value} onSelect={onSelect}>
-    <MediaArtwork thumbnail={thumbnail} title={title} className="aspect-square size-8 shrink-0 object-cover tv:size-10" />
-    <span className="grid min-w-0 flex-1"><span className="truncate">{title}</span>{detail && <span className="truncate text-xs text-muted-foreground tv:text-sm">{detail}</span>}</span>
+    <MediaArtwork thumbnail={thumbnail} title={title} className="aspect-square size-10 shrink-0 rounded-sm object-cover" />
+    <span className="grid min-w-0 flex-1"><span className="truncate">{title}</span>{detail && <span className="truncate text-meta text-muted-foreground tv:text-sm">{detail}</span>}</span>
   </CommandItem>;
 }
 
@@ -260,7 +260,7 @@ function Empty({ scope, recents, onScope, onRecent, onOpen }: { scope: SearchSco
   const recent = recents.slice(0, 6), continuing = played.slice(0, 6);
   // The kinds as chips (Design → Chips): a quiet fill that steps up under the pointer, the chosen one checked as a
   // ChoiceGroup's is, and the keys' selection inverted as every focus is. On the TV, rows.
-  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-2 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:min-h-control-sm **:[[cmdk-item]]:gap-1.5 **:[[cmdk-item]]:rounded-full **:[[cmdk-item]]:bg-secondary **:[[cmdk-item]]:px-3.5 **:[[cmdk-item]]:data-[selected=true]:bg-fill-hover **:[[cmdk-item]]:[&>svg]:order-first **:[[cmdk-item]]:[&>svg]:-ml-1 tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:rounded-md tv:**:[[cmdk-item]]:px-2 tv:**:[[cmdk-item]]:bg-transparent";
+  const chips = "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-2 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:min-h-control **:[[cmdk-item]]:gap-1.5 **:[[cmdk-item]]:rounded-full **:[[cmdk-item]]:bg-secondary **:[[cmdk-item]]:px-3.5 **:[[cmdk-item]]:data-[selected=true]:bg-fill-hover **:[[cmdk-item]]:[&>svg]:order-first **:[[cmdk-item]]:[&>svg]:-ml-1 tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:rounded-md tv:**:[[cmdk-item]]:px-2 tv:**:[[cmdk-item]]:bg-transparent";
   return <div className="grid gap-y-2 tv:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] tv:gap-x-8">
     <div data-palette-column data-palette-kinds className={chips}><CommandGroup heading="Search in"><ScopeRows items={kindScopes} scope={scope} onScope={onScope} /></CommandGroup></div>
     {(recent.length > 0 || continuing.length > 0) && <div data-palette-column className="grid content-start gap-2">
@@ -283,7 +283,7 @@ function Typed({ text, link, scope, labels, recents, connected, onSearch, onScop
     const provider = providerForUrl(text);
     const where = text.replace(/^https?:\/\//i, "");
     return <CommandGroup>
-      <CommandItem value="link:play" disabled={!connected} onSelect={onPlayLink} className="text-base font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight"><span className="shrink-0">Play</span><span className="min-w-0 truncate font-normal text-muted-foreground">{where}</span></CommandItem>
+      <CommandItem value="link:play" disabled={!connected} onSelect={onPlayLink} className="min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight"><span className="shrink-0">Play</span><span className="min-w-0 truncate font-normal text-muted-foreground">{where}</span></CommandItem>
       {provider && <CommandItem value="link:open" onSelect={() => onOpen(collectionLocation({ provider, url: text }))}>Open page</CommandItem>}
       <CommandItem value="query" onSelect={onSearch}>Choose how to play</CommandItem>
     </CommandGroup>;
@@ -292,7 +292,7 @@ function Typed({ text, link, scope, labels, recents, connected, onSearch, onScop
     <CommandGroup>
       {/* A verb, not a second field: "Search “ra” in Music". On the TV the typed query reads from the sofa here, larger than
           the header's field holds it. */}
-      <CommandItem value="query" onSelect={onSearch} className="text-base font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight">
+      <CommandItem value="query" onSelect={onSearch} className="min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight">
         <Search aria-hidden="true" className="text-muted-foreground tv:size-6" /><span className="min-w-0 truncate">Search “{text.trim()}”</span>
         {labels.length > 0 && <span className="shrink-0 font-normal text-muted-foreground">in {labels.join(", ")}</span>}
       </CommandItem>
