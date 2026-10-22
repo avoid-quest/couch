@@ -147,7 +147,10 @@ nearby items follow as divided rows: an episode goes by its name ("Episodio
 1", "S1 E1, 36:00" on its meta line), and a link every row shares (its season,
 its channel) is left to the header and the trail; an album's tracks are a tracklist of
 number, title and time, with nothing the page already says (cover, artist,
-album). A page ends with its own content.
+album). A YouTube video in no list is followed by "More from" its channel:
+the channel's Videos tab, as its own page reads it. A page ends with its own
+content; a page with nothing under its header (a single track) is its header,
+filling the window above the bar with its copy and picture centred in it.
 
 **Open in browser** appears in an item's menu when it has an original page
 (provider media and collections, History, For later, Up next, stations with a

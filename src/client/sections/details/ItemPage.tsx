@@ -133,7 +133,7 @@ function QueueDetails({ id }: { id: string }) {
   const radio = isRadio(item);
   return <><DetailLayout context={<MediaContext creator={item.creator} />} title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} more={browserActions(queuePageUrl(item))} />
-    {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
+    {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} creator={item.creator} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
   </>;
 }
 
@@ -172,7 +172,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     queue={{ label: "Queue", disabled: blocked, run: () => action.mutate(() => session.queue(item.title, () => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id }))) }}
     save={item.url ? save : undefined}
     playOn={{ disabled: blocked || !playable || !item.playable, run: deviceId => action.mutate(() => play(start, deviceId)) }}
-    more={[...browserActions(item.url), ...item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []]} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
+    more={[...browserActions(item.url), ...item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []]} /><RelatedCollection collection={item.collection} creator={item.creator} currentTitle={item.title} /></>;
 }
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
@@ -217,7 +217,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
       { label: "Move up", disabled: !connected || action.isPending || index <= 0, run: () => action.mutate(() => move(-1)) },
       { label: "Move down", disabled: !connected || action.isPending || index < 0 || index >= items.length - 1, run: () => action.mutate(() => move(1)) },
       { label: "Remove", disabled: !connected || action.isPending, run: () => action.mutate(remove) },
-    ]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
+    ]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} creator={item.creator} currentUrl={item.url} /></>;
 }
 
 function RadioDetails({ item }: { item: RadioStation }) {

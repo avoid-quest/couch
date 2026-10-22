@@ -498,6 +498,12 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 .stage-copy { position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; width: 100%; max-width: 46rem; padding-bottom: 2.5rem; container-type: inline-size; }
 /* Beside a picture the copy takes the room left of it, less a gap: a wide picture leaves less than a poster. */
 .stage:has(> [data-stage-picture] > *) .stage-copy { max-width: min(46rem, calc(100% - var(--object-w) - 3vw - 3rem)); }
+/* A Details page with nothing under its stage (a single video, a track) is its stage: it fills the window above the
+   bar and centres the copy and the picture in it, instead of standing over an empty page. */
+@media (min-width: 48rem) {
+  .stage[data-stage="details"]:not(:has(~ :not([hidden], .sr-only))) { --stage-h: calc(100svh - var(--bottom-bar, 0px) - 1rem); --object-h: min(calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem), 34rem); align-content: center; }
+  .stage[data-stage="details"]:not(:has(~ :not([hidden], .sr-only))) .stage-picture { inset-block: 0; height: auto; margin-top: var(--top-bar, 4rem); }
+}
 /* Phones and narrow windows: the picture leads the column at the top, under the header, centred above the copy; a
    wide one spans the column. */
 @media (max-width: 47.99rem) {

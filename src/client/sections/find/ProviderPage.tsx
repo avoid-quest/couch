@@ -135,7 +135,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     </>}
     {summary?.error && moved.test(summary.errorMessage ?? "") ? <MovedSource name={providerNames[provider]} message={summary.errorMessage!.replace(moved, "")} retry={summary.retry} />
       : <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />}
-    {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}
+    {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} creator={page?.item?.creator} currentUrl={page?.item?.url ?? url} />}
   </section>;
 }
 
