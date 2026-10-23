@@ -142,7 +142,13 @@ The verbs: Play (Play all; Resume with From start once partly watched), Queue,
 Play on while another device can play it, Save as a bookmark that fills once
 saved (one fixed-width toggle, `aria-pressed`, named Save), then "…" for the
 rest (Remove from Continue, Move up/down, Play next, Open in browser…). The
-primary verb carries `data-page-first`. A series names the episode its Play
+primary verb carries `data-page-first`. A video's Play and Queue use its
+displayed canonical item; Resume keeps the selected containing list and
+occurrence while resuming its saved position (From start resets it). History
+keeps the original media identity when its public page uses a canonical alias,
+including youtu.be and Shorts; choosing another playlist or occurrence preserves
+that history and uses the selected list for continuation. A series
+names the episode its Play
 starts: "Resume S1 E1" while one is part watched, else "Play S1 E2", the next
 unwatched episode of the season last played (the first season otherwise); a
 series of seasons reads that season's episodes for it, and until it can, Play
@@ -151,7 +157,9 @@ nearby items follow as divided rows: an episode goes by its name ("Episodio
 1", "S1 E1, 36:00" on its meta line), and a link every row shares (its season,
 its channel) is left to the header and the trail; an album's tracks are a tracklist of
 number, title and time, with nothing the page already says (cover, artist,
-album). A YouTube video in no list is followed by "More from" its channel:
+album). Nearby items follow the selected occurrence when a list repeats a
+video, retaining the source's indices across unavailable entries. A YouTube
+video in no list is followed by "More from" its channel:
 the channel's Videos tab, as its own page reads it. A page ends with its own
 content; a page with nothing under its header (a single track) is its header,
 filling the window above the bar with its copy and picture centred in it.

@@ -1,5 +1,6 @@
 import type { LiveFailedMessage, LiveSignalMessage, LiveUploadFailedMessage } from "../shared/live-input";
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
+import type { MediaCollection } from "../shared/media";
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
 import { safePlaybackError } from "./playback-log";
@@ -20,6 +21,10 @@ const httpUrl = (value: unknown): value is string => {
 };
 const collectionLink = (value: unknown, provider: unknown) => object(value) && httpUrl(value.url) && providerForUrl(value.url) === provider
   && typeof value.title === "string" && value.title.length > 0 && value.title.length <= 300 && !/[\u0000-\u001f\u007f]/.test(value.title);
+
+export const validProviderCollection = (value: unknown, provider: unknown): value is MediaCollection => object(value) && collectionLink(value, provider)
+  && (value.parent === undefined || collectionLink(value.parent, provider))
+  && (value.index === undefined || number(value.index, 2400) && Number.isInteger(value.index));
 
 function validEntry(value: unknown): value is QueueEntry {
   if (!object(value) || value.liveSourceId !== undefined || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;
@@ -49,9 +54,7 @@ function validAction(value: unknown): value is Action {
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
       && playOptions(value) && videoQuality(value.quality)
-      && (value.collection === undefined || object(value.collection) && collectionLink(value.collection, value.provider) && providerForUrl(value.url) === value.provider
-        && (value.collection.parent === undefined || collectionLink(value.collection.parent, value.provider))
-        && (value.collection.index === undefined || number(value.collection.index, 2400) && Number.isInteger(value.collection.index)))
+      && (value.collection === undefined || validProviderCollection(value.collection, value.provider) && providerForUrl(value.url) === value.provider)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail));
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
@@ -147,11 +150,11 @@ export function parseCommand(message: string): ClientMessage {
   }
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, ...guard, action: { type: "navigate", key: value.action.key, ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }) } };
   if (value.action.type === "enqueueProvider") {
-    const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection, deviceId } = value.action;
+    const { provider, url, shape, title, thumbnail, playNow, fromStart, quality, placement, collection, deviceId } = value.action;
     return { type: "command", requestId: value.requestId, ...guard, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
       ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
       ...(collection === undefined ? {} : { collection: { title: collection.title, url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }), ...(collection.parent ? { parent: { title: collection.parent.title, url: collection.parent.url } } : {}) } }),
-      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }), ...(deviceId === undefined ? {} : { deviceId }) } };
+      ...(playNow === undefined ? {} : { playNow }), ...(fromStart === undefined ? {} : { fromStart }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }), ...(deviceId === undefined ? {} : { deviceId }) } };
   }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;

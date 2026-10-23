@@ -42,7 +42,7 @@ export function createContinuationResolver(loadList = loadProviderList) {
     signal.throwIfAborted();
     const sameItem = (candidate: string) => {
       const next = episode && streamingEpisode(candidate);
-      return candidate === url || (provider === "animesaturn" || provider === "animeunity") && !!publicProviderMediaUrl(url) && publicProviderMediaUrl(candidate) === publicProviderMediaUrl(url)
+      return candidate === url || (provider === "youtube" || provider === "animesaturn" || provider === "animeunity") && !!publicProviderMediaUrl(url) && publicProviderMediaUrl(candidate) === publicProviderMediaUrl(url)
         || !!movies123 && movies123PageUrl(candidate)?.href === movies123.href
         || !!next && next.origin === episode!.origin && next.title === episode!.title && next.episode === episode!.episode;
     };

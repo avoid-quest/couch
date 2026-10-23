@@ -145,9 +145,9 @@ function OnlineResults(props: Props) {
     catch (reason) { if (!signal.aborted) failed(failure, reason); }
     finally { if (!signal.aborted) setBusy(false); }
   }
-  function play(item: ProviderItem, playNow: boolean, placement?: "next", deviceId?: string) {
+  function play(item: ProviderItem, playNow: boolean, placement?: "next", deviceId?: string, fromStart = false) {
     void action(`Couldn't ${playNow ? "play" : "queue"} ${item.title}.`, async signal => {
-      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(!music ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}), ...(deviceId ? { deviceId } : {}) });
+      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(!music ? { quality: props.quality } : {}), playNow, ...(fromStart ? { fromStart } : {}), ...(placement ? { placement } : {}), ...(deviceId ? { deviceId } : {}) });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
     });
@@ -211,9 +211,12 @@ function OnlineResults(props: Props) {
     const animeResume = selected && ["animesaturn", "animeunity"].includes(provider) ? seriesResumeFor(selected, historyItems) : undefined;
     const progress = animeResume ?? (start ? progressFor(start, historyItems) : selected ? seriesResumeFor(selected, historyItems) : undefined);
     const resume = progress?.playable && !progress.watched && progress.position > 0 ? progress : undefined;
+    // Keep the saved source identity even when Details selects another list/occurrence.
+    const resumeSelection = resume && selected?.kind === "media" && start?.collection && (start.collection.url !== resume.collection?.url || start.collection.index != null && start.collection.index !== resume.collection?.index)
+      ? { collection: start.collection, ...(!music ? { quality: props.quality } : {}) } : undefined;
     const startItem = (fromStart = false, deviceId?: string) => {
-      if (resume && props.onPlayHistory) void action(`Couldn't play ${resume.title}.`, () => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on }), deviceId));
-      else if (start) play(start, true, undefined, deviceId);
+      if (resume && props.onPlayHistory) void action(`Couldn't play ${resume.title}.`, () => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on, ...(resumeSelection ? { selection: resumeSelection } : {}) }), deviceId));
+      else if (start) play(start, true, undefined, deviceId, fromStart);
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
     // Without the season's episodes yet, Play plays the season from its first.
@@ -223,7 +226,7 @@ function OnlineResults(props: Props) {
     const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(`Couldn't ${playNow ? "play" : "queue"} ${page.title || selected?.title || providerNames[provider]}.`, () => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(!playNow ? { title: page.title || selected?.title || providerNames[provider] } : {}), ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
     props.onResults?.(providerNames[provider], { page: page ?? undefined, count: shown.length, loading, refreshing: fetching && !!page, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < shown.length || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || fetching, hits,
       ...(props.url ? { collection: { context: props.context ?? selected?.collection, creator: selected?.creator, url: selected?.url ?? props.url, title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
-        single: selected?.kind === "media", playAll: start || resume ? () => startItem() : playSeason ? () => playSeason() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : playSeason ?? (list(true) && (deviceId => list(true, deviceId)?.())), queueAll: list(false),
+        single: selected?.kind === "media", playAll: start || resume ? () => startItem() : playSeason ? () => playSeason() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : playSeason ?? (list(true) && (deviceId => list(true, deviceId)?.())), queueAll: selected?.kind === "media" && props.onCommand ? () => play(selected, false) : list(false),
         playNext: selected?.kind === "media" && props.onCommand ? () => play(selected, false, "next") : undefined,
         playLabel: [resume ? "Resume" : start || playSeason ? "Play" : undefined, episode].filter(Boolean).join(" ") || undefined, position: resume?.position, duration: resume?.duration ?? (selected?.kind === "media" && !selected.live ? selected.duration : undefined), fromStart: resume ? () => startItem(true) : undefined,
         // A page's section opens from that page; it isn't something to keep (one saved before can still go).

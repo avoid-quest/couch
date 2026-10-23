@@ -29,9 +29,10 @@ function RelatedItems({ target, collection, creator, more, currentUrl, currentTi
   const report = useCallback((_: string, summary: SearchResultSummary) => setSummary(summary), []);
   const hits = summary?.hits ?? [];
   const isCurrent = (hit: typeof hits[number]) => currentUrl ? hit.url === currentUrl : !!currentTitle && hit.title === currentTitle;
-  const currentIndex = hits.findIndex(isCurrent);
+  const occurrenceIndex = collection?.index == null ? -1 : hits.findIndex(hit => isCurrent(hit) && hit.context?.url === collection.url && hit.context.index === collection.index);
+  const currentIndex = occurrenceIndex < 0 ? hits.findIndex(isCurrent) : occurrenceIndex;
   const start = Math.max(0, currentIndex - 2);
-  const nearby = hits.slice(start, start + 5).filter(hit => !isCurrent(hit)).slice(0, 4);
+  const nearby = hits.slice(start, start + 5).filter((hit, index) => occurrenceIndex < 0 ? !isCurrent(hit) : start + index !== occurrenceIndex).slice(0, 4);
   const cursor = collection ? providerCollectionCursor(target.provider, collection) : undefined;
   const title = collection || more ? `More from ${target.title}` : `Browse ${target.title}`;
   return <section aria-label={title} hidden={!!summary && !summary.loading && !summary.error && !nearby.length} className="mt-10 min-w-0 space-y-4">

@@ -32,7 +32,7 @@ import { playsOn } from "@/session/device-id";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId, isRadio, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
-import type { HistoryItem } from "../../../shared/viewing";
+import type { HistoryItem, HistorySelection } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { useOnAir, useStationMenu, useStationShow } from "./on-air";
@@ -45,7 +45,7 @@ import { providerFavoritesQuery } from "@/api/providers";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
 import type { ProviderId } from "../../../shared/providers";
 
-export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
+export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string; selection?: HistorySelection }) => Promise<boolean>;
 
 // A shelf scrolls, so it holds more than fits; a board's list holds its first few. Their headings open the rest.
 const shelfLength = 12;

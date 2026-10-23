@@ -1,6 +1,8 @@
 import { providerForUrl, publicProviderMediaUrl } from "../shared/providers";
 import type { PlaybackActor, QueueEntry, SessionState } from "../shared/protocol";
-import type { HistoryItem, WatchingProfile } from "../shared/viewing";
+import type { HistoryItem, HistorySelection, WatchingProfile } from "../shared/viewing";
+import type { VideoQuality } from "../shared/providers";
+import { validProviderCollection } from "./validation";
 import { RadioError, type createRadio } from "./radio";
 import { playbackMediaId, ViewingError } from "./progress";
 import type { ProgressSnapshot, Store } from "./store";
@@ -22,7 +24,7 @@ export type Viewing = {
   removeHistory(mediaId: string): ProgressSnapshot;
   restoreProgress(removed: ProgressSnapshot, expected?: ProgressSnapshot): void;
   loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize: () => void, playedBy?: PlaybackActor): void;
-  playHistory(mediaId: string, fromStart: boolean, authorize: () => void, playedBy?: PlaybackActor): void;
+  playHistory(mediaId: string, fromStart: boolean, authorize: () => void, playedBy?: PlaybackActor, selection?: HistorySelection): void;
 };
 
 const progressIdentity = /^media:[a-f0-9]{64}$/;
@@ -159,7 +161,7 @@ export function createCatalog({ radio, viewing }: Services) {
           if (request.method !== "POST") return methodNotAllowed("POST");
           const changes = await body(request);
           authorize();
-          if (Object.keys(changes).some(key => !["fromStart", "profileId"].includes(key)) || typeof changes.profileId !== "string" || changes.fromStart !== undefined && typeof changes.fromStart !== "boolean") throw new RequestError("Choose resume or play from start.");
+          if (Object.keys(changes).some(key => !["fromStart", "profileId", "selection"].includes(key)) || typeof changes.profileId !== "string" || changes.fromStart !== undefined && typeof changes.fromStart !== "boolean") throw new RequestError("Choose resume or play from start.");
           const unchangedSettings = () => {
             authorize();
             if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("Playback settings changed. Try again.", 409);
@@ -169,7 +171,18 @@ export function createCatalog({ radio, viewing }: Services) {
           try { mediaId = decodeURIComponent(historyPlay[1]!); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
-          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings, playedBy);
+          let selection: HistorySelection | undefined;
+          if (changes.selection !== undefined) {
+            const item = viewing.store.sharedProgress(mediaId);
+            if (!item) throw new ViewingError("History item not found.", 404);
+            const url = historyView(item).url;
+            const value = changes.selection as Record<string, unknown> | null;
+            if (!url || !value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !["collection", "quality"].includes(key))
+              || !validProviderCollection(value.collection, providerForUrl(url)) || value.quality !== undefined && (typeof value.quality !== "string" || !["auto", "best", "1080p", "720p", "480p"].includes(value.quality))) throw new RequestError("Choose a collection from this item's source.");
+            const { title, url: collectionUrl, index, parent } = value.collection;
+            selection = { collection: { title, url: collectionUrl, ...(index === undefined ? {} : { index }), ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}) }, ...(value.quality === undefined ? {} : { quality: value.quality as VideoQuality }) };
+          }
+          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings, playedBy, selection);
           return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {
