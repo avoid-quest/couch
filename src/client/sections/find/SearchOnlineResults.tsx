@@ -13,6 +13,7 @@ import { useHidden } from "@/api/hidden";
 import { apiFetch } from "@/api/client";
 import { historyQuery } from "@/api/progress";
 import { usePlayOn } from "@/components/PlayOn";
+import { useOptionalSessionGate } from "@/session/session-context";
 import { failed } from "@/toasts";
 import type { MenuAction } from "@/components/RowMenu";
 import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
@@ -81,6 +82,9 @@ function OnlineResults(props: Props) {
   const { provider } = props;
   const client = useQueryClient();
   const playOn = usePlayOn();
+  const state = useOptionalSessionGate()?.state;
+  // Play's announcement needs current destinations, not unrelated player snapshots.
+  const destinations = JSON.stringify([state?.controlling, state?.devices?.map(({ id, name }) => [id, name])]);
   const request = props.url ? { url: props.url } : { query: props.query };
   // Hidden sources still report search counts. Active controls presentation,
   // not whether a source participates in the cross-source search.
@@ -226,6 +230,6 @@ function OnlineResults(props: Props) {
         save: selected && (!pageSection(selected) || selectedSaved) ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, isHidden, later.data, history.data, history.isLoading, seasonPage.data, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
+  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), destinations, page, visible, favorites, isHidden, later.data, history.data, history.isLoading, seasonPage.data, busy, loading, fetching, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }

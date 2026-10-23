@@ -107,6 +107,7 @@ export async function mountUiAudit() {
       gate={...gate,state:{...gate.state!,currentEntryId:entry.id,player:{...gate.state!.player,status:'paused'}}};
       render();await wait();
     },
+    async updateSession(update: (current: SessionGateValue) => SessionGateValue) { gate=update(gate);render();await wait(); },
     client,router,calls,actions,
     close(){root.unmount();client.clear();window.fetch=originalFetch;document.body.classList.toggle('tv-presentation',wasTv);},
   };

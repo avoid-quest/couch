@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { defaultStringifySearch, useLocation, useRouter, useSearch } from "@tanstack/react-router";
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { QueueEntry } from "../shared/protocol";
@@ -64,29 +64,28 @@ export function restoreDetailFocus(target?: FocusTarget) {
 
 export function useDetailNavigation() {
   const router = useRouter({ warn: false });
-  return {
-    open(href: string, focusSelector?: string, viewTransition: boolean | { types: string[] } = false) {
-      if (!router) return;
-      const location = router.state.location;
-      const focus = opener(focusSelector);
-      if (focus) {
-        router.history.replace(location.href, { ...location.state, detailFocus: focus });
-        router.history.flush();
-      }
-      // An item or collection page keeps the section it was opened from: its tab, breadcrumb and Back's fallback.
-      void router.navigate({ href: keepSection(href, sectionForPath(location.pathname, location.searchStr)), viewTransition, state: { pageOpener: { href: location.href, index: location.state.__TSR_index } } });
-    },
-    back(fallback = "/search") {
-      if (!router) return;
-      const target = router.state.location.state.pageOpener;
-      const distance = target && target.index - router.state.location.state.__TSR_index;
-      // Return to the actual opener, skipping intervening player/queue entries.
-      if (distance && distance < 0) router.history.go(distance);
-      else if (target) void router.navigate({ href: target.href, replace: true });
-      else if (router.state.location.pathname !== "/now" && router.history.canGoBack()) router.history.back();
-      else void router.navigate({ href: fallback, replace: true });
-    },
-  };
+  const open = useCallback((href: string, focusSelector?: string, viewTransition: boolean | { types: string[] } = false) => {
+    if (!router) return;
+    const location = router.state.location;
+    const focus = opener(focusSelector);
+    if (focus) {
+      router.history.replace(location.href, { ...location.state, detailFocus: focus });
+      router.history.flush();
+    }
+    // An item or collection page keeps the section it was opened from: its tab, breadcrumb and Back's fallback.
+    void router.navigate({ href: keepSection(href, sectionForPath(location.pathname, location.searchStr)), viewTransition, state: { pageOpener: { href: location.href, index: location.state.__TSR_index } } });
+  }, [router]);
+  const back = useCallback((fallback = "/search") => {
+    if (!router) return;
+    const target = router.state.location.state.pageOpener;
+    const distance = target && target.index - router.state.location.state.__TSR_index;
+    // Return to the actual opener, skipping intervening player/queue entries.
+    if (distance && distance < 0) router.history.go(distance);
+    else if (target) void router.navigate({ href: target.href, replace: true });
+    else if (router.state.location.pathname !== "/now" && router.history.canGoBack()) router.history.back();
+    else void router.navigate({ href: fallback, replace: true });
+  }, [router]);
+  return useMemo(() => ({ open, back }), [open, back]);
 }
 
 // Keep the origin's focus target in its own history entry, including across reload.
