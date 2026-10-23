@@ -1,5 +1,6 @@
 ---
 import "../styles.css";
+import Analytics from "../components/Analytics.astro";
 import { buttonVariants } from "../../../../src/client/components/ui/button";
 
 const description = "A free, open-source media player everyone shares. Phones and laptops join with a QR code to choose what plays, play it, or share their own screen and sound.";
@@ -17,6 +18,7 @@ const repo = "https://github.com/avoid-quest/couch";
     <link rel="canonical" href={new URL("/about", Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <Analytics />
   </head>
   <body>
     <main>

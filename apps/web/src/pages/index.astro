@@ -1,6 +1,7 @@
 ---
 import { Image } from "astro:assets";
 import couch from "../assets/couch.png";
+import Analytics from "../components/Analytics.astro";
 import "../styles.css";
 
 const description = "A free, open-source media player everyone shares. Phones and laptops join with a QR code to choose what plays, play it, or share their own screen and sound.";
@@ -21,6 +22,7 @@ const description = "A free, open-source media player everyone shares. Phones an
     <link rel="canonical" href={Astro.site} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <Analytics />
   </head>
   <body>
     <main>
