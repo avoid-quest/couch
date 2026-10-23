@@ -99,7 +99,8 @@ can set an explicit HTTP(S) Guide URL in Sources for another host. Adding the
 same playlist again updates this override; leaving it blank restores discovery.
 Station identity and favourites stay stable. Guide channel IDs match exactly
 within each source. Missing guides, gaps and channel-only guides keep stations
-playable. Guides refresh every 15 minutes, with bounded reads and failure
+playable. Invalid optional categories or artwork do not discard valid programmes.
+Guides refresh every 15 minutes, with bounded reads and failure
 backoff (including Retry-After), retaining usable cached transmissions.
 
 When titles match, schedule fields win and fresh live enrichment fills missing

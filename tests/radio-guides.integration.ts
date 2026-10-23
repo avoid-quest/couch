@@ -84,6 +84,32 @@ test("existing JSON enrichment works without a guide and pairing/authority still
   } finally { radio.close(); }
 });
 
+test("blank guide overrides restore discovery while an omitted guide keeps the configured URL", async () => {
+  const radio = createRadio({ databasePath: ":memory:", fetch: async () => new Response(m3u) });
+  const settings = createRadioSettings(radio);
+  const input = { name: "Community", url: "https://community.example/list.m3u" };
+  const explicit = "https://override.example/schedule.xml";
+  const post = async (body: object) => {
+    const response = await settings.handle(new Request("http://couch.local/api/radio/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), () => ({ device: null, authority: "host", claimAvailable: false }));
+    assert.equal(response.status, 201);
+    return (await response.json() as { playlist: { id: string; guideUrl: string | null; discoveredGuideUrl: string | null } }).playlist;
+  };
+  try {
+    const initial = await post({ ...input, guideUrl: explicit });
+    const kept = await post(input);
+    assert.equal(kept.id, initial.id);
+    assert.equal(kept.guideUrl, explicit);
+    for (const guideUrl of ["", " \t ", null]) {
+      await post({ ...input, guideUrl: explicit });
+      const cleared = await post({ ...input, guideUrl });
+      assert.equal(cleared.id, initial.id);
+      assert.equal(cleared.guideUrl, null);
+      assert.equal(cleared.discoveredGuideUrl, "https://community.example/guide.xml");
+      assert.equal((await post(input)).guideUrl, null);
+    }
+  } finally { radio.close(); }
+});
+
 test("browsing and playback preserve live shows inside broad guide slots, then fall back on expiry", async () => {
   const realNow = Date.now;
   const sampledAt = Date.parse("2026-10-23T18:00:00Z"), expiresAt = sampledAt + 60_000;

@@ -206,7 +206,9 @@ export function parseGuidePrograms(text: string, channels: Pick<PrivateChannel, 
     const id = guideId(channelId, String(start));
     if (ids.has(id)) return fail("XMLTV repeats a program start for the same channel.");
     ids.add(id);
-    const categories = Array.isArray(row.category) ? radioLabels(row.category.map(value => scalar(value, 500))) : [];
+    const categories = Array.isArray(row.category) ? radioLabels(row.category.flatMap(value => {
+      try { return [scalar(value, 500, true)]; } catch { return []; }
+    })) : [];
     let artworkUrl: string | undefined;
     for (const icon of Array.isArray(row.icon) ? row.icon : []) {
       try { if (record(icon)) artworkUrl = guideUrl(icon["@_src"], options.base); } catch { /* Optional artwork cannot invalidate a guide. */ }

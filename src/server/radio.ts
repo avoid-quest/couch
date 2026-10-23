@@ -356,6 +356,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       url = canonical.href;
       const id = radioId(`playlist:${url}`);
       if (id !== avoidRadioPlaylistId && !getPlaylist(id) && db.query<{ count: number }, [string]>("SELECT COUNT(*) AS count FROM radio_playlists WHERE id != ?").get(avoidRadioPlaylistId)!.count >= 30) throw new RadioError("You can save up to 30 custom radio playlists.");
+      if (typeof explicitGuide === "string" && !explicitGuide.trim()) explicitGuide = null;
       if (explicitGuide !== undefined && explicitGuide !== null) { try { explicitGuide = guideUrl(explicitGuide); } catch { throw new RadioError("Enter an HTTP or HTTPS guide URL without credentials or headers."); } }
       db.query("INSERT INTO radio_playlists (id, name, url) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name").run(id, name.trim(), url);
       if (explicitGuide !== undefined) db.query("UPDATE radio_playlists SET guide_url = ? WHERE id = ?").run(explicitGuide, id);
