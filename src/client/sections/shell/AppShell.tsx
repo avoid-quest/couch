@@ -39,6 +39,7 @@ import { PairForm } from "./PairForm";
 import { TvPairing } from "./TvPairing";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
+import { UpdateNotice } from "@/sections/updates/UpdateNotice";
 import { ShareControl } from "@/sections/share/ShareControl";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
@@ -367,7 +368,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             </div>
           </header>}
           <div className="app-page flex min-w-0 flex-1 flex-col" data-scroll-restoration-id="app-page">
-            {paired && !onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>}
+            {paired && !onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}{!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && <UpdateNotice />}</div>}
             {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
             {!paired ? <PairingPage status={status} /> : <>
               {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}

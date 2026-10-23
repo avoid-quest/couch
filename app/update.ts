@@ -3,7 +3,7 @@ import updater from "electron-updater";
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
-import { isUpdateChannel, isUpdateVersion, parseUpdateOutcome, validateUpdateAction, type UpdateChannel, type UpdateOutcome, type UpdateState } from "../src/shared/updates";
+import { isUpdateChannel, isUpdateVersion, parseUpdateOutcome, validateUpdateAction, UPDATE_INTERRUPTS_PLAYBACK, type UpdateChannel, type UpdateOutcome, type UpdateState } from "../src/shared/updates";
 import { appDiagnostic, logAppError } from "./diagnostics";
 
 const every = 4 * 60 * 60 * 1000;
@@ -17,6 +17,7 @@ type Options = {
   channelPath: string;
   tv: boolean;
   onState(state: UpdateState): void;
+  playing?: () => boolean | Promise<boolean>;
 };
 
 // Checks at start and every 4 hours on the chosen channel, the build's own by
@@ -25,7 +26,7 @@ type Options = {
 // The TV runs as an account that can't install packages: root's
 // couch-update.timer installs overnight while nothing plays, and Restart to
 // update starts couch-update@<version>.service (docs/native-tv.md).
-export function startUpdates({ channelPath, tv, onState }: Options) {
+export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   const { autoUpdater } = updater;
   // Its default console logger prints raw URLs and stacks before our error handler.
   autoUpdater.logger = {
@@ -76,15 +77,25 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     if (state.status === "installing") set({ status: "ready", error: "Couldn't install the update. Try again later." });
   });
 
-  function install(expected: string, delay: number) {
+  async function install(expected: string, delay: number, interrupt = false) {
     if (state.status !== "ready" || state.available !== expected) throw new Error("The available update changed. Check again.");
     if (tv) installing = Math.floor(Date.now() / 1000) * 1000;
     set({ status: "installing", error: null });
-    return finishInstall(expected, delay);
+    try {
+      if (!interrupt && await playing?.()) throw new Error(UPDATE_INTERRUPTS_PLAYBACK);
+    } catch (error) {
+      set({ status: "ready", error: error instanceof Error ? error.message : "Couldn't check playback. Try again." });
+      throw error;
+    }
+    void finishInstall(expected, delay, interrupt).catch(error => {
+      set({ status: "ready", error: error instanceof Error ? error.message : "Couldn't install the update. Try again later." });
+      logAppError("update", `Couldn't install the update: ${error.message}`);
+    });
   }
 
-  async function finishInstall(version: string, delay: number) {
+  async function finishInstall(version: string, delay: number, interrupt: boolean) {
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    if (!interrupt && await playing?.()) throw new Error(UPDATE_INTERRUPTS_PLAYBACK);
     if (!tv) return autoUpdater.quitAndInstall(true, true);
     // Root installs the release and restarts the TV app.
     await promisify(execFile)("systemctl", ["start", "--no-block", `couch-update@${version}.service`]).catch(error => {
@@ -148,7 +159,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
       validateUpdateAction(action);
       if (action.op === "check") void check();
       else if (action.op === "channel") return setChannel(action.channel);
-      else if (action.op === "install") void install(action.version, installDelay).catch(error => logAppError("update", `Couldn't install the update: ${error.message}`));
+      else if (action.op === "install") await install(action.version, installDelay, action.interrupt);
       return state;
     },
   };

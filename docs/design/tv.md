@@ -62,7 +62,9 @@ that Remote in another browser profile.
   Down from a row (`data-nav-row`: a shelf, the hero's or Details' verbs, a
   media row) reach the nearest row first, so shelves and their headings are
   walked one by one. The header and the footer (now-playing bar) come only
-  after the page's controls; Up from the first row reaches the current tab, and
+  after the page's controls, as an in-page footer (`data-nav-footer`, the update
+  review's actions) comes after the notes that scroll beneath it; Up from the first
+  row reaches the current tab, and
   Up again a toast's action. In Saved and Settings, Right from the rail enters
   the content and Left returns to the selected entry.
 - **Controls that would trap arrows don't.** Arrows past a radio group's ends,

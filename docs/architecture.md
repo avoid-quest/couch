@@ -323,6 +323,23 @@ uses SoundCloud's known JPEG artwork sizes, up to 500px, instead of probing each
 original image with a serial HEAD request. Search still uses yt-dlp's flat
 extraction; playback retains its full format extraction and public-network proxy.
 
+## Updates
+
+The shared update UI coordinates this native app, its current server and that
+server's connected native apps through the existing update bridge. Its small
+batch record lives in browser storage, scoped to the server installation and
+viewer; it is not a server-side queue. It checks media tools first, confirms each
+connected app's running version before restarting the server, and restarts this
+app last. Reload resumes observation of an accepted install rather than resending
+it. A failed step stops later restarts; pending intent expires after 30 minutes.
+The native owner and remote API recheck playback before manual installation unless
+the user explicitly chose to interrupt it; live publishers count even without
+receivers. The TV's overnight update policy stays.
+
+Every paired viewer can read cached GitHub release history; update and helper
+maintenance endpoints remain administrator-only. History is fetched on demand and
+separate from installer availability, so a notes failure cannot block an update.
+
 ## Helpers
 
 Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
@@ -353,6 +370,11 @@ from Couch ([Receive AirPlay](airplay.md)).
   newer release exists, and downloads again any helper that is missing or
   doesn't run. Before each yt-dlp run it also replaces a missing yt-dlp or
   QuickJS-NG, and a yt-dlp that won't start.
+- An administrator's manual update also refreshes managed QuickJS-NG and ffmpeg
+  builds, and mpv where already installed or needed. Compatible system copies stay
+  under their package manager, and a held yt-dlp stays held. Checks share the
+  existing per-helper queues, retain copies in use and report a failed lookup or
+  download even when a working fallback remains. Status reads alone do no work.
 - Core records what it actually selected in `<data>/helpers/status.json`
   (`HelperStatus` in `src/server/helper-status.ts`, `schema: 1`): per helper its
   origin (`system` or `managed`), version, path, the SHA-256 it verified when it

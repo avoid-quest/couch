@@ -7,6 +7,7 @@ import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLV
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
+import { useHelper } from "./helpers";
 
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
@@ -110,7 +111,7 @@ export async function liveHls(url: string, signal: AbortSignal) {
   return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }
 
-export function createSendspin(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg: () => Promise<string>; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
+export function createSendspin(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: () => Promise<string>; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
   const core = new SendspinCore();
   core.configureServer({ name: options.name });
   const sockets = new Set<WebSocket>();
@@ -193,9 +194,11 @@ export function createSendspin(options: { identity: string; name: string; admit:
       const signal = AbortSignal.timeout(15_000);
       const headers = current.headers ?? {};
       let proxy: Awaited<ReturnType<typeof createPublicMediaProxy>> | undefined;
+      let ffmpeg: ReturnType<typeof useHelper> | undefined;
       try {
         input ??= audioInput(current.audioSource ?? current.source, headers, signal);
-        const [{ source, hls }, ffmpeg] = await Promise.all([input, options.ffmpeg()]).catch(error => { input = undefined; throw error; });
+        ffmpeg = options.ffmpeg ? options.ffmpeg().then(path => ({ path, release() {} })) : useHelper("ffmpeg");
+        const [{ source, hls }, executable] = await Promise.all([input, ffmpeg]).catch(error => { input = undefined; throw error; });
         if (current.publicNetwork) proxy = await createPublicMediaProxy(new AbortController().signal, current.source);
         if (attempt !== generation) { await proxy?.close(); return; }
         const wires = new Set<Wire>(members.flatMap(member => { const session = listening(member.deviceId), wire = session && wireOf(session); return wire ? [wire] : []; }));
@@ -208,7 +211,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
           return ["-map", "0:a:0", "-vn", "-sn", "-dn", ...filters.length ? ["-af", filters.join(",")] : [], "-ar", "48000", "-ac", "2"];
         };
         // Network protocols only, and a 10 s timeout on every read (#644 FFmpeg safety).
-        const child = spawn(ffmpeg, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto,httpproxy", "-rw_timeout", "10000000",
+        const child = spawn(executable.path, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto,httpproxy", "-rw_timeout", "10000000",
           ...proxy ? ["-http_proxy", proxy.url, "-format_whitelist", "aac,ac3,aiff,ape,asf,flac,flv,hls,matroska,webm,mov,mp3,mpeg,mpegts,ogg,wav,wv"] : [],
           ...Object.keys(headers).length ? ["-headers", Object.entries(headers).map(([name, value]) => `${name}: ${value}\r\n`).join("")] : [],
           // Start live HLS at its newest complete segment and avoid probing ahead
@@ -217,6 +220,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
           ...live ? ["-copyts"] : [], ...seek ? ["-ss", String(start)] : [], "-i", source,
           ...wires.has("opus") ? [...shape(true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
           ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
+        child.once("close", executable.release);
+        ffmpeg = undefined; // The child owns the lease until its process and pipes close.
         if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
         const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
         run = next;
@@ -275,7 +280,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
       } catch (error) {
         await proxy?.close();
         if (attempt === generation) fail(error instanceof Error && error.name !== "TimeoutError" ? error.message : "The audio source didn't answer.");
-      }
+      } finally { await ffmpeg?.then(using => using.release(), () => {}); }
     };
     // Sends every chunk that is due to every speaker on its wire: one write per speaker.
     const tick = (current: Run) => {

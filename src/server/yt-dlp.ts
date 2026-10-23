@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { resolve } from "node:path";
 import { providerForUrl } from "../shared/providers";
-import { helper, checkHelper, helperWorked, useHelper } from "./helpers";
+import { checkHelper, helperWorked, useHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 import { soundCloudPlugin } from "./soundcloud";
 import { createPublicMediaProxy } from "./public-media-proxy";
@@ -114,7 +114,8 @@ export const resolveWithYtDlp = <T>(args: string[], options: YtDlpOptions, provi
 });
 
 async function extractWith(command: string, args: string[], { signal, timeoutMs = 30_000, plugin }: YtDlpOptions): Promise<string> {
-  const quickjs = await helper("qjs");
+  // yt-dlp can launch QuickJS late in extraction, after a manual update has selected a new copy.
+  const quickjs = await useHelper("qjs");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
@@ -129,7 +130,7 @@ async function extractWith(command: string, args: string[], { signal, timeoutMs 
         // Keep it in Couch's data, so each search and playback needn't fetch the site's JS again.
         const settings = plugin === "streamingcommunity" ? ["--use-extractors", "StreamingCommunity,end", "--flat-playlist"]
           : soundcloud ? ["--cache-dir", resolve(process.env.COUCH_DATA_DIR ?? ".data", "yt-dlp-cache")] : [];
-        try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory] : []), ...settings, ...args], cancellation, proxy.url); }
+        try { return await extract(command, quickjs.path, [...(bundled ? ["--plugin-dirs", bundled.directory] : []), ...settings, ...args], cancellation, proxy.url); }
         finally { await proxy.close(); }
       }
       finally { await bundled?.close(); }
@@ -139,5 +140,5 @@ async function extractWith(command: string, args: string[], { signal, timeoutMs 
     signal?.throwIfAborted();
     if (deadline.aborted) throw new ExtractionError("The website took too long to respond. Try again.");
     throw error;
-  }
+  } finally { quickjs.release(); }
 }

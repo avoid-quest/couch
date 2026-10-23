@@ -93,6 +93,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let stopRendering: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
+    let publishing = false;
     // The socket's URL carries the sharing it opened with; only a later change is sent.
     let advertised: DeviceSharing | undefined;
     const advertiseSharing = () => {
@@ -103,8 +104,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       }
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
-    const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const reportPlayback = () => { void couchApp?.reportPlayback?.(publishing ? "playing" : ["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
+    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; publishing = false; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -213,7 +214,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           upload.searchParams.set("token", credentials.token);
           upload.searchParams.set("key", key);
           return new WebSocket(upload);
-        }, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
+        }, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) { publishing = !!source; setLocalLiveSourceId(source?.id ?? null); reportPlayback(); } } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;

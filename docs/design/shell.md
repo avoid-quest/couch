@@ -56,6 +56,14 @@ screen readers. Nothing pushes the page down. Only the app pointed at another
 Couch keeps a line under the header, for its Try again and Use this computer.
 An updated Couch and a player error keep their line too.
 
+An available app update keeps a compact status line here with **Review update**
+and **Later**. Review opens the same [update view](settings.md#updates) as Settings,
+in a shadcn Dialog that supports TV focus and Back; its actions hold the dialog's
+bottom edge while the notes scroll. Later dismisses that version
+for this viewer and device; Settings remains available. The line stays out of the
+player, fullscreen and Updates settings, and off a TV while it plays. During a batch it shows progress;
+settled results stay reachable until dismissed. It never opens the dialog on its own.
+
 **Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Saved, Remote
 while the Couch has a TV, Settings; lucide icons over labels), and the
 top bar is the Couch switch, the search field, then Share as an icon. A narrow TV undoes

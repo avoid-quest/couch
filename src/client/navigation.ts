@@ -92,6 +92,14 @@ function moveFocus(key: string) {
   // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
   const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
+  // A footer inside the page ([data-nav-footer], the update review's actions) sticks to its container's end, so Down
+  // reaches it after the container's controls that scroll beneath it.
+  const below = (element: HTMLElement) => { const to = box(element); return to.y + to.height / 2 > cy + 1; };
+  const last = (element: HTMLElement) => {
+    if (later && element.closest(later)) return true;
+    const footer = key === "ArrowDown" ? element.closest<HTMLElement>("[data-nav-footer]") : null;
+    return !!footer && !footer.contains(active) && destinations.some(other => !footer.contains(other) && footer.parentElement!.contains(other) && below(other));
+  };
   const candidates = destinations.filter(element => element !== active).map(element => {
     const to = box(element);
     const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
@@ -104,7 +112,7 @@ function moveFocus(key: string) {
     // can still choose a completely unrelated shelf when there is no neighbour.
     const beside = horizontal ? to.bottom <= from.top || to.top >= from.bottom
       : !!own?.contains(element) && (past(to) < 0 || penalty > 0);
-    return { element, forward, beside, score: forward + penalty + (later && element.closest(later) ? 100_000 : 0) };
+    return { element, forward, beside, score: forward + penalty + (last(element) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
@@ -113,7 +121,7 @@ function moveFocus(key: string) {
     const row = candidate.element.closest<HTMLElement>(navigationRow);
     const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
     const sameColumn = content?.contains(active) && content.contains(candidate.element);
-    return { row: unit, edge: Math.max(0, past(to)) + (sameColumn ? 0 : sideways(to)) + (later && candidate.element.closest(later) ? 100_000 : 0) };
+    return { row: unit, edge: Math.max(0, past(to)) + (sameColumn ? 0 : sideways(to)) + (last(candidate.element) ? 100_000 : 0) };
   }) : [];
   const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
   const next = reach[nearest]?.row;

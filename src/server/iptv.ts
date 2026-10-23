@@ -7,7 +7,7 @@ import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shar
 import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
 import { ADMIN_ONLY } from "./messages";
 import { execFile } from "node:child_process";
-import { helper } from "./helpers";
+import { useHelper } from "./helpers";
 
 // Raw MPEG-TS plays through mpegts.js. Chromium has no MPEG-1/2 video, AC-3/E-AC-3 or
 // MP2 decoder, so those channels play in Core's own mpv (#644 ticket 1). ffmpeg reads the
@@ -16,9 +16,13 @@ import { helper } from "./helpers";
 // Actual HEVC decoding depends on the browser build and device.
 const linux = process.platform === "linux";
 async function transport(url: string, signal: AbortSignal, hevc: boolean): Promise<{ mpegts?: true; mpv?: true; hostMpv?: true }> {
-  const ffmpeg = await helper("ffmpeg");
-  const probe = await new Promise<string>(resolve => execFile(ffmpeg, ["-hide_banner", "-nostdin", "-protocol_whitelist", "http,https,tcp,tls", "-probesize", "1000000", "-analyzeduration", "3000000", "-i", url],
-    { timeout: 10_000, signal }, (_error, _stdout, stderr) => resolve(String(stderr))));
+  const ffmpeg = await useHelper("ffmpeg");
+  const probe = await new Promise<string>(resolve => {
+    try {
+      execFile(ffmpeg.path, ["-hide_banner", "-nostdin", "-protocol_whitelist", "http,https,tcp,tls", "-probesize", "1000000", "-analyzeduration", "3000000", "-i", url],
+        { timeout: 10_000, signal }, (_error, _stdout, stderr) => resolve(String(stderr))).once("close", ffmpeg.release);
+    } catch (error) { ffmpeg.release(); throw error; }
+  });
   signal.throwIfAborted();
   if (!/^Input #0, mpegts\b/m.test(probe)) return {};
   const hostMpv = linux && /Stream #.*: Video: hevc\b/.test(probe);

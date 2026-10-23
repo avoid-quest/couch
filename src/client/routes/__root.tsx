@@ -4,6 +4,7 @@ import type { DeviceIdentity } from "../../shared/devices";
 import { useEffect } from "react";
 import { AppShell } from "../sections/shell/AppShell";
 import { RemotePlayerSession } from "../session/remote-player-session";
+import { UpdateCenterProvider } from "../session/update-center";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -25,7 +26,7 @@ function NotFound() {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: DeviceIdentity | null; localHost: boolean; connected: boolean }>()({
-  component: () => <RemotePlayerSession><AppShell /></RemotePlayerSession>,
+  component: () => <UpdateCenterProvider><RemotePlayerSession><AppShell /></RemotePlayerSession></UpdateCenterProvider>,
   errorComponent: RootError,
   notFoundComponent: NotFound,
 });

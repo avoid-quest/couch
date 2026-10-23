@@ -6,6 +6,7 @@ import type { UpdateOutcome, UpdateState } from "../src/shared/app-bridge";
 import { updateApp } from "../src/client/session/native-updates";
 
 mock.module("../src/client/session/session-context", () => ({
+  errorText: (error: unknown) => error instanceof Error ? error.message : String(error),
   useSessionGate: () => ({ credentials: { origin: "http://localhost", token: "test" }, identity: { authority: "administrator" }, connected: true, localHost: false }),
 }));
 mock.module("../src/client/sections/settings/SettingsLayout", () => ({
@@ -15,12 +16,13 @@ mock.module("../src/client/sections/settings/settings-scope", () => ({
   useSettingsScope: () => ({ device: "Phone", couch: "Living room TV", host: false, administrator: true, role: "You're an admin" }),
 }));
 const { UpdatesPage } = await import("../src/client/sections/settings/app/UpdatesPage");
+const { UpdateCenterProvider } = await import("../src/client/session/update-center");
 
 function renderState(state: UpdateState) {
   const client = new QueryClient();
   client.setQueryData(["updates", "targets"], [{ id: "host", name: "Living room TV", tv: true }]);
   client.setQueryData(["updates", "host"], state);
-  const html = renderToStaticMarkup(<QueryClientProvider client={client}><UpdatesPage /></QueryClientProvider>);
+  const html = renderToStaticMarkup(<QueryClientProvider client={client}><UpdateCenterProvider><UpdatesPage /></UpdateCenterProvider></QueryClientProvider>);
   client.clear();
   return html;
 }
@@ -58,8 +60,8 @@ test.each([
   };
   const html = renderState(await updateApp(bridge, { op: "install", version: "0.3.1" }));
   expect(html).toContain(renderToStaticMarkup(error));
-  expect(html).toContain("Update ready");
-  const retry = html.match(/<button\b[^>]*>Update and restart<\/button>/)?.[0];
+  expect(html).toContain("0.3.0 to 0.3.1");
+  const retry = html.match(/<button\b[^>]*>Update 1 device<\/button>/)?.[0];
   expect(retry).toBeDefined();
   expect(retry).not.toMatch(/\sdisabled(?:=|[\s>])/);
 });

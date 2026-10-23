@@ -37,6 +37,40 @@ device; the page names the list, which has no heading of its own, and it ends
 in an outline Reset to default. `/settings/device/discover` opens it. A Move
 that reaches an end returns focus to the row's Switch.
 
+## Updates
+
+The Updates page and the shell's **Review update** dialog share one view. What’s
+new loads on demand and shows the selected device's changes through its offered
+version, however many releases it skipped. It previews the newest five changes
+from at most three releases, each cut to 140 characters; **Read all N changes**,
+beside "Changes since", shows every change in that range in full and **Show fewer
+changes** returns to the preview, both without moving the focus. Older releases
+expand separately. Stable and Preview have separate histories; each release keeps
+its version, date and a link to GitHub. Missing notes never block an update.
+
+The summary, the playback confirmation and the Update and Check buttons stay at
+the bottom of the screen while long notes scroll beneath them: above the footer in
+Settings, at the dialog's bottom edge. A remote's Down reaches them after the notes
+and rows, and focus in the notes stops above them.
+
+Flat rows name this app, the connected server and its connected Couch apps, with
+their current and offered versions. Ready apps start selected. **Update N devices**
+checks the server's media tools, updates connected apps, then the server, then
+this app. This device appears only once. A browser has no app installer of its own.
+Media tools expand beneath the rows with their version and result; **Update media
+tools** works when no app needs an update. System copies stay system-managed, and
+an operator's yt-dlp hold stays in force. An older server without tool maintenance
+says so while still allowing its app to update.
+
+Progress survives a reload or restart. A device is Updated only after its running
+version is confirmed; a failure stops the remaining restarts. The main Update
+button retries the apps still ready or the failed media tools.
+Results remain until dismissed. Restart intent expires after 30 minutes, so an
+old page cannot restart devices hours later. When playback or sharing would stop,
+the action confirms inline as **Stop playback and update**; tools-only maintenance
+does not ask to stop playback. Each app retains its own channel, configured below
+the shared view, and the existing TV automatic-update results and local logs stay.
+
 ## Rows
 
 `SettingsRow` sets a label beside its control once the column has room. A
