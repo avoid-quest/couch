@@ -54,9 +54,10 @@ export function ContentBreadcrumb({ title, url, collection, provider, radio = fa
   const nav = useRef<HTMLElement>(null);
   const trailKey = crumbs.map(crumb => crumb.to).join();
   useLayoutEffect(() => { setHidden(0); }, [trailKey]);
-  // A crumb squeezed below its cap means the line is out of room: hide one more, until it fits or none is left to hide.
+  // A line wider than its room, or a crumb squeezed below its cap, means it is out of room: hide one more, until it fits or none is left to hide.
   useLayoutEffect(() => {
-    const squeezed = [...nav.current?.querySelectorAll<HTMLElement>("[data-crumb-text]") ?? []]
+    const element = nav.current;
+    const squeezed = !!element && element.scrollWidth > element.clientWidth + 1 || [...element?.querySelectorAll<HTMLElement>("[data-crumb-text]") ?? []]
       .some(text => text.clientWidth + 1 < Math.min(text.scrollWidth, parseFloat(getComputedStyle(text).maxWidth)));
     if (squeezed && hidden < middle.length) setHidden(hidden + 1);
   });
@@ -73,10 +74,11 @@ export function ContentBreadcrumb({ title, url, collection, provider, radio = fa
     return () => observer.disconnect();
   }, []);
   if (!crumbs.length || player && !holders.length) return null;
-  const open = (event: MouseEvent<HTMLAnchorElement>, to: string) => {
-    // The player opens what holds it as Details do, so Back returns to the player.
+  const open = (event: MouseEvent<HTMLAnchorElement>, to: string, menu?: string) => {
+    // The player opens what holds it as Details do, so Back returns to the player: the TV and a keyboard to the menu's
+    // control they chose from, as its item goes with the menu.
     if (!player || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); navigation.open(to);
+    event.preventDefault(); navigation.open(to, menu && !event.detail ? `[data-page="Now"] button[aria-label${menu}]` : undefined);
   };
   const collapsed = middle.slice(0, hidden);
   const shown = collapsed.length ? [crumbs[0]!, ...crumbs.slice(1 + collapsed.length)] : crumbs;
@@ -90,13 +92,13 @@ export function ContentBreadcrumb({ title, url, collection, provider, radio = fa
             <DropdownMenu>
               <DropdownMenuTrigger className={cn("flex items-center rounded-sm hover:text-foreground", leading)} aria-label={`Show ${collapsed.length} more in the path`}><BreadcrumbEllipsis className="h-8 w-6 touch:size-11" /></DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="max-w-[min(24rem,90vw)]">
-                {collapsed.map(item => <DropdownMenuItem key={item.to} asChild className="whitespace-normal"><Link to={item.to} onClick={event => open(event, item.to)}>{item.label}</Link></DropdownMenuItem>)}
+                {collapsed.map(item => <DropdownMenuItem key={item.to} asChild className="whitespace-normal"><Link to={item.to} onClick={event => open(event, item.to, '$=" more in the path"')}>{item.label}</Link></DropdownMenuItem>)}
               </DropdownMenuContent>
             </DropdownMenu>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
         </>}
-        <BreadcrumbItem className={floor(crumb.label)}>
+        <BreadcrumbItem className={floor(crumb.label, !!crumb.children)}>
           <CrumbName label={crumb.label}>
             <BreadcrumbLink asChild><Link data-crumb-text to={crumb.to} activeOptions={{ exact: true }} onClick={event => open(event, crumb.to)} className={cn("block min-w-0 truncate rounded-sm", cap, leading)}>{crumb.label}</Link></BreadcrumbLink>
           </CrumbName>
@@ -112,8 +114,9 @@ export function ContentBreadcrumb({ title, url, collection, provider, radio = fa
 // and one capped collection.
 const cap = "max-w-[20ch]";
 
-// A name truncates to no less than six characters; a shorter one never truncates.
-const floor = (label: string) => label.length > 6 ? "min-w-[6ch]" : "shrink-0";
+// A name truncates to no less than six characters, beside its menu's chevron (gap-1 and w-6, or size-11 on touch); a
+// shorter one never truncates.
+const floor = (label: string, menu: boolean) => label.length <= 6 ? "shrink-0" : menu ? "min-w-[calc(6ch+1.75rem)] touch:min-w-[calc(6ch+3rem)]" : "min-w-[6ch]";
 
 /** A crumb's name, whole on hover and focus once it truncates. */
 function CrumbName({ label, children }: { label: string; children: ReactNode }) {
@@ -126,11 +129,11 @@ function CrumbName({ label, children }: { label: string; children: ReactNode }) 
 }
 
 /** The collections in a crumb (a series' seasons), the one on the path marked: shadcn's breadcrumb with a dropdown. */
-function Children({ parent, items, open }: { parent: string; items: Sibling[]; open: (event: MouseEvent<HTMLAnchorElement>, to: string) => void }) {
+function Children({ parent, items, open }: { parent: string; items: Sibling[]; open: (event: MouseEvent<HTMLAnchorElement>, to: string, menu?: string) => void }) {
   return <DropdownMenu>
     <DropdownMenuTrigger className="flex h-8 w-6 shrink-0 items-center justify-center rounded-sm hover:text-foreground touch:size-11" aria-label={`More in ${parent}`}><ChevronDown aria-hidden="true" className="size-3.5" /></DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="max-w-[min(24rem,90vw)]">
-      {items.map(item => <DropdownMenuItem key={item.to} asChild className="whitespace-normal"><Link to={item.to} aria-current={item.current ? "page" : undefined} className={cn(item.current && "text-foreground font-medium")} onClick={event => open(event, item.to)}>{item.label}</Link></DropdownMenuItem>)}
+      {items.map(item => <DropdownMenuItem key={item.to} asChild className="whitespace-normal"><Link to={item.to} aria-current={item.current ? "page" : undefined} className={cn(item.current && "text-foreground font-medium")} onClick={event => open(event, item.to, `="${CSS.escape(`More in ${parent}`)}"`)}>{item.label}</Link></DropdownMenuItem>)}
     </DropdownMenuContent>
   </DropdownMenu>;
 }

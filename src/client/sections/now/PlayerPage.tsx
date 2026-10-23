@@ -72,6 +72,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const clickOpened = useRef<Element | null>(null);
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
+    // Up next is still expanded until the route commits, so one a click opened hands focus to the picture here.
+    if (clickOpened.current && clickOpened.current === queueTrigger.current) { clickOpened.current = null; surface()?.focus({ preventScroll: true }); return; }
     (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)'))?.focus();
   }, [setQueueOpen]);
   const band = useRef<HTMLDivElement>(null);
