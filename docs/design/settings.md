@@ -40,10 +40,18 @@ that reaches an end returns focus to the row's Switch.
 ## Updates
 
 The Updates page and the shell's **Review update** dialog share one view. What’s
-new loads on demand, shows the selected device's changes through its offered
-version, and expands older releases. Stable and Preview have separate histories;
-each release keeps its change text and a link to GitHub. Missing notes never block
-an update.
+new loads on demand and shows the selected device's changes through its offered
+version, however many releases it skipped. It previews the newest five changes
+from at most three releases, each cut to 140 characters; **Read all N changes**,
+beside "Changes since", shows every change in that range in full and **Show fewer
+changes** returns to the preview, both without moving the focus. Older releases
+expand separately. Stable and Preview have separate histories; each release keeps
+its version, date and a link to GitHub. Missing notes never block an update.
+
+The summary, the playback confirmation and the Update and Check buttons stay at
+the bottom of the screen while long notes scroll beneath them: above the footer in
+Settings, at the dialog's bottom edge. A remote's Down reaches them after the notes
+and rows, and focus in the notes stops above them.
 
 Flat rows name this app, the connected server and its connected Couch apps, with
 their current and offered versions. Ready apps start selected. **Update N devices**
