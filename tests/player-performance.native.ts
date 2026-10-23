@@ -1,4 +1,5 @@
 // bun tests/player-performance.native.ts .artifacts/player-performance [--checks] [--trace] [--assert-budget=60] [--rounds=40]
+// --seek drives playback, hover and native mouse drags (default: three rounds); --profile measures React render cost.
 // An isolated Electron renderer, production CSS/routes and fixture API reads; COUCH_PERF_AUDIO adds local audio decoding.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -9,9 +10,11 @@ import config from '../vite.config';
 const directory = resolve(process.argv[2] ?? '.artifacts/player-performance');
 const checks = process.argv.includes('--checks');
 const trace = process.argv.includes('--trace');
+const seek = process.argv.includes('--seek');
+const profile = process.argv.includes('--profile');
 const argument = (name: string, fallback: number) => Number(process.argv.find(value => value.startsWith(`--${name}=`))?.split('=')[1] ?? fallback);
 const assertBudget = argument('assert-budget', process.argv.includes('--assert-budget') ? 120 : 0);
-const rounds = argument('rounds', 40);
+const rounds = argument('rounds', seek ? 3 : 40);
 const clockMs = argument('clock-ms', 250);
 const navigation = process.argv.includes('--shell-navigation') ? 'shell' : 'player';
 const audioPath = process.env.COUCH_PERF_AUDIO;
@@ -25,12 +28,14 @@ import { runPlayerTransitionRegression } from '../../tests/player-transition.bro
 import { runPlayerStatusRegression } from '../../tests/player-status.browser';
 import { runArtworkMountRegression } from '../../tests/artwork-mount.browser';
 import { runPlayerClockRenderingRegression } from '../../tests/player-clock-rendering.browser';
-window.runFixture = ${checks ? `async () => ({ checks: [await runArtworkMountRegression(), await runPlayerClockRenderingRegression(), await runPlayerTransitionRegression(), await runPlayerStatusRegression()] })` : `() => runPlayerPerformance(${JSON.stringify({ rounds, clockMs, navigation, audioUrl: audioPath ? '/benchmark.mp3' : undefined })})`};
+import { prepareSeekPerformance, runSeekBarRegression } from '../../tests/seek-bar.browser';
+window.prepareSeek = () => prepareSeekPerformance(${JSON.stringify(audioPath ? '/benchmark.mp3' : undefined)});
+window.runFixture = ${checks ? `async () => ({ checks: [await runArtworkMountRegression(), await runPlayerClockRenderingRegression(), await runPlayerTransitionRegression(), await runPlayerStatusRegression(), await runSeekBarRegression()] })` : `() => runPlayerPerformance(${JSON.stringify({ rounds, clockMs, navigation, audioUrl: audioPath ? '/benchmark.mp3' : undefined })})`};
 </script></body></html>`);
 try {
   await build(mergeConfig(config({ command: 'build', mode: 'production' }), {
-    // Commit-count assertions need React's profiling build; frame timings use the ordinary release build.
-    resolve: { alias: checks ? { 'react-dom/client': 'react-dom/profiling' } : {} },
+    // Commit assertions and render-cost samples need React's profiling build; frame budgets use the ordinary release build.
+    resolve: { alias: checks || profile ? { 'react-dom/client': 'react-dom/profiling' } : {} },
     build: { outDir, rollupOptions: { input: entry } },
     logLevel: 'error',
   }));
@@ -64,7 +69,33 @@ app.whenReady().then(async () => {
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     }
     if (${trace}) await contentTracing.startRecording({ included_categories: ['devtools.timeline', 'blink', 'blink.user_timing', 'cc', 'viz', 'benchmark', 'toplevel'] });
-    const result = await window.webContents.executeJavaScript('window.runFixture()', true);
+    app.focus({ steal: true });
+    window.focus();
+    let result;
+    if (${seek} && !${checks}) {
+      await window.webContents.executeJavaScript('window.prepareSeek().then(fixture => { window.seekFixture = fixture; })', true);
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      for (let round = 0; round < ${rounds}; round++) for (const surface of ['bar', 'player']) {
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
+        const rect = await window.webContents.executeJavaScript('window.seekFixture.surface(' + JSON.stringify(surface) + ')');
+        const point = fraction => ({ x: Math.round(rect.x + rect.width * fraction), y: Math.round(rect.y) });
+        await window.webContents.executeJavaScript("window.seekFixture.begin('playback')"); await wait(1000);
+        await window.webContents.executeJavaScript("window.seekFixture.begin('hover')");
+        for (let step = 0; step < 240; step++) {
+          window.webContents.sendInputEvent({ type: 'mouseMove', ...point(.1 + .8 * step / 239) }); await wait(8);
+        }
+        window.webContents.sendInputEvent({ type: 'mouseMove', ...point(.15) }); await wait(50);
+        await window.webContents.executeJavaScript("window.seekFixture.begin('drag')");
+        window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...point(.15) });
+        for (let step = 0; step < 240; step++) {
+          window.webContents.sendInputEvent({ type: 'mouseMove', button: 'left', modifiers: ['leftButtonDown'], ...point(.15 + .7 * step / 239) }); await wait(8);
+        }
+        await window.webContents.executeJavaScript('window.seekFixture.beforeRelease()');
+        window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point(.85) });
+        await window.webContents.executeJavaScript('window.seekFixture.afterRelease()');
+      }
+      result = await window.webContents.executeJavaScript('window.seekFixture.finish()');
+    } else result = await window.webContents.executeJavaScript('window.runFixture()', true);
     result.displayHz = screen.getDisplayMatching(window.getBounds()).displayFrequency;
     result.versions = process.versions;
     result.gpu = app.getGPUFeatureStatus();
@@ -80,7 +111,7 @@ app.whenReady().then(async () => {
 const env = { ...process.env, COUCH_DATA_DIR: join(directory, 'data'), COUCH_PORT: String(server.port) };
 delete env.ELECTRON_RUN_AS_NODE;
 const child = Bun.spawn([electron, probe], { env, stdout: 'inherit', stderr: 'inherit' });
-const timeout = setTimeout(() => { console.error('Renderer fixture timed out'); child.kill(); }, Math.max(60_000, rounds * 1200 + 20_000));
+const timeout = setTimeout(() => { console.error('Renderer fixture timed out'); child.kill(); }, Math.max(60_000, rounds * (seek ? 20_000 : 1200) + 20_000));
 try {
   process.exitCode = await child.exited;
   console.log(`Evidence: ${join(directory, 'result.json')}`);

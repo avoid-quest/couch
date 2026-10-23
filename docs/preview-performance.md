@@ -110,7 +110,7 @@ without another build or test competing for the CPU.
 
 `--checks` uses React's profiling build for commit assertions and runs artwork,
 clock isolation, player transitions/Remote navigation/footer clearance, and player
-status regressions. Performance samples use the ordinary minified React build.
+status and seek-preview regressions. Performance samples use the ordinary minified React build.
 The harness uses an ephemeral loopback port and its own data directory, exits its
 own Electron process, and leaves the owner's installed Couch untouched. Narrow
 windows exercise phone layout, not phone hardware.
@@ -258,3 +258,80 @@ mounts, clock/closed-panel isolation, navigation/focus/footer clearance, and pla
 status. The earlier Windows caption-height fix and player visual polish remain;
 Windows 11 native/DPI validation still requires a Windows machine. These changes
 are in the checkout and have not replaced the installed preview.
+
+### Seek bar: playback, hover and dragging
+
+The radio navigation workload above has no seekable timeline. A separate workload
+now exercises the collapsed bar and full player with a 900-second seekable item,
+60 chapter entries, four clock updates per second, buffer updates and silent MP3
+decoding. Electron supplies trusted mouse events, including held-button modifiers,
+so the test exercises Radix's real pointer capture. Each run has three rounds of
+playback, roughly 120 pointer moves per second over the timeline, and a drag from
+15% to 85% on each surface. Release must send exactly one seek to 765 seconds;
+no seek may be sent during the drag.
+
+The regression caught excess work before the change: twelve hover moves caused
+3,468 chapter-position reads, while touch and disabled timelines each made twelve
+unnecessary hover geometry reads. `TimelineHover` now owns its transient state
+and receives the slider/markers as children. Pointer previews update that small
+component. Touch and disabled input return before reading geometry. The existing
+Radix slider still owns the thumb, pointer capture and keyboard semantics.
+This follows [React's local-state and children-composition guidance](https://react.dev/reference/react/memo#should-you-add-memo-everywhere)
+and retains [Radix's change/commit API](https://www.radix-ui.com/primitives/docs/components/slider).
+No animation loop, throttle, manual DOM rendering or dependency was added.
+
+One paired React profiling run per revision, three rounds per surface, gave:
+
+| Total React render time in the measured interaction | Before | After |
+| --- | --- | --- |
+| Collapsed-bar hover | 188.3 ms | 21.6 ms |
+| Player hover | 306.0 ms | 49.0 ms |
+| Collapsed-bar drag | 147.1 ms | 87.3 ms |
+| Player drag | 365.3 ms | 194.3 ms |
+| Combined hover | 494.3 ms | 70.6 ms (86% lower) |
+| Combined drag | 512.4 ms | 281.6 ms (45% lower) |
+
+These are accumulated React Profiler durations across the interactions, not a
+single frame's latency or whole-process CPU. The before/after profiles use the
+same profiling build. Pointer/drag chapter reads fell from 823,809 to 30,542;
+remaining reads belong to clock/buffer updates. The isolated hover regression
+now reads no chapter metadata, and both ignored-input geometry counts are zero.
+It also checks preview text after a duration change, hover without a seek, ten-
+second cumulative keyboard seeking, clock updates during editing, and blur.
+
+Separately, three after runs in the ordinary production React build completed
+all 18 mouse drags accurately with zero premature/extra seek commands, no long
+tasks and no gaps above either the 60 fps floor or 12.5 ms. Median frame interval
+was 8.3 ms and the worst was 9.4 ms. The valid production baseline also stayed
+within those frame budgets: the demonstrated gain here is reduced rendering
+work, not a claim that this fixture reproduced the installed app's seek stutter.
+The workload does not measure live-stream seek acknowledgement or decoder startup.
+
+An earlier profiling attempt recorded one drag stopping at 135 seconds; capture-
+instrumented reruns and the production runs did not reproduce it. Its cause is
+unconfirmed and it is not claimed fixed. That result remains in
+`.artifacts/seek/before-profile/`; the valid paired profiles are `before-profile-valid`
+and `after-profile`, and the repeated production results are `after-production-{1,2,3}`.
+
+```sh
+COUCH_PERF_AUDIO=.artifacts/benchmark.mp3 COUCH_PERF_WIDTH=1512 COUCH_PERF_HEIGHT=982 bun tests/player-performance.native.ts .artifacts/seek-performance --seek --rounds=3 --assert-budget=60
+# Separate render-cost measurement; do not use profiling numbers as release-build frame timing.
+COUCH_PERF_AUDIO=.artifacts/benchmark.mp3 COUCH_PERF_WIDTH=1512 COUCH_PERF_HEIGHT=982 bun tests/player-performance.native.ts .artifacts/seek-profile --seek --rounds=3 --profile
+```
+
+Final seek validation: all five browser suites pass at desktop width, at 390px
+and with reduced motion. Typechecking and six targeted playback/buffering unit
+tests pass. A 40-round navigation recheck also passes the 60 fps floor, including
+cold entry (worst warm gap 17.2 ms). The keyboard regression uses the real Down-
+to-Play focus handoff and waits for its resulting observed value; an initial
+fixed-delay blur assertion was inconsistent and is retained as a test diagnostic
+in `.artifacts/seek/blur-first-failure.json`.
+
+Review validation reproduced that keyboard assertion with an inactive native
+window: `document.hasFocus()` was false, focus had moved to Pause, and the slider
+still held its draft. The native runner now activates its app before focusing
+the window; the keyboard regression rejects an inactive window explicitly.
+All five suites pass in normal and reduced-motion runs with that correction.
+Evidence is in `.artifacts/pr-stack/reviews/duration-focus-detail` (failure) and
+`duration-active{,-reduced}` (passing runs). This diagnoses the keyboard-test
+failure; the earlier 135-second drag result remains unexplained.
