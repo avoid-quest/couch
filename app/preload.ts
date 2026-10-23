@@ -9,12 +9,17 @@ const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
   return result.value as T;
 };
 
-// The Mac window has no title bar: the page leaves room for its controls (index.css).
-if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presentation")) {
-  const controls = (shown: boolean) => document.documentElement.toggleAttribute("data-window-controls", shown);
+// Desktop windows have no title bar: the page leaves room for their controls (index.css).
+if (!process.argv.includes("--couch-tv-presentation")) {
+  const controls = (shown: boolean) => {
+    if (shown) document.documentElement.setAttribute("data-window-controls", process.platform === "darwin" ? "" : "overlay");
+    else document.documentElement.removeAttribute("data-window-controls");
+  };
   addEventListener("DOMContentLoaded", () => controls(true));
   ipcRenderer.on("couch:full-screen", (_event, fullScreen: boolean) => controls(!fullScreen));
+}
 
+if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presentation")) {
   // Electron's `swipe` is three-finger only. Two-finger scrolling supplies wheel
   // deltas and a native gestureScrollEnd; keep this adapter out of browsers and TV.
   let x = 0, y = 0, ignored = false, lastWheel = 0;

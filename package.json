@@ -97,7 +97,9 @@
       "build/core.mjs",
       "dist/**",
       "packaging/icons/icon.png",
+      "packaging/icons/icon.ico",
       "packaging/icons/preview/icon.png",
+      "packaging/icons/preview/icon.ico",
       "packaging/icons/tray-template.png"
     ],
     "mac": {

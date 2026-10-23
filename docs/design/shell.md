@@ -58,9 +58,24 @@ An updated Couch and a player error keep their line too.
 **Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Saved, Remote
 while the Couch has a TV, Settings; lucide icons over labels), and the
 top bar is the Couch switch then the search field. A narrow TV undoes
-`touch:` with `tv:`. **The Mac window** puts its buttons and drag region in the
-header (`[data-window-controls]`). Unpaired there is no header (see First run
-and pairing).
+`touch:` with `tv:`. **Desktop windows** put their native buttons and drag region
+in the header (`[data-window-controls]`), without a separate title bar. macOS
+keeps its traffic lights at the left; Windows and Linux use Electron's
+`titleBarOverlay`, transparent with white symbols, 56px tall times the interface
+size. The header and player heading reserve the controls' space: 90pt on the
+Mac, `titlebar-area-x` and `titlebar-area-width` on Windows/Linux, divided by
+the interface scale. Empty header space drags the window; a double-click uses
+the OS's maximize/restore behavior. Fullscreen drops the controls' inset.
+Windows/Linux auto-hide the menu bar, as
+[t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts)
+does, keeping its accelerators; the tray keeps working as before. The TV stays
+frameless and fullscreen. Unpaired there is no header (see First run and pairing).
+
+Window icons use PNG on Linux and ICO on Windows, including Couch Preview's
+icon. Windows uses `quest.avoid.couch` as its AppUserModelID, matching the
+installer's appId. electron-builder supplies the installer names and icons and
+the Linux `couch.desktop` launcher, whose `StartupWMClass=couch` matches
+`package.json`'s `desktopName`; both release channels keep that identity.
 
 **Sharing.** While this device shares its screen or sound, the header shows
 "Sharing screen" (or sound, or microphone) with Stop sharing; it shrinks to
@@ -252,7 +267,7 @@ The app asks "Where is your Couch?" (This computer hosts it; Another Couch
 joins one), then the computer's name, with a random default, and whether to
 share it on the network. Pairing reuses that name. Unpaired, every device sees
 only the pairing page, with no header: centred in the window, its mark and
-"Pair with Couch" the only brand, and in the Mac app the whole window drags by
+"Pair with Couch" the only brand, and in the desktop app the whole window drags by
 it. The app, or a browser that has known another Couch, gets one line under the
 description, the address then Change, which opens the Couch switch; a TV picks
 its Couch in Settings once paired. A TV shows a code and a QR instead, which an

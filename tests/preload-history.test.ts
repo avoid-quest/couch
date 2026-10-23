@@ -8,6 +8,7 @@ function fixture(platform = "darwin", tv = false) {
   const listeners = new Map<string, (...args: any[]) => void>();
   const ipc = new Map<string, (...args: any[]) => void>();
   const visits: number[] = [];
+  const attributes = new Map<string, string>();
   class Element {
     scrollWidth = 100;
     clientWidth = 100;
@@ -22,7 +23,10 @@ function fixture(platform = "darwin", tv = false) {
     addEventListener: (name: string, fn: (...args: any[]) => void) => listeners.set(name, fn),
     Element, getComputedStyle: (element: Element) => element,
     history: { go: (direction: number) => visits.push(direction) },
-    document: { body: { classList: { contains: () => tv } } },
+    document: {
+      documentElement: { setAttribute: (name: string, value: string) => attributes.set(name, value), removeAttribute: (name: string) => attributes.delete(name) },
+      body: { classList: { contains: () => tv } },
+    },
   });
   const target = new Element();
   const wheel = (deltaX: number, deltaY = 0, extra = {}) => listeners.get("wheel")?.({
@@ -30,8 +34,29 @@ function fixture(platform = "darwin", tv = false) {
     composedPath: () => [target], ...extra,
   });
   const end = () => ipc.get("couch:scroll-end")?.({});
-  return { listeners, target, visits, wheel, end };
+  return { listeners, ipc, attributes, target, visits, wheel, end };
 }
+
+test("desktop controls reserve the platform's space and release it in fullscreen", () => {
+  for (const platform of ["darwin", "win32", "linux"]) {
+    const f = fixture(platform);
+    f.listeners.get("DOMContentLoaded")!();
+    // Keep the Mac's empty attribute compatible with older remote renderers.
+    expect(f.attributes.get("data-window-controls")).toBe(platform === "darwin" ? "" : "overlay");
+    f.ipc.get("couch:full-screen")!({}, true);
+    expect(f.attributes.has("data-window-controls")).toBe(false);
+    f.ipc.get("couch:full-screen")!({}, false);
+    expect(f.attributes.has("data-window-controls")).toBe(true);
+  }
+});
+
+test("TV windows never reserve desktop controls on any platform", () => {
+  for (const platform of ["darwin", "win32", "linux"]) {
+    const f = fixture(platform, true);
+    expect(f.listeners.has("DOMContentLoaded")).toBe(false);
+    expect(f.ipc.has("couch:full-screen")).toBe(false);
+  }
+});
 
 test("a macOS horizontal gesture traverses native history once, at its native end", () => {
   const f = fixture();

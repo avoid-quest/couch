@@ -23,6 +23,7 @@ import { rendererStatus } from "./renderer-status";
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
 // Couch Preview packages name their own window and tray icon (scripts/package.ts).
 const { identifier, icon: appIcon = "packaging/icons/icon.png" } = JSON.parse(readFileSync(join(app.getAppPath(), "package.json"), "utf8")) as { identifier: string; icon?: string };
+if (process.platform === "win32") app.setAppUserModelId(identifier);
 const base = process.platform === "linux" ? process.env.XDG_DATA_HOME?.startsWith("/") ? process.env.XDG_DATA_HOME : join(homedir(), ".local/share") : app.getPath("appData");
 const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(base, identifier) : ".data"));
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -58,7 +59,7 @@ const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
 const tv = appliance || choice.tvPresentation === true;
 const renderer = !primary ? null : rendererStatus(join(dataDir, "renderer-status.json"), { run, version: app.getVersion() }, () => choice.mode === "remote" ? "remote" : "local");
-// The Mac window hides its title bar; its controls sit in the page's header (index.css).
+// Desktop controls sit in the page's header; the TV stays frameless (index.css).
 const macChrome = process.platform === "darwin" && !tv;
 const save = (next: Choice) => {
   next.targets = [...new Set([...next.targets, ...next.address ? [next.address] : []])];
@@ -295,13 +296,14 @@ const interfaceSizes = [1, 1.15, 1.3];
 const interfaceSize = () => interfaceSizes.find(value => value === Number(readText(interfaceSizePath))) ?? 1;
 // Centre the 14pt controls in the 56px header, which scales with the interface size.
 const controlsPosition = () => ({ x: 16, y: Math.round(28 * interfaceSize() - 7) });
+const titleBarOverlay = () => ({ color: "#00000000", symbolColor: "#ffffff", height: Math.round(56 * interfaceSize()) });
 
 function createWindow() {
   window = new BrowserWindow({
     ...tv ? { fullscreen: true, frame: false } : { width: 1280, height: 800, ...savedBounds() },
-    ...macChrome ? { titleBarStyle: "hidden", trafficLightPosition: controlsPosition() } : {},
-    minWidth: 800, minHeight: 600, show: false, title: "Couch", backgroundColor: "#000000",
-    ...process.platform === "linux" ? { icon: join(app.getAppPath(), appIcon) } : {},
+    ...tv ? {} : { titleBarStyle: "hidden", ...macChrome ? { trafficLightPosition: controlsPosition() } : { titleBarOverlay: titleBarOverlay() } },
+    minWidth: 800, minHeight: 600, show: false, title: app.getName(), backgroundColor: "#000000", autoHideMenuBar: true,
+    ...process.platform !== "darwin" ? { icon: join(app.getAppPath(), process.platform === "win32" ? appIcon.replace(/\.png$/, ".ico") : appIcon) } : {},
     webPreferences: {
       preload: join(import.meta.dirname, "preload.cjs"),
       autoplayPolicy: "no-user-gesture-required",
@@ -313,7 +315,7 @@ function createWindow() {
   if (tv) present();
   window.once("ready-to-show", show);
   window.on("leave-full-screen", () => { if (tv) window?.setFullScreen(true); });
-  if (macChrome) {
+  if (!tv) {
     // Fullscreen hides the window controls, so the header drops their space.
     const fullScreen = () => window?.webContents.send("couch:full-screen", window.isFullScreen());
     window.on("enter-full-screen", fullScreen);
@@ -446,6 +448,7 @@ handle("interface-size", (_event, size) => {
   if (!interfaceSizes.includes(size as number)) throw new Error("Choose a supported interface size.");
   write(interfaceSizePath, String(size));
   if (macChrome) window?.setWindowButtonPosition(controlsPosition());
+  else if (!tv) window?.setTitleBarOverlay(titleBarOverlay());
   return size;
 });
 

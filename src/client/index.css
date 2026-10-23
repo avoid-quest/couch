@@ -246,16 +246,20 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 @media (max-width: 600px) { [data-sonner-toaster][data-x-position] { width: auto; } }
 [data-sonner-toaster][data-x-position] [data-sonner-toast] { left: auto; right: 0; width: fit-content; max-width: 100%; }
 
-/* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window
-   around their controls and leave 90pt for the window's buttons, which don't zoom.
+/* Desktop apps have no title bar (app/main.ts). As in t3code, headers drag the window
+   around their controls. Native controls don't zoom with the interface.
    Electron 44 inherits app-region, so children reset to initial and add no rectangles;
    open dialogs sit above a header and take its clicks back. */
 [data-window-controls] .drag-region { app-region: drag; }
 @layer base { [data-window-controls] .drag-region > * { app-region: initial; } }
 [data-window-controls] :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
-[data-window-controls] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
+[data-window-controls=""] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
+[data-window-controls="overlay"] .window-controls-inset {
+  padding-left: max(var(--gutter), calc(env(titlebar-area-x, 0px) / var(--interface-scale) + .75rem));
+  padding-right: max(var(--gutter), calc((100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)) / var(--interface-scale) + .75rem));
+}
 /* 90pt is where the first control's box starts, so the Couch switch keeps its hit area inside it. */
-[data-window-controls] .window-controls-inset > :first-child { margin-left: 0; }
+[data-window-controls=""] .window-controls-inset > :first-child { margin-left: 0; }
 
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }
