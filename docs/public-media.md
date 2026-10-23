@@ -36,6 +36,13 @@ Extensionless playlists with an incorrect MIME type are detected from their
 prefix. Non-HTTP references, variable substitution and content steering fail closed.
 Source subtitles use the same public-only HTTP transport.
 
+YouTube resolution uses yt-dlp's [`--check-formats`](https://github.com/yt-dlp/yt-dlp#video-format-options)
+before returning selected streams. An advertised format is not proof that its
+fresh URL can be downloaded: on the Mac network, new `TVHTML5` video/audio URLs
+returned 403 through curl and Core even with per-format headers and matching
+IPv4 egress, then worked when replayed later. yt-dlp's downloadability check made
+the immediate relay requests succeed, without cookies or a pinned player client.
+
 Core stores protected loopback media for Synced playback. A media-only loopback
 listener keeps native decoding independent of the UI listener’s bind address and
 TLS configuration; it closes with Core. FFmpeg also uses the

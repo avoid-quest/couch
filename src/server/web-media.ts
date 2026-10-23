@@ -157,10 +157,12 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     // yt-dlp's res uses the smaller dimension, including portrait Shorts.
     const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
-    const sort = youtube ? ["--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
+    // Fresh YouTube URLs can answer 403 before they are usable. Let yt-dlp check
+    // downloadability before Core hands the selected streams to a player.
+    const selection = youtube ? ["--check-formats", "--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
     // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
-    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
+    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9), ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
       const info = parseInfo(output);
       // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
       // maximum instead; formats with no known dimensions remain eligible.

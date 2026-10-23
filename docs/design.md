@@ -428,6 +428,8 @@ its results hold, as it finds them).
   key returns. The TV ignores pointer hover on them.
 - A refused media request shows its HTTP status. **Try again** requests a fresh
   stream; a 403 alone does not claim that the video requires age verification or sign-in.
+  YouTube stays loading until its selected formats pass a downloadability check,
+  including after **Try again**.
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
