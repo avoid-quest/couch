@@ -1,6 +1,6 @@
 # Intel macOS support
 
-Researched 2026-10-23, with the implementation below added on the same date.
+Researched 2026-10-23; implementation updated 2026-10-24 for an Intel Ventura Mac.
 Intel support needs a small packaging and website change, deliberate helper
 compatibility and target-device testing. The relay was cross-compiled on Linux;
 no Mac app was executed during this audit or implementation. No CI/release was
@@ -13,18 +13,32 @@ dispatched by the implementation agent, and installed Couch/data were untouched.
   pinned builder aggregates the channel's single Mac update YAML, and the
   pinned updater selects its architecture's ZIP. No custom merger, universal
   app, second Mac job, signing-identity change or automatic workflow trigger.
-- **Apple Silicon macOS 14+, Intel macOS 15+.** Apple's
+- **Apple Silicon macOS 14+, Intel macOS 13 Ventura+.** Apple's
   [`LSMinimumSystemVersionByArchitecture`](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html#//apple_ref/doc/uid/TP40009250-113253-BAJDHACB)
-  sets arm64 to 14.0.0 and x86_64 to 15.0.0, alongside the existing common 14.0
-  minimum. Intel's 15 floor covers the selected official mpv distribution
-  without promising native TV codec support on 14. System audio remains 14.2+.
+  sets arm64 to 14.0.0 and x86_64 to 13.0.0, alongside a common 13.0 minimum.
+  Electron 44.4.5 and the Go 1.27.2 relay both support 13 (sources below).
+  System audio remains 14.2+; Ventura can share a screen or audio input.
+  The earlier implementation's Intel 15 floor was overly broad: only optional
+  mpv needs 15, not normal media playback or the complete desktop app.
+- **Keep optional native TV playback separate from the launch floor.** On
+  Intel macOS 13–14, use a compatible runnable mpv 0.35+ on PATH or already in
+  Couch's cache. Without one, only a channel needing mpv reports that automatic
+  Intel mpv downloads require 15+ and a compatible installation can enable it.
+  Manual checks retain compatible cached copies rather than fetching a known
+  incompatible binary. Read the OS product version with Apple's
+  `/usr/bin/sw_vers -productVersion`, also used by
+  [CMake's Darwin initialization](https://github.com/Kitware/CMake/blob/v4.2.0/Modules/Platform/Darwin-Initialize.cmake#L289),
+  rather than translating Darwin kernel release numbers. Unknown OS versions
+  also block automatic Intel mpv downloads. macOS 15+ retains automatic mpv;
+  Windows, Linux and ARM selection remain unchanged. Building or pinning an
+  older mpv distribution is outside this addition.
 - **Build and bundle unmodified official QuickJS-NG 0.17.0 source**, pinned to
   commit `6d46d07d04041b40f4f49eaa7fdebe44c314c699`. Upstream documents
   [CMake builds](https://quickjs-ng.github.io/quickjs/building); its pinned
   [CLI target](https://github.com/quickjs-ng/quickjs/blob/6d46d07d04041b40f4f49eaa7fdebe44c314c699/CMakeLists.txt)
   needs no target executable to generate code while cross-compiling. Use
   CMake's [deployment target](https://cmake.org/cmake/help/latest/variable/CMAKE_OSX_DEPLOYMENT_TARGET.html)
-  14.0 and explicit arm64/x86_64 architecture. The before-signing `afterPack`
+  13.0 and explicit arm64/x86_64 architecture. The before-signing `afterPack`
   hook verifies emitted architecture and deployment target, includes the MIT
   license/source notice, and runs the host-native CLI. The runtime is signed
   with the app and updated with Couch. Main supplies `COUCH_QJS_PATH`; helpers
@@ -38,7 +52,7 @@ dispatched by the implementation agent, and installed Couch/data were untouched.
   `-x64.dmg` assets. Do not infer CPU from a Mac browser's user agent. The
   fallback file has no invented Intel URL; add it only after publication.
 - **FFmpeg supplier migration deferred:** today's verified Intel binary fits
-  the 15 floor. Its supplier's January 2027 end of new Intel builds remains a
+  the 13 floor (its own minimum is 12). Its supplier's January 2027 end of new Intel builds remains a
   concrete maintenance deadline. It does not justify a distribution framework
   or supplier/signature-policy change in this packaging addition.
 
@@ -47,11 +61,13 @@ catalog channel separation and missing-asset/offline behavior, and real
 executable fixtures for bundled helper selection/manual checks. They do not
 prove the Mac C build, signing or runtime behavior. Parent-owned `act` checks
 and an unpublished signed Mac Package run remain required. Before shipping,
-validate a clean Intel macOS 15 installation, first-use YouTube/native TV
-playback, FFmpeg, relay, capture, pairing and signed updates; retain a macOS 14
+validate a clean Intel Ventura installation, first-use YouTube and normal
+media, native TV playback with a compatible local mpv and its clear failure
+without one, FFmpeg, relay, screen/audio-input capture, pairing and signed
+updates; retain a macOS 14
 Apple Silicon check for the existing supported floor.
 
-### Implementation verification on Linux
+### Initial implementation verification on Linux (2026-10-23)
 
 With Bun **1.4.2** via mise: frozen install, typecheck, app build and web build
 passed. Package-hook/catalog tests passed (5); update/UI regressions passed
@@ -73,6 +89,24 @@ its verified PID. This browser check and the successful production web build
 do not validate Mac execution. Parent-owned act and hosted Package validation
 remain separate, and hosted ARM cross-packaging is not physical Intel testing.
 
+### Ventura follow-up verification on Linux (2026-10-24)
+
+With pinned Bun **1.4.2** via mise, typecheck, app build and web build passed.
+The new Node Intel mpv integration passed **11** scenarios: Ventura/Sonoma
+first-use errors without fetching an incompatible binary, compatible PATH/cache
+selection, broken/obsolete copies, manual checks, unreadable OS version and
+automatic verified downloads on macOS 15 and newer. Helper-update and
+helper-selection integrations passed **37** cases together; package-hook,
+release-catalog and capture regressions passed **23**. The existing system-audio
+14.2 guard, combined Mac update feed and architecture selection remain covered.
+
+These tests simulate Intel Mac selection with real executable fixtures on Linux;
+they do not execute Mac binaries. The parent owns the final `act` proof and
+unpublished hosted Package run. The latter must verify both app/QuickJS
+architectures, deployment targets and signatures; Ventura playback still needs
+the target Intel Mac. The follow-up changes only the website's minimum-OS text;
+the desktop/mobile layout check above applies to the existing row structure.
+
 ## Couch audit and recommendation
 
 Checked against Couch commit `32a79d37d006fff770c2b19a222afa994612af00` on 2026-10-23.
@@ -93,7 +127,8 @@ The bundled relay maps x64 to Go's amd64 and disables CGO. Sources:
 
 - **App launch:** Couch configures `minimumSystemVersion: 14.0`. Adding an x64
   installer alone would not change this. The implementation now adds the
-  architecture-specific Intel 15 floor. [Configuration](../package.json).
+  architecture-specific Intel 13 / Apple Silicon 14 floors and common 13
+  minimum. [Configuration](../package.json).
 - **System audio capture:** Couch enables it at macOS **14.2**, regardless of
   CPU. Earlier versions can still share a screen or audio input.
   [Capture owner](../app/capture.ts).
@@ -102,7 +137,7 @@ The bundled relay maps x64 to Go's amd64 and disables CGO. Sources:
   `LC_BUILD_VERSION`. The arm64 asset also declares 26.0, so this deserves a
   separate compatibility fix for the existing Mac build too. The release
   workflow uses `macos-latest` without an explicit deployment target. We cannot
-  promise a fresh installation works on macOS 14/15 without a compatible
+  promise a fresh installation works on macOS 13/14/15 without a compatible
   runtime or real target-OS validation. A working system/cached helper may hide
   this problem. Couch explicitly passes `quickjs:<path>` to yt-dlp. Sources:
   [v0.17.0 assets](https://github.com/quickjs-ng/quickjs/releases/tag/v0.17.0),
@@ -142,8 +177,8 @@ The bundled relay maps x64 to Go's amd64 and disables CGO. Sources:
    page and documentation. Populate fallback downloads only after an Intel
    installer has actually shipped.
 3. Choose the supported macOS/feature floor and use compatible verified helper
-   builds. Resolve QuickJS before advertising reliable 14/15 support; resolve
-   mpv as well if all TV playback is promised on Intel macOS 14. Plan the Intel
+   builds. Resolve QuickJS before advertising reliable 13+ support; describe
+   the compatible local mpv requirement for Intel 13–14. Plan the Intel
    FFmpeg replacement before the supplier's January 2027 cutoff.
 4. Prove packaging/workflow edits with `act` as [CI](ci.md) requires, then run a
    manually dispatched signed Package build. Test a clean Intel installation,
@@ -198,10 +233,11 @@ This is an engineering estimate, not a measured delivery schedule:
   deliberately chosen Intel macOS baseline, helper compatibility work and a
   signed install/update/capture smoke test, assuming access to an Intel Mac
   and compatible helper builds. Hidden target-OS failures can extend this.
-- **Full coverage on older systems:** retaining macOS 14 for every TV codec may
+- **Full coverage on older systems:** covering macOS 13–14 for every TV codec may
   require sourcing or building compatible mpv and QuickJS; scope that work
-  before promising the same estimate. Supporting pre-14 systems is a separate
-  compatibility project and should not be bundled into Intel packaging.
+  before promising the same estimate. The Ventura variant keeps such a separate
+  mpv distribution out of scope. Supporting systems below Electron/Go's 13 floor
+  would be another compatibility project.
 
 Start by choosing and testing the OS baseline, then ship separate architectures
 through one Mac packaging job. Avoid a universal bundle or a custom updater.

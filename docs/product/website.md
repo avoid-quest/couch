@@ -28,7 +28,7 @@ lingers long enough to reach its link, past a sofa that still dodges.
    of avoid.quest.
 
 **Download** links back to About from its footer. Each channel lists separate
-Mac (Apple Silicon, macOS 14+) and Mac (Intel, macOS 15+) downloads when its
+Mac (Apple Silicon, macOS 14+) and Mac (Intel, macOS 13+) downloads when its
 release contains those installers. Both include the first-open command.
 The user chooses the CPU explicitly; a Mac user agent does not identify it.
 The fallback catalog lists only published files, so it gains Intel only after

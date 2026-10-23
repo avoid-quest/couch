@@ -296,7 +296,11 @@ IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core
 (`src/server/mpv.ts`, JSON IPC). ffmpeg reads the channel's codecs when it
 starts. mpv comes from `PATH` or, on macOS and Windows, from mpv's GitHub
-releases (SHA-256 checked); Linux uses the system's package.
+releases (SHA-256 checked); Linux uses the system's package. On Intel macOS
+13–14, automatic mpv downloads are blocked because the official build needs 15.
+A compatible runnable `PATH` or cached copy can serve those channels; without
+one, only the channel needing mpv reports the compatible-install requirement.
+Manual helper checks also preserve a compatible cached copy on those systems.
 
 Sources include live device inputs, AirPlay senders and external internet media: yt-dlp sites
 (YouTube, Twitch, RaiPlay, Bandcamp and others), StreamingCommunity, radio and
@@ -345,7 +349,7 @@ separate from installer availability, so a notes failure cannot block an update.
 Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
 YouTube's challenges) and ffmpeg (`src/server/helpers.ts`). Mac packages ship
 QuickJS-NG 0.17.0, built from pinned upstream source for their actual CPU and
-macOS 14 rather than using upstream's macOS-26-only binaries
+macOS 13 rather than using upstream's macOS-26-only binaries
 ([build and signing](ci.md#bundled-mac-javascript-runtime)). Main passes its
 path as `COUCH_QJS_PATH`; compatible system copies still take precedence.
 Otherwise Core selects this bundled copy ahead of downloaded copies, including

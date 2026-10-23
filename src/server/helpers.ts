@@ -256,6 +256,16 @@ async function check(name: Helper, update = false): Promise<Choice> {
     return select(name, { origin: "bundled", path, version: found }, copies);
   }
   const copy = (await managed())[0];
+  // Ask macOS for its product version, not Darwin's differently numbered kernel.
+  // The official Intel mpv requires 15; older Macs can keep a compatible local copy.
+  if (name === "mpv" && process.platform === "darwin" && process.arch === "x64"
+    && !(Number.parseInt(await run("/usr/bin/sw_vers", ["-productVersion"]) ?? "", 10) >= 15)) {
+    for (const cached of await managed()) {
+      const found = await version(name, cached.path);
+      if (found && recentEnough(name, found)) return select(name, { ...cached, origin: "managed" }, copies);
+    }
+    throw new Error("This channel needs mpv. Automatic Intel mpv downloads require macOS 15 or later. Install a compatible mpv 0.35 or later on PATH, then try this channel again.");
+  }
   // Manual checks also refresh managed builds. Compatible PATH copies stay with their
   // package manager, and startup/daily checks retain their compatibility-only policy.
   if (update && name !== "yt-dlp") current = await release();

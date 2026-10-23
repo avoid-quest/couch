@@ -159,11 +159,14 @@ dmg on a Mac, the exe on Windows, the AppImage or deb on Linux. After that it
 updates itself.
 
 Choose **Apple Silicon** (`-arm64.dmg`, macOS **14+**) or **Intel**
-(`-x64.dmg`, macOS **15+**). The [download page](https://couch.avoid.quest/download)
+(`-x64.dmg`, macOS **13 Ventura or later**). The [download page](https://couch.avoid.quest/download)
 lists each architecture when that channel has published it. System audio
-capture requires macOS 14.2 or later. Intel's macOS 15 floor also covers the
-native player used for some TV codecs; it does not add support for older Macs
-that cannot run 15.
+capture requires macOS 14.2 or later; Ventura can share a screen or audio input.
+On Intel macOS 13–14, channels needing the native TV player require a compatible
+mpv 0.35 or later on `PATH`, or a working compatible copy already in Couch's
+cache. Otherwise only that channel reports the installation requirement;
+ordinary media remains available. Automatic Intel mpv downloads require
+macOS 15+. Couch does not build or pin an older mpv distribution.
 
 Couch isn't notarized by Apple, so the first time macOS won't open it. Move it
 to Applications, then run this once in Terminal (`Couch Preview.app` for the
