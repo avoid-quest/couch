@@ -87,7 +87,6 @@ contextBridge.exposeInMainWorld("couchApp", {
   completeLocalSetup: () => call("complete-local-setup"),
   connection: () => call("connection"),
   interfaceSize: size => call("interface-size", size),
-  titleBarHeight: height => call("title-bar-height", height),
   onAddresses: listener => {
     const handler = (_event: unknown, urls: string[]) => listener(urls);
     ipcRenderer.on("couch:addresses", handler);
