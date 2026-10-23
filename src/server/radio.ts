@@ -2,9 +2,11 @@ import { Database } from "./sqlite";
 import { Resolver } from "node:dns/promises";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { avoidRadioPlaylistId, avoidRadioPlaylistUrl, type AvoidRadioCatalog, type RadioPlaylist, type RadioStation } from "../shared/radio";
+import { avoidRadioPlaylistId, avoidRadioPlaylistUrl, type AvoidRadioCatalog, type RadioPlaylist, type RadioStation, type RadioGuide, radioLabels, radioNow, radioNext, radioMatches } from "../shared/radio";
+import { createRadioGuides } from "./radio-guides";
+import { guideUrl } from "./iptv-feeds";
 import { createRadioMetadata } from "./radio-metadata";
-import { radioHttpUrl as httpUrl, radioId, readRadioPlaylist } from "./radio-playlists";
+import { radioHttpUrl as httpUrl, radioId, readRadioSource } from "./radio-playlists";
 
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -33,7 +35,11 @@ function station(value: unknown): RadioStation {
   for (const key of ["groupTitle", "tvgId"] as const) {
     if (value[key] === undefined) continue;
     if (typeof value[key] !== "string" || value[key].length > 200 || /[\u0000-\u001f\u007f]/.test(value[key])) throw new RadioError("Invalid station metadata.");
-    metadata[key] = value[key].trim();
+    metadata[key] = key === "tvgId" ? value[key] : value[key].trim();
+  }
+  if (value.tags !== undefined) {
+    if (!Array.isArray(value.tags) || value.tags.length > 100 || value.tags.some(tag => typeof tag !== "string" || tag.length > 500)) throw new RadioError("Invalid station tags.");
+    metadata.tags = radioLabels(value.tags);
   }
   if (value.sourceId !== undefined) {
     if (typeof value.sourceId !== "string" || !uuid.test(value.sourceId)) throw new RadioError("Invalid radio playlist ID.");
@@ -47,6 +53,7 @@ function providerStation(value: unknown): RadioStation | null {
   try {
     return station({
       id: value.stationuuid,
+      tags: typeof value.tags === "string" ? radioLabels(value.tags.slice(0, 10_000).split(",")).slice(0, 100) : [],
       name: typeof value.name === "string" ? value.name.slice(0, 200) : value.name,
       url: httpUrl(value.url_resolved) ?? httpUrl(value.url),
       homepage: httpUrl(value.homepage),
@@ -94,17 +101,21 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     CREATE TABLE IF NOT EXISTS radio_playlist_stations (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, position INTEGER NOT NULL, station TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS radio_playlist_order ON radio_playlist_stations(source_id, position);
   `);
+  for (const column of ["guide_url", "discovered_guide_url"]) {
+    if (!db.query<{ name: string }, []>("PRAGMA table_info(radio_playlists)").all().some(row => row.name === column)) db.exec(`ALTER TABLE radio_playlists ADD COLUMN ${column} TEXT`);
+  }
   const cache = new Map<string, { expires: number; stations: RadioStation[] }>();
   const pending = new Map<string, Promise<RadioStation[]>>();
   const refreshes = new Map<string, { promise: Promise<RadioPlaylist>; controller: AbortController }>();
   const shutdown = new AbortController();
-  const metadata = createRadioMetadata({ fetch: request, signal: shutdown.signal });
+  const liveMetadata = createRadioMetadata({ fetch: request, signal: shutdown.signal });
+  const guides = createRadioGuides({ fetch: request, signal: shutdown.signal });
   let avoidRetryAt = 0;
   let closed = false;
   let directory: { expires: number; servers: string[] } | undefined;
   let discovery: Promise<string[]> | undefined;
   const assertOpen = () => { if (closed) throw new RadioError("The radio catalog is closing.", 503); };
-  const playlistSelect = "SELECT p.id, p.name, p.url, p.updated_at AS updatedAt, p.error, (SELECT COUNT(*) FROM radio_playlist_stations s WHERE s.source_id = p.id) AS stationCount FROM radio_playlists p";
+  const playlistSelect = "SELECT p.id, p.name, p.url, p.updated_at AS updatedAt, p.error, p.guide_url AS guideUrl, p.discovered_guide_url AS discoveredGuideUrl, (SELECT COUNT(*) FROM radio_playlist_stations s WHERE s.source_id = p.id) AS stationCount FROM radio_playlists p";
   const getPlaylist = (id: string) => db.query<RadioPlaylist, [string]>(`${playlistSelect} WHERE p.id = ?`).get(id);
   const requirePlaylist = (id: string) => {
     assertOpen();
@@ -124,7 +135,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     const signal = AbortSignal.any([controller.signal, shutdown.signal, AbortSignal.timeout(10_000)]);
     const promise = (async () => {
       try {
-        const stations = await readRadioPlaylist(playlist.url, id, request, signal);
+        const { stations, discoveredGuideUrl } = await readRadioSource(playlist.url, id, request, signal);
         authorize();
         assertOpen();
         signal.throwIfAborted();
@@ -137,7 +148,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
             insert.run(station.id, id, index, json);
             updateFavorite.run(json, station.id);
           });
-          db.query("UPDATE radio_playlists SET updated_at = ?, error = NULL WHERE id = ?").run(Date.now(), id);
+          db.query("UPDATE radio_playlists SET updated_at = ?, discovered_guide_url = ?, error = NULL WHERE id = ?").run(Date.now(), discoveredGuideUrl, id);
         })();
         onChange();
         return getPlaylist(id)!;
@@ -166,7 +177,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     }
     const stations = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE source_id = ? ORDER BY position").all(avoidRadioPlaylistId)
       .map(row => station(JSON.parse(row.station)));
-    const { url: _url, ...summary } = playlist;
+    const { url: _url, guideUrl: _guide, discoveredGuideUrl: _discovered, ...summary } = playlist;
     return { playlist: summary, stations };
   }
 
@@ -199,30 +210,70 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     throw new RadioError("Radio Browser is unavailable. Try again shortly. Your saved stations are still available.", 503);
   }
 
-  return {
-    metadata,
-    avoid,
-    async avoidProgrammes(callerSignal?: AbortSignal) {
-      const programmes: Record<string, import("../shared/radio").RadioProgrammeDetails> = {};
-      // Include catalog loading in the budget, below the client's 45s timeout.
-      const signal = AbortSignal.any([shutdown.signal, callerSignal, AbortSignal.timeout(30_000)].filter((value): value is AbortSignal => !!value));
-      if (signal.aborted) return programmes;
-      const canceled = Promise.withResolvers<void>();
-      const cancel = () => canceled.resolve();
-      signal.addEventListener("abort", cancel, { once: true });
-      try {
-        const catalog = await Promise.race([avoid(), canceled.promise]);
-        if (!catalog) return programmes;
-        // Finish only the current shared requests after this caller leaves.
-        for (let offset = 0; !signal.aborted && offset < Math.min(catalog.stations.length, 50); offset += 3) {
-          await Promise.all(catalog.stations.slice(offset, Math.min(offset + 3, 50)).map(async current => {
-            if (!current.tvgId) return;
-            const result = await metadata.get(current.tvgId, current.url, signal);
-            if (result.programme && !signal.aborted) programmes[current.id] = result.programme;
-          }));
+  const sourceStations = (id: string) => db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE source_id = ? ORDER BY position").all(id).map(row => station(JSON.parse(row.station)));
+
+  async function stationGuide(current: RadioStation, callerSignal?: AbortSignal): Promise<{ guide: RadioGuide; retryAt: number }> {
+    const source = current.sourceId ? getPlaylist(current.sourceId) : null;
+    const [schedule, live] = await Promise.all([
+      source ? guides.get(source, sourceStations(source.id)) : Promise.resolve({ programmes: new Map(), retryAt: Date.now() + 60_000 }),
+      source?.url === avoidRadioPlaylistUrl && current.tvgId ? liveMetadata.get(current.tvgId, current.url, callerSignal) : Promise.resolve({ programme: null, retryAt: Date.now() + 60_000 }),
+    ]);
+    return { guide: { programmes: schedule.programmes.get(current.id) ?? [], live: live.programme }, retryAt: Math.min(schedule.retryAt, live.retryAt) };
+  }
+
+  async function programmes(callerSignal?: AbortSignal) {
+    const result: Record<string, RadioGuide> = {};
+    const signal = AbortSignal.any([shutdown.signal, callerSignal ?? shutdown.signal, AbortSignal.timeout(30_000)]);
+    await avoid();
+    const sources = db.query<RadioPlaylist, []>(playlistSelect).all();
+    let index = 0;
+    await Promise.all(Array.from({ length: Math.min(3, sources.length) }, async () => {
+      while (index < sources.length && !signal.aborted) {
+        const source = sources[index++]!;
+        const stations = sourceStations(source.id);
+        const schedule = await guides.get(source, stations);
+        if (closed || signal.aborted) return;
+        for (const current of stations) {
+          const entries = schedule.programmes.get(current.id);
+          if (entries?.length) result[current.id] = { programmes: entries, live: null };
         }
-        return programmes;
-      } finally { signal.removeEventListener("abort", cancel); }
+        if (source.url === avoidRadioPlaylistUrl) {
+          for (let offset = 0; offset < Math.min(stations.length, 50) && !signal.aborted; offset += 3) {
+            await Promise.all(stations.slice(offset, Math.min(offset + 3, 50)).map(async current => {
+              if (!current.tvgId) return;
+              const live = await liveMetadata.get(current.tvgId, current.url, signal);
+              if (live.programme && !signal.aborted) result[current.id] = { programmes: schedule.programmes.get(current.id) ?? [], live: live.programme };
+            }));
+          }
+        }
+      }
+    }));
+    return result;
+  }
+
+  return {
+    metadata: {
+      async get(id: string, streamUrl: string, signal?: AbortSignal) {
+        if (closed || signal?.aborted) return { programme: null, retryAt: Date.now() + 60_000 };
+        const row = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(id);
+        if (!row) return { programme: null, retryAt: Date.now() + 60_000 };
+        const current = station(JSON.parse(row.station));
+        if (current.url !== streamUrl) return { programme: null, retryAt: Date.now() + 60_000 };
+        const { guide, retryAt } = await stationGuide(current, signal);
+        if (closed || signal?.aborted) return { programme: null, retryAt: Date.now() + 60_000 };
+        const latest = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(id);
+        if (!latest || station(JSON.parse(latest.station)).url !== streamUrl) return { programme: null, retryAt: Date.now() + 60_000 };
+        const programme = radioNow(guide, current.id), next = radioNext(guide);
+        return { programme, retryAt: Math.min(retryAt, programme?.expiresAt ?? Infinity, next?.start ?? Infinity) };
+      },
+    },
+    programmes,
+    avoid,
+    async avoidProgrammes(signal?: AbortSignal) {
+      return Object.fromEntries(Object.entries(await programmes(signal)).flatMap(([id, guide]) => {
+        const current = radioNow(guide, id);
+        return current ? [[id, current]] : [];
+      }));
     },
     async search({ q = "", countrycode = "" }: { q?: string; countrycode?: string } = {}) {
       assertOpen();
@@ -294,7 +345,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       assertOpen();
       return db.query<RadioPlaylist, []>(`${playlistSelect} ORDER BY p.rowid`).all();
     },
-    async addPlaylist({ name, url }: { name: string; url: string }, authorize = () => {}): Promise<RadioPlaylist> {
+    async addPlaylist({ name, url, guideUrl: explicitGuide }: { name: string; url: string; guideUrl?: string | null }, authorize = () => {}): Promise<RadioPlaylist> {
       authorize();
       assertOpen();
       if (typeof name !== "string" || !name.trim() || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)) throw new RadioError("Enter a playlist name of 1 to 200 characters.");
@@ -305,7 +356,9 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       url = canonical.href;
       const id = radioId(`playlist:${url}`);
       if (id !== avoidRadioPlaylistId && !getPlaylist(id) && db.query<{ count: number }, [string]>("SELECT COUNT(*) AS count FROM radio_playlists WHERE id != ?").get(avoidRadioPlaylistId)!.count >= 30) throw new RadioError("You can save up to 30 custom radio playlists.");
+      if (explicitGuide !== undefined && explicitGuide !== null) { try { explicitGuide = guideUrl(explicitGuide); } catch { throw new RadioError("Enter an HTTP or HTTPS guide URL without credentials or headers."); } }
       db.query("INSERT INTO radio_playlists (id, name, url) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name").run(id, name.trim(), url);
+      if (explicitGuide !== undefined) db.query("UPDATE radio_playlists SET guide_url = ? WHERE id = ?").run(explicitGuide, id);
       return refreshPlaylist(id, authorize);
     },
     refreshPlaylist,
@@ -325,15 +378,14 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       if (typeof q !== "string" || q.length > 100) throw new RadioError("Use a station name of up to 100 characters.");
       const query = q.trim().toLocaleLowerCase();
       return db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE source_id = ? ORDER BY position").all(playlist.id)
-        .map(row => station(JSON.parse(row.station))).filter(station => !query || `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(query));
+        .map(row => station(JSON.parse(row.station))).filter(station => !query || radioMatches(station, query));
     },
     programmeStation(source: string): { id: string; streamUrl: string } | null {
       assertOpen();
       if (!source.startsWith("radio:")) return null;
-      const row = db.query<{ station: string }, [string, string]>("SELECT s.station FROM radio_playlist_stations s JOIN radio_playlists p ON p.id = s.source_id WHERE s.id = ? AND p.url = ?")
-        .get(source.slice(6), avoidRadioPlaylistUrl);
+      const row = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(source.slice(6));
       const current = row ? station(JSON.parse(row.station)) : null;
-      return current?.tvgId ? { id: current.tvgId, streamUrl: current.url } : null;
+      return current ? { id: current.id, streamUrl: current.url } : null;
     },
     getPlayable(id: string): { source: string; title: string; metadata?: { thumbnail: string } } {
       assertOpen();

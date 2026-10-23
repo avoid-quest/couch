@@ -2,11 +2,12 @@ import { parseM3U } from "@iptv/playlist";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { createHash } from "node:crypto";
 import type { GuideChannel, GuideProgram } from "../shared/iptv";
+import { radioLabels } from "../shared/radio";
 
 export const guideLimits = { playlistBytes: 2 * 1024 * 1024, xmlBytes: 16 * 1024 * 1024, channels: 5_000, programs: 100_000, elements: 600_000, nesting: 12, sources: 8 };
 export type PrivateChannel = GuideChannel & { streamUrl: string; logoUrl: string | null };
 export class GuideError extends Error {
-  constructor(message: string, readonly status = 400) { super(message); }
+  constructor(message: string, readonly status = 400, readonly retryMs?: number) { super(message); }
 }
 const fail = (message: string): never => { throw new GuideError(message); };
 export const guideId = (...parts: string[]) => createHash("sha256").update(JSON.stringify(["couch:iptv:v1", ...parts])).digest("hex");
@@ -51,8 +52,10 @@ export async function boundedBytes(response: Response, maximum: number, signal: 
   } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
 }
 
-export async function guideFetch(url: string, maximum: number, request: typeof fetch, signal: AbortSignal) {
+export async function guideFetch(url: string, maximum: number, request: typeof fetch, signal: AbortSignal, origin?: string) {
   for (let redirects = 0; redirects <= 3; redirects++) {
+    url = guideUrl(url);
+    if (origin && new URL(url).origin !== origin) fail("Discovered guides must stay on the playlist origin. Set an explicit guide URL for another host.");
     signal.throwIfAborted();
     const response = await request(url, { signal, redirect: "manual", headers: { "User-Agent": "Couch/0.1" } });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -60,7 +63,12 @@ export async function guideFetch(url: string, maximum: number, request: typeof f
       url = guideUrl(response.headers.get("location"), url);
       continue;
     }
-    if (!response.ok) { await response.body?.cancel(); throw new GuideError(`The source returned HTTP ${response.status}.`, 502); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      const retry = response.headers.get("retry-after");
+      const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
+      throw new GuideError(`The source returned HTTP ${response.status}.`, 502, Number.isFinite(delay) ? Math.max(30_000, Math.min(15 * 60_000, delay)) : undefined);
+    }
     return { url, bytes: await boundedBytes(response, maximum, signal) };
   }
   throw new GuideError("The source redirected too many times.", 502);
@@ -159,7 +167,7 @@ export function xmltvTime(value: unknown): number {
   return date.getTime() - offset * 60_000;
 }
 
-export function parseGuidePrograms(text: string, channels: PrivateChannel[]): GuideProgram[] {
+export function parseGuidePrograms(text: string, channels: Pick<PrivateChannel, "id" | "tvgId">[], options: { partial?: boolean; base?: string } = {}): GuideProgram[] {
   if (Buffer.byteLength(text) > guideLimits.xmlBytes) fail("The XMLTV guide exceeds 16 MiB.");
   if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(text)) fail("XMLTV DTD and entity declarations are unsupported.");
   let elements = 0;
@@ -167,7 +175,7 @@ export function parseGuidePrograms(text: string, channels: PrivateChannel[]): Gu
   if (XMLValidator.validate(text) !== true) fail("The XMLTV guide is not valid XML.");
   const parsed: unknown = new XMLParser({ ignoreAttributes: false, parseTagValue: false, parseAttributeValue: false, trimValues: false, htmlEntities: true, maxNestedTags: guideLimits.nesting,
     processEntities: { maxEntitySize: 32, maxExpansionDepth: 1, maxTotalExpansions: 1_000_000, maxExpandedLength: guideLimits.xmlBytes },
-    isArray: (_name, path) => typeof path === "string" && ["tv.channel", "tv.programme", "tv.programme.title", "tv.programme.desc"].includes(path),
+    isArray: (_name, path) => typeof path === "string" && ["tv.channel", "tv.programme", "tv.programme.title", "tv.programme.desc", "tv.programme.category", "tv.programme.icon"].includes(path),
   }).parse(text);
   if (!record(parsed) || !record(parsed.tv)) return fail("XMLTV needs a tv document root.");
   const tv = parsed.tv;
@@ -181,7 +189,7 @@ export function parseGuidePrograms(text: string, channels: PrivateChannel[]): Gu
     defined.add(id);
   }
   const mapping = new Map(channels.map(channel => [channel.tvgId, channel.id]));
-  if (channels.some(channel => !defined.has(channel.tvgId))) fail("Each M3U tvg-id must match an XMLTV channel id exactly.");
+  if (!options.partial && channels.some(channel => !defined.has(channel.tvgId))) fail("Each M3U tvg-id must match an XMLTV channel id exactly.");
   const rows = tv.programme ?? [];
   if (!Array.isArray(rows) || rows.length > guideLimits.programs) return fail("XMLTV supports at most 100000 programs.");
   const scalar = (value: unknown, max: number, optional = false) => {
@@ -198,6 +206,12 @@ export function parseGuidePrograms(text: string, channels: PrivateChannel[]): Gu
     const id = guideId(channelId, String(start));
     if (ids.has(id)) return fail("XMLTV repeats a program start for the same channel.");
     ids.add(id);
-    return [{ id, channelId, start, end, title: scalar(row.title, 300), description: scalar(row.desc, 4000, true) }];
+    const categories = Array.isArray(row.category) ? radioLabels(row.category.map(value => scalar(value, 500))) : [];
+    let artworkUrl: string | undefined;
+    for (const icon of Array.isArray(row.icon) ? row.icon : []) {
+      try { if (record(icon)) artworkUrl = guideUrl(icon["@_src"], options.base); } catch { /* Optional artwork cannot invalidate a guide. */ }
+      if (artworkUrl) break;
+    }
+    return [{ id, channelId, start, end, title: scalar(row.title, 300), description: scalar(row.desc, 4000, true), ...(categories.length ? { categories } : {}), ...(artworkUrl ? { artworkUrl } : {}) }];
   });
 }

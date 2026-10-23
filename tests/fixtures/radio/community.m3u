@@ -1,0 +1,7 @@
+#EXTM3U x-tvg-url="guide.xml"
+#EXTINF:-1 tvg-id="community.main" group-title="Community stations" radio="true",Community Radio
+https://audio.example/community.mp3
+#EXTINF:-1 tvg-id="community.archive" radio="true",Archive
+https://audio.example/archive.mp3
+#EXTINF:-1 tvg-id="community.unscheduled" radio="true",Unscheduled
+https://audio.example/unscheduled.mp3
