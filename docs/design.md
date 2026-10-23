@@ -423,6 +423,8 @@ its results hold, as it finds them).
   sources that didn't answer beside others that did (Search, a Details page's
   neighbours) are one muted line at the end, `SourcesUnanswered`; **Empty** for empty states; a `Spinner` status line for
   work in progress.
+- An outgoing Search page keeps its query and filters while the destination
+  loads; a page change does not start an empty search in the background.
 - **Dialog** for short tasks (pairing, source setup), **AlertDialog** for
   confirmations, **Popover** for the player's menus and panels over the picture,
   the Couch switch and Where it plays on desktop, **Sheet** for longer panels
