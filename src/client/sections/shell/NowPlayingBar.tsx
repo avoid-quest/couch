@@ -90,8 +90,9 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
     const location = router.state.location;
     // Stop removes the focused bar. After the commit, return lost focus to the
     // same page, leaving navigation and any deliberately chosen target alone.
+    // The player hides the bar as it opens and puts focus on its own picture.
     queueMicrotask(() => {
-      if (page?.isConnected && router.state.location === location && document.activeElement === document.body) recoverPageFocus(page, router);
+      if (page?.isConnected && !page.matches('[data-page="Now"]') && router.state.location === location && document.activeElement === document.body) recoverPageFocus(page, router);
     });
   }, [router]);
   const detailNavigation = useDetailNavigation();

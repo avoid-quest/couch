@@ -366,20 +366,22 @@ export function ShellChrome({ children }: PropsWithChildren) {
               <DigitalClock className="ml-3 hidden text-base text-muted-foreground tv:inline" />
             </div>
           </header>}
-          {paired && !onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>}
-          {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
-          {!paired ? <PairingPage status={status} /> : <>
-            {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
-            {/* Cached routes appear immediately; the player keeps its separate band transition. The page is its own layer,
-                so a Stage's room lies under its content and over the shell's black. */}
-            <div className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
-            {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
-                the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
-            <div ref={footer} className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}>
-              {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
-              <SectionTabs bar className="hidden bg-background touch:flex tv:hidden" />
-            </div>
-          </>}
+          <div className="app-page flex min-w-0 flex-1 flex-col" data-scroll-restoration-id="app-page">
+            {paired && !onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>}
+            {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
+            {!paired ? <PairingPage status={status} /> : <>
+              {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
+              {/* Cached routes appear immediately; the player keeps its separate band transition. The page is its own layer,
+                  so a Stage's room lies under its content and over the shell's black. */}
+              <div className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
+            </>}
+          </div>
+          {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
+              the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
+          {paired && <div ref={footer} className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}>
+            {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
+            <SectionTabs bar className="hidden bg-background touch:flex tv:hidden" />
+          </div>}
           {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
           <Toaster tvPresentation={tvPresentation} />
         </div>
@@ -407,7 +409,12 @@ function useTopBar(ref: RefObject<HTMLElement | null>, shown: boolean) {
     const element = ref.current;
     if (!element || !shown) return;
     const root = document.documentElement.style;
-    const observer = new ResizeObserver(() => root.setProperty("--top-bar", `${element.offsetHeight}px`));
+    const observer = new ResizeObserver(() => {
+      root.setProperty("--top-bar", `${element.offsetHeight}px`);
+      if (document.documentElement.classList.contains("electron") && !element.hidden) {
+        void window.couchApp?.titleBarHeight?.(element.getBoundingClientRect().height);
+      }
+    });
     observer.observe(element, { box: "border-box" });
     return () => { observer.disconnect(); root.removeProperty("--top-bar"); };
   }, [ref, shown]);

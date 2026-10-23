@@ -35,10 +35,10 @@ for (const secondStatus of [200, 404]) test(`a screen reports its own ${secondSt
   other.report({ playbackId: second.playbackId, status: "error", error: "Picture decoder failed" });
   // Synced sound owns the shared PlayerState; the screen's rewritten failure reaches couch.log.
   await until(() => lines.some(line => line.includes("player error") && line.includes("on Other")));
-  const expected = secondStatus === 200 ? "Picture decoder failed" : "The website refused this stream (HTTP 404). Play it again.";
+  const expected = secondStatus === 200 ? "Picture decoder failed" : "The media server refused this stream (HTTP 404). Try again to request a fresh stream.";
   const error = lines.find(line => line.includes("player error") && line.includes("on Other"))!;
   assert.equal(error.slice(error.indexOf(": ") + 2), expected);
   f.receiver.report({ playbackId: first.playbackId, status: "error", error: "Picture decoder failed" });
   await until(() => lines.some(line => line.includes("player error") && line.includes("on Receiver")));
-  assert.ok(lines.find(line => line.includes("player error") && line.includes("on Receiver"))!.endsWith("The website refused this stream (HTTP 403). Play it again."));
+  assert.ok(lines.find(line => line.includes("player error") && line.includes("on Receiver"))!.endsWith("The media server refused this stream (HTTP 403). Try again to request a fresh stream."));
 });

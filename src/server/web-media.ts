@@ -14,6 +14,7 @@ import { resolveAnimeSaturnLink } from "./animesaturn";
 import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
+import { logMediaResolution } from "./media-diagnostics";
 
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
@@ -144,7 +145,7 @@ function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): 
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = ""): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = "", playbackId?: string): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
@@ -156,10 +157,12 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     // yt-dlp's res uses the smaller dimension, including portrait Shorts.
     const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
-    const sort = youtube ? ["--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
+    // Fresh YouTube URLs can answer 403 before they are usable. Let yt-dlp check
+    // downloadability before Core hands the selected streams to a player.
+    const selection = youtube ? ["--check-formats", "--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
     // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
-    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
+    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9), ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
       const info = parseInfo(output);
       // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
       // maximum instead; formats with no known dimensions remain eligible.
@@ -180,6 +183,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       }
       try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
       if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
+      logMediaResolution(playbackId, info, media.headers);
       // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
       // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
       // its own headers, opens the master playlist instead.
@@ -201,7 +205,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           await response.body?.cancel();
           cancellation.throwIfAborted();
           if (response.status !== 410) return null;
-          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage);
+          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage, playbackId);
           const replacement = new URL(fresh.source);
           if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
           return fresh;

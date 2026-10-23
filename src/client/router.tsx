@@ -7,7 +7,7 @@ export const router = createRouter({
   routeTree,
   context: { queryClient: undefined!, identity: null, localHost: false, connected: false },
   scrollRestoration: true,
-  scrollToTopSelectors: [".tv-browser"],
+  scrollToTopSelectors: [".tv-browser", ".app-page"],
   defaultPreload: "intent",
 });
 
