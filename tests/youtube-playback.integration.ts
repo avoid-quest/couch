@@ -1,6 +1,7 @@
 // Run with Node (Bun bundles the TS):
 // bun build tests/youtube-playback.integration.ts --target=node --outfile=build/youtube-playback.integration.mjs
 // COUCH_TEST_YT_DLP=/absolute/path/to/yt-dlp node --test build/youtube-playback.integration.mjs
+// Use the executable from yt-dlp's platform zip, as Couch's helper manager does.
 // The real format-selection cases explicitly skip without that optional executable.
 // Helper discovery is stubbed; selection uses real yt-dlp --load-info-json, with no website requests.
 import assert from "node:assert/strict";
@@ -60,6 +61,8 @@ test("YouTube playback selection and safe extraction errors", async t => {
     if (stderr !== undefined) child = spawn(process.execPath, ["-e", `process.stderr.write(${JSON.stringify(stderr)}); process.exitCode = 1;`], options);
     else {
       assert.ok(executable, "COUCH_TEST_YT_DLP is required for real selection");
+      const host = new URL(args.at(-1)!).hostname;
+      assert.equal(args.includes("--check-formats"), host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"), "downloadability checks apply only to YouTube");
       extractions++;
       // Sorting fixtures have no media server. The downloadability cases below keep
       // the production check and use the real proxy with its controlled local fixture.
@@ -158,8 +161,10 @@ test("YouTube playback selection and safe extraction errors", async t => {
   });
   await t.test("YouTube skips a refused advertised format and rejects an entirely refused selection", real, async () => {
     const contacts: string[] = [];
+    let stalled = false;
     const upstream = createServer((request, response) => {
       contacts.push(request.url!);
+      if (stalled) return;
       if (request.url === "/refused.mp4") { response.writeHead(403); response.end(); }
       else { response.writeHead(200, { "Content-Length": "1024" }); response.end(Buffer.alloc(1024)); }
     });
@@ -180,6 +185,13 @@ test("YouTube playback selection and safe extraction errors", async t => {
       assert.ok(contacts.includes("/refused.mp4"));
       assert.ok(contacts.includes("/available.mp4"));
       await noFormat(select([refused, audio]));
+      const checked = contacts.length;
+      stalled = true;
+      const started = performance.now();
+      await assert.rejects(createWebMediaResolver({ timeoutMs: 2000 })("https://www.youtube.com/watch?v=fixture"), error => error instanceof ExtractionError && error.message === "The website took too long to respond. Try again.");
+      assert.ok(contacts.length > checked, "the deadline interrupted an actual format check");
+      assert.ok(performance.now() - started < 5000, "format checks remain inside the extraction deadline");
+      assert.equal(children.at(-1)!.killed, true, "the deadline kills the stalled extractor");
     } finally {
       downloadProxy = undefined;
       await proxy.close();

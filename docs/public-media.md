@@ -78,18 +78,20 @@ hooks do not apply to the local relay. Core forwards the receiver's Range unchan
 
 `media resolve` links the Playback ID to a new transport attempt. `media resolved`
 records yt-dlp's selected formats/codecs, age/availability metadata, CDN hosts,
-URL client (`c`), seconds to expiry, IP family/fingerprint, and presence of `n` and
-`pot`. These parameters are observations, not proof that a challenge or token is
-valid. Header fingerprints compare yt-dlp's per-format context, the top-level
-headers Core retained, and the headers Core actually sent. They use a random
-per-process key: compare them only within the same run. Cookie and authorization
+known Googlevideo client (`c`), seconds to expiry, IP family/fingerprint, and
+presence of `n` and `pot`. These parameters are observations, not proof that a
+challenge or token is valid. Header fingerprints compare yt-dlp's per-format
+context, the top-level headers Core retained, and the headers Core actually sent. Browser hints contain
+only family and platform labels. Fingerprints use a random per-process key:
+compare them only within the same run. Cookie and authorization
 values, signed URLs, raw IPs, Referer/Origin values and arbitrary header values
-are never printed. A URL's IP fingerprint does not establish Core's outbound IP.
+are never printed. IP-literal hosts are recorded only as `IPv4` or `IPv6`. A URL's
+IP fingerprint does not establish Core's outbound IP.
 
 `media response` records the first answer for each stream/status on a relay route,
 including later refusals, even if the renderer never reports an error. It records
 the final connection's IP family and headers after redirect stripping, and names
-Core as the fetcher, the receiving Device/Core, upstream host, Range, and HTTP
+Core as the fetcher, the receiving Device/Core, upstream host, sent Range, and HTTP
 status. Child HLS successes stay quiet, repeated statuses are deduplicated, and
 each route has a 12-line budget. A locally generated 502 is marked separately
 from an upstream HTTP response. `media resolve-failed` records the safe extractor

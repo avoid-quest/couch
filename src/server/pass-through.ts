@@ -188,9 +188,10 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
         if (stream === "child" && status < 400 || relay.logged.has(entry) || relay.logged.size >= 12) return;
         relay.logged.add(entry);
         const context = response && publicResponseContext(response);
+        const sentRange = (context?.headers ?? sentHeaders).range ?? null;
         logMediaDiagnostic("response", playbackId, { route: relay.id.slice(0, 8), fetcher: "Core", consumer: relay.target.userAgent === "Couch" ? "Core" : "Device", stream, status, outcome: failure ? "transport-or-playlist-error" : "upstream",
           routeAgeSeconds: Math.round((Date.now() - relay.createdAt) / 1000), ...mediaAddress(url), responseHost: mediaAddress(response?.url || url).host, connectionIpFamily: context?.ipFamily ?? null,
-          range: range === null ? null : /^bytes=\d{0,16}-\d{0,16}$/.test(range) ? range : "other", headers: mediaHeaders(context?.headers ?? sentHeaders) });
+          range: sentRange === null ? null : /^bytes=\d{0,16}-\d{0,16}$/.test(sentRange) ? sentRange : "other", headers: mediaHeaders(context?.headers ?? sentHeaders) });
       };
       let upstream: Response;
       try {

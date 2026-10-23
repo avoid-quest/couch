@@ -6,16 +6,19 @@ const key = randomBytes(32);
 const fingerprint = (value: string | null) => value ? createHmac("sha256", key).update(value).digest("hex").slice(0, 12) : null;
 const label = (value: unknown) => typeof value === "string" && /^[\w.+-]{1,64}$/.test(value) ? value : null;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const googlevideoClients = new Set(["WEB", "WEB_EMBEDDED_PLAYER", "WEB_REMIX", "WEB_CREATOR", "ANDROID", "ANDROID_VR", "IOS", "VISIONOS", "MWEB", "TVHTML5", "TVHTML5_SIMPLY"]);
 
 export function mediaAddress(source: string) {
   const url = URL.parse(source);
   if (!url) return { host: "unknown" };
   const expires = Number(url.searchParams.get("expire"));
   const ip = url.searchParams.get("ip");
+  const hostFamily = isIP(url.hostname.replace(/^\[|\]$/g, ""));
+  const client = url.searchParams.get("c");
   return {
-    host: url.hostname,
+    host: hostFamily ? `IPv${hostFamily}` : url.hostname,
     itag: /^\d{1,5}$/.test(url.searchParams.get("itag") ?? "") ? url.searchParams.get("itag") : null,
-    client: label(url.searchParams.get("c")),
+    client: (url.hostname === "googlevideo.com" || url.hostname.endsWith(".googlevideo.com")) && client && googlevideoClients.has(client) ? client : null,
     expiresInSeconds: Number.isSafeInteger(expires) && expires > 0 ? Math.round(expires - Date.now() / 1000) : null,
     ipFamily: ip ? isIP(ip) : 0, ip: fingerprint(ip),
     n: url.searchParams.has("n"), pot: url.searchParams.has("pot"),
@@ -26,8 +29,9 @@ export function mediaHeaders(value: unknown) {
   const entries = object(value) ? Object.entries(value).filter((pair): pair is [string, string] => typeof pair[1] === "string").map(([name, field]) => [name.toLowerCase(), field]) : [];
   const fields = Object.fromEntries(entries);
   const ua = fields["user-agent"] ?? "";
+  const agent = /\b(Chrome|Chromium|Firefox|Version)\//.exec(ua)?.[1];
   return {
-    agent: /\b(?:Chrome|Chromium|Firefox|Version)\/[\d.]+/.exec(ua)?.[0] ?? (ua === "Couch" ? "Couch" : ua ? "other" : null),
+    agent: agent === "Version" ? "Safari" : agent ?? (ua === "Couch" ? "Couch" : ua ? "other" : null),
     platform: /Windows|Android|iPhone|iPad|Macintosh|Linux/.exec(ua)?.[0] ?? null,
     // Even Referer and Origin can carry credentials. Compare, never print their values.
     context: Object.fromEntries(["user-agent", "referer", "origin", "accept", "accept-language", "sec-fetch-mode"].map(name => [name, fingerprint(fields[name] ?? null)])),

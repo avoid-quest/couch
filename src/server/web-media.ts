@@ -205,7 +205,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           await response.body?.cancel();
           cancellation.throwIfAborted();
           if (response.status !== 410) return null;
-          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage);
+          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage, playbackId);
           const replacement = new URL(fresh.source);
           if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
           return fresh;
