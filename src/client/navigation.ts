@@ -57,7 +57,7 @@ function moveFocus(key: string) {
     focus(entry(controls));
     return;
   }
-  if (key === "ArrowDown" && active.closest(".app-header")) {
+  if (key === "ArrowDown" && active.closest(".app-header-controls")) {
     const first = [...scope.querySelectorAll<HTMLElement>("[data-page-first]")].find(element => visible(element) && (!remoteNavigation || !element.closest(localOnly)));
     if (first) { focus(first); return; }
   }
@@ -90,7 +90,7 @@ function moveFocus(key: string) {
     return gap < 0 ? 0 : gap * 2 + 1000;
   };
   // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
-  const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? ".app-footer" : null;
+  const bar = key === "ArrowUp" ? ".app-header-controls" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
   // A footer inside the page ([data-nav-footer], the update review's actions) sticks to its container's end, so Down
   // reaches it after the container's controls that scroll beneath it.
@@ -130,7 +130,7 @@ function moveFocus(key: string) {
     ? controls.find(element => element.matches('[data-nav-rail] [aria-current="page"]')) : undefined;
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
   const tab = key === "ArrowUp" && later && best?.element.closest(later)
-    ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
+    ? [...scope.querySelectorAll<HTMLElement>('.app-header-controls [aria-current="page"]')].find(visible) : undefined;
   // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
   // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
   const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(element => visible(element) && (!remoteNavigation || !element.closest(localOnly))) : undefined;

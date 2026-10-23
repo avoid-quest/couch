@@ -29,7 +29,7 @@ export function DisplaySettings({ credentials, connected, title }: { credentials
   const change = (op: string, body: unknown) => { if (connected && !pending) changeMutation.mutate({ op, body }); };
 
   return (
-    <SettingsSection title={title} description="Pick a screen. Confirm within 20 seconds or it switches back.">
+    <SettingsSection title={title} description="Try a screen, then confirm within 20 seconds. Resolution and refresh rate stay the same.">
       {connected && display.isPending && <SettingsRowsSkeleton />}
       {state?.outputs.map(output => (
         <SettingsRow key={output.id} label={output.name} description={[
@@ -39,14 +39,12 @@ export function DisplaySettings({ credentials, connected, title }: { credentials
           <Button variant="outline" aria-label={`Try ${output.name}`} disabled={!connected || pending || !!state.preview || !output.connected || !output.width} onClick={() => change("preview", { output: output.id })}>Try</Button>
         </SettingsRow>
       ))}
-      {state?.preview && <div role="status" className="flex flex-wrap items-center gap-2">
-        <p className="mr-auto text-sm">Keep this screen? Reverting in {Math.max(0, Math.ceil((state.preview.expiresAt - now) / 1_000))} s.</p>
+      {state?.preview && <SettingsRow role="status" label="Keep this screen?" description={`Reverting in ${Math.max(0, Math.ceil((state.preview.expiresAt - now) / 1_000))} s.`}>
         <Button disabled={pending || !connected} onClick={() => change("confirm", { token: state.preview!.token })}>Keep</Button>
         <Button variant="outline" disabled={pending || !connected} onClick={() => change("cancel", { token: state.preview!.token })}>Revert</Button>
-      </div>}
+      </SettingsRow>}
       {state?.notice && <p role="status" className="text-sm text-muted-foreground">{state.notice}</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{display.error && !changeMutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void display.refetch()}>Try again</Button></AlertAction>}</Alert>}
-      <p className="text-sm text-muted-foreground">Resolution and refresh rate don't change.</p>
     </SettingsSection>
   );
 }

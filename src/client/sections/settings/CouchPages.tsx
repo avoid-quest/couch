@@ -1,12 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Switch } from "@/components/ui/switch";
 import type { SourceKind } from "@/components/sourceTypes";
 import { ADMIN_ONLY } from "@/copy";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
-import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
+import type { SettingsPage } from "../../../shared/settings-pages";
 import { SettingsLayout } from "./SettingsLayout";
 import { SettingsSources } from "./SettingsSources";
 import { useSettingsScope } from "./settings-scope";
@@ -64,7 +63,6 @@ export function SourcesPage({ section }: { section: SettingsPage }) {
   const source = section.startsWith("source-") ? section.slice(7) as SourceKind : undefined;
   return <SettingsLayout section={section}>
     <SettingsSources canManage={administrator} connected={connected} credentials={credentials} source={source} />
-    {!source && <p className="text-sm text-muted-foreground">Share this device's screen or sound from <Link data-text-link className="underline underline-offset-4" to={settingsPages.device.path}>This device › General</Link>.</p>}
   </SettingsLayout>;
 }
 
@@ -80,7 +78,7 @@ export function SoundPage() {
         <SettingsRow label="Audio delay" description={ADMIN_ONLY} />
         <SettingsRow label="Test tone" description={ADMIN_ONLY} />
       </SettingsSection>
-      <SettingsSection title="Bluetooth" description={`Pair, connect or forget ${couch}'s Bluetooth speakers. ${ADMIN_ONLY}`} />
+      <SettingsSection><SettingsRow label="Bluetooth" description={`Pair, connect or forget ${couch}'s Bluetooth speakers. ${ADMIN_ONLY}`} /></SettingsSection>
     </> : credentials && <>
       <SoundSettings credentials={credentials} connected={connected} hostName={couch} />
       <BluetoothSettings credentials={credentials} connected={connected} />
@@ -101,8 +99,8 @@ export function DisplayPage() {
       {appliance && (administrator && credentials ? <StartupSettings credentials={credentials} connected={connected} /> : <SettingsRow label="Start on boot" description={ADMIN_ONLY} />)}
     </SettingsSection>}
     {details?.tvPresentation && <>
-      {!administrator ? <SettingsSection title="Screen" description={ADMIN_ONLY} /> : credentials && <DisplaySettings title="Screen" credentials={credentials} connected={connected} />}
-      {state?.appearance && <SettingsSection title="Text size">
+      {!administrator ? <SettingsSection><SettingsRow label="Screen" description={ADMIN_ONLY} /></SettingsSection> : credentials && <DisplaySettings title="Screen" credentials={credentials} connected={connected} />}
+      {state?.appearance && <SettingsSection>
         <TvInterfaceSize appearance={state.appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} />
       </SettingsSection>}
     </>}

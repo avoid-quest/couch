@@ -40,7 +40,7 @@ export function StreamingCommunitySettings({ credentials, connected, canManage }
           <Input autoComplete="off" className="min-w-0 flex-1" disabled={!available || page.isFetching || pending} id="streamingcommunity-origin" maxLength={254} onChange={event => setDraft(event.target.value)} placeholder={streamingCommunityOrigin} spellCheck={false} type="url" value={site} />
           <Button type="submit" variant="outline" disabled={!available || page.isFetching || pending || value === page.data?.origin || !validStreamingCommunityOrigin(value)}>{pending ? "Saving…" : "Save"}</Button>
         </form>
-      </SettingsRow> : <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
+      </SettingsRow> : <SettingsRow label="Site address" description={ADMIN_ONLY} />}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{page.error && !saving.error && <AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => void page.refetch()}>Try again</Button></AlertAction>}</Alert>}
     </SettingsSection>
   );

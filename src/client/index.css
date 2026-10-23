@@ -38,7 +38,7 @@ body { min-width: 0; }
 @custom-variant hover { @media (hover: hover) { &:where(:not(.tv-presentation *)):hover { @slot; } } }
 
 @theme inline {
-    --font-heading: var(--font-sans);
+    --font-heading: var(--font-display);
     --font-sans: 'Inter Tight Variable', sans-serif;
     --font-display: 'Mona Sans Variable', 'Inter Tight Variable', sans-serif;
     --color-ring: var(--ring);
@@ -244,7 +244,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
 .electron .app-page:has(.player-page) { overflow: hidden; }
 .electron .app-footer { right: calc(var(--desktop-window-right-resize-inset) / var(--interface-scale)); }
 .electron [data-nav-rail] { top: 2rem; }
-.electron .app-header { grid-template-columns: auto minmax(max-content, 1fr) minmax(0, 30rem); column-gap: .75rem; }
+.electron .app-header-controls { grid-template-columns: auto minmax(max-content, 1fr) minmax(0, 30rem); column-gap: .75rem; }
 .electron ::-webkit-scrollbar { width: var(--app-scrollbar-width); height: var(--app-scrollbar-width); }
 .electron ::-webkit-scrollbar-track { background: transparent; }
 .electron ::-webkit-scrollbar-thumb { background: var(--app-scrollbar-thumb); border-radius: 3px; }

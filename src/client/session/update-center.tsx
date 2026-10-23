@@ -6,6 +6,7 @@ import { ApiError, apiJson, apiSend } from "../api/client";
 import { deviceId, useLocalDeviceName } from "./device-id";
 import { couchApp } from "./native-context";
 import { updateApp } from "./native-updates";
+import { notice } from "../toasts";
 import { errorText, useSessionGate } from "./session-context";
 import { batchActive, batchLifetime, createUpdateBatch, restartTimeout, restoreUpdateBatch, runUpdateBatch, saveUpdateBatch, updateBatchKey, type UpdateBatch } from "./update-batch";
 
@@ -20,10 +21,10 @@ export type UpdateCenterValue = {
   batch: UpdateBatch | null;
   busy: boolean;
   checking: boolean;
+  checkFailed: boolean;
   check(): Promise<void>;
   update(ids: string[], interrupt?: boolean): Promise<void>;
   setChannel(id: string, channel: UpdateChannel): Promise<void>;
-  clearBatch(): void;
 };
 
 const UpdateCenterContext = createContext<UpdateCenterValue | null>(null);
@@ -76,7 +77,14 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
   const lifetime = useRef(new AbortController());
   const localRevision = useRef(0);
   const active = batchActive(batch);
+  const clearActionError = (id: string, next: UpdateState) => {
+    if (!next.error && next.status !== "error") setActionErrors(errors => errors[id] ? { ...errors, [id]: undefined } : errors);
+  };
   const updateBatch = (next: UpdateBatch | null) => { batchRef.current = next; setBatch(next); };
+  const clearBatch = () => {
+    try { localStorage.removeItem(storageKey); } catch { /* Retire the result in this tab even if storage became unavailable. */ }
+    updateBatch(null);
+  };
   useEffect(() => {
     lifetime.current = new AbortController();
     return () => lifetime.current.abort();
@@ -85,7 +93,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
   useEffect(() => {
     if (!couchApp?.updates) return;
     let disposed = false;
-    const receive = (next: UpdateState) => { localRevision.current++; setLocal(next); setLocalError(undefined); };
+    const receive = (next: UpdateState) => { localRevision.current++; setLocal(next); setLocalError(undefined); clearActionError("app", next); };
     const unsubscribe = couchApp.onUpdates(receive);
     const revision = localRevision.current;
     void couchApp.updates().then(next => {
@@ -103,13 +111,17 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
     if (canMaintain && item.id !== "app" && !remote.some(target => target.id === item.id) && item.status !== "updated") remote.push({ id: item.id, name: item.name, tv: false });
   }
   const reads = useQueries({ queries: remote.map(target => ({ queryKey: ["updates", target.id], enabled: connected,
-    queryFn: ({ signal }: { signal: AbortSignal }) => apiJson<UpdateState>(credentials!, `/api/updates${suffix(target.id)}`, { signal }),
+    queryFn: async ({ signal }: { signal: AbortSignal }) => {
+      const next = await apiJson<UpdateState>(credentials!, `/api/updates${suffix(target.id)}`, { signal });
+      clearActionError(target.id, next);
+      return next;
+    },
     refetchInterval: (query: { state: { data: unknown } }) => active || activeState(query.state.data as UpdateState | undefined) ? interval : idleInterval, retry: false })) });
   const helperQuery = useQuery({ queryKey: ["updates", "helpers"], enabled: canMaintain && connected,
     queryFn: ({ signal }) => apiJson<HelperUpdates>(credentials!, "/api/updates/helpers", { signal }),
     refetchInterval: query => active || query.state.data?.status === "checking" ? interval : idleInterval, retry: false });
   const targets: UpdateCenterTarget[] = [
-    ...(couchApp?.updates ? [{ id: "app", name: name ?? "This app", tv: couchApp.tvPresentation, local: true, state: local, error: localError }] : []),
+    ...(couchApp?.updates ? [{ id: "app", name: name ?? "This app", tv: couchApp.tvPresentation, local: true, state: local, error: actionErrors.app ?? localError }] : []),
     ...remote.map((target, index) => ({ ...target, local: false, state: reads[index]?.data,
       error: actionErrors[target.id] ?? (reads[index]?.error ? errorText(reads[index]!.error) : discovery.error ? errorText(discovery.error) : undefined) })),
   ];
@@ -117,7 +129,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
   const localAction = async (action: UpdateAction) => {
     const revision = localRevision.current;
     const next = await updateApp(couchApp!, action);
-    if (!lifetime.current.signal.aborted && revision === localRevision.current) { localRevision.current++; setLocal(next); setLocalError(undefined); }
+    if (!lifetime.current.signal.aborted && revision === localRevision.current) { localRevision.current++; setLocal(next); setLocalError(undefined); clearActionError("app", next); }
     return next;
   };
   const read = async (id: string, signal: AbortSignal) => {
@@ -126,6 +138,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
       : await apiJson<UpdateState>(credentials!, `/api/updates${suffix(id)}`, { signal });
     signal.throwIfAborted();
     if (id !== "app") client.setQueryData(["updates", id], next);
+    clearActionError(id, next);
     return next;
   };
   const helpers = async (resume: boolean, startedAt: number, previousCheck: number | null | undefined, signal: AbortSignal) => {
@@ -186,37 +199,72 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
         },
       });
       if (interruption(error)) throw error;
+      if (!error && !signal.aborted) {
+        clearBatch();
+        const message = initial.items.length === 1 ? `Updated ${initial.items[0]!.name}` : initial.items.length ? `Updated ${initial.items.length} devices` : "Media tools updated";
+        notice(initial.helpers === "skipped" ? `${message}. Media tools weren’t checked.` : message);
+      }
     } finally { runner.current = false; if (!lifetime.current.signal.aborted) setRunning(false); }
   };
 
   useEffect(() => {
-    if (!batchActive(batch) || runner.current) return;
+    if (runner.current) return;
+    if (!batchActive(batch)) {
+      // Earlier builds retained completed results indefinitely. Retire them quietly, without repeating a toast.
+      if (batch && batch.helpers !== "failed" && !batch.items.some(item => item.status === "failed")) clearBatch();
+      return;
+    }
     const needsServer = !["updated", "skipped"].includes(batch!.helpers) || batch!.items.some(item => item.id !== "app" && item.status !== "updated");
+    if (needsServer && identity && !canMaintain) {
+      const stopped: UpdateBatch = { ...batch!, helpers: "failed", helperError: "Only an admin can finish updating these devices." };
+      try { saveUpdateBatch(localStorage, storageKey, stopped); } catch { /* The in-memory failure still stops this run. */ }
+      updateBatch(stopped);
+      return;
+    }
     if (needsServer && (!canMaintain || !connected)) return;
     void execute(batch!).catch(() => {}); // Restored failures are shown in the retained batch.
   }, [batch, canMaintain, connected, running]);
 
   const check = async () => {
     if (checkingRef.current || runner.current || active) return;
+    clearBatch();
     checkingRef.current = true; setChecking(true); setHelperActionError(undefined);
+    const signal = lifetime.current.signal, startedAt = Date.now();
+    const states: UpdateState[] = [];
+    let failed = false;
     try {
       await Promise.all([
         ...targets.map(async target => {
           try {
-            if (target.local) await localAction({ op: "check" });
+            let next: UpdateState;
+            if (target.local) next = await localAction({ op: "check" });
             else {
-              const next = await apiSend<UpdateState>(credentials!, `/api/updates/check${suffix(target.id)}`);
+              next = await apiSend<UpdateState>(credentials!, `/api/updates/check${suffix(target.id)}`);
+              signal.throwIfAborted();
               client.setQueryData(["updates", target.id], next);
               setActionErrors(errors => ({ ...errors, [target.id]: undefined }));
             }
-          } catch (error) { if (target.local) setLocalError(errorText(error)); else setActionErrors(errors => ({ ...errors, [target.id]: errorText(error) })); }
+            while (activeState(next)) {
+              if (Date.now() - startedAt > batchLifetime) throw new Error("Still checking for updates. Try again later.");
+              await pause(signal);
+              next = await read(target.id, signal);
+            }
+            states.push(next);
+            if (next.error || next.status === "error") { failed = true; setActionErrors(errors => ({ ...errors, [target.id]: next.error ?? "Couldn't check for updates." })); }
+          } catch (error) { failed = true; setActionErrors(errors => ({ ...errors, [target.id]: errorText(error) })); }
         }),
-        ...(canMaintain ? [apiSend<HelperUpdates>(credentials!, "/api/updates/helpers/check").then(next => { client.setQueryData(["updates", "helpers"], next); }, error => { setHelperActionError(errorText(error)); })] : []),
+        ...(canMaintain ? [helpers(false, startedAt, undefined, signal).catch(error => { failed = true; setHelperActionError(errorText(error)); })] : []),
       ]);
+      if (!failed && !signal.aborted) {
+        const tools = canMaintain && client.getQueryData<HelperUpdates>(["updates", "helpers"]);
+        if (tools && tools.items.some(item => item.status === "updated")) notice("Media tools updated");
+        else if (states.every(state => state.status === "up-to-date")) notice("Everything is up to date");
+      }
     } finally { checkingRef.current = false; setChecking(false); }
   };
   const update = async (ids: string[], interrupt = false) => {
     if (runner.current || checkingRef.current || batchActive(batchRef.current)) return;
+    setHelperActionError(undefined);
     const next = createUpdateBatch(targets, ids, canMaintain, interrupt);
     if (!next.items.length && next.helpers === "updated") return;
     checkingRef.current = true;
@@ -244,6 +292,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
   };
   const setChannel = async (id: string, channel: UpdateChannel) => {
     if (runner.current || active || checkingRef.current) return;
+    clearBatch();
     if (id === "app") await localAction({ op: "channel", channel });
     else {
       if (!canMaintain || !targets.some(target => target.id === id)) throw new Error("Choose a connected Couch app.");
@@ -251,14 +300,10 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
       client.setQueryData(["updates", id], next);
     }
   };
-  const clearBatch = () => {
-    if (runner.current || batchActive(batchRef.current)) return;
-    try { localStorage.removeItem(storageKey); } catch { return; }
-    updateBatch(null);
-  };
   const value: UpdateCenterValue = { targets, canMaintain, helpers: canMaintain ? helperQuery.data : undefined,
     helperError: helperActionError ?? (helperQuery.error ? errorText(helperQuery.error) : undefined), batch,
     busy: running || active, checking: checking || targets.some(target => activeState(target.state)) || helperQuery.data?.status === "checking",
-    check, update, setChannel, clearBatch };
+    checkFailed: !!helperActionError || targets.some(target => !!actionErrors[target.id]),
+    check, update, setChannel };
   return <UpdateCenterContext.Provider value={value}>{children}</UpdateCenterContext.Provider>;
 }

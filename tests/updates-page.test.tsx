@@ -13,15 +13,16 @@ mock.module("../src/client/sections/settings/SettingsLayout", () => ({
   SettingsLayout: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }));
 mock.module("../src/client/sections/settings/settings-scope", () => ({
-  useSettingsScope: () => ({ device: "Phone", couch: "Living room TV", host: false, administrator: true, role: "You're an admin" }),
+  useSettingsScope: () => ({ device: "Phone", couch: "Living room TV", host: false, administrator: true, known: true }),
 }));
 const { UpdatesPage } = await import("../src/client/sections/settings/app/UpdatesPage");
 const { UpdateCenterProvider } = await import("../src/client/session/update-center");
 
-function renderState(state: UpdateState) {
+function renderState(state: UpdateState, others: { id: string; name: string; state: UpdateState }[] = []) {
   const client = new QueryClient();
-  client.setQueryData(["updates", "targets"], [{ id: "host", name: "Living room TV", tv: true }]);
+  client.setQueryData(["updates", "targets"], [{ id: "host", name: "Living room TV", tv: true }, ...others.map(({ id, name }) => ({ id, name, tv: false }))]);
   client.setQueryData(["updates", "host"], state);
+  for (const other of others) client.setQueryData(["updates", other.id], other.state);
   const html = renderToStaticMarkup(<QueryClientProvider client={client}><UpdateCenterProvider><UpdatesPage /></UpdateCenterProvider></QueryClientProvider>);
   client.clear();
   return html;
@@ -61,7 +62,14 @@ test.each([
   const html = renderState(await updateApp(bridge, { op: "install", version: "0.3.1" }));
   expect(html).toContain(renderToStaticMarkup(error));
   expect(html).toContain("0.3.0 to 0.3.1");
-  const retry = html.match(/<button\b[^>]*>Update 1 device<\/button>/)?.[0];
+  const retry = html.match(/<button\b[^>]*>Update Living room TV<\/button>/)?.[0];
   expect(retry).toBeDefined();
   expect(retry).not.toMatch(/\sdisabled(?:=|[\s>])/);
+});
+
+test("one device's channel is its Channel row; several are named under Channels", () => {
+  const state: UpdateState = { version: "0.3.0", channel: "latest", status: "up-to-date", available: null, progress: null, checkedAt: 1, error: null };
+  const labels = (html: string) => [...html.matchAll(/<legend[^>]*>([^<]+)<|for="update-channel-[^"]+"[^>]*>([^<]+)</g)].map(match => match[1] ?? match[2]);
+  expect(labels(renderState(state))).toEqual(["Channel"]);
+  expect(labels(renderState(state, [{ id: "laptop", name: "Laptop", state: { ...state, channel: "preview" } }]))).toEqual(["Channels", "Living room TV", "Laptop"]);
 });

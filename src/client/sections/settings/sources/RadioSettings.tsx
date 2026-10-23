@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { avoidRadioPlaylistId, type RadioPlaylist } from "../../../../shared/radio";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { RowOptions } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
     update("playlists", "POST", { name: name.trim(), url: url.trim() });
   }
 
-  if (!canManage) return <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>;
+  if (!canManage) return <SettingsSection><SettingsRow label="Playlists" description={ADMIN_ONLY} /></SettingsSection>;
   return (
     <div className="flex min-w-0 flex-col gap-8" data-radio-settings>
       <SettingsSection aria-label="Radio playlists">
@@ -60,7 +61,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
             {source.error && <span className="block text-destructive">{source.error}{source.updatedAt && " Showing the last stations."}</span>}
           </>}>
             <Button variant="outline" disabled={!canWrite} onClick={() => update(`playlists/${encodeURIComponent(source.id)}/refresh`, "POST")}>Update stations</Button>
-            <Button variant="ghost" disabled={!canWrite} onClick={() => setRemoving(source)}>Remove</Button>
+            <RowOptions title={source.name} disabled={!canWrite} actions={[{ label: "Remove", run: () => setRemoving(source) }]} />
           </SettingsRow>
         ))}
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{page.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => void page.refetch()}>Try again</Button></AlertAction>}</Alert>}
@@ -77,7 +78,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
         </SettingsSection>
       </form>
       <AlertDialog open={!!removing} onOpenChange={open => { if (!open) setRemoving(null); }}>
-        <AlertDialogContent>
+        <AlertDialogContent data-tv-local-only>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {removing?.name}?</AlertDialogTitle>
             <AlertDialogDescription>Saved stations stay.</AlertDialogDescription>

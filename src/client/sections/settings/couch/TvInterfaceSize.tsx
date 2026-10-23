@@ -29,17 +29,15 @@ export function TvInterfaceSize({ appearance, credentials, connected, administra
       <SettingsRow data-tv-local-only={native ? "" : undefined} label="Text size" description={administrator ? previewOnly ? undefined : "Try a size, then confirm within 20 seconds." : ADMIN_ONLY}>
         {administrator ? <>
           <ChoiceGroup label="TV interface size" value={String(seconds || !appearance.preview ? appearance.size : appearance.confirmedSize)} options={sizeChoices} disabled={!canWrite} onValueChange={size => change("", { size: Number(size) as InterfaceSize })} />
-          <Button variant="ghost" disabled={!canWrite} onClick={() => change("/reset", { size: 1 })}>Reset</Button>
         </> : <span className="text-sm">{confirmed}</span>}
       </SettingsRow>
       {previewing && (
-        <div role="status" className="flex flex-wrap items-center gap-2" data-tv-local-only={native ? "" : undefined}>
-          <p className="mr-auto text-sm">Keep this size? Reverting in {seconds} s.</p>
+        <SettingsRow role="status" label="Keep this size?" description={`Reverting in ${seconds} s.`} data-tv-local-only={native ? "" : undefined}>
           {administrator && <>
             <Button disabled={!canWrite} onClick={() => change("/confirm", { previewId: appearance.preview!.id })}>Keep</Button>
             <Button variant="outline" disabled={!canWrite} onClick={() => change("/cancel", { previewId: appearance.preview!.id })}>Revert</Button>
           </>}
-        </div>
+        </SettingsRow>
       )}
       {mutation.error && <Alert variant="destructive"><AlertDescription>{mutation.error.message || "Couldn't change the TV text size."}</AlertDescription></Alert>}
     </>

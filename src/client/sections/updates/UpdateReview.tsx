@@ -1,9 +1,10 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { ApiError } from "@/api/client";
+import { SettingsRow } from "@/components/SettingsRow";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -13,38 +14,31 @@ import { useUpdateCenter, type UpdateCenterTarget } from "@/session/update-cente
 import { UPDATE_INTERRUPTS_PLAYBACK } from "../../../shared/updates";
 import type { HelperUpdates } from "../../../shared/helper-updates";
 import { ReleaseNotes } from "./ReleaseNotes";
-import { updateBusy, updateInterrupts, updateReady, updateStatuses } from "./update-presentation";
+import { automaticUpdateStatus, updateInstallHint, updateBusy, updateInterrupts, updateReady, updateStatuses } from "./update-presentation";
 
 const helperStatuses: Record<HelperUpdates["items"][number]["status"], string> = { checking: "Checking…", updated: "Updated", current: "Up to date", compatible: "Compatible", held: "Kept for compatibility", system: "Managed by the system", error: "Update failed" };
 const batchStatuses = { waiting: "Waiting", installing: "Updating…", updated: "Updated", failed: "Update failed" };
 
 function MediaTools() {
   const { helpers, helperError, batch } = useUpdateCenter();
-  const { state, details } = useSessionGate();
-  const [open, setOpen] = useState(false);
   const skipped = batch?.helpers === "skipped";
-  return <Collapsible open={open} onOpenChange={setOpen}>
-    <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-3 h-auto whitespace-normal text-left">{open ? "Hide media tools" : `Media tools on ${state?.installationName ?? details?.name ?? "this server"}`}{(helpers?.status === "checking" || batch?.helpers === "checking") && <Spinner />}</Button></CollapsibleTrigger>
-    <CollapsibleContent className="space-y-3 pt-2 text-sm">
-      <p className="text-muted-foreground">Checked on this server before apps restart.</p>
-      {helpers?.items.map(item => <div key={item.name} className="flex flex-wrap justify-between gap-x-4 gap-y-1">
-        <span>{item.name === "qjs" ? "QuickJS" : item.name === "ffmpeg" ? "FFmpeg" : item.name}{item.version && <span className="ml-2 text-muted-foreground">{item.version}</span>}</span>
-        <span className={item.error ? "text-destructive" : "text-muted-foreground"}>{item.error ?? helperStatuses[item.status]}</span>
-      </div>)}
-      {!helpers && !helperError && <p className="text-muted-foreground">Media tools haven’t been checked yet.</p>}
-      {(helperError || batch?.helperError) && <p role={skipped ? "status" : "alert"} className={skipped ? "text-muted-foreground" : "text-destructive"}>{batch?.helperError ?? helperError}</p>}
-    </CollapsibleContent>
-    {skipped && !open && <p className="text-sm text-muted-foreground">{batch.helperError}</p>}
-  </Collapsible>;
+  const problem = batch?.helperError ?? helperError ?? helpers?.items.filter(item => item.status === "error").map(item => `${item.name}: ${item.error ?? "Update failed"}`).join("; ");
+  const checking = helpers?.status === "checking" || batch?.helpers === "checking";
+  return <SettingsRow label="Media tools" description={helpers?.items.map(item => `${item.name === "qjs" ? "QuickJS" : item.name === "ffmpeg" ? "FFmpeg" : item.name}${item.version ? ` ${item.version}` : ""}${["held", "system"].includes(item.status) ? ` (${helperStatuses[item.status].toLowerCase()})` : ""}`).join(", ")}>
+    <span className={cn("flex min-w-0 items-center gap-2 break-words text-sm", problem && !skipped ? "text-destructive" : "text-muted-foreground")}>
+      {checking && <Spinner />}
+      {problem || (checking ? "Checking…" : helpers?.items.some(item => item.status === "held") ? "Kept for compatibility" : helpers?.status === "done" ? "Up to date" : helpers?.items.length ? "Compatible" : "Not checked yet")}
+    </span>
+  </SettingsRow>;
 }
 
-/** Shared review and progress, mounted in Settings or the notice's dialog. */
-export function UpdateReview({ targets, notesOpen = false }: { targets: UpdateCenterTarget[]; notesOpen?: boolean }) {
+/** Device status, release notes and actions live together in Updates settings. */
+export function UpdateReview({ targets }: { targets: UpdateCenterTarget[] }) {
   const center = useUpdateCenter();
   const { localHost, state } = useSessionGate();
   const includesTools = center.canMaintain;
   const [choices, setChoices] = useState<Record<string, boolean>>({});
-  const [notes, setNotes] = useState(notesOpen);
+  const [notes, setNotes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string[] | null>(null);
   const [acting, setActing] = useState(false);
@@ -53,7 +47,7 @@ export function UpdateReview({ targets, notesOpen = false }: { targets: UpdateCe
   const id = useId();
   const ready = targets.filter(target => updateReady(target.state));
   // A failed or unfinished device stays ready and selected, so Update retries what remains.
-  const selected = ready.filter(target => choices[target.id] !== false).map(target => target.id);
+  const selected = ready.filter(target => ready.length === 1 || choices[target.id] !== false).map(target => target.id);
   const disabled = center.busy || acting;
 
   const update = async (ids: string[], interrupt = false) => {
@@ -78,40 +72,36 @@ export function UpdateReview({ targets, notesOpen = false }: { targets: UpdateCe
   }, []);
 
   return <div className="space-y-6" data-update-review>
-    <Collapsible open={notes} onOpenChange={setNotes} className="**:scroll-mb-[calc(var(--update-actions)+.5rem)]">
-      {!notesOpen && <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-3">{notes ? "Hide what’s new" : "What’s new"}</Button></CollapsibleTrigger>}
-      <CollapsibleContent>{notes && <ReleaseNotes targets={targets} />}</CollapsibleContent>
-    </Collapsible>
-    <div className={cn("space-y-4 **:scroll-mb-[calc(var(--update-actions)+.5rem)]", notes && "border-t pt-6")}>
+    <div className="@container **:scroll-mb-[calc(var(--update-actions)+.5rem)]">
       {targets.map(target => {
         const state = target.state;
-        const item = center.batch?.items.find(item => item.id === target.id);
+        const item = center.batch?.items.find(item => item.id === target.id && (item.status !== "updated" || state?.version === item.version && !state.available));
         const available = updateReady(state);
+        const selectable = available && ready.length > 1;
         const problem = item?.error ?? target.error ?? state?.error;
-        return <div key={target.id} className="space-y-2" data-nav-row>
-          <div className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 sm:grid-cols-[1rem_minmax(0,1fr)_auto]">
-            <Checkbox id={`${id}-${target.id}`} aria-label={`Update ${target.name}`} checked={available && choices[target.id] !== false} disabled={!available || disabled} className="mt-1" onCheckedChange={checked => { setChoices(previous => ({ ...previous, [target.id]: checked === true })); setConfirmation(null); }} />
-            <div className="min-w-0 flex-1">
-              <label htmlFor={`${id}-${target.id}`} className="block break-words text-sm font-medium">{target.name}</label>
-              <p className="break-words text-sm text-muted-foreground">{state ? `${state.version}${state.available ? ` to ${state.available}` : ""}` : "Waiting for update information…"}</p>
-              {problem && <p role="alert" className="mt-1 break-words text-sm text-destructive">{problem}</p>}
-            </div>
-            {/* A ready row already says so with its versions and checkbox. */}
-            <span role="status" className="col-start-2 flex items-center gap-2 text-sm text-muted-foreground empty:hidden sm:col-start-3 sm:row-start-1">
-              {(item?.status === "waiting" || item?.status === "installing" || updateBusy(state)) && <Spinner />}
-              {item ? batchStatuses[item.status] : state && !available ? updateStatuses[state.status] : ""}
-            </span>
-          </div>
-          {state?.status === "downloading" && state.progress !== null && <Progress value={state.progress} aria-label={`Downloading update for ${target.name}`} className="ml-7 w-[calc(100%-1.75rem)]" />}
-        </div>;
+        return <SettingsRow key={target.id} data-nav-row label={target.name} htmlFor={selectable ? `${id}-${target.id}` : undefined} description={<>
+          <span className="block">{state ? `${state.version}${state.available ? ` to ${state.available}` : ""}` : "Waiting for update information…"}</span>
+          {state && <><span className="block">{updateInstallHint(state, target.local)}</span><span className="block">{automaticUpdateStatus(state)}</span></>}
+          {problem && <span className="mt-1 block text-destructive">{problem}</span>}
+        </>}>
+          {selectable && <Checkbox id={`${id}-${target.id}`} aria-label={`Update ${target.name}`} checked={choices[target.id] !== false} disabled={disabled} onCheckedChange={checked => { setChoices(previous => ({ ...previous, [target.id]: checked === true })); setConfirmation(null); }} />}
+          <span className={cn("flex items-center gap-2 text-sm", available ? "text-foreground" : "text-muted-foreground")}>
+            {(item?.status === "waiting" || item?.status === "installing" || updateBusy(state)) && <Spinner />}
+            {item ? batchStatuses[item.status] : state ? updateStatuses[state.status] : ""}
+          </span>
+          {state?.status === "downloading" && state.progress !== null && <Progress value={state.progress} aria-label={`Downloading update for ${target.name}`} className="basis-full" />}
+        </SettingsRow>;
       })}
       {/* Retain named results even when the device went offline during its restart. */}
       {center.batch?.items.filter(item => !targets.some(target => target.id === item.id)).map(item => <div key={item.id} className="text-sm"><span>{item.name}</span><span className="ml-3 text-muted-foreground">{batchStatuses[item.status]}</span>{item.error && <p className="break-words text-destructive">{item.error}</p>}</div>)}
       {includesTools && <MediaTools />}
     </div>
-    {/* Long notes scroll beneath the actions, which stay above the footer (--bottom-bar) or the dialog's edge. In the
-        desktop app the page scrolls inside the shell, which already ends above the footer (index.css). */}
-    <div ref={actions} data-nav-footer className="sticky bottom-[var(--bottom-bar,0px)] in-[.electron]:bottom-0 z-10 -mt-3 space-y-3 bg-background py-3 in-data-[slot=dialog-content]:pb-6">
+    {ready.length > 0 && <Collapsible open={notes} onOpenChange={setNotes} className="**:scroll-mb-[calc(var(--update-actions)+.5rem)]">
+      <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-3">What’s new<ChevronDown aria-hidden="true" className={cn(notes && "rotate-180")} /></Button></CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">{notes && <ReleaseNotes targets={ready} />}</CollapsibleContent>
+    </Collapsible>}
+    {/* Long notes scroll beneath actions that stay above the footer; the desktop scroller already ends there. */}
+    <div ref={actions} data-nav-footer className="sticky bottom-[var(--bottom-bar,0px)] in-[.electron]:bottom-0 z-10 -mt-3 space-y-3 bg-background py-3">
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
       {confirmation ? <p role="alert" className="text-sm">Updating will stop playback and any screen or sound sharing on the selected apps.</p>
         : selected.length > 0 && <p className="text-sm text-muted-foreground">{targets.some(target => target.local && selected.includes(target.id)) ? "Selected apps restart. This app restarts last." : "Selected apps restart."}</p>}
@@ -120,24 +110,10 @@ export function UpdateReview({ targets, notesOpen = false }: { targets: UpdateCe
           <Button disabled={disabled} onClick={() => void update(confirmation, true)}>Stop playback and update</Button>
           <Button variant="ghost" onClick={() => setConfirmation(null)}>Cancel</Button>
         </> : <>
-          {(ready.length > 0 || includesTools) && <Button disabled={disabled || !selected.length && !includesTools} onClick={() => void update(selected)}>{disabled ? <><Spinner />Updating…</> : selected.length ? `Update ${selected.length} ${selected.length === 1 ? "device" : "devices"}` : "Update media tools"}</Button>}
-          {(targets.length > 0 || includesTools) && <Button variant="ghost" disabled={disabled || center.checking} onClick={() => void check()}>{center.checking ? <><Spinner />Checking…</> : "Check for updates"}</Button>}
-          {center.batch && !disabled && <Button variant="ghost" onClick={center.clearBatch}>Dismiss results</Button>}
+          {(ready.length > 0 || center.busy && !!center.batch?.items.length) && <Button className="h-auto min-h-control max-w-full whitespace-normal py-1.5 text-left" disabled={disabled || center.checking || !selected.length} onClick={() => void update(selected)}>{disabled ? <><Spinner />Updating…</> : ready.length === 1 ? `Update ${ready[0]!.name}` : selected.length ? `Update ${selected.length} ${selected.length === 1 ? "device" : "devices"}` : "Update devices"}</Button>}
+          {(targets.length > 0 || includesTools) && <Button variant="outline" disabled={disabled || center.checking} onClick={() => void check()}>{center.checking ? <><Spinner />Checking…</> : "Check for updates"}</Button>}
         </>}
       </div>
     </div>
   </div>;
-}
-
-export function UpdateReviewDialog({ children }: { children: ReactNode }) {
-  const { targets } = useUpdateCenter();
-  const [open, setOpen] = useState(false);
-  return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogTrigger asChild>{children}</DialogTrigger>
-    {/* No footer to clear in the dialog: the review's actions hold its bottom edge and padding. */}
-    <DialogContent className="gap-6 bg-background pb-0 ring-0 [--bottom-bar:0px] sm:max-w-2xl" aria-describedby={undefined}>
-      <DialogHeader><DialogTitle>Review update</DialogTitle></DialogHeader>
-      {open && <UpdateReview targets={targets} notesOpen />}
-    </DialogContent>
-  </Dialog>;
 }

@@ -54,7 +54,7 @@ export function ThisDevicePage() {
     {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
     {!nativeHost && screenWakeLock.error && <Alert variant="destructive"><AlertDescription>{screenWakeLock.error}</AlertDescription></Alert>}
     <CouchChoice credentials={credentials} installationName={state?.installationName ?? details?.name} />
-    {host ? <SettingsSection title="Let other devices use" description={`${couch}'s speakers and screen are shared while Share on network is on.`} /> : <DeviceSharingSettings />}
+    {host ? <SettingsSection><SettingsRow label="Let other devices use" description={`${couch}'s speakers and screen are shared while Share on network is on.`} /></SettingsSection> : <DeviceSharingSettings />}
     <QuitAppSettings host={host} couch={couch} />
   </SettingsLayout>;
 }

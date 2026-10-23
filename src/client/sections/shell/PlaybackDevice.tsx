@@ -5,12 +5,10 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { useMutation, useMutationState, useQuery } from "@tanstack/react-query";
-import { QRCodeSVG } from "qrcode.react";
-import { Spinner } from "@/components/ui/spinner";
-import { pairingCodeQuery } from "@/api/devices";
+import { useMutation, useMutationState } from "@tanstack/react-query";
+import { SetupQr } from "@/components/SetupQr";
+import { RowOptions } from "@/components/RowMenu";
 import { useSessionGate } from "@/session/session-context";
-import { groupedCode } from "./TvPairing";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
 import { deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
@@ -195,8 +193,8 @@ export function AppCouchChoice({ installationName }: { installationName?: string
       {targets.map(target => {
         const named = nameOf(target);
         return <SettingsRow key={target} label={named || hostOf(target)} description={named ? hostOf(target) : undefined}>
-          {device.mode === "remote" && device.address === target ? inUse : <Button variant="outline" disabled={device.pending} onClick={() => void select("remote", target)}>Switch</Button>}
-          <Button variant="ghost" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); setDialog("forget"); }}>Forget</Button>
+          {device.mode === "remote" && device.address === target ? <>{inUse}<Button variant="ghost" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); setDialog("forget"); }}>Forget</Button></>
+            : <><Button variant="outline" disabled={device.pending} onClick={() => void select("remote", target)}>Switch</Button><RowOptions title={named || hostOf(target)} disabled={device.pending} actions={[{ label: "Forget", run: () => { setAddress(target); setDialog("forget"); } }]} /></>}
         </SettingsRow>;
       })}
       <AnotherCouchForm description="Join a Couch that runs on another computer. This computer still plays." address={address} onAddressChange={setAddress} onConnect={() => void select("remote", address)} pending={device.pending} />
@@ -277,7 +275,7 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   </Onboarding>;
   // The window's own loopback origin stays first until the LAN address arrives over IPC.
   const url = host?.urls.find(value => new URL(value).hostname !== "127.0.0.1");
-  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep(device?.advanced ? "network" : "share"), disabled: busy }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <JoinQr url={url} credentials={credentials} /> : undefined} description={url ? <>
+  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep(device?.advanced ? "network" : "share"), disabled: busy }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <SetupQr url={url} credentials={credentials} /> : undefined} description={url ? <>
     <p>On a phone, scan the code. On a TV or another computer, open <span className="whitespace-nowrap text-foreground">{url}</span> and enter the code.</p>
     <p>The browser will warn that the connection isn't private, because Couch makes its own certificate. Continue only for this address.</p>
   </> : <p role="status">Looking for this computer's network address…</p>} data-tv-navigation-scope>
@@ -287,19 +285,4 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
       <p className="text-meta text-muted-foreground">Pair more devices later in Settings, under Devices & network.</p>
     </div>
   </Onboarding>;
-}
-
-/** The join step's object: the pairing QR on its light ground, the code under it for whoever types it. */
-function JoinQr({ url, credentials }: { url: string; credentials: Credentials }) {
-  const pairing = useQuery(pairingCodeQuery(credentials));
-  const code = pairing.data;
-  if (pairing.isError) return <Alert variant="destructive"><AlertDescription>Couldn't load the code.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void pairing.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>;
-  if (!code) return <Spinner className="size-6 text-muted-foreground" />;
-  const link = new URL(url);
-  link.hash = `pair=${code}`;
-  // The QR keeps a light ground so every phone camera can read it.
-  return <figure className="grid justify-items-center gap-5">
-    <div className="rounded-sm bg-foreground p-3 shadow-(--object-shadow)"><QRCodeSVG value={link.href} size={256} marginSize={2} level="M" title={`Pair with code ${code}`} className="size-[min(56vw,15rem)]" /></div>
-    <figcaption aria-label={`Code ${code.split("").join(" ")}`} className="font-display text-5xl font-semibold tabular-nums whitespace-pre">{groupedCode(code)}</figcaption>
-  </figure>;
 }

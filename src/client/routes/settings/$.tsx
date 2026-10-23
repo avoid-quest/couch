@@ -1,14 +1,15 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { settingsAliases, settingsPagePath } from "../../../shared/settings-pages";
-import { couchApp } from "../../session/native-context";
+import { updatesPage } from "../../sections/updates/update-presentation";
 
 // Earlier Settings addresses open the page that now holds them; anything else opens Settings.
 export const Route = createFileRoute("/settings/$")({
   beforeLoad: ({ location, context }) => {
     const page = settingsAliases[location.pathname.replace(/\/$/, "")] ?? null;
-    // Updates used to open on this app's own updater, which the Couch's page shows when this app hosts it.
+    // Updates opens the viewer's one Updates page, which moves again if the role turns out otherwise.
     // Full mode hosts before this app's identity arrives.
-    const host = context?.identity ? context.identity.authority === "host" : context?.localHost;
-    throw redirect({ href: settingsPagePath(page === "updates" && couchApp?.updates && !host ? "device-updates" : page ?? "device"), replace: true });
+    const authority = context?.identity?.authority;
+    const administrator = authority ? authority === "host" || authority === "administrator" : !!context?.localHost;
+    throw redirect({ href: settingsPagePath(page === "updates" ? updatesPage(administrator) ?? page : page ?? "device"), replace: true });
   },
 });

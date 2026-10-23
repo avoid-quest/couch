@@ -4,7 +4,6 @@ import { ChevronRight } from "lucide-react";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { radioSourcesQuery } from "@/api/radio";
 import { streamingCommunityQuery } from "@/api/settings";
 import { iptvSourcesQuery } from "@/api/iptv";
@@ -47,11 +46,12 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
 
   return <>
     <SettingsSection aria-label="Sources">
-      {available && queries.some(query => query.isPending) && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
       {sourcePages.map(id => (
-        <SettingsRow key={id} label={settingsPages[`source-${id}` as SettingsPage].label} description={status[id]}>
-          <Button variant="ghost" asChild><Link to={settingsPages[`source-${id}` as SettingsPage].path} aria-label={`Open ${settingsPages[`source-${id}` as SettingsPage].label}`}>Open<ChevronRight aria-hidden="true" /></Link></Button>
-        </SettingsRow>
+        <Link key={id} data-slot="field" className="group text-muted-foreground hover:text-foreground" to={settingsPages[`source-${id}` as SettingsPage].path}>
+          <SettingsRow label={settingsPages[`source-${id}` as SettingsPage].label} description={status[id]} className="grid-cols-[minmax(0,1fr)_auto] @2xl:grid-cols-[minmax(0,1fr)_auto]">
+            <ChevronRight aria-hidden="true" className="size-4" />
+          </SettingsRow>
+        </Link>
       ))}
       {failed.length > 0 && <Alert variant="destructive"><AlertDescription>Couldn't load sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => failed.forEach(query => void query.refetch())}>Try again</Button></AlertAction></Alert>}
     </SettingsSection>

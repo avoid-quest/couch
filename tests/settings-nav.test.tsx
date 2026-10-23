@@ -10,6 +10,10 @@ mock.module("@tanstack/react-router", () => ({
   useNavigate: () => () => Promise.resolve(),
 }));
 let gate: object = {};
+// A browser has no app updater, as if it had no bridge; a test gives this app one.
+const app: { updates?: () => void } = {};
+const native = await import("../src/client/session/native-context");
+mock.module("../src/client/session/native-context", () => ({ ...native, couchApp: app }));
 mock.module("../src/client/session/session-context", () => ({ useSessionGate: () => gate, useOptionalSessionGate: () => gate, errorText: String }));
 mock.module("../src/client/sections/shell/AppShell", () => ({ useShell: () => ({ credentials: null }) }));
 mock.module("../src/client/session/session", () => ({ createId: () => "id" }));
@@ -39,7 +43,7 @@ function rail(authority: "host" | "controller" | "administrator", details: objec
 test("Settings names its two owners, and locks what a controller can't change", () => {
   expect(rail("controller", { systemAudio: true, tvPresentation: true, updates: true })).toEqual([
     { title: "This device", subtitle: "Phone", pages: ["device", "home"] },
-    { title: "Living room", subtitle: "Connected", pages: ["devices", "playback", "sources", "sound!", "display!", "updates!"] },
+    { title: "Living room", subtitle: "Connected", pages: ["devices", "playback", "sources", "sound!", "display!"] },
   ]);
   expect(rail("administrator", {}, "reconnecting")[1]).toEqual({ title: "Living room", subtitle: "Reconnecting, admin", pages: ["devices", "playback", "sources"] });
   expect(rail("controller", {}, "server-unavailable")[1]?.subtitle).toBe("Offline");
@@ -50,6 +54,19 @@ test("On the host, the two owners are one Couch", () => {
     { title: "Living room", subtitle: "This computer runs it", pages: ["device", "home", "devices", "playback", "sources", "sound", "updates"] },
   ]);
   expect(rail("host", { tvPresentation: true })[0]?.subtitle).toBe("This TV runs it");
+});
+
+test("Each viewer has one Updates: an admin's covers every app, anyone else's only this app", () => {
+  const updates = (authority: "host" | "controller" | "administrator", details: object) => rail(authority, details).flatMap(group => group.pages).filter(page => page.includes("updates"));
+  try {
+    expect(updates("administrator", { updates: true })).toEqual(["updates"]);
+    expect(updates("administrator", {})).toEqual([]);
+    app.updates = () => {};
+    // An admin's own app is enough even when the Couch has no updater.
+    expect(updates("administrator", {})).toEqual(["updates"]);
+    expect(updates("host", {})).toEqual(["updates"]);
+    expect(updates("controller", { updates: true })).toEqual(["device-updates"]);
+  } finally { app.updates = undefined; }
 });
 
 test("Below md, Settings lists both owners, and each page names its owner above its title", () => {
@@ -82,4 +99,23 @@ test("Playback offers subtitles in one row, and the player's speeds", async () =
   const choices = (label: string) => [...html.slice(html.indexOf(`aria-label="${label}"`)).split("</div>")[0]!.matchAll(/<button[^>]*aria-checked="(true|false)"[^>]*>[\s\S]*?<\/svg>([^<]+)</g)].map(match => match[2] + (match[1] === "true" ? "*" : ""));
   expect(choices("Subtitles")).toEqual(["Off*", "Original", "Italiano", "English"]);
   expect(choices("Speed")).toEqual(["0.5×", "0.75×", "1×*", "1.25×", "1.5×", "2×"]);
+});
+
+test("A paired device's role and Forget share its one menu; an older duplicate offers only Forget", async () => {
+  look("administrator", {});
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const { devicesQuery } = await import("../src/client/api/devices");
+  const { DevicesSettings } = await import("../src/client/sections/settings/couch/DevicesSettings");
+  const credentials = { origin: "http://couch", token: "t" };
+  const client = new QueryClient();
+  const seen = (id: string, name: string, lastSeenAt: number) => ({ ...device(id, name, "controller"), lastSeenAt });
+  client.setQueryData(devicesQuery(credentials).queryKey, [device("host", "Living room", "host"), seen("tv", "Bedroom TV", 2), seen("old", "Bedroom TV", 1), device("phone", "Phone", "administrator")]);
+  const html = renderToStaticMarkup(<QueryClientProvider client={client}>
+    <DevicesSettings credentials={credentials} connected urls={[]} identity={{ authority: "administrator", claimAvailable: false, device: device("me", "Laptop", "administrator") }} remoteControlEnabled administratorClaimed />
+  </QueryClientProvider>);
+  const row = (id: string) => html.split(`data-device="${id}"`)[1]!.split("data-device=")[0]!;
+  expect(row("tv")).toContain('aria-label="Options for Bedroom TV"');
+  expect(row("tv")).not.toContain("Make admin");
+  expect(row("old")).not.toContain("Options for");
+  expect(row("old")).toContain(">Forget</button>");
 });

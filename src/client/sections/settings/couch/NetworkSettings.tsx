@@ -72,7 +72,7 @@ export function NetworkSettings({ credentials, connected, urls, remoteControlEna
       {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
     </SettingsSection>
     {administrator ? <LiveRelaySettings credentials={credentials} connected={connected} device={device} couch={couch} host={host} />
-      : <SettingsSection title="Live playback relay" description={`A relay on ${couch} for devices that can't connect directly. ${ADMIN_ONLY}`} />}
+      : <SettingsSection><SettingsRow label="Live playback relay" description={`A relay on ${couch} for devices that can't connect directly. ${ADMIN_ONLY}`} /></SettingsSection>}
     <AlertDialog open={!!confirm} onOpenChange={open => { if (!open) setConfirm(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
