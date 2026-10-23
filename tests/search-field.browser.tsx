@@ -90,6 +90,13 @@ export async function runSearchFieldRegression() {
     assert(plays === 1 && query() === "old", "Repeat Enter in the field did not play the closest match once");
     assert(requests.length === initialRequests, "Unchanged-query submission repeated provider requests");
     await input("draft before composition");
+    const selection = field().getAttribute("aria-activedescendant");
+    for (const modifier of ["shiftKey", "ctrlKey", "metaKey", "altKey"]) for (const key of ["ArrowUp", "ArrowDown"]) {
+      const event = new KeyboardEvent("keydown", { key, [modifier]: true, bubbles: true, cancelable: true });
+      field().dispatchEvent(event);
+      await wait();
+      assert(!event.defaultPrevented && document.activeElement === field() && field().getAttribute("aria-activedescendant") === selection, "Modified arrow was consumed by the palette");
+    }
     await wait(650);
     assert(query() === "old", `Unsubmitted edit changed the route: ${router.state.location.href}`);
     assert(requests.length === initialRequests, "Unsubmitted edit started provider requests");

@@ -304,6 +304,14 @@ Details page's Stage, a trail that would only name the tab it opened in
 (Radio, Live TV) keeps its "Home" as its way up. One line of small
 muted text; out of room, the longest crumbs truncate first. Esc and the TV's Back
 still go back in history, restoring focus.
+That is the exact opener in the page or bar, including when both have an
+identical link and the page's one appears later. If the opener disappears
+(such as a stopped now-playing bar), the returning page's first control or
+heading holds focus. For up to 15 seconds, the exact opener takes precedence
+if it returns; a key, pointer press, focus choice or navigation cancels that
+handoff. An identical link in another scope never substitutes for the opener.
+Check with `tests/home-focus.browser.ts` and `tests/focus-recovery.browser.ts`
+on an empty Vite fixture at `?tv=0` and `?tv=1`.
 
 ## Play on in menus
 

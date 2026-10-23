@@ -132,10 +132,14 @@ export function HomePage() {
     : hasRow("radio") && firstOnAir ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
     : null;
   const playingMedia = current && past.find(item => item.queueEntryId === current.id)?.mediaId;
-  // A hero verb disables while it plays, which drops the focus, and the playing hero then puts the transport where
-  // From start was, so focus moves to its Open player when it leads (as page entry would) unless it went elsewhere.
+  // Play replaces the hero's verbs with its playing title. Hand over lost focus,
+  // as page entry would, unless the user moved elsewhere while playback started.
   const leading = useRef(false);
   const playHero = (item: HistoryItem, fromStart: boolean) => { leading.current = true; resume.mutate({ item, fromStart }, { onSettled: ok => { if (!ok) leading.current = false; } }); };
+  const playRadioHero = (station: RadioStation) => {
+    leading.current = true;
+    void shell.enqueueRadio(station, true).then(ok => { if (!ok) leading.current = false; });
+  };
   useEffect(() => {
     if (hero?.kind !== "playing" || !leading.current) return;
     leading.current = false;
@@ -181,7 +185,7 @@ export function HomePage() {
       <Button variant="ghost" size="lg" aria-label={`Details ${hero.item.title}`} onClick={() => details.open(itemLocation("history", hero.item.mediaId))}>Details</Button>
     </HomeHero>
     : hero.kind === "radio" ? <HomeHero context={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={metaLine(hero.show.genre)}>
-      <Button data-page-first size="lg" aria-label={on(`Play ${hero.station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(hero.station, true)}><Play aria-hidden="true" />{on("Play")}</Button>
+      <Button data-page-first size="lg" aria-label={on(`Play ${hero.station.name}`)} disabled={!available} onClick={() => playRadioHero(hero.station)}><Play aria-hidden="true" />{on("Play")}</Button>
     </HomeHero> : null;
 
   // A list takes its items' majority shape; an item of another shape is contained in that frame.

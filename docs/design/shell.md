@@ -99,6 +99,9 @@ aren't listed, since Home has them; typing a source's name offers it. On
 the TV they are columns the arrows cross (Up/Down within, Left/Right between).
 Nothing is selected until an arrow, so Enter still submits.
 
+Modified arrow keys keep the field's native caret and selection behavior; the
+palette handles plain arrows.
+
 **Typing** selects the query row, a verb rather than a second field: "Search
 “jazz”", or "Search “jazz” in Music" when scoped. Then it suggests only what
 the client already holds, once typing pauses (`useDebouncedValue`, 120 ms):
@@ -204,6 +207,12 @@ sits inside the page's scroll padding, which the footer itself fills, so focus
 on a sticky footer's control (from Tab, or focus moved by script) scrolled
 the page beneath by hundreds of pixels. The page stays still as the bar opens
 a panel and as Stop takes the bar away.
+If Stop (including OS media controls) removes the focused bar or one of its
+portalled Volume, Where it plays or Playback panels, focus returns to the
+current page's primary control. While that control loads, the page's heading
+or another control holds focus provisionally for up to 15 seconds. A key,
+pointer press, focus choice or navigation ends recovery; a control chosen
+while Stop finishes keeps focus.
 
 ## A picture you start opens the player
 

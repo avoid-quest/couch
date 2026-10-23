@@ -47,6 +47,11 @@ function opener(selector?: string): FocusTarget | undefined {
   selector = id ? `#${CSS.escape(id)}` : label ? `${active.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]`
     : href ? `a[href="${CSS.escape(href)}"]` : undefined;
   if (!selector) return;
+  // The persistent bar may hold the same link before the returning page mounts.
+  // Keep its occurrence within its own page or bar, rather than the whole document.
+  const page = active.closest<HTMLElement>("[data-page]")?.dataset.page;
+  const scope = page ? `[data-page="${CSS.escape(page)}"]` : active.closest("[data-now-playing]") ? "[data-now-playing]" : "";
+  if (scope) selector = `${scope} ${selector}`;
   return { selector, index: [...document.querySelectorAll(selector)].indexOf(active) };
 }
 
@@ -88,6 +93,7 @@ export function useDetailNavigation() {
 // Results can arrive after the route mounts, so restore when the target appears.
 export function DetailFocusRestoration() {
   const location = useLocation();
+  const router = useRouter();
   const previousPage = useRef<string | null>(null);
   useEffect(() => {
     const filterable = ["/search", "/collection", "/radio", "/live-tv"].includes(location.pathname);
@@ -121,7 +127,7 @@ export function DetailFocusRestoration() {
       if (restoreDetailFocus(target)) return true;
       // Removing a saved item can remove its opener. Keep focus on the page
       // while allowing an asynchronously loaded opener to take precedence.
-      if (tv && returning && location.pathname !== "/now") {
+      if (returning && location.pathname !== "/now") {
         const page = document.querySelector<HTMLElement>("[data-page]");
         if (page) { focusPageControl(page); fallbackFocus = document.activeElement; }
       }
@@ -131,6 +137,7 @@ export function DetailFocusRestoration() {
     // Keep watching for lost focus until input, navigation or the timeout.
     // Fresh Home entry waits until input or navigation, even for slow catalogues.
     restore();
+    let restoring = false;
     const observer = new MutationObserver(() => {
       // Home's reordered shelves can load out of order. Until input, an earlier
       // shelf's first tile takes precedence over a later shelf's provisional entry.
@@ -139,14 +146,23 @@ export function DetailFocusRestoration() {
       // Sharing is intentional, not a delayed catalogue response: its arrival keeps the current tile.
       if (homeEntry && document.querySelector('[data-page="Home"] [data-page-first]:not(:disabled)')?.closest('[aria-label="Shared sources"]')) return;
       // Loading can replace the first control; settle again if it lost focus.
-      restore();
+      restoring = true;
+      try { restore(); } finally { restoring = false; }
     });
-    const stop = () => { observer.disconnect(); clearTimeout(timer); window.removeEventListener("keydown", stop, true); window.removeEventListener("pointerdown", stop, true); };
+    const chosen = () => { if (!restoring) stop(); };
+    const stop = () => {
+      observer.disconnect(); clearTimeout(timer); unsubscribe();
+      window.removeEventListener("keydown", stop, true);
+      window.removeEventListener("pointerdown", stop, true);
+      window.removeEventListener("focusin", chosen, true);
+    };
     const timer = home ? undefined : setTimeout(stop, 15_000);
+    const unsubscribe = router.subscribe("onBeforeNavigate", stop);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert"] });
     window.addEventListener("keydown", stop, true);
     window.addEventListener("pointerdown", stop, true);
+    window.addEventListener("focusin", chosen, true);
     return stop;
-  }, [location.state.__TSR_key]);
+  }, [location.state.__TSR_key, router]);
   return null;
 }
