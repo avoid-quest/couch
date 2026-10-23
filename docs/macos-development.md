@@ -36,8 +36,9 @@ security find-identity -v -p codesigning
 
 ## Package and launch the isolated app
 
-Install Go 1.27.2 on PATH for packaging the bundled live relay. The package hook
-builds its arm64 executable inside the app before code signing.
+Install Go 1.27.2 on PATH, CMake, git and Xcode command line tools for packaging.
+The package hook builds the live relay and bundled QuickJS for the selected
+architecture inside the app before code signing ([packaging](ci.md)).
 
 These overrides use the repository's electron-builder v26 configuration. Keep
 the same bundle ID and certificate across rebuilds. `forceCodeSigning` makes a
