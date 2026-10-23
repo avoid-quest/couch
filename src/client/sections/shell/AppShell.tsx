@@ -92,12 +92,12 @@ function useShellValue() {
     }
   };
   const changeSection = changePage;
-  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id) => {
+  const openPlayer = (panel?: "queue" | "info", targetDeviceId = playerTarget?.id) => {
     const href = `/now${defaultStringifySearch({ queue: panel === "queue" || undefined, targetDeviceId })}`;
     if (playerTarget && targetDeviceId === playerTarget.id) void router.navigate({ href, replace: true, state: location.state });
     else if (targetDeviceId) detailNavigation.open(href, section === "Remote" && panel === "queue" ? '[data-remote-page] button[aria-label="Up next"]' : undefined);
     else if (section === "Now") void router.navigate({ href, replace: true, state: previous => previous });
-    else detailNavigation.open(href);
+    else detailNavigation.open(href, undefined, panel === "info" ? { playerInfo: true } : undefined);
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
@@ -297,7 +297,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!tvPresentation) return;
     const onHome = () => shell.changeSection("Home");
-    const onInfo = () => shell.changeSection("Now");
+    // On the player a remote's Info shows or hides Info there (PlayerPage); elsewhere it opens the player with Info shown.
+    const onInfo = () => { if (section !== "Now") shell.openPlayer("info"); };
     window.addEventListener("couch-home", onHome);
     window.addEventListener("couch-info", onInfo);
     return () => { window.removeEventListener("couch-home", onHome); window.removeEventListener("couch-info", onInfo); };

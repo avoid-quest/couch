@@ -337,7 +337,10 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
 .player-art { min-width: 0; min-height: 0; }
 .player-art > :not(svg), .player-art img { display: block; width: min(52cqi, calc(var(--art-h) * var(--art-ratio, 1))); height: auto; aspect-ratio: var(--art-ratio, 1); object-fit: cover; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
 .player-art > svg { width: 4rem; height: 4rem; }
-[data-player-audio-copy] { container-type: inline-size; padding-bottom: .25rem; }
+[data-player-audio-copy] { container-type: inline-size; align-content: safe end; padding-bottom: .25rem; }
+/* Info grows the copy in place, from under the title. Where it is taller than the room it scrolls, its foot still level
+   with the artwork's; the inset keeps a focused link's inversion inside the scroller. */
+.player-page[data-info] [data-player-audio-copy] { max-height: 100cqh; overflow-y: auto; scrollbar-width: thin; margin-inline: -.375rem; padding-inline: .375rem; }
 /* The room's light pools behind the artwork, never behind the copy. */
 .player-page > .room { --room-x: 30%; --room-y: 50%; }
 @media (max-width: 959px), (max-aspect-ratio: 5/4) {
@@ -346,6 +349,9 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
   .player-art > :not(svg), .player-art img { width: min(100cqi, calc(var(--art-h) * var(--art-ratio, 1))); }
   [data-player-audio-copy] { width: 100%; }
   .player-page > .room { --room-x: 50%; --room-y: 32%; }
+  /* Stacked, Info makes room under a smaller artwork, and the whole column scrolls when it still can't fit. */
+  .player-page[data-info] .player-summary { --art-h: max(6rem, calc(100cqh - 26rem)); overflow-y: auto; align-content: safe center; scrollbar-width: thin; width: calc(100% + .75rem); margin-inline: -.375rem; padding-inline: .375rem; }
+  .player-page[data-info] [data-player-audio-copy] { max-height: none; overflow: visible; margin-inline: 0; padding-inline: 0; }
 }
 .player-timeline:has([role="slider"]) { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
 .player-timeline:has([role="slider"]) > .relative { grid-column: 2; grid-row: 1; }
@@ -361,11 +367,9 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
 .player-control-row > .player-transport { grid-column: 2; justify-self: center; }
 .player-control-row > [data-player-tools] { grid-column: 3; justify-self: end; }
 @media (min-width: 960px) {
-  /* Up next sits beside the artwork while something is still to come; otherwise the artwork has the room, and Up next,
-     summoned from its button, is a panel over the room at the right above the band, as it is over a picture. */
-  [data-artwork-stage] .player-workspace:has(> .player-queue[data-beside]) { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
-  [data-artwork-stage] .player-queue[data-beside] { display: flex; }
-  .player-page[data-artwork-stage][data-queue-open] .player-queue:not([data-beside]) { display: flex; position: absolute; z-index: 30; right: 0; bottom: 0; width: min(28rem, 100%); max-height: 100%; padding: .25rem .75rem .75rem; border-radius: var(--radius-lg); background: rgb(12 12 12 / 82%); -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 70%); }
+  /* The artwork has the room; Up next, summoned from its button, is a panel over the room at the right above the band,
+     as it is over a picture. */
+  .player-page[data-artwork-stage][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: 0; bottom: 0; width: min(28rem, 100%); max-height: 100%; padding: .25rem .75rem .75rem; border-radius: var(--radius-lg); background: rgb(12 12 12 / 82%); -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 70%); }
 }
 @media (max-width: 959px) {
   /* On phones audio's Up next replaces the artwork. */
@@ -389,10 +393,15 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
+  /* Short windows keep the artwork beside the copy; stacking would collapse the artwork. Keep the display type,
+     and scroll the copy if it cannot fit. */
+  .player-page[data-artwork-stage] .player-summary { --art-h: max(6rem, 92cqh); grid-template-columns: auto minmax(0, 40rem); height: auto; max-height: 100cqh; overflow-y: auto; align-content: safe center; }
+  .player-page[data-artwork-stage] [data-player-audio-copy] { max-height: 100cqh; overflow-y: auto; }
+  .player-page[data-artwork-stage] .display-title { --glyph: .8; }
   .player-header { padding-block: .25rem; }
   .player-control-row { column-gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
-  [data-player-audio-copy] :is(h1, [data-player-ends]) { font-size: 1.125rem; }
+  [data-player-audio-copy] [data-player-ends] { font-size: 1.125rem; }
 }
 
 .player-page[data-player-idle][data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) 1rem; display: flex; justify-content: center; }

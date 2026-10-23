@@ -77,20 +77,19 @@ export async function runPlayerStatusRegression() {
       else assert(document.querySelector('[data-player-audio-copy] [data-player-status]') && !document.querySelector('[data-player-band] [data-player-status]'), `${status}: status left the artwork's copy`);
       assert(document.querySelector('[data-player-summary]'), `${status}: artwork summary disappeared`);
     }
-    // The band's tools, left to right as shown, and the centre of what is shown in a slot.
+    // The band's tools, left to right as shown.
     const phone = innerWidth < 640;
     const labels = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(button => button.getClientRects().length)
       .toSorted((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(button => button.getAttribute("aria-label"));
-    const centre = (selector: string) => { const element = [...document.querySelectorAll(selector)].find(item => item.getClientRects().length); if (!element) return NaN; const rect = element.getBoundingClientRect(); return Math.round(rect.left + rect.width / 2); };
     const topTools = () => labels('[data-player-top] button:not([aria-label^="Back"])');
     // The band's tools are the bar's, sound, then content, then view: Volume (not on phones), Where it plays, Up next, the
-    // gear. The top line holds no tools. Beside artwork there is no fullscreen, so its last slot stays empty, holding the
-    // bar's x; on phones, whose bar has no tools to line up with, the slot goes and the tools end at the gutter.
+    // gear, fullscreen. Info sits at the top right directly above fullscreen.
     const barTools = [...phone ? [] : ["Volume"], "Where it plays", "Up next", "Playback"];
-    assert(JSON.stringify(topTools()) === JSON.stringify([]), `Top line tools: ${topTools().join(", ")}`);
-    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify(barTools), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
-    if (phone) assert(!document.querySelector("[data-player-tools] span[data-player-last]")?.getClientRects().length, "Artwork band keeps an empty slot on a phone");
-    else assert(centre("[data-player-tools] span[data-player-last]") > centre('[data-player-tools] [aria-label="Playback"]'), "Artwork band lost fullscreen's empty slot after the gear");
+    assert(JSON.stringify(topTools()) === JSON.stringify(["Info"]), `Top line tools: ${topTools().join(", ")}`);
+    assert(JSON.stringify(labels("[data-player-tools] button")) === JSON.stringify([...barTools, "Enter fullscreen"]), `Artwork band tools out of the bar's order: ${labels("[data-player-tools] button").join(", ")}`);
+    const info = document.querySelector('[data-player-top] button[aria-label="Info"]')!.getBoundingClientRect();
+    const fullscreen = document.querySelector('[data-player-tools] button[aria-label="Enter fullscreen"]')!.getBoundingClientRect();
+    assert(Math.abs(info.left + info.width / 2 - fullscreen.left - fullscreen.width / 2) < 1, "Info is not aligned above fullscreen");
     for (const button of document.querySelectorAll<HTMLElement>('.player-control-row button')) {
       const rect = button.getBoundingClientRect();
       assert(rect.left >= 0 && rect.right <= innerWidth, "A player tool requires horizontal scrolling");

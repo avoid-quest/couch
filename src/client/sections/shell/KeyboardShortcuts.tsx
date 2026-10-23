@@ -10,7 +10,7 @@ const help = [
   ["K / Space", "Play or pause"], ["J / L", "Back / forward 10 seconds"],
   ["← / →", "Back / forward 5 seconds in the player"], ["↑ / ↓", "Raise / lower volume in the player"],
   ["0–9", "Jump to 0–90%"], ["M", "Mute or unmute"], ["C", "Toggle subtitles"],
-  ["F", "Toggle fullscreen in the player"], ["Shift + N", "Play next"],
+  ["F", "Toggle fullscreen in the player"], ["I", "Show or hide info in the player"], ["Shift + N", "Play next"],
   ["H / S", "Home / Saved"], ["/", "Search"], [",", "Settings"],
   ["P / Q", "Player / Up next"], ["Esc", "Close panel or go back"], ["?", "Keyboard shortcuts"],
 ];

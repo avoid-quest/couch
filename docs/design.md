@@ -57,8 +57,11 @@ bar for thumb reach.
   room: the Stage, the player and the now-playing bar. Never nested in the
   target.
 - **Say each thing once.** The bar holds the transport, so Home's Stage
-  doesn't repeat it while something plays; Up next takes room beside the
-  artwork only while something is still to come.
+  doesn't repeat it while something plays. The player's Now playing is calm
+  (artwork, title, where it comes from) and Info at the top right, aligned with
+  fullscreen below, shows the rest in place;
+  Up next is summoned from its button, never parked beside the artwork
+  ([Player](design/player.md#calm-and-info)).
 - **Real content only.** Browse pages show what a source returns; Couch picks
   nothing. Home's sources are built from what the Couch saved.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress

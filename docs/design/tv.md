@@ -83,7 +83,10 @@ A TV receiving Play starts focused on the picture, so the bands hide after
 and Down on the timeline, Left and Right seek 10 s. Back hides them; with them
 hidden it leaves the player for its opener. A paused picture keeps them up.
 Stop is OK, Right, OK for pausable media and OK, OK for radio and live. Details
-is in the Playback gear's menu. The gear ends the TV's tools: the TV has no
-fullscreen, so the band leaves its slot empty, and an empty slot is no stop
-for the remote. A Remote's Info key opens
-the player from any page.
+is in the Playback gear's menu. Over a picture the gear ends the TV's tools:
+the TV has no fullscreen, so the band leaves its slot empty, and an empty slot
+is no stop for the remote. Beside artwork, Info sits at the top right. A Remote's Info key opens
+the player from any page with Info shown, and on the player shows or hides it
+([Player](player.md#calm-and-info)); over a picture it shows or hides the
+controls, whose top line names what plays. Back closes Info before it hides
+the controls.

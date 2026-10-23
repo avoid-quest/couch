@@ -106,11 +106,13 @@ screen; where a line sits says what it describes:
   it ("22:12 Afternoon selections"). The station's tags wait on its Details.
 - **Details and Home's hero** follow the Stage: the show's title, its
   categories and host, then the station with its tags ("NTS Radio, Community,
-  Talk"; a link on Home), the progress line, the verbs, the synopsis.
+  Talk"; a link on Home), the progress line, the verbs, the synopsis. The
+  player keeps its own order: the station's link and tags under the title, then
+  categories and host.
 - **Progress** is the Stage's line, with what's left and the local window
   beside it ("30 min left, 21:12–22:12", Couch's 24-hour clock). Only a real
   broadcast window gives it; it never seeks.
-- **The next show** (`RadioNext`) closes Details' copy: its
+- **The next show** (`RadioNext`) closes Details' copy and the player's: its
   schedule line, its own categories and end ("Ambient, until 23:12", a weekday
   when it isn't today), its picture when it has one and two lines of synopsis.
 
