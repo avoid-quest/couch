@@ -33,6 +33,7 @@ import { createCatalog, type Viewing } from "./catalog";
 import { createProviderMetadata, providerMetadata } from "./provider-metadata";
 import { playbackMediaId, ViewingError } from "./progress";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
+import { logMediaDiagnostic, mediaAddress } from "./media-diagnostics";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
@@ -1131,7 +1132,14 @@ export async function createHub(options: HubOptions) {
       if (grouped(playback) && !playback.joining) await buffer(source, signal);
       return { source: liveUrl(source.id, playbackId, "core", "av"), hls: true, audioOnly: !source.video, metadata: { live: true } };
     }
-    if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage);
+    if (entry.source.startsWith("web:")) {
+      logMediaDiagnostic("resolve", playbackId, { playback: playback.id.slice(0, 8), host: mediaAddress(entry.source.slice(4)).host, quality: entry.quality ?? "auto", vp9: tab?.data.vp9 ?? true });
+      try { return await resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage, playbackId); }
+      catch (error) {
+        logMediaDiagnostic("resolve-failed", playbackId, { canceled: signal.aborted, error: safePlaybackError(error instanceof Error ? error.message : "Unknown error") });
+        throw error;
+      }
+    }
     if (entry.source.startsWith("iptv:")) {
       const { hostMpv, ...media } = await guide.getPlayable(entry.source.slice(5), signal, playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()));
       // Keep codec policy in Core, never in the browser player protocol.
@@ -1751,7 +1759,7 @@ export async function createHub(options: HubOptions) {
           // A browser can't tell a relayed source's refusal from a format it can't play.
           const loaded = browserLoads.get(socket);
           const refused = player.status === "error" && player.playbackId && loaded?.playbackId === player.playbackId ? passThrough.refused(player.playbackId, loaded.source) ?? (loaded.audioSource ? passThrough.refused(player.playbackId, loaded.audioSource) : undefined) : undefined;
-          if (refused) player.error = `The website refused this stream (HTTP ${refused}). Play it again.`;
+          if (refused) player.error = `The media server refused this stream (HTTP ${refused}). Try again to request a fresh stream.`;
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
           // Once per error a tab reports for this load. Core already logged a group's
           // own failure; an echoed state adds no second account of the same error.

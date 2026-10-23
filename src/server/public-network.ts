@@ -58,6 +58,10 @@ export function connectPublic(hostname: string, port: number, signal?: AbortSign
 // Separate pools ensure a guarded request cannot reuse a socket opened elsewhere.
 const agents = { "http:": new http.Agent({ keepAlive: true, lookup: publicLookup }), "https:": new https.Agent({ keepAlive: true, lookup: publicLookup }) };
 
+// Internal evidence for the final hop; never expose it as response headers to a Device.
+const responseContexts = new WeakMap<Response, { ipFamily: number; headers: Record<string, string> }>();
+export const publicResponseContext = (response: Response) => responseContexts.get(response);
+
 function target(value: string | URL): URL {
   let url: URL;
   try { url = new URL(value); } catch { throw new TypeError("Use an HTTP or HTTPS URL."); }
@@ -137,7 +141,12 @@ export async function publicFetch(input: RequestInfo | URL, init?: RequestInit):
     headers.set("host", url.host);
     const incoming = await send(url, method, headers, body, request.signal);
     const status = incoming.statusCode!, location = incoming.headers.location;
-    if (![301, 302, 303, 307, 308].includes(status) || !location || request.redirect === "manual") return response(incoming, url, method, redirects > 0);
+    if (![301, 302, 303, 307, 308].includes(status) || !location || request.redirect === "manual") {
+      const ipFamily = isIP(incoming.socket.remoteAddress ?? "");
+      const result = response(incoming, url, method, redirects > 0);
+      responseContexts.set(result, { ipFamily, headers: Object.fromEntries(headers) });
+      return result;
+    }
     incoming.destroy();
     if (request.redirect === "error" || redirects === 20) throw new TypeError("The website redirected this request.");
     const next = target(new URL(location, url));

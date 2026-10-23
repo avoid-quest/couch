@@ -6,7 +6,7 @@ import https from "node:https";
 import { once } from "node:events";
 import { PassThrough, Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
-import { connectPublic, isPublicAddress, lookupPublic, publicFetch, publicLookup, PublicNetworkError } from "../src/server/public-network";
+import { connectPublic, isPublicAddress, lookupPublic, publicFetch, publicLookup, publicResponseContext, PublicNetworkError } from "../src/server/public-network";
 import { createPassThrough } from "../src/server/pass-through";
 
 test("only public IPv4 and global IPv6 addresses pass", () => {
@@ -163,6 +163,7 @@ function transport(t: TestContext, route: (call: Call) => Spec) {
       assert.equal(address, "93.184.216.34");
       const spec = route(call);
       const response = (spec.body instanceof Readable ? spec.body : Readable.from([typeof spec.body === "string" ? Buffer.from(spec.body) : spec.body ?? Buffer.alloc(0)])) as http.IncomingMessage;
+      Object.defineProperty(response, "socket", { value: { remoteAddress: "93.184.216.34" } });
       response.statusCode = spec.status ?? 200;
       response.statusMessage = "OK";
       response.rawHeaders = Object.entries(spec.headers ?? {}).flat();
@@ -226,6 +227,8 @@ test("public redirects strip credentials, change POST to GET, and expose the fin
   assert.equal(headers["user-agent"], "Couch fixture");
   assert.equal(headers.range, "bytes=0-10");
   assert.equal(headers["content-type"], undefined);
+  assert.deepEqual(publicResponseContext(response), { ipFamily: 4, headers });
+  assert.equal(response.headers.has("connectionIpFamily"), false);
 });
 
 test("redirects keep same-origin credentials but never restore them after an origin change", async t => {
