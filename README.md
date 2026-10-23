@@ -94,15 +94,6 @@ Environment overrides use the `COUCH_` prefix, including `COUCH_PORT` and
 data in the platform data directory under the `quest.avoid.couch` identity, as
 the Tauri app did. Development uses `.data/`.
 
-## Website
-
-`apps/web` is an Astro workspace using the existing UI styles. Run
-`bun run web:dev`; `bun run web:build` builds it and `bun run web:deploy`
-publishes it to Cloudflare Workers at `couch.avoid.quest`. The download page
-finds the newest release and preview on
-[this repository's releases](https://github.com/avoid-quest/couch/releases) through
-GitHub's API, with `apps/web/src/releases.json` as fallback.
-
 ## Contribute
 
 Fork it, open an issue, or send a pull request. Read
