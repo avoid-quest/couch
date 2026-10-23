@@ -97,7 +97,7 @@ export function LiveTvPage() {
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
   return <section data-page="Live TV" className="min-w-0 space-y-6">
-    <PageHeader breadcrumb={<ContentBreadcrumb title="Live TV" />} title="Live TV" />
+    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Live TV" />
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
     {/* The filters wait for the guide, so an empty one never offers a choice. */}
     {none ? <NoPlaylists what="channels" settings="/settings/couch/sources/live-tv" /> : guide.data && <FilterBar label="Live TV filters">

@@ -83,7 +83,7 @@ Twitch results refresh every 20 s while visible and connected.
 
 Home's sources ([Home](home.md#the-sources)) sample what Couch can play; two
 of their headings open pages of their own. **Radio** (`/radio`) and **Live
-TV** (`/live-tv`) are lists with a breadcrumb ("Home › Radio") and the filter row:
+TV** (`/live-tv`) are lists with a breadcrumb to Home and the filter row:
 Radio's source choice (`radioSource`: Built-in, Couch's own station list;
 Playlists; Directory) and Filter; Live TV's group (`group`) and Filter, with
 each channel's now and next from the XMLTV guide on its meta line. Filters and
@@ -309,21 +309,27 @@ Turning a page moves focus to the list's top.
 ## Breadcrumbs
 
 `ContentBreadcrumb` (shadcn's Breadcrumb) is a sub-page's real path, above its
-h1 (on a Details page, inside the Stage's copy, over the title): the section it
-opened in, Radio or the source's home, the collections holding it, each a link,
-then the page itself (`BreadcrumbPage`): "Home › StreamingCommunity › Series ›
-Season 2". It is a way to reach content, not only a way back, so every page
-shows it whole, a Details page that opened in its tab too ("Home › Phony").
+h1 (on a Details page, inside the Stage's copy, over the title), each crumb a
+link: the section it opened in, Radio or the source's home, then the collections
+holding it ("Home › StreamingCommunity › Series"). The h1 names the page, so the
+trail ends at its parent, with no separator after the last crumb. It is a way to
+reach content, not only a way back, so every page shows it, a Details page that
+opened in its tab too ("Home").
 
-- **One line.** Small muted text. Out of room, the crumbs between the first and
-  the last ancestor collapse into "…" (`BreadcrumbEllipsis`), a menu listing
-  them whole, shadcn's collapsed breadcrumb; they come back once the line has
-  room. Only what is left then truncates, the page first (the h1 below names
-  it), never below six characters, with the whole name in a tooltip on hover
-  and focus.
-- **Siblings.** Where the crumb's parent page is already loaded (a series'
-  seasons, a channel's playlists, cached by visiting it), a chevron after the
-  crumb opens a menu of the parent's collections, the current one marked:
+- **One line, every name capped.** Small muted text. Each crumb's name is at
+  most 20ch (about 24 letters, 160px at `text-sm`, where a title's first words
+  already name it: "Tiny Desk Concerts: the…"), truncated with its whole name in
+  a tooltip on hover and focus, so one long name never crowds out the short ones.
+  A Stage's 46rem copy column holds the section, the source and two capped
+  collections whole. Only when the capped crumbs still don't fit do the middle
+  ones collapse into "…" (`BreadcrumbEllipsis`), nearest the first first, a menu
+  listing them whole, shadcn's collapsed breadcrumb: the first crumb and the
+  last ancestors stay ("Home › … › Tiny Desk Concerts: the…" on a phone). They
+  come back once the line has room. Past that, names shrink, never below six
+  characters.
+- **What's in a crumb.** Where a crumb's page is already loaded (a series, a
+  channel, cached by visiting it), a chevron after it opens a menu of the
+  collections in it (its seasons, its playlists), the one on the path marked:
   shadcn's breadcrumb with a dropdown. Nothing is fetched for it.
 - **The player** shows what holds what plays, the source and its collections
   ("YouTube › Tiny Desk concerts"), above its title, only when a collection
@@ -332,8 +338,6 @@ shows it whole, a Details page that opened in its tab too ("Home › Phony").
 - Every crumb, "…" and chevron is a focus stop for Tab and the TV's remote.
 
 Esc and the TV's Back still go back in history, restoring focus.
-Settings' path works the same way ([Settings](settings.md)), ending in the
-page.
 That is the exact opener in the page or bar, including when both have an
 identical link and the page's one appears later. If the opener disappears
 (such as a stopped now-playing bar), the returning page's first control or

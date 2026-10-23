@@ -66,9 +66,9 @@ runs it").
 
 The selected entry names the page, so pages keep an `sr-only` h1 from `md` up.
 Below `md`, `/settings` is the rail as divided rows, and each page leads with
-its owner as a breadcrumb ("This device › Playback" or "{Couch} › Sources")
-above a visible title; Back goes up to the list. A source's own page shows
-"Sources › StreamingCommunity" above its title at every width. Rows stack label and control until their column has
+its owner as a breadcrumb ("This device" or "{Couch}") above a visible title;
+Back goes up to the list. A source's own page shows "Sources" above its title
+at every width. Rows stack label and control until their column has
 room for both.
 
 On wide screens the rail stays in view below the header while a long page
