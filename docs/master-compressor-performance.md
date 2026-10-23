@@ -23,7 +23,8 @@ release certification or a measurement of the studio ThinkPad T480.
   The fixture also runs with TV presentation enabled.
 - Hub/WebSocket/database tests preserve Direct delivery, pause, position and
   device volume; carry settings through In sync → Direct; retry after disabling
-  a failed compressor; persist per Playback; migrate older queues; reject
+  a failed compressor and restore progress/watched tracking with the original
+  viewer and actor, including errors before the first progress report; persist per Playback; migrate older queues; reject
   corrupt settings, stale item IDs and unauthorized/live-sharing commands.
 - Real FFmpeg 9.0.2 and Sendspin clients receive compressed PCM and Opus from
   one graph. The loud test tone's PCM RMS falls from 0.5657 to 0.1715, stereo
@@ -34,7 +35,9 @@ release certification or a measurement of the studio ThinkPad T480.
 - Relay tests cover CORS, inconclusive probes, same-origin audio, and every
   segment/key of a compressed HLS playlist. HLS engine regressions include
   settings arriving during a decoder import. mpv filter arguments and IPC
-  changes/rejections are checked with mocked process/IPC boundaries.
+  changes/rejections are checked with mocked process/IPC boundaries. A rejected
+  filter stays visible through later playback events until a successful edit
+  or a new load clears it.
 
 Typecheck and production build pass, along with the targeted unit and integration
 regressions (mixer, public media relay, live input, device volume, sound session,
