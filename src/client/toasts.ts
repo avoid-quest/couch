@@ -5,7 +5,7 @@ import { ApiError } from "./api/client";
 // and shows one toast: a repeat updates the one showing. Only this module and the Toaster import sonner.
 const brief = 4_000, long = 6_000;
 
-type Kind = "failed" | "undo" | "queued" | "playing-on" | "notice" | "tap-to-hear";
+type Kind = "failed" | "undo" | "queued" | "playing-on" | "notice" | "tap-to-hear" | "sharing";
 /** The Toaster shows the newest two; older ones stay mounted, hidden. */
 export const visibleToasts = 2;
 // Sonner updates a toast in place, so a repeat keeps its toast's id only while that toast shows: one leaving (timed
@@ -56,5 +56,11 @@ export const playingOn = (name: string, deviceId: string) => {
   return show("playing-on", `Playing on ${name}`, { duration: brief });
 };
 export const notice = (text: string) => show("notice", text, { duration: long });
+/**
+ * Once the last device stops watching, the capture still runs: say so once, with Stop sharing. Like every sharing
+ * control it stays this device's own; sonner takes no data attributes, so navigation.ts reads its class instead.
+ */
+export const stillSharing = (title: string, stop: () => void) =>
+  show("sharing", `Still sharing ${title}, on no screens`, { duration: long, className: "tv-local-only", action: { label: "Stop sharing", onClick: stop } });
 export const waitingForTap = (hear: () => void) =>
   show("tap-to-hear", "Sound is waiting for a tap", { duration: Infinity, action: { label: "Tap to hear", onClick: hear } });

@@ -5,7 +5,7 @@ import { startHold } from "./hold";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
-const localOnly = '[data-tv-local-only]';
+const localOnly = '[data-tv-local-only], .tv-local-only';
 const toaster = "[data-sonner-toaster]";
 const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]';
 let remoteNavigation = false;
@@ -125,7 +125,7 @@ function moveFocus(key: string) {
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
   // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
   // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
-  const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(visible) : undefined;
+  const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(element => visible(element) && (!remoteNavigation || !element.closest(localOnly))) : undefined;
   focus(rail ?? tab ?? best?.element ?? toast);
 }
 

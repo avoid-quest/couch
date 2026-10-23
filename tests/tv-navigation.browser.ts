@@ -85,10 +85,14 @@ window.runSavedBackRegression = async () => {
 // A paired phone's Remote reaches the TV through applyTvNavigation; it must not pick or share
 // this device's capture, while the TV's own keyboard and pointer still can.
 const sharingLocalOnly = async () => {
-  await click('[data-app-nav] a[href="/settings"]');
-  await click('[data-settings-page="device"]');
+  // A TV hides the header's Share by default; Settings → This device then offers it.
+  const fromSettings = !document.querySelector('header [aria-label="Share screen or sound"]');
+  if (fromSettings) { await click('[data-app-nav] a[href="/settings"]'); await click('[data-settings-page="device"]'); }
+  const share = control('[aria-label="Share screen or sound"]');
+  assert(share.closest("[data-tv-local-only]"), "Share is not local to this device");
+  share.click(); await wait(350);
   const choice = (label: string) => [...document.querySelectorAll<HTMLElement>('[aria-label="What to share"] [role="radio"]')].find(item => item.textContent === label);
-  const microphone = choice("Microphone or audio input"), screen = choice("Screen");
+  const microphone = choice("Microphone"), screen = choice("Screen");
   assert(microphone && screen && !microphone.matches(":disabled"), "Sharing has no enabled capture choices; stop any existing capture first");
   assert(screen!.getAttribute("aria-checked") === "true", "Sharing did not start on Screen");
   const remote = async (key: Parameters<typeof applyTvNavigation>[0]) => { applyTvNavigation(key); await wait(350); };
@@ -96,10 +100,13 @@ const sharingLocalOnly = async () => {
     microphone!.focus();
     await remote("select");
     assert(microphone!.getAttribute("aria-checked") !== "true", "Remote OK chose what this device shares");
+    // The dialog is this device's own, so a Remote's arrows move nothing in it.
     await remote("down");
-    assert(!microphone!.closest("fieldset")!.contains(document.activeElement), "Remote arrows stayed in this device's capture");
+    assert(document.activeElement === microphone, "Remote arrows moved in this device's capture");
     microphone!.click(); await wait(350);
     assert(microphone!.getAttribute("aria-checked") === "true", "This device's own pointer could not choose the input");
+    // The desktop app may still be listing its screens.
+    await until(() => !control("#live-audio-input").matches(":disabled"));
     control("#live-audio-input").focus(); await key("Enter"); await wait(350);
     const listbox = control('[role="listbox"][data-state="open"]');
     const option = document.activeElement;
@@ -108,8 +115,8 @@ const sharingLocalOnly = async () => {
     await key("Escape"); await wait(350);
     assert(!document.querySelector('[role="listbox"][data-state="open"]'), "This device's own Back did not close its audio input list");
   } finally {
-    screen!.click(); await wait(350);
-    await click('[data-app-nav] a[href="/"]');
+    await key("Escape"); await wait(350);
+    if (fromSettings) await click('[data-app-nav] a[href="/"]');
   }
 };
 

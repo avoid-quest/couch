@@ -31,8 +31,8 @@ trail above their h1 ([Browse](browse.md#breadcrumbs)).
 ## Header
 
 One sticky row: the Couch switch (or, on a TV, its own name) and the section
-tabs at the left; search, the sharing control and, on desktop, Keyboard
-shortcuts at the right; the TV adds a small clock. No hairline under it: it is
+tabs at the left; Share (or, while sharing, its capsule), search and, on
+desktop, Keyboard shortcuts at the right; the TV adds a small clock. No hairline under it: it is
 ink on the room. The current tab is white with a short white rule under its
 name, the others muted until a pointer brings them up. The search field keeps
 a solid fill (`muted`), so artwork under the see-through header never shows
@@ -58,7 +58,7 @@ An updated Couch and a player error keep their line too.
 
 **Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Saved, Remote
 while the Couch has a TV, Settings; lucide icons over labels), and the
-top bar is the Couch switch then the search field. A narrow TV undoes
+top bar is the Couch switch, the search field, then Share as an icon. A narrow TV undoes
 `touch:` with `tv:`. **Desktop windows** put their native buttons and drag region
 in the header, without a separate title bar. macOS (`[data-window-controls]`)
 keeps its traffic lights at the left; Windows and Linux use Electron's
@@ -101,10 +101,13 @@ The dark initial window background, reveal on `ready-to-show`, native resize
 frame/corners and restore/show/focus on a second launch already follow
 t3code's shell and remain in place.
 
-**Sharing.** While this device shares its screen or sound, the header shows
-"Sharing screen" (or sound, or microphone) with Stop sharing; it shrinks to
-one icon (lucide Radio) that opens a Popover on phones. It stays local to the
-publishing device: another device's Remote can't use it.
+**Share.** On a device that can capture, Share opens the Share dialog (a TV
+hides it until Settings → This device shows it); while this device shares, it
+becomes the capsule (its picture, the share's name, viewers and Stop sharing)
+whose panel lists who watches and how ([Share](share.md)). While
+it shows, the right column takes the room it needs. It stays local to the
+publishing device: another device's Remote can't use it. The player's top band
+keeps "Sharing screen" with Stop sharing.
 
 ## Search field
 

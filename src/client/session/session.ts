@@ -14,7 +14,7 @@ import { couchApp } from "./native-context";
 import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
-import type { LiveSelection } from "../../shared/live-input";
+import type { LiveSelection, LiveVideoQuality } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
@@ -380,8 +380,15 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     return live.current.audioInputs();
   }, []);
   const endLive = useCallback(() => live.current?.end() ?? Promise.resolve(), []);
+  // What this device shares, and what changes while it does (sections/share).
+  const liveSharing = useMemo(() => ({
+    current: () => live.current?.sharing() ?? null,
+    setQuality: (quality: LiveVideoQuality) => live.current?.setQuality(quality) ?? Promise.resolve(),
+    setMuted: (muted: boolean) => live.current?.setMuted(muted),
+    routes: () => live.current?.routes() ?? Promise.resolve({}),
+  }), []);
 
 
 
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId: current ? localLiveSourceId : null };
+  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, liveAudioInputs, liveSharing, localLiveSourceId: current ? localLiveSourceId : null };
 }

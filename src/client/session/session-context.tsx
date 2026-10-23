@@ -83,6 +83,8 @@ export type SessionGateValue = SessionBag & {
   dismissChooser: (request: string) => void;
   // This window's own request after Play on a source's publisher, unless Core asks everyone (choosesHere).
   requestedChooser: string | null;
+  // Opens Where it plays for the playback this window views, as this window's own request.
+  openWhereItPlays: () => void;
 };
 
 export function useSessionGate(): SessionGateValue {
@@ -122,7 +124,7 @@ export function SessionGate({ children, upNext }: PropsWithChildren<{ upNext: (t
     dispatchTvRoute(key);
   }
 
-  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId } = useSession(credentials, handleNavigation);
+  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect, startLive, endLive, liveAudioInputs, liveSharing, localLiveSourceId } = useSession(credentials, handleNavigation);
   const screenWakeLock = useScreenWakeLock(!nativeHost && connected && playingOnDevice(state?.playbacks, deviceId()));
   const localName = useLocalDeviceName();
   const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
@@ -230,6 +232,11 @@ export function SessionGate({ children, upNext }: PropsWithChildren<{ upNext: (t
     return result;
   }, [readObservation, upNext]);
 
+  const openWhereItPlays = useCallback(() => {
+    const playback = readObservation()?.playback;
+    if (playback) setRequestedChooser(`${playback}:here:${++chooserRequests.current}`);
+  }, [readObservation]);
+
   const run = useCallback(async (action: Action, targetDeviceId?: string) => {
     const owner = currentCredentials.current;
     const current = () => owner === currentCredentials.current;
@@ -303,8 +310,8 @@ export function SessionGate({ children, upNext }: PropsWithChildren<{ upNext: (t
   const pairingOrigin = credentials?.origin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
-    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId,
+    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, liveSharing, localLiveSourceId, openWhereItPlays,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser]);
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, liveSharing, localLiveSourceId, openWhereItPlays, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }
