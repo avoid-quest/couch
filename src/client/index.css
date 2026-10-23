@@ -263,7 +263,8 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 .electron { --desktop-window-right-resize-inset: 0px; --app-scrollbar-width: calc(6px / var(--interface-scale)); --app-scrollbar-thumb: rgb(255 255 255 / 8%); --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%); }
 .electron-windows { --desktop-window-right-resize-inset: 6px; }
 html.electron, .electron body { height: 100%; overflow: hidden; }
-.electron #root { height: calc(100dvh / var(--interface-scale)); padding-right: calc(var(--desktop-window-right-resize-inset) / var(--interface-scale)); }
+/* First run and pairing sit outside .app-page, so #root scrolls them. */
+.electron #root { height: calc(100dvh / var(--interface-scale)); overflow-y: auto; padding-right: calc(var(--desktop-window-right-resize-inset) / var(--interface-scale)); }
 .electron .app-shell { height: calc(100dvh / var(--interface-scale)); min-height: 0; }
 .electron :is(.app-shell > main, .tv-browser, .app-page) { min-height: 0; }
 .electron .app-page { overflow-y: auto; overscroll-behavior-y: none; scroll-padding-block: 1rem; }
