@@ -3,6 +3,7 @@ import { mountUiAudit } from './ui-audit.browser';
 
 export async function runPlayerClockRenderingRegression() {
   const audit = await mountUiAudit();
+  const homeRows = localStorage.getItem('couch.home-rows');
   let artworkReads = 0;
   let closedPanelReads = 0;
   const rect = Element.prototype.getBoundingClientRect;
@@ -11,6 +12,8 @@ export async function runPlayerClockRenderingRegression() {
     return rect.call(this);
   };
   try {
+    localStorage.setItem('couch.home-rows', '[{"id":"upNext","shown":true}]');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'couch.home-rows' }));
     await audit.go('/radio', { player: 'playing' });
     await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, queue: gate.state!.queue.map((entry, i) => i ? entry : new Proxy(entry, {
       get(target, property, receiver) { if (property === 'thumbnail') artworkReads++; return Reflect.get(target, property, receiver); },
@@ -41,8 +44,26 @@ export async function runPlayerClockRenderingRegression() {
     const secondProgress = document.querySelector('[data-home-hero] [role="progressbar"]')?.getAttribute('aria-valuenow');
     if (firstProgress === secondProgress) throw new Error('Home progress stopped updating');
     if (artworkReads > backgroundReads) throw new Error(`Clock ticks re-rendered Home artwork (${artworkReads} reads)`);
+    for (const duration of [0, null]) {
+      await audit.updateClock({ playbackId: 'p', position: 500, duration });
+      const progress = document.querySelector('[data-home-hero] [role="progressbar"]');
+      if (!progress || Math.abs(Number(progress.getAttribute('aria-valuenow')) - 500 / 900 * 100) > .001) throw new Error(`Home lost the known duration when the clock reported ${duration}`);
+      const minutes = (text: string | null | undefined) => {
+        const time = text?.match(/(\d{2}):(\d{2})$/);
+        return time ? Number(time[1]) * 60 + Number(time[2]) : NaN;
+      };
+      const ends = minutes(progress.getAttribute('aria-label'));
+      const until = minutes(document.querySelector('[data-home-board] section[aria-label="Up next"] header p')?.textContent);
+      // The next fixture item lasts 15 minutes; both labels use the same wall clock, including at midnight.
+      if ((until - ends + 1440) % 1440 !== 15) throw new Error(`Up next lost the remaining playback when the clock reported ${duration}: ends=${ends}, until=${until}`);
+    }
     await audit.go('/now', { player: 'playing', live: true });
     if (document.querySelector('[data-player-ends]')) throw new Error('Live radio must not show an end time');
+    await audit.go('/', { player: 'playing', live: true });
+    if (document.querySelector('[data-home-hero] [role="progressbar"], [data-home-board] section[aria-label="Up next"] header p')) throw new Error('Live radio must not show Home progress or an Up next end time');
     return { passed: true, artworkReads, backgroundReads, closedPanelReads, firstEnd, secondEnd };
-  } finally { Element.prototype.getBoundingClientRect = rect; audit.close(); }
+  } finally {
+    Element.prototype.getBoundingClientRect = rect; audit.close();
+    if (homeRows === null) localStorage.removeItem('couch.home-rows'); else localStorage.setItem('couch.home-rows', homeRows);
+  }
 }

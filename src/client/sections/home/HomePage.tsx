@@ -256,7 +256,7 @@ export function HomePage() {
 function PlayingProgress({ current, speed }: { current: QueueEntry; speed: number }) {
   const clock = usePlaybackClock();
   const now = useDurationClock();
-  const length = clock.duration ?? knownLength(current);
+  const length = clock.duration || knownLength(current);
   if (!length) return null;
   const remaining = Math.max(0, length - clock.position) / speed;
   return <ProgressLine position={clock.position} duration={length} label={`${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}`} />;
@@ -270,7 +270,7 @@ function UpcomingBoard({ cursor, pageFirst, onMore }: { cursor: number; pageFirs
   const queue = state?.queue ?? [];
   const upcoming = queue.slice(cursor + 1);
   const shape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
-  const length = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
+  const length = current ? current.live ? null : playbackClock.duration || knownLength(current) : 0;
   // Up next as a timetable: each entry starts when the one before it ends.
   let clock = length == null ? null : Math.max(0, length - playbackClock.position) / (state?.player.speed || 1);
   const plan = upcoming.map(entry => {
