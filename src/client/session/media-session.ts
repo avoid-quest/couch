@@ -1,7 +1,10 @@
 import { useEffect, useEffectEvent } from "react";
 import type { Action } from "../../shared/protocol";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
-import { isRadio } from "../../shared/radio";
+import { useQuery } from "@tanstack/react-query";
+import { radioProgrammesQuery } from "@/api/radio";
+import { useRadioClock } from "@/radio-clock";
+import { isRadio, freshRadioProgramme, radioNow } from "../../shared/radio";
 import { useSessionGate } from "./session-context";
 import { usePlaybackClock } from "./playback-clock";
 
@@ -10,12 +13,15 @@ const actions = ["play", "pause", "stop", "nexttrack", "seekto", "seekbackward",
 // Media Session feeds the system's media keys and Now Playing (macOS Now
 // Playing, Windows media controls, Linux MPRIS) while this page plays media.
 export function useMediaSession() {
-  const { state, connected, run } = useSessionGate();
+  const { state, connected, run, credentials } = useSessionGate();
   const clock = usePlaybackClock();
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   const playbackId = player?.playbackId && current && ["playing", "paused", "loading"].includes(player.status) ? player.playbackId : null;
-  const programme = state?.radioProgramme?.playbackId === playbackId ? state?.radioProgramme : null;
+  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : "";
+  const guides = useQuery({ ...radioProgrammesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && !!stationId, refetchInterval: 60_000 });
+  const now = useRadioClock(Object.values(guides.data ?? {}), state?.radioProgramme);
+  const programme = (state?.radioProgramme?.playbackId === playbackId ? freshRadioProgramme(state?.radioProgramme, now) : null) ?? (stationId && playbackId ? radioNow(guides.data?.[stationId], stationId, now) : null);
   const title = programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "";
   const artist = programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "";
   const album = programme?.album ?? current?.collection?.title ?? "";

@@ -20,30 +20,31 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [guideUrl, setGuideUrl] = useState("");
   const [removing, setRemoving] = useState<RadioPlaylist | null>(null);
   const available = connected && canManage && !!credentials;
   const page = useQuery({ ...radioSourcesQuery(credentials ?? empty), enabled: available });
   const mutation = useMutation({
-    mutationFn: async ({ path, method, body }: { path: string; method: string; body?: { name: string; url: string } }) => {
+    mutationFn: async ({ path, method, body }: { path: string; method: string; body?: { name: string; url: string; guideUrl?: string | null } }) => {
       const response = await apiFetch(credentials!, `/api/radio/${path}`, { method, ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
       const result = response.status === 204 ? null : await response.json() as { playlist?: RadioPlaylist };
       if (result?.playlist?.error) throw new Error(result.playlist.error);
       return result?.playlist;
     },
     onSuccess: async (_, { body }) => {
-      if (body) { setName(""); setUrl(""); }
+      if (body) { setName(""); setUrl(""); setGuideUrl(""); }
       await queryClient.invalidateQueries({ queryKey: ["radio"] });
     },
   });
   const canWrite = available && !mutation.isPending;
-  const update = (path: string, method: string, body?: { name: string; url: string }) => { if (canWrite) mutation.mutate({ path, method, body }); };
+  const update = (path: string, method: string, body?: { name: string; url: string; guideUrl?: string | null }) => { if (canWrite) mutation.mutate({ path, method, body }); };
   const sources = page.data?.sources ?? [];
   const builtIn = sources.find(source => source.id === avoidRadioPlaylistId);
   const error = mutation.error ? mutation.error.message || "Couldn't update radio playlists." : page.error ? "Couldn't load radio playlists." : null;
 
   function add(event: FormEvent) {
     event.preventDefault();
-    update("playlists", "POST", { name: name.trim(), url: url.trim() });
+    update("playlists", "POST", { name: name.trim(), url: url.trim(), guideUrl: guideUrl.trim() || null });
   }
 
   if (!canManage) return <SettingsSection><SettingsRow label="Playlists" description={ADMIN_ONLY} /></SettingsSection>;
@@ -57,6 +58,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
         {sources.filter(source => source.id !== avoidRadioPlaylistId).map(source => (
           <SettingsRow key={source.id} data-radio-source-id={source.id} label={<span className="break-words">{source.name}</span>} description={<>
             <span className="block break-all">{source.url}</span>
+            {(source.guideUrl || source.discoveredGuideUrl) && <span className="block break-all">Guide: {source.guideUrl || source.discoveredGuideUrl}</span>}
             <span className="block">{source.updatedAt ? `${source.stationCount} stations, ${updated(source.updatedAt)}` : updated(null)}</span>
             {source.error && <span className="block text-destructive">{source.error}{source.updatedAt && " Showing the last stations."}</span>}
           </>}>
@@ -73,6 +75,9 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
           </SettingsRow>
           <SettingsRow label="M3U URL" htmlFor="radio-source-url">
             <Input className="w-full" disabled={!canWrite} id="radio-source-url" maxLength={4096} onChange={event => setUrl(event.target.value)} placeholder="https://example.com/playlist.m3u" required type="url" value={url} />
+          </SettingsRow>
+          <SettingsRow label="Guide URL" htmlFor="radio-guide-url" description="Optional. Leave it blank to use the guide the playlist names.">
+            <Input className="w-full" disabled={!canWrite} id="radio-guide-url" maxLength={4096} onChange={event => setGuideUrl(event.target.value)} placeholder="https://example.com/guide.xml" type="url" value={guideUrl} />
           </SettingsRow>
           <div><Button type="submit" disabled={!canWrite || !name.trim() || !url.trim()}>{mutation.isPending && mutation.variables?.body ? "Adding…" : "Add"}</Button></div>
         </SettingsSection>

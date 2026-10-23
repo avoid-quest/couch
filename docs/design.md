@@ -63,7 +63,8 @@ bar for thumb reach.
   nothing. Home's sources are built from what the Couch saved.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress
   and end times are small muted metadata. Live media that can't seek has no
-  timeline.
+  seek timeline. Radio may show broadcast progress from an XMLTV programme
+  window, with its local times and remaining minutes ([Radio](design/browse.md#radio-and-live-tv)).
 - **Undo, not confirm**, for shared actions; destructive admin actions confirm
   inline or in an AlertDialog.
 - **Disabled keeps its place.** A control that can't act stays in its slot at

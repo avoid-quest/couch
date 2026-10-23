@@ -18,7 +18,7 @@ const thumbnail = "https://i.ytimg.com/vi/vWLJeqLPfSU/hqdefault.jpg";
 const creator = {title:"NPR Music",url:"https://www.youtube.com/@nprmusic"};
 const collection = {title:"Tiny Desk concerts",url:"https://www.youtube.com/playlist?list=PL1B627337ED6F55F0",index:0};
 const entry = {id:"concert",title:"Khruangbin: Tiny Desk Concert",source:"web:https://www.youtube.com/watch?v=vWLJeqLPfSU",thumbnail,subtitle:"NPR Music",duration:900,creator,collection};
-const station = {id:"audit-radio",name:"NTS Radio",url:"https://stream.example.com/nts",homepage:"https://www.nts.live",countryCode:"GB",codec:"MP3",bitrate:128,sourceId:avoidRadioPlaylistId,logoUrl:thumbnail};
+const station = {id:"audit-radio",name:"NTS Radio",url:"https://stream.example.com/nts",homepage:"https://www.nts.live",countryCode:"GB",codec:"MP3",bitrate:128,sourceId:avoidRadioPlaylistId,logoUrl:thumbnail,tags:["Community","Talk"],groupTitle:"Community network"};
 const media = {id:entry.id,provider:"youtube",kind:"media",url:entry.source.slice(4),title:entry.title,thumbnail,subtitle:entry.subtitle,creator,collection,duration:900,description:"Khruangbin perform a live set at NPR Music.\n\nExplore the channel or the full Tiny Desk collection."};
 const saved = {...media,kind:"web",source:entry.source,sourceLabel:"YouTube",savedAt:Date.now()};
 const history = {...media,mediaId:"audit-history",sourceLabel:"YouTube",position:120,watched:false,playable:true,queueEntryId:entry.id};
@@ -60,7 +60,7 @@ export async function mountUiAudit(onRender: ProfilerOnRenderCallback = () => {}
     else if(path==='/api/playlists') body={playlists:mode==='empty'?[]:[{id:'audit-list',name:'Sunday listening',entryCount:2,duration:1800,updatedAt:Date.now()}]};
     else if(path.startsWith('/api/playlists/')) body={playlist:{id:'audit-list',name:'Sunday listening',entries:[entry,{...entry,id:'next',title:'The next concert'}]}};
     else if(path==='/api/radio/avoid') body={playlist:{id:avoidRadioPlaylistId,name:'avoid radio',stationCount:1,error:null},stations:mode==='empty'?[]:[station]};
-    else if(path==='/api/radio/avoid/programmes') body={programmes:mode==='empty'?{}:{[station.id]:{stationId:station.id,title:'Early Bird',artworkUrl:thumbnail,description:'Music for the beginning of the day.',expiresAt:Date.now()+3600000}}};
+    else if(path==='/api/radio/programmes') body={programmes:mode==='empty'?{}:{[station.id]:{programmes:[{id:'morning',title:'Early Bird',start:Date.now()-1800000,end:Date.now()+1800000,artworkUrl:thumbnail,description:'Music for the beginning of the day.',categories:['Jazz','Experimental']},{id:'afternoon',title:'Afternoon selections',start:Date.now()+1800000,end:Date.now()+5400000,categories:['Ambient'],description:'Selections from the community studio.'}],live:{stationId:station.id,provider:'radio.avoid.quest',title:'Early Bird',artist:'Alex',genre:'Jazz',sampledAt:Date.now()-1000,expiresAt:Date.now()+60000}}}};
     else if(path==='/api/radio/favorites') body={favorites:mode==='empty'?[]:[station]};
     else if(path.startsWith('/api/radio/stations/')) body={station};
     else if(path==='/api/radio/stations') body={stations:mode==='empty'?[]:[station]};

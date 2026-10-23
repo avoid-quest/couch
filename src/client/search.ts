@@ -45,7 +45,7 @@ export function searchRelevance(query: string) {
   const words = normalizeWords(query);
   const mentions = (text: string, word: string) => normalizeWords(text).some(part => part.startsWith(word));
   return {
-    close: (hit: Pick<SearchHit, "title" | "meta">) => !words.length || words.some(word => mentions(`${hit.title} ${hit.meta}`, word)),
+    close: (hit: Pick<SearchHit, "title" | "meta" | "radio">) => !words.length || words.some(word => mentions([hit.title, hit.meta, hit.radio?.host, hit.radio?.group, ...hit.radio?.tags ?? [], ...hit.radio?.categories ?? []].join(" "), word)),
     strong: (hit: Pick<SearchHit, "title">) => words.length > 0 && words.every(word => mentions(hit.title, word)),
   };
 }

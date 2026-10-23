@@ -135,7 +135,7 @@ export async function runFocusRecoveryRegression({ includeTimeout = false } = {}
   for (const source of ["history", "radio"]) for (const from of panels.length ? ["bar", "Volume"] : ["bar"]) {
     await check(`Stop from ${from} hands provisional focus to the delayed ${source} hero`, async () => {
       const audit = await mountUiAudit();
-      const held = holdReads([source === "history" ? "/api/progress/history" : "/api/radio/avoid/programmes"], source === "radio");
+      const held = holdReads([source === "history" ? "/api/progress/history" : "/api/radio/programmes"], source === "radio");
       try {
         await audit.go("/", { player: "paused", fresh: true });
         if (from === "bar") stopFromBar();

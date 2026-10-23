@@ -1,3 +1,6 @@
+import { useRadioClock } from "@/radio-clock";
+import { RadioNext, RadioProgress } from "@/components/RadioSchedule";
+import { metaLine } from "@/media-caption";
 import { DetailSkeleton } from "@/components/LoadingMedia";
 import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
@@ -24,7 +27,7 @@ import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
 import type { ForLaterItem, ForLaterReference } from "../../../shared/for-later";
 import type { HistoryItem } from "../../../shared/viewing";
-import { avoidRadioPlaylistId, isRadio, type RadioStation } from "../../../shared/radio";
+import { isRadio, radioNow, radioNext, radioShowLabels, type RadioStation } from "../../../shared/radio";
 import type { PlaybackCollection } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
@@ -225,13 +228,23 @@ function RadioDetails({ item }: { item: RadioStation }) {
   const { connected } = useSessionGate();
   const action = useDetailAction();
   const { play } = usePlayOn();
-  const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && item.sourceId === avoidRadioPlaylistId, refetchInterval: 60_000 });
+  const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && !!item.sourceId, refetchInterval: 60_000 });
   const save = useStationSave()(item);
-  const programme = programmes.data?.[item.id];
-  return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} shape="square" fit={programme?.artworkUrl ? undefined : "contain"} meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre, programme?.artist, programme?.album, programme?.bitrate && `${programme.bitrate} kbps`].filter(Boolean).join(" · ")} description={programme?.description}
+  const now = useRadioClock(Object.values(programmes.data ?? {}));
+  const guide = programmes.data?.[item.id];
+  const programme = connected ? radioNow(guide, item.id, now) : null;
+  const next = connected ? radioNext(guide, now) : undefined;
+  // The show leads with its categories and host, then the station with its tags; without a show the station is the title.
+  const show = programme && metaLine(...radioShowLabels(programme), programme.artist, programme.album, !!programme.bitrate && `${programme.bitrate} kbps`);
+  return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} shape="square" fit={programme?.artworkUrl ? undefined : "contain"}
+    meta={programme ? undefined : metaLine(...item.tags ?? [], item.groupTitle || item.countryCode)}
+    context={programme && <span className="grid gap-caption">{show && <span>{show}</span>}<span>{metaLine(item.name, ...item.tags ?? [])}</span></span>}
+    progress={<RadioProgress show={programme} />} description={programme?.description}
     play={{ label: "Play", aria: item.name, disabled: !connected || !shell.available || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, true)) }}
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, false)) }}
     save={{ ...save, disabled: save.disabled || action.isPending }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => shell.enqueueRadio(item, true, on), deviceId)) }}
-    more={browserActions(programme?.programmeUrl ?? item.homepage)} /><RelatedRadio station={item} /></>;
+    more={browserActions(programme?.programmeUrl ?? item.homepage)}>
+      <RadioNext show={next} className="mt-2" />
+    </DetailLayout><RelatedRadio station={item} /></>;
 }

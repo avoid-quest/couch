@@ -31,10 +31,11 @@ import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
-import { avoidRadioPlaylistId, isRadio, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
+import { avoidRadioPlaylistId, isRadio, radioShowLabels, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
 import type { HistoryItem, HistorySelection } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
+import { RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { useOnAir, useStationMenu, useStationShow } from "./on-air";
 import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 import { Board, BoardArt, BoardList } from "./HomeBoard";
@@ -156,11 +157,11 @@ export function HomePage() {
   // reads Radio, as the player does, never its stream's host.
   const status = playbackStatus(state, connected);
   const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
-  const playingMeta = metaLine(playing?.lead, playing?.subtitle, current && !isRadio(current) && sourceLabel(current.source), !status.quiet && status.label, at?.elsewhere && `on ${at.name}`);
+  const playingMeta = metaLine(playing?.lead, playing?.subtitle, ...radioShowLabels(show), show?.artist, current && !isRadio(current) && sourceLabel(current.source), !status.quiet && status.label, at?.elsewhere && `on ${at.name}`);
   const heroCaption = hero?.kind === "continue" ? historyCaption(hero.item) : undefined;
 
   const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
-      progress={!live ? <PlayingProgress current={current} speed={state?.player.speed || 1} /> : undefined}
+      progress={live ? <RadioProgress show={show} /> : <PlayingProgress current={current} speed={state?.player.speed || 1} />}
       // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
       open={() => shell.changeSection("Now")} />
     : hero.kind === "continue" && heroCaption ? <HomeHero context={<MediaContext collection={hero.item.collection} creator={hero.item.creator} />} thumbnail={hero.item.thumbnail} shape={historyShape(hero.item)} title={heroCaption.title} meta={heroCaption.meta}
@@ -171,7 +172,7 @@ export function HomePage() {
       {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
       <Button variant="ghost" size="lg" aria-label={`Details ${hero.item.title}`} onClick={() => details.open(itemLocation("history", hero.item.mediaId))}>Details</Button>
     </HomeHero>
-    : hero.kind === "radio" ? <HomeHero context={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={metaLine(hero.show.genre)}>
+    : hero.kind === "radio" ? <HomeHero context={<RadioStationLine className="text-sm" station={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} tags={hero.station.tags} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={metaLine(...radioShowLabels(hero.show), hero.show.artist)} progress={<RadioProgress show={hero.show} />}>
       <Button data-page-first size="lg" aria-label={on(`Play ${hero.station.name}`)} disabled={!available} onClick={() => playRadioHero(hero.station)}><Play aria-hidden="true" />{on("Play")}</Button>
     </HomeHero> : null;
 

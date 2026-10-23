@@ -1,9 +1,10 @@
+import { useRadioClock } from "@/radio-clock";
 import { defaultStringifySearch, Link, Outlet, useLocation, useMatches, useRouter } from "@tanstack/react-router";
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ErrorInfo, type PropsWithChildren, type ReactNode, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { BookmarkIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
-import type { RadioStation } from "../../../shared/radio";
+import { freshRadioProgramme, type RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import type { HistorySelection } from "../../../shared/viewing";
 import { DigitalClock } from "@/components/DigitalClock";
@@ -180,7 +181,8 @@ function useShellValue() {
   }, [credentials, profileId, playProgress, run, setError]);
 
   const player = state?.player;
-  const programme = connected ? state?.radioProgramme : null;
+  const metadataNow = useRadioClock([], state?.radioProgramme);
+  const programme = connected && freshRadioProgramme(state?.radioProgramme, metadataNow) ? state?.radioProgramme : null;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
