@@ -4,6 +4,7 @@ import { publicFetch } from "./public-network";
 export const artworkSizeLimit = 8 * 1024 * 1024;
 // Raster pictures only: a browser decodes them and nothing in them runs (no SVG).
 const pictures = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
+type Picture = { type: string; bytes: Uint8Array };
 
 /**
  * The pictures Core read lately, newest last, within a byte budget that counts each address and picture, so a picture
@@ -12,8 +13,9 @@ const pictures = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", 
  */
 export function createArtworkCache(budget = 24 * 1024 * 1024) {
   const entries = new Map<string, { type: string; bytes: Uint8Array; cost: number }>();
+  const pending = new Map<string, { promise: Promise<Picture | null>; controller: AbortController; readers: number }>();
   let size = 0;
-  return {
+  const cache = {
     get(key: string) {
       const entry = entries.get(key);
       // Read again, it is the newest.
@@ -29,8 +31,41 @@ export function createArtworkCache(budget = 24 * 1024 * 1024) {
       entries.set(key, { type, bytes: new Uint8Array(bytes), cost }); size += cost;
       for (const [oldest, entry] of entries) { if (size <= budget) break; entries.delete(oldest); size -= entry.cost; }
     },
+    async read(key: string, load: (signal: AbortSignal) => Promise<Picture | null>, signal: AbortSignal): Promise<Picture | null> {
+      signal.throwIfAborted();
+      const kept = cache.get(key);
+      if (kept) return kept;
+      let work = pending.get(key);
+      if (!work) {
+        const controller = new AbortController();
+        const promise = load(controller.signal).then(picture => {
+          controller.signal.throwIfAborted();
+          if (picture) cache.set(key, picture.type, picture.bytes);
+          return picture;
+        }).finally(() => { if (pending.get(key)?.controller === controller) pending.delete(key); });
+        work = { promise, controller, readers: 0 };
+        pending.set(key, work);
+      }
+      work.readers++;
+      let abort!: () => void;
+      try {
+        return await new Promise<Picture | null>((resolve, reject) => {
+          abort = () => reject(signal.reason);
+          signal.addEventListener("abort", abort, { once: true });
+          work.promise.then(resolve, reject);
+        });
+      } finally {
+        signal.removeEventListener("abort", abort);
+        // One device leaving must not cancel the other readers. With none left, a new reader starts afresh.
+        if (--work.readers === 0 && pending.get(key) === work) {
+          pending.delete(key);
+          work.controller.abort();
+        }
+      }
+    },
     get size() { return size; },
   };
+  return cache;
 }
 const shared = createArtworkCache();
 
@@ -46,17 +81,16 @@ export async function artworkResponse(request: Request, authorize: () => void, f
   try { target = new URL(new URL(request.url).searchParams.get("url") ?? ""); } catch { return Response.json({ error: "Send the artwork's address." }, { status: 400 }); }
   if (!/^https?:$/.test(target.protocol) || target.username || target.password) return Response.json({ error: "Send a public web address." }, { status: 400 });
   const picture = (type: string, bytes: Uint8Array) => new Response(Buffer.from(bytes), { headers: { "Content-Type": type, "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; default-src 'none'", "Cache-Control": "private, max-age=86400" } });
-  const kept = cache.get(target.href);
-  if (kept) return picture(kept.type, kept.bytes);
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(10_000)]);
   try {
-    const upstream = await fetcher(target, { signal, headers: { accept: [...pictures].join(", ") } });
-    const type = upstream.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-    if (!upstream.ok || !pictures.has(type)) { await upstream.body?.cancel(); return Response.json({ error: "That address has no picture." }, { status: 502 }); }
-    const bytes = await boundedBytes(upstream, artworkSizeLimit, signal);
-    if (!bytes.byteLength) return Response.json({ error: "That address has no picture." }, { status: 502 });
-    cache.set(target.href, type, bytes);
-    return picture(type, bytes);
+    const result = await cache.read(target.href, async cancellation => {
+      const signal = AbortSignal.any([cancellation, AbortSignal.timeout(10_000)]);
+      const upstream = await fetcher(target, { signal, headers: { accept: [...pictures].join(", ") } });
+      const type = upstream.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+      if (!upstream.ok || !pictures.has(type)) { await upstream.body?.cancel(); return null; }
+      const bytes = await boundedBytes(upstream, artworkSizeLimit, signal);
+      return bytes.byteLength ? { type, bytes } : null;
+    }, request.signal);
+    return result ? picture(result.type, result.bytes) : Response.json({ error: "That address has no picture." }, { status: 502 });
   } catch {
     return Response.json({ error: "Couldn't read that picture." }, { status: 502 });
   }
