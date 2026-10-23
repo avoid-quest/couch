@@ -15,7 +15,8 @@ The pad is a ring of four arrows around a round OK, each target at least 64px;
 the catalog has no direction pad, so it is clipped `Button`s. Each press sends
 one key. OK sends on release; held for 500 ms it sends a held OK (`menu`),
 which opens the focused item's menu on the TV ([Menus](../design.md#menus)).
-Arrow keys work while the pad has focus. Info opens the TV's player.
+Arrow keys work while the pad has focus. Info opens the TV's player with its
+Info shown; on the player it shows or hides Info ([Player](player.md#calm-and-info)).
 
 Remote picks the TV this device controls, else one that's on, else the one
 seen last. A TV that's off says so ("Living room TV is off."); "No TV

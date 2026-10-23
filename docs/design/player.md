@@ -53,8 +53,8 @@ menu, are one family wherever they open, from the band or the now-playing bar:
   with a hairline, which a black page needs to hold its edge
 - one corner (`rounded-lg`) and one inset: text sits .75rem in
 - two widths: 18rem for Volume and the gear's menu, 32rem for Where it plays
-  and Up next, except Up next summoned over the room beside artwork: 28rem of
-  glass with a shadow ([Up next](#up-next))
+  and Up next, except Up next over the room beside artwork: 28rem of glass
+  with a shadow ([Up next](#up-next))
 - one place: 8px above the band (or the bar), ending at the gutter, the
   tools' right edge, whichever tool opened them (`toolPanel`)
 - each grows from the button that opened it
@@ -124,12 +124,13 @@ The control row:
   content, then view: **Volume, Where it plays, Up next, the Playback gear**,
   then **the last slot: fullscreen**, bottom right as on every player. The bar
   has Open player in that slot, so each tool sits at the bar's x.
-- Where nothing can fill the screen (beside artwork, and on the TV, which is
-  always full screen) the slot stays empty rather than holding a fullscreen
-  that can never act. Couch's disabled controls keep their slot while their
-  media might allow them again, as Next does; this one can't, and on the TV an
-  empty slot is no stop for the remote. A window already in fullscreen keeps
-  Exit fullscreen there.
+- Fullscreen stays at the bottom right for audio and video, directly under
+  **Info** at the top right beside artwork ([Calm and Info](#calm-and-info)).
+  Entering fullscreen changes it to Exit fullscreen in the same place. Over a picture on the TV,
+  which is always full screen, the slot stays empty rather than holding a fullscreen that can never
+  act: Couch's disabled controls keep their slot while their media might allow
+  them again, as Next does; this one can't, and an empty slot is no stop for
+  the remote.
 - Every control is a ghost icon (`icon-lg`), each with an `aria-label` and
   a matching `title`. Its target is 44px and grows with the interface only to
   2.25rem: 54px at 1920 wide, the size of YouTube's fullscreen controls
@@ -142,8 +143,8 @@ The control row:
   every tool stays: nothing moves into a menu and nothing is dropped. At 320
   wide the seven 44px targets fill the row exactly, touching with no overlap;
   at 390 70px separate the transport from the tools. Anything narrower scrolls
-  the row. Beside artwork a phone's band drops the empty last slot, since its
-  bar has no tools to line up with, so the tools end at the gutter.
+  the row. Beside artwork fullscreen stays in the same slot;
+  Info stays at the top right, directly above it.
 
 ### The band and the now-playing bar
 
@@ -180,7 +181,7 @@ The differences are deliberate:
 | Where | Bar | Band | Why |
 |---|---|---|---|
 | Wide screens | Volume, Where it plays, Up next, gear, Open player | the same, then fullscreen at Open player's x | Fullscreen is bottom right on every player. |
-| Beside artwork (audio, or playing elsewhere), from 960px | Up next opens the player's Up next | Up next takes focus into the list beside the artwork, and Close returns (with nothing to come, it opens Up next over the room); the last slot is empty | The list is already on screen; the buttons keep their places. |
+| Beside artwork (audio, or playing elsewhere) | Up next opens the player's Up next | Up next opens over the room; Info is at the top right, fullscreen at the bottom right | The bottom row keeps playback tools; Info reveals the show's details. |
 | Phones | Play/Pause and Open player, after the title | the transport at the left, then Where it plays, Up next, the gear and fullscreen | A minimized player needs no mixer; the player has it. Open player sits at fullscreen's x. The band has no room to centre the transport beside four tools. |
 
 Over a playing video, the bands hide 4 s after the last key while focus is on
@@ -234,19 +235,15 @@ With nothing to show (no queued or played row, no Autoplay pick and no
 search for one), Up next isn't offered: its button keeps its slot, disabled,
 with "Nothing queued" as its tooltip, in the band and the bar.
 
-Beside artwork it takes a column only while something is still to come (a
-queued entry after what plays, or Autoplay's picks: `hasQueued`). Played rows
-alone, a radio evening's usual case, leave the artwork the whole room, and Up
+Beside artwork it is never parked on screen: the artwork has the room, and Up
 next is summoned from its button as a panel over the room at the right above
 the band (28rem, `rounded-lg`, translucent black glass with a shadow), growing
-from its button; a click on the room closes it.
+from its button; a click on the room closes it. It lies over Info, which stays
+as it was beneath it. On phones it takes the artwork's place.
 
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
 - A click on the picture while Up next is open closes it, without pausing.
-- Beside artwork, on wide screens, while something is to come, Up next stays
-  on screen, and the band's Up next takes focus into it, with Close to
-  return. On phones it replaces the artwork.
 - **Playing** heads the list only where the player's title is off screen.
 - **Upcoming rows** are board lines:
   - The title is heavy. The start time is light, at the same size, at the
@@ -349,12 +346,15 @@ as wide as the gutters allow. The copy:
   same place (`PlaysOn`).
 - the relationship links, on the same line. A station's link shows under its
   show; without a show the title is the station, and already opens it.
-- a meta line: a show's genre and host ("Bass, Breaks, Goldie B"), as its
-  tile says them, else the subtitle, else the source, then "in a separate
-  window" for a channel that plays in mpv's window
-- the end time, updated independently so clock ticks do not re-render the
-  artwork and controls
-- a station's current programme or track
+- "In a separate window" for a channel that plays in mpv's window
+- a station's current track
+- in Info only ([Calm and Info](#calm-and-info)): the trail above the title,
+  the station's tags after its link, a meta line (a show's categories and host,
+  "Bass, Breaks, Goldie B", as its tile says them, else a station's tags, else
+  the subtitle, else the source), a show's broadcast progress, synopsis and the
+  next show ([Radio](browse.md#radio-and-live-tv)), and an item's end time,
+  updated independently so clock ticks do not re-render the artwork and
+  controls
 
 The room's light pools behind the artwork, never behind the copy, and its
 colours cross-fade when the show or item changes. The band and Up next beside
@@ -366,13 +366,49 @@ tile lists (`useStationShow`). The rule is the same on the tile, the
 now-playing bar, Home's hero and the player, loading or playing: the show's
 title and photo while there is a show, else the station's name and logo.
 
-The band sits in the room with no rule, and nothing over a picture. There is
-nothing to fill, so the band's fullscreen slot is empty (a window already in
-fullscreen keeps its Exit fullscreen there). Live media
+The band sits in the room with no rule, and nothing over a picture. Fullscreen
+stays at the bottom right on desktop and phones; Info sits directly above it.
+Live media
 that can't seek has no timeline, no time and no label, and its Pause stays
-disabled. On wide screens, the queue sits beside the artwork while something
-is to come. The band includes
-the phone's safe-area inset.
+disabled. The band includes the phone's safe-area inset.
+
+### Calm and Info
+
+Now playing opens **calm**, on every screen: the artwork, the title, where it
+comes from (the station or creator, and where it plays) and the transport, as a
+TV's player shows only the picture and what it is. **Info** shows the rest in
+place, as a TV's Info button does: the copy grows under the title, in the same
+type, with no panel, heading or label, and fades in over 200 ms (none with
+reduced motion). Nothing moves to another page and playback is untouched.
+
+- **One control, three ways.** The top-right Info button (`aria-expanded`,
+  `aria-controls="player-info"`), the I key, and a Remote's Info key, which
+  reaches the TV through `dispatchTvRoute("info")` (open menus close first).
+  From any other page the Remote's Info opens the player with Info shown
+  (`playerInfo` in the entry's history state); on the player it toggles.
+  Over a picture there is no Info: the top line already names what plays, so a
+  Remote's Info shows or hides the controls, as a TV's info banner.
+- **Back** closes the gear's menu, then Up next, then Info, then (on the TV)
+  hides the controls, before it leaves the player. Pressing Info while Up next
+  is open closes Up next and shows Info.
+- **Focus.** A pointer's click on Info returns focus to the picture, as the
+  band's other buttons do; the keyboard and the remote keep it on Info. What
+  Info hides takes its focus with it (the trail's links, a synopsis' More), so
+  that focus moves to Info's button, else the picture. The station's link stays
+  the same element either way.
+- **Scope.** Info belongs to the Playback and entry it was opened for: another
+  entry or Playback starts calm. A new programme on the same station keeps it
+  open, and its metadata, the next show included, follows the broadcast's own
+  clock. The hidden part is in the DOM, `hidden`, so its content is always
+  current and out of the accessibility tree.
+- **Room.** Beside the artwork the copy keeps its foot level with the
+  artwork's; when Info is taller than the room it scrolls. Stacked (phones,
+  portrait), the artwork shrinks to make room, to no less than 6rem tall, and
+  the column scrolls if it still can't fit. Windows up to 500px high keep the
+  artwork beside the copy in both modes, with the same 6rem minimum and display
+  type; the copy scrolls when needed.
+- **Next programme is not Up next.** The station's next show is part of Info
+  ("Next programme"); Up next is what Couch will play.
 
 ## Stop sharing
 
@@ -404,6 +440,7 @@ band, the now-playing bar, Home's hero and Remote (`PlaybackTransport`).
 | Gear menu with in-place submenus (Subtitles, Audio, Speed, Quality, Chapters, Audio delay) | YouTube, whose gear holds Subtitles/CC and Audio track |
 | No separate subtitles button; C toggles subtitles | YouTube's C key; the owner asked for fewer buttons |
 | Up next as a panel over the picture from its own button | Netflix's episodes panel |
+| Calm Now playing; Info shows more in place, from the remote's Info key | TV guides' and set-top boxes' Info button |
 | Autoplay switch | YouTube |
 | Next card near the end | Prime Video's "Next up"; Netflix's Next Episode |
 | Buffering as a centred spinner | YouTube; Apple's HIG |
