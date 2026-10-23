@@ -29,6 +29,8 @@ function fixture(platform = "darwin", tv = false) {
     Element, getComputedStyle: (element: Element) => element,
     history: { go: (direction: number) => visits.push(direction) },
     document: {
+      createElement: () => ({ textContent: "" }),
+      head: { append() {} },
       documentElement: { classList: { add: (...names: string[]) => names.forEach(name => classes.add(name)), toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) }, setAttribute: (name: string, value: string) => attributes.set(name, value), removeAttribute: (name: string) => attributes.delete(name) },
       body: { classList: { contains: () => tv } },
     },
@@ -47,11 +49,13 @@ test("desktop controls reserve the platform's space and release it in fullscreen
     const f = fixture(platform);
     f.listeners.get("DOMContentLoaded")!();
     // Keep the Mac's empty attribute compatible with older remote renderers.
-    expect(f.attributes.get("data-window-controls")).toBe(platform === "darwin" ? "" : "overlay");
+    expect(f.attributes.get("data-window-controls")).toBe(platform === "darwin" ? "" : undefined);
     f.ipc.get("couch:full-screen")!({}, true);
     expect(f.attributes.has("data-window-controls")).toBe(false);
+    expect(f.classes.has("wco")).toBe(false);
     f.ipc.get("couch:full-screen")!({}, false);
-    expect(f.attributes.has("data-window-controls")).toBe(true);
+    expect(f.attributes.has("data-window-controls")).toBe(platform === "darwin");
+    expect(f.classes.has("wco")).toBe(platform !== "darwin");
   }
 });
 
@@ -68,7 +72,7 @@ test("WCO follows native geometry, including fullscreen and restored controls", 
     f.overlay.visible = true;
     f.geometry.get("geometrychange")!();
     expect(f.classes.has("wco")).toBe(true);
-    expect(f.attributes.get("data-window-controls")).toBe("overlay");
+    expect(f.attributes.has("data-window-controls")).toBe(false);
   }
   const mac = fixture();
   mac.listeners.get("DOMContentLoaded")!();

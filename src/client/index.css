@@ -254,18 +254,7 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 @layer base { [data-window-controls] .drag-region > * { app-region: initial; } }
 [data-window-controls] :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
 [data-window-controls=""] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
-.wco {
-  --workspace-topbar-height: calc(env(titlebar-area-height, 0px) / var(--interface-scale));
-  --workspace-controls-top: calc(env(titlebar-area-y, 0px) / var(--interface-scale));
-  --workspace-controls-left: calc(env(titlebar-area-x, 0px) / var(--interface-scale));
-  --workspace-native-controls-inset: calc((100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)) / var(--interface-scale));
-}
-.wco .window-controls-inset {
-  padding-left: max(var(--gutter), calc(var(--workspace-controls-left) + .75rem));
-  padding-right: max(var(--gutter), calc(var(--workspace-native-controls-inset) + .75rem));
-}
-.wco .player-top { padding-top: var(--workspace-controls-top); }
-.wco :is(.player-header, [data-player-heading]) { min-height: var(--workspace-topbar-height); }
+/* Windows/Linux overlay geometry and drag regions ship in preload.ts for older remote renderers too. */
 /* 90pt is where the first control's box starts, so the Couch switch keeps its hit area inside it. */
 [data-window-controls=""] .window-controls-inset > :first-child { margin-left: 0; }
 
@@ -281,7 +270,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
 .electron .app-page:has(.player-page) { overflow: hidden; }
 .electron .app-footer { right: calc(var(--desktop-window-right-resize-inset) / var(--interface-scale)); }
 .electron [data-nav-rail] { top: 2rem; }
-.electron .app-header { grid-template-columns: auto minmax(max-content, 1fr) minmax(0, 30rem); column-gap: .75rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.electron .app-header { grid-template-columns: auto minmax(max-content, 1fr) minmax(0, 30rem); column-gap: .75rem; }
 .electron ::-webkit-scrollbar { width: var(--app-scrollbar-width); height: var(--app-scrollbar-width); }
 .electron ::-webkit-scrollbar-track { background: transparent; }
 .electron ::-webkit-scrollbar-thumb { background: var(--app-scrollbar-thumb); border-radius: 3px; }

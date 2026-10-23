@@ -9,10 +9,11 @@ const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
   return result.value as T;
 };
 
-// Desktop windows have no title bar: the page leaves room for their controls (index.css).
+// Desktop windows have no title bar: reserve their native controls in the page.
 if (!process.argv.includes("--couch-tv-presentation")) {
   const controls = (shown: boolean) => {
-    if (shown) document.documentElement.setAttribute("data-window-controls", process.platform === "darwin" ? "" : "overlay");
+    if (process.platform !== "darwin") document.documentElement.classList.toggle("wco", shown);
+    else if (shown) document.documentElement.setAttribute("data-window-controls", "");
     else document.documentElement.removeAttribute("data-window-controls");
   };
   addEventListener("DOMContentLoaded", () => controls(true));
@@ -20,8 +21,29 @@ if (!process.argv.includes("--couch-tv-presentation")) {
   if (process.platform !== "darwin") addEventListener("DOMContentLoaded", () => {
     const root = document.documentElement;
     root.classList.add("electron", process.platform === "win32" ? "electron-windows" : "electron-linux");
+    // Ship overlay geometry with the native shell: an older remote renderer only
+    // knows data-window-controls as the Mac's left inset, but has the same hooks.
+    const style = document.createElement("style");
+    style.textContent = `
+      .wco {
+        --workspace-topbar-height: calc(env(titlebar-area-height, 0px) / var(--interface-scale, 1));
+        --workspace-controls-top: calc(env(titlebar-area-y, 0px) / var(--interface-scale, 1));
+        --workspace-controls-left: calc(env(titlebar-area-x, 0px) / var(--interface-scale, 1));
+        --workspace-native-controls-inset: calc((100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)) / var(--interface-scale, 1));
+      }
+      .wco .window-controls-inset {
+        padding-left: max(var(--gutter, 1rem), calc(var(--workspace-controls-left) + .75rem));
+        padding-right: max(var(--gutter, 1rem), calc(var(--workspace-native-controls-inset) + .75rem));
+      }
+      .wco .player-top { padding-top: var(--workspace-controls-top); }
+      .wco :is(.player-header, [data-player-heading]) { min-height: var(--workspace-topbar-height); }
+      .wco .drag-region { app-region: drag; }
+      @layer base { .wco .drag-region > * { app-region: initial; } }
+      .wco :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
+    `;
+    document.head.append(style);
     const overlay = (navigator as Navigator & { windowControlsOverlay?: { visible: boolean; addEventListener(type: "geometrychange", listener: () => void): void } }).windowControlsOverlay;
-    const sync = () => { root.classList.toggle("wco", overlay?.visible === true); controls(overlay?.visible === true); };
+    const sync = () => controls(overlay?.visible === true);
     sync();
     overlay?.addEventListener("geometrychange", sync);
   });

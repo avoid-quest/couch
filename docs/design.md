@@ -251,10 +251,9 @@ screen alike. Two faces, clearly apart:
   (`.display-title`, weight 680 to 760), page titles and the headings of shelves,
   lists and sections (normal width, semibold). `index.html` preloads its latin
   file.
-- **Inter Tight** (everything else, except the Windows/Linux desktop header's
-  system font; [Shell](design/shell.md#header)): regular, but for the bar's title
-  (medium); metadata small, muted and tabular. `index.html` preloads its latin
-  file too.
+- **Inter Tight** (everything else, including the desktop header): regular, but
+  for the bar's title (medium); metadata small, muted and tabular. `index.html`
+  preloads its latin file too.
 
 A display title is always Mona Sans at its normal width (100%), so short and
 long titles read in one voice; condensed below about 92% it reads as another,

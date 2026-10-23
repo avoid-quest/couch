@@ -60,7 +60,7 @@ An updated Couch and a player error keep their line too.
 while the Couch has a TV, Settings; lucide icons over labels), and the
 top bar is the Couch switch then the search field. A narrow TV undoes
 `touch:` with `tv:`. **Desktop windows** put their native buttons and drag region
-in the header (`[data-window-controls]`), without a separate title bar. macOS
+in the header, without a separate title bar. macOS (`[data-window-controls]`)
 keeps its traffic lights at the left; Windows and Linux use Electron's
 `titleBarOverlay` with t3code's Linux-safe `#01000000` and white symbols.
 The header reports its measured height to Main, centring the controls on the
@@ -68,10 +68,12 @@ search and tabs at every window width and interface size. Couch keeps its
 3rem search field rather than t3code's compact 40px row. The header and player
 heading reserve the controls' space: 90pt on the Mac; on Windows/Linux, the
 `wco` class follows `navigator.windowControlsOverlay.visible` and its
-`geometrychange` events. Its `--workspace-*` variables read `titlebar-area-*`
-in viewport pixels and divide by the interface scale. The player uses that
-same row height. Empty header space drags the window; a double-click uses
-the OS's maximize/restore behavior. Fullscreen drops the controls' inset.
+`geometrychange` events. The preload supplies its `--workspace-*` variables,
+insets and drag regions, so older remote renderers also clear the overlay
+without matching their Mac-only `[data-window-controls]` rules. The variables
+read `titlebar-area-*` in viewport pixels and divide by the interface scale.
+The player uses that same row height. Empty header space drags the window;
+a double-click uses the OS's maximize/restore behavior. Fullscreen drops the controls' inset.
 Windows/Linux auto-hide the menu bar, as
 [t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts)
 does, keeping its accelerators; the tray keeps working as before. The TV stays
@@ -82,9 +84,9 @@ below the header, so no scrollbar reaches the window controls. Page navigation
 and Back restore that container's position; focus clears its top and footer.
 Scrollbars are 6 physical pixels with transparent tracks, white 8% thumbs and
 12% on hover, as in t3code's dark theme. Windows leaves a 6px right resize
-edge outside the renderer's content. Only this desktop header uses t3code's
-system font stack (Segoe UI on Windows); content keeps Couch's type. macOS,
-the browser and the TV retain their existing chrome and document scrolling.
+edge outside the renderer's content. The header keeps Couch's Inter Tight.
+macOS, the browser and the TV retain their existing chrome and document
+scrolling.
 
 Window icons use PNG on Linux and ICO on Windows, including Couch Preview's
 icon. Windows uses `quest.avoid.couch` as its AppUserModelID, matching the
