@@ -38,7 +38,8 @@ bar for thumb reach.
 - **Set the words whole.** Titles wrap and their type adapts to their length
   rather than ellipsing where there is room: the Stage's and the player's
   titles, Home's rows, tiles and captions. Text truncates only where space is
-  truly scarce (a phone's bar, the line over a video, a breadcrumb), with the
+  truly scarce (a phone's bar, the line over a video, a breadcrumb's long
+  names), with the
   whole text on hover and focus.
 - **Depth means something.** What floats casts a shadow: the bar, an object
   on the Stage, the player's artwork, Up next summoned over the room. Pages,
@@ -141,7 +142,9 @@ The copy sits at the bottom left in the room left of the picture (at most
 46rem, less the picture's width and a gap): the trail, the title at display
 size ([Type](#type)), one muted meta line ending in its links, progress, the
 verbs, the synopsis. Nothing of it lies over the picture. The header is
-see-through while the page is at its top and black once it scrolls.
+see-through while the page is at its top and black once it scrolls; Windows/Linux
+desktop windows keep a black native title-bar strip and scroll below it
+([Shell](design/shell.md#header)).
 
 - **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
   Details page with nothing under its stage fills the window above the bar
@@ -162,7 +165,8 @@ shifted right. Desktop icons use the black tile in
 maskable icon keeps it inside the safe circle. In the app, `CouchMark` sets it
 in the current ink: before the Couch's name in the header (filled while
 connected, hollow while not), before the TV's own name, and on the pairing and
-first-run screens.
+first-run screens, where it stands whole at the right as a Stage's mark would
+([Shell](design/shell.md#first-run-and-pairing)).
 
 ## Tokens
 
@@ -250,9 +254,9 @@ screen alike. Two faces, clearly apart:
   (`.display-title`, weight 680 to 760), page titles and the headings of shelves,
   lists and sections (normal width, semibold). `index.html` preloads its latin
   file.
-- **Inter Tight** (everything else): regular, but for the bar's title
-  (medium); metadata small, muted and tabular. `index.html` preloads its latin
-  file too.
+- **Inter Tight** (everything else, including the desktop header): regular, but
+  for the bar's title (medium); metadata small, muted and tabular. `index.html`
+  preloads its latin file too.
 
 A display title is always Mona Sans at its normal width (100%), so short and
 long titles read in one voice; condensed below about 92% it reads as another,
@@ -372,9 +376,12 @@ Shared building blocks in `src/client/components`:
 
 - `PageHeader`: a page's h1 with an optional back button or breadcrumb and
   actions; `hidden` keeps an `sr-only` h1 where the tab or rail already names
-  the page. `ContentBreadcrumb` is a content page's trail of ancestors.
+  the page. `ContentBreadcrumb` is a content page's real path, up to its
+  parent ([Browse](design/browse.md#breadcrumbs)).
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `Stage`, `StageTitle`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
+- `Onboarding`: first run's and pairing's screen, a Stage without artwork with
+  optional Back and step capsules; `wide` gives settings rows the full width ([Shell](design/shell.md#first-run-and-pairing)).
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
   one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for
@@ -427,6 +434,10 @@ its results hold, as it finds them).
   player's band, so they never cover the artwork at the top. A toast never takes focus:
   Up from the top of the page reaches the newest one's action, and any other
   key returns. The TV ignores pointer hover on them.
+- A refused media request shows its HTTP status. **Try again** requests a fresh
+  stream; a 403 alone does not claim that the video requires age verification or sign-in.
+  YouTube stays loading until its selected formats pass a downloadability check,
+  including after **Try again**.
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again

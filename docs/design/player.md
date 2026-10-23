@@ -86,8 +86,13 @@ band.
 
 - Back, then the title at `text-3xl` semibold (`text-2xl` on phones), up to
   two lines, the whole title on hover. The title opens Details.
-- Under the title, at `text-base`, the relationship links (`MediaContext`). A subtitle that
-  the links already name is not repeated (`mediaSubtitle`).
+- Above the title, the collections holding what plays, after its source
+  ("YouTube › Tiny Desk concerts"), as a Stage's trail
+  ([Browse](browse.md#breadcrumbs)). Beside artwork it leads the copy the same
+  way.
+- Under the title, at `text-base`, the relationship links (`MediaContext`): the
+  creator, and a show's station. A subtitle that the links or the trail already
+  name is not repeated (`mediaSubtitle`).
 - At the right, small: the end time ("ends 21:42"), Stop sharing while this
   device shares, and the clock on the TV.
 - The top line publishes `--player-top`. Toasts and Up next stay below it.
@@ -279,14 +284,24 @@ card and Netflix's Next Episode.
 
 On desktop and phones, the player opens focused on its picture
 (`data-player-surface`, `tabindex="-1"`, "Player: {title}"), so keys are
-shortcuts at once ([Shell](shell.md#keyboard)).
+shortcuts at once, as on YouTube ([Shell](shell.md#keyboard)): ← and → seek,
+↑ and ↓ change the volume, Space or K plays or pauses, J and L skip, F fills
+the screen and M mutes. However it opens (the now-playing bar, Play on a page,
+a picture that starts), the page's focus recovery leaves it to the picture.
 
 - A key shows the controls and leaves focus where it is.
 - A click on video plays or pauses. On audio it does nothing.
 - A double-click toggles fullscreen.
-- A pointer click in the band returns focus to the picture, unless the click
-  opened something.
-- Tab enters the controls.
+- A pointer click in the band returns focus to the picture. What it opened (a
+  Popover, Up next) returns focus to the picture when it closes, and so does
+  Back from Details opened from the gear's menu.
+- A control the pointer left focused hands focus to the picture as the bands
+  hide, so the keys never land on the page behind them.
+- Tab enters the controls, with the focused control inverted. A control the
+  keyboard focused keeps Enter, Space and the arrows (Space and the arrows act
+  once: the shortcuts leave a focused control alone), and what the keyboard
+  opened returns focus to its control.
+- The TV keeps its own: the remote's first key enters the controls.
 - On phones, a tap shows or hides the controls.
 
 ### Back on desktop and phones

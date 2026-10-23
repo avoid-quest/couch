@@ -31,6 +31,8 @@ export type CouchApp = {
   completeLocalSetup(): Promise<AppMode>;
   connection(): Promise<ConnectionInfo>;
   interfaceSize(size?: InterfaceSize): Promise<InterfaceSize>;
+  /** Fits Windows/Linux native controls to the rendered header. Older apps lack it. */
+  titleBarHeight?(height: number): Promise<void>;
   onAddresses(listener: (urls: string[]) => void): () => void;
   /** Closing hides the window, which keeps hosting and playing; the page ends its sharing. Older apps lack it. */
   onWindowClosed?(listener: () => void): () => void;

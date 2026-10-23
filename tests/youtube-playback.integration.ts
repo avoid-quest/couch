@@ -1,6 +1,7 @@
 // Run with Node (Bun bundles the TS):
 // bun build tests/youtube-playback.integration.ts --target=node --outfile=build/youtube-playback.integration.mjs
 // COUCH_TEST_YT_DLP=/absolute/path/to/yt-dlp node --test build/youtube-playback.integration.mjs
+// Use the executable from yt-dlp's platform zip, as Couch's helper manager does.
 // The real format-selection cases explicitly skip without that optional executable.
 // Helper discovery is stubbed; selection uses real yt-dlp --load-info-json, with no website requests.
 import assert from "node:assert/strict";
@@ -12,6 +13,8 @@ import { syncBuiltinESMExports } from "node:module";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
+import { createPublicMediaProxy } from "../src/server/public-media-proxy";
 import type { VideoQuality } from "../src/shared/protocol";
 
 type Format = Record<string, unknown>;
@@ -30,6 +33,7 @@ test("YouTube playback selection and safe extraction errors", async t => {
   const spawn = cp.spawn, execFile = cp.execFile, lookup = dns.lookup;
   let stderr: string | undefined;
   let extractions = 0, lookups = 0;
+  let downloadProxy: string | undefined;
   const children: ReturnType<typeof cp.spawn>[] = [];
   const probes = new Map<string, string>();
   for (const [name, version] of [["yt-dlp", "2026.10.21"], ["qjs", "0.17.0"], ["ffmpeg", "ffmpeg version 9.0.2"]]) {
@@ -57,9 +61,14 @@ test("YouTube playback selection and safe extraction errors", async t => {
     if (stderr !== undefined) child = spawn(process.execPath, ["-e", `process.stderr.write(${JSON.stringify(stderr)}); process.exitCode = 1;`], options);
     else {
       assert.ok(executable, "COUCH_TEST_YT_DLP is required for real selection");
+      const host = new URL(args.at(-1)!).hostname;
+      assert.equal(args.includes("--check-formats"), host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"), "downloadability checks apply only to YouTube");
       extractions++;
-      // Keep production flags and the proxy; replace only the website extraction input.
-      child = spawn(executable, [...args.slice(0, args.indexOf("--")), "--load-info-json", fixture], options);
+      // Sorting fixtures have no media server. The downloadability cases below keep
+      // the production check and use the real proxy with its controlled local fixture.
+      const selection = args.slice(0, args.indexOf("--")).filter(arg => downloadProxy || arg !== "--check-formats");
+      if (downloadProxy) selection[selection.indexOf("--proxy") + 1] = downloadProxy;
+      child = spawn(executable, [...selection, "--load-info-json", fixture], options);
     }
     children.push(child);
     return child;
@@ -149,6 +158,45 @@ test("YouTube playback selection and safe extraction errors", async t => {
   await t.test("non-YouTube selection keeps its existing height cap and codecs", real, async () => {
     const media = await select([video("small", 240, 426, "vp9"), video("large", 480, 854, "vp9"), opus], "480p", false, "https://www.dailymotion.com/video/fixture");
     assert.equal(new URL(media.source).pathname, "/small.mp4");
+  });
+  await t.test("YouTube skips a refused advertised format and rejects an entirely refused selection", real, async () => {
+    const contacts: string[] = [];
+    let stalled = false;
+    const upstream = createServer((request, response) => {
+      contacts.push(request.url!);
+      if (stalled) return;
+      if (request.url === "/refused.mp4") { response.writeHead(403); response.end(); }
+      else { response.writeHead(200, { "Content-Length": "1024" }); response.end(Buffer.alloc(1024)); }
+    });
+    await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve));
+    const port = (upstream.address() as import("node:net").AddressInfo).port;
+    const proxy = await createPublicMediaProxy(new AbortController().signal, undefined, async hostname => {
+      assert.equal(hostname, "media.example");
+      return [{ address: "127.0.0.1", family: 4 }];
+    });
+    downloadProxy = proxy.url;
+    const address = (path: string) => ({ url: `http://media.example:${port}/${path}`, protocol: "http" });
+    const refused = video("refused", 1920, 1080, "avc1.640028", address("refused.mp4"));
+    const available = video("available", 1280, 720, "avc1.640028", address("available.mp4"));
+    const audio = { ...aac, ...address("aac.m4a") };
+    try {
+      const media = await select([refused, available, audio]);
+      assert.equal(new URL(media.source).pathname, "/available.mp4");
+      assert.ok(contacts.includes("/refused.mp4"));
+      assert.ok(contacts.includes("/available.mp4"));
+      await noFormat(select([refused, audio]));
+      const checked = contacts.length;
+      stalled = true;
+      const started = performance.now();
+      await assert.rejects(createWebMediaResolver({ timeoutMs: 2000 })("https://www.youtube.com/watch?v=fixture"), error => error instanceof ExtractionError && error.message === "The website took too long to respond. Try again.");
+      assert.ok(contacts.length > checked, "the deadline interrupted an actual format check");
+      assert.ok(performance.now() - started < 5000, "format checks remain inside the extraction deadline");
+      assert.equal(children.at(-1)!.killed, true, "the deadline kills the stalled extractor");
+    } finally {
+      downloadProxy = undefined;
+      await proxy.close();
+      await new Promise<void>(resolve => upstream.close(() => resolve()));
+    }
   });
   for (const [upstream, expected] of [
     ["This live stream recording is not available.", "This video is unavailable or was removed."],
