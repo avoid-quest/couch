@@ -165,7 +165,9 @@ the app) and never travels through Remote.
 
 `/saved`, one section per `?tab=`: For later, Channels & stations (saved
 channels, playlists, albums and series, then favourite stations), Lists and
-Played (History, newest first). A rail on wide screens (white ink on a
+Played (History, newest first). A saved YouTube channel's Play, Play on and
+Queue read its Videos section, with the same 500-video limit as other lists.
+A rail on wide screens (white ink on a
 `secondary` capsule for the current entry; a pointer only brings another
 entry's ink up; no heading; counts only when not zero) and a Select on phones
 choose the section; the rail names the page. Without a `?tab=`, Saved opens the
