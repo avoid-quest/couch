@@ -508,7 +508,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Remote](design/remote.md): the Remote section and Type on TV.
 - [Settings](design/settings.md): its pages and section nav.
 
-`apps/web` (the couch.avoid.quest site) keeps its own pages.
+`apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
+words follow [the website notes](product/website.md) and [voice](product/voice.md).
 
 ## Changing a surface
 

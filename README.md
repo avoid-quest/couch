@@ -1,35 +1,55 @@
 # couch.avoid.quest
 
-Streams and radio on one screen. Every phone is a remote.
+A media player everyone shares.
 
-Couch is a shared media player for the living room, part of **avoid.quest**.
-Run it on the computer connected to your TV, or on your own Mac or PC. Pair
-phones and laptops as remotes and build one queue together.
+Run Couch on the computer by the TV. Everyone else joins from their phone or
+laptop by scanning a QR code: no app to install, no account. Together you
+choose what plays, which devices play it, and whose screen or sound to share.
+Couch is free and open source, one of the projects of
+[avoid.quest](https://avoid.quest). Forks and contributions are welcome.
 
-Couch runs as one Electron app where every client is a full Device.
+## What you can do
 
-## Take a seat
+- **Choose together.** Search YouTube, Twitch, RaiPlay, Bandcamp and
+  SoundCloud, browse film, series and anime catalogues, play radio (avoid
+  radio, M3U playlists, Radio Browser) or Live TV playlists with a guide, or
+  paste a link from another site yt-dlp supports.
+  Everything goes into one shared Up next; save lists for later and resume
+  where you left off.
+- **Play it where you want.** In **Where it plays**, give the picture to the TV
+  and the sound to the kitchen laptop, or to several phones at once; their
+  sound plays in sync with each other. A device lends its screen or speakers only if it allows
+  it.
+- **Share live.** Send a screen, a window, this computer's sound or an audio
+  input to other devices. Each plays it as soon as it arrives, so they may be
+  slightly apart; turn on **In sync** to have them play together, a few seconds
+  behind the device that's sharing.
+- **Keep it running.** An admin looks after the Couch from their phone:
+  pairing, sources, sound outputs and updates, including updating a TV.
 
-- **Pick something online.** Browse YouTube, Twitch, RaiPlay,
-  StreamingCommunity, [123MoviesFree](docs/123moviesfree.md),
-  [AnimeSaturn](docs/animesaturn.md) or [AnimeUnity](docs/animeunity.md), open Bandcamp
-  albums and tracks, or play other website links through yt-dlp. Automatic
-  quality is up to 1080p.
-- **Tune in.** Add avoid radio in one click, import a radio M3U playlist, find
-  stations through Radio Browser, or add IPTV playlists with an XMLTV guide.
-- **Share the controls.** Scan the pairing QR or enter its six-digit code.
-  Everyone can browse independently, add to the shared queue, and control
-  playback.
-- **Come back later.** Save playlists and items for later, and resume where you
-  left off.
+Not every source plays everywhere: see
+[what plays where](docs/usage.md#what-plays-where). Local files, media folders
+and Jellyfin were removed.
 
-**This computer** hosts Couch in the app; **Another Couch** shows a paired host's
-own page in the app window. Browser remotes connect on your local network.
+## Coming soon: live sound
+
+A mixer plugged into the Couch computer, and everyone at the gig
+listening on their own phone or headphones, close to live and in step. Couch
+can already send a sound card's input to other devices, but you choose between fast
+and in sync a few seconds behind; doing both at once is lab work today, not in
+a release. Read
+the [vision](docs/product/vision.md) and its
+[experience specs](docs/product/specs/).
 
 ## Install
 
-Download the macOS `.dmg`, Windows `.exe`, or Linux `.AppImage` / `.deb` from
-[Releases](https://github.com/avoid-quest/couch/releases).
+Couch is in preview. Download it from
+[couch.avoid.quest/download](https://couch.avoid.quest/download) or
+[Releases](https://github.com/avoid-quest/couch/releases): the `.dmg` for
+Apple Silicon Macs (macOS 14+), the `.exe` for Windows 11, or the `.AppImage`
+or `.deb` for Linux (x86_64). It updates itself. Phones and laptops that only
+join don't install anything.
+
 See the [installation notes](docs/usage.md#install) for macOS's first-launch
 command and Windows's SmartScreen prompt.
 
@@ -40,7 +60,8 @@ installed alternative satisfies the dependency without requiring both sound
 servers. AppImage users must provide these packages and `libgbm1` themselves. Check
 `pactl info` in the desktop user's session before playing. ALSA drivers alone
 do not provide Couch's sound controls. FFmpeg is downloaded separately by
-Couch when a suitable copy is not already installed.
+Couch when a suitable copy is not already installed. To make a Debian computer
+a dedicated TV, see the [download page](https://couch.avoid.quest/download).
 
 ## Develop
 
@@ -73,16 +94,24 @@ Environment overrides use the `COUCH_` prefix, including `COUCH_PORT` and
 data in the platform data directory under the `quest.avoid.couch` identity, as
 the Tauri app did. Development uses `.data/`.
 
-## Website
+## Contribute
 
-`apps/web` is an Astro workspace using the existing UI styles. Run
-`bun run web:dev`; `bun run web:build` builds it and `bun run web:deploy`
-publishes it to Cloudflare Workers at `couch.avoid.quest`. The download page
-finds the newest release and preview on
-[this repository's releases](https://github.com/avoid-quest/couch/releases) through
-GitHub's API, with `apps/web/src/releases.json` as fallback.
+Fork it, open an issue, or send a pull request. Read
+[usage and development](docs/usage.md) to run it and
+[architecture](docs/architecture.md) to find your way around; the
+[product docs](docs/product/vision.md) say what Couch is for and
+[voice](docs/product/voice.md) how to write about it. PR titles are plain
+sentences because they become the release notes ([checks and releases](docs/ci.md)).
+
+Couch is released under the [MIT licence](LICENSE). Couch's patch to UxPlay
+(`native/airplay/`) is GPL-3.0-or-later, like UxPlay itself, and each package
+comes with its dependencies' notices.
+
+## Docs
 
 - [Usage and development](docs/usage.md)
+- [Share a live device](docs/live-inputs.md)
 - [Checks and releases](docs/ci.md)
 - [Current architecture](docs/architecture.md)
 - [Design system](docs/design.md)
+- [Product: vision, positioning, voice and what we can claim](docs/product/vision.md)

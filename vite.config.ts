@@ -44,7 +44,7 @@ export default defineConfig(({ command }) => ({
       manifest: {
         name: "Couch",
         short_name: "Couch",
-        description: "Shared media player for your TV, controlled from any phone",
+        description: "A media player everyone shares",
         theme_color: "#000000",
         background_color: "#000000",
         display: "standalone",

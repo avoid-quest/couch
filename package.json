@@ -3,7 +3,7 @@
   "productName": "Couch",
   "identifier": "quest.avoid.couch",
   "version": "0.4.0",
-  "description": "Shared media player for your TV, controlled from any phone",
+  "description": "A media player everyone shares",
   "homepage": "https://couch.avoid.quest",
   "license": "MIT",
   "author": {
@@ -133,7 +133,7 @@
       "icon": "packaging/icons/icon.png",
       "executableName": "couch",
       "category": "AudioVideo",
-      "synopsis": "Shared media player for your TV"
+      "synopsis": "A media player everyone shares"
     },
     "deb": {
       "artifactName": "${name}_${version}_${arch}.${ext}",
