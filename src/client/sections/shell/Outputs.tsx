@@ -12,6 +12,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FilterInput } from "@/components/ContentFilters";
 import { RangeControl } from "@/components/RangeControl";
+import { CompressorControls } from "@/components/CompressorControls";
 import { PlaybackVolume, toolPanel } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
 import { Level } from "@/components/Level";
@@ -109,6 +110,10 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
   // One device sounding: the Volume above is its level, so its row doesn't repeat the fader.
   const sole = soleSound(rows);
   const sounds = sounding(state, connected);
+  const canCompress = !state.outputs?.length || state.outputs.some(output => {
+    const sharing = state.devices?.find(device => device.id === output.deviceId)?.sharing;
+    return output.deviceId === deviceId() || (!output.picture || sharing?.video) && (!output.sound || sharing?.audio);
+  });
   const row = (item: Row) => tv ? tvRow({ row: item, run, playing: sounds }) : deviceRow({ row: item, run, fader: item.device.id !== sole, playing: sounds });
   return <>
     {/* The first line, and with the counts and search, what stays put while a long list scrolls: in a Sheet it sticks
@@ -129,6 +134,8 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
     </div>
     {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}
     <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3">
+      {state.compressor && state.player.playbackId && <CompressorControls key={state.playback} settings={state.compressor} playbackId={state.player.playbackId} run={run}
+        unavailable={!connected ? "Reconnect to change the compressor." : !canCompress ? "This playback is private." : state.queue.find(entry => entry.id === state.currentEntryId)?.liveSourceId ? "Unavailable for live sharing." : undefined} />}
       {playing.length > 0 && <ul aria-label="Playing" className="grid">{playing.map(row)}</ul>}
       {rest.length > 0 && <ul aria-label="Not playing" className={cn("grid", playing.length > 0 && "mt-2 border-t pt-2")}>{rest.map(row)}</ul>}
       {offline.length > 0 && <p className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">Offline: {offlineNames(offline)}</p>}

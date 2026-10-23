@@ -4,6 +4,8 @@ import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../sha
 import { soundClock } from "./sendspin";
 import { localDeviceName } from "./device-id";
 import { bufferedEnd, setBuffered } from "./buffered";
+import { createCompressor } from "./compressor";
+import type { CompressorSettings } from "../../shared/compressor";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
 // itself. URLs play in <video>; YouTube's separate audio in an <audio> that follows the
@@ -11,10 +13,15 @@ import { bufferedEnd, setBuffered } from "./buffered";
 // cross-origin HLS stays native first because its segments may not allow CORS;
 // raw MPEG-TS through mpegts.js (#644 ticket 1). A picture of a synced Playback plays muted and
 // follows the Sendspin clock instead of Core's transport commands (ticket 11).
-const video = document.createElement("video");
-const audio = document.createElement("audio");
-video.playsInline = true;
-video.style.cssText = "width: 100%; height: 100%; object-fit: contain";
+const createVideo = () => {
+  const element = document.createElement("video");
+  element.playsInline = true;
+  element.style.cssText = "width: 100%; height: 100%; object-fit: contain";
+  return element;
+};
+let video = createVideo();
+let audio = document.createElement("audio");
+let processing: { context: AudioContext; graph: ReturnType<typeof createCompressor>; source: MediaElementAudioSourceNode } | null = null;
 const holder = document.createElement("div");
 holder.hidden = true;
 holder.append(video, audio);
@@ -91,6 +98,7 @@ export function waitForTap(unlock: (() => void) | null) {
 // A browser that wants a gesture before sound plays the picture muted and asks for a tap.
 const start = (element: HTMLMediaElement) => {
   const id = playbackId, source = loading, stream = mediaStream;
+  resumeCompression();
   return element.play().catch((error: unknown) => {
     if (playbackId !== id || loading !== source || mediaStream !== stream || !(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
     setBlocked(true);
@@ -118,27 +126,34 @@ const unsupported = () => fail(`${localDeviceName() ?? "This device"} can't play
 const sourceFailed = () => fail(video.error?.message || "This media couldn't load. The source may be unavailable or unsupported.");
 // Pass-through says whether a source is HLS; without it, the path does.
 const isPlaylist = (command: NonNullable<typeof loading>) => !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
-for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "waiting", "seeked", "ended", "ratechange", "resize"]) {
-  video.addEventListener(event, () => {
-    // Following the clock nudges the rate many times a second; Core doesn't need to hear each one.
-    if (event === "ratechange" && following) return;
-    if (event === "waiting" || event === "playing") stalled = event === "waiting";
-    if (event !== "durationchange" && event !== "resize") follow(event !== "ratechange");
-    send();
-  });
-}
-video.addEventListener("canplay", () => { ready = true; send(); });
 // The timeline's loaded segment, only for media that seeks: not a capture, raw MPEG-TS or a live stream.
 const buffered = () => { const end = playbackId && Number.isFinite(video.duration) && !mpegts && !mediaStream ? bufferedEnd(video.buffered, video.currentTime) : null; setBuffered(end === null ? null : { playbackId: playbackId!, end }); };
-for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"]) video.addEventListener(event, buffered);
-video.addEventListener("timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
-video.addEventListener("error", () => {
-  if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
-  else if (isPlaylist(loading)) void playlist(loading, false);
-  else sourceFailed();
-});
-audio.addEventListener("error", () => fail(audio.error?.message || "This media couldn't play here."));
-video.textTracks.addEventListener("change", send);
+let mediaEvents = new AbortController();
+const observeElements = () => {
+  const on = (element: EventTarget, event: string, listener: () => void) => element.addEventListener(event, listener, { signal: mediaEvents.signal });
+  for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "waiting", "seeked", "ended", "ratechange", "resize"]) {
+    on(video, event, () => {
+      // Following the clock nudges the rate many times a second; Core doesn't need to hear each one.
+      if (event === "ratechange" && following) return;
+      if (event === "waiting" || event === "playing") stalled = event === "waiting";
+      if (event === "pause" || event === "ended") suspendCompression();
+      else if (event === "playing") resumeCompression();
+      if (event !== "durationchange" && event !== "resize") follow(event !== "ratechange");
+      send();
+    });
+  }
+  on(video, "canplay", () => { ready = true; send(); });
+  for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"]) on(video, event, buffered);
+  on(video, "timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
+  on(video, "error", () => {
+    if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
+    else if (isPlaylist(loading)) void playlist(loading, false);
+    else sourceFailed();
+  });
+  on(audio, "error", () => fail(audio.error?.message || "This media couldn't play here."));
+  on(video.textTracks, "change", send);
+};
+observeElements();
 
 // iOS ignores a media element's volume (it always reads 1), so there 0 mutes it.
 const fixedVolume = (() => { video.volume = 0.5; const fixed = video.volume !== 0.5; video.volume = 1; return fixed; })();
@@ -146,7 +161,42 @@ const apply = () => {
   const silent = fixedVolume && volume === 0;
   video.muted = split() || blocked || !!following || silent;
   audio.muted = !!following || silent;
-  video.volume = audio.volume = volume;
+  video.volume = audio.volume = processing ? 1 : volume;
+  processing?.graph.volume(blocked || following ? 0 : volume);
+};
+// Creating a graph is opt-in; disabled playback retains the ordinary decoder/output path.
+const resumeCompression = () => {
+  const current = processing;
+  if (!current || following || current.context.state === "running") return;
+  void current.context.resume().then(() => {
+    if (processing !== current) return;
+    setBlocked(false); apply(); follow();
+  }, () => { if (processing === current) setBlocked(true); });
+  setTimeout(() => { if (processing === current && current.context.state === "suspended" && !following && !video.paused) setBlocked(true); }, 500);
+};
+const suspendCompression = () => {
+  const current = processing;
+  if (!current) return;
+  void current.context.suspend().then(() => {
+    // Resume can arrive before suspension finishes.
+    if (processing === current && !following && !video.paused && !video.ended) resumeCompression();
+  }, () => {});
+};
+const prepareCompression = (settings: CompressorSettings) => {
+  if (mediaStream || loading?.liveSourceId || following) return;
+  if (!processing && settings.enabled) {
+    let context: AudioContext | undefined;
+    try {
+      context = new AudioContext();
+      const graph = createCompressor(context, settings);
+      const source = context.createMediaElementSource(loading?.audioSource ? audio : video);
+      source.connect(graph.input); graph.output.connect(context.destination);
+      processing = { context, graph, source };
+    } catch { void context?.close().catch(() => {}); fail("This browser couldn't start the compressor. Turn it off and try again."); return; }
+  }
+  processing?.graph.set(settings);
+  if (!video.paused) resumeCompression();
+  else if (ready || loading?.paused) suspendCompression();
 };
 // The sound's clock on this video's timeline: a live clock is the source's timestamps (#643's
 // RaiPlay stall), which hls.js maps to its own timeline. mpegts.js hides them, so a channel's
@@ -161,6 +211,8 @@ const setFollow = (follow: Follow | null) => {
   unfollow?.();
   unfollow = null;
   following = follow;
+  if (follow) suspendCompression();
+  else if (loading?.compressor) prepareCompression(loading.compressor);
   apply();
   if (!follow) { video.playbackRate = video.defaultPlaybackRate; return; }
   const current = playbackId;
@@ -232,8 +284,22 @@ const reset = () => {
   failure = null;
   subtitleDelay = 0;
   setBlocked(false);
+  if (processing) mediaEvents.abort();
   for (const track of video.querySelectorAll("track")) track.remove();
   for (const element of [video, audio]) { element.srcObject = null; element.removeAttribute("src"); element.load(); }
+  if (processing) {
+    processing.source.disconnect();
+    processing.graph.close();
+    void processing.context.close().catch(() => {});
+    processing = null;
+    // A media-element source cannot be detached back to native output. Replace the elements so
+    // the next Direct load, especially WebRTC, has no Web Audio graph or CORS requirement.
+    const nextVideo = createVideo(), nextAudio = document.createElement("audio");
+    video.replaceWith(nextVideo); audio.replaceWith(nextAudio);
+    video = nextVideo; audio = nextAudio;
+    mediaEvents = new AbortController();
+    observeElements();
+  }
   apply();
 };
 
@@ -291,6 +357,7 @@ export function play(command: PlaybackCommand) {
       reset();
       playbackId = command.playbackId;
       loading = command;
+      if (command.compressor && !command.follow && !command.liveSourceId) prepareCompression(command.compressor);
       if (command.follow) setFollow(command.follow);
       apply();
       if (command.mpegts) { void transportStream(command); break; }
@@ -300,7 +367,7 @@ export function play(command: PlaybackCommand) {
       for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
         if (!source) continue;
         // The app allows googlevideo in CORS mode (app/main.ts); browsers fetch it without CORS.
-        element.crossOrigin = window.couchApp && new URL(source).hostname.endsWith(".googlevideo.com") ? "anonymous" : null;
+        element.crossOrigin = command.compressor?.enabled && !command.liveSourceId || window.couchApp && new URL(source).hostname.endsWith(".googlevideo.com") ? "anonymous" : null;
         if (element !== video || !useHls) element.src = source;
       }
       apply();
@@ -315,12 +382,20 @@ export function play(command: PlaybackCommand) {
       if (!useHls && !command.paused && !following) void start(video);
       break;
     case "follow":
+      if (loading && command.compressor) loading.compressor = command.compressor;
       setFollow(command.follow);
       // A live clock needs hls.js's timestamps; a picture playing natively switches to it.
       if (loading && !hls && !mpegts && mapsTimestamps({ ...loading, follow: command.follow ?? undefined })) {
         for (const element of [video, audio]) { element.removeAttribute("src"); element.load(); }
         ready = false;
         void playlist(loading);
+      }
+      break;
+    case "compressor":
+      if (!mediaStream && loading && !loading.liveSourceId) {
+        loading.compressor = command.settings;
+        prepareCompression(command.settings);
+        apply();
       }
       break;
     case "addSubtitle": addTrack(command.source, command.title, command.language, true); break;
@@ -371,6 +446,7 @@ export function onBlocked(listener: (blocked: boolean) => void) {
   return () => { blockedListeners.delete(listener); };
 }
 export function hear() {
+  resumeCompression();
   unlockSound?.();
   unlockSound = null;
   setBlocked(false);

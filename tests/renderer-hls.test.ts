@@ -283,3 +283,11 @@ test("an asynchronous HLS load cannot replace or fail a newer ordinary load", ()
   assert.equal(reports.at(-1).playbackId, "new");
   assert.equal(reports.at(-1).error, null);
 `));
+
+test("compressor settings received while HLS imports do not discard the current load", () => check(`
+  load();
+  play({ type: "compressor", playbackId: "playback", settings: { enabled: false, threshold: -24, ratio: 4, attack: 10, release: 250, knee: 9, gain: 0 } });
+  await flush();
+  assert.equal(decoders.length, 1);
+  assert.equal(decoders[0].media, video);
+`));

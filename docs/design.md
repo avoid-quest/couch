@@ -14,6 +14,10 @@ one serves, and **Where it plays**, a Playback's Devices with their picture and
 sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
+The mixer's **Compressor** belongs to the Playback and runs before device volume.
+It is off by default. **Advanced** opens six draft controls with Apply and Reset
+to default; see [Where it plays](design/where-it-plays.md#compressor).
+
 **One layout.** The TV's layout is Couch's layout on every screen, rendered as
 one component tree. Screens differ only where input demands it (a pointer,
 touch reach, typing, the window), through the `tv:` and `touch:` variants and,

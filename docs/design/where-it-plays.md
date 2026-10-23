@@ -32,6 +32,7 @@ a Sheet's first line sticks on the Sheet's ground. Its Sheet is unchanged
 ```
 [mute] ──────────────●──  72
 Picture 1, Sound 2
+Compressor                  Advanced  ○
 Living room TV      ▣  ♪  ───●───  40  …
 Francesco's phone   ▢  ♪  ──────●  60  …
 This device
@@ -46,6 +47,8 @@ Offline: Garden, Anna's tablet
 - **[In sync](#in-sync)** where it applies.
 - **Counts:** one muted line, zeros left out: Picture n, Sound n, In sync n,
   Behind n, Can't play n, Offline n, from what Core already sends.
+- **Compressor:** the Playback's switch and Advanced disclosure, before its
+  device rows, in the scrollable part of the panel.
 - **Rows:** the devices playing this, then the rest after a plain hairline.
   Offline devices outside the Playback fold into one muted line that names
   each once, counting devices that share a name ("Offline: A, Living room
@@ -182,3 +185,44 @@ server's own outputs when the previous mix is gone, or this device when
 those are offline. Ordinary Play keeps the mix; Where it plays and explicit
 Play on choose where it plays. Core decides this
 (`tests/server-selection.integration.ts`).
+
+## Compressor
+
+One **Compressor** switch, off by default, applies to ordinary media in this
+Playback. It stays with the queue across restarts and output changes. It works
+on a single Direct device, including Couch's Electron TV, and on In sync
+sound. Device volume/mute remain after compression. Independent Playbacks keep
+independent settings. Live Share and WebRTC are excluded, including buffered
+live sharing; their switch is disabled with a reason. Disconnected controllers
+and private Playbacks also show a disabled control. A playback error leaves
+the switch available so disabling compression can retry the item.
+
+**Advanced** is a flat shadcn Collapsible: Threshold (dB), Ratio (:1), Attack
+(ms), Release (ms), Knee (dB), and Output gain (dB), each with a slider and
+numeric input. Opening it sends nothing. Edits remain drafts until **Apply**
+sends one patch; **Reset to default** fills the draft without changing the
+switch. Invalid values disable Apply. A pending command disables edits, and a
+failed command preserves the draft and shows an inline error. Closing the
+mixer discards unapplied drafts. The TV remote can adjust sliders with
+Left/Right and move between rows with Up/Down.
+
+Defaults: −18 dB threshold, 3:1 ratio, 10 ms attack, 250 ms release, 9 dB knee,
+0 dB output gain. This reduces dynamic range; it is not automatic loudness
+normalization or a peak limiter. Browser automatic makeup cannot be disabled,
+so Output gain trims its result. Browser and server compressors sound different
+at identical settings.
+
+Direct uses Web Audio without joining Sendspin. Enabling it for the first time
+reloads the source at its current position/pause state with CORS-readable
+URLs. A source that doesn't permit CORS uses Couch's signed byte relay, without
+transcoding or Sendspin buffering. Further edits crossfade in the existing
+graph. Turning it off crossfades to an aligned dry path, then disconnects the
+compressor; enabling it disconnects the unused dry path after the crossfade.
+Paused or ended playback suspends the audio context, and the next load with
+compression off needs no audio graph. In sync changes clear buffered audio and restart
+its existing FFmpeg at the current position (a brief rebuffer); Apply batches
+edits to avoid restarting on every slider movement. mpv replaces its named
+lavfi filter. There is no continuously polled meter.
+
+[Research and implementation notes](../master-compressor-research.md) describe
+the DSP, browser constraints and [performance measurements](../master-compressor-performance.md).
