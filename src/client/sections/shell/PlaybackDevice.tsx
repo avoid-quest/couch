@@ -124,9 +124,10 @@ function DeviceForm() {
   const [names] = useState(targetNames);
   // The shell isn't mounted before a mode is chosen, so the chooser brings the TV remote's arrow keys itself (#644 ticket 12).
   useNavigation(() => {});
-  const selectRemote = async (confirmed = false) => {
-    try { await device.choose("remote", address, confirmed); }
-    catch (reason) { if (message(reason).startsWith("confirmation-required:")) setConfirm(message(reason).split(":")[1]!); }
+  // A known Couch that needs confirmation puts its address in the field, beside Stop and switch.
+  const selectRemote = async (target: string, confirmed = false) => {
+    try { await device.choose("remote", target, confirmed); }
+    catch (reason) { if (message(reason).startsWith("confirmation-required:")) { setAddress(target); setConfirm(message(reason).split(":")[1]!); } }
   };
   return <div className="grid w-full gap-10">
     <div className="grid justify-items-start gap-3">
@@ -139,11 +140,11 @@ function DeviceForm() {
     <div className="grid w-full">
       {!!device.targets.length && <ul className="grid divide-y border-b">{device.targets.map(target => <li key={target} className="flex items-center gap-2 py-3">
         <span className="grid min-w-0 flex-1 gap-0.5"><span className="text-body break-words">{names[target] || hostOf(target)}</span>{names[target] && <span className="text-meta text-muted-foreground break-all">{hostOf(target)}</span>}</span>
-        <Button variant="outline" disabled={device.pending} onClick={() => void device.choose("remote", target)}>Connect</Button>
+        <Button variant="outline" disabled={device.pending} onClick={() => void selectRemote(target)}>Connect</Button>
         <Button variant="ghost" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button>
       </li>)}</ul>}
-      <AnotherCouchForm className="border-b-0 pt-4 @2xl:grid-cols-1 [&_[data-slot=field-label]]:text-title [&_[data-slot=field-label]]:font-medium" description="Join a Couch that runs on another computer; this one still plays. Its address is in that Couch's Settings, under Devices & network." address={address} onAddressChange={value => { setAddress(value); setConfirm(null); }} onConnect={() => void selectRemote()} pending={device.pending}>
-        {confirm && <div className="grid w-full gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
+      <AnotherCouchForm className="border-b-0 pt-4 @2xl:grid-cols-1 [&_[data-slot=field-label]]:text-title [&_[data-slot=field-label]]:font-medium" description="Join a Couch that runs on another computer; this one still plays. Its address is in that Couch's Settings, under Devices & network." address={address} onAddressChange={value => { setAddress(value); setConfirm(null); }} onConnect={() => void selectRemote(address)} pending={device.pending}>
+        {confirm && <div className="grid w-full gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(address, true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
       </AnotherCouchForm>
     </div>
     <ForgetCouchDialog name={forgetting && (names[forgetting] || hostOf(forgetting))} pending={device.pending} error={device.error} onClose={() => setForgetting(null)} onForget={() => !!forgetting && device.forget(forgetting)}
@@ -250,29 +251,30 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   const error = saveName.error ?? sharing.error ?? finish.error;
   const failure = error && <Alert variant="destructive"><AlertDescription>{message(error)}</AlertDescription></Alert>;
   const shown = savedName ?? placeholder;
-  if (step === "name") return <Onboarding key={step} back={{ label: "Back", onClick: device!.chooseAgain }} step={{ current: 1, total: 3 }} title="Name this computer" description="Phones and TVs show this name when you choose where to play." data-tv-navigation-scope>
+  if (step === "name") return <Onboarding key={step} back={{ label: "Back", onClick: device!.chooseAgain, disabled: busy }} step={{ current: 1, total: 3 }} title="Name this computer" description="Phones and TVs show this name when you choose where to play." data-tv-navigation-scope>
     <form className="grid w-full gap-6" onSubmit={event => { event.preventDefault(); if (!busy) saveName.mutate(); }}>
       <Field><FieldLabel htmlFor="host-name" className="sr-only">Name</FieldLabel><Input id="host-name" autoFocus className="h-field text-title" autoComplete="off" maxLength={60} placeholder={shown} value={name ?? savedName ?? ""} onChange={event => setName(event.target.value)} disabled={busy} /></Field>
       {failure}
       <Button size="lg" className="justify-self-start" disabled={busy}>Continue</Button>
     </form>
   </Onboarding>;
-  if (step === "share") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name") }} step={{ current: 2, total: 3 }} title="Share it on your network?" description={<>
+  if (step === "share") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name"), disabled: busy }} step={{ current: 2, total: 3 }} title="Share it on your network?" description={<>
     <p>Phones, TVs, browsers and other computers on your network can then pair with {shown}, play on it and join as speakers. Only devices you pair get in.</p>
     <p>Not sharing keeps Couch to this computer. Change it later in Settings, under Devices & network.</p>
   </>} data-tv-navigation-scope>
     {failure}
     <div className="flex flex-wrap gap-2"><Button autoFocus size="lg" disabled={busy} onClick={() => sharing.mutate(true)}>Share</Button><Button size="lg" variant="ghost" disabled={busy} onClick={() => sharing.mutate(false)}>Keep it to this computer</Button></div>
   </Onboarding>;
-  if (step === "network") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name") }} step={{ current: 2, total: 3 }} title="How do devices connect?"
+  if (step === "network") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name"), disabled: busy }} step={{ current: 2, total: 3 }} title="How do devices connect?"
     description={<p>Change any of these later in Settings, under Devices & network.</p>} wide data-tv-navigation-scope>
     {credentials && <div className="grid gap-10"><NetworkSettings credentials={credentials} connected={connected} urls={host?.urls ?? [credentials.origin]} remoteControlEnabled={remoteControlEnabled}
       managedLan={details?.lanError !== undefined} lanError={details?.lanError} device={scope.device} couch={scope.couch} host administrator /></div>}
     {failure}
     <Button size="lg" className="justify-self-start" disabled={busy} onClick={() => remoteControlEnabled ? setStep("join") : finish.mutate()}>{remoteControlEnabled ? "Continue" : "Done"}</Button>
   </Onboarding>;
-  const url = host?.urls[0];
-  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep(device?.advanced ? "network" : "share") }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <JoinQr url={url} credentials={credentials} /> : undefined} description={url ? <>
+  // The window's own loopback origin stays first until the LAN address arrives over IPC.
+  const url = host?.urls.find(value => new URL(value).hostname !== "127.0.0.1");
+  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep(device?.advanced ? "network" : "share"), disabled: busy }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <JoinQr url={url} credentials={credentials} /> : undefined} description={url ? <>
     <p>On a phone, scan the code. On a TV or another computer, open <span className="whitespace-nowrap text-foreground">{url}</span> and enter the code.</p>
     <p>The browser will warn that the connection isn't private, because Couch makes its own certificate. Continue only for this address.</p>
   </> : <p role="status">Looking for this computer's network address…</p>} data-tv-navigation-scope>

@@ -12,7 +12,7 @@ import { StageTitle } from "@/components/Stage";
  * `embedded` sets it inside a page instead: no room, a small mark.
  */
 export function Onboarding({ title, description, back, step, object, wide = false, embedded = false, children, className, ...props }: Omit<ComponentProps<"section">, "title"> & {
-  title: string; description?: ReactNode; back?: { label: string; onClick: () => void }; step?: { current: number; total: number }; object?: ReactNode; wide?: boolean; embedded?: boolean;
+  title: string; description?: ReactNode; back?: { label: string; onClick: () => void; disabled?: boolean }; step?: { current: number; total: number }; object?: ReactNode; wide?: boolean; embedded?: boolean;
 }) {
   const id = useId();
   return (
@@ -22,7 +22,7 @@ export function Onboarding({ title, description, back, step, object, wide = fals
         <div className="@container grid min-w-0 gap-8">
           <div className="grid w-full justify-items-start gap-4">
             {(embedded || !object) && <CouchMark className={cn("mb-2 size-10", !embedded && !wide && "lg:hidden")} />}
-            {back && <Button variant="ghost" data-back className="-ml-3.5 text-muted-foreground" onClick={back.onClick}><ChevronLeft aria-hidden="true" />{back.label}</Button>}
+            {back && <Button variant="ghost" data-back className="-ml-3.5 text-muted-foreground" disabled={back.disabled} onClick={back.onClick}><ChevronLeft aria-hidden="true" />{back.label}</Button>}
             {step && <Steps {...step} />}
             <StageTitle id={id} title={title} />
             {description && <div className="grid max-w-prose gap-3 text-body text-muted-foreground">{description}</div>}
