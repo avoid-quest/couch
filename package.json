@@ -5,6 +5,7 @@
   "version": "0.4.0",
   "description": "Shared media player for your TV, controlled from any phone",
   "homepage": "https://couch.avoid.quest",
+  "license": "MIT",
   "author": {
     "name": "avoid-quest",
     "email": "support@avoid.quest"
