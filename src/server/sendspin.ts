@@ -8,6 +8,7 @@ import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
+import { compressorFilter } from "../shared/compressor";
 
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
@@ -206,7 +207,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
         const speed = state.speed ?? 1, start = state.position, live = !!current.live && !current.radio;
         const seek = start > 0 && !current.radio && !live && (state.duration !== null || !!current.startPosition);
         // A live run keeps the source's timestamps and prints its first one (ashowinfo, on one wire only).
-        const shape = (first: boolean) => {
+        const compressed = current.compressor?.enabled && !current.liveSourceId;
+        const graph = compressed ? `[0:a:0]${[...live ? ["ashowinfo"] : [], ...speed === 1 ? [] : [tempo(speed)], "aresample=48000", "aformat=channel_layouts=stereo", compressorFilter(current.compressor!), ...wires.size > 1 ? [`asplit=${wires.size}`] : []].join(",")}${[...wires].map(wire => `[${wire}]`).join("")}` : undefined;
+        const shape = (wire: Wire, first: boolean) => {
+          if (graph) return ["-map", `[${wire}]`, "-vn", "-sn", "-dn", "-ar", "48000", "-ac", "2"];
           const filters = [...live && first ? ["ashowinfo"] : [], ...speed === 1 ? [] : [tempo(speed)]];
           return ["-map", "0:a:0", "-vn", "-sn", "-dn", ...filters.length ? ["-af", filters.join(",")] : [], "-ar", "48000", "-ac", "2"];
         };
@@ -218,8 +222,9 @@ export function createSendspin(options: { identity: string; name: string; admit:
           // through several seconds before anchoring the shared playback clock.
           ...live && hls ? ["-live_start_index", "-1", "-probesize", "32768", "-analyzeduration", "100000"] : [],
           ...live ? ["-copyts"] : [], ...seek ? ["-ss", String(start)] : [], "-i", source,
-          ...wires.has("opus") ? [...shape(true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
-          ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
+          ...graph ? ["-filter_complex", graph] : [],
+          ...wires.has("opus") ? [...shape("opus", true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
+          ...wires.has("pcm") ? [...shape("pcm", !wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
         child.once("close", executable.release);
         ffmpeg = undefined; // The child owns the lease until its process and pipes close.
         if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
@@ -388,6 +393,11 @@ export function createSendspin(options: { identity: string; name: string; admit:
           case "audioPause": pause(); break;
           case "seek": halt(); state = { ...state, position: command.position }; if (state.status === "paused") report(); else void start(); break;
           case "speed": { const at = position(), paused = state.status === "paused"; halt(); state = { ...state, position: at, speed: command.speed }; if (paused) report(); else void start(); break; }
+          case "compressor":
+            if (!load || load.liveSourceId) break;
+            load = { ...load, compressor: command.settings };
+            if (state.status === "playing" || state.status === "loading") void restart();
+            break;
           case "stop": halt(true); load = undefined; state = idle(); report(); break;
         }
       },

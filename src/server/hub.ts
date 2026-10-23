@@ -66,6 +66,7 @@ import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./send
 import { logPlaybackError, safePlaybackError } from "./playback-log";
 import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
+import type { CompressorSettings } from "../shared/compressor";
 
 type HubOptions = {
   hostname?: string;
@@ -208,7 +209,7 @@ export async function createHub(options: HubOptions) {
   // screens: while Synced, the tabs showing the picture and the item each loaded; heard and seen:
   // the group's last report and a screen's, whose subtitles join it. delivery: as couch.log last said.
   // Private speakers keep their effective trim when another Device sets All. Output consent is live.
-  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
+  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; compressor: CompressorSettings; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live" | "publicNetwork"> & { audioOnly?: boolean };
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
@@ -439,6 +440,7 @@ export async function createHub(options: HubOptions) {
   };
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
     const sourceId = sourceOf(playback);
+    if (command.type === "load") command = { ...command, compressor: sourceId ? undefined : playback.compressor };
     if (command.type === "stop" || command.type === "load" && (!sourceId || grouped(playback))) live.closePlayback(playback.id);
     if (command.type === "stop") playback.loaded = undefined;
     if (command.type === "load") {
@@ -619,9 +621,19 @@ export async function createHub(options: HubOptions) {
     const reuse = playback.resolved?.playbackId === loaded.playbackId && playback.resolved.vp9 === tab.data.vp9 && !playback.media?.live ? playback.resolved.media : undefined;
     const { headers = {}, ...media } = await (reuse ?? resolveEntry(entry, loaded.playbackId, signal, tab, playback));
     const fresh = entry.liveSourceId ? { ...media, source: liveUrl(entry.liveSourceId, loaded.playbackId, deviceOf(tab), "video", tab.data.origin) }
-      : await passThrough.prepare(loaded.playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal);
+      : await passThrough.prepare(loaded.playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal, playback.compressor.enabled);
     const { player } = stateOf(playback);
-    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, mpv: fresh.mpv, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
+    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, mpv: fresh.mpv, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback), compressor: entry.liveSourceId ? undefined : playback.compressor };
+  };
+  // Prepare CORS-readable bytes without changing Direct into a Sendspin group.
+  const compressionMedia = async (playback: Playback, tab: Socket<SocketData>, playbackId: string) => {
+    const state = stateOf(playback), entry = state.queue.find(item => item.id === state.currentEntryId);
+    if (!entry || entry.liveSourceId) throw new Error("Compressor is unavailable for live sharing.");
+    const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(30_000)]);
+    const reuse = playback.resolved?.playbackId === playbackId && playback.resolved.vp9 === tab.data.vp9 ? playback.resolved.media : undefined;
+    const { headers = {}, ...media } = await (reuse ?? resolveEntry(entry, playbackId, signal, tab, playback));
+    const prepared = await passThrough.prepare(playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal, true);
+    return { source: prepared.source, audioSource: prepared.audioSource, hls: prepared.hls };
   };
   // The group reports the sound; a screen adds the subtitles it shows. Paused in Where it plays, it keeps that message.
   const observeSynced = (playback: Playback) => {
@@ -712,8 +724,14 @@ export async function createHub(options: HubOptions) {
       show(playback);
       if (screen && playbackId && sockets.has(screen)) {
         playback.renderer = screen;
-        send(screen, playerCommand({ type: "follow", playbackId, follow: null }));
-        deliver(playback, { type: "volume", volume: levelOf(playback) });
+        if (playback.compressor.enabled && !browserLoads.get(screen)?.compressor?.enabled) {
+          void compressionMedia(playback, screen, playbackId).then(media => {
+            if (!playback.synced && playback.renderer === screen && stateOf(playback).player.playbackId === playbackId) playback.session.reload(media);
+          }, error => { if (!playback.synced && playback.renderer === screen && stateOf(playback).player.playbackId === playbackId) unavailable(playback, error instanceof Error ? error.message : "The audio couldn't be prepared."); });
+        } else {
+          send(screen, playerCommand({ type: "follow", playbackId, follow: null, compressor: playback.compressor }));
+          deliver(playback, { type: "volume", volume: levelOf(playback) });
+        }
       } else if (tab && !source) handOver(playback, tab);
     }
     if (source && !grouped(playback)) {
@@ -740,7 +758,7 @@ export async function createHub(options: HubOptions) {
   };
   const createPlayback = (id: string = crypto.randomUUID()) => {
     const saved = store.playback(id);
-    const playback = { id, outputs: [], mixTrim: saved.mixTrim(), privateTrims: new Map(), renderer: null, screens: new Map() } as unknown as Playback;
+    const playback = { id, outputs: [], mixTrim: saved.mixTrim(), compressor: saved.compressor(), privateTrims: new Map(), renderer: null, screens: new Map() } as unknown as Playback;
     const prepareMedia = async (resolved: MediaSource & { headers?: Record<string, string> }, playbackId: string, signal: AbortSignal) => {
       signal.throwIfAborted();
       const { headers = {}, ...media } = resolved;
@@ -754,7 +772,7 @@ export async function createHub(options: HubOptions) {
       const isLiveMedia = !!(entry?.live || media.metadata?.live);
       const deviceTarget = tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : coreTarget;
       const sameTarget = coreTarget && deviceTarget?.origin === coreTarget.origin && deviceTarget.userAgent === coreTarget.userAgent;
-      const prepared = entry?.liveSourceId ? media : sameTarget ? core : await passThrough.prepare(playbackId, media, headers, deviceTarget, signal);
+      const prepared = entry?.liveSourceId ? media : sameTarget && !playback.compressor.enabled ? core : await passThrough.prepare(playbackId, media, headers, deviceTarget, signal, playback.compressor.enabled);
       signal.throwIfAborted();
       playback.media = { playbackId, source: core.source, audioSource: core.audioSource, headers: coreHeaders, publicNetwork: media.publicNetwork, live: isLiveMedia, audioOnly: media.audioOnly };
       if (isLiveMedia && !media.radio && !entry?.liveSourceId) void audioRendition(core.audioSource ?? core.source, coreHeaders, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
@@ -1013,7 +1031,7 @@ export async function createHub(options: HubOptions) {
       // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
       // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
       const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => playsAt(playback, id)))), view = `${playback?.id}:${device}:${volume}`;
-      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback) } } satisfies ServerMessage)); }
+      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, compressor: playback?.compressor, outputs: delays(playback) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
@@ -1890,6 +1908,24 @@ export async function createHub(options: HubOptions) {
             if (!tv) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             if (action.type === "navigate") send(tv, JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage));
             else await remote.text(tv, action.token, action.text, action.submit === true);
+          } else if (action.type === "compressor") {
+            const target = lookedAt(deviceId);
+            if (!target || stateOf(target).player.playbackId !== action.playbackId) throw new Error("The playing item changed. Try again.");
+            const permitted = authorizePlayback(target, authorize, deviceId);
+            permitted();
+            if (sourceOf(target)) throw new Error("Compressor is unavailable for live sharing.");
+            const previous = target.compressor, settings = { ...previous, ...action.settings }, renderer = target.renderer;
+            const direct = !target.synced && mpvPlayback !== target;
+            const media = settings.enabled && direct && renderer && !browserLoads.get(renderer)?.compressor?.enabled
+              ? await compressionMedia(target, renderer, action.playbackId) : undefined;
+            permitted();
+            if (lookedAt(deviceId) !== target || stateOf(target).player.playbackId !== action.playbackId || target.compressor !== previous || renderer !== target.renderer || direct !== (!target.synced && mpvPlayback !== target)) throw new Error("Playback changed while preparing the audio. Try again.");
+            store.playback(target.id).saveCompressor(settings);
+            target.compressor = settings;
+            if (target.loaded) target.loaded = { ...target.loaded, compressor: settings };
+            if (media || !settings.enabled && stateOf(target).player.status === "error") target.session.reload(media, !settings.enabled);
+            else sendPlayer(target, { type: "compressor", playbackId: action.playbackId, settings });
+            broadcast();
           } else if (action.type === "inSync") {
             const target = lookedAt(deviceId);
             if (!target) throw new Error("Play something first.");

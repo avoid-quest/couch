@@ -6,6 +6,7 @@ import type { TvAppearance } from "./appearance";
 import type { DeviceSharing } from "./device-sharing";
 import type { LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
 import type { CaptureKind } from "./capture";
+import type { CompressorSettings } from "./compressor";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
@@ -73,6 +74,7 @@ export type SessionState = {
   // All's attenuation of this Playback's selected sound: 100 preserves Device levels, 0 silences them. Only older
   // clients still set it; the one Volume folds it into Device levels.
   mixTrim?: number;
+  compressor?: CompressorSettings;
   outputs?: Output[];
   playbacks?: PlaybackSummary[];
   devices?: DeviceSummary[];
@@ -104,6 +106,7 @@ export type Action =
   | { type: "playLive"; sourceId: string; deviceId?: string; playNow?: boolean; placement?: "next" }
   // The controlled Playback's live inputs play in sync on its devices, buffered, or directly on each.
   | { type: "inSync"; inSync: boolean }
+  | { type: "compressor"; playbackId: string; settings: Partial<CompressorSettings> }
   | { type: "sharing"; sharing: DeviceSharing }
   | { type: "askEveryDevice"; enabled: boolean }
   | { type: "control"; deviceId: string }
@@ -173,8 +176,9 @@ export type PlaybackCommand =
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
   // hls: Pass-through found an HLS playlist, which hls.js plays where the engine can't.
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow; liveSourceId?: string; livePeerId?: string; liveOutput?: { picture: boolean; sound: boolean; volume: number } }
-  | { type: "follow"; playbackId: string; follow: Follow | null }
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow; liveSourceId?: string; livePeerId?: string; liveOutput?: { picture: boolean; sound: boolean; volume: number }; compressor?: CompressorSettings }
+  | { type: "follow"; playbackId: string; follow: Follow | null; compressor?: CompressorSettings }
+  | { type: "compressor"; playbackId: string; settings: CompressorSettings }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }

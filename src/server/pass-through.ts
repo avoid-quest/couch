@@ -12,7 +12,7 @@ import { logMediaDiagnostic, mediaAddress, mediaHeaders } from "./media-diagnost
 type Target = { origin: string; userAgent: string };
 type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
 // refused: the last error status the source answered, which a browser reports as an unsupported format.
-type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; logged: Set<string> };
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; audioCors?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; logged: Set<string> };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -69,11 +69,12 @@ async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSign
   const mixed = relay.target.origin.startsWith("https:") && url.startsWith("http:");
   const response = await ask(mixed ? relayHeaders(relay, url) : { origin: relay.target.origin, "user-agent": relay.target.userAgent });
   const playlist = playlistType(response?.headers.get("content-type") ?? null, url);
-  if (!response) return { direct: true, playlist };
-  if (mixed) return { direct: !response.ok, playlist };
-  if (!response.ok) return { direct: !(await ask(relayHeaders(relay, url)))?.ok, playlist };
+  if (!response) return { direct: !relay.audioCors, playlist };
+  if (mixed) return { direct: !relay.audioCors && !response.ok, playlist };
+  if (!response.ok) return { direct: !relay.audioCors && !(await ask(relayHeaders(relay, url)))?.ok, playlist };
+  const sameOrigin = new URL(url).origin === relay.target.origin && (!response.url || new URL(response.url).origin === relay.target.origin);
   const shared = ["*", relay.target.origin].includes(response.headers.get("access-control-allow-origin") ?? "");
-  return { direct: shared || !(cors || playlist), playlist };
+  return { direct: sameOrigin || shared || !(cors || playlist), playlist };
 }
 
 // Relay addresses are signed for one Playback, so Core relays only what it resolved for the
@@ -105,8 +106,8 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
     };
     const first = master ? null : lines.find(line => line.trim() && !line.startsWith("#"));
     // Segments stay direct when the Device may read them (Twitch's allow every Origin).
-    if (!relay.publicNetwork && first && absolute(first.trim())) relay.segments ??= probe(absolute(first.trim())!, relay, true, AbortSignal.timeout(5000)).then(answer => answer.direct);
-    const segments = relay.publicNetwork ? false : await relay.segments ?? true;
+    if (!relay.publicNetwork && !relay.audioCors && first && absolute(first.trim())) relay.segments ??= probe(absolute(first.trim())!, relay, true, AbortSignal.timeout(5000)).then(answer => answer.direct);
+    const segments = relay.publicNetwork || relay.audioCors ? false : await relay.segments ?? true;
     const to = (uri: string, playlist: boolean) => {
       const url = absolute(uri);
       return !url ? uri : playlist ? link(relay, "playlist", url) : segments ? url : link(relay, "bytes", url);
@@ -141,7 +142,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       return relay?.playbackId === playbackId ? relay.refused : undefined;
     },
     // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
-    async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal): Promise<T> {
+    async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal, audioCors = false): Promise<T> {
       signal.throwIfAborted();
       if (closed) throw new Error("The media relay is closed.");
       if (!target || media.mpv && !media.publicNetwork) {
@@ -152,10 +153,11 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // headers. One capability per preparation keeps every child on its route.
       // The single source-header map authorizes only the main source's origin;
       // a separate audio URL or redirected playlist cannot expand that trust.
-      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now(), source: media.source, audioSource: media.audioSource, logged: new Set() };
+      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, audioCors, createdAt: Date.now(), source: media.source, audioSource: media.audioSource, logged: new Set() };
       const route = async (url: string) => {
-        const answer = await probe(url, relay, !!media.mpegts, signal, relay.publicNetwork ? publicRequest : fetch);
-        return { url: answer.direct && !relay.publicNetwork ? url : link(relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
+        const answer = await probe(url, relay, !!media.mpegts || audioCors, signal, relay.publicNetwork ? publicRequest : fetch);
+        // Web Audio needs readable audio, including every HLS child; a native media element alone does not.
+        return { url: answer.direct && !relay.publicNetwork && !(audioCors && answer.playlist) ? url : link(relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
       };
       const [main, audio] = await Promise.all([route(media.source), media.audioSource ? route(media.audioSource) : undefined]);
       signal.throwIfAborted();

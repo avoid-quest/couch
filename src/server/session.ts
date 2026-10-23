@@ -552,11 +552,11 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     },
     // The newest tab of an output Device took over, or an output came back online: the current
     // item loads there where it is (#644 Tabs, Offline).
-    reload() {
+    reload(media?: Pick<MediaSource, "source" | "audioSource" | "hls">, retry = false) {
       const { playbackId, status, position, speed } = state.player;
-      if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status)) return;
+      if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status) && !(retry && status === "error")) return;
       const live = loaded.radio || state.queue.find(entry => entry.id === state.currentEntryId)?.live;
-      const { startPosition: _start, ...command } = loaded;
+      const { startPosition: _start, ...command } = { ...loaded, ...media };
       send({ ...command, ...(live ? {} : { startPosition: position }), paused: pendingPause ?? status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
     },
     // No output is online: the Playback pauses where it is and waits (#644 Offline). The wait
