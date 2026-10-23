@@ -8,6 +8,7 @@ import { AppShell } from "../src/client/sections/shell/AppShell";
 import { PlayerPage } from "../src/client/sections/now/PlayerPage";
 import { RemotePage } from "../src/client/sections/remote/RemotePage";
 import { RemotePlayerSession } from "../src/client/session/remote-player-session";
+import { UpdateCenterProvider } from "../src/client/session/update-center";
 import { readPlayerSearch } from "../src/client/session/player-control";
 import { SessionGateContext } from "../src/client/session/gate-context";
 import type { SessionGateValue } from "../src/client/session/session-context";
@@ -41,7 +42,7 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
       liveSources: [], preferences: {}, activeProfile: { id: "default", name: "Default" }, profiles: [],
     },
   } as unknown as SessionGateValue;
-  const route = createRootRoute({ component: () => <RemotePlayerSession><AppShell /><CommitProbe /></RemotePlayerSession> });
+  const route = createRootRoute({ component: () => <UpdateCenterProvider><RemotePlayerSession><AppShell /><CommitProbe /></RemotePlayerSession></UpdateCenterProvider> });
   const home = createRoute({ getParentRoute: () => route, path: "/", component: () => <h1>Transition fixture</h1> });
   const now = createRoute({ getParentRoute: () => route, path: "/now", validateSearch: readPlayerSearch,
     component: () => {

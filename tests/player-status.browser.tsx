@@ -5,6 +5,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { AppShell } from "../src/client/sections/shell/AppShell";
 import { PlayerPage } from "../src/client/sections/now/PlayerPage";
 import { SessionGateContext } from "../src/client/session/gate-context";
+import { UpdateCenterProvider } from "../src/client/session/update-center";
 import type { SessionGateValue } from "../src/client/session/session-context";
 import { isTvPresentation } from "../src/client/session/presentation";
 import { deviceId } from "../src/client/session/device-id";
@@ -32,7 +33,7 @@ export async function mountPlayerReview() {
       liveSources: [], preferences: {}, activeProfile: { id: "default", name: "Default" }, profiles: [],
     },
   } as unknown as SessionGateValue;
-  const route = createRootRoute({ component: AppShell });
+  const route = createRootRoute({ component: () => <UpdateCenterProvider><AppShell /></UpdateCenterProvider> });
   const home = createRoute({ getParentRoute: () => route, path: "/", component: () => <h1>Home</h1> });
   const now = createRoute({ getParentRoute: () => route, path: "/now", component: PlayerPage });
   const collection = createRoute({ getParentRoute: () => route, path: "/collection", component: () => <h1>Related content</h1> });
