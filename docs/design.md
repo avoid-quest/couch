@@ -232,7 +232,7 @@ to 85%), and an outline's edge comes up. One whose panel is open
 (`aria-expanded`) stays lit. Ink never turns dark under a pointer, and nothing
 tints, dims, scales or moves under it; the bar's artwork keeps its ink, and a
 text link's ink and underline come up to white. A press dims a tile's picture
-to 80%. A press on the transport (Play, Pause, Stop, Next) dips its glyph to 90%
+to 80%. A press on the transport (Play, Pause, Stop, Next) scales its glyph to 90%
 and lets it spring back ([Motion](#motion)). Whatever a press acts on shows the hand, sliders
 included (the arrow while disabled). Never on the TV, which lifts its focus
 instead. The header's tabs mark the current section with a short white rule
@@ -296,8 +296,9 @@ are capsules, `h-control text-sm`; `touch:` (phones and windows narrower than
 it plays, Up next, Playback, fullscreen, Open player, Back, a Sheet's Close)
 are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target. The
 transport's filled glyphs use opaque ink and fade as a whole at 80% opacity
-(100% on hover or keyboard focus, 60% on press): translucent fill and stroke
-must not overlap into a bright contour. This follows CSS
+(100% on hover or keyboard focus, 60% on press). Opacity eases over 150 ms;
+keyboard focus lights it at once and reduced motion skips the transition.
+Translucent fill and stroke must not overlap into a bright contour. This follows CSS
 [`opacity`](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/opacity),
 which composites the element and its contents together.
 The player's band and the now-playing bar share `--player-target`, which grows to
@@ -315,7 +316,7 @@ arrives, 600 ms for colour that follows what plays.
 - Colour changes (hover, selection, the tab underline) ease both ways.
 - Focus inversion arrives at once and fades out, so a held arrow never passes
   through grey.
-- A press on the transport, in the bar and the band, dips its glyph to 90%
+- A press on the transport, in the bar and the band, scales its glyph to 90%
   over 150 ms and springs back as it lifts, so Play and Pause feel struck.
 - Menus and popovers grow from the button that opened them (a zoom from 90%,
   its origin at the trigger's centre: an arrow that draws nothing gives Radix

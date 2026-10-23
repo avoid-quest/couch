@@ -16,7 +16,7 @@ import { useBufferedEnd } from "@/session/buffered";
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
 // Fade the completed glyph: translucent fill and stroke would overlap into a bright contour.
-const transportInk = "text-foreground active:text-foreground [&_svg]:opacity-80 hover:[&_svg]:opacity-100 active:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-100";
+const transportInk = "text-foreground active:text-foreground [&_svg]:opacity-80 motion-safe:[&_svg]:transition-opacity motion-safe:[&_svg]:duration-150 hover:[&_svg]:opacity-100 active:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-100 focus-visible:[&_svg]:duration-0";
 
 export function playbackCapabilities(state: ClientSessionState | null, connected: boolean) {
   const player = state?.player;
