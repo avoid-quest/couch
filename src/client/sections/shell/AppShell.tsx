@@ -412,9 +412,6 @@ function useTopBar(ref: RefObject<HTMLElement | null>, shown: boolean) {
     const root = document.documentElement.style;
     const observer = new ResizeObserver(() => {
       root.setProperty("--top-bar", `${element.offsetHeight}px`);
-      if (document.documentElement.classList.contains("electron") && !element.hidden) {
-        void window.couchApp?.titleBarHeight?.(element.getBoundingClientRect().height);
-      }
     });
     observer.observe(element, { box: "border-box" });
     return () => { observer.disconnect(); root.removeProperty("--top-bar"); };

@@ -71,16 +71,16 @@ top bar is the Couch switch, the search field, then Share as an icon. A narrow T
 in the header, without a separate title bar. macOS (`[data-window-controls]`)
 keeps its traffic lights at the left; Windows and Linux use Electron's
 `titleBarOverlay` with t3code's Linux-safe `#01000000` and white symbols.
-The header reports its measured height to Main, centring the controls on the
-search and tabs at every window width and interface size. Couch keeps its
-3rem search field rather than t3code's compact 40px row. The header and player
+Windows/Linux caption buttons keep t3code's fixed 40px height independently of
+the header and interface size, so enlarging the search and tabs never stretches
+the native buttons. Couch keeps its 3rem search field. The header and player
 heading reserve the controls' space: 90pt on the Mac; on Windows/Linux, the
 `wco` class follows `navigator.windowControlsOverlay.visible` and its
 `geometrychange` events. The preload supplies its `--workspace-*` variables,
 insets and drag regions, so older remote renderers also clear the overlay
 without matching their Mac-only `[data-window-controls]` rules. The variables
 read `titlebar-area-*` in viewport pixels and divide by the interface scale.
-The player uses that same row height. Empty header space drags the window;
+The player clears that native controls row. Empty header space drags the window;
 a double-click uses the OS's maximize/restore behavior. Fullscreen drops the controls' inset.
 Windows/Linux auto-hide the menu bar, as
 [t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts)

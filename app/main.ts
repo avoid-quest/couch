@@ -296,14 +296,14 @@ const interfaceSizes = [1, 1.15, 1.3];
 const interfaceSize = () => interfaceSizes.find(value => value === Number(readText(interfaceSizePath))) ?? 1;
 // Centre the 14pt controls in the 56px header, which scales with the interface size.
 const controlsPosition = () => ({ x: 16, y: Math.round(28 * interfaceSize() - 7) });
-let titleBarHeight = Math.round(72 * interfaceSize());
 // Match t3code: #00000000 does not work correctly on Linux.
-const titleBarOverlay = () => ({ color: "#01000000", symbolColor: "#ffffff", height: titleBarHeight });
+// Native caption buttons keep their own compact height, independent of page zoom.
+const titleBarOverlay = { color: "#01000000", symbolColor: "#ffffff", height: 40 };
 
 function createWindow() {
   window = new BrowserWindow({
     ...tv ? { fullscreen: true, frame: false } : { width: 1280, height: 800, ...savedBounds() },
-    ...tv ? {} : { titleBarStyle: "hidden", ...macChrome ? { trafficLightPosition: controlsPosition() } : { titleBarOverlay: titleBarOverlay() } },
+    ...tv ? {} : { titleBarStyle: "hidden", ...macChrome ? { trafficLightPosition: controlsPosition() } : { titleBarOverlay } },
     minWidth: 800, minHeight: 600, show: false, title: app.getName(), backgroundColor: "#000000", autoHideMenuBar: true,
     ...process.platform !== "darwin" ? { icon: join(app.getAppPath(), process.platform === "win32" ? appIcon.replace(/\.png$/, ".ico") : appIcon) } : {},
     webPreferences: {
@@ -451,13 +451,6 @@ handle("interface-size", (_event, size) => {
   write(interfaceSizePath, String(size));
   if (macChrome) window?.setWindowButtonPosition(controlsPosition());
   return size;
-});
-// Couch's header uses fluid rem sizes as well as interface zoom. Follow its
-// actual row instead of assuming a fixed title-bar height (macOS stays as it is).
-handle("title-bar-height", (_event, height) => {
-  if (tv || macChrome || typeof height !== "number" || !Number.isFinite(height) || height < 40 || height > 240) return;
-  titleBarHeight = Math.round(height);
-  window?.setTitleBarOverlay(titleBarOverlay());
 });
 
 // Quit is deliberate (closing the window only hides it), and a SIGTERM from
