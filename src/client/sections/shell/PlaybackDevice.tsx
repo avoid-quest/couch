@@ -5,22 +5,30 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQuery } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
+import { Spinner } from "@/components/ui/spinner";
+import { pairingCodeQuery } from "@/api/devices";
+import { useSessionGate } from "@/session/session-context";
+import { groupedCode } from "./TvPairing";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
 import { deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
 import { defaultDeviceName } from "../../../shared/devices";
 import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
-import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
 import { Onboarding } from "./Onboarding";
+import { NetworkSettings, sharingMutationKey } from "@/sections/settings/couch/NetworkSettings";
+import { useSettingsScope } from "@/sections/settings/settings-scope";
 import { AnotherCouchForm, ForgetCouchDialog } from "./CouchForms";
 import { StatusLine } from "./StatusLine";
 import { useNavigation } from "@/navigation";
 
 export type Choice = AppMode;
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void>; chooseAgain: () => void };
+type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void>; chooseAgain: () => void; setupStep: SetupStep; setSetupStep: (step: SetupStep) => void; advanced: boolean; hostHere: (advanced: boolean) => void };
+// Advanced setup asks the network step instead of the share step.
+type SetupStep = "name" | "share" | "network" | "join";
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -39,6 +47,9 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   const [pending, setPending] = useState(!!couchApp);
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
+  // First run's step lives here: saving the name reconnects, which remounts the shell under it.
+  const [setupStep, setSetupStep] = useState<SetupStep>("name");
+  const [advanced, setAdvanced] = useState(false);
   useEffect(() => {
     if (!couchApp) return;
     let disposed = false;
@@ -85,7 +96,9 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     },
     completeLocalSetup: async () => setChoice(await app.completeLocalSetup()),
     // Back from first run's name step shows the chooser again; Main keeps This computer until another choice.
-    chooseAgain: () => setChoice({ ...choice, mode: null }),
+    chooseAgain: () => { setChoice({ ...choice, mode: null }); setSetupStep("name"); },
+    setupStep, setSetupStep, advanced,
+    hostHere: next => { setAdvanced(next); void device.choose("local"); },
   };
   return <Context.Provider value={device}>
     {choice.mode ? children : <main className="drag-region flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
@@ -98,6 +111,8 @@ const hostOf = (address: string) => address.replace(/^https?:\/\//i, "").replace
 // Native choices remember only addresses, so each Couch's name is kept here once seen.
 const namesKey = "couch.target-names";
 const targetNames = (): Record<string, string> => { try { return Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(namesKey) || "{}") ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string")); } catch { return {}; } };
+// Where the app's icon lives while its window is closed (app/main.ts makes it).
+const trayName = /Mac/.test(navigator.platform) ? "menu bar" : "tray";
 const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and other devices disconnect." : reason === "playback" ? "Playback here stops." : "Other devices can't reach this Couch until you switch back.";
 
 function DeviceForm() {
@@ -109,26 +124,31 @@ function DeviceForm() {
   const [names] = useState(targetNames);
   // The shell isn't mounted before a mode is chosen, so the chooser brings the TV remote's arrow keys itself (#644 ticket 12).
   useNavigation(() => {});
-  const selectRemote = async (confirmed = false) => {
-    try { await device.choose("remote", address, confirmed); }
-    catch (reason) { if (message(reason).startsWith("confirmation-required:")) setConfirm(message(reason).split(":")[1]!); }
+  // A known Couch that needs confirmation puts its address in the field, beside Stop and switch.
+  const selectRemote = async (target: string, confirmed = false) => {
+    try { await device.choose("remote", target, confirmed); }
+    catch (reason) { if (message(reason).startsWith("confirmation-required:")) { setAddress(target); setConfirm(message(reason).split(":")[1]!); } }
   };
-  return <div className="grid gap-6">
-    <div className="-mx-3 border-t">
-      <Button autoFocus variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal text-foreground whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
-        <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Host Couch here. Phones, browsers and other computers on your network join it.</span></span>
-        <ChevronRight aria-hidden="true" />
-      </Button>
-      {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between gap-4 rounded-none border-0 text-foreground px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}>
-        <span className="grid gap-0.5"><span className="text-base font-medium">{names[target] || hostOf(target)}</span>{names[target] && <span className="text-sm text-muted-foreground">{hostOf(target)}</span>}</span>
-        <ChevronRight aria-hidden="true" />
-      </Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
-      <AnotherCouchForm className="px-3 py-4 md:grid-cols-1 [&_[data-slot=field-label]]:font-medium" description="Join a Couch that runs on another computer. This computer still plays." address={address} onAddressChange={value => { setAddress(value); setConfirm(null); }} onConnect={() => void selectRemote()} pending={device.pending}>
-        {confirm && <div className="grid w-full gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
+  return <div className="grid w-full gap-10">
+    <div className="grid justify-items-start gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button autoFocus size="lg" data-host-here disabled={device.pending} onClick={() => device.hostHere(false)}>Host on this computer</Button>
+        <Button size="lg" variant="ghost" className="text-muted-foreground" disabled={device.pending} onClick={() => device.hostHere(true)}>Advanced setup</Button>
+      </div>
+      <p className="max-w-prose text-sm text-muted-foreground">Phones, TVs and browsers on your network join it. Closing the window keeps Couch running so they still can; quit from its icon in the {trayName}.</p>
+    </div>
+    <div className="grid w-full">
+      {!!device.targets.length && <ul className="grid divide-y border-b">{device.targets.map(target => <li key={target} className="flex items-center gap-2 py-3">
+        <span className="grid min-w-0 flex-1 gap-0.5"><span className="text-body break-words">{names[target] || hostOf(target)}</span>{names[target] && <span className="text-meta text-muted-foreground break-all">{hostOf(target)}</span>}</span>
+        <Button variant="outline" disabled={device.pending} onClick={() => void selectRemote(target)}>Connect</Button>
+        <Button variant="ghost" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button>
+      </li>)}</ul>}
+      <AnotherCouchForm className="border-b-0 pt-4 @2xl:grid-cols-1 [&_[data-slot=field-label]]:text-title [&_[data-slot=field-label]]:font-medium" description="Join a Couch that runs on another computer; this one still plays. Its address is in that Couch's Settings, under Devices & network." address={address} onAddressChange={value => { setAddress(value); setConfirm(null); }} onConnect={() => void selectRemote(address)} pending={device.pending}>
+        {confirm && <div className="grid w-full gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(address, true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
       </AnotherCouchForm>
     </div>
     <ForgetCouchDialog name={forgetting && (names[forgetting] || hostOf(forgetting))} pending={device.pending} error={device.error} onClose={() => setForgetting(null)} onForget={() => !!forgetting && device.forget(forgetting)}
-      onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.focus(); }} />
+      onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>("[data-host-here]")?.focus(); }} />
     {device.error && !device.error.startsWith("confirmation-required:") && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
   </div>;
 }
@@ -203,26 +223,83 @@ export function useLocalSetupPending(credentials: Credentials | null) {
 }
 
 // The server bumps the devices revision, which refreshes remoteControlEnabled.
-// The app window is this Couch's Device, so its name is asked here, once.
+// The app window is this Couch's Device, so its name is asked here, once. Then whether to share it on the network
+// and, when shared, how phones and TVs join; Back walks the steps, then returns to the chooser. Advanced setup swaps the
+// share step for Devices & network's own network rows.
 export function LocalSharingPrompt({ credentials }: { credentials: Credentials | null }) {
   const device = usePlaybackDevice();
   const pending = useLocalSetupPending(credentials);
   const savedName = useLocalDeviceName();
-  const [name, setName] = useState("");
+  const { host, details, connected, remoteControlEnabled } = useSessionGate();
+  const scope = useSettingsScope();
+  const step = device?.setupStep, setStep = device?.setSetupStep ?? (() => {});
+  const [name, setName] = useState<string | null>(null);
+  const placeholder = defaultDeviceName(deviceId());
+  const saveName = useMutation({
+    mutationFn: () => saveLocalDeviceName(name?.trim() || savedName || placeholder),
+    onSuccess: () => setStep(device?.advanced ? "network" : "share"),
+  });
   const sharing = useMutation({
     mutationFn: async (enabled: boolean) => {
-      if (!savedName) await saveLocalDeviceName(name.trim() || defaultDeviceName(deviceId()));
       await apiSend(credentials!, "/api/settings/sharing", { enabled }, "POST", 10_000);
-      await device!.completeLocalSetup();
+      if (enabled) setStep("join"); else await device!.completeLocalSetup();
     },
   });
+  const finish = useMutation({ mutationFn: () => device!.completeLocalSetup() });
+  // Network's own Share on network save: wait for it, and trust what it saved until the devices revision catches up.
+  const networkSave = useMutationState({ filters: { mutationKey: sharingMutationKey }, select: mutation => mutation.state }).at(-1);
+  const shared = networkSave?.status === "success" ? networkSave.variables === true : remoteControlEnabled;
   if (!pending) return null;
-  const setSharing = (enabled: boolean) => { if (!sharing.isPending) sharing.mutate(enabled); };
-  // Naming comes first: it is the one thing every other Device will show (#644 ticket 12).
-  return <Onboarding back={{ label: "Back", onClick: device!.chooseAgain }} title={savedName ? "Share this computer?" : "Name this computer"} description={savedName ? `${savedName} uses the same name with every Couch.` : "Every device on your network shows this name. Leave it empty to keep the one shown."} data-tv-navigation-scope>
-    {!savedName && <Field><FieldLabel htmlFor="host-name">Name</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>}
-    <div className="grid gap-0.5">{!savedName && <p className="text-base font-medium">Share it on your network?</p>}<p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it later in Settings → Network.</p></div>
-    {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}
-    <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Share</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
+  const busy = saveName.isPending || sharing.isPending || finish.isPending;
+  const error = saveName.error ?? sharing.error ?? finish.error;
+  const failure = error && <Alert variant="destructive"><AlertDescription>{message(error)}</AlertDescription></Alert>;
+  const shown = savedName ?? placeholder;
+  if (step === "name") return <Onboarding key={step} back={{ label: "Back", onClick: device!.chooseAgain, disabled: busy }} step={{ current: 1, total: 3 }} title="Name this computer" description="Phones and TVs show this name when you choose where to play." data-tv-navigation-scope>
+    <form className="grid w-full gap-6" onSubmit={event => { event.preventDefault(); if (!busy) saveName.mutate(); }}>
+      <Field><FieldLabel htmlFor="host-name" className="sr-only">Name</FieldLabel><Input id="host-name" autoFocus className="h-field text-title" autoComplete="off" maxLength={60} placeholder={shown} value={name ?? savedName ?? ""} onChange={event => setName(event.target.value)} disabled={busy} /></Field>
+      {failure}
+      <Button size="lg" className="justify-self-start" disabled={busy}>Continue</Button>
+    </form>
   </Onboarding>;
+  if (step === "share") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name"), disabled: busy }} step={{ current: 2, total: 3 }} title="Share it on your network?" description={<>
+    <p>Phones, TVs, browsers and other computers on your network can then pair with {shown}, play on it and join as speakers. Only devices you pair get in.</p>
+    <p>Not sharing keeps Couch to this computer. Change it later in Settings, under Devices & network.</p>
+  </>} data-tv-navigation-scope>
+    {failure}
+    <div className="flex flex-wrap gap-2"><Button autoFocus size="lg" disabled={busy} onClick={() => sharing.mutate(true)}>Share</Button><Button size="lg" variant="ghost" disabled={busy} onClick={() => sharing.mutate(false)}>Keep it to this computer</Button></div>
+  </Onboarding>;
+  if (step === "network") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name"), disabled: busy }} step={{ current: 2, total: 3 }} title="How do devices connect?"
+    description={<p>Change any of these later in Settings, under Devices & network.</p>} wide data-tv-navigation-scope>
+    {credentials && <div className="grid gap-10"><NetworkSettings credentials={credentials} connected={connected} urls={host?.urls ?? [credentials.origin]} remoteControlEnabled={remoteControlEnabled}
+      managedLan={details?.lanError !== undefined} lanError={details?.lanError} device={scope.device} couch={scope.couch} host administrator /></div>}
+    {failure}
+    <Button size="lg" className="justify-self-start" disabled={busy || networkSave?.status === "pending"} onClick={() => shared ? setStep("join") : finish.mutate()}>{shared ? "Continue" : "Done"}</Button>
+  </Onboarding>;
+  // The window's own loopback origin stays first until the LAN address arrives over IPC.
+  const url = host?.urls.find(value => new URL(value).hostname !== "127.0.0.1");
+  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep(device?.advanced ? "network" : "share"), disabled: busy }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <JoinQr url={url} credentials={credentials} /> : undefined} description={url ? <>
+    <p>On a phone, scan the code. On a TV or another computer, open <span className="whitespace-nowrap text-foreground">{url}</span> and enter the code.</p>
+    <p>The browser will warn that the connection isn't private, because Couch makes its own certificate. Continue only for this address.</p>
+  </> : <p role="status">Looking for this computer's network address…</p>} data-tv-navigation-scope>
+    {failure}
+    <div className="grid justify-items-start gap-3">
+      <Button autoFocus size="lg" disabled={busy} onClick={() => finish.mutate()}>Done</Button>
+      <p className="text-meta text-muted-foreground">Pair more devices later in Settings, under Devices & network.</p>
+    </div>
+  </Onboarding>;
+}
+
+/** The join step's object: the pairing QR on its light ground, the code under it for whoever types it. */
+function JoinQr({ url, credentials }: { url: string; credentials: Credentials }) {
+  const pairing = useQuery(pairingCodeQuery(credentials));
+  const code = pairing.data;
+  if (pairing.isError) return <Alert variant="destructive"><AlertDescription>Couldn't load the code.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void pairing.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>;
+  if (!code) return <Spinner className="size-6 text-muted-foreground" />;
+  const link = new URL(url);
+  link.hash = `pair=${code}`;
+  // The QR keeps a light ground so every phone camera can read it.
+  return <figure className="grid justify-items-center gap-5">
+    <div className="rounded-sm bg-foreground p-3 shadow-(--object-shadow)"><QRCodeSVG value={link.href} size={256} marginSize={2} level="M" title={`Pair with code ${code}`} className="size-[min(56vw,15rem)]" /></div>
+    <figcaption aria-label={`Code ${code.split("").join(" ")}`} className="font-display text-5xl font-semibold tabular-nums whitespace-pre">{groupedCode(code)}</figcaption>
+  </figure>;
 }

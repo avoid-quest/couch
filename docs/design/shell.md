@@ -287,10 +287,37 @@ Checks: `tests/desktop-interactions.browser.ts` (build with
 
 ## First run and pairing
 
-The app asks "Where is your Couch?" (This computer hosts it; Another Couch
-joins one), then the computer's name, with a random default, and whether to
-share it on the network. Pairing reuses that name. Unpaired, every device sees
-only the pairing page, with no header: centred in the window, its mark and
+First run and pairing are staged like a Details page without artwork
+(`Onboarding`): the graphite [room](../design.md#room) fills the window, the
+question is a display title at the left, and Couch's mark stands at the right
+where a picture would (above the copy, small, below `lg`). A phone approving a
+TV sets the same screen inside its page, without the room and at a page
+title's size.
+
+The app asks "Where is your Couch?": Host on this computer, the one primary
+button, with one line on what hosting means (phones, TVs and browsers join it,
+and closing the window keeps Couch running until it is quit from its menu bar
+or tray icon), with a quiet Advanced setup beside it; or Another Couch's address (with the Couches it knows above it),
+and where to find it. Hosting then walks three steps under short progress
+capsules, Back going to the step before and from the first to the chooser:
+
+1. **Name this computer**, with a random default, which every device shows.
+2. **Share it on your network?** Share, or Keep it to this computer
+   (Settings → Devices & network changes it later).
+3. **Pair your phone or TV**, only when shared: the pairing QR and code stand
+   where the mark was, beside this Couch's address and the certificate warning
+   the browser will show. Done opens Home.
+
+Advanced setup walks the same three steps but asks **How do devices
+connect?** in place of the share step: Devices & network's own network rows
+(`NetworkSettings`: Share on network, Allow HTTP connections, Network address
+and the live playback relay), across the screen's width with the mark small
+above, and one line saying all of them change later there. Continue pairs when
+sharing is on; otherwise Done opens Home.
+
+The step lives in the mode gate, since saving the name reconnects and remounts
+the shell. Pairing reuses that name. Unpaired, every device sees
+only the pairing page, with no header: its mark and
 "Pair with Couch" the only brand, and in the desktop app the whole window drags by
 it. The app, or a browser that has known another Couch, gets one line under the
 description, the address then Change, which opens the Couch switch; a TV picks

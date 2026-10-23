@@ -276,10 +276,10 @@ function PairingPage({ status }: { status: ReactNode }) {
   const device = usePlaybackDevice();
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const switchable = !tvPresentation && (nativeHost || !!credentials || knownConnections().some(item => item.origin !== origin));
-  const couch = switchable && <span className="mt-1 flex flex-wrap items-baseline gap-x-3"><span className="min-w-0 break-all">{localHost ? "This computer" : new URL(origin).host}</span><CouchSwitch inline credentials={credentials} connected={connected} status={statusLabel} installationName={details?.name} /></span>;
+  const couch = switchable && <span className="mt-1 flex flex-wrap items-baseline gap-x-3"><span className="min-w-0 whitespace-nowrap">{localHost ? "This computer" : new URL(origin).host}</span><CouchSwitch inline credentials={credentials} connected={connected} status={statusLabel} installationName={details?.name} /></span>;
   if (localHost) return <Onboarding title="Starting Couch" description={couch || undefined}>
     {status}
-    {booting ? <StatusLine busy>Starting…</StatusLine> : <><p className="text-sm text-muted-foreground">Couldn't start Couch on this computer. If it keeps failing, restart this computer.</p><Button className="self-start" onClick={retryHost}>{TRY_AGAIN}</Button></>}
+    {booting ? <StatusLine busy>Starting…</StatusLine> : <><p className="text-sm text-muted-foreground">Couldn't start Couch on this computer. If it keeps failing, restart this computer.</p><Button className="justify-self-start" onClick={retryHost}>{TRY_AGAIN}</Button></>}
   </Onboarding>;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
@@ -290,7 +290,7 @@ function PairingPage({ status }: { status: ReactNode }) {
     {status}
     {lost}
     <PairForm />
-    {tvPresentation && <Button variant="ghost" data-back className="-ml-3 self-start" onClick={() => setTyping(false)}>Scan with a phone instead</Button>}
+    {tvPresentation && <Button variant="ghost" data-back className="-ml-3 justify-self-start" onClick={() => setTyping(false)}>Scan with a phone instead</Button>}
   </Onboarding>;
 }
 

@@ -72,7 +72,7 @@ export const titleLength = (title: string) => title.length > 44 ? "xlong" : titl
 export const titleFit = (title: string) => ({ "--word": Math.max(4, ...title.split(/\s+/).map(word => word.length)) }) as CSSProperties;
 
 /** The Stage's title, in the display face, set by its length so a long one still reads as type, never a paragraph. */
-export function StageTitle({ title, as: Heading = "h1", className, children }: { title: string; as?: "h1" | "h2"; className?: string; children?: ReactNode }) {
-  return <Heading tabIndex={-1} data-length={titleLength(title)} style={titleFit(title)}
+export function StageTitle({ title, as: Heading = "h1", id, className, children }: { title: string; as?: "h1" | "h2"; id?: string; className?: string; children?: ReactNode }) {
+  return <Heading id={id} tabIndex={-1} data-length={titleLength(title)} style={titleFit(title)}
     className={cn("display-title text-balance outline-none", className)}>{children ?? title}</Heading>;
 }
