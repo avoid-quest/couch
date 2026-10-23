@@ -100,7 +100,7 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
   const gone = query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400);
   if (!query.data || gone) return <>
     {gone ? <ItemNotFound />
-      : connected && !query.error ? <DetailSkeleton trail={<ContentBreadcrumb stage radio={kind === "radio"} />} /> : <PageHeader breadcrumb={<ContentBreadcrumb />} title="Details" />}
+      : connected && !query.error ? <DetailSkeleton trail={<ContentBreadcrumb radio={kind === "radio"} />} /> : <PageHeader breadcrumb={<ContentBreadcrumb />} title="Details" />}
     {query.error && !gone ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
       : !connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this item.</p>}
   </>;
@@ -114,7 +114,7 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
 
 /** The trail names the collections holding the item, so the header's links leave them out. */
 function DetailLayout({ collection, radio, ...header }: ComponentProps<typeof DetailHeader> & { collection?: PlaybackCollection; radio?: boolean }) {
-  return <DetailHeader {...header} trail={<ContentBreadcrumb stage title={header.title} collection={collection} radio={radio} />} />;
+  return <DetailHeader {...header} trail={<ContentBreadcrumb title={header.title} collection={collection} radio={radio} />} />;
 }
 
 // Core says why a verb failed; without its answer, Couch wasn't reached.

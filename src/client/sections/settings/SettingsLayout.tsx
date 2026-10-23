@@ -39,8 +39,8 @@ export function SettingsLayout({ section, children }: { section: SettingsPage; c
           <BreadcrumbList className="text-sm">
             {/* Back (Esc, the TV's Back) goes up to the nearest crumb, which returns the focus to this page's entry. */}
             {crumbs.map((crumb, index) => <Fragment key={crumb.to}>
+              {index > 0 && <BreadcrumbSeparator className={crumbs[index - 1]!.className} />}
               <BreadcrumbItem className={cn("min-w-0", crumb.className)}><BreadcrumbLink asChild><Link data-back={index === crumbs.length - 1 || undefined} to={crumb.to} state={{ detailFocus: { selector: crumb.focus, index: 0 } }} className="block truncate leading-8 touch:leading-11">{crumb.label}</Link></BreadcrumbLink></BreadcrumbItem>
-              <BreadcrumbSeparator className={crumb.className} />
             </Fragment>)}
           </BreadcrumbList>
         </Breadcrumb>} />
