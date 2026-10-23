@@ -60,3 +60,39 @@ Implementation references: [Node HTTP request options](https://nodejs.org/api/ht
 [FFmpeg HTTP and TLS protocols](https://ffmpeg.org/ffmpeg-protocols.html),
 [W3C origin-only referrers](https://www.w3.org/TR/referrer-policy/#referrer-policy-origin),
 and [HLS URI rules](https://www.rfc-editor.org/rfc/rfc8216).
+
+## Playback diagnostics
+
+`Direct` in `couch.log` describes device-owned playback, as opposed to synchronized
+sound. It does not mean a browser fetches a public site's media directly. For a
+YouTube video, Chromium fetches the signed local relay and Core fetches Googlevideo;
+FFmpeg is not involved in this Direct route. Electron's Googlevideo-only Range/CORS
+hooks do not apply to the local relay. Core forwards the receiver's Range unchanged.
+
+`media resolve` links the Playback ID to a new transport attempt. `media resolved`
+records yt-dlp's selected formats/codecs, age/availability metadata, CDN hosts,
+URL client (`c`), seconds to expiry, IP family/fingerprint, and presence of `n` and
+`pot`. These parameters are observations, not proof that a challenge or token is
+valid. Header fingerprints compare yt-dlp's per-format context, the top-level
+headers Core retained, and the headers Core actually sent. They use a random
+per-process key: compare them only within the same run. Cookie and authorization
+values, signed URLs, raw IPs, Referer/Origin values and arbitrary header values
+are never printed. A URL's IP fingerprint does not establish Core's outbound IP.
+
+`media response` records the first answer for each stream/status on a relay route,
+including later refusals, even if the renderer never reports an error. It records
+the final connection's IP family and headers after redirect stripping, and names
+Core as the fetcher, the receiving Device/Core, upstream host, Range, and HTTP
+status. Child HLS successes stay quiet, repeated statuses are deduplicated, and
+each route has a 12-line budget. A locally generated 502 is marked separately
+from an upstream HTTP response. `media resolve-failed` records the safe extractor
+error or cancellation. Try again creates a new attempt and re-runs extraction;
+it does not reuse the previous signed URL.
+
+For a failure in the Mac test instance, capture
+`~/Library/Application Support/quest.avoid.couch-test/logs/couch.log` immediately
+after one failure and one **Try again**. Include the `media resolve`,
+`media resolved`, `media response` and `player error` lines for both attempts,
+helper selection lines, Couch version and the failure's local time. If the app
+was restarted, include `couch.1.log` too. Note VPN/proxy/network changes during
+playback. Do not send an unredacted HAR, yt-dlp JSON, cookies or signed URLs.

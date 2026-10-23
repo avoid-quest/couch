@@ -14,6 +14,7 @@ import { resolveAnimeSaturnLink } from "./animesaturn";
 import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
+import { logMediaResolution } from "./media-diagnostics";
 
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
@@ -144,7 +145,7 @@ function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): 
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = ""): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = "", playbackId?: string): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
@@ -180,6 +181,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       }
       try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
       if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
+      logMediaResolution(playbackId, info, media.headers);
       // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
       // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
       // its own headers, opens the master playlist instead.

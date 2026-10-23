@@ -1,7 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { publicFetch, stripCrossOriginHeaders } from "./public-network";
+import { publicFetch, publicResponseContext, stripCrossOriginHeaders } from "./public-network";
 import { boundedBytes } from "./iptv-feeds";
 import { serve, type Listener } from "./http";
+import { logMediaDiagnostic, mediaAddress, mediaHeaders } from "./media-diagnostics";
 
 // Pass-through (#644 Delivery): a Device that can't fetch a source itself because of its
 // Origin, CORS or headers gets the bytes through Core. Core asks each source the way the
@@ -11,7 +12,7 @@ import { serve, type Listener } from "./http";
 type Target = { origin: string; userAgent: string };
 type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
 // refused: the last error status the source answered, which a browser reports as an unsupported format.
-type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number };
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; logged: Set<string> };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -151,7 +152,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // headers. One capability per preparation keeps every child on its route.
       // The single source-header map authorizes only the main source's origin;
       // a separate audio URL or redirected playlist cannot expand that trust.
-      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now() };
+      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now(), source: media.source, audioSource: media.audioSource, logged: new Set() };
       const route = async (url: string) => {
         const answer = await probe(url, relay, !!media.mpegts, signal, relay.publicNetwork ? publicRequest : fetch);
         return { url: answer.direct && !relay.publicNetwork ? url : link(relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
@@ -179,9 +180,22 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // The same Playback can have a loopback decoder and multiple browser origins.
       // Keep child links on the origin serving this request, not the last prepared Device.
       const destination = { ...relay, target: { ...relay.target, origin: address.origin } };
+      const sentHeaders = { ...relayHeaders(relay, url), ...(range ? { range } : {}) };
+      const diagnostic = (status: number, response?: Response, failure = false) => {
+        const stream = url === relay.source ? "main" : url === relay.audioSource ? "audio" : "child";
+        const entry = `${stream}:${status}:${failure}`;
+        // First answer and distinct failures, bounded per route; never log every range or HLS segment.
+        if (stream === "child" && status < 400 || relay.logged.has(entry) || relay.logged.size >= 12) return;
+        relay.logged.add(entry);
+        const context = response && publicResponseContext(response);
+        logMediaDiagnostic("response", playbackId, { route: relay.id.slice(0, 8), fetcher: "Core", consumer: relay.target.userAgent === "Couch" ? "Core" : "Device", stream, status, outcome: failure ? "transport-or-playlist-error" : "upstream",
+          routeAgeSeconds: Math.round((Date.now() - relay.createdAt) / 1000), ...mediaAddress(url), responseHost: mediaAddress(response?.url || url).host, connectionIpFamily: context?.ipFamily ?? null,
+          range: range === null ? null : /^bytes=\d{0,16}-\d{0,16}$/.test(range) ? range : "other", headers: mediaHeaders(context?.headers ?? sentHeaders) });
+      };
       let upstream: Response;
       try {
-        upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay, url), ...(range ? { range } : {}) }, signal: request.signal });
+        upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: sentHeaders, signal: request.signal });
+        diagnostic(upstream.status, upstream);
         // The last answer stands: a refusal is forgotten once the source answers again.
         relay.refused = upstream.status >= 400 && upstream.status <= 599 && upstream.status !== 416 ? upstream.status : undefined;
         let playlist = kind === "playlist" || playlistType(upstream.headers.get("content-type"), upstream.url || url);
@@ -194,7 +208,10 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
           if (relay.publicNetwork && !/^\uFEFF?#EXTM3U\r?\n/.test(text)) throw new Error("Invalid HLS playlist.");
           return new Response(await rewrite(text, upstream.url || url, destination), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
         }
-      } catch { return new Response("The media destination could not be read.", { status: 502 }); }
+      } catch {
+        if (!request.signal.aborted) diagnostic(502, undefined, true);
+        return new Response("The media destination could not be read.", { status: 502 });
+      }
       const headers = new Headers();
       for (const name of forwarded) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
       return new Response(upstream.body, { status: upstream.status, headers });

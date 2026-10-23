@@ -426,6 +426,8 @@ its results hold, as it finds them).
   player's band, so they never cover the artwork at the top. A toast never takes focus:
   Up from the top of the page reaches the newest one's action, and any other
   key returns. The TV ignores pointer hover on them.
+- A refused media request shows its HTTP status. **Try again** requests a fresh
+  stream; a 403 alone does not claim that the video requires age verification or sign-in.
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
