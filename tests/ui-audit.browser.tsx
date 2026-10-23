@@ -1,11 +1,13 @@
 // Production route tree with deterministic read responses for visual state review.
 // No API writes or playback commands leave this fixture.
+import { Profiler, useState, type PropsWithChildren, type ProfilerOnRenderCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { routeTree } from "../src/client/routeTree.gen";
 import { SessionGateContext } from "../src/client/session/gate-context";
 import type { SessionGateValue } from "../src/client/session/session-context";
+import { PlaybackClockContext, emptyPlaybackClock, type PlaybackClock } from "../src/client/session/playback-clock";
 import { deviceId } from "../src/client/session/device-id";
 import { isTvPresentation } from "../src/client/session/presentation";
 import { avoidRadioPlaylistId } from "../src/shared/radio";
@@ -21,7 +23,7 @@ const media = {id:entry.id,provider:"youtube",kind:"media",url:entry.source.slic
 const saved = {...media,kind:"web",source:entry.source,sourceLabel:"YouTube",savedAt:Date.now()};
 const history = {...media,mediaId:"audit-history",sourceLabel:"YouTube",position:120,watched:false,playable:true,queueEntryId:entry.id};
 export type AuditMode = "loaded" | "loading" | "empty" | "error";
-export async function mountUiAudit() {
+export async function mountUiAudit(onRender: ProfilerOnRenderCallback = () => {}) {
   const wasTv = document.body.classList.contains('tv-presentation');
   document.body.classList.toggle('tv-presentation', isTvPresentation());
   const root = createRoot(document.getElementById("fixture")!);
@@ -83,7 +85,13 @@ export async function mountUiAudit() {
     state:baseState,
   } as unknown as SessionGateValue;
   const router = createRouter({routeTree,history:createMemoryHistory({initialEntries:['/']}),context:{queryClient:client,identity:gate.identity,localHost:false,connected:true}});
-  const render=()=>root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><RouterProvider router={router}/></QueryClientProvider></SessionGateContext>);
+  let setClock!: (clock: PlaybackClock) => void;
+  function Clock({ children }: PropsWithChildren) {
+    const [clock, update] = useState(emptyPlaybackClock);
+    setClock = update;
+    return <PlaybackClockContext value={clock}>{children}</PlaybackClockContext>;
+  }
+  const render=()=>root.render(<Clock><Profiler id="audit" onRender={onRender}><SessionGateContext value={gate}><QueryClientProvider client={client}><RouterProvider router={router}/></QueryClientProvider></SessionGateContext></Profiler></Clock>);
   render();await wait(300);
   return {
     async go(href:string, options:{mode?:AuditMode;player?:string;video?:boolean;live?:boolean;connected?:boolean;fresh?:boolean;retry?:boolean;controller?:boolean;buffering?:boolean;pairing?:'new'|'removed'|'starting'|'failed';remote?:'ready'|'offline'|'private'|'none'}={}) {
@@ -110,6 +118,7 @@ export async function mountUiAudit() {
       render();await wait();
     },
     async updateSession(update: (current: SessionGateValue) => SessionGateValue) { gate=update(gate);render();await wait(); },
+    async updateClock(clock: PlaybackClock) { setClock(clock); await wait(); },
     client,router,calls,actions,
     close(){root.unmount();client.clear();window.fetch=originalFetch;document.body.classList.toggle('tv-presentation',wasTv);},
   };

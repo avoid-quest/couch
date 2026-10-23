@@ -166,15 +166,11 @@ They share one set of controls:
   is a picture, Speed, Quality, Audio delay and Details. Each acts on the
   playback, not on this window, so none needs the player open. Details closes
   the menu as it leaves the page.
-- **They move, not cross-fade.** Each shared control has its own view
-  transition name (`couch-play`, `couch-stop`, `couch-next`, `couch-volume`,
-  `couch-where`, `couch-queue`, `couch-gear`, and `couch-last` for the last
-  slot), so it
-  glides from its place in the bar to its place in the band while the band
-  itself grows (`couch-player-band`). Open player glides into fullscreen's
-  slot. The bar's thumbnail travels into the player's artwork, or grows into
-  its picture (`couch-art`), and the bar's title and its line fade out at once
-  rather than stretch over the band's timeline ([Design](../design.md#motion)).
+- **A short fade on entry.** The player appears over 160 ms, and Back fades
+  the restored bar in over the same interval. Their controls keep the positions
+  above; opacity is the only animated property. There is no shared-element
+  snapshot capture on navigation. Reduced motion skips the fade
+  ([Design](../design.md#motion)).
 
 The differences are deliberate:
 
@@ -353,7 +349,8 @@ as wide as the gutters allow. The copy:
 - a meta line: a show's genre and host ("Bass, Breaks, Goldie B"), as its
   tile says them, else the subtitle, else the source, then "in a separate
   window" for a channel that plays in mpv's window
-- the end time
+- the end time, updated independently so clock ticks do not re-render the
+  artwork and controls
 - a station's current programme or track
 
 The room's light pools behind the artwork, never behind the copy, and its

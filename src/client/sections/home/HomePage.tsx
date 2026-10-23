@@ -64,13 +64,11 @@ type Hero = { kind: "playing" } | { kind: "continue"; item: HistoryItem } | { ki
  * clock time it matters at. Each device picks which shelves it shows and in what order.
  */
 export function HomePage() {
-  const playbackClock = usePlaybackClock();
   const shell = useShell();
   const { on, play } = usePlayOn();
   const { credentials, available, current } = shell;
   const { state, connected, run, queue: queued, nativeHost, videoQualityPreference } = useSessionGate();
   const details = useDetailNavigation();
-  const now = useDurationClock();
   const [queueOpen, setQueueOpen] = useState(false);
   const layout = useHomeRows();
   const onHome = layout.rows.filter(row => row.shown);
@@ -103,21 +101,10 @@ export function HomePage() {
     ];
   };
 
-  const player = state?.player;
   const queue = state?.queue ?? [];
   const currentIndex = queue.findIndex(entry => entry.id === state?.currentEntryId);
   const cursor = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
   const upcoming = queue.slice(cursor + 1);
-  const length = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
-  const remaining = length == null ? null : Math.max(0, length - (playbackClock.position ?? 0)) / (player?.speed || 1);
-  // Up next as a timetable: each entry starts when the one before it ends.
-  let clock = remaining;
-  const plan = upcoming.map(entry => {
-    const starts = clock, seconds = knownLength(entry);
-    clock = clock == null || seconds == null ? null : clock + seconds;
-    return { entry, starts, seconds };
-  });
-  const doneBy = clock;
 
   const past = history.data?.items ?? [];
   const unfinished = past.filter(item => item.position > 0 && !item.watched);
@@ -173,7 +160,7 @@ export function HomePage() {
   const heroCaption = hero?.kind === "continue" ? historyCaption(hero.item) : undefined;
 
   const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
-      progress={!live && length ? <ProgressLine position={playbackClock.position ?? 0} duration={length} label={remaining != null ? `${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}` : undefined} /> : undefined}
+      progress={!live ? <PlayingProgress current={current} speed={state?.player.speed || 1} /> : undefined}
       // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
       open={() => shell.changeSection("Now")} />
     : hero.kind === "continue" && heroCaption ? <HomeHero context={<MediaContext collection={hero.item.collection} creator={hero.item.creator} />} thumbnail={hero.item.thumbnail} shape={historyShape(hero.item)} title={heroCaption.title} meta={heroCaption.meta}
@@ -190,7 +177,6 @@ export function HomePage() {
 
   // A list takes its items' majority shape; an item of another shape is contained in that frame.
   const continueShape = majorityShape(continued.slice(0, boardLength).map(historyShape));
-  const upNextShape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
   const laterShape = majorityShape(savedMedia.slice(0, boardLength).map(savedShape));
   const recentShape = majorityShape(recent.slice(0, boardLength).map(historyShape));
   // With no Stage, a remote starts on the board's first row.
@@ -202,11 +188,7 @@ export function HomePage() {
         primary={{ label: "Resume", disabled: !resumable(item), onClick: () => resume.mutate({ item, fromStart: false }) }} menu={historyMenu(item, true)} />)}
     </BoardList>,
 
-    upNext: !!upcoming.length && <BoardList title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : undefined}
-      more={upcoming.length > boardLength && <Button variant="ghost" className="-ml-3.5 justify-self-start text-muted-foreground" onClick={() => setQueueOpen(true)}>{upcoming.length - boardLength} more</Button>}>
-      {plan.slice(0, boardLength).map(({ entry, starts, seconds }, index) => <UpNextRow key={entry.id} entry={entry} shape={upNextShape} pageFirst={firstBoard === "upNext" && index === 0} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? undefined : metaLine(formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`)}
-        verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />)}
-    </BoardList>,
+    upNext: !!upcoming.length && <UpcomingBoard cursor={cursor} pageFirst={firstBoard === "upNext"} onMore={() => setQueueOpen(true)} />,
 
     later: !!savedMedia.length && <BoardList title="For later" href="/saved?tab=later">
       {savedMedia.slice(0, boardLength).map((item, index) => <MediaRow compact key={item.id} data-saved-details={item.id} pageFirst={firstBoard === "later" && index === 0} related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} {...savedCaption(item)} source={item.url}
@@ -268,6 +250,39 @@ export function HomePage() {
       </SheetContent>
     </Sheet>
   </section>;
+}
+
+// Only the progress and timetable subscribe to playback time; a tick must not render Home's shelves and artwork.
+function PlayingProgress({ current, speed }: { current: QueueEntry; speed: number }) {
+  const clock = usePlaybackClock();
+  const now = useDurationClock();
+  const length = clock.duration || knownLength(current);
+  if (!length) return null;
+  const remaining = Math.max(0, length - clock.position) / speed;
+  return <ProgressLine position={clock.position} duration={length} label={`${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}`} />;
+}
+
+function UpcomingBoard({ cursor, pageFirst, onMore }: { cursor: number; pageFirst: boolean; onMore: () => void }) {
+  const { credentials, available, current } = useShell();
+  const { state, connected, run } = useSessionGate();
+  const playbackClock = usePlaybackClock();
+  const now = useDurationClock();
+  const queue = state?.queue ?? [];
+  const upcoming = queue.slice(cursor + 1);
+  const shape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
+  const length = current ? current.live ? null : playbackClock.duration || knownLength(current) : 0;
+  // Up next as a timetable: each entry starts when the one before it ends.
+  let clock = length == null ? null : Math.max(0, length - playbackClock.position) / (state?.player.speed || 1);
+  const plan = upcoming.map(entry => {
+    const starts = clock, seconds = knownLength(entry);
+    clock = clock == null || seconds == null ? null : clock + seconds;
+    return { entry, starts, seconds };
+  });
+  return <BoardList title="Up next" time={clock != null ? `until ${formatEndTime(clock, now)}` : undefined}
+    more={upcoming.length > boardLength && <Button variant="ghost" className="-ml-3.5 justify-self-start text-muted-foreground" onClick={onMore}>{upcoming.length - boardLength} more</Button>}>
+    {plan.slice(0, boardLength).map(({ entry, starts, seconds }, index) => <UpNextRow key={entry.id} entry={entry} shape={shape} pageFirst={pageFirst && index === 0} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? undefined : metaLine(formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`)}
+      verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />)}
+  </BoardList>;
 }
 
 /** An Up next entry's row: its press plays it now, and its menu holds what its Up next row in the player does. */

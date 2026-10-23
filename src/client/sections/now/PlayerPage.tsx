@@ -81,7 +81,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const topBand = useCallback((element: HTMLDivElement | null) => {
     if (!element) return;
     const root = document.documentElement.style;
-    const observer = new ResizeObserver(() => root.setProperty("--player-top", `${element.offsetHeight}px`));
+    const observer = new ResizeObserver(([entry]) => root.setProperty("--player-top", `${Math.round(entry!.borderBoxSize[0]!.blockSize)}px`));
     observer.observe(element, { box: "border-box" });
     return () => { observer.disconnect(); root.removeProperty("--player-top"); };
   }, []);
@@ -125,7 +125,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (queueOpen) queueClose.current?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
-  const ends = useEndTime(state);
   // Unattended playback starts on the picture so automatic focus cannot pin the bands open.
   // A TV already driven by keys keeps its transport entry point.
   useEffect(() => {
@@ -245,7 +244,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const trail = current && <ContentBreadcrumb player collection={current.collection} className="[&_[data-slot=breadcrumb-list]]:text-base" />;
   const linkedTitle = detailHref ? <ContentLink href={detailHref} className="no-underline hover:underline">{title}</ContentLink> : title;
   // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
-  const queueOrigin = `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%`;
+  const queueOrigin = queueOpen && !besideQueue ? `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%` : undefined;
   const settings = player && state?.preferences ? { entry: current, player, ready: transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
   // Over a picture the status is the picture's (a spinner centred on it, as YouTube's and Apple's HIG; a problem as a
   // short centred line with its one remedy); beside artwork it follows the title. Plain loading says nothing else.
@@ -294,7 +293,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         {trail && <div className={cn("min-w-0", back ? "col-start-2 col-end-4" : "col-span-full")}>{trail}</div>}
         {back && <div className="row-start-2">{back}</div>}
         <h1 title={title} className="row-start-2 min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl">{linkedTitle}</h1>
-        <div className="row-start-2 flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">{sharing && <LiveSharingStatus />}{ends && <p data-player-ends>{ends}</p>}{tvPresentation && <DigitalClock />}</div>
+        <div className="row-start-2 flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">{sharing && <LiveSharingStatus />}{!radio && <PlayerEndTime state={state} />}{tvPresentation && <DigitalClock />}</div>
         {(byline || context) && <div className={cn("flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base", back ? "col-start-2 col-end-4" : "col-span-full")}>{byline && <p className="min-w-0 truncate">{byline}</p>}{context}</div>}
       </div>}
     </div>
@@ -310,7 +309,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {/* Where it plays leads the line under the title, as in the now-playing bar. */}
           {elsewhere && at ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"><PlaysOn at={at} />{context}</div> : context}
           {meta && <p className="text-sm text-pretty text-muted-foreground">{meta}</p>}
-          {ends && <p data-player-ends className="text-sm text-muted-foreground tabular-nums">{ends}</p>}
+          {!radio && <PlayerEndTime state={state} className="text-sm text-muted-foreground tabular-nums" />}
           {nowPlaying && <p role="status" className="text-sm text-pretty text-muted-foreground">{nowPlaying}</p>}
           {statusView}
         </div>
@@ -339,7 +338,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       if (event.target !== clickOpened.current || event.target.matches('[aria-expanded="true"]')) return;
       clickOpened.current = null;
       surface()?.focus({ preventScroll: true });
-    }} className={cn("player-band z-20 pt-1 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
+    }} className={cn("player-band z-20 pt-1 transition-opacity duration-200 motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
       {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
           bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
           gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
@@ -361,7 +360,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
                   turns subtitles on and off. It opens over the picture above the gear. */}
               <Popover open={panel === "settings"} onOpenChange={open => setPanel(open ? "settings" : null)}>
                 <PopoverTrigger asChild><Button ref={gear} data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
-                {settings && <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
+                {panel === "settings" && settings && <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
               </Popover>
               {/* The window can leave fullscreen. Where nothing can fill the screen (artwork, the TV, which is always
                   full) the slot stays empty, not a control that can never act, so the tools keep their x and the TV
@@ -375,6 +374,12 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>
     </div>
   </section>;
+}
+
+// Clock ticks update their label without re-rendering the player, artwork and menus.
+function PlayerEndTime({ state, className }: { state: ClientSessionState | null; className?: string }) {
+  const ends = useEndTime(state);
+  return ends ? <p data-player-ends className={className}>{ends}</p> : null;
 }
 
 /**
