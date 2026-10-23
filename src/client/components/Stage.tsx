@@ -7,7 +7,7 @@ import { roomStyle, useArtwork } from "./AmbientLight";
 // While a page with a stage is at its top, the header lies over the stage's picture; once the page scrolls, the
 // copy would pass under it, so it is black again.
 const stages = new Set<Element>();
-const mark = () => document.documentElement.toggleAttribute("data-stage-under-header", stages.size > 0 && scrollY < 4);
+const mark = () => document.documentElement.toggleAttribute("data-stage-under-header", stages.size > 0 && (document.querySelector(".electron .app-page")?.scrollTop ?? scrollY) < 4);
 
 /** Each kind's shape, as width over height, until the picture's own is known. */
 export const shapeRatio: Record<ArtShape, number> = { video: 16 / 9, poster: 2 / 3, square: 1, round: 1 };
@@ -45,8 +45,8 @@ export function Stage({ thumbnail, shape, fit, title, size = "details", label, c
     if (!element) return;
     stages.add(element);
     mark();
-    addEventListener("scroll", mark, { passive: true });
-    return () => { removeEventListener("scroll", mark); stages.delete(element); mark(); };
+    addEventListener("scroll", mark, { passive: true, capture: true });
+    return () => { removeEventListener("scroll", mark, true); stages.delete(element); mark(); };
   }, []);
   const form = vector(thumbnail) || art?.clear ? "mark" : "object";
   const wide = fit !== "contain" && shape !== "round" && ratio >= wideRatio;

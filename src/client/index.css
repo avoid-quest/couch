@@ -246,16 +246,35 @@ html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-pl
 @media (max-width: 600px) { [data-sonner-toaster][data-x-position] { width: auto; } }
 [data-sonner-toaster][data-x-position] [data-sonner-toast] { left: auto; right: 0; width: fit-content; max-width: 100%; }
 
-/* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window
-   around their controls and leave 90pt for the window's buttons, which don't zoom.
+/* Desktop apps have no title bar (app/main.ts). As in t3code, headers drag the window
+   around their controls. Native controls don't zoom with the interface.
    Electron 44 inherits app-region, so children reset to initial and add no rectangles;
    open dialogs sit above a header and take its clicks back. */
 [data-window-controls] .drag-region { app-region: drag; }
 @layer base { [data-window-controls] .drag-region > * { app-region: initial; } }
 [data-window-controls] :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
-[data-window-controls] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
+[data-window-controls=""] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
+/* Windows/Linux overlay geometry and drag regions ship in preload.ts for older remote renderers too. */
 /* 90pt is where the first control's box starts, so the Couch switch keeps its hit area inside it. */
-[data-window-controls] .window-controls-inset > :first-child { margin-left: 0; }
+[data-window-controls=""] .window-controls-inset > :first-child { margin-left: 0; }
+
+/* t3code keeps the native resize edge and caption strip outside the scroller.
+   These classes are only set on Windows/Linux desktop windows, never Mac or TV. */
+.electron { --desktop-window-right-resize-inset: 0px; --app-scrollbar-width: calc(6px / var(--interface-scale)); --app-scrollbar-thumb: rgb(255 255 255 / 8%); --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%); }
+.electron-windows { --desktop-window-right-resize-inset: 6px; }
+html.electron, .electron body { height: 100%; overflow: hidden; }
+.electron #root { height: calc(100dvh / var(--interface-scale)); padding-right: calc(var(--desktop-window-right-resize-inset) / var(--interface-scale)); }
+.electron .app-shell { height: calc(100dvh / var(--interface-scale)); min-height: 0; }
+.electron :is(.app-shell > main, .tv-browser, .app-page) { min-height: 0; }
+.electron .app-page { overflow-y: auto; overscroll-behavior-y: none; scroll-padding-block: 1rem; }
+.electron .app-page:has(.player-page) { overflow: hidden; }
+.electron .app-footer { right: calc(var(--desktop-window-right-resize-inset) / var(--interface-scale)); }
+.electron [data-nav-rail] { top: 2rem; }
+.electron .app-header { grid-template-columns: auto minmax(max-content, 1fr) minmax(0, 30rem); column-gap: .75rem; }
+.electron ::-webkit-scrollbar { width: var(--app-scrollbar-width); height: var(--app-scrollbar-width); }
+.electron ::-webkit-scrollbar-track { background: transparent; }
+.electron ::-webkit-scrollbar-thumb { background: var(--app-scrollbar-thumb); border-radius: 3px; }
+.electron ::-webkit-scrollbar-thumb:hover { background: var(--app-scrollbar-thumb-hover); }
 
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }

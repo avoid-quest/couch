@@ -12,7 +12,7 @@ test("the real preload routes versioned installs and legacy renderer methods to 
     contextBridge: { exposeInMainWorld(name: string, bridge: CouchApp) { expect(name).toBe("couchApp"); app = bridge; } },
     ipcRenderer: { async invoke(...args: unknown[]) { calls.push(args); return { value: state }; }, on() {}, off() {} },
   };
-  runInNewContext(await result.outputs[0]!.text(), { require: () => electron, process: { platform: "linux", argv: [] } });
+  runInNewContext(await result.outputs[0]!.text(), { require: () => electron, process: { platform: "linux", argv: [] }, addEventListener() {} });
   expect(await app!.updates()).toEqual(state);
   await app!.checkForUpdates();
   await app!.setUpdateChannel("preview");
