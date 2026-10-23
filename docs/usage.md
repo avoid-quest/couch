@@ -1,7 +1,8 @@
 # Couch usage and development
 
-Couch plays internet media on a TV or computer and lets every phone on the LAN
-control it. The Electron app shows it; Core (Node) owns the shared queue, catalogs
+Couch plays internet media on a TV or computer. Phones and laptops on the same
+network join it to choose what plays, play it themselves, or share their own
+screen or sound. The Electron app shows it; Core (Node) owns the shared queue, catalogs
 and paired remotes.
 
 ## Sources
