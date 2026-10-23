@@ -3,7 +3,7 @@ import { updateSettings } from "../src/server/updates-settings";
 import { createNativeUpdates } from "../src/server/updates-native";
 import type { UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { DeviceIdentity } from "../src/shared/devices";
-import { parseUpdateOutcome } from "../src/shared/updates";
+import { parseUpdateOutcome, UPDATE_INTERRUPTS_PLAYBACK } from "../src/shared/updates";
 
 const state: UpdateState = { version: "0.3.0", channel: "latest", status: "ready", available: "0.3.1", progress: null, checkedAt: null, error: null };
 const identity = (authority: DeviceIdentity["authority"]): DeviceIdentity => ({ authority, device: null, claimAvailable: false });
@@ -29,6 +29,30 @@ test("authorization is checked again after reading a channel or version", async 
   const response = await updateSettings(request("/api/updates/channel", { channel: "preview" }), () => ++reads === 1 ? identity("administrator") : null, async () => { calls++; return state; });
   expect(response.status).toBe(401);
   expect(calls).toBe(0);
+});
+
+test("playback must be explicitly interrupted at the server install boundary", async () => {
+  const calls: UpdateAction[] = [];
+  const invoke = async (action: UpdateAction) => { calls.push(action); return state; };
+  const blocked = await updateSettings(request("/api/updates/install", { version: "0.3.1" }), () => identity("administrator"), invoke, () => [], { playing: () => true });
+  expect(blocked.status).toBe(409);
+  expect(await blocked.json()).toEqual({ error: UPDATE_INTERRUPTS_PLAYBACK, interruptionRequired: true });
+  expect(calls).toEqual([]);
+  const allowed = await updateSettings(request("/api/updates/install?interrupt=1", { version: "0.3.1" }), () => identity("administrator"), invoke, () => [], { playing: () => true });
+  expect(allowed.status).toBe(200);
+  expect(calls).toEqual([{ op: "install", version: "0.3.1", interrupt: true }]);
+});
+
+test("paired controllers can read release notes but cannot maintain media tools", async () => {
+  let checks = 0;
+  const helpers = { read: async () => ({ status: "idle" as const, checkedAt: null, items: [] }), check: async () => { checks++; return { status: "checking" as const, checkedAt: null, items: [] }; } };
+  const services = { helpers, releases: async () => ({ releases: [], more: false }) };
+  expect((await updateSettings(request("/api/updates/releases"), () => identity("controller"), undefined, undefined, services)).status).toBe(200);
+  expect((await updateSettings(request("/api/updates/releases"), () => null, undefined, undefined, services)).status).toBe(401);
+  expect((await updateSettings(request("/api/updates/helpers/check", {}), () => identity("controller"), undefined, undefined, services)).status).toBe(403);
+  expect(checks).toBe(0);
+  expect((await updateSettings(request("/api/updates/helpers/check", {}), () => identity("administrator"), undefined, undefined, services)).status).toBe(200);
+  expect(checks).toBe(1);
 });
 
 test("malformed versions and target IDs never reach the native updater", async () => {

@@ -16,8 +16,10 @@ const rejectedUpload = (url: string, origin: string) => new Promise<number>((res
 test("capture upload is paired, secret-bound and owned by the exact publishing window", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
+    assert.equal((await (await f.api("/api/connection")).json()).player, "idle");
     await f.publish("screen");
     assert.equal(f.publisher.state.playbacks?.length, 0);
+    assert.equal((await (await f.api("/api/connection")).json()).player, "playing", "native update guards must see a publisher even without receivers");
     assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, false);
     assert.equal(JSON.stringify(f.receiver.state).includes(f.uploadToken), false);
     assert.equal(await rejectedUpload(f.uploadUrl("screen", "2".repeat(64)), f.hub.origin), 403);
@@ -29,6 +31,7 @@ test("capture upload is paired, secret-bound and owned by the exact publishing w
     assert.equal((await f.receiver.command({ type: "endLive", sourceId: "screen" })).ok, false);
     f.publisher.socket.terminate();
     await until(() => !f.receiver.state.liveSources?.length);
+    assert.equal((await (await f.api("/api/connection")).json()).player, "idle");
     assert.equal(await rejectedUpload(f.uploadUrl("screen", f.uploadToken), f.hub.origin), 403);
   } finally { await f.close(); }
 });

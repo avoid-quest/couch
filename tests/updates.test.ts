@@ -83,6 +83,32 @@ test("a downloaded update installs when Couch quits, on macOS as elsewhere", asy
   expect(armed).toEqual([true]);
 });
 
+test("manual installation checks playback in its owner and needs explicit interruption", async () => {
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: false, onState() {}, playing: () => true });
+  app.isPackaged = true;
+  available = "0.3.1";
+  await updates.check();
+  await expect(updates.action({ op: "install", version: "0.3.1" })).rejects.toThrow("Stop playback and update");
+  expect(installs).toBe(0);
+  expect(updates.state().status).toBe("ready");
+  await updates.action({ op: "install", version: "0.3.1", interrupt: true });
+  expect(installs).toBe(1);
+});
+
+test("playback starting during the reply delay keeps the installer ready", async () => {
+  let playing = false;
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: false, onState() {}, playing: () => playing });
+  app.isPackaged = true;
+  available = "0.3.1";
+  await updates.check();
+  await updates.action({ op: "install", version: "0.3.1" }, 5);
+  playing = true;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(installs).toBe(0);
+  expect(updates.state().status).toBe("ready");
+  expect(updates.state().error).toContain("Stop playback and update");
+});
+
 test("a missing Stable feed cannot offer the previous Preview release", async () => {
   Object.defineProperty(process, "platform", { ...platform, value: "linux" });
   const updates = start();

@@ -59,6 +59,8 @@ import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
 import { updateSettings } from "./updates-settings";
 import { createNativeUpdates } from "./updates-native";
+import { createReleaseHistory } from "./release-notes";
+import type { HelperUpdates } from "../shared/helper-updates";
 import type { UpdateAction, UpdateState, UpdateTarget } from "../shared/app-bridge";
 import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
 import { logPlaybackError, safePlaybackError } from "./playback-log";
@@ -80,6 +82,7 @@ type HubOptions = {
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeUpdates?: (action: UpdateAction) => Promise<UpdateState>;
+  helperUpdates?: { read(): Promise<HelperUpdates>; check(): Promise<HelperUpdates> };
   /** Main saves TV mode and restarts the app after replying. */
   nativeTvMode?: (enabled: boolean) => Promise<void>;
   native?: boolean;
@@ -156,6 +159,7 @@ export async function createHub(options: HubOptions) {
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<Socket<SocketData>>();
   const clientUpdates = new Map<Socket<SocketData>, ReturnType<typeof createNativeUpdates>>();
+  const releaseHistory = createReleaseHistory();
   const updateSocket = (id: string) => [...sockets].findLast(socket => socket.data.deviceId === id && clientUpdates.has(socket));
   const updateTargets = (): UpdateTarget[] => [
     ...options.nativeUpdates ? [{ id: "host", name: store.installationName(), tv: process.env.COUCH_TV_PRESENTATION === "1" }] : [],
@@ -1396,8 +1400,8 @@ export async function createHub(options: HubOptions) {
   };
 
   // Whether this Couch plays anything, for the app, health checks and unattended updates. An
-  // admitted AirPlay sender counts even before anyone plays its source.
-  const status = () => all().map(playback => stateOf(playback).player.status).find(value => ["loading", "playing", "paused"].includes(value)) ?? (airplay.active() ? "playing" : "idle");
+  // admitted AirPlay sender or live publisher counts even before anyone plays its source.
+  const status = () => all().map(playback => stateOf(playback).player.status).find(value => ["loading", "playing", "paused"].includes(value)) ?? (airplay.active() || live.sources().length > 0 ? "playing" : "idle");
   const frontend = createFrontend();
   // Unauthenticated pairing: the LAN's own origins only, while sharing is on, with a JSON body.
   type Respond = (body: unknown, status?: number) => Response;
@@ -1627,7 +1631,12 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/bluetooth(?:\/|$)/.test(url.pathname)) return cors(request, await bluetoothSettings(request, currentIdentity, options.nativeBluetooth));
       if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
       if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
-      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updateSettings(request, currentIdentity, invokeUpdate, updateTargets));
+      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updateSettings(request, currentIdentity, invokeUpdate, updateTargets, {
+        releases: releaseHistory, helpers: options.helperUpdates,
+        playing: id => id === "host" ? ["loading", "playing", "paused"].includes(status())
+          : live.sources().some(source => source.deviceId === id) || all().some(playback => ["loading", "playing", "paused"].includes(stateOf(playback).player.status)
+            && (playback.outputs.some(output => output.deviceId === id) || playback.held?.deviceId === id)),
+      }));
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
       if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));

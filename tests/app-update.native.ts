@@ -89,10 +89,19 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
   assert(evidence.ordinaryCloseKeptWindow);
   this.show();
   await loadURL.call(this, new URL('/settings/couch/updates', url).href, options);
+  // Helper downloads are covered separately. Keep this native lifecycle check offline
+  // once Core starts, so the new batch UI can reach its final local-app install.
+  await this.webContents.executeJavaScript(\`
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => String(input).includes('/api/updates/helpers')
+      ? Promise.resolve(new Response(JSON.stringify({status:'done',checkedAt:Date.now(),items:[]})))
+      : originalFetch(input, init);
+    void 0;
+  \`);
   await this.webContents.executeJavaScript(
-    'new Promise((resolve, reject) => { const deadline = Date.now() + 5000; const check = () => { const button = [...document.querySelectorAll("button")].find(button => button.textContent === "Restart to update"); if (button) resolve(); else if (Date.now() > deadline) reject(new Error("Update button missing")); else setTimeout(check, 50); }; check(); })'
+    'new Promise((resolve, reject) => { const deadline = Date.now() + 5000; const check = () => { const button = [...document.querySelectorAll("button")].find(button => button.textContent === "Update 1 device" && !button.disabled); if (button) resolve(); else if (Date.now() > deadline) reject(new Error("Update button missing")); else setTimeout(check, 50); }; check(); })'
   );
-  await this.webContents.executeJavaScript('[...document.querySelectorAll("button")].find(button => button.textContent === "Restart to update").click()');
+  await this.webContents.executeJavaScript('[...document.querySelectorAll("button")].find(button => button.textContent === "Update 1 device").click()');
   evidence.buttonClicked = true;
   record();
   if (${pending}) setTimeout(() => {

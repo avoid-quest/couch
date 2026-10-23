@@ -420,6 +420,10 @@ its results hold, as it finds them).
 
 ### Messages
 
+Available updates keep a compact line below the header, opening the shared
+[update review](design/settings.md#updates). Release notes, device selection and
+progress stay in the app; the notice never opens a dialog by itself.
+
 - **Toast** (sonner): errors, Undo, Queue confirmation and unexpected outcomes.
   Every toast is one of `src/client/toasts.ts`'s kinds (`failed`, `undo`,
   `queued`, `playing-on`, `notice`, `tap-to-hear`, `sharing`), each with a fixed duration

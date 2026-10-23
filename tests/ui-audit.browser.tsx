@@ -48,6 +48,8 @@ export async function mountUiAudit() {
       const title = target.includes('@') ? 'NPR Music' : target ? 'Tiny Desk concerts' : undefined;
       body = {items:items.map(item=>({...item,provider,kind:provider==='twitch'?'media':item.kind,live:provider==='twitch',url:provider==='twitch'?'https://www.twitch.tv/nprmusic':item.url})),...(target?{item:{...media,provider,url:target,kind:single?'media':'collection',title:single?media.title:title},title:single?media.title:title,thumbnail,description:media.description}: {})};
     } else if(path==='/api/providers/favorites') body={favorites:mode==='empty'?[]:[{...media,kind:'channel',url:creator.url,title:creator.title}]};
+    else if(path==='/api/updates/targets') body=[];
+    else if(path==='/api/updates/helpers') body={status:'idle',checkedAt:null,items:[]};
     else if(path==='/api/devices') body={devices:[{id:deviceId(),name:'Studio browser',role:'administrator',createdAt:Date.now(),lastSeenAt:Date.now()},{id:'audit-tv',name:'Living room TV',role:'controller',createdAt:Date.now(),lastSeenAt:Date.now()}]};
     else if(path.endsWith('/pairing-code')||path.endsWith('/claim-code')) body={code:'123456'};
     else if(path==='/api/for-later') body={items:mode==='empty'?[]:[saved]};

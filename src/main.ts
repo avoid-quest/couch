@@ -5,6 +5,7 @@ import { createNativeTvMode } from "./server/tv-mode-native";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { helpersCommand, startHelpers } from "./server/helpers";
+import { createHelperUpdates } from "./server/helper-updates";
 import { createHub } from "./server/hub";
 import { liveTurnFromEnvironment } from "./server/live-ice";
 import type { AppMessage, CoreMessage } from "./shared/protocol";
@@ -43,12 +44,14 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 startHelpers(join(dataDir, "helpers"));
+const helperUpdates = createHelperUpdates(join(dataDir, "helpers"));
 const hub = await createHub({
   managedLan: native || allowLanHttp,
   allowLanHttp,
   onAddresses: urls => app?.postMessage({ type: "addresses", urls }),
   remoteControlEnabled: !native,
   native,
+  helperUpdates,
   nativeDisplay: nativeDisplay.request,
   ...(native ? { nativeUpdates: nativeUpdates.request, nativeTvMode: nativeTvMode.request } : {}),
   ...(bluetooth ? { nativeBluetooth: bluetooth.request } : {}),

@@ -2,8 +2,9 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { access, constants, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { basename, delimiter, dirname, join, sep } from "node:path";
+import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { unzipSync } from "fflate";
+import type { HelperUpdate } from "../shared/helper-updates";
 import { activeHold, pin, pinned, readHelperStatus, readHold, readStatus, removeHold, updateStatus, writeJson, type HelperHold } from "./helper-status";
 
 // Core's media helpers. It uses the system's copy when it is recent enough.
@@ -110,7 +111,7 @@ let root = "";
 // Executables a run is still using; pruning leaves their copies for a later check.
 const inUse = new Map<string, number>();
 type Copy = { version: string; path: string };
-type Choice = Copy & { origin: "system" | "managed"; sha256?: string; latest?: string; held?: boolean };
+type Choice = Copy & { origin: "system" | "managed"; sha256?: string; latest?: string; held?: boolean; error?: string };
 const newestFirst = (a: string, b: string) => b.localeCompare(a, "en", { numeric: true });
 
 // A yt-dlp copy being removed is first renamed to <version>.removing; see remove.
@@ -190,6 +191,7 @@ async function install(name: Helper, release: Release) {
   const path = await executable(partial, name);
   if (!path) throw new Error(`the ${name} download has no program`);
   await verify(name, release, path);
+  if ([...inUse.keys()].some(path => path.startsWith(target + sep))) throw new Error(`${name} ${release.version} is still in use. Try again after playback finishes.`);
   await rm(target, { recursive: true, force: true });
   await rename(partial, target);
   console.error(`Couch helpers: installed ${name} ${release.version} (SHA-256 verified)`);
@@ -217,13 +219,13 @@ async function select(name: Helper, choice: Choice, copies: Copy[] | null) {
     if (copy && choice.sha256) Object.assign(copy, { sha256: choice.sha256, installedAt: now });
     status.selected[name] = { origin: choice.origin, version: choice.version, path: choice.path, sha256: copy?.sha256 ?? null, verifiedAt: now, latest: choice.latest ?? null, held: !!choice.held };
   });
-  return choice.path;
+  return choice;
 }
 
 // The yt-dlp hold the last check saw, so a run notices a new or ended one.
 let holdSeen: string | null = null;
 
-async function check(name: Helper): Promise<string> {
+async function check(name: Helper, update = false): Promise<Choice> {
   let copies: Copy[] | null = null;
   const managed = async () => copies ??= await installed(name);
   if (name === "yt-dlp") {
@@ -237,21 +239,30 @@ async function check(name: Helper): Promise<string> {
   const system = await onPath(name);
   const systemVersion = system && await version(name, system);
   // Only yt-dlp is kept current, so only its latest release matters up front.
-  const current = name === "yt-dlp" ? await latest(name).catch(() => null) : null;
+  let error: string | undefined;
+  const release = () => latest(name).catch((failure: Error) => { error = failure.message; return null; });
+  let current = name === "yt-dlp" ? await release() : null;
   // A failed release check must not prefer an older PATH copy over the cached one.
   const offlineCopy = name === "yt-dlp" && !current ? (await managed())[0] : undefined;
   if (system && systemVersion && recentEnough(name, systemVersion, current?.version ?? offlineCopy?.version))
     // Couch's own yt-dlp copies stay bounded, with their previous one, while PATH's is used.
-    return select(name, { origin: "system", path: system, version: systemVersion, latest: current?.version }, name === "yt-dlp" ? await managed() : copies);
+    return select(name, { origin: "system", path: system, version: systemVersion, latest: current?.version, error }, name === "yt-dlp" ? await managed() : copies);
   const copy = (await managed())[0];
-  if (copy && (!current || copy.version >= current.version)) return select(name, { ...copy, origin: "managed", latest: current?.version }, copies);
-  try { return await select(name, { ...await install(name, current ?? await latest(name)), origin: "managed", latest: current?.version }, copies); }
+  // Manual checks also refresh managed builds. Compatible PATH copies stay with their
+  // package manager, and startup/daily checks retain their compatibility-only policy.
+  if (update && name !== "yt-dlp") current = await release();
+  if (copy && (!current || newestFirst(copy.version, current.version) <= 0)) return select(name, { ...copy, origin: "managed", latest: current?.version, error }, copies);
+  try {
+    const target = current ?? await latest(name);
+    return await select(name, { ...await install(name, target), origin: "managed", latest: target.version }, copies);
+  }
   catch (error) {
-    const fallback: Choice | null = copy ? { ...copy, origin: "managed", latest: current?.version }
-      : system && systemVersion ? { origin: "system", path: system, version: systemVersion, latest: current?.version } : null;
+    const failure = { latest: current?.version, error: (error as Error).message };
+    const fallback: Choice | null = copy ? { ...copy, origin: "managed", ...failure }
+      : system && systemVersion ? { origin: "system", path: system, version: systemVersion, ...failure } : null;
     console.error(`Couch helpers: couldn't download ${name}: ${(error as Error).message}${fallback ? `; using ${fallback.path}` : ""}`);
     if (fallback) return select(name, fallback, copies);
-    if (name === "mpv" && !assets?.[3]) throw error;
+    if (update || name === "mpv" && !assets?.[3]) throw error;
     throw new Error(`Couch couldn't download ${name}. Check the internet connection and try again.`);
   }
 }
@@ -259,15 +270,50 @@ async function check(name: Helper): Promise<string> {
 const chosen = new Map<Helper, Promise<string>>();
 
 // Checks run one at a time per helper, so a repair never races an update.
-export function checkHelper(name: Helper) {
+function queueCheck(name: Helper, run: () => Promise<string>) {
   const previous = chosen.get(name)?.then(path => path, () => "") ?? Promise.resolve("");
-  const next = previous.then(before => check(name).then(path => {
+  const next = previous.then(before => run().then(path => {
     if (path !== before) console.error(`Couch helpers: ${name} is ${path}`);
     return path;
   }));
   next.catch((error: Error) => console.error(`Couch helpers: ${error.message}`));
   chosen.set(name, next);
   return next;
+}
+
+export function checkHelper(name: Helper) {
+  return queueCheck(name, () => check(name).then(choice => choice.path));
+}
+
+// mpv is optional: an update must not install it on a Core that has never needed it.
+export async function helpersToUpdate(directory: string): Promise<Helper[]> {
+  const { selected } = await readStatus(directory);
+  const needed = root && resolve(root) === resolve(directory) && chosen.has("mpv");
+  const mpv = selected.mpv || needed || await onPath("mpv")
+    || (await readdir(join(directory, "mpv")).catch(() => [])).some(entry => !unfinished(entry));
+  return mpv ? [...names, "mpv"] : [...names];
+}
+
+export async function updateHelper(directory: string, name: Helper): Promise<HelperUpdate> {
+  let choice: Choice | undefined, error: string | null = null, before: string | undefined;
+  try {
+    // Core initializes the helper directory. A status/check route in a test or a server
+    // without helper setup must never fall through to paths relative to an empty root.
+    if (!root || resolve(root) !== resolve(directory)) throw new Error("Couch's media helpers have not been started for this directory.");
+    await queueCheck(name, async () => {
+      before = (await readStatus(directory)).selected[name]?.version;
+      choice = await check(name, true);
+      return choice.path;
+    });
+  } catch (failure) { error = failure instanceof Error ? failure.message : "Couldn't update this helper."; }
+  const selected = choice ?? (await readStatus(directory)).selected[name];
+  error ??= choice?.error ?? null;
+  return {
+    name, version: selected?.version ?? null, origin: selected?.origin ?? null, error,
+    status: error ? "error" : choice?.held ? "held"
+      : name !== "yt-dlp" && choice?.origin === "system" ? name === "mpv" ? "system" : "compatible"
+      : choice?.version !== before ? "updated" : "current",
+  };
 }
 
 // Checks every helper now and once a day: first-run downloads, yt-dlp updates and repairs.

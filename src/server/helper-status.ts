@@ -16,7 +16,7 @@ export type SelectedHelper = {
   sha256: string | null;
   // When the selection check last ran this executable.
   verifiedAt: string;
-  // yt-dlp's latest release seen by that check; null when offline, held or not checked.
+  // The latest release seen by that check; null when offline, held or not checked.
   latest: string | null;
   // Selected by an operator's hold (`--helpers previous`), not by the update check.
   held: boolean;

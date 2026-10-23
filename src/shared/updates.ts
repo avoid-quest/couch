@@ -5,7 +5,8 @@ const statuses = ["idle", "checking", "up-to-date", "downloading", "ready", "ins
 const outcomes = ["installed", "installed-unverified", "rolled-back", "failed", "skipped", "up-to-date", "waiting"] as const;
 
 export type UpdateChannel = typeof channels[number];
-export type UpdateAction = { op: "read" } | { op: "check" } | { op: "channel"; channel: UpdateChannel } | { op: "install"; version: string };
+export type UpdateAction = { op: "read" } | { op: "check" } | { op: "channel"; channel: UpdateChannel } | { op: "install"; version: string; interrupt?: boolean };
+export const UPDATE_INTERRUPTS_PLAYBACK = "Updating will stop playback. Choose Stop playback and update to continue.";
 export type UpdateTarget = { id: string; name: string; tv: boolean };
 export type UpdateOutcome = {
   version: string | null;
@@ -42,6 +43,7 @@ export function validateUpdateAction(action: unknown): asserts action is UpdateA
     if (!("channel" in action) || !isUpdateChannel(action.channel)) throw new Error("Choose Stable or Preview.");
   } else if (action.op === "install") {
     if (!("version" in action) || !isUpdateVersion(action.version)) throw new Error("Choose the available update.");
+    if ("interrupt" in action && typeof action.interrupt !== "boolean") throw new Error("Choose whether to stop playback.");
   } else throw new Error("Invalid update action.");
 }
 
