@@ -1,5 +1,4 @@
-import { playbackStatus, sounding } from "@/playback-status";
-import { Level } from "@/components/Level";
+import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -129,9 +128,9 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
     <div className="relative flex min-w-0 items-center gap-4 max-sm:gap-3 max-sm:pr-4">
       <button data-bar-art type="button" tabIndex={-1} aria-hidden="true" className="relative flex h-14 max-w-28 min-w-14 shrink-0 items-center justify-center overflow-hidden rounded-md shadow-[0_.375rem_1rem_rgb(0_0_0/45%)] bg-black/40 max-sm:h-12 max-sm:min-w-12 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-28 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto" onClick={() => onOpen()}>{artwork}</button>
       <div data-bar-title className="grid min-w-0 flex-1 gap-1">
-        <Button variant="link" className="group/title h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title leading-tight font-medium whitespace-normal text-foreground touch:min-h-0 max-sm:text-body" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
-          {/* Two lines on wide screens; one on a phone, where the bar is narrow. Focus shows it whole. */}
-          <span className="line-clamp-2 break-words max-sm:line-clamp-1 group-focus-visible/title:line-clamp-none" title={title}>{title}</span>{sounding(state, connected) && <Level moving className="ml-2 shrink-0 text-[.875rem]" />}</Button>
+        <Button variant="link" className="h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title leading-tight font-medium text-foreground touch:min-h-0 max-sm:text-body" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
+          {/* Keep the collapsed bar compact; the player shows the whole title. */}
+          <span className="truncate" title={title}>{title}</span></Button>
         {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}
         <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-meta text-muted-foreground">
           {at?.elsewhere && <PlaysOn at={at} />}
