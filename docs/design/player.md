@@ -108,7 +108,10 @@ The timeline row:
 - As on YouTube, the line thickens under a pointer and while it is dragged,
   here, beside artwork and on the now-playing bar alike. Over a picture, and
   on the bar, its thumb shows only while a pointer or focus is on it.
-- A hovering pointer reads the time under it, on the panel surface.
+- A hovering pointer reads the time under it, on the panel surface. Its preview
+  updates independently of the slider, chapters and playback labels; touch and
+  disabled timelines do no hover work. Dragging previews locally and sends one
+  seek on release. Keyboard seeking keeps its ten-second steps across clock updates.
 
 The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the

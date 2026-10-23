@@ -405,7 +405,8 @@ Shared building blocks in `src/client/components`:
   restoration; `useRelatedMenu` gives the same relationships as a tile's or a
   row's "Go to …" verbs.
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
-  ([Player](design/player.md)).
+  ([Player](design/player.md)). The timeline's pointer preview owns its state;
+  pointer motion leaves the slider, chapter markers and playback labels alone.
 - `playbackStatus`: one status vocabulary for Home, the player, the
   now-playing bar, Remote and Up next. Its `quiet` states (Playing, Paused,
   Ready to play) are left to the Play/Pause glyph, so status lines show only
