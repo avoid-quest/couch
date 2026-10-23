@@ -161,7 +161,8 @@ shifted right. Desktop icons use the black tile in
 maskable icon keeps it inside the safe circle. In the app, `CouchMark` sets it
 in the current ink: before the Couch's name in the header (filled while
 connected, hollow while not), before the TV's own name, and on the pairing and
-first-run screens.
+first-run screens, where it stands whole at the right as a Stage's mark would
+([Shell](design/shell.md#first-run-and-pairing)).
 
 ## Tokens
 
@@ -374,6 +375,8 @@ Shared building blocks in `src/client/components`:
   the page. `ContentBreadcrumb` is a content page's trail of ancestors.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `Stage`, `StageTitle`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
+- `Onboarding`: first run's and pairing's screen, a Stage without artwork with
+  optional Back and step capsules ([Shell](design/shell.md#first-run-and-pairing)).
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
   one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for

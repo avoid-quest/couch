@@ -466,6 +466,12 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 .display-title[data-length="long"] { --title-size: var(--title-long, 3.125rem); --title-weight: 700; line-height: 1; }
 .display-title[data-length="xlong"] { --title-size: var(--title-xlong, 2.5rem); --title-weight: 680; line-height: 1.04; }
 
+/* First run and pairing (Onboarding.tsx) ask their question in display type, a step under a Details page's title. */
+.onboarding { --title-short: 4rem; --title-medium: 3.25rem; --title-long: 2.75rem; --title-xlong: 2.25rem; }
+/* Inside a page (a phone approving a TV) it is a page title's size. */
+.onboarding[data-embedded] { --title-short: 2.75rem; --title-medium: 2.25rem; --title-long: 2rem; --title-xlong: 1.75rem; }
+@media (max-width: 47.99rem) { .onboarding:not([data-embedded]) { --title-short: 2.75rem; --title-medium: 2.25rem; --title-long: 1.875rem; --title-xlong: 1.625rem; } }
+
 /* A Details page's one meta line: what it is, then its links, "YouTube, Blender" (DetailHeader). */
 .detail-meta { display: flex; flex-wrap: wrap; align-items: center; column-gap: .3em; }
 .detail-meta:empty { display: none; }
