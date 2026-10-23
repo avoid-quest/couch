@@ -7,6 +7,11 @@ import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123"
 export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity" | "movies123" | "animesaturn" | "animeunity";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
+export const providerPageSize = 24;
+export const youtubeMaxOffset = 2_400;
+// Include every occurrence on YouTube's final supported page.
+export const maxCollectionIndex = youtubeMaxOffset + providerPageSize - 1;
+
 export type ProviderItem = {
   id: string;
   provider: ProviderId;

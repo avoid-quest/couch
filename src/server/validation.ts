@@ -1,7 +1,7 @@
 import type { LiveFailedMessage, LiveSignalMessage, LiveUploadFailedMessage } from "../shared/live-input";
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import type { MediaCollection } from "../shared/media";
-import { providerForUrl } from "../shared/providers";
+import { maxCollectionIndex, providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
 import { safePlaybackError } from "./playback-log";
 
@@ -24,7 +24,7 @@ const collectionLink = (value: unknown, provider: unknown) => object(value) && h
 
 export const validProviderCollection = (value: unknown, provider: unknown): value is MediaCollection => object(value) && collectionLink(value, provider)
   && (value.parent === undefined || collectionLink(value.parent, provider))
-  && (value.index === undefined || number(value.index, 2400) && Number.isInteger(value.index));
+  && (value.index === undefined || number(value.index, maxCollectionIndex) && Number.isInteger(value.index));
 
 function validEntry(value: unknown): value is QueueEntry {
   if (!object(value) || value.liveSourceId !== undefined || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;

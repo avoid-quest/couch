@@ -119,6 +119,25 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
     }
   }
 
+  // Normalize only the saved alias the user actually opened, after its channel resolved.
+  function normalizeChannelFavorite(provider: ProviderId, url: string, page: ProviderPage) {
+    const resolved = page.item;
+    if (provider !== "youtube" || !url || resolved?.provider !== "youtube" || resolved.kind !== "channel" || resolved.url === url
+      || !/^https:\/\/www\.youtube\.com\/channel\/UC[A-Za-z0-9_-]{22}$/.test(resolved.url)) return;
+    const id = providerItemId(provider, url);
+    const row = db.query<{ item: string; position: number }, [string]>("SELECT item, position FROM provider_favorites WHERE id = ?").get(id);
+    if (!row) return;
+    let previous: ProviderItem;
+    try { previous = savedItem(JSON.parse(row.item)); } catch { return; }
+    if (previous.provider !== "youtube" || previous.kind !== "channel") return;
+    const item = savedItem(resolved);
+    db.transaction(() => {
+      db.query("DELETE FROM provider_favorites WHERE id = ?").run(id);
+      db.query("INSERT INTO provider_favorites (id, item, position) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET item = excluded.item").run(item.id, JSON.stringify(item), row.position);
+    })();
+    onChange();
+  }
+
   return {
     cachedItem,
     async handle(request: Request, authorize = () => {}): Promise<Response> {
@@ -175,7 +194,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         if (query.length > 200 || url.length > 4096 || cursor.length > 4096 || [query, url, cursor].some(value => /[\u0000-\u001f\u007f]/.test(value))) throw new ProviderError("The browse request is invalid or too long.", 400);
         const key = JSON.stringify([provider, query, url, cursor]);
         const cached = cache.get(key);
-        if (cached && cached.expires > Date.now()) return Response.json(cached.page);
+        if (cached && cached.expires > Date.now()) { normalizeChannelFavorite(provider, url, cached.page); return Response.json(cached.page); }
         // SoundCloud search already carries its complete public track metadata.
         // Opening Details mustn't resolve audio streams that playback will resolve afresh.
         const track = provider === "soundcloud" && url && !query && !cursor ? cachedItem(url) : undefined;
@@ -193,6 +212,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
             signal.throwIfAborted();
             const page = await browse[provider]({ ...(query ? { query } : {}), ...(url ? { url } : {}), ...(cursor ? { cursor } : {}) }, signal);
             signal.throwIfAborted();
+            normalizeChannelFavorite(provider, url, page);
             if (cache.size >= 100) cache.delete(cache.keys().next().value!);
             cache.set(key, { page, expires: Date.now() + (provider === "twitch" ? 20_000 : 60_000) });
             return page;

@@ -38,6 +38,11 @@ and tracks in one result list, without a next page. Its catalogue accepts public
 tag pages and custom domains are not catalogue links. SoundCloud track searches
 offer **More from SoundCloud**.
 
+New YouTube channel Saves use the channel's canonical address when metadata is
+available. Previously saved handle or custom-address bookmarks remain in Saved;
+opening one updates its address when the channel resolves, keeping its Saved and
+Remove actions. If the canonical channel is already saved, the two bookmarks merge.
+
 ## What plays where
 
 A Couch app hosts with **This computer** chosen and joins with **Another
