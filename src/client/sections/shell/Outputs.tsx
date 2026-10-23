@@ -28,8 +28,8 @@ type Side = "popover" | "right" | "bottom";
 
 // A desktop's pointer and width: there the panel hangs from its button, so the bar and the transport stay usable.
 const desktopQuery = "(min-width: 960px) and (pointer: fine)";
-const subscribeDesktop = (onChange: () => void) => { const media = window.matchMedia(desktopQuery); media.addEventListener("change", onChange); return () => media.removeEventListener("change", onChange); };
-const isDesktop = () => window.matchMedia(desktopQuery).matches;
+export const subscribeDesktop = (onChange: () => void) => { const media = window.matchMedia(desktopQuery); media.addEventListener("change", onChange); return () => media.removeEventListener("change", onChange); };
+export const isDesktop = () => window.matchMedia(desktopQuery).matches;
 /** The longest list a Popover holds; past it the same button opens a right-side Sheet. */
 const popoverRows = 10;
 

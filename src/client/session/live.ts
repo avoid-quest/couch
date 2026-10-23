@@ -1,13 +1,21 @@
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
-import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource, LiveUploadFailedMessage } from "../../shared/live-input";
+import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource, LiveUploadFailedMessage, LiveVideoQuality } from "../../shared/live-input";
 import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
+import { routeOf, type LiveRoute } from "./live-route";
 
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
-type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
+type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; title: string; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
+type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
+/**
+ * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
+ * silent preview; relay: a TURN relay is offered to its connections.
+ */
+export type LiveSharing = { source: LiveSource; title: string; stream: MediaStream; quality: LiveVideoQuality; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
+// Bound capture before encoding it, at most 30 fps.
+const pictureConstraints = (quality: LiveVideoQuality): MediaTrackConstraints => ({ ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: 30, max: 30 } });
 // The browser's own capture errors are terse ("Permission denied", which Chromium also throws when the picker is
 // closed); say what happened and what to do next. Anything else keeps its message.
 const captureError = (reason: unknown, kind: LiveSelection["kind"]) => {
@@ -86,6 +94,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     if (!current || publishers.has(target.peerId)) return;
     let peer: Peer;
     try { peer = makePeer(target.peerId); } catch { return; }
+    peer.deviceId = target.deviceId;
     publishers.set(target.peerId, peer);
     const active = () => publication === current && publishers.get(target.peerId) === peer;
     try {
@@ -246,11 +255,11 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const quality = selection.videoQuality ?? "1080p";
         const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
-        // Bound capture before encoding it. Audio-only display capture
-        // still needs a video track, but none of those pixels are transmitted.
+        // Audio-only display capture still needs a video track, but none of those pixels are transmitted.
+        // A browser's own picker opens on the surface chosen in Couch (a screen or a window), and still offers the rest.
         const video: MediaTrackConstraints = selection.kind === "system-audio"
           ? { width: { max: 320 }, height: { max: 180 }, frameRate: { max: 1 } }
-          : { ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: 30, max: 30 } };
+          : { ...pictureConstraints(quality), ...(selection.surface ? { displaySurface: selection.surface } : {}) };
         capture = await (selection.kind === "microphone"
           ? navigator.mediaDevices.getUserMedia({ audio: { ...audio, ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}) }, video: false })
           : navigator.mediaDevices.getDisplayMedia({ video, audio: sound && audio })).catch(reason => { throw captureError(reason, selection.kind); });
@@ -261,7 +270,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const label = selection.kind === "microphone" ? "Microphone" : selection.kind === "system-audio" ? "System audio" : "Screen";
         const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false };
+        // Named by what was chosen in Couch, else by the input the browser opened ("iPhone Microphone").
+        const title = selection.title ?? (selection.kind === "microphone" && audioTracks[0]?.label || label);
+        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, title, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
@@ -280,6 +291,32 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       } finally { if (!closed) await couchApp?.prepareCapture?.(null).catch(() => {}); starting = false; }
     },
     end,
+    sharing(): LiveSharing | null {
+      const current = publication?.published ? publication : undefined;
+      if (!current) return null;
+      return { source: current.source, title: current.title, quality: current.quality, stream: current.preview, surface: current.surface, since: current.since, relay: options.iceServers.some(server => [server.urls].flat().some(url => /^turns?:/.test(url))), muted: current.source.kind === "microphone" && current.stream.getAudioTracks().every(track => !track.enabled) };
+    },
+    /** A new picture quality for the capture going out, without restarting it. */
+    async setQuality(quality: LiveVideoQuality) {
+      const current = publication;
+      const track = current?.source.kind === "screen" ? current.stream.getVideoTracks()[0] : undefined;
+      if (!current || !track) return;
+      await track.applyConstraints(pictureConstraints(quality));
+      current.quality = quality;
+    },
+    /** Silences a microphone for every receiver, keeping the capture and its connections. */
+    setMuted(muted: boolean) {
+      if (publication?.source.kind === "microphone") for (const track of publication.stream.getAudioTracks()) track.enabled = !muted;
+    },
+    /** Each receiving device's route, as its connection selected it; a device not yet connected has none. */
+    async routes(): Promise<Record<string, LiveRoute>> {
+      const routes: Record<string, LiveRoute> = {};
+      await Promise.all([...publishers.values()].map(async peer => {
+        const route = peer.deviceId && peer.connection.connectionState === "connected" ? routeOf(await peer.connection.getStats().catch(() => new Map() as RTCStatsReport)) : undefined;
+        if (route && peer.deviceId) routes[peer.deviceId] = route;
+      }));
+      return routes;
+    },
     observe(sources: LiveSource[]) {
       if (publication?.published && !sources.some(source => source.id === publication!.source.id)) {
         // State and upload errors use different sockets. Whichever arrives first

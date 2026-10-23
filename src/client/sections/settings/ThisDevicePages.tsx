@@ -14,7 +14,6 @@ import { settingsPages } from "../../../shared/settings-pages";
 import { SettingsLayout } from "./SettingsLayout";
 import { useSettingsScope } from "./settings-scope";
 import { TvInterfaceSize } from "./couch/TvInterfaceSize";
-import { DeviceInputSettings } from "./sources/DeviceInputSettings";
 import { CouchChoice } from "./this-device/CouchChoice";
 import { DeviceNameSettings } from "./this-device/DeviceNameSettings";
 import { DeviceSharingSettings } from "./this-device/DeviceSharingSettings";
@@ -48,7 +47,6 @@ export function ThisDevicePage() {
     {!nativeHost && screenWakeLock.error && <Alert variant="destructive"><AlertDescription>{screenWakeLock.error}</AlertDescription></Alert>}
     <CouchChoice credentials={credentials} installationName={state?.installationName ?? details?.name} />
     {host ? <SettingsSection title="Let other devices use" description={`${couch}'s speakers and screen are shared while Share on network is on.`} /> : <DeviceSharingSettings />}
-    <DeviceInputSettings title="Share screen or sound" />
     <QuitAppSettings host={host} couch={couch} />
   </SettingsLayout>;
 }

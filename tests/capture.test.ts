@@ -20,7 +20,8 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
   const contents = { mainFrame: { url } } as unknown as WebContents;
   const window = { id: 1 };
   const prompts: { parent: unknown; options: MessageBoxOptions }[] = [];
-  let list = [screen, { id: "window:2:0", name: "Music app" }];
+  let list: { id: string; name: string; thumbnail?: { isEmpty(): boolean; toDataURL(): string } }[] = [screen, { id: "window:2:0", name: "Music app" }];
+  const sizes: { width: number; height: number }[] = [];
   const statuses: Record<string, string> = { screen: "granted", microphone: "granted" };
   const opened: string[] = [];
   const module = { exports: {} as typeof import("../app/capture") };
@@ -30,7 +31,7 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
     require: () => ({
       BrowserWindow: { fromWebContents: (from: unknown) => from === contents ? window : null },
       dialog: { showMessageBox(parent: unknown, options: MessageBoxOptions) { prompts.push({ parent, options }); return prompt(options); } },
-      desktopCapturer: { getSources: async () => list },
+      desktopCapturer: { getSources: async (options: { thumbnailSize: { width: number; height: number } }) => { sizes.push(options.thumbnailSize); return list; } },
       systemPreferences: { askForMediaAccess: microphone, getMediaAccessStatus: (type: string) => statuses[type] },
       shell: { openExternal: async (target: string) => { opened.push(target); } },
       session: { defaultSession: {
@@ -43,7 +44,7 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
   const capture = module.exports.createCapture(() => contents, () => url, "http://localhost:4100");
   capture.install();
   return {
-    capture, contents, window, prompts, statuses, opened,
+    capture, contents, window, prompts, statuses, opened, sizes,
     list(next: typeof list) { list = next; },
     expire() { now += 30_001; },
     navigate(next: string) { contents.mainFrame.url = next; },
@@ -87,6 +88,22 @@ test("a selected display grants one local request with system audio", async () =
   expect(h.check("display-capture")).toBe(false);
   expect(h.request("media", [])).toBe(false);
   expect(h.prompts).toEqual([]);
+});
+
+test("screens and windows come as small pictures to this computer's own Couch, and as names alone to another's", async () => {
+  const h = harness();
+  const picture = { isEmpty: () => false, toDataURL: () => "data:image/png;base64,AA" };
+  h.list([{ ...screen, thumbnail: picture }, { id: "window:2:0", name: "Music app", thumbnail: { isEmpty: () => true, toDataURL: () => "data:," } }]);
+  expect(await h.capture.sources()).toEqual([{ ...screen, thumbnail: "data:image/png;base64,AA" }, { id: "window:2:0", name: "Music app", kind: "window" }]);
+  expect(h.sizes.at(-1)).toEqual({ width: 320, height: 200 });
+  h.selectCouch("https://couch.local:4100/");
+  h.navigate("https://couch.local:4100/");
+  expect(await h.capture.sources()).toEqual([screen, { id: "window:2:0", name: "Music app", kind: "window" }]);
+  expect(h.sizes.at(-1)).toEqual({ width: 0, height: 0 });
+  // Main still names a prepared source from its own list, without the picture.
+  await h.capture.prepare({ kind: "screen", sourceId: screen.id });
+  expect(await h.display({ securityOrigin: "https://couch.local:4100" })).toEqual({ video: screen });
+  expect(h.prompts[0]?.options.message).toContain("“Studio display”");
 });
 
 test("capture preparation never grants another origin, frame, camera or app window", async () => {

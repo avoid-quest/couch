@@ -76,10 +76,13 @@ export function createCapture(contents: () => WebContents | null, address: () =>
     async sources(): Promise<CaptureSource[]> {
       const frame = owner();
       const request = generation;
-      const found = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 0, height: 0 } });
+      // Pictures only for this computer's own Couch: another Couch's page (Client mode) would see a window's
+      // content before the owner allows it, so it gets names alone.
+      const pictures = origin() === localOrigin;
+      const found = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: pictures ? { width: 320, height: 200 } : { width: 0, height: 0 } });
       if (request !== generation || frame !== owner()) throw new Error("Couch changed while choosing a source. Choose it again.");
       sources = found.map(({ id, name }) => ({ id, name, kind: id.startsWith("screen:") ? "screen" : "window" }));
-      return sources;
+      return found.map(({ thumbnail }, index) => ({ ...sources[index]!, ...pictures && thumbnail && !thumbnail.isEmpty() ? { thumbnail: thumbnail.toDataURL() } : {} }));
     },
     async prepare(selection: unknown): Promise<void> {
       revoke();

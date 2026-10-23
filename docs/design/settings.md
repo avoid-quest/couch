@@ -7,7 +7,7 @@ hand, and the Couch everyone shares, its hardware included:
 
 | Page | Owner | Path | Holds |
 | --- | --- | --- | --- |
-| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Connection (which Couch it shows), what it lets other devices use, Share screen or sound, Quit Couch (app) |
+| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
 | Home | This device | `/settings/device/home` | Home's sections, one list |
 | Updates | This device | `/settings/device/updates` | this app's updates and logs (a desktop app that doesn't run the Couch) |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
@@ -26,7 +26,9 @@ updater on an app connected to another Couch. The player's gear opens the player
 own Playback menu, not this page.
 
 Online video quality offers Best, 1080p, 720p and 480p: Auto plays 1080p, so
-it is the 1080p choice.
+it is the 1080p choice. Sharing this device's screen or sound starts from the
+header's Share ([Share](share.md)); its picture quality is chosen there each
+time, so Settings keeps no default.
 
 Home lists each of Home's sections ([Home](home.md#sections)) as a Switch
 beside its name, with Move up/down at the row's end (no drag), saved per

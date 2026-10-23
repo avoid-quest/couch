@@ -115,8 +115,9 @@ lies over it at 80% (`#1c1c1e`, `--tone`'s initial value, without one). Over pur
 it, its white ink keeps 10.4:1 and its muted ink (white 80%) 7.3:1 for every
 hue, measured. The tone cross-fades over 600 ms when what plays changes. It is
 the one backdrop filter on a page (Up next, summoned over the player's room,
-is the other, on the player). Toasts float in the same family, on its solid
-surface and shadow (`--float-shadow`) without the filter.
+is the other, on the player). Toasts and the header's sharing capsule float in
+the same family, on its solid surface and shadow (`--float-shadow`) without
+the filter.
 
 ## Stage
 
@@ -414,7 +415,7 @@ its results hold, as it finds them).
 
 - **Toast** (sonner): errors, Undo, Queue confirmation and unexpected outcomes.
   Every toast is one of `src/client/toasts.ts`'s kinds (`failed`, `undo`,
-  `queued`, `playing-on`, `notice`, `tap-to-hear`), each with a fixed duration
+  `queued`, `playing-on`, `notice`, `tap-to-hear`, `sharing`), each with a fixed duration
   and at most one action; a repeat updates the one showing. Routine actions,
   and playback activity from other devices, stay quiet. A new item or
   controlled device retires old Queue and Undo feedback; switching Couch
@@ -479,6 +480,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Player](design/player.md): the picture, scrims, the band, settings, Up next,
   status.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.
+- [Share](design/share.md): sharing this device's screen or sound, the
+  capsule while it runs.
 - [TV](design/tv.md): what the TV adds for its remote.
 - [Remote](design/remote.md): the Remote section and Type on TV.
 - [Settings](design/settings.md): its pages and section nav.

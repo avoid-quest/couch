@@ -85,10 +85,11 @@ window.runSavedBackRegression = async () => {
 // A paired phone's Remote reaches the TV through applyTvNavigation; it must not pick or share
 // this device's capture, while the TV's own keyboard and pointer still can.
 const sharingLocalOnly = async () => {
-  await click('[data-app-nav] a[href="/settings"]');
-  await click('[data-settings-page="device"]');
+  const share = control('[aria-label="Share screen or sound"]');
+  assert(share.closest("[data-tv-local-only]"), "The header's Share is not local to this device");
+  share.click(); await wait(350);
   const choice = (label: string) => [...document.querySelectorAll<HTMLElement>('[aria-label="What to share"] [role="radio"]')].find(item => item.textContent === label);
-  const microphone = choice("Microphone or audio input"), screen = choice("Screen");
+  const microphone = choice("Microphone"), screen = choice("Screen");
   assert(microphone && screen && !microphone.matches(":disabled"), "Sharing has no enabled capture choices; stop any existing capture first");
   assert(screen!.getAttribute("aria-checked") === "true", "Sharing did not start on Screen");
   const remote = async (key: Parameters<typeof applyTvNavigation>[0]) => { applyTvNavigation(key); await wait(350); };
@@ -108,8 +109,7 @@ const sharingLocalOnly = async () => {
     await key("Escape"); await wait(350);
     assert(!document.querySelector('[role="listbox"][data-state="open"]'), "This device's own Back did not close its audio input list");
   } finally {
-    screen!.click(); await wait(350);
-    await click('[data-app-nav] a[href="/"]');
+    await key("Escape"); await wait(350);
   }
 };
 

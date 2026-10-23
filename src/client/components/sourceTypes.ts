@@ -6,4 +6,4 @@ export type SourceSettingsProps = {
   canManage: boolean;
 };
 
-export type SourceKind = "radio" | "streaming-community" | "iptv" | "device-inputs";
+export type SourceKind = "radio" | "streaming-community" | "iptv";

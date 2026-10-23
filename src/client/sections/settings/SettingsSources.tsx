@@ -13,7 +13,6 @@ import { settingsPages, type SettingsPage } from "../../../shared/settings-pages
 import { IptvSettings } from "./sources/IptvSettings";
 import { RadioSettings } from "./sources/RadioSettings";
 import { StreamingCommunitySettings } from "./sources/StreamingCommunitySettings";
-import { DeviceInputSettings } from "./sources/DeviceInputSettings";
 import { AirPlaySettings } from "./sources/AirPlaySettings";
 import { HiddenSettings } from "./sources/HiddenSettings";
 import { useSettingsScope } from "./settings-scope";
@@ -23,8 +22,7 @@ import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 const sourcePages = ["iptv", "radio", "streaming-community"] as const;
 const plural = (count: number, one: string) => `${count.toLocaleString()} ${one}${count === 1 ? "" : "s"}`;
 
-export function SettingsSources({ source, onAdded, ...props }: SourceSettingsProps & { source?: SourceKind; onAdded?: () => void }) {
-  if (source === "device-inputs") return <DeviceInputSettings onAdded={onAdded} />;
+export function SettingsSources({ source, ...props }: SourceSettingsProps & { source?: SourceKind }) {
   if (source === "radio") return <RadioSettings {...props} />;
   if (source === "streaming-community") return <StreamingCommunitySettings {...props} />;
   if (source === "iptv") return <IptvSettings {...props} />;

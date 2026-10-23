@@ -5,8 +5,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { errorText, useSessionGate } from "@/session/session-context";
 
-/** Local capture remains visible and stoppable while browsing, controlling another device or in the player. */
-export function LiveSharingStatus({ className, header = false }: { className?: string; header?: boolean }) {
+/** In the player's top band, local capture stays visible and stoppable; the header has its capsule (sections/share). */
+export function LiveSharingStatus({ className }: { className?: string }) {
   const { state, endLive, localLiveSourceId, setError } = useSessionGate();
   const [pending, setPending] = useState(false);
   const [open, setOpen] = useState(false);
@@ -21,7 +21,7 @@ export function LiveSharingStatus({ className, header = false }: { className?: s
   }}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>;
   // No background of its own: the header has one, and the player's top band shades a picture with its scrim.
   return <div data-live-sharing data-tv-local-only className={cn("flex shrink-0 items-center gap-1 text-sm whitespace-nowrap", className)}>
-    <span role="status" className={cn("text-muted-foreground max-sm:sr-only", header && "max-xl:sr-only")}>{status}</span>
+    <span role="status" className="text-muted-foreground max-sm:sr-only">{status}</span>
     {stop("max-sm:hidden")}
     {/* On a phone the status is one icon: hover reads its title, and a press (touch has no hover) opens the status with
         Stop sharing as its action, so a stray tap beside the search never ends sharing for every receiver. */}
