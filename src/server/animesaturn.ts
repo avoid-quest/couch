@@ -15,8 +15,8 @@ function publicPlayerUrl(value: string, embed: boolean): URL | undefined {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.port || url.username || url.password || url.hash) return;
     if (embed ? /^cdn\d{1,3}\.megaplay\.su$/.test(url.hostname) && /^\/e\/[a-f\d]{16,128}$/.test(url.pathname) && (!url.search || url.search === "?autoplay=1")
-      : /^(?:cdn\d{1,3}\.megaplay\.su|srv\d{1,3}\.[a-z\d-]+\.streampeaker\.org)$/.test(url.hostname) && /\.m3u8$/.test(url.pathname)) return url;
-  } catch { /* Only the observed public players and their HLS hosts are used. */ }
+      : /^(?:cdn\d{1,3}\.megaplay\.su|srv\d{1,3}\.[a-z\d-]+\.streampeaker\.org)$/.test(url.hostname) && /\.(?:m3u8|mp4)$/.test(url.pathname)) return url;
+  } catch { /* Only the observed public players and their media hosts are used. */ }
 }
 
 async function playerText(url: string, maximum: number, signal: AbortSignal, request: typeof fetch): Promise<string> {
@@ -25,6 +25,27 @@ async function playerText(url: string, maximum: number, signal: AbortSignal, req
   const response = await request(url, { signal: cancellation, credentials: "omit", redirect: "error", headers });
   if (!response.ok) { await response.body?.cancel().catch(() => {}); throw unavailable(); }
   return readProviderText(response, maximum, cancellation, unavailable());
+}
+
+async function probeProgressive(url: string, signal: AbortSignal, request: typeof fetch): Promise<void> {
+  const cancellation = AbortSignal.any([signal, AbortSignal.timeout(12_000)]);
+  cancellation.throwIfAborted();
+  const response = await request(url, { signal: cancellation, credentials: "omit", redirect: "error", headers: { ...headers, Range: "bytes=0-0" } });
+  const reader = response.body?.getReader();
+  if (!reader) throw unavailable();
+  const abort = () => { void reader.cancel().catch(() => {}); };
+  cancellation.addEventListener("abort", abort, { once: true });
+  try {
+    cancellation.throwIfAborted();
+    if (!response.ok) throw unavailable();
+    // Read only the first binary data, then cancel even if Range was ignored.
+    for (;;) {
+      const { value, done } = await reader.read();
+      cancellation.throwIfAborted();
+      if (done) throw unavailable();
+      if (value.length) return;
+    }
+  } finally { cancellation.removeEventListener("abort", abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
 // Both public players publish JSON string literals. Read those values without
@@ -47,7 +68,7 @@ export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), deadline]);
   try {
     const title = await animeSaturnTitle(url.href, cancellation, request);
-    // HD publishes HLS in one response; Mega adds one allowlisted iframe hop.
+    // HD publishes HLS or progressive MP4; Mega adds one allowlisted iframe hop.
     const players = title.players.sort((a, b) => Number(new URL(b).searchParams.get("source") === "animesaturn_live") - Number(new URL(a).searchParams.get("source") === "animesaturn_live"));
     for (const player of players) {
       try {
@@ -61,8 +82,10 @@ export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal
           stream = directStream(html);
           if (!stream || stream.origin !== embed.origin) continue;
         }
-        const manifest = await playerText(stream.href, 512 * 1024, cancellation, request);
-        if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) continue;
+        if (stream.pathname.endsWith(".m3u8")) {
+          const manifest = await playerText(stream.href, 512 * 1024, cancellation, request);
+          if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) continue;
+        } else await probeProgressive(stream.href, cancellation, request);
         cancellation.throwIfAborted();
         const { title: name, thumbnail, duration } = title.item;
         return { url: stream.href, headers: { ...headers }, metadata: { title: name, ...(thumbnail ? { thumbnail } : {}), ...(duration !== undefined ? { duration } : {}) }, subtitles: [] };

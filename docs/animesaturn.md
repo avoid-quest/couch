@@ -32,11 +32,20 @@ Observed on 2026-10-17:
   loaded successfully during the smoke check, but its manifest returned
   Cloudflare HTTP 502; the HD stream remained available.
 
+On 2026-10-22, Suikoden Episode 1's HD player published a progressive `.mp4`
+on the same accepted Streampeaker hosts, with `var isHls = false`. A bounded
+32-byte range request returned `206 video/mp4` with an MP4 file header.
+
 Couch reads those literals without running site scripts or loading player
-libraries. It tries HD first, then Mega, validates the HLS response, and
+libraries. It tries HD first, then Mega, validates HLS manifests, and
 passes a browser user agent and AnimeSaturn referer to playback. Hostnames,
 embed paths, requests, response sizes, and timeouts are bounded. Redirects
-are rejected. The observed episode is labelled Sub ITA; these player pages
+are rejected. Before selecting progressive MP4, the page resolver requests a
+one-byte binary range and cancels the response after the first data, even when
+the server ignores Range. An unavailable or empty MP4 falls through to Mega;
+the probe shares the per-request timeout and overall deadline. The page resolver
+never downloads the media file as text. The observed
+episodes are labelled Sub ITA; these player pages
 expose no separate subtitle tracks.
 
 Browsing returns at most 50 episodes with the exact zero-based position in
