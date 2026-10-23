@@ -205,38 +205,11 @@ body { min-width: 0; }
 [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] .text-muted-foreground,
 :is(button, a, [role="option"]):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) .text-muted-foreground,
 [data-media-tile]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) [data-tile-meta] { transition-duration: 0s; }
-html { view-transition-name: none; }
-
-/* The now-playing bar grows into the player band and back: the one longer move, as it crosses the screen. */
-::view-transition-group(couch-player-band), ::view-transition-group(*.couch-control) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
-/* The bar's controls are the band's: each glides to its own place in the band rather than cross-fading with the band
-   (on phones Play/Pause moves from beside Open player to the band's left). */
-:is([data-now-playing], .player-band) :is(button:is([data-play-button], [aria-label="Stop"], [aria-label="Next"], [aria-label="Volume"], [aria-label="Where it plays"], [data-panel="queue"], [data-panel="settings"]), [data-player-last]) { view-transition-class: couch-control; }
-:is([data-now-playing], .player-band) button[data-play-button] { view-transition-name: couch-play; }
-:is([data-now-playing], .player-band) button[aria-label="Stop"] { view-transition-name: couch-stop; }
-:is([data-now-playing], .player-band) button[aria-label="Next"] { view-transition-name: couch-next; }
-:is([data-now-playing], .player-band) button[aria-label="Volume"] { view-transition-name: couch-volume; }
-:is([data-now-playing], .player-band) button[aria-label="Where it plays"] { view-transition-name: couch-where; }
-:is([data-now-playing], .player-band) button[data-panel="queue"] { view-transition-name: couch-queue; }
-:is([data-now-playing], .player-band) button[data-panel="settings"] { view-transition-name: couch-gear; }
-/* The last slot: the bar's Open player glides into the band's fullscreen (or its empty slot) and back. */
-:is([data-now-playing], .player-band) [data-player-last] { view-transition-name: couch-last; }
-/* Artwork travels (Design → Motion): the now-playing bar's thumbnail, or after Play on a Details page (the couch-play
-   transition) that page's artwork, becomes the player's artwork, or its picture, and back. One element holds the name
-   at a time, so Details' artwork takes it from the bar's while it travels. It moves over 280 ms, a little ahead of the
-   band, and each end keeps its proportions. */
-[data-now-playing] [data-bar-art] > :first-child, .player-art > :first-child, .player-page[data-osd] > [data-player-surface] { view-transition-name: couch-art; }
-html:active-view-transition-type(couch-play) [data-detail-art] > * { view-transition-name: couch-art; }
-html:active-view-transition-type(couch-play):has([data-detail-art]) [data-now-playing] [data-bar-art] > :first-child { view-transition-name: none; }
-::view-transition-group(couch-art) { animation-duration: .28s; animation-timing-function: var(--ease-out); }
-::view-transition-old(couch-art), ::view-transition-new(couch-art) { height: 100%; object-fit: contain; }
-/* The bar's title and the line under it don't stretch with the band over its timeline: they leave at once as it grows,
-   and return once it has shrunk back. */
-[data-now-playing] [data-bar-title] { view-transition-name: couch-bar-title; }
-::view-transition-old(couch-bar-title) { animation: couch-fade-out .1s var(--ease-out) both; }
-::view-transition-new(couch-bar-title) { animation: couch-fade-in .1s var(--ease-out) .22s both; }
-@keyframes couch-fade-out { to { opacity: 0; } }
-@keyframes couch-fade-in { from { opacity: 0; } }
+/* Opacity stays on the compositor; route snapshots stalled player entry under playback-clock updates. */
+@media (prefers-reduced-motion: no-preference) {
+  .player-page, [data-now-playing] { animation: couch-player-enter .16s var(--ease-out); }
+}
+@keyframes couch-player-enter { from { opacity: 0; } to { opacity: 1; } }
 /* Toasts arrive like the other surfaces, over 200 ms, not sonner's 400 ms, so a leaving one has faded by the time sonner
    unmounts it (200 ms). Sonner itself keeps them still with reduced motion. */
 [data-sonner-toaster] :is([data-sonner-toast], [data-sonner-toast] > *) { transition-duration: 200ms; transition-timing-function: var(--ease-out); }

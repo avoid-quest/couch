@@ -1,5 +1,5 @@
 import { defaultStringifySearch, Link, Outlet, useLocation, useMatches, useRouter } from "@tanstack/react-router";
-import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren, type ReactNode, type RefObject } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ErrorInfo, type PropsWithChildren, type ReactNode, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { BookmarkIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
@@ -48,13 +48,6 @@ import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id"
 
 // The sections in tab order, with their icons in the phone tab bar. Search is the header's field, not a tab.
 const sections: [string, LucideIcon][] = [["Home", HouseIcon], ["Saved", BookmarkIcon], ["Remote", TvIcon], ["Settings", SettingsIcon]];
-const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
-const reducedMotion = () => window.matchMedia(reducedMotionQuery).matches;
-function subscribeReducedMotion(onChange: () => void) {
-  const media = window.matchMedia(reducedMotionQuery);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-}
 
 export type ShellValue = ReturnType<typeof useShellValue>;
 export { useShell } from "./shell-context";
@@ -66,7 +59,6 @@ function useShellValue() {
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
   const section = sectionForPath(location.pathname, location.searchStr) ?? "Home";
-  const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
   const settingsSection = settingsPageForPath(location.pathname);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
   if (location.pathname === "/search") rememberedSearch.current = readSearchState(location.searchStr);
@@ -93,20 +85,18 @@ function useShellValue() {
     if (to !== at) {
       if (name === "Now") {
         if (section === "Now") void router.navigate({ href: to, replace: true, state: previous => previous });
-        else detailNavigation.open(to, undefined, playerTransition);
+        else detailNavigation.open(to);
       }
-      else if (playerTransition && section === "Now") void router.navigate({ href: to, viewTransition: true });
       else router.history.push(to);
     }
   };
   const changeSection = changePage;
-  // `types` name the view transition, so its CSS can pick what travels (index.css: couch-play).
-  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id, types?: string[]) => {
+  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id) => {
     const href = `/now${defaultStringifySearch({ queue: panel === "queue" || undefined, targetDeviceId })}`;
     if (playerTarget && targetDeviceId === playerTarget.id) void router.navigate({ href, replace: true, state: location.state });
     else if (targetDeviceId) detailNavigation.open(href, section === "Remote" && panel === "queue" ? '[data-remote-page] button[aria-label="Up next"]' : undefined);
     else if (section === "Now") void router.navigate({ href, replace: true, state: previous => previous });
-    else detailNavigation.open(href, undefined, playerTransition && (types ? { types } : true));
+    else detailNavigation.open(href);
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
@@ -123,8 +113,7 @@ function useShellValue() {
     const explicitlyStarted = !!state.playedBy && !current.settled;
     // Consume audio-only starts too: a retry can temporarily clear their media flags.
     if (explicitlyStarted) current.settled = true;
-    // A Details page's artwork travels into the player its Play opened.
-    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer(undefined, undefined, ["couch-play"]);
+    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer();
     current.picture = picture;
   }, [picture, presentation, pictured, !!state?.playedBy, !!state]);
   // The header's field, which the player hides: from there, its page comes back first.
@@ -316,8 +305,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   // This computer's Couch has started once its Core answered with a connection; until
   // then the shell shows Starting… or Couldn't start Couch (PairingPage).
   useShellReady(!localHost || paired);
-  // The URL can move before the presented route. Keep the shell's bar in
-  // step with the page, including view-transition snapshots.
+  // The URL can move before the presented route. Keep the shell's bar in step with the page.
   const playerVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/now") });
   const remoteVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/remote") });
   // Home's top item is what plays, with its own transport, whenever something does.
@@ -330,7 +318,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && !playerVisible && !remoteVisible;
   // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
-  useBottomBar(footer, paired && !setupPending);
+  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying);
   const header = useRef<HTMLElement>(null);
   useTopBar(header, paired && !setupPending);
 
@@ -372,7 +360,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
             {!paired ? <PairingPage status={status} /> : <>
               {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
-              {/* Cached routes appear immediately; the player keeps its separate band transition. The page is its own layer,
+              {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. The page is its own layer,
                   so a Stage's room lies under its content and over the shell's black. */}
               <div className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
             </>}
@@ -410,8 +398,8 @@ function useTopBar(ref: RefObject<HTMLElement | null>, shown: boolean) {
     const element = ref.current;
     if (!element || !shown) return;
     const root = document.documentElement.style;
-    const observer = new ResizeObserver(() => {
-      root.setProperty("--top-bar", `${element.offsetHeight}px`);
+    const observer = new ResizeObserver(([entry]) => {
+      root.setProperty("--top-bar", `${Math.round(entry!.borderBoxSize[0]!.blockSize)}px`);
     });
     observer.observe(element, { box: "border-box" });
     return () => { observer.disconnect(); root.removeProperty("--top-bar"); };

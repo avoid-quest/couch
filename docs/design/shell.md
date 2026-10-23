@@ -242,14 +242,10 @@ nothing changes side as it grows into the band
   Open player, at fullscreen's x: a minimized player needs no mixer, and the
   player has it.
 
-Opening the player is a view transition: the bar grows into the band
-(`couch-player-band`), and each shared control glides to its place in the band
-under its own name rather than cross-fading, and Open player glides into
-fullscreen's slot. On wide screens they are already in place; on phones
-Play/Pause glides to the band's left. The thumbnail travels into the player's
-artwork or picture (`couch-art`); the title and its line fade out at once
-rather than stretch over the band's timeline, and fade back in once the band
-has shrunk into the bar.
+Opening the player fades it in over 160 ms; Back fades the restored bar in
+over the same interval. The controls keep their corresponding positions in
+both layouts, with Open player sharing fullscreen's slot. The animation uses
+only opacity and takes no route snapshots. Reduced motion skips it.
 
 It shows on every page whenever something is loaded, Home included, and hides
 only on the player and on Remote. With the phone tab bar it forms the footer, whose

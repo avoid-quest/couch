@@ -31,18 +31,21 @@ function publishBars() {
   else document.documentElement.style.removeProperty("--bottom-bar");
 }
 
-/** Publishes a bar's height as --bottom-bar, which scroll padding and the player's workspace clear. */
-export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true) {
+/** Publishes --bottom-bar before paint; contentKey also measures when the shell adds/removes its playing bar. */
+export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true, contentKey?: boolean) {
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || !shown) return;
     const measure = () => { bars.set(element, element.offsetHeight); publishBars(); };
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(([entry]) => {
+      bars.set(element, Math.round(entry!.borderBoxSize[0]!.blockSize));
+      publishBars();
+    });
     // The border box: the player band drops its scrim's padding when Up next opens.
     observer.observe(element, { box: "border-box" });
     measure();
     return () => { observer.disconnect(); bars.delete(element); publishBars(); };
-  }, [ref, shown]);
+  }, [ref, shown, contentKey]);
 }
 
 // Stop may reveal a loading page. Its heading/other controls are provisional
@@ -120,7 +123,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   // The bar is the player's band, minimized: a capsule of tinted glass floating over the page, its corners and its
   // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
   return <div className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5">
-  <footer data-now-playing onFocusCapture={() => { focusWithin.current = true; }} onBlurCapture={() => { focusWithin.current = false; }} aria-label="Now playing" style={roomStyle(light)} className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target) [view-transition-name:couch-player-band]">
+  <footer data-now-playing onFocusCapture={() => { focusWithin.current = true; }} onBlurCapture={() => { focusWithin.current = false; }} aria-label="Now playing" style={roomStyle(light)} className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target)">
     <PlaybackTimeline state={state} connected={connected} run={run} className="bar-timeline absolute inset-x-5 top-0 z-10 -translate-y-1/2 max-sm:inset-x-4 [&_[data-time-labels]]:hidden" />
     {/* Two lines beside the artwork at its own shape, as a mini-player's. The title is the control, across the whole
         line, and the artwork a pointer target for it; the line under it keeps its own links, so they sit outside the
@@ -147,7 +150,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
       {/* The player's own Playback menu, for whatever plays, here or on another device. */}
       <Popover open={menu} onOpenChange={setMenu}>
         <PopoverTrigger asChild><Button ref={gear} data-panel="settings" variant="ghost" size="icon-lg" className={desktop} aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
-        {settings && <PlaybackMenu {...settings} trigger={gear.current} tracks={!isAudioOnly(playback, current, player.tracks)} details={details && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref(details)} aria-label="Details" onClick={event => {
+        {menu && settings && <PlaybackMenu {...settings} trigger={gear.current} tracks={!isAudioOnly(playback, current, player.tracks)} details={details && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref(details)} aria-label="Details" onClick={event => {
           // As the player's own Details: in the section it was opened from, and Back returns to the gear.
           setMenu(false);
           if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

@@ -165,6 +165,6 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
   const [open, setOpen] = useState(false);
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
-    <PopoverContent {...toolPanel(trigger.current)} aria-label="Volume controls" className="w-72"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
+    {open && <PopoverContent {...toolPanel(trigger.current)} aria-label="Volume controls" className="w-72"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>}
   </Popover>;
 }

@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
  * inverted ground (index.css) while artwork keeps its own, and on an inner layer so a caller's ground for the picture
  * doesn't cover it.
  */
-// Every address that has loaded in this page, so remounted artwork skips its fade.
-const shown = new Set<string>();
+// Loaded artwork keeps its proportions as well as its fade state across route mounts.
+const shown = new Map<string, number | undefined>();
 /** The cover's hue, from its title. */
 const hue = (title: string) => { let hash = 7; for (const char of title) hash = (hash * 31 + char.codePointAt(0)!) >>> 0; return hash % 360; };
 
@@ -33,14 +33,21 @@ export function MediaArtwork({ thumbnail, title, collection = false, bare = fals
   } catch { /* Missing artwork sets the title in type. */ }
   // Artwork fades in once it has loaded, rather than popping in over its frame; art this page already showed (another
   // tab, a revisit) is there at once.
-  const [loadedSrc, setLoadedSrc] = useState("");
+  const [loadedSrc, setLoadedSrc] = useState(() => shown.has(src) ? src : "");
   const image = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
     // A decoded browser-cache hit must not fade from transparent on every route revisit.
-    if (image.current?.complete && image.current.naturalWidth) { shown.add(src); setLoadedSrc(src); }
-  }, [src]);
+    if (src !== loadedSrc && image.current?.complete && image.current.naturalWidth && image.current.naturalHeight) {
+      shown.set(src, image.current.naturalWidth / image.current.naturalHeight);
+      setLoadedSrc(src);
+    }
+  }, [src, loadedSrc]);
   return src && src !== failedSrc
-    ? <img ref={image} className={cn("media-artwork block w-full aspect-video object-cover bg-muted motion-safe:transition-opacity motion-safe:duration-200 motion-safe:not-data-loaded:opacity-0", className)} data-loaded={src === loadedSrc || shown.has(src) || undefined} src={src} alt="" loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined} decoding="async" referrerPolicy="no-referrer" onLoad={() => { shown.add(src); setLoadedSrc(src); }} onError={() => setFailedSrc(src)} />
+    ? <img ref={image} className={cn("media-artwork block w-full aspect-video object-cover bg-muted motion-safe:transition-opacity motion-safe:duration-200 motion-safe:not-data-loaded:opacity-0", className)} data-loaded={src === loadedSrc || shown.has(src) || undefined} src={src} alt="" loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined} decoding="async" referrerPolicy="no-referrer" onLoad={event => {
+      const { naturalWidth, naturalHeight } = event.currentTarget;
+      shown.set(src, naturalWidth && naturalHeight ? naturalWidth / naturalHeight : undefined);
+      setLoadedSrc(src);
+    }} onError={() => setFailedSrc(src)} />
     : bare ? null : <span className={cn("media-artwork @container relative flex w-full aspect-video overflow-hidden", className)} aria-hidden="true">
       <span className="absolute inset-0 flex text-white" style={{ background: `oklch(.3 .05 ${hue(title)})` }}>
         {collection ? <Folder className="m-auto size-[max(1rem,20cqi)] text-white/70" />
@@ -60,16 +67,20 @@ const href = (src: string | undefined) => { try { return new URL(src ?? "").href
  */
 export function useArtRatio(src: string | undefined, fallback: number) {
   const [measured, setMeasured] = useState<{ src: string; ratio: number }>();
+  const url = href(src);
+  const ratio = measured?.src === url ? measured.ratio : shown.get(url) ?? fallback;
   const ref = useCallback((element: HTMLElement | null) => {
     if (!element) return;
     const read = () => {
       const image = element.querySelector("img");
-      if (image?.complete && image.naturalWidth && image.naturalHeight) setMeasured({ src: image.src, ratio: image.naturalWidth / image.naturalHeight });
+      if (image?.src === url && image.complete && image.naturalWidth && image.naturalHeight && image.naturalWidth / image.naturalHeight !== ratio) {
+        setMeasured({ src: image.src, ratio: image.naturalWidth / image.naturalHeight });
+      }
     };
     // A load doesn't bubble, but it passes the element on its way down.
     element.addEventListener("load", read, true);
     read();
     return () => element.removeEventListener("load", read, true);
-  }, []);
-  return [ref, measured && measured.src === href(src) ? measured.ratio : fallback] as const;
+  }, [url, ratio]);
+  return [ref, ratio] as const;
 }

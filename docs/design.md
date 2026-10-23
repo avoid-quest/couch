@@ -126,7 +126,9 @@ the filter.
 (`DetailHeader`). It reaches up under the header and out to the window's
 edges, in its picture's [room](#room), which fades into the page's black at
 its foot. The picture stands whole at the right at its own proportions, read
-once it loads (`useArtRatio`; its kind's shape until then):
+once it loads (`useArtRatio`; its kind's shape until then). Loaded proportions
+are shared with the bar and player, so revisiting artwork starts at its known
+shape without a second layout:
 
 - **Object**, any picture, a wide frame too (a video's 16:9): as tall as the
   stage allows under the header (`--object-h`) and no wider than 40vw
@@ -327,15 +329,11 @@ arrives, 600 ms for colour that follows what plays.
 - Routes appear immediately with cached content; artwork fades only on a cold
   load, and a Stage's object settles .75rem into place as it does (450 ms);
   the player's bands fade together with the subtitles they lift.
-- One spatial story for what plays: the now-playing bar grows into the player
-  band with a view transition (`couch-player-band`, 320 ms), and the artwork
-  travels with it (`couch-art`, 280 ms, ease-out): the bar's thumbnail becomes
-  the player's artwork or its picture, and after Play on a Details page (the
-  `couch-play` transition type) that page's artwork does. Only one element
-  holds the name at a time. The bar's title and its line fade out at once
-  rather than stretch over the band's timeline (`couch-bar-title`). These
-  are view transitions, so they are composited snapshots, and reduced motion
-  skips them.
+- Opening the player fades it in over 160 ms; Back fades the restored bar in
+  over the same interval. Only opacity animates, with no route snapshots or
+  shared-element capture. The transport keeps its familiar positions in both
+  layouts. Reduced motion presents them immediately. The measured navigation
+  costs and frame budget are in [Preview performance](preview-performance.md).
 - When what plays changes, the room's colours and the bar's tone cross-fade
   over 600 ms, as do a letterbox's light ([Room](#room)). Reduced motion swaps
   them at once.

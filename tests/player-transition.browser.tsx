@@ -1,5 +1,5 @@
 // On an empty Vite page, import this module and call runPlayerTransitionRegression().
-// Real shell, player and router; session state is a paused local fixture, with no Core.
+// Real shell, player and router; session state is a playing local fixture, with no Core.
 import { createRoot } from "react-dom/client";
 import { useLayoutEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -15,10 +15,13 @@ import type { SessionGateValue } from "../src/client/session/session-context";
 import { deviceId } from "../src/client/session/device-id";
 
 const wait = (ms = 60) => new Promise(resolve => setTimeout(resolve, ms));
-const finished = (transition: ViewTransition | undefined) => Promise.race([
-  transition?.finished,
-  wait(3000).then(() => { throw new Error("Player transition did not finish within 3 seconds"); }),
-]);
+const present = async (selector: string) => {
+  const deadline = performance.now() + 3000;
+  while (!document.querySelector(selector)) {
+    if (performance.now() > deadline) throw new Error(`Navigation did not present ${selector}`);
+    await wait(10);
+  }
+};
 export async function runPlayerTransitionRegression(inspect?: (surface: string) => Promise<void>) {
   const host = document.getElementById("fixture")!;
   const root = createRoot(host);
@@ -52,8 +55,7 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     } });
   const remote = createRoute({ getParentRoute: () => route, path: "/remote", component: RemotePage });
   const router = createRouter({ routeTree: route.addChildren([home, now, remote]), history: createMemoryHistory({ initialEntries: ["/"] }) });
-  const transitions: ViewTransition[] = [];
-  const snapshots: { phase: string; names: ReturnType<typeof names> }[] = [];
+  let transitions = 0;
   const failures: string[] = [];
   let journey = "";
   const timing: { phase: string; journey: string; url: string; presented: string[]; remote: boolean; bar: boolean; player: boolean }[] = [];
@@ -68,27 +70,24 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     useLayoutEffect(() => capture("commit"));
     return null;
   }
-  const observer = new MutationObserver(() => capture("mutation"));
+  const observer = new MutationObserver(() => {
+    capture("mutation");
+    // Returning from the player must restore scroll clearance in the same commit,
+    // before ResizeObserver gets a later chance to measure the restored footer.
+    const footer = host.querySelector<HTMLElement>(".app-footer");
+    if (footer?.checkVisibility() && host.querySelector("[data-now-playing]") && !host.querySelector("[data-player-band]")) {
+      const clearance = parseFloat(document.documentElement.style.getPropertyValue("--bottom-bar")) || 0;
+      if (Math.abs(clearance - footer.offsetHeight) > 1) failures.push(`Restored footer at ${router.state.location.href} (${journey}, transitions=${transitions}) needs ${footer.offsetHeight}px clearance, got ${clearance}px`);
+    }
+  });
   observer.observe(host, { childList: true, subtree: true });
   let frame: number;
   const sampleFrame = () => { capture("frame"); frame = requestAnimationFrame(sampleFrame); };
   frame = requestAnimationFrame(sampleFrame);
   const start = document.startViewTransition.bind(document);
-  const names = () => [...document.querySelectorAll<HTMLElement>("[data-player-band], [data-now-playing]")].map(element => ({
-    element: element.hasAttribute("data-player-band") ? "player" : "bar", name: getComputedStyle(element).viewTransitionName,
-    rendered: element.checkVisibility(),
-  }));
-  // Each shared control's own transition name, so it glides from the bar to its place in the band: the gear (couch-gear),
-  // and the bar's Open player into fullscreen's slot (couch-last).
-  const shared = (selector: string) => [...host.querySelectorAll<HTMLElement>(`${selector} button, ${selector} [data-player-last]`)]
-    .filter(element => element.checkVisibility()).map(element => getComputedStyle(element).viewTransitionName).filter(name => name !== "none");
-  let barNames: string[] = [];
-  document.startViewTransition = ((update: () => Promise<void>) => {
-    snapshots.push({ phase: "before", names: names() });
-    const transition = start(async () => { await update(); snapshots.push({ phase: "after", names: names() }); });
-    transitions.push(transition);
-    transition.ready.catch(error => failures.push(`${error.name}: ${error.message}`));
-    return transition;
+  document.startViewTransition = ((...args: Parameters<typeof start>) => {
+    transitions++;
+    return start(...args);
   }) as typeof document.startViewTransition;
   try {
     root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></SessionGateContext>);
@@ -107,29 +106,23 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     titleButton.blur();
     await inspect?.("bar");
     for (let i = 0; i < 3; i++) {
-      if (i === 0) barNames = shared("[data-now-playing]");
       // The title and the bar's last slot open the player alike.
       host.querySelector<HTMLButtonElement>(i === 1 ? '[data-now-playing] [data-player-last]' : '[data-bar-title] button')!.click();
-      await wait();
-      await finished(transitions.at(-1));
+      await present("[data-player-band]");
       if (!host.querySelector("[data-player-band]")) throw new Error(`No fixture player: ${host.textContent}`);
       if (i === 0) {
-        const bandNames = shared("[data-player-band]");
-        if (!bandNames.includes("couch-last") || !barNames.includes("couch-last")) failures.push("The bar's Open player and the band's last slot must share couch-last");
-        if (innerWidth >= 640 && !(barNames.includes("couch-gear") && bandNames.includes("couch-gear"))) failures.push("The bar's gear and the band's must share couch-gear");
-        const missing = barNames.filter(name => !bandNames.includes(name));
-        if (missing.length) failures.push(`Bar controls with no place in the band: ${missing.join(", ")}`);
+        const animation = host.querySelector('.player-page')!.getAnimations().find(animation => animation instanceof CSSAnimation && animation.animationName === 'couch-player-enter');
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!reduced && !animation) failures.push("Player entry has no opacity animation");
+        if (reduced && animation) failures.push("Player entry ignores reduced motion");
         await inspect?.("player");
       }
-      await router.navigate({ to: "/", viewTransition: true });
-      await finished(transitions.at(-1));
+      await wait(200);
+      host.querySelector<HTMLButtonElement>('[data-player-top] button[aria-label^="Back to"]')!.click();
+      await present("[data-now-playing]");
+      await wait(200);
     }
-    if (snapshots.length !== 12) failures.push("Three round trips must capture twelve snapshots");
-    snapshots.forEach((snapshot, index) => {
-      const named = snapshot.names.filter(element => element.rendered && element.name === "couch-player-band");
-      const expected = index % 4 === 0 || index % 4 === 3 ? "bar" : "player";
-      if (named.length !== 1 || named[0]?.element !== expected) failures.push(`${snapshot.phase} snapshot ${index} needs exactly one ${expected}`);
-    });
+    if (transitions) failures.push("Player navigation must not freeze rendering for native snapshots");
     // Remote Up next and Back use ordinary navigation, not a view transition.
     // Observe actual commits/mutations as well as frames; URL and presented matches can differ.
     if (!gate.tvPresentation) {
@@ -171,11 +164,11 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
       clickTab("/");
       await wait(250);
       if (!host.querySelector("[data-now-playing]")) failures.push("Home must restore the bar");
-      if (transitions.length !== 6) failures.push("Remote navigation must not start view transitions");
+      if (transitions !== 0) failures.push("Remote navigation must not start view transitions");
       timing.forEach((sample, index) => {
         if (sample.remote && sample.bar) failures.push(`${sample.journey} ${sample.phase} ${index} mounted a bar on Remote`);
       });
     }
-    return { passed: !failures.length, failures, snapshots, timing };
+    return { passed: !failures.length, failures, transitions, timing };
   } finally { observer.disconnect(); cancelAnimationFrame(frame); document.startViewTransition = start; root.unmount(); client.clear(); }
 }
