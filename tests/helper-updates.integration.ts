@@ -33,7 +33,7 @@ async function until(predicate: () => boolean | Promise<boolean>) {
 function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "couch-helper-updates-"));
   const bin = join(directory, "bin"), helpers = join(directory, "helpers");
-  const original = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE };
+  const original = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE, COUCH_QJS_PATH: process.env.COUCH_QJS_PATH };
   const timers: ReturnType<typeof setInterval>[] = [], interval = globalThis.setInterval;
   t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => {
     const timer = interval(...args); timers.push(timer); return timer;
@@ -103,6 +103,35 @@ function fixture(t: TestContext) {
   const check = async () => { await updates.check(); await updates.close(); return (await updates.read()).items; };
   return { directory, bin, helpers, updates, system, cached, release, state, start, check };
 }
+
+test("bundled QuickJS works on first use and manual checks never replace it with a newer download", options, async t => {
+  const f = fixture(t);
+  rmSync(join(f.bin, "qjs"));
+  const bundled = join(f.directory, "bundled-qjs");
+  writeFileSync(bundled, program("0.17.0"), { mode: 0o755 });
+  process.env.COUCH_QJS_PATH = bundled;
+  f.cached("qjs", "v0.99.0", "0.99.0");
+  f.release("qjs", "v0.99.1");
+  await f.start();
+  assert.equal(await helper("qjs"), bundled, "the app bundle takes precedence over the old download cache");
+  assert.equal((await readHelperStatus(f.helpers)).selected.qjs?.origin, "bundled");
+  rmSync(join(f.helpers, "qjs"), { recursive: true, force: true });
+  assert.equal(await checkHelper("qjs"), bundled, "clearing the download cache leaves the bundled runtime usable");
+  assert.deepEqual((await f.check()).find(item => item.name === "qjs"), { name: "qjs", version: "0.17.0", origin: "bundled", status: "compatible", error: null });
+  assert.ok(f.state.requests.every(url => !url.includes("quickjs")), "the bundle is updated with Couch, never from the incompatible upstream binary feed");
+});
+
+test("a missing bundled QuickJS reports a repair instead of silently downloading an incompatible runtime", options, async t => {
+  const f = fixture(t);
+  await f.start();
+  rmSync(join(f.bin, "qjs"));
+  process.env.COUCH_QJS_PATH = join(f.directory, "missing-qjs");
+  f.release("qjs", "v0.99.1");
+  const item = (await f.check()).find(item => item.name === "qjs");
+  assert.equal(item?.status, "error");
+  assert.match(item?.error ?? "", /Reinstall Couch/);
+  assert.ok(f.state.requests.every(url => !url.includes("quickjs")));
+});
 
 test("reads are passive, and checks without Core helper setup cannot write to an implicit directory", options, async t => {
   const f = fixture(t);

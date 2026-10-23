@@ -27,7 +27,12 @@ lingers long enough to reach its link, past a sofa that still dodges.
 5. **Footer.** Download, GitHub, What plays where, How sharing works, A project
    of avoid.quest.
 
-**Download** links back to About from its footer.
+**Download** links back to About from its footer. Each channel lists separate
+Mac (Apple Silicon, macOS 14+) and Mac (Intel, macOS 15+) downloads when its
+release contains those installers. Both include the first-open command.
+The user chooses the CPU explicitly; a Mac user agent does not identify it.
+The fallback catalog lists only published files, so it gains Intel only after
+the first Intel release.
 
 Precise capabilities and limits live in the repository's docs, one click away;
 the site never lists sources exhaustively or names protocols.

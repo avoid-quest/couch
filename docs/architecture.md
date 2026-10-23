@@ -343,8 +343,15 @@ separate from installer availability, so a notes failure cannot block an update.
 ## Helpers
 
 Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
-YouTube's challenges) and ffmpeg. The app ships none of them
-(`src/server/helpers.ts`). The AirPlay receiver is not one of them: Linux packages
+YouTube's challenges) and ffmpeg (`src/server/helpers.ts`). Mac packages ship
+QuickJS-NG 0.17.0, built from pinned upstream source for their actual CPU and
+macOS 14 rather than using upstream's macOS-26-only binaries
+([build and signing](ci.md#bundled-mac-javascript-runtime)). Main passes its
+path as `COUCH_QJS_PATH`; compatible system copies still take precedence.
+Otherwise Core selects this bundled copy ahead of downloaded copies, including
+during manual checks. It updates only with Couch and a broken bundle reports
+a reinstall rather than downloading an incompatible runtime.
+The AirPlay receiver is not one of them: Linux packages
 ship its pinned UxPlay build, like the live relay, and nothing updates it apart
 from Couch ([Receive AirPlay](airplay.md)).
 
@@ -357,7 +364,9 @@ from Couch ([Receive AirPlay](airplay.md)).
   - yt-dlp's own `yt-dlp_macos.zip`, `yt-dlp_linux*.zip` or `yt-dlp_win*.zip`.
     These unpacked builds start in a fraction of a second; the one-file builds
     unpack themselves on every run.
-  - QuickJS-NG's `qjs-*` release binary.
+  - QuickJS-NG's `qjs-*` release binary, except when using the bundled Mac copy.
+    A source/development Mac on an older OS needs a compatible system copy or
+    `COUCH_QJS_PATH` pointing at the [local build](ci.md#bundled-mac-javascript-runtime).
   - ffmpeg from [Martin Riedl](https://ffmpeg.martin-riedl.de) on macOS and
     Linux (its `.sha256`; on macOS also his Developer ID signature), and from
     [BtbN](https://github.com/BtbN/FFmpeg-Builds) on Windows. Martin Riedl's
@@ -372,12 +381,13 @@ from Couch ([Receive AirPlay](airplay.md)).
   QuickJS-NG, and a yt-dlp that won't start.
 - An administrator's manual update also refreshes managed QuickJS-NG and ffmpeg
   builds, and mpv where already installed or needed. Compatible system copies stay
-  under their package manager, and a held yt-dlp stays held. Checks share the
+  under their package manager, bundled QuickJS stays with Couch, and a held
+  yt-dlp stays held. Checks share the
   existing per-helper queues, retain copies in use and report a failed lookup or
   download even when a working fallback remains. Status reads alone do no work.
 - Core records what it actually selected in `<data>/helpers/status.json`
   (`HelperStatus` in `src/server/helper-status.ts`, `schema: 1`): per helper its
-  origin (`system` or `managed`), version, path, the SHA-256 it verified when it
+  origin (`system`, `managed` or `bundled`), version, path, the SHA-256 it verified when it
   downloaded that copy, when the check last ran it and the latest yt-dlp release
   that check saw. Under `managed`, each copy on disk has its digest and, for
   yt-dlp, `worked`: the last time Couch resolved playable media with that copy,

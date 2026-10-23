@@ -514,6 +514,11 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).
+Download uses flat rows per channel, with explicit **Mac (Apple Silicon)**
+(macOS 14+) and **Mac (Intel)** (macOS 15+) choices. Each row appears only when
+that channel has its installer; it carries the architecture, minimum OS and
+first-open instructions. Browser platform detection can bring Apple Silicon
+first on a Mac, but never infers the CPU from its user agent.
 
 ## Changing a surface
 

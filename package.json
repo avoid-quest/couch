@@ -114,6 +114,10 @@
       "hardenedRuntime": false,
       "minimumSystemVersion": "14.0",
       "extendInfo": {
+        "LSMinimumSystemVersionByArchitecture": {
+          "arm64": "14.0.0",
+          "x86_64": "15.0.0"
+        },
         "NSAudioCaptureUsageDescription": "Couch shares this computer's audio with the devices you choose.",
         "NSMicrophoneUsageDescription": "Couch shares your microphone or audio input with the devices you choose."
       }

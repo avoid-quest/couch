@@ -7,11 +7,11 @@ import type { Helper } from "./helpers";
 // diagnosis can name the executable that runs. Only Core writes it; reading it, or the
 // recovery hold beside it, never checks, downloads or selects a helper.
 export type SelectedHelper = {
-  origin: "system" | "managed";
-  // A managed copy's release; a system copy's first line of --version.
+  origin: "system" | "managed" | "bundled";
+  // A managed copy's release; a system or bundled copy's first line of --version.
   version: string;
   path: string;
-  // The SHA-256 Couch verified when it downloaded this copy; null for system copies
+  // The SHA-256 Couch verified when it downloaded this copy; null for system/bundled copies
   // and copies downloaded before Couch recorded it.
   sha256: string | null;
   // When the selection check last ran this executable.
@@ -73,7 +73,7 @@ export async function readStatus(directory: string): Promise<HelperStatus> {
   const { selected, managed } = value;
   for (const name of helpers) {
     const choice = isRecord(selected) ? selected[name] : null;
-    if (isRecord(choice) && (choice.origin === "system" || choice.origin === "managed") && typeof choice.version === "string"
+    if (isRecord(choice) && (choice.origin === "system" || choice.origin === "managed" || choice.origin === "bundled") && typeof choice.version === "string"
       && typeof choice.path === "string" && typeof choice.verifiedAt === "string" && typeof choice.held === "boolean")
       status.selected[name] = { origin: choice.origin, version: choice.version, path: choice.path, sha256: text(choice.sha256), verifiedAt: choice.verifiedAt, latest: text(choice.latest), held: choice.held };
     const copies = isRecord(managed) ? managed[name] : null;

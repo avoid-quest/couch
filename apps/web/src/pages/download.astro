@@ -9,7 +9,8 @@ const releases = await currentCatalog();
 const deb = releases.stable.deb ?? releases.preview.deb;
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
 const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
-  dmg: { name: "Mac", target: "Apple Silicon, macOS 14 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
+  dmg: { name: "Mac (Apple Silicon)", target: "macOS 14 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
+  "dmg-intel": { name: "Mac (Intel)", target: "macOS 15 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
   nsis: { name: "Windows", target: "x86_64, Windows 11", note: "Installs for your user only. The first time, SmartScreen shows More info > Run anyway." },
   appimage: { name: "Linux", target: "x86_64 AppImage", note: "Make it executable, then open it. Needs FUSE 2." },
   deb: { name: "Debian TV", target: "Debian 13, x86_64, X11", note: "For Debian desktops and dedicated TVs." },
@@ -52,7 +53,7 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
                 <h3>{labels[format].name}</h3>
                 <p>{labels[format].target}</p>
                 <p>{labels[format].note}</p>
-                {format === "dmg" && <p><code>xattr -dr com.apple.quarantine "/Applications/{channel === "preview" ? "Couch Preview" : "Couch"}.app"</code></p>}
+                {(format === "dmg" || format === "dmg-intel") && <p><code>xattr -dr com.apple.quarantine "/Applications/{channel === "preview" ? "Couch Preview" : "Couch"}.app"</code></p>}
               </div>
               <span data-version>{item?.version}</span>
               <a class={format === mine ? primary : secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}>Download</a>

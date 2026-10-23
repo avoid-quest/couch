@@ -3,10 +3,10 @@ import fallback from "./releases.json";
 // The public repo the app publishes to and updates from (package.json build.publish).
 const repo = "avoid-quest/couch";
 export type Channel = "stable" | "preview";
-export const formats = ["dmg", "nsis", "appimage", "deb"] as const;
+export const formats = ["dmg", "dmg-intel", "nsis", "appimage", "deb"] as const;
 export type PackageFormat = (typeof formats)[number];
 // How electron-builder ends each installer's name.
-const suffixes: Record<PackageFormat, string> = { dmg: "-arm64.dmg", nsis: "-x64.exe", appimage: "-x86_64.AppImage", deb: "_amd64.deb" };
+const suffixes: Record<PackageFormat, string> = { dmg: "-arm64.dmg", "dmg-intel": "-x64.dmg", nsis: "-x64.exe", appimage: "-x86_64.AppImage", deb: "_amd64.deb" };
 export type Release = { version: string; url: string; filename: string };
 export type Catalog = Record<Channel, Partial<Record<PackageFormat, Release>>>;
 type GitHubRelease = { tag_name: string; prerelease: boolean; assets: { name: string; browser_download_url: string }[] };
