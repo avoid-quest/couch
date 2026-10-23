@@ -69,6 +69,7 @@ app.whenReady().then(async () => {
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     }
     if (${trace}) await contentTracing.startRecording({ included_categories: ['devtools.timeline', 'blink', 'blink.user_timing', 'cc', 'viz', 'benchmark', 'toplevel'] });
+    app.focus({ steal: true });
     window.focus();
     let result;
     if (${seek} && !${checks}) {

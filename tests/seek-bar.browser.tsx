@@ -47,6 +47,7 @@ export async function runSeekBarRegression() {
     if (touchGeometryReads) failures.push(`Touch input performed ${touchGeometryReads} hover geometry reads`);
     if (track.querySelector('[data-hover-time]')) failures.push('Touch displayed a hover preview');
     // Keyboard edits still use ten-second steps and retain the draft while clock observations arrive.
+    if (!document.hasFocus()) throw new Error('The seek keyboard regression requires an active fixture window');
     thumb.focus();
     thumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
     await wait();
@@ -59,7 +60,7 @@ export async function runSeekBarRegression() {
     thumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     const deadline = performance.now() + 1000;
     while (thumb.getAttribute('aria-valuenow') !== '121' && performance.now() < deadline) await nextFrame();
-    if (thumb.getAttribute('aria-valuenow') !== '121' || !document.activeElement?.matches('[data-play-button]')) failures.push('Down did not hand focus to Play and restore the observed position');
+    if (thumb.getAttribute('aria-valuenow') !== '121' || !document.activeElement?.matches('[data-play-button]')) failures.push(`Down did not hand focus to Play and restore the observed position: ${JSON.stringify({ value: thumb.getAttribute('aria-valuenow'), focus: document.activeElement?.getAttribute('aria-label'), documentFocused: document.hasFocus(), connected: thumb.isConnected })}`);
     await audit.updateSession(gate => ({ ...gate, connected: false }));
     geometryReads = 0;
     for (let i = 0; i < 12; i++) { move(.5); await nextFrame(); }

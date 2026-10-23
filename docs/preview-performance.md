@@ -326,3 +326,12 @@ cold entry (worst warm gap 17.2 ms). The keyboard regression uses the real Down-
 to-Play focus handoff and waits for its resulting observed value; an initial
 fixed-delay blur assertion was inconsistent and is retained as a test diagnostic
 in `.artifacts/seek/blur-first-failure.json`.
+
+Review validation reproduced that keyboard assertion with an inactive native
+window: `document.hasFocus()` was false, focus had moved to Pause, and the slider
+still held its draft. The native runner now activates its app before focusing
+the window; the keyboard regression rejects an inactive window explicitly.
+All five suites pass in normal and reduced-motion runs with that correction.
+Evidence is in `.artifacts/pr-stack/reviews/duration-focus-detail` (failure) and
+`duration-active{,-reduced}` (passing runs). This diagnoses the keyboard-test
+failure; the earlier 135-second drag result remains unexplained.
