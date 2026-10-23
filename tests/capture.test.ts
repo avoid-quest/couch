@@ -392,6 +392,7 @@ test("the actual preload sends capture selections and cancellation to Main", asy
   const calls: unknown[] = [];
   runInNewContext(await built.outputs[0]!.text(), {
     process: { platform: "linux", argv: [] },
+    addEventListener() {},
     require: () => ({
       contextBridge: { exposeInMainWorld(_name: string, bridge: CouchApp) { app = bridge; } },
       ipcRenderer: { async invoke(...args: unknown[]) { calls.push(args); return { value: args[0] === "couch:capture-sources" ? [screen] : undefined }; }, on() {}, off() {} },
@@ -412,6 +413,7 @@ test("the actual preload tells the page when Main closes its window, once per su
   const listeners = new Map<string, Set<() => void>>();
   runInNewContext(await built.outputs[0]!.text(), {
     process: { platform: "linux", argv: [] },
+    addEventListener() {},
     require: () => ({
       contextBridge: { exposeInMainWorld(_name: string, bridge: CouchApp) { app = bridge; } },
       ipcRenderer: {
