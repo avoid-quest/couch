@@ -57,7 +57,7 @@ export const shareTargets = (state: ClientSessionState | null | undefined, here:
 
 /** A device watching or hearing this device's share, and how it gets it. */
 export type Viewer = { device: DeviceSummary; picture: boolean; sound: boolean; playing: boolean; behind: boolean; error?: string };
-/** Every device the share plays on, in each playback that plays it; the publisher never plays its own (docs/live-inputs.md). */
+/** Every online device the share plays on, in each playback that plays it; the publisher never plays its own (docs/live-inputs.md). */
 export function viewersOf(state: ClientSessionState | null | undefined, sourceId: string): Viewer[] {
   const viewers = new Map<string, Viewer>();
   // A channel the capture lacks plays nothing there, as Where it plays counts it.
@@ -65,7 +65,8 @@ export function viewersOf(state: ClientSessionState | null | undefined, sourceId
   for (const playback of state?.playbacks ?? []) if (playback.liveSourceId === sourceId) for (const output of playback.outputs) {
     const device = state?.devices?.find(item => item.id === output.deviceId);
     const picture = output.picture && source?.video !== false, sound = output.sound && source?.audio !== false;
-    if (device && (picture || sound)) viewers.set(device.id, { device, picture, sound, playing: playback.status === "playing", behind: !!output.buffered, error: output.error });
+    // An offline device keeps its output in the playback (Where it plays says Offline) but watches nothing.
+    if (device?.online && (picture || sound)) viewers.set(device.id, { device, picture, sound, playing: playback.status === "playing", behind: !!output.buffered, error: output.error });
   }
   return [...viewers.values()];
 }

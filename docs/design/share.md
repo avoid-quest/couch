@@ -6,7 +6,8 @@ while it runs. Its rules live in
 with a test per rule in `tests/share.test.ts`; capture itself is the live
 session's ([Share a live device](../live-inputs.md)).
 
-Everything here is this device's own: it carries `data-tv-local-only`, so a
+Everything here is this device's own: it carries `data-tv-local-only` (its toast
+the `tv-local-only` class, as sonner takes no attributes), so a
 TV's own remote and pointer use it but another device's Remote never reaches
 it.
 
@@ -43,7 +44,7 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   is chosen for you; a window waits for your choice. In a browser Screen and
   Window hand off to the browser's own picker, which opens on that surface and
   still offers the rest. Sound only takes the first screen's capture for its
-  sound in the desktop app.
+  sound in the desktop app, so Start sharing waits there until it lists one.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
   place, disabled, and leaves the choice. Without a choice the share waits in
@@ -97,9 +98,10 @@ Sheet on phones and the TV:
 - Another window of this device already shares: the dialog says so and Start
   sharing waits.
 - A receiver that can't play: its row says "Can't play: {reason}" in red.
-- The last viewer leaves while the capture still runs: one toast, "Still
-  sharing {name}, on no screens", with Stop sharing. It leaves once a viewer
-  returns or the share ends.
+- The last viewer leaves or goes offline while the capture still runs: one
+  toast, "Still sharing {name}, on no screens", with Stop sharing, this
+  device's own like the rest. It leaves once a viewer returns or the share
+  ends.
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.

@@ -80,11 +80,12 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const takes = (device: (typeof devices)[number]) => kind.pictures ? device.sharing?.video || device.sharing?.audio && sound : device.sharing?.audio;
   // A chosen device that the kind or sound no longer suits drops out of the choice.
   const chosen = devices.filter(device => targets.includes(device.id) && takes(device));
-  // Closing the dialog while the capture starts cancels it, as Cancel does. Once published, the header's capsule takes
-  // Share's place and unmounts the dialog itself, which ends nothing.
+  // Closing the dialog while the capture or the input probe starts cancels it, as Cancel does. Once published, the
+  // header's capsule takes Share's place and unmounts the dialog itself, which ends nothing.
   const starting = useRef(false);
   useEffect(() => () => { if (starting.current && !liveSharing.current()) void endLive().catch(() => {}); }, []);
-  const ready = available && !reason && !elsewhere && (!lists || !kind.pictures || !!source);
+  // The desktop app's Sound only takes a screen's capture for its sound (selectionOf).
+  const ready = available && !reason && !elsewhere && (!lists || !!(kind.pictures ? source : sources?.some(item => item.kind === "screen")));
 
   const checkAccess = async (on = kind) => {
     const text = await couchApp?.captureAccess?.(on.capture).catch(() => null);
@@ -114,7 +115,8 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const chooseInput = async () => {
     setListing(true); setError(null);
     try {
-      const next = await liveAudioInputs();
+      starting.current = true;
+      const next = await liveAudioInputs().finally(() => { starting.current = false; });
       setInputs(next);
       setAudioDeviceId(previous => next.some(input => input.deviceId === previous) ? previous : "default");
       if (!next.length) setError("No audio inputs are available. Connect a microphone or audio interface and try again.");

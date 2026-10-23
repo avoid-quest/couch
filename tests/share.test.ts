@@ -58,6 +58,11 @@ describe("who's watching", () => {
     expect(viewersOf(state, "s").map(viewer => viewer.device.id)).toEqual(["tv", "kitchen", "bedroom"]);
   });
 
+  test("leaves out an offline device whose output stays in the playback", () => {
+    const away = { ...state, devices: state.devices.map(item => item.id === "tv" ? { ...item, online: false } : item) } as ClientSessionState;
+    expect(viewersOf(away, "s").map(viewer => viewer.device.id)).toEqual(["kitchen", "bedroom"]);
+  });
+
   test("counts only the channels the capture carries", () => {
     const silent = { ...state, liveSources: [{ id: "s", deviceId: "here", name: "Screen", kind: "screen", audio: false, video: true }] } as ClientSessionState;
     expect(viewersOf(silent, "s").map(viewer => [viewer.device.id, viewer.picture, viewer.sound])).toEqual([["tv", true, false], ["bedroom", true, false]]);
