@@ -36,7 +36,7 @@ export const batchActive = (batch: UpdateBatch | null) => !!batch && batch.helpe
 export function restoreUpdateBatch(text: string | null, now = Date.now()): UpdateBatch | null {
   try {
     const value = JSON.parse(text ?? "null") as UpdateBatch | null;
-    if (!value || !Number.isFinite(value.createdAt) || value.createdAt > now || now - value.createdAt > batchLifetime
+    if (!value || !Number.isFinite(value.createdAt) || value.createdAt > now
       || !["waiting", "checking", "updated", "skipped", "failed"].includes(value.helpers)
       || value.interrupt !== undefined && typeof value.interrupt !== "boolean"
       || value.helperError !== undefined && typeof value.helperError !== "string"
@@ -56,6 +56,8 @@ export function restoreUpdateBatch(text: string | null, now = Date.now()): Updat
     }
     // Preserve the planned order; rejecting edited ordering is safer than reordering an active install.
     if (value.items.some((item, index) => index > 0 && rank(item.id) < rank(value.items[index - 1]!.id))) return null;
+    // Restart intent expires; completed and failed results stay until dismissed.
+    if (now - value.createdAt > batchLifetime && batchActive(value)) return null;
     return value;
   } catch { return null; }
 }

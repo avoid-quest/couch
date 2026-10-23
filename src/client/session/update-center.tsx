@@ -170,7 +170,8 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
           }
         },
         confirm: async item => {
-          while (Date.now() - item.startedAt! < restartTimeout) {
+          // A resumed page can already be past the timeout while the app has successfully restarted.
+          while (true) {
             let next: UpdateState | undefined;
             try { next = await read(item.id, signal); }
             catch (error) { if (signal.aborted || error instanceof ApiError && [401, 403].includes(error.status)) throw error; }
@@ -178,6 +179,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
             if (next?.error) throw new Error(next.error);
             const last = next?.automatic?.last;
             if (last && last.at >= item.startedAt! && ["failed", "rolled-back"].includes(last.outcome)) throw new Error(last.error ?? `Couch ${item.version} did not start.`);
+            if (Date.now() - item.startedAt! >= restartTimeout) break;
             await pause(signal);
           }
           throw new Error(`Couldn't confirm Couch ${item.version} after restarting. Reconnect and check before retrying.`);

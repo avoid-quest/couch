@@ -2,18 +2,33 @@ import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { strToU8, zipSync } from "fflate";
+import { Identity } from "@sonn-audio/node-sendspin";
 import { createHelperUpdates } from "../src/server/helper-updates";
 import { readHelperStatus, writeJson } from "../src/server/helper-status";
 import { checkHelper, helper, startHelpers, useHelper, type Helper } from "../src/server/helpers";
 import { runYtDlp } from "../src/server/yt-dlp";
+import { createSendspin } from "../src/server/sendspin";
+import { createLiveStreams } from "../src/server/live-stream";
+import { createGuide } from "../src/server/iptv";
+import type { PlayerState } from "../src/shared/protocol";
 
 // Real executable probes and checksum-verified fixture downloads in a private PATH
 // and helper directory. Only release servers are mocked; no installed data is used.
 const options = { skip: process.platform !== "linux", timeout: 10_000 };
 const program = (version: string) => `#!/bin/sh\nprintf '%s\\n' '${version}'\n`;
+
+async function until(predicate: () => boolean | Promise<boolean>) {
+  const deadline = Date.now() + 2_000;
+  while (!await predicate()) {
+    assert.ok(Date.now() < deadline, "The media helper operation did not finish.");
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
 
 function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "couch-helper-updates-"));
@@ -204,6 +219,183 @@ exec "$runtime" --version
   } finally {
     cancellation.abort();
     await extraction.catch(() => {});
+  }
+});
+
+async function managedFfmpeg(t: TestContext) {
+  const f = fixture(t);
+  rmSync(join(f.bin, "ffmpeg"));
+  const older = f.cached("ffmpeg", "7.0", "ffmpeg version 7.0");
+  const started = join(f.directory, "encoding"), finish = join(f.directory, "finish");
+  writeFileSync(older, `#!${process.execPath}
+if (process.argv.includes('-version')) { console.log('ffmpeg version 7.0'); process.exit(); }
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(started)}, String(process.pid));
+setInterval(() => { if (fs.existsSync(${JSON.stringify(finish)})) process.exit(Number(fs.readFileSync(${JSON.stringify(finish)}, 'utf8'))); }, 10);
+`, { mode: 0o755 });
+  f.release("ffmpeg", "8.0");
+  await f.start();
+  const stopped = () => {
+    if (!existsSync(started)) return true;
+    try { process.kill(Number(readFileSync(started, "utf8")), 0); return false; } catch { return true; }
+  };
+  return { ...f, older, started, finish, stopped };
+}
+
+for (const outcome of ["exit", "failure", "stop"] as const) test(`updating FFmpeg while Sendspin awaits its source keeps the executable through launch and ${outcome}`, options, async t => {
+  const f = await managedFfmpeg(t);
+  const source = "https://media.example/input.m3u8", pending = Promise.withResolvers<Response>();
+  const request = globalThis.fetch;
+  let inspecting = false;
+  t.mock.method(globalThis, "fetch", (url: string) => {
+    if (url !== source) return request(url);
+    inspecting = true;
+    return pending.promise;
+  });
+  const states: PlayerState[] = [];
+  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Helper lease fixture", admit: () => false, changed() {} });
+  const group = server.group("helper-lease", state => states.push(state));
+  try {
+    group.send({ type: "load", playbackId: "fixture", source });
+    await until(() => inspecting);
+    // Source inspection stays pending while the manual check installs a new managed copy.
+    assert.equal((await f.check()).find(item => item.name === "ffmpeg")?.status, "updated");
+    pending.resolve(new Response("#EXTM3U\n", { headers: { "content-type": "application/vnd.apple.mpegurl" } }));
+    await until(() => existsSync(f.started) || states.some(state => state.status === "error"));
+    assert.ok(existsSync(f.started), `The retained FFmpeg must launch: ${states.at(-1)?.error}`);
+    await f.check();
+    assert.ok(existsSync(f.older), "the encoder keeps its managed copy while running");
+    if (outcome === "stop") group.send({ type: "stop" });
+    else writeFileSync(f.finish, outcome === "failure" ? "1" : "0");
+    await until(async () => { await f.check(); return !existsSync(f.older); });
+    assert.equal(states.some(state => state.status === "error"), outcome === "failure");
+  } finally {
+    pending.resolve(new Response(""));
+    group.close(); server.close();
+    await until(f.stopped);
+  }
+});
+
+for (const outcome of ["stop", "source failure", "spawn failure", "source failure before helper resolution"] as const) test(`Sendspin releases managed FFmpeg after a pre-launch ${outcome}`, options, async t => {
+  const f = await managedFfmpeg(t);
+  const helperReady = Promise.withResolvers<void>(), access = fs.access;
+  let helperPending = false;
+  const mocked = t.mock.method(fs, "access", async (...args: Parameters<typeof fs.access>) => {
+    if (args[0] === f.older && outcome === "source failure before helper resolution") {
+      helperPending = true;
+      await helperReady.promise;
+    }
+    return access(...args);
+  });
+  syncBuiltinESMExports();
+  const source = "https://media.example/input.m3u8", pending = Promise.withResolvers<Response>();
+  const request = globalThis.fetch;
+  let inspecting = false;
+  t.mock.method(globalThis, "fetch", (url: string) => {
+    if (url !== source) return request(url);
+    inspecting = true;
+    return pending.promise;
+  });
+  const states: PlayerState[] = [];
+  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Helper lease fixture", admit: () => false, changed() {} });
+  const group = server.group("helper-lease", state => states.push(state));
+  try {
+    group.send({ type: "load", playbackId: "fixture", source });
+    await until(() => inspecting);
+    if (outcome === "source failure before helper resolution") await until(() => helperPending);
+    await f.check();
+    assert.ok(existsSync(f.older));
+    const response = new Response("#EXTM3U\n", { headers: { "content-type": "application/vnd.apple.mpegurl" } });
+    if (outcome === "stop") group.send({ type: "stop" });
+    if (outcome.startsWith("source failure")) t.mock.method(response, "text", async () => { throw new Error("Source body failed"); });
+    if (outcome === "spawn failure") writeFileSync(f.older, "#!/missing/fixture-interpreter\n");
+    pending.resolve(response);
+    await until(() => states.at(-1)?.status === (outcome === "stop" ? "idle" : "error"));
+    helperReady.resolve();
+    await until(async () => { await f.check(); return !existsSync(f.older); });
+    assert.equal(existsSync(f.started), false, "failed or cancelled starts do not leave an encoder");
+  } finally {
+    pending.resolve(new Response(""));
+    helperReady.resolve();
+    group.close(); server.close();
+    await until(f.stopped);
+    mocked.mock.restore(); syncBuiltinESMExports();
+  }
+});
+
+for (const outcome of ["exit", "failure", "cancel"] as const) test(`IPTV probes retain managed FFmpeg and release it after ${outcome}`, options, async t => {
+  const f = await managedFfmpeg(t);
+  const source = "https://media.example/live.ts";
+  const guide = createGuide({ databasePath: ":memory:", fetch: async () => new Response(`#EXTM3U\n#EXTINF:-1 tvg-id="fixture",Fixture\n${source}\n`) });
+  const identity = () => ({ device: null, authority: "host" as const, claimAvailable: false });
+  const cancellation = new AbortController();
+  let probing: ReturnType<typeof guide.getPlayable> | undefined;
+  try {
+    const added = await guide.handle(new Request("http://couch.local/api/iptv/sources", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Fixture", playlistUrl: "https://media.example/channels.m3u" }),
+    }), identity);
+    assert.equal(added.status, 201, await added.text());
+    const { channels } = await (await guide.handle(new Request("http://couch.local/api/iptv/guide"), identity)).json() as { channels: { id: string }[] };
+    probing = guide.getPlayable(channels[0]!.id, cancellation.signal, false);
+    void probing.catch(() => {});
+    await until(() => existsSync(f.started));
+    await f.check();
+    assert.ok(existsSync(f.older), "a running probe retains its managed copy");
+    if (outcome === "cancel") {
+      cancellation.abort();
+      await assert.rejects(probing, { name: "AbortError" });
+    } else {
+      writeFileSync(f.finish, outcome === "failure" ? "1" : "0");
+      assert.deepEqual(await probing, { source });
+    }
+    await until(async () => { await f.check(); return !existsSync(f.older); });
+  } finally {
+    cancellation.abort();
+    await probing?.catch(() => {});
+    guide.close();
+    await until(f.stopped);
+  }
+});
+
+for (const outcome of ["stop", "setup failure", "cancel", "spawn failure"] as const) test(`live encoding leases FFmpeg across directory setup and releases it after ${outcome}`, options, async t => {
+  const f = await managedFfmpeg(t);
+  const pending = Promise.withResolvers<void>(), mkdir = fs.mkdir;
+  let preparing = false;
+  const mocked = t.mock.method(fs, "mkdir", async (...args: Parameters<typeof fs.mkdir>) => {
+    if (String(args[0]).includes("couch-live-stream-")) {
+      preparing = true;
+      await pending.promise;
+      if (outcome === "setup failure") throw new Error("Directory setup failed");
+    }
+    return mkdir(...args);
+  });
+  syncBuiltinESMExports();
+  const streams = createLiveStreams({});
+  const starting = streams.start("fixture", { audio: true, video: false });
+  void starting.catch(() => {});
+  try {
+    await until(() => preparing);
+    assert.equal((await f.check()).find(item => item.name === "ffmpeg")?.status, "updated");
+    assert.ok(existsSync(f.older), "directory setup still needs the selected executable");
+    if (outcome === "cancel") streams.end("fixture");
+    if (outcome === "spawn failure") writeFileSync(f.older, "#!/missing/fixture-interpreter\n");
+    pending.resolve();
+    if (outcome === "stop") {
+      await starting;
+      await until(() => existsSync(f.started));
+      await f.check();
+      assert.ok(existsSync(f.older), "the live encoder keeps its copy while running");
+      streams.end("fixture");
+    } else await assert.rejects(starting);
+    await streams.close();
+    await f.check();
+    assert.equal(existsSync(f.older), false);
+    assert.ok(f.stopped());
+  } finally {
+    pending.resolve();
+    await starting.catch(() => {});
+    await streams.close();
+    mocked.mock.restore(); syncBuiltinESMExports();
   }
 });
 

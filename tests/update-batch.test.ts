@@ -182,3 +182,18 @@ test("restore rejects expired, malformed, duplicate and reordered intent", () =>
   expect(updateBatchKey("https://one", "install", "viewer")).not.toBe(updateBatchKey("https://one", "other", "viewer"));
   expect(updateBatchKey("https://one", "install", "viewer")).not.toBe(updateBatchKey("https://one", "install", "other"));
 });
+
+test("settled results survive expiry without reviving restart intent", async () => {
+  const batch = planned();
+  const completed: UpdateBatch = { ...batch, helpers: "updated", items: batch.items.map(item => ({ ...item, status: "updated" })) };
+  const failed: UpdateBatch = { ...batch, helpers: "updated", items: batch.items.map((item, index) => index === 0 ? { ...item, status: "failed", error: "Could not reconnect" } : item) };
+  const helpers: UpdateBatch = { ...batch, helpers: "failed", helperError: "Download failed" };
+  for (const result of [completed, failed, helpers]) {
+    const restored = restoreUpdateBatch(JSON.stringify(result), batch.createdAt + batchLifetime + 1);
+    expect(restored).toEqual(result);
+    const run = harness(restored!);
+    await runUpdateBatch(restored!, run.actions);
+    expect(run.events).toEqual([]);
+  }
+  expect(restoreUpdateBatch(JSON.stringify(batch), batch.createdAt + batchLifetime + 1)).toBeNull();
+});

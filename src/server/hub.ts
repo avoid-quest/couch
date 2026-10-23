@@ -64,7 +64,6 @@ import type { HelperUpdates } from "../shared/helper-updates";
 import type { UpdateAction, UpdateState, UpdateTarget } from "../shared/app-bridge";
 import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
 import { logPlaybackError, safePlaybackError } from "./playback-log";
-import { helper } from "./helpers";
 import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
@@ -128,7 +127,7 @@ export async function createHub(options: HubOptions) {
   const iceServers = () => [...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(liveRelay() ? [liveRelay()!] : [])];
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
-  const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
+  const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(),
     savedDelay: id => store.deviceSyncDelay(id), saveDelay: (id, delay) => store.saveDeviceSyncDelay(id, delay),
     admit: (id, loopback) => id === store.hostDevice()?.id ? loopback : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast() });
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
@@ -233,7 +232,7 @@ export async function createHub(options: HubOptions) {
   const nameOf = (deviceId: string) => deviceId === AIRPLAY_PUBLISHER ? "AirPlay" : playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
   // A failed buffered stream ends only buffered delivery: direct receivers and capture continue. Each
   // receiver relayed this source stops waiting and says why; Core waits for Play to retry it or the next item.
-  const liveStreams = createLiveStreams({ ffmpeg: () => helper("ffmpeg"), failed: (sourceId, error) => {
+  const liveStreams = createLiveStreams({ failed: (sourceId, error) => {
     live.upload(sourceId, false);
     log(`live ${sourceId.slice(0, 8)} buffered stream stopped: ${error}`);
     for (const playback of all()) {

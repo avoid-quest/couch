@@ -8,7 +8,8 @@ import type { SessionGateValue } from "../src/client/session/session-context";
 import { UpdateCenterProvider } from "../src/client/session/update-center";
 import { UpdateNotice } from "../src/client/sections/updates/UpdateNotice";
 import { UpdateReview } from "../src/client/sections/updates/UpdateReview";
-import { useUpdateCenter } from "../src/client/session/update-center";
+import { useUpdateCenter, type UpdateCenterValue } from "../src/client/session/update-center";
+import { restartTimeout, updateBatchKey, type UpdateBatch } from "../src/client/session/update-batch";
 import { applyTvNavigation, useNavigation } from "../src/client/navigation";
 import { deviceId } from "../src/client/session/device-id";
 import type { UpdateState } from "../src/shared/updates";
@@ -46,6 +47,7 @@ export async function mountUpdateReviewAudit() {
   const requests: string[] = [];
   let rejectInstall = false;
   let notesFail = false;
+  let notesMissing = false;
   const targets = [{ id: "host", name: "Living room server", tv: false }, { id: "tv", name: "Living room TV with a deliberately long device name", tv: true }];
   const updates = Object.fromEntries(targets.map(target => [target.id, { version: "0.3.1", available: "0.4.0", channel: "latest", status: "ready", progress: null, checkedAt: 1, error: null }])) as Record<string, UpdateState>;
   const helpers = { status: "done", checkedAt: 1, items: [{ name: "yt-dlp", version: "2026.10.20", origin: "managed", status: "current", error: null }, { name: "ffmpeg", version: "8.0", origin: "system", status: "system", error: null }] };
@@ -56,6 +58,7 @@ export async function mountUpdateReviewAudit() {
     if (url.pathname === "/api/updates/helpers" || url.pathname === "/api/updates/helpers/check") return Response.json(helpers);
     if (url.pathname === "/api/updates/releases") return notesFail ? Response.json({ error: "Release server unavailable" }, { status: 503 })
       : url.searchParams.get("page") === "2" ? Response.json({ more: false, releases: [release("0.3.0", ["Second page of the release history."])] })
+      : notesMissing ? Response.json({ more: true, releases: [] })
       : Response.json({ more: url.searchParams.get("channel") === "latest", releases: releases[url.searchParams.get("channel") as "latest" | "preview"] });
     const id = url.searchParams.get("device")!;
     if (url.pathname === "/api/updates/install") {
@@ -161,8 +164,56 @@ export async function mountUpdateReviewAudit() {
       button("Stop playback and update").click(); await wait(); await wait();
       assert(requests.some(request => request.includes("interrupt=1")), "Confirmed interruption was not sent");
       assert(document.body.textContent?.includes("2 of 2 devices updated"), "Confirmed installed versions were not reported");
+      notesFail = false; notesMissing = true;
+      await client.resetQueries({ queryKey: ["updates", "releases"] }); await wait();
+      assert(!document.body.textContent?.includes("No release notes found") && button("Load older releases"), "An empty first page was reported as the end of release history");
+      button("Load older releases").click(); await wait(); await wait();
+      assert(document.body.textContent?.includes("No release notes found for Couch"), "Exhausted history did not report missing notes");
       return "Passed: bounded preview for skipped and huge releases, Read all/Show fewer, actions and focus clear of long notes, history paging, lazy/exact notes, note failure independence, TV focus and Back, Later/settings, API409 confirmation, persistent failed results, confirmed completion.";
     },
     close() { root.unmount(); client.clear(); window.fetch = originalFetch; },
   };
+}
+
+// A real provider restored after its per-app deadline still reads the running version once, without resending.
+export async function runUpdateResumeRegression() {
+  const originalFetch = window.fetch;
+  for (const installed of [true, false]) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const root = createRoot(document.getElementById("fixture")!);
+    const installationId = `resume-${crypto.randomUUID()}`;
+    const key = updateBatchKey(location.origin, installationId, deviceId());
+    const startedAt = Date.now() - restartTimeout - 1_000;
+    const saved: UpdateBatch = { createdAt: startedAt, helpers: "updated", items: [
+      { id: "tv", name: "TV", version: "0.4.0", status: "installing", startedAt },
+      { id: "host", name: "Server", version: "0.4.0", status: "waiting" },
+    ] };
+    localStorage.setItem(key, JSON.stringify(saved));
+    const ready: UpdateState = { version: "0.3.1", available: "0.4.0", channel: "latest", status: "ready", progress: null, checkedAt: 1, error: null };
+    const states: Record<string, UpdateState> = { tv: installed ? { ...ready, version: "0.4.0", available: null, status: "up-to-date" } : ready, host: ready };
+    const installs: string[] = [];
+    window.fetch = async (input, init) => {
+      const url = new URL(String(input), location.origin), id = url.searchParams.get("device")!;
+      if (url.pathname === "/api/updates/targets") return Response.json([{ id: "tv", name: "TV", tv: true }, { id: "host", name: "Server", tv: false }]);
+      if (url.pathname === "/api/updates/helpers") return Response.json({ status: "done", checkedAt: 1, items: [] });
+      if (url.pathname === "/api/updates/install" && init?.method === "POST") { installs.push(id); states[id] = { ...ready, version: "0.4.0", available: null, status: "up-to-date" }; }
+      if (url.pathname === "/api/updates" || url.pathname === "/api/updates/install") return Response.json(states[id]);
+      throw new Error(`Unexpected resume fixture request: ${url}`);
+    };
+    let center: UpdateCenterValue | undefined;
+    function Observe() { center = useUpdateCenter(); return null; }
+    const gate = { credentials: { origin: location.origin, token: "resume-fixture", installationId }, connected: true, localHost: false, identity: { authority: "administrator", device: { id: deviceId() } } } as unknown as SessionGateValue;
+    try {
+      root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><UpdateCenterProvider><Observe /></UpdateCenterProvider></QueryClientProvider></SessionGateContext>);
+      const deadline = Date.now() + 4_000;
+      while ((!center || center.busy) && Date.now() < deadline) await wait();
+      assert(center && !center.busy, "A restored update did not settle");
+      assert(JSON.stringify(installs) === JSON.stringify(installed ? ["host"] : []), "A saved install was resent or an unconfirmed app advanced the batch");
+      assert(center.batch?.items[0]?.status === (installed ? "updated" : "failed"), "The running version was not observed after the restart deadline");
+      assert(center.batch?.items[1]?.status === (installed ? "updated" : "waiting"), "The remaining server restart did not follow confirmation");
+    } finally {
+      root.unmount(); client.clear(); localStorage.removeItem(key); window.fetch = originalFetch;
+    }
+  }
+  return "Passed: delayed resume confirms the running version without resending; an old version still times out and stops later restarts.";
 }

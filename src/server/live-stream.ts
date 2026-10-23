@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket, type RawData } from "ws";
+import { useHelper } from "./helpers";
 
 export type LiveRendition = "av" | "audio" | "video";
 // upload: the capturing window's MediaRecorder over a WebSocket; pcm: Core's own 44.1 kHz
@@ -15,6 +16,7 @@ type Stream = {
   child?: ChildProcessWithoutNullStreams;
   exited?: Promise<void>;
   setup?: Promise<void>;
+  release?: () => void;
   socket?: WebSocket;
   timer?: ReturnType<typeof setInterval>;
   lastData: number;
@@ -33,7 +35,7 @@ const timeoutMs = 30_000;
 // Capture enters Couch once, and only while something plays it buffered. The resulting
 // rolling HLS source uses the same URL renderer, Sendspin audio and picture clock as a
 // TV stream. The caller owns publication authorization and gates every upload and media request.
-export function createLiveStreams(options: { ffmpeg: () => Promise<string>; failed?: (sourceId: string, error: string) => void }) {
+export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; failed?: (sourceId: string, error: string) => void }) {
   const streams = new Map<string, Stream>();
   const cleaning = new Set<Promise<void>>();
   let closed = false;
@@ -49,6 +51,7 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
     const cleanup = (async () => {
       await stream.setup?.catch(() => {});
       await stream.exited;
+      stream.release?.();
       if (stream.directory) await rm(stream.directory, { recursive: true, force: true });
     })();
     cleaning.add(cleanup);
@@ -75,7 +78,8 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
         // Assign the directory before awaiting the helper so cancellation also
         // cleans up a download or executable lookup still in flight.
         stream.directory = await mkdtemp(join(tmpdir(), "couch-live-stream-"));
-        const executable = await options.ffmpeg();
+        const ffmpeg = options.ffmpeg ? { path: await options.ffmpeg(), release() {} } : await useHelper("ffmpeg");
+        stream.release = ffmpeg.release;
         if (stream.ended) throw new Error("This input has stopped.");
         const renditions: LiveRendition[] = source.video ? ["av", "audio", "video"] : ["av", "audio"];
         await Promise.all(renditions.map(rendition => mkdir(join(stream.directory!, rendition))));
@@ -85,7 +89,7 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
         // retains the audio clock (including AAC encoder delay). Relative paths
         // keep platform temp-directory syntax out of tee's parser.
         const outputs = renditions.map(rendition => `[f=hls${rendition === "av" ? "" : `:select=${rendition === "audio" ? "a" : "v"}`}:avoid_negative_ts=disabled:hls_segment_options=avoid_negative_ts=disabled:hls_time=1:hls_list_size=8:hls_delete_threshold=2:hls_flags=delete_segments+independent_segments+temp_file:hls_segment_filename=${rendition}/segment-%09d.ts]${rendition}/stream.m3u8`).join("|");
-        const child = stream.child = spawn(executable, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-protocol_whitelist", "pipe",
+        const child = stream.child = spawn(ffmpeg.path, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-protocol_whitelist", "pipe",
           ...input === "pcm" ? ["-f", "s16be", "-ar", "44100", "-ac", "2"] : ["-probesize", "1000000", "-analyzeduration", "1000000"], "-i", "pipe:0",
           // Picture-only inputs still need a silent reference clock for the
           // ordinary multi-device picture follower. This is not shared sound.

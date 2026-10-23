@@ -85,7 +85,7 @@ export function ReleaseNotes({ targets }: { targets: UpdateCenterTarget[] }) {
     {query.isPending && credentials && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading release notes…</p>}
     {(!credentials || query.isError) && <p className="text-sm text-muted-foreground">Release notes are unavailable. You can still update.{credentials && <> <Button variant="ghost" size="sm" onClick={() => void query.refetch()}>Try again</Button></>}</p>}
     {shown.map(release => <ReleaseEntry release={release} key={release.version} />)}
-    {query.isSuccess && !changed.length && <p className="text-sm text-muted-foreground">{available || installed ? `No release notes found for Couch ${available ?? installed}. You can still update.` : "No release notes found."}</p>}
+    {query.isSuccess && !changed.length && !query.hasNextPage && <p className="text-sm text-muted-foreground">{available || installed ? `No release notes found for Couch ${available ?? installed}. You can still update.` : "No release notes found."}</p>}
     {(history.length > 0 || query.hasNextPage) && <Collapsible open={older} onOpenChange={setOlder}>
       <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-3">{older ? "Hide release history" : "Release history"}</Button></CollapsibleTrigger>
       <CollapsibleContent className="space-y-6 pt-3">
