@@ -40,7 +40,8 @@ through its text. Over a [Stage](../design.md#stage), while the page is at its
 top, the header is see-through over the Stage's room, dark enough for muted
 ink at 7:1; once the page scrolls it is black again. The header
 publishes its height as `--top-bar` so scroll padding keeps focus clear of it
-and the Stage reaches up under it. Below `lg` a TV centres its tabs on a second row.
+and the Stage reaches up under it. Windows/Linux desktop windows keep a black
+title-bar strip and scroll below it instead. Below `lg` a TV centres its tabs on a second row.
 
 Its geometry holds from page to page: the search field fills the right column
 (16rem to 30rem, Keyboard shortcuts included; on the TV up to 20rem, 24rem
@@ -61,21 +62,42 @@ top bar is the Couch switch then the search field. A narrow TV undoes
 `touch:` with `tv:`. **Desktop windows** put their native buttons and drag region
 in the header (`[data-window-controls]`), without a separate title bar. macOS
 keeps its traffic lights at the left; Windows and Linux use Electron's
-`titleBarOverlay`, transparent with white symbols, 56px tall times the interface
-size. The header and player heading reserve the controls' space: 90pt on the
-Mac, `titlebar-area-x` and `titlebar-area-width` on Windows/Linux, divided by
-the interface scale. Empty header space drags the window; a double-click uses
+`titleBarOverlay` with t3code's Linux-safe `#01000000` and white symbols.
+The header reports its measured height to Main, centring the controls on the
+search and tabs at every window width and interface size. Couch keeps its
+3rem search field rather than t3code's compact 40px row. The header and player
+heading reserve the controls' space: 90pt on the Mac; on Windows/Linux, the
+`wco` class follows `navigator.windowControlsOverlay.visible` and its
+`geometrychange` events. Its `--workspace-*` variables read `titlebar-area-*`
+in viewport pixels and divide by the interface scale. The player uses that
+same row height. Empty header space drags the window; a double-click uses
 the OS's maximize/restore behavior. Fullscreen drops the controls' inset.
 Windows/Linux auto-hide the menu bar, as
 [t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts)
 does, keeping its accelerators; the tray keeps working as before. The TV stays
 frameless and fullscreen. Unpaired there is no header (see First run and pairing).
 
+Windows/Linux keep the document inside the window and scroll `.app-page`
+below the header, so no scrollbar reaches the window controls. Page navigation
+and Back restore that container's position; focus clears its top and footer.
+Scrollbars are 6 physical pixels with transparent tracks, white 8% thumbs and
+12% on hover, as in t3code's dark theme. Windows leaves a 6px right resize
+edge outside the renderer's content. Only this desktop header uses t3code's
+system font stack (Segoe UI on Windows); content keeps Couch's type. macOS,
+the browser and the TV retain their existing chrome and document scrolling.
+
 Window icons use PNG on Linux and ICO on Windows, including Couch Preview's
 icon. Windows uses `quest.avoid.couch` as its AppUserModelID, matching the
 installer's appId. electron-builder supplies the installer names and icons and
 the Linux `couch.desktop` launcher, whose `StartupWMClass=couch` matches
 `package.json`'s `desktopName`; both release channels keep that identity.
+NSIS keeps electron-builder's per-user, one-click install and desktop/Start
+menu shortcuts, including differential updates, as t3code does. Its small
+`customInstall` macro mirrors t3code's missing Start menu shortcut repair and
+sets the shortcut's AppUserModelID too. Neither app adds a custom jump list.
+The dark initial window background, reveal on `ready-to-show`, native resize
+frame/corners and restore/show/focus on a second launch already follow
+t3code's shell and remain in place.
 
 **Sharing.** While this device shares its screen or sound, the header shows
 "Sharing screen" (or sound, or microphone) with Stop sharing; it shrinks to

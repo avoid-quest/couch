@@ -5,7 +5,11 @@ const build = await Bun.build({ entrypoints: ["app/preload.ts"], target: "node",
 const preload = await build.outputs[0]!.text();
 
 function fixture(platform = "darwin", tv = false) {
+  const classes = new Set<string>();
+  const geometry = new Map<string, () => void>();
+  const overlay = { visible: true, addEventListener: (name: string, fn: () => void) => geometry.set(name, fn) };
   const listeners = new Map<string, (...args: any[]) => void>();
+  const addListener = (name: string, fn: (...args: any[]) => void) => { const previous = listeners.get(name); listeners.set(name, (...args: any[]) => { previous?.(...args); fn(...args); }); };
   const ipc = new Map<string, (...args: any[]) => void>();
   const visits: number[] = [];
   const attributes = new Map<string, string>();
@@ -20,11 +24,12 @@ function fixture(platform = "darwin", tv = false) {
   runInNewContext(preload, {
     require: () => ({ contextBridge: { exposeInMainWorld() {} }, ipcRenderer: { on: (name: string, fn: (...args: any[]) => void) => ipc.set(name, fn) } }),
     process: { platform, argv: tv ? ["--couch-tv-presentation"] : [] },
-    addEventListener: (name: string, fn: (...args: any[]) => void) => listeners.set(name, fn),
+    addEventListener: addListener,
+    navigator: { windowControlsOverlay: overlay },
     Element, getComputedStyle: (element: Element) => element,
     history: { go: (direction: number) => visits.push(direction) },
     document: {
-      documentElement: { setAttribute: (name: string, value: string) => attributes.set(name, value), removeAttribute: (name: string) => attributes.delete(name) },
+      documentElement: { classList: { add: (...names: string[]) => names.forEach(name => classes.add(name)), toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) }, setAttribute: (name: string, value: string) => attributes.set(name, value), removeAttribute: (name: string) => attributes.delete(name) },
       body: { classList: { contains: () => tv } },
     },
   });
@@ -34,7 +39,7 @@ function fixture(platform = "darwin", tv = false) {
     composedPath: () => [target], ...extra,
   });
   const end = () => ipc.get("couch:scroll-end")?.({});
-  return { listeners, ipc, attributes, target, visits, wheel, end };
+  return { listeners, ipc, attributes, classes, overlay, geometry, target, visits, wheel, end };
 }
 
 test("desktop controls reserve the platform's space and release it in fullscreen", () => {
@@ -48,6 +53,26 @@ test("desktop controls reserve the platform's space and release it in fullscreen
     f.ipc.get("couch:full-screen")!({}, false);
     expect(f.attributes.has("data-window-controls")).toBe(true);
   }
+});
+
+test("WCO follows native geometry, including fullscreen and restored controls", () => {
+  for (const platform of ["win32", "linux"]) {
+    const f = fixture(platform);
+    f.listeners.get("DOMContentLoaded")!();
+    expect(f.classes.has(platform === "win32" ? "electron-windows" : "electron-linux")).toBe(true);
+    expect(f.classes.has("wco")).toBe(true);
+    f.overlay.visible = false;
+    f.geometry.get("geometrychange")!();
+    expect(f.classes.has("wco")).toBe(false);
+    expect(f.attributes.has("data-window-controls")).toBe(false);
+    f.overlay.visible = true;
+    f.geometry.get("geometrychange")!();
+    expect(f.classes.has("wco")).toBe(true);
+    expect(f.attributes.get("data-window-controls")).toBe("overlay");
+  }
+  const mac = fixture();
+  mac.listeners.get("DOMContentLoaded")!();
+  expect(mac.classes.size).toBe(0);
 });
 
 test("TV windows never reserve desktop controls on any platform", () => {

@@ -140,7 +140,9 @@ The copy sits at the bottom left in the room left of the picture (at most
 46rem, less the picture's width and a gap): the trail, the title at display
 size ([Type](#type)), one muted meta line ending in its links, progress, the
 verbs, the synopsis. Nothing of it lies over the picture. The header is
-see-through while the page is at its top and black once it scrolls.
+see-through while the page is at its top and black once it scrolls; Windows/Linux
+desktop windows keep a black native title-bar strip and scroll below it
+([Shell](design/shell.md#header)).
 
 - **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
   Details page with nothing under its stage fills the window above the bar
@@ -249,7 +251,8 @@ screen alike. Two faces, clearly apart:
   (`.display-title`, weight 680 to 760), page titles and the headings of shelves,
   lists and sections (normal width, semibold). `index.html` preloads its latin
   file.
-- **Inter Tight** (everything else): regular, but for the bar's title
+- **Inter Tight** (everything else, except the Windows/Linux desktop header's
+  system font; [Shell](design/shell.md#header)): regular, but for the bar's title
   (medium); metadata small, muted and tabular. `index.html` preloads its latin
   file too.
 

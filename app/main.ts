@@ -296,7 +296,9 @@ const interfaceSizes = [1, 1.15, 1.3];
 const interfaceSize = () => interfaceSizes.find(value => value === Number(readText(interfaceSizePath))) ?? 1;
 // Centre the 14pt controls in the 56px header, which scales with the interface size.
 const controlsPosition = () => ({ x: 16, y: Math.round(28 * interfaceSize() - 7) });
-const titleBarOverlay = () => ({ color: "#00000000", symbolColor: "#ffffff", height: Math.round(56 * interfaceSize()) });
+let titleBarHeight = Math.round(72 * interfaceSize());
+// Match t3code: #00000000 does not work correctly on Linux.
+const titleBarOverlay = () => ({ color: "#01000000", symbolColor: "#ffffff", height: titleBarHeight });
 
 function createWindow() {
   window = new BrowserWindow({
@@ -448,8 +450,14 @@ handle("interface-size", (_event, size) => {
   if (!interfaceSizes.includes(size as number)) throw new Error("Choose a supported interface size.");
   write(interfaceSizePath, String(size));
   if (macChrome) window?.setWindowButtonPosition(controlsPosition());
-  else if (!tv) window?.setTitleBarOverlay(titleBarOverlay());
   return size;
+});
+// Couch's header uses fluid rem sizes as well as interface zoom. Follow its
+// actual row instead of assuming a fixed title-bar height (macOS stays as it is).
+handle("title-bar-height", (_event, height) => {
+  if (tv || macChrome || typeof height !== "number" || !Number.isFinite(height) || height < 40 || height > 240) return;
+  titleBarHeight = Math.round(height);
+  window?.setTitleBarOverlay(titleBarOverlay());
 });
 
 // Quit is deliberate (closing the window only hides it), and a SIGTERM from

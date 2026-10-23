@@ -17,6 +17,14 @@ if (!process.argv.includes("--couch-tv-presentation")) {
   };
   addEventListener("DOMContentLoaded", () => controls(true));
   ipcRenderer.on("couch:full-screen", (_event, fullScreen: boolean) => controls(!fullScreen));
+  if (process.platform !== "darwin") addEventListener("DOMContentLoaded", () => {
+    const root = document.documentElement;
+    root.classList.add("electron", process.platform === "win32" ? "electron-windows" : "electron-linux");
+    const overlay = (navigator as Navigator & { windowControlsOverlay?: { visible: boolean; addEventListener(type: "geometrychange", listener: () => void): void } }).windowControlsOverlay;
+    const sync = () => { root.classList.toggle("wco", overlay?.visible === true); controls(overlay?.visible === true); };
+    sync();
+    overlay?.addEventListener("geometrychange", sync);
+  });
 }
 
 if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presentation")) {
@@ -57,6 +65,7 @@ contextBridge.exposeInMainWorld("couchApp", {
   completeLocalSetup: () => call("complete-local-setup"),
   connection: () => call("connection"),
   interfaceSize: size => call("interface-size", size),
+  titleBarHeight: height => call("title-bar-height", height),
   onAddresses: listener => {
     const handler = (_event: unknown, urls: string[]) => listener(urls);
     ipcRenderer.on("couch:addresses", handler);

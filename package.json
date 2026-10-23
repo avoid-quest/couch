@@ -121,6 +121,9 @@
       "target": "nsis",
       "icon": "packaging/icons/icon.ico"
     },
+    "nsis": {
+      "include": "packaging/installer.nsh"
+    },
     "linux": {
       "target": [
         "AppImage",
