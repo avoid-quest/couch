@@ -57,13 +57,17 @@ bar for thumb reach.
   room: the Stage, the player and the now-playing bar. Never nested in the
   target.
 - **Say each thing once.** The bar holds the transport, so Home's Stage
-  doesn't repeat it while something plays; Up next takes room beside the
-  artwork only while something is still to come.
+  doesn't repeat it while something plays. The player's Now playing is calm
+  (artwork, title, where it comes from) and Info at the top right, aligned with
+  fullscreen below, shows the rest in place;
+  Up next is summoned from its button, never parked beside the artwork
+  ([Player](design/player.md#calm-and-info)).
 - **Real content only.** Browse pages show what a source returns; Couch picks
   nothing. Home's sources are built from what the Couch saved.
 - **Content leads, time supports.** Title and artwork lead; runtime, progress
   and end times are small muted metadata. Live media that can't seek has no
-  timeline.
+  seek timeline. Radio may show broadcast progress from an XMLTV programme
+  window, with its local times and remaining minutes ([Radio](design/browse.md#radio-and-live-tv)).
 - **Undo, not confirm**, for shared actions; destructive admin actions confirm
   inline or in an AlertDialog.
 - **Disabled keeps its place.** A control that can't act stays in its slot at
@@ -521,6 +525,9 @@ first-open instructions. Browser platform detection can bring Apple Silicon
 first on a Mac, but never infers the CPU from its user agent.
 On Intel macOS 13–14, a TV channel needing mpv reports the compatible-install
 requirement only when no suitable local copy is available; other media is unaffected.
+
+It tracks page views and installer clicks through a same-origin Umami proxy;
+the [website notes](product/website.md#analytics) describe the download counters.
 
 ## Changing a surface
 

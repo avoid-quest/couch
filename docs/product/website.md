@@ -37,6 +37,33 @@ the first Intel release.
 Precise capabilities and limits live in the repository's docs, one click away;
 the site never lists sources exhaustively or names protocols.
 
+## Analytics
+
+All three pages use Umami website `90980392-7c3c-43f4-96c2-cff6645daa5a`.
+The browser loads `/u/script.js` and sends events to `/u/api/send`; Astro's
+Cloudflare Worker proxies these to `https://umami.net-work.studio`, following
+the [avoid.quest web proxy](https://github.com/avoid-quest/avoid.quest/blob/main/apps/web/src/pages/u/%5B...path%5D.ts).
+Both requests stay on the website's origin to avoid third-party domain blocks.
+The proxy exposes only those two endpoints, preserves Umami's session metadata
+and supplies Cloudflare's visitor IP in Umami's built-in field so cross-zone
+requests keep the right visitor identity. Only successful scripts are cached;
+collection responses are never cached.
+
+Installer links send the **download** event with properties **os** (`macos`,
+`windows`, `linux`), **format** (`dmg`, `dmg-intel`, `nsis`, `appimage`, `deb`)
+and **channel** (`stable`, `preview`). In Umami, open **Events**, select **download**, then use
+**Properties → os** for the click count per target OS. The format property
+separates Mac architectures and Linux's AppImage and Debian packages. These
+count clicks, not completed downloads; links to the Download page itself are
+ordinary page views.
+
+Tracking is limited to `couch.avoid.quest`, so local development and previews
+do not add visits. It honours Do Not Track and excludes URL queries and hashes,
+as in avoid.quest. The tracker and click attributes follow Umami's official
+[configuration](https://docs.umami.is/docs/tracker-configuration),
+[events](https://docs.umami.is/docs/track-events) and
+[proxy](https://docs.umami.is/docs/bypass-ad-blockers) guidance.
+
 ## Brief for a later visual pass
 
 Not part of this edition; for whoever redesigns the page.

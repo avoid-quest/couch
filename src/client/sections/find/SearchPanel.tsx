@@ -31,6 +31,7 @@ import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } 
 import { createId } from "../../session/session";
 import type { SourceKind } from "@/components/sourceTypes";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { RadioSlot } from "@/components/RadioSchedule";
 import { ArtLevel, useLevel } from "@/components/Level";
 import { DurationBar } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
@@ -303,6 +304,7 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       // A press that plays keeps the hit's own destination (a station's page) in the menu as Open.
       menu={play || hit.primary.label === "Play" ? [...play && hit.primary.label !== "Play" ? [{ label: hit.primary.label, disabled: hit.primary.disabled, run: hit.primary.run }] : [], ...hit.actions.filter(action => action.label !== "Play")] : hit.actions}>
+      {hit.radio?.next && <RadioSlot show={hit.radio.next} className="w-full text-meta break-words text-muted-foreground" />}
       {hit.id === currentId && <span className="text-sm font-medium">{session ? playbackStatus(session.state, session.connected).label : "Current item"}</span>}
       {!compact && !hit.collection && <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />}
     </MediaRow>;

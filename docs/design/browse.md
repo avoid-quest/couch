@@ -85,13 +85,61 @@ Home's sources ([Home](home.md#the-sources)) sample what Couch can play; two
 of their headings open pages of their own. **Radio** (`/radio`) and **Live
 TV** (`/live-tv`) are lists with a breadcrumb to Home and the filter row:
 Radio's source choice (`radioSource`: Built-in, Couch's own station list;
-Playlists; Directory) and Filter; Live TV's group (`group`) and Filter, with
+Playlists; Directory), Genre (`genre`, the station tags and show categories the
+list holds) and Filter (station, show, host, tag or category); Live TV's group (`group`) and Filter, with
 each channel's now and next from the XMLTV guide on its meta line. Filters and
 page live in the URL. A channel has no page: pressing it plays, its menu holds
 Play on and Queue. Live TV shows its filters once the guide answers; with no
 channels at all, an admin gets "No channels yet" with Add a playlist
 (Settings → Sources → Live TV) and anyone else one line, "No channels yet. An
 admin can add a playlist."; Radio's empty Playlists does the same.
+
+Radio keeps a station's **tags** apart from its current show's **categories**.
+Categories come from XMLTV and fresh live enrichment; playlist group
+names remain source labels. Labels fold whitespace, Unicode form and case
+without guessing genres or splitting compound labels. Neither is labelled on
+screen; where a line sits says what it describes:
+
+- **A row or tile** says what it plays: the show and its categories ("Early
+  Bird, Jazz, Experimental"), else the station's tags and group. A row adds the
+  next show as a schedule line, its start time light, as Live TV's guide says
+  it ("22:12 Afternoon selections"). The station's tags wait on its Details.
+- **Details and Home's hero** follow the Stage: the show's title, its
+  categories and host, then the station with its tags ("NTS Radio, Community,
+  Talk"; a link on Home), the progress line, the verbs, the synopsis. The
+  player keeps its own order: the station's link and tags under the title, then
+  categories and host.
+- **Progress** is the Stage's line, with what's left and the local window
+  beside it ("30 min left, 21:12–22:12", Couch's 24-hour clock). Only a real
+  broadcast window gives it; it never seeks.
+- **The next show** (`RadioNext`) closes Details' copy and the player's: its
+  schedule line, its own categories and end ("Ambient, until 23:12", a weekday
+  when it isn't today), its picture when it has one and two lines of synopsis.
+
+Global Search matches the current show's host and a station's tags even when
+the caption leaves them out. Upcoming shows don't supply search matches.
+
+Radio playlists discover a single XMLTV URL from `x-tvg-url` on the M3U header.
+Automatic discovery and its redirects stay on that playlist origin; an admin
+can set an explicit HTTP(S) Guide URL in Sources for another host. Adding the
+same playlist again updates this override; leaving it blank restores discovery.
+Station identity and favourites stay stable. Guide channel IDs match exactly
+within each source. Missing guides, gaps and channel-only guides keep stations
+playable. Invalid optional categories or artwork do not discard valid programmes.
+Guides refresh every 15 minutes, with bounded reads and failure
+backoff (including Retry-After), retaining usable cached transmissions.
+
+When titles match, schedule fields win and fresh live enrichment fills missing
+fields if its sample falls inside that transmission. If the fresh live title
+differs, its title, artwork and other fields show together, without borrowing the
+schedule slot's description, categories or times. This preserves individual live
+shows inside broad schedule slots. Live metadata expires at its freshness deadline
+or the next known broadcast boundary. Upcoming entries never inherit live metadata.
+In a gap, enrichment from an ended transmission is dropped; independently fresh
+live-only information may still show. JSON freshness
+times never supply programme boundaries. Browsing, Home, Details, Now Playing,
+the window title and Media Session retire metadata at its expiry or broadcast
+boundary. Each simultaneous Playback tracks its own station; downloads are shared.
 
 Catalogue homes (StreamingCommunity, 123MoviesFree, AnimeSaturn, AnimeUnity)
 are poster grids sized by the available width; other source pages are rows.

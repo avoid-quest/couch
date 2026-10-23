@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseGuideChannels } from "../src/server/iptv-feeds";
+import { parseGuideChannels, parseGuidePrograms } from "../src/server/iptv-feeds";
 
 test("a channel list keeps playable channels and counts those needing headers or repeating a tvg-id", () => {
   const list = [
@@ -17,4 +17,19 @@ test("a channel list keeps playable channels and counts those needing headers or
   const { channels, skipped } = parseGuideChannels(list, "source", "https://example.com/list.m3u");
   expect(channels.map(channel => [channel.tvgId, channel.streamUrl])).toEqual([["one", "https://example.com/one.m3u8"], ["three", "https://example.com/relative/three.m3u8"]]);
   expect(skipped).toEqual({ headers: 1, duplicates: 1 });
+});
+
+test("optional malformed categories do not discard radio or television programmes", () => {
+  const invalid = `<category/><category lang="en"/><category>  </category><category>${"x".repeat(501)}</category><category>bad&#x7f;label</category>`;
+  const xml = `<tv><channel id="one"/>
+    <programme channel="one" start="20261023090000 +0000" stop="20261023100000 +0000"><title>Morning</title>${invalid}<category lang="en"> Jazz </category><category>jazz</category><category>Experimental</category></programme>
+    <programme channel="one" start="20261023100000 +0000" stop="20261023110000 +0000"><title>Next</title>${invalid}</programme>
+  </tv>`;
+  for (const partial of [false, true]) {
+    const programmes = parseGuidePrograms(xml, [{ id: "station", tvgId: "one" }], { partial });
+    expect(programmes.map(programme => programme.title)).toEqual(["Morning", "Next"]);
+    expect(programmes[0]!.categories).toEqual(["Jazz", "Experimental"]);
+    expect(programmes[1]!.categories).toBeUndefined();
+  }
+  expect(() => parseGuidePrograms(xml.replace("<title>Morning</title>", ""), [{ id: "station", tvgId: "one" }])).toThrow("text fields");
 });

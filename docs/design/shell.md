@@ -278,7 +278,7 @@ keeps the requested page.
 
 TanStack Hotkeys, inside the app only; the header's Keyboard shortcuts dialog
 lists them: K/Space play or pause, J/L seek 10 s, 0–9 jump, M mute, C
-subtitles, F fullscreen, Shift+N play next, H/S Home and Saved, `/` Search,
+subtitles, F fullscreen, I the player's Info, Shift+N play next, H/S Home and Saved, `/` Search,
 `,` Settings, P/Q player and Up next, Esc close or back, `?` the list. Space and
 the player's arrows act only when focus isn't on a control (or is on a
 `tabindex="-1"` target such as the player's picture). Open panels, text

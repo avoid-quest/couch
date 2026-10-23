@@ -21,6 +21,7 @@ export async function runRadioCacheRegression(keepMounted = false) {
   window.fetch = async input => {
     const { pathname } = new URL(String(input), location.href); reads.push(pathname);
     if (pathname === `/api/radio/stations/${id}`) return Response.json({ station });
+    if (pathname === "/api/radio/programmes") return Response.json({ programmes: {} });
     if (pathname === "/api/radio/playlists") return Response.json({ playlists: [{ id: sourceId, name: "My stations" }] });
     if (pathname.includes("/playlists/")) return Response.json({ stations: [station, { ...station, id: "cccccccc-cccc-4ccc-cccc-cccccccccccc", name: "Nearby FM" }] });
     return Response.json({ favorites: [], stations: [], items: [] });

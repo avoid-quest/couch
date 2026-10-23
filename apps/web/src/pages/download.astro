@@ -1,5 +1,6 @@
 ---
 import "../styles.css";
+import Analytics from "../components/Analytics.astro";
 import { buttonVariants } from "../../../../src/client/components/ui/button";
 import { currentCatalog, formats, type Channel, type PackageFormat } from "../release-catalog";
 
@@ -8,12 +9,12 @@ export const prerender = false;
 const releases = await currentCatalog();
 const deb = releases.stable.deb ?? releases.preview.deb;
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
-const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
-  dmg: { name: "Mac (Apple Silicon)", target: "macOS 14 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
-  "dmg-intel": { name: "Mac (Intel)", target: "macOS 13 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
-  nsis: { name: "Windows", target: "x86_64, Windows 11", note: "Installs for your user only. The first time, SmartScreen shows More info > Run anyway." },
-  appimage: { name: "Linux", target: "x86_64 AppImage", note: "Make it executable, then open it. Needs FUSE 2." },
-  deb: { name: "Debian TV", target: "Debian 13, x86_64, X11", note: "For Debian desktops and dedicated TVs." },
+const labels: Record<PackageFormat, { name: string; os: string; target: string; note: string }> = {
+  dmg: { name: "Mac (Apple Silicon)", os: "macos", target: "macOS 14 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
+  "dmg-intel": { name: "Mac (Intel)", os: "macos", target: "macOS 13 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
+  nsis: { name: "Windows", os: "windows", target: "x86_64, Windows 11", note: "Installs for your user only. The first time, SmartScreen shows More info > Run anyway." },
+  appimage: { name: "Linux", os: "linux", target: "x86_64 AppImage", note: "Make it executable, then open it. Needs FUSE 2." },
+  deb: { name: "Debian TV", os: "linux", target: "Debian 13, x86_64, X11", note: "For Debian desktops and dedicated TVs." },
 };
 const primary = buttonVariants();
 const secondary = buttonVariants({ variant: "outline" });
@@ -36,6 +37,7 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
     <link rel="canonical" href={new URL("/download", Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <Analytics />
   </head>
   <body>
     <main>
@@ -56,7 +58,8 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
                 {(format === "dmg" || format === "dmg-intel") && <p><code>xattr -dr com.apple.quarantine "/Applications/{channel === "preview" ? "Couch Preview" : "Couch"}.app"</code></p>}
               </div>
               <span data-version>{item?.version}</span>
-              <a class={format === mine ? primary : secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}>Download</a>
+              <a class={format === mine ? primary : secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}
+                data-umami-event="download" data-umami-event-os={labels[format].os} data-umami-event-format={format} data-umami-event-channel={channel}>Download</a>
             </li>;
           })}
         </ul>

@@ -1,9 +1,10 @@
+import { useRadioClock } from "@/radio-clock";
 import { defaultStringifySearch, Link, Outlet, useLocation, useMatches, useRouter } from "@tanstack/react-router";
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ErrorInfo, type PropsWithChildren, type ReactNode, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { BookmarkIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
-import type { RadioStation } from "../../../shared/radio";
+import { freshRadioProgramme, type RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import type { HistorySelection } from "../../../shared/viewing";
 import { DigitalClock } from "@/components/DigitalClock";
@@ -91,12 +92,12 @@ function useShellValue() {
     }
   };
   const changeSection = changePage;
-  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id) => {
+  const openPlayer = (panel?: "queue" | "info", targetDeviceId = playerTarget?.id) => {
     const href = `/now${defaultStringifySearch({ queue: panel === "queue" || undefined, targetDeviceId })}`;
     if (playerTarget && targetDeviceId === playerTarget.id) void router.navigate({ href, replace: true, state: location.state });
     else if (targetDeviceId) detailNavigation.open(href, section === "Remote" && panel === "queue" ? '[data-remote-page] button[aria-label="Up next"]' : undefined);
     else if (section === "Now") void router.navigate({ href, replace: true, state: previous => previous });
-    else detailNavigation.open(href);
+    else detailNavigation.open(href, undefined, panel === "info" ? { playerInfo: true } : undefined);
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
@@ -180,7 +181,8 @@ function useShellValue() {
   }, [credentials, profileId, playProgress, run, setError]);
 
   const player = state?.player;
-  const programme = connected ? state?.radioProgramme : null;
+  const metadataNow = useRadioClock([], state?.radioProgramme);
+  const programme = connected && freshRadioProgramme(state?.radioProgramme, metadataNow) ? state?.radioProgramme : null;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
@@ -295,7 +297,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!tvPresentation) return;
     const onHome = () => shell.changeSection("Home");
-    const onInfo = () => shell.changeSection("Now");
+    // On the player a remote's Info shows or hides Info there (PlayerPage); elsewhere it opens the player with Info shown.
+    const onInfo = () => { if (section !== "Now") shell.openPlayer("info"); };
     window.addEventListener("couch-home", onHome);
     window.addEventListener("couch-info", onInfo);
     return () => { window.removeEventListener("couch-home", onHome); window.removeEventListener("couch-info", onInfo); };

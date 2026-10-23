@@ -2,9 +2,9 @@ import { browserActions } from "@/original-page";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
-import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
+import { avoidRadioPlaylistId, radioNow, radioNext, radioMatches, radioShowLabels, type RadioStation } from "../../../shared/radio";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
-import { useDurationClock } from "@/components/DurationBar";
+import { useRadioClock } from "@/radio-clock";
 import { createId } from "../../session/session";
 import { readSearch, searchError, type SearchPlaybackProps, type SearchHit } from "./SearchOnlineResults";
 import { failed } from "@/toasts";
@@ -20,8 +20,8 @@ function RadioResults(props: Props) {
   const lifetime = useRef<AbortController | null>(null);
   const title = props.source;
   const directory = title === "Radio directory", avoid = title === "avoid radio";
-  const now = useDurationClock();
-  const programmes = useQuery({ ...radioProgrammesQuery(props), enabled: props.connected && props.active && avoid, refetchInterval: 60_000 });
+  const programmes = useQuery({ ...radioProgrammesQuery(props), enabled: props.connected && props.active && !directory, refetchInterval: 60_000 });
+  const now = useRadioClock(Object.values(programmes.data ?? {}));
   const options = radioSearchQuery(props, title, props.query);
   const search = useQuery({ ...options, enabled: props.connected, refetchOnMount: props.retry ? "always" : true });
   const kept = useQuery({ ...radioFavoritesListQuery(props), enabled: props.connected, retry: false });
@@ -54,15 +54,17 @@ function RadioResults(props: Props) {
       if (!signal.aborted) await client.invalidateQueries({ queryKey: ["radio", "favorites"] });
     });
   }
-  const matches = (station: RadioStation) => !!station.sourceId && station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
+  const matches = (station: RadioStation) => !!station.sourceId && station.sourceId !== avoidRadioPlaylistId;
   const stationIds = new Set(stations.map(station => station.id));
-  const results = directory || avoid ? stations : [...stations, ...(favorites ?? []).filter(station => matches(station) && !stationIds.has(station.id))];
+  const results = (directory || avoid ? stations : [...stations, ...(favorites ?? []).filter(station => matches(station) && !stationIds.has(station.id))]).filter(station => radioMatches(station, props.query, radioNow(programmes.data?.[station.id], station.id, now)));
   useLayoutEffect(() => {
     const hits: SearchHit[] | undefined = results.map(station => {
       const saved = !!favorites?.some(item => item.id === station.id);
       const value = programmes.data?.[station.id];
-      const programme = avoid && value && value.expiresAt > now ? value : undefined;
-      return { id: `${title}:${station.id}`, source: title, radio: {id: station.id, title: station.name, url: station.url}, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
+      const programme = radioNow(value, station.id, now);
+      const next = radioNext(value, now);
+      // A row says what it plays: the show and its categories, else the station's tags and group; the next show has a line of its own.
+      return { id: `${title}:${station.id}`, source: title, radio: {id: station.id, title: station.name, url: station.url, tags: station.tags, categories: radioShowLabels(programme), host: programme?.artist, group: station.groupTitle, next: next && { start: next.start, title: next.title }}, title: station.name, meta: [...new Set([...programme ? [programme.title, ...radioShowLabels(programme)] : [...station.tags ?? [], station.groupTitle], title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
         primary: props.browse ? { label: "Open", href: itemLocation("radio", station.id), run: () => navigation.open(itemLocation("radio", station.id)) } : { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
           ...(props.browse ? [] : [{ label: "Details", run: () => navigation.open(itemLocation("radio", station.id)) }]),

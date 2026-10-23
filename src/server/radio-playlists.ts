@@ -1,8 +1,8 @@
 import { parseM3U } from "@iptv/playlist";
 import { createHash } from "node:crypto";
 import type { RadioStation } from "../shared/radio";
+import { guideFetch, guideLimits, guideUrl } from "./iptv-feeds";
 
-const maxBytes = 2 * 1024 * 1024;
 const maxStations = 5_000;
 
 export function radioHttpUrl(value: unknown): string | null {
@@ -54,10 +54,11 @@ function parseStations(text: string, sourceId: string, url: string): RadioStatio
     const name = (channel.name || channel.tvgName || "").trim();
     if (!name || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("Station names must contain 1 to 200 characters.");
     const streamUrl = resolveUrl(channel.url!, url);
-    const tvgId = channel.tvgId?.trim();
+    const tvgId = channel.tvgId;
     const groupTitle = channel.groupTitle?.trim();
     if ([tvgId, groupTitle].some(value => value && (value.length > 200 || /[\u0000-\u001f\u007f]/.test(value)))) throw new Error("Playlist station IDs and group names must be at most 200 characters.");
-    const id = radioId(`${sourceId}\0${tvgId ? `tvg:${tvgId}` : `url:${streamUrl}`}`);
+    const identityTvgId = tvgId?.trim(); // Preserve installed IDs; guide matching keeps the original value.
+    const id = radioId(`${sourceId}\0${identityTvgId ? `tvg:${identityTvgId}` : `url:${streamUrl}`}`);
     if (stations.has(id)) continue;
     let logoUrl: string | undefined;
     if (channel.tvgLogo) {
@@ -69,44 +70,22 @@ function parseStations(text: string, sourceId: string, url: string): RadioStatio
   return [...stations.values()];
 }
 
-async function readText(response: Response, signal: AbortSignal): Promise<string> {
-  if (Number(response.headers.get("content-length")) > maxBytes) {
-    await response.body?.cancel();
-    throw new Error("Radio playlists must be no larger than 2 MiB.");
+export async function readRadioSource(url: string, sourceId: string, request: typeof globalThis.fetch, signal: AbortSignal) {
+  const response = await guideFetch(url, guideLimits.playlistBytes, request, signal);
+  const text = Buffer.from(response.bytes).toString("utf8");
+  const stations = parseStations(text, sourceId, response.url);
+  const advertised = parseM3U(text).headers?.xTvgUrl;
+  let discoveredGuideUrl: string | null = null;
+  if (advertised) {
+    try {
+      const target = guideUrl(advertised, response.url);
+      // Automatic discovery can only fetch from the imported playlist's origin.
+      if (new URL(target).origin === new URL(response.url).origin) discoveredGuideUrl = target;
+    } catch { /* A malformed optional guide must not remove playable stations. */ }
   }
-  if (!response.body) throw new Error("The playlist server returned an empty response.");
-  const reader = response.body.getReader();
-  const abort = () => { void reader.cancel(signal.reason).catch(() => {}); };
-  signal.addEventListener("abort", abort, { once: true });
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    signal.throwIfAborted();
-    for (;;) {
-      const { value, done } = await reader.read();
-      signal.throwIfAborted();
-      if (done) return Buffer.concat(chunks).toString("utf8");
-      size += value.length;
-      if (size > maxBytes) { await reader.cancel(); throw new Error("Radio playlists must be no larger than 2 MiB."); }
-      chunks.push(value);
-    }
-  } finally { signal.removeEventListener("abort", abort); reader.releaseLock(); }
+  return { stations, discoveredGuideUrl };
 }
 
 export async function readRadioPlaylist(url: string, sourceId: string, request: typeof globalThis.fetch, signal: AbortSignal): Promise<RadioStation[]> {
-  let target = url;
-  for (let redirects = 0; redirects <= 3; redirects++) {
-    signal.throwIfAborted();
-    const response = await request(target, { redirect: "manual", signal, headers: { "User-Agent": "Couch/0.1", Accept: "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain" } });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      await response.body?.cancel();
-      const location = response.headers.get("location");
-      if (!location) throw new Error("The playlist server returned an invalid redirect.");
-      target = resolveUrl(location, target);
-      continue;
-    }
-    if (!response.ok) { await response.body?.cancel(); throw new Error(`The playlist server returned HTTP ${response.status}.`); }
-    return parseStations(await readText(response, signal), sourceId, target);
-  }
-  throw new Error("The playlist server redirected too many times.");
+  return (await readRadioSource(url, sourceId, request, signal)).stations;
 }

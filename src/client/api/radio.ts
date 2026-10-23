@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioProgrammeDetails, type RadioStation } from "../../shared/radio";
+import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioGuide, type RadioStation } from "../../shared/radio";
 import { apiFetch, type ApiCredentials } from "./client";
 
 const radioRequest = (credentials: ApiCredentials, path: string, init: RequestInit = {}) =>
@@ -25,20 +25,20 @@ export const radioSourcesQuery = (credentials: ApiCredentials) =>
 
 export const radioProgrammesQuery = (credentials: ApiCredentials) =>
   queryOptions({
-    queryKey: ["radio", "avoid", "programmes"] as const,
-    queryFn: ({ signal }) => radioRequest(credentials, "avoid/programmes", { signal }).then(response => response.json() as Promise<{ programmes: Record<string, RadioProgrammeDetails> }>).then(result => result.programmes),
+    queryKey: ["radio", "programmes"] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, "programmes", { signal }).then(response => response.json() as Promise<{ programmes: Record<string, RadioGuide> }>).then(result => result.programmes),
     staleTime: 30_000,
   });
 
 export const radioSearchQuery = (credentials: ApiCredentials, source: "avoid radio" | "Radio playlists" | "Radio directory", query: string, refresh = false) =>
   queryOptions({
     // The external directory is independent of local favorites/source revisions.
-    queryKey: [source === "Radio directory" ? "radio-directory" : "radio", "search", source, source === "avoid radio" ? "" : query] as const,
+    queryKey: [source === "Radio directory" ? "radio-directory" : "radio", "search", source, source === "Radio directory" ? query : ""] as const,
     staleTime: 30_000,
     // The built-in catalogue is shared; each observer selects its own search.
     select: (data: { stations: RadioStation[]; error?: string }) => {
       if (query.length > 100) throw new Error("Search radio with at most 100 characters.");
-      return source === "avoid radio" ? { ...data, stations: data.stations.filter(station => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())) } : data;
+      return data;
     },
     retry: false,
     queryFn: async ({ signal }): Promise<{ stations: RadioStation[]; error?: string }> => {
@@ -59,7 +59,7 @@ export const radioSearchQuery = (credentials: ApiCredentials, source: "avoid rad
       await Promise.all(Array.from({ length: Math.min(3, playlists.length) }, async () => {
         while (index < playlists.length && !signal.aborted) {
           const current = index++, playlist = playlists[current]!;
-          try { results[current] = (await read<{ stations: RadioStation[] }>(`/api/radio/playlists/${encodeURIComponent(playlist.id)}/stations?${search}`)).stations; }
+          try { results[current] = (await read<{ stations: RadioStation[] }>(`/api/radio/playlists/${encodeURIComponent(playlist.id)}/stations`)).stations; }
           catch (reason) { failures.push(`${playlist.name}: ${reason instanceof Error ? reason.message : "Could not complete this request."}`); }
         }
       }));
