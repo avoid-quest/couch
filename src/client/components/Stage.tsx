@@ -38,7 +38,8 @@ export function Stage({ thumbnail, shape, fit, title, size = "details", label, c
   children: ReactNode;
 } & Omit<ComponentProps<"section">, "title" | "children">) {
   const art = useArtwork(thumbnail);
-  const [picture, ratio] = useArtRatio(thumbnail, shapeRatio[shape]);
+  const [picture, naturalRatio] = useArtRatio(thumbnail, shapeRatio[shape]);
+  const ratio = shape === "round" ? 1 : naturalRatio;
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     const element = root.current;
@@ -48,7 +49,7 @@ export function Stage({ thumbnail, shape, fit, title, size = "details", label, c
     addEventListener("scroll", mark, { passive: true, capture: true });
     return () => { removeEventListener("scroll", mark, true); stages.delete(element); mark(); };
   }, []);
-  const form = vector(thumbnail) || art?.clear ? "mark" : "object";
+  const form = shape !== "round" && (vector(thumbnail) || art?.clear) ? "mark" : "object";
   const wide = fit !== "contain" && shape !== "round" && ratio >= wideRatio;
   // A Details page's stage is its header; Home's is a section of the board.
   const Tag = size === "details" ? "header" : "section";

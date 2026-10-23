@@ -150,6 +150,8 @@ They share one set of controls:
 - **The same icons, glyphs and targets** at every width: the transport, the
   lucide Volume, Where it plays (SlidersVertical), Up next (ListMusic) and the
   gear (Settings), at `--player-target` with a 1.25rem glyph.
+  Filled transport icons fade as a single shape, so their edges stay flat
+  instead of forming a brighter contour where fill and stroke overlap.
 - **The transport at the same x.** Both centre it in a
   `1fr auto 1fr` grid inside the same gutter.
 - **The same tools at the same x, in the same order:** Volume, Where it

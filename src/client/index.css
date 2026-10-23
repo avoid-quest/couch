@@ -517,7 +517,7 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 .stage-object { width: var(--object-w); height: auto; aspect-ratio: var(--art-ratio); object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
 /* A picture that loads cold settles into its place as it fades in, once; one already shown is there at once. */
 @media (prefers-reduced-motion: no-preference) { .stage-object { transition: opacity .2s var(--ease-out), translate .45s var(--ease-out); } .stage-object:not([data-loaded]) { translate: 0 .75rem; } }
-.stage-picture[data-shape="round"] .stage-object { border-radius: 50%; }
+.stage-picture[data-shape="round"] .stage-object { border-radius: 50%; object-fit: cover; }
 .stage[data-form="mark"] .stage-object { box-shadow: none; border-radius: 0; background: transparent; }
 /* A picture that didn't load leaves no box: the room stands alone, as it does without one. */
 .stage-picture:empty { display: none; }

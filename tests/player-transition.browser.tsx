@@ -8,6 +8,7 @@ import { AppShell } from "../src/client/sections/shell/AppShell";
 import { PlayerPage } from "../src/client/sections/now/PlayerPage";
 import { RemotePage } from "../src/client/sections/remote/RemotePage";
 import { RemotePlayerSession } from "../src/client/session/remote-player-session";
+import { UpdateCenterProvider } from "../src/client/session/update-center";
 import { readPlayerSearch } from "../src/client/session/player-control";
 import { SessionGateContext } from "../src/client/session/gate-context";
 import type { SessionGateValue } from "../src/client/session/session-context";
@@ -23,6 +24,7 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const id = deviceId();
+  const title = "ZOLA GORGON #40 THE BRIDE OF CHRIST IN AUTUMN.mp3";
   const tvId = "t".repeat(43);
   const gate = {
     credentials: { origin: location.origin, token: "fixture", installationId: "fixture" },
@@ -32,15 +34,15 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
     videoQualityPreference: { quality: "auto" }, run: async () => true, setError: () => {}, seekBy: () => {},
     state: {
       installationName: "Transition fixture", playback: "p", controlling: id, currentEntryId: "e",
-      queue: [{ id: "e", title: "Transition fixture", source: "https://example.com/fixture.mp4", duration: 120 }],
-      player: { status: "paused", playbackId: "p", speed: 1, volume: 50, tracks: [] },
+      queue: [{ id: "e", title, creator: { title: "Cashmere Radio", url: "https://www.youtube.com/@cashmereradio" }, source: "https://example.com/fixture.mp4", duration: 120 }],
+      player: { status: "playing", playbackId: "p", speed: 1, volume: 50, tracks: [] },
       devices: [{ id, name: "Fixture", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }],
       outputs: [{ deviceId: id, picture: true, sound: true }],
-      playbacks: [{ id: "p", title: "Transition fixture", status: "paused", outputs: [{ deviceId: id, picture: true, sound: true }] }],
+      playbacks: [{ id: "p", title, status: "playing", outputs: [{ deviceId: id, picture: true, sound: true }] }],
       liveSources: [], preferences: {}, activeProfile: { id: "default", name: "Default" }, profiles: [],
     },
   } as unknown as SessionGateValue;
-  const route = createRootRoute({ component: () => <RemotePlayerSession><AppShell /><CommitProbe /></RemotePlayerSession> });
+  const route = createRootRoute({ component: () => <UpdateCenterProvider><RemotePlayerSession><AppShell /><CommitProbe /></RemotePlayerSession></UpdateCenterProvider> });
   const home = createRoute({ getParentRoute: () => route, path: "/", component: () => <h1>Transition fixture</h1> });
   const now = createRoute({ getParentRoute: () => route, path: "/now", validateSearch: readPlayerSearch,
     component: () => {
@@ -91,16 +93,23 @@ export async function runPlayerTransitionRegression(inspect?: (surface: string) 
   try {
     root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider></SessionGateContext>);
     await wait(500);
+    await document.fonts.ready;
     if (!host.querySelector("[data-now-playing]")) throw new Error(`No fixture bar: ${host.textContent}`);
     // The bar is as tall as its tallest item (the artwork or a 44px control) plus its padding: two tight text lines.
     const bar = host.querySelector<HTMLElement>("[data-now-playing]")!;
     const padding = parseFloat(getComputedStyle(bar).paddingTop) + parseFloat(getComputedStyle(bar).paddingBottom) + parseFloat(getComputedStyle(bar).borderTopWidth);
     const tallest = Math.max(...[...bar.querySelectorAll<HTMLElement>('button[aria-hidden="true"], [data-size="icon-lg"]')].filter(item => item.checkVisibility()).map(item => item.getBoundingClientRect().height));
     if (bar.getBoundingClientRect().height > tallest + padding + 1) failures.push(`The bar is ${bar.getBoundingClientRect().height}px, taller than its ${tallest}px items`);
+    if (bar.querySelector('.level')) failures.push("The collapsed player still shows the playing animation");
+    const titleButton = bar.querySelector<HTMLButtonElement>('[data-bar-title] button')!;
+    titleButton.focus();
+    if (bar.getBoundingClientRect().height > tallest + padding + 1) failures.push("Focusing the title expands the collapsed player");
+    titleButton.blur();
+    await inspect?.("bar");
     for (let i = 0; i < 3; i++) {
       if (i === 0) barNames = shared("[data-now-playing]");
       // The title and the bar's last slot open the player alike.
-      host.querySelector<HTMLButtonElement>(i === 1 ? '[data-now-playing] [data-player-last]' : '[aria-label="Open player: Transition fixture"]')!.click();
+      host.querySelector<HTMLButtonElement>(i === 1 ? '[data-now-playing] [data-player-last]' : '[data-bar-title] button')!.click();
       await wait();
       await finished(transitions.at(-1));
       if (!host.querySelector("[data-player-band]")) throw new Error(`No fixture player: ${host.textContent}`);

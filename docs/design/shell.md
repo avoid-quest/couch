@@ -208,10 +208,10 @@ nothing changes side as it grows into the band
 - **At the left, what plays,** as large as a mini-player's (YouTube Music,
   Spotify and Apple Music run about 56–64px): the artwork 3.5rem tall (3rem on
   phones) at its own shape (a frame 16:9, up to 7rem wide, `rounded-md`, with a soft shadow), and
-  two lines, the title (`text-title font-medium`, `text-body` on phones, up
-  to two lines and one on phones, whole while it has focus, with the whole
-  title on hover) followed by the [level](../design.md#motion) while sound
-  comes out, over a `text-meta` line. The title is the control across its whole line, with the
+  two lines: a single-line title (`text-title font-medium`, `text-body` on phones,
+  with ellipsis, the whole title in its tooltip and accessible name) over a
+  `text-meta` line. Focus keeps the same height; opening the player shows the
+  whole title. There is no playing-bars animation. The title is the control across its whole line, with the
   artwork a pointer target for it; neither dims under a pointer. Under the title, one line that
   doesn't wrap: "on {device}" in the ink when it plays elsewhere, then its
   collection or station link (a station's only under its show, since without

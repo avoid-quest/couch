@@ -15,6 +15,9 @@ import { useBufferedEnd } from "@/session/buffered";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
+// Fade the completed glyph: translucent fill and stroke would overlap into a bright contour.
+const transportInk = "text-foreground active:text-foreground [&_svg]:opacity-80 motion-safe:[&_svg]:transition-opacity motion-safe:[&_svg]:duration-150 hover:[&_svg]:opacity-100 active:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-100 focus-visible:[&_svg]:duration-0";
+
 export function playbackCapabilities(state: ClientSessionState | null, connected: boolean) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
@@ -108,12 +111,12 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, cl
   const enabled = [ended || failed ? available : transportReady && pausable, stoppable, nextReady && hasNext];
   const first = (slot: number) => pageFirst && enabled.indexOf(true) === slot || undefined;
   return <div className={cn("flex shrink-0 items-center gap-0.5", className)} role="group" aria-label="Playback controls">
-    <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" aria-label={label} title={label} disabled={!enabled[0]}
+    <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" className={transportInk} aria-label={label} title={label} disabled={!enabled[0]}
       onClick={() => { if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {ended || failed ? <RotateCcw aria-hidden="true" /> : pause ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}
     </Button>
-    <Button data-page-first={first(1)} variant="ghost" size="icon-lg" className={moreClassName} aria-label="Stop" title="Stop" disabled={!enabled[1]} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
-    <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={moreClassName} aria-label="Next" title="Next" disabled={!enabled[2]}
+    <Button data-page-first={first(1)} variant="ghost" size="icon-lg" className={cn(transportInk, moreClassName)} aria-label="Stop" title="Stop" disabled={!enabled[1]} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
+    <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={cn(transportInk, moreClassName)} aria-label="Next" title="Next" disabled={!enabled[2]}
       onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>
   </div>;
 }

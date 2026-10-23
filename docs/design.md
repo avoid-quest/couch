@@ -131,7 +131,8 @@ once it loads (`useArtRatio`; its kind's shape until then):
 - **Object**, any picture, a wide frame too (a video's 16:9): as tall as the
   stage allows under the header (`--object-h`) and no wider than 40vw
   (`--object-w`), `rounded-sm`, with its shadow (`--object-shadow`); a
-  channel's avatar is a circle. A picture that loads cold settles into place
+  channel's avatar stays a square frame with a circular mask, even when its
+  source is non-square or transparent. A picture that loads cold settles into place
   (.75rem, 450 ms) as it fades in. Never a backdrop: no fade can know where a
   thumbnail's lettering sits, so a backdrop ghosts it beside the title and
   ends in a hard edge.
@@ -231,7 +232,7 @@ to 85%), and an outline's edge comes up. One whose panel is open
 (`aria-expanded`) stays lit. Ink never turns dark under a pointer, and nothing
 tints, dims, scales or moves under it; the bar's artwork keeps its ink, and a
 text link's ink and underline come up to white. A press dims a tile's picture
-to 80%. A press on the transport (Play, Pause, Stop, Next) dips its glyph to 90%
+to 80%. A press on the transport (Play, Pause, Stop, Next) scales its glyph to 90%
 and lets it spring back ([Motion](#motion)). Whatever a press acts on shows the hand, sliders
 included (the arrow while disabled). Never on the TV, which lifts its focus
 instead. The header's tabs mark the current section with a short white rule
@@ -280,7 +281,7 @@ breaks; a longer all-caps word may.
 | The player's title over a video | `text-3xl` semibold, two lines, then the whole title on hover |
 | Page title (`PageHeader`) | `text-page font-semibold` in Mona Sans |
 | Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` in Mona Sans |
-| The bar's title, the palette's query row | `text-title font-medium`; the bar's wraps to two lines (one on phones, whole on focus) |
+| The bar's title, the palette's query row | `text-title font-medium`; the bar's stays on one line with ellipsis, its full title in the tooltip and accessible name |
 | Item title (tiles, rows), settings label, the search palette's rows | `text-body`, wrapped whole |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |
 | Controls | `text-sm` (the Stage's verbs `text-body`) |
@@ -294,7 +295,13 @@ are capsules, `h-control text-sm`; `touch:` (phones and windows narrower than
 960px) raises them to 44px. Playback icon controls (transport, Volume, Where
 it plays, Up next, Playback, fullscreen, Open player, Back, a Sheet's Close)
 are one ghost `icon-lg` button with a 1.25rem glyph and a 44px target. The
-player's band and the now-playing bar share `--player-target`, which grows to
+transport's filled glyphs use opaque ink and fade as a whole at 80% opacity
+(100% on hover or keyboard focus, 60% on press). Opacity eases over 150 ms;
+keyboard focus lights it at once and reduced motion skips the transition.
+Translucent fill and stroke must not overlap into a bright contour. This follows CSS
+[`opacity`](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/opacity),
+which composites the element and its contents together.
+The player's band and the now-playing bar share `--player-target`, which grows to
 2.25rem. At a row's end they pull back (`-ml-2.5`/`-mr-2.5`) so the glyph lines
 up with the text. So does the verb that starts a header's second line on a phone, under the
 full-width primary (`verbRow`).
@@ -309,7 +316,7 @@ arrives, 600 ms for colour that follows what plays.
 - Colour changes (hover, selection, the tab underline) ease both ways.
 - Focus inversion arrives at once and fades out, so a held arrow never passes
   through grey.
-- A press on the transport, in the bar and the band, dips its glyph to 90%
+- A press on the transport, in the bar and the band, scales its glyph to 90%
   over 150 ms and springs back as it lifts, so Play and Pause feel struck.
 - Menus and popovers grow from the button that opened them (a zoom from 90%,
   its origin at the trigger's centre: an arrow that draws nothing gives Radix
@@ -341,12 +348,10 @@ arrives, 600 ms for colour that follows what plays.
   only while what plays is playing, and lies flat while paused, buffering or
   loading, as short thin bars that can't be read as a "…". It sits on the playing item's artwork (a black square in its
   bottom-left corner, only while sound comes out, since a paused chip read as a "…") wherever it is listed, in place of a playing track's
-  number, after the now-playing bar's title while sound comes out, so the title never shifts (never on
-  its thumbnail, where a corner chip read as a "…"; paused, the bar's Play
-  glyph says so) and beside each device in Where it plays whose sound is in. Its bars move by transforms only, in
+  number, and beside each device in Where it plays whose sound is in. The now-playing bar has no level:
+  Play/Pause already communicates its state. Its bars move by transforms only, in
   steps, about eight a second, from one clock for every level on the page (`Level`): a continuous animation would have
-  the browser draw every frame for as long as anything plays, and the bar's glass blur what lies under it again on each
-  of them. Reduced motion holds them still at three heights while it plays.
+  the browser draw every frame for as long as anything plays. Reduced motion holds them still at three heights while it plays.
 - New motion is `motion-safe:`; reduced motion stills everything.
 
 ## Components
