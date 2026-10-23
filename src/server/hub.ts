@@ -225,7 +225,6 @@ export async function createHub(options: HubOptions) {
     inSync?: boolean; bufferFailure?: { playbackId: string; error: string }; silenced?: Map<string, number> };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
-  let radioPlayback: Playback | null = null;
   const all = () => [...playbacks.values()];
   const hostId = () => store.hostDevice()?.id ?? "host";
   const deviceOf = (socket: Socket<SocketData>) => socket.data.deviceId ?? hostId();
@@ -1040,7 +1039,7 @@ export async function createHub(options: HubOptions) {
   };
   const publish = (playback: Playback, state: SessionState, clock?: PlaybackClock) => {
     playback.state = state;
-    if (playback === radioPlayback) radioProgramme?.observe(state);
+    radioProgramme?.observe(state, playback.id);
     sound?.interrupt();
     if (!clock) { broadcast(); queueMicrotask(() => settle(playback)); return; }
     if (closed) return;
@@ -1057,7 +1056,7 @@ export async function createHub(options: HubOptions) {
     live.closePlayback(playback.id);
     playbacks.delete(playback.id);
     for (const output of [...playback.outputs]) release(playback, output.deviceId, false);
-    if (radioPlayback === playback) radioPlayback = null;
+    radioProgramme?.remove(playback.id);
     playback.synced?.close();
     hide(playback);
     playback.session.close();
@@ -1173,8 +1172,7 @@ export async function createHub(options: HubOptions) {
     }
     if (entry.source.startsWith("radio:")) {
       const station = radio.getPlayable(entry.source.slice(6));
-      radioPlayback = playback;
-      radioProgramme?.load(playbackId, entry.source, station.source);
+      radioProgramme?.load(playbackId, entry.source, station.source, playback.id);
       return { ...station, radio: true };
     }
     // Local files, the library and Jellyfin were removed; their saved entries stay readable but unplayable.
@@ -1657,7 +1655,7 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
       if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|programmes|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
       if (!websocket && url.pathname === "/api/artwork") return cors(request, await artworkResponse(request, authorize));

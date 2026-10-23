@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="community.main"><display-name>Community Radio</display-name></channel>
+  <channel id="community.archive"><display-name>Archive</display-name></channel>
+  <programme channel="community.main" start="20261025013000 +0200" stop="20261025023000 +0200">
+    <title>Night Shift</title><desc>Selections from the community studio.</desc>
+    <category> Jazz </category><category lang="en">jazz</category><category>Experimental</category>
+    <icon src="art/night.jpg"/>
+  </programme>
+  <programme channel="community.main" start="20261025023000 +0100" stop="20261025033000 +0100">
+    <title>After Hours</title><category>Ambient</category>
+  </programme>
+</tv>
