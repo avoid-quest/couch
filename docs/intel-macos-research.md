@@ -52,20 +52,20 @@ dispatched by the implementation agent, and installed Couch/data were untouched.
   `-x64.dmg` assets. Do not infer CPU from a Mac browser's user agent. The
   fallback file has no invented Intel URL; add it only after publication.
 - **FFmpeg supplier migration deferred:** today's verified Intel binary fits
-  the 13 floor (its own minimum is 12). Its supplier's January 2027 end of new Intel builds remains a
+  the 13 floor (its own minimum is 12). Its supplier's January 2027 end of new
+  Intel builds remains a
   concrete maintenance deadline. It does not justify a distribution framework
   or supplier/signature-policy change in this packaging addition.
 
 Linux checks exercise the pinned update-metadata merger/architecture selector,
 catalog channel separation and missing-asset/offline behavior, and real
 executable fixtures for bundled helper selection/manual checks. They do not
-prove the Mac C build, signing or runtime behavior. Parent-owned `act` checks
-and an unpublished signed Mac Package run remain required. Before shipping,
+prove the Mac C build, signing or runtime behavior. The Package validation below
+covers the build and signing. Before shipping,
 validate a clean Intel Ventura installation, first-use YouTube and normal
 media, native TV playback with a compatible local mpv and its clear failure
 without one, FFmpeg, relay, screen/audio-input capture, pairing and signed
-updates; retain a macOS 14
-Apple Silicon check for the existing supported floor.
+updates; retain a macOS 14 Apple Silicon check for the existing supported floor.
 
 ### Initial implementation verification on Linux (2026-10-23)
 
@@ -101,11 +101,29 @@ release-catalog and capture regressions passed **23**. The existing system-audio
 14.2 guard, combined Mac update feed and architecture selection remain covered.
 
 These tests simulate Intel Mac selection with real executable fixtures on Linux;
-they do not execute Mac binaries. The parent owns the final `act` proof and
-unpublished hosted Package run. The latter must verify both app/QuickJS
-architectures, deployment targets and signatures; Ventura playback still needs
-the target Intel Mac. The follow-up changes only the website's minimum-OS text;
+they do not execute Mac binaries. Ventura playback still needs the target Intel
+Mac. The follow-up changes only the website's minimum-OS text;
 the desktop/mobile layout check above applies to the existing row structure.
+
+### Package verification (2026-10-24)
+
+The final runtime and packaging changes at `ad6bb58` passed Linux Package under
+`act` with `catthehacker/ubuntu:full-latest`, before dispatching the
+[unpublished hosted Package](https://github.com/avoid-quest/couch/actions/runs/40032475061).
+All hosted jobs passed: macOS, Linux and Windows. The Mac job built both CPUs in
+3m35s and strictly verified both app bundles and both QuickJS signatures.
+
+The downloaded Mac artifacts contain both DMGs and ZIPs. Each ZIP's Info.plist
+declares a common macOS 13 minimum and architecture floors of Intel 13 / Apple
+Silicon 14. The app, QuickJS and relay have the expected CPU and macOS 13 Mach-O
+deployment target; the QuickJS license and pinned source notice are present.
+Inspection of 15 thin Mach-O binaries per ZIP found no deployment target above
+the advertised floor. The shared `latest-mac.yml` contains all four installers,
+with sizes and SHA-512 hashes matching the actual files.
+
+This proves cross-packaging, signing and artifact metadata. It does not prove
+Intel Ventura execution, playback performance, capture permissions or a signed
+update installation on the target Mac. No release was published.
 
 ## Couch audit and recommendation
 
