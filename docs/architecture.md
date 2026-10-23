@@ -176,8 +176,15 @@ that follows the video, Couch-hosted HLS through hls.js where supported with
 native HLS as the fallback, and raw MPEG-TS through mpegts.js. Direct cross-origin
 HLS retains native playback with hls.js as the fallback because a provider's
 segments may not permit CORS. Synced live pictures use hls.js to map source
-timestamps where supported. Chromium Devices get YouTube's VP9 and Opus,
-others H.264 and AAC. Uploaded SRT/VTT subtitles are served to the `<track>` as
+timestamps where supported. VP9-capable Devices prefer YouTube's VP9 and Opus;
+other Devices require H.264 and AAC, including separate audio and progressive
+fallbacks, or receive the fixed no-playable-format error. YouTube quality uses
+yt-dlp's smaller-dimension resolution (including portrait Shorts): Auto caps at
+1080p, explicit 480/720/1080p caps fall back to lower available resolutions,
+and Best has no cap. The smallest known positive dimension must fit the cap;
+if only width or height is known, that dimension must fit. Formats with neither
+dimension known remain eligible. Other sites keep their existing height selection.
+Uploaded SRT/VTT subtitles are served to the `<track>` as
 WebVTT from memory. A browser that needs a gesture before sound plays the picture
 muted and shows "Tap to hear". In the app, Main caps googlevideo's open-ended
 `Range` requests at 10 MB, because YouTube sends those at about playback speed.
