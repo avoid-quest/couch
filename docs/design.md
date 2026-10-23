@@ -38,7 +38,8 @@ bar for thumb reach.
 - **Set the words whole.** Titles wrap and their type adapts to their length
   rather than ellipsing where there is room: the Stage's and the player's
   titles, Home's rows, tiles and captions. Text truncates only where space is
-  truly scarce (a phone's bar, the line over a video, a breadcrumb), with the
+  truly scarce (a phone's bar, the line over a video, a breadcrumb once its
+  middle has collapsed), with the
   whole text on hover and focus.
 - **Depth means something.** What floats casts a shadow: the bar, an object
   on the Stage, the player's artwork, Up next summoned over the room. Pages,
@@ -371,7 +372,8 @@ Shared building blocks in `src/client/components`:
 
 - `PageHeader`: a page's h1 with an optional back button or breadcrumb and
   actions; `hidden` keeps an `sr-only` h1 where the tab or rail already names
-  the page. `ContentBreadcrumb` is a content page's trail of ancestors.
+  the page. `ContentBreadcrumb` is a content page's real path, ending in the
+  page ([Browse](design/browse.md#breadcrumbs)).
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `Stage`, `StageTitle`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`

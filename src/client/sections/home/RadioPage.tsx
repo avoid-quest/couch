@@ -39,7 +39,7 @@ export function RadioPage() {
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
   return <section data-page="Radio" className="min-w-0 space-y-6">
-    <PageHeader breadcrumb={<ContentBreadcrumb />} title="Radio" />
+    <PageHeader breadcrumb={<ContentBreadcrumb title="Radio" />} title="Radio" />
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
     <FilterBar label="Radio filters">
       <FilterChoice label="Source" value={source} onChange={source => void navigate({ href: radioBrowseLocation(source, 1, filter), resetScroll: false })} options={radioBrowseSources.map(value => ({ value, label: sourceLabels[value] }))} />

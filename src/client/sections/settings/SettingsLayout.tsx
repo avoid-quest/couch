@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { useSessionGate } from "@/session/session-context";
 import { cn } from "@/lib/utils";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
@@ -42,6 +42,7 @@ export function SettingsLayout({ section, children }: { section: SettingsPage; c
               <BreadcrumbItem className={cn("min-w-0", crumb.className)}><BreadcrumbLink asChild><Link data-back={index === crumbs.length - 1 || undefined} to={crumb.to} state={{ detailFocus: { selector: crumb.focus, index: 0 } }} className="block truncate leading-8 touch:leading-11">{crumb.label}</Link></BreadcrumbLink></BreadcrumbItem>
               <BreadcrumbSeparator className={crumb.className} />
             </Fragment>)}
+            <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block truncate leading-8 touch:leading-11">{page.label}</BreadcrumbPage></BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>} />
         <div className="flex min-w-0 flex-col gap-8">{children}</div>

@@ -1,6 +1,7 @@
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
+import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent } from "react";
 import { flushSync } from "react-dom";
@@ -67,6 +68,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const tap = useRef<boolean | null>(null);
   // What the picture's last click asked for, so a double-click's second click can undo it.
   const clicked = useRef(false);
+  // The band's control a click opened (a Popover, Up next), whose return of focus hands it to the picture.
+  const clickOpened = useRef<Element | null>(null);
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
     (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)'))?.focus();
@@ -140,7 +143,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     const remoteFocus = tvPresentation && document.documentElement.hasAttribute("data-keyboard")
       && root.current?.contains(document.activeElement) && !document.activeElement?.matches("[data-player-surface]");
     const opened = document.querySelector('[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"]');
-    if (!remoteFocus && !opened && !root.current?.querySelector(":focus-visible:not([data-player-surface])") && !document.activeElement?.closest("[data-sonner-toaster]")) setShown(false);
+    if (remoteFocus || opened || root.current?.querySelector(":focus-visible:not([data-player-surface])") || document.activeElement?.closest("[data-sonner-toaster]")) return;
+    // Hidden bands are inert; a control a click left focused hands its keys to the picture rather than to the page.
+    if (!tvPresentation && document.activeElement?.closest("[data-player-band], [data-player-top]")) surface()?.focus({ preventScroll: true });
+    setShown(false);
   };
   const wake = () => {
     setShown(true);
@@ -213,7 +219,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
   const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!detailHref || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); detailNavigation.open(detailHref, panel === "settings" ? '.player-page button[aria-label="Playback"]' : undefined);
+    // Back returns the TV and a keyboard to the gear they opened Details from; a pointer's Back returns to the picture.
+    event.preventDefault(); detailNavigation.open(detailHref, panel === "settings" && (tvPresentation || !event.detail) ? '.player-page button[aria-label="Playback"]' : undefined);
   };
   // A pointer has no Back key, so desktop and phones lead the top line with Back; the TV's remote has its own.
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
@@ -230,8 +237,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const meta = [byline, separate && ["playing", "paused"].includes(player?.status ?? "") && "in a separate window"].filter(Boolean).join(", ");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const status = playbackStatus(state, connected, now);
-  // A station's link names it under its show; without a show the title is the station, and already opens it.
-  const context = current && <MediaContext creator={current.creator} collection={current.collection} radio={radio && currentProgramme && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} />;
+  // A station's link names it under its show; without a show the title is the station, and already opens it. The
+  // collections holding what plays are its trail, above the title as on a Stage.
+  const context = current && <MediaContext creator={current.creator} radio={radio && currentProgramme && current.source.startsWith("radio:") ? { id: current.source.slice(6), title: current.title } : undefined} />;
+  const trail = current && <ContentBreadcrumb player collection={current.collection} className="[&_[data-slot=breadcrumb-list]]:text-base" />;
   const linkedTitle = detailHref ? <ContentLink href={detailHref} className="no-underline hover:underline">{title}</ContentLink> : title;
   // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
   const queueOrigin = `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%`;
@@ -280,9 +289,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         <LiveSharingStatus className="ml-auto" />
       </div>}
       {osd && <div data-player-heading className={cn("drag-region window-controls-inset grid items-center gap-x-3 px-(--gutter)", back ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]")}>
-        {back}
-        <h1 title={title} className="min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl">{linkedTitle}</h1>
-        <div className="flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">{sharing && <LiveSharingStatus />}{ends && <p data-player-ends>{ends}</p>}{tvPresentation && <DigitalClock />}</div>
+        {trail && <div className={cn("min-w-0", back ? "col-start-2 col-end-4" : "col-span-full")}>{trail}</div>}
+        {back && <div className="row-start-2">{back}</div>}
+        <h1 title={title} className="row-start-2 min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl">{linkedTitle}</h1>
+        <div className="row-start-2 flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">{sharing && <LiveSharingStatus />}{ends && <p data-player-ends>{ends}</p>}{tvPresentation && <DigitalClock />}</div>
         {(byline || context) && <div className={cn("flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base", back ? "col-start-2 col-end-4" : "col-span-full")}>{byline && <p className="min-w-0 truncate">{byline}</p>}{context}</div>}
       </div>}
     </div>
@@ -292,6 +302,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         <div ref={artFrame} data-player-art aria-hidden="true" className="player-art">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         {/* The media title leads; related content and secondary metadata follow, then what's wrong, if anything. */}
         <div data-player-audio-copy className="grid min-w-0 content-end gap-3 [&_[data-media-context]]:text-base">
+          {trail}
           {/* Set whole in the display face, its size and width by its length, as the Stage's title. */}
           {title && <h1 data-length={titleLength(title)} style={titleFit(title)} className="display-title min-w-0 text-balance">{linkedTitle}</h1>}
           {/* Where it plays leads the line under the title, as in the now-playing bar. */}
@@ -313,9 +324,19 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     {osd && state && !queueOpen && !panel && <NextUp state={state} run={run} />}
     {/* A pointer leaves the keys to the shortcuts: once a click in the band has done its job, focus returns to the
-        picture, unless the click opened something. A keyboard's click (detail 0) keeps focus where the keyboard put it. */}
+        picture; what it opened returns focus to the picture once it closes, off the TV. A keyboard's click (detail 0)
+        keeps focus where the keyboard put it, and what it opened returns focus to its control. */}
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={event => {
-      if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
+      if (event.detail) requestAnimationFrame(() => {
+        const at = document.activeElement;
+        clickOpened.current = !tvPresentation && document.querySelector('.player-band [aria-expanded="true"]') || null;
+        if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true });
+      });
+      else clickOpened.current = null;
+    }} onFocus={event => {
+      if (event.target !== clickOpened.current || event.target.matches('[aria-expanded="true"]')) return;
+      clickOpened.current = null;
+      surface()?.focus({ preventScroll: true });
     }} className={cn("player-band z-20 pt-1 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
       {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
           bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback

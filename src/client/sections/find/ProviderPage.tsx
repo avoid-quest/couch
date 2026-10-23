@@ -102,8 +102,8 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     onSelectPage={page => goToPage(locationFor({ page }))} />;
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
-    {cold && url ? <DetailSkeleton trail={<ContentBreadcrumb stage title={collection.title} provider={provider} collection={trail} />} />
-      : <CollectionHeader collection={collection} canPlay={available} shape={shape} trail={<ContentBreadcrumb stage title={collection.title} provider={provider} collection={trail} />} />}
+    {cold && url ? <DetailSkeleton trail={<ContentBreadcrumb provider={provider} collection={trail} />} />
+      : <CollectionHeader collection={collection} canPlay={available} shape={shape} trail={<ContentBreadcrumb title={collection.title} url={url} provider={provider} collection={trail} />} />}
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
