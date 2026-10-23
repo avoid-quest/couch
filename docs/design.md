@@ -514,6 +514,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).
+It tracks page views and installer clicks through a same-origin Umami proxy;
+the [website notes](product/website.md#analytics) describe the download counters.
 
 ## Changing a surface
 
