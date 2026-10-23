@@ -3,6 +3,7 @@ import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from 
 import type { MediaCollection } from "../shared/media";
 import { maxCollectionIndex, providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
+import { isCompressorPatch } from "../shared/compressor";
 import { safePlaybackError } from "./playback-log";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
@@ -47,6 +48,7 @@ function validAction(value: unknown): value is Action {
     case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow });
     case "askEveryDevice": return typeof value.enabled === "boolean";
     case "inSync": return typeof value.inSync === "boolean";
+    case "compressor": return id(value.playbackId) && isCompressorPatch(value.settings);
     case "control": return id(value.deviceId);
     case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
     case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "menu", "back", "home", "info"].includes(value.key);

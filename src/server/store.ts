@@ -13,6 +13,7 @@ import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 import { CHANGED_ELSEWHERE } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
+import { defaultCompressor, isCompressorPatch, type CompressorSettings } from "../shared/compressor";
 
 type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
 export type ProgressSnapshot = Array<ProgressRow & { profileId: string }>;
@@ -112,6 +113,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
   }).immediate();
   // Each Playback keeps the Mixer's All trim; older rows play at the Devices' levels.
   if (!db.query<{ name: string }, []>("PRAGMA table_info(playback)").all().some(column => column.name === "mixTrim")) db.exec("ALTER TABLE playback ADD COLUMN mixTrim INTEGER NOT NULL DEFAULT 100");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(playback)").all().some(column => column.name === "compressor")) db.exec("ALTER TABLE playback ADD COLUMN compressor TEXT");
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
 
@@ -224,8 +226,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     playbackIds() { return db.query<{ id: string }, []>("SELECT id FROM playback ORDER BY rowid").all().map(row => row.id); },
     forgetPlayback(id: string) { db.query("DELETE FROM playback WHERE id = ?").run(id); },
     playback(id: string) {
-      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null; mixTrim: number }, [string]>("SELECT queue, cursor, continuation, mixTrim FROM playback WHERE id = ?").get(id);
-      const save = (column: "queue" | "cursor" | "continuation" | "mixTrim", value: string | number | null) => {
+      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null; mixTrim: number; compressor: string | null }, [string]>("SELECT queue, cursor, continuation, mixTrim, compressor FROM playback WHERE id = ?").get(id);
+      const save = (column: "queue" | "cursor" | "continuation" | "mixTrim" | "compressor", value: string | number | null) => {
         db.query("INSERT OR IGNORE INTO playback (id, queue) VALUES (?, '[]')").run(id);
         db.query(`UPDATE playback SET ${column} = ? WHERE id = ?`).run(value, id);
       };
@@ -235,6 +237,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
         playbackContinuation(): PlaybackContinuation | null { const value = row()?.continuation; return value ? JSON.parse(value) : null; },
         mixTrim() { return row()?.mixTrim ?? 100; },
         saveMixTrim(level: number) { save("mixTrim", level); },
+        compressor(): CompressorSettings {
+          try { const value: unknown = JSON.parse(row()?.compressor ?? "null"); return { ...defaultCompressor, ...isCompressorPatch(value) ? value : {} }; }
+          catch { return { ...defaultCompressor }; }
+        },
+        saveCompressor(settings: CompressorSettings) { save("compressor", JSON.stringify(settings)); },
         savePlaybackContinuation(context: PlaybackContinuation | null) { save("continuation", context ? JSON.stringify(context) : null); },
         saveQueueCursor(entryId: string, beforeCommit?: () => void) { db.transaction(() => {
           const previous = row()?.cursor ?? null;

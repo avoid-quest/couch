@@ -203,6 +203,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     if (playbackId !== state.player.playbackId) throw new Error("The playing item changed. Use the current state and try again.");
   };
   let loaded: Extract<PlaybackCommand, { type: "load" }> | null = null;
+  // Errors finish the active progress record; retry retains the original viewing owner and actor.
+  let progressContext: { profileId: string; playedBy?: PlaybackActor } | undefined;
   const send = (command: PlaybackCommand) => {
     if (command.type === "load") {
       const entry = state.queue.find(item => item.id === state.currentEntryId);
@@ -371,7 +373,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
         const mediaId = playbackMediaId(currentEntry);
         const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
-        progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy);
+        progressContext = { profileId: mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy: playedBy ? { ...playedBy } : undefined };
+        progress.begin(currentEntry, playbackId, progressContext.profileId, progressContext.playedBy);
         options.prepareAudio?.();
         send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
@@ -552,11 +555,16 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     },
     // The newest tab of an output Device took over, or an output came back online: the current
     // item loads there where it is (#644 Tabs, Offline).
-    reload() {
+    reload(media?: Pick<MediaSource, "source" | "audioSource" | "hls">, retry = false) {
       const { playbackId, status, position, speed } = state.player;
-      if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status)) return;
-      const live = loaded.radio || state.queue.find(entry => entry.id === state.currentEntryId)?.live;
-      const { startPosition: _start, ...command } = loaded;
+      if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status) && !(retry && status === "error")) return;
+      const entry = state.queue.find(entry => entry.id === state.currentEntryId);
+      const live = loaded.radio || entry?.live;
+      if (retry && status === "error" && entry && progressContext) {
+        progress.begin(entry, loaded.playbackId, progressContext.profileId, progressContext.playedBy);
+        state.playedBy = progressContext.playedBy ? { ...progressContext.playedBy } : undefined;
+      }
+      const { startPosition: _start, ...command } = { ...loaded, ...media };
       send({ ...command, ...(live ? {} : { startPosition: position }), paused: pendingPause ?? status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
     },
     // No output is online: the Playback pauses where it is and waits (#644 Offline). The wait
@@ -590,6 +598,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
         return name && name !== actor.name ? { ...actor, name } : actor;
       };
       if (state.playedBy) state.playedBy = renamed(state.playedBy);
+      if (progressContext?.playedBy) progressContext.playedBy = renamed(progressContext.playedBy);
       if (state.queue.some(entry => entry.addedBy && renamed(entry.addedBy) !== entry.addedBy)) {
         state.queue = state.queue.map(entry => entry.addedBy ? { ...entry, addedBy: renamed(entry.addedBy) } : entry);
         try { store.saveQueue(state.queue, state.queueCursorEntryId); } catch { /* The saved queue keeps the old name until its next save. */ }
@@ -598,7 +607,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     },
     busy: (mediaId?: string) => ["loading", "playing", "paused"].includes(state.player.status) && (mediaId === undefined || progress.mediaId === mediaId),
     forget(mediaId: string) { progress.discard(mediaId); },
-    forgetProfile(id: string) { progress.forgetProfile(id); },
+    forgetProfile(id: string) { progress.forgetProfile(id); if (progressContext?.profileId === id) progressContext = undefined; },
     finish() { finishProgress(false, true); },
     notice(actor: PlaybackActor, text: string, kind?: NonNullable<SessionState["activity"]>["kind"]) {
       const activity = state.activity = { id: crypto.randomUUID(), actor, text, kind };

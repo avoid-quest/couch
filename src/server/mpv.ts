@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 import { helper } from "./helpers";
+import { compressorFilter, type CompressorSettings } from "../shared/compressor";
 
 // Channels Chromium can't decode (MPEG-2 video, AC-3/E-AC-3 or MP2 audio) play in a
 // downloaded mpv on the Device that runs Core, driven over its JSON IPC (#644 ticket 1).
@@ -15,6 +16,10 @@ export function createMpv(report: (state: PlayerState) => void) {
   let child: ChildProcess | null = null;
   let socket: Socket | null = null;
   let volume = 100;
+  let compressor: CompressorSettings | undefined;
+  let liveInput = false, compressorRejected = false;
+  const audioFilter = () => compressor?.enabled ? `@couch-compressor:lavfi=[${compressorFilter(compressor)}]` : "";
+  const applyCompressor = () => socket?.write(`${JSON.stringify({ command: ["af", "set", audioFilter()], request_id: 1 })}\n`);
   let state: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume, seekable: false, error: null };
   let loaded = false, paused = false, buffering = false, reportedAt = 0;
   const publish = (changes: Partial<PlayerState>, force = true) => {
@@ -23,7 +28,7 @@ export function createMpv(report: (state: PlayerState) => void) {
     reportedAt = performance.now();
     report(state);
   };
-  const status = () => !loaded || buffering ? "loading" : paused ? "paused" : "playing";
+  const status = () => compressorRejected ? "error" : !loaded || buffering ? "loading" : paused ? "paused" : "playing";
   const command = (...args: unknown[]) => socket?.write(`${JSON.stringify({ command: args })}\n`);
   const quit = () => {
     const current = child;
@@ -37,11 +42,17 @@ export function createMpv(report: (state: PlayerState) => void) {
     connection.once("connect", () => {
       if (child !== process) { connection.destroy(); return; }
       socket = connection;
+      applyCompressor();
       for (const [id, name] of ["time-pos", "duration", "pause", "paused-for-cache", "seekable", "speed"].entries()) command("observe_property", id, name);
       createInterface({ input: connection }).on("line", line => {
-        let message: { event?: string; name?: string; data?: unknown; reason?: string; file_error?: string };
+        let message: { event?: string; name?: string; data?: unknown; reason?: string; file_error?: string; request_id?: number; error?: string };
         try { message = JSON.parse(line); } catch { return; }
         if (child !== process) return;
+        if (message.request_id === 1 && message.error) {
+          const previouslyRejected = compressorRejected;
+          compressorRejected = message.error !== "success";
+          if (compressorRejected || previouslyRejected) publish({ status: status(), error: compressorRejected ? "mpv couldn't apply the compressor. Turn it off and try again." : null });
+        }
         if (message.event === "file-loaded") { loaded = true; publish({ status: status() }); }
         else if (message.event === "end-file" && message.reason !== "stop") publish(message.reason === "eof" ? { status: "ended" } : { status: "error", error: `mpv couldn't play this channel${message.file_error ? ` (${message.file_error})` : ""}.` });
         else if (message.event === "property-change") {
@@ -58,16 +69,20 @@ export function createMpv(report: (state: PlayerState) => void) {
   };
   return {
     send(message: PlaybackCommand) {
+      if (message.type !== "load" && "playbackId" in message && message.playbackId !== state.playbackId) return;
       switch (message.type) {
         case "load": {
           quit();
+          liveInput = !!message.liveSourceId;
+          compressor = liveInput ? undefined : message.compressor;
+          compressorRejected = false;
           loaded = false; paused = !!message.paused; buffering = false;
           publish({ playbackId: message.playbackId, status: "loading", position: 0, duration: null, seekable: false, error: null, speed: 1 });
           const { playbackId } = message;
           void helper("mpv").then(path => {
             if (state.playbackId !== playbackId) return;
             const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-config", "--no-terminal", "--no-input-default-bindings", "--force-window=immediate", "--fullscreen", "--keep-open=no", "--title=Couch", `--volume=${volume}`,
-              ...(message.paused ? ["--pause"] : []), ...(message.startPosition ? [`--start=${message.startPosition}`] : []), "--", message.source], { stdio: "ignore" });
+              ...audioFilter() ? [`--af=${audioFilter()}`] : [], ...(message.paused ? ["--pause"] : []), ...(message.startPosition ? [`--start=${message.startPosition}`] : []), "--", message.source], { stdio: "ignore" });
             child = process;
             process.once("error", error => { if (child === process) publish({ status: "error", error: `mpv didn't start: ${error.message}` }); });
             process.once("exit", () => { if (child === process) { child = null; publish({ status: "error", error: "The mpv window was closed." }); } });
@@ -79,6 +94,7 @@ export function createMpv(report: (state: PlayerState) => void) {
         case "audioPause": command("set_property", "pause", true); break;
         case "seek": command("seek", message.position, "absolute"); break;
         case "speed": command("set_property", "speed", message.speed); break;
+        case "compressor": if (!liveInput) { compressor = message.settings; applyCompressor(); } break;
         case "volume": volume = message.volume; command("set_property", "volume", volume); publish({}); break;
         case "stop": quit(); publish({ playbackId: null, status: "idle", position: 0, duration: null, seekable: false, error: null }); break;
       }
