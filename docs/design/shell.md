@@ -258,7 +258,7 @@ title's size.
 The app asks "Where is your Couch?": Host on this computer, the one primary
 button, with one line on what hosting means (phones, TVs and browsers join it,
 and closing the window keeps Couch running until it is quit from its menu bar
-or tray icon); or Another Couch's address (with the Couches it knows above it),
+or tray icon), with a quiet Advanced setup beside it; or Another Couch's address (with the Couches it knows above it),
 and where to find it. Hosting then walks three steps under short progress
 capsules, Back going to the step before and from the first to the chooser:
 
@@ -268,6 +268,13 @@ capsules, Back going to the step before and from the first to the chooser:
 3. **Pair your phone or TV**, only when shared: the pairing QR and code stand
    where the mark was, beside this Couch's address and the certificate warning
    the browser will show. Done opens Home.
+
+Advanced setup walks the same three steps but asks **How do devices
+connect?** in place of the share step: Devices & network's own network rows
+(`NetworkSettings`: Share on network, Allow HTTP connections, Network address
+and the live playback relay), across the screen's width with the mark small
+above, and one line saying all of them change later there. Continue pairs when
+sharing is on; otherwise Done opens Home.
 
 The step lives in the mode gate, since saving the name reconnects and remounts
 the shell. Pairing reuses that name. Unpaired, every device sees

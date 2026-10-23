@@ -376,7 +376,7 @@ Shared building blocks in `src/client/components`:
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `Stage`, `StageTitle`, `titleLength` and `titleFit` ([Stage](#stage), [Type](#type)); `useArtRatio` (`MediaArtwork.tsx`) reads a picture's own proportions.
 - `Onboarding`: first run's and pairing's screen, a Stage without artwork with
-  optional Back and step capsules ([Shell](design/shell.md#first-run-and-pairing)).
+  optional Back and step capsules; `wide` gives settings rows the full width ([Shell](design/shell.md#first-run-and-pairing)).
 - `Shelf` and `MediaTile`; `MediaRow` / `MediaList`; `MediaArtwork`
   ([Browse](design/browse.md#rows-and-tiles)). Artwork keeps its true shape,
   one per kind of item (`artShape`: 2:3 posters for films and series, 16:9 for

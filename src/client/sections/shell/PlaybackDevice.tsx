@@ -19,13 +19,16 @@ import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { TRY_AGAIN } from "@/copy";
 import { Onboarding } from "./Onboarding";
+import { NetworkSettings } from "@/sections/settings/couch/NetworkSettings";
+import { useSettingsScope } from "@/sections/settings/settings-scope";
 import { AnotherCouchForm, ForgetCouchDialog } from "./CouchForms";
 import { StatusLine } from "./StatusLine";
 import { useNavigation } from "@/navigation";
 
 export type Choice = AppMode;
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void>; chooseAgain: () => void; setupStep: SetupStep; setSetupStep: (step: SetupStep) => void };
-type SetupStep = "name" | "share" | "join";
+type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void>; chooseAgain: () => void; setupStep: SetupStep; setSetupStep: (step: SetupStep) => void; advanced: boolean; hostHere: (advanced: boolean) => void };
+// Advanced setup asks the network step instead of the share step.
+type SetupStep = "name" | "share" | "network" | "join";
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -46,6 +49,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   const busy = useRef(false);
   // First run's step lives here: saving the name reconnects, which remounts the shell under it.
   const [setupStep, setSetupStep] = useState<SetupStep>("name");
+  const [advanced, setAdvanced] = useState(false);
   useEffect(() => {
     if (!couchApp) return;
     let disposed = false;
@@ -93,7 +97,8 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     completeLocalSetup: async () => setChoice(await app.completeLocalSetup()),
     // Back from first run's name step shows the chooser again; Main keeps This computer until another choice.
     chooseAgain: () => { setChoice({ ...choice, mode: null }); setSetupStep("name"); },
-    setupStep, setSetupStep,
+    setupStep, setSetupStep, advanced,
+    hostHere: next => { setAdvanced(next); void device.choose("local"); },
   };
   return <Context.Provider value={device}>
     {choice.mode ? children : <main className="drag-region flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
@@ -125,7 +130,10 @@ function DeviceForm() {
   };
   return <div className="grid w-full gap-10">
     <div className="grid justify-items-start gap-3">
-      <Button autoFocus size="lg" data-host-here disabled={device.pending} onClick={() => void device.choose("local")}>Host on this computer</Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button autoFocus size="lg" data-host-here disabled={device.pending} onClick={() => device.hostHere(false)}>Host on this computer</Button>
+        <Button size="lg" variant="ghost" className="text-muted-foreground" disabled={device.pending} onClick={() => device.hostHere(true)}>Advanced setup</Button>
+      </div>
       <p className="max-w-prose text-sm text-muted-foreground">Phones, TVs and browsers on your network join it. Closing the window keeps Couch running so they still can; quit from its icon in the {trayName}.</p>
     </div>
     <div className="grid w-full">
@@ -215,18 +223,20 @@ export function useLocalSetupPending(credentials: Credentials | null) {
 
 // The server bumps the devices revision, which refreshes remoteControlEnabled.
 // The app window is this Couch's Device, so its name is asked here, once. Then whether to share it on the network
-// and, when shared, how phones and TVs join; Back walks the steps, then returns to the chooser.
+// and, when shared, how phones and TVs join; Back walks the steps, then returns to the chooser. Advanced setup swaps the
+// share step for Devices & network's own network rows.
 export function LocalSharingPrompt({ credentials }: { credentials: Credentials | null }) {
   const device = usePlaybackDevice();
   const pending = useLocalSetupPending(credentials);
   const savedName = useLocalDeviceName();
-  const { host } = useSessionGate();
+  const { host, details, connected, remoteControlEnabled } = useSessionGate();
+  const scope = useSettingsScope();
   const step = device?.setupStep, setStep = device?.setSetupStep ?? (() => {});
   const [name, setName] = useState<string | null>(null);
   const placeholder = defaultDeviceName(deviceId());
   const saveName = useMutation({
     mutationFn: () => saveLocalDeviceName(name?.trim() || savedName || placeholder),
-    onSuccess: () => setStep("share"),
+    onSuccess: () => setStep(device?.advanced ? "network" : "share"),
   });
   const sharing = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -254,9 +264,16 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
     {failure}
     <div className="flex flex-wrap gap-2"><Button autoFocus size="lg" disabled={busy} onClick={() => sharing.mutate(true)}>Share</Button><Button size="lg" variant="ghost" disabled={busy} onClick={() => sharing.mutate(false)}>Keep it to this computer</Button></div>
   </Onboarding>;
+  if (step === "network") return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("name") }} step={{ current: 2, total: 3 }} title="How do devices connect?"
+    description={<p>Change any of these later in Settings, under Devices & network.</p>} wide data-tv-navigation-scope>
+    {credentials && <div className="grid gap-10"><NetworkSettings credentials={credentials} connected={connected} urls={host?.urls ?? [credentials.origin]} remoteControlEnabled={remoteControlEnabled}
+      managedLan={details?.lanError !== undefined} lanError={details?.lanError} device={scope.device} couch={scope.couch} host administrator /></div>}
+    {failure}
+    <Button size="lg" className="justify-self-start" disabled={busy} onClick={() => remoteControlEnabled ? setStep("join") : finish.mutate()}>{remoteControlEnabled ? "Continue" : "Done"}</Button>
+  </Onboarding>;
   const url = host?.urls[0];
-  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep("share") }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <JoinQr url={url} credentials={credentials} /> : undefined} description={url ? <>
-    <p>On a phone, scan the code. On a TV or another computer, open <span className="break-all text-foreground">{url}</span> and enter the code.</p>
+  return <Onboarding key={step} back={{ label: "Back", onClick: () => setStep(device?.advanced ? "network" : "share") }} step={{ current: 3, total: 3 }} title="Pair your phone or TV" object={url && credentials ? <JoinQr url={url} credentials={credentials} /> : undefined} description={url ? <>
+    <p>On a phone, scan the code. On a TV or another computer, open <span className="whitespace-nowrap text-foreground">{url}</span> and enter the code.</p>
     <p>The browser will warn that the connection isn't private, because Couch makes its own certificate. Continue only for this address.</p>
   </> : <p role="status">Looking for this computer's network address…</p>} data-tv-navigation-scope>
     {failure}
