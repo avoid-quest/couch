@@ -17,7 +17,7 @@ export function createMpv(report: (state: PlayerState) => void) {
   let socket: Socket | null = null;
   let volume = 100;
   let compressor: CompressorSettings | undefined;
-  let liveInput = false;
+  let liveInput = false, compressorRejected = false;
   const audioFilter = () => compressor?.enabled ? `@couch-compressor:lavfi=[${compressorFilter(compressor)}]` : "";
   const applyCompressor = () => socket?.write(`${JSON.stringify({ command: ["af", "set", audioFilter()], request_id: 1 })}\n`);
   let state: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume, seekable: false, error: null };
@@ -28,7 +28,7 @@ export function createMpv(report: (state: PlayerState) => void) {
     reportedAt = performance.now();
     report(state);
   };
-  const status = () => !loaded || buffering ? "loading" : paused ? "paused" : "playing";
+  const status = () => compressorRejected ? "error" : !loaded || buffering ? "loading" : paused ? "paused" : "playing";
   const command = (...args: unknown[]) => socket?.write(`${JSON.stringify({ command: args })}\n`);
   const quit = () => {
     const current = child;
@@ -48,7 +48,11 @@ export function createMpv(report: (state: PlayerState) => void) {
         let message: { event?: string; name?: string; data?: unknown; reason?: string; file_error?: string; request_id?: number; error?: string };
         try { message = JSON.parse(line); } catch { return; }
         if (child !== process) return;
-        if (message.request_id === 1 && message.error && message.error !== "success") publish({ status: "error", error: "mpv couldn't apply the compressor. Turn it off and try again." });
+        if (message.request_id === 1 && message.error) {
+          const previouslyRejected = compressorRejected;
+          compressorRejected = message.error !== "success";
+          if (compressorRejected || previouslyRejected) publish({ status: status(), error: compressorRejected ? "mpv couldn't apply the compressor. Turn it off and try again." : null });
+        }
         if (message.event === "file-loaded") { loaded = true; publish({ status: status() }); }
         else if (message.event === "end-file" && message.reason !== "stop") publish(message.reason === "eof" ? { status: "ended" } : { status: "error", error: `mpv couldn't play this channel${message.file_error ? ` (${message.file_error})` : ""}.` });
         else if (message.event === "property-change") {
@@ -71,6 +75,7 @@ export function createMpv(report: (state: PlayerState) => void) {
           quit();
           liveInput = !!message.liveSourceId;
           compressor = liveInput ? undefined : message.compressor;
+          compressorRejected = false;
           loaded = false; paused = !!message.paused; buffering = false;
           publish({ playbackId: message.playbackId, status: "loading", position: 0, duration: null, seekable: false, error: null, speed: 1 });
           const { playbackId } = message;

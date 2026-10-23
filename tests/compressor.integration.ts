@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { liveFixture, until } from "./live-input.fixture";
 import { openStore } from "../src/server/store";
 import { defaultCompressor } from "../src/shared/compressor";
+import { playbackMediaId } from "../src/server/progress";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -86,6 +87,43 @@ test("compression enabled In sync prepares the existing screen before returning 
     await until(() => a.load()?.compressor?.enabled === false);
     assert.equal(a.load()!.startPosition, 4, "Disabling after an error retries from the current position");
   } finally { await f.close(); }
+});
+
+for (const observed of [false, true]) test(`disabling compression after an error ${observed ? "after" : "before"} the first progress report restores tracking`, { timeout: 15_000 }, async () => {
+  const f = await liveFixture(), saved = openStore(f.databasePath, true);
+  try {
+    const client = f.publisher, entry = { id: "film", title: "Film", source: `${f.hub.origin}/api/health` };
+    assert.equal((await client.command({ type: "enqueue", playNow: true, deviceId: client.id, entry })).ok, true);
+    await until(() => !!client.load());
+    const playbackId = client.load()!.playbackId, mediaId = playbackMediaId(entry)!;
+    assert.equal((await client.command({ type: "compressor", playbackId, settings: { enabled: true } })).ok, true);
+    await until(() => client.load()?.compressor?.enabled === true);
+    const owner = client.state.activeProfile.id, actor = client.state.playedBy;
+    assert.equal(actor?.deviceId, client.id);
+    if (observed) {
+      client.report({ playbackId, position: 12, duration: 100, seekable: true });
+      await until(() => saved.sharedProgress(mediaId)?.position === 12);
+    } else assert.equal(saved.sharedProgress(mediaId), null);
+    client.report({ playbackId, status: "error", error: "Couldn't start the compressor", position: observed ? 12 : 0 });
+    await until(() => client.state.player.status === "error");
+    const created = await f.api("/api/profiles", { name: "Another viewer" });
+    assert.equal(created.status, 201);
+    const { profile } = await created.json() as { profile: { id: string } };
+    assert.equal((await f.api(`/api/profiles/${profile.id}/select`, {})).status, 200);
+    await until(() => client.state.activeProfile.id === profile.id);
+    assert.equal((await client.command({ type: "compressor", playbackId, settings: { enabled: false } })).ok, true);
+    await until(() => client.load()?.compressor?.enabled === false);
+    client.report({ playbackId, position: 40, duration: 100, seekable: true, error: null });
+    await until(() => client.state.player.status === "playing");
+    assert.equal(saved.sharedProgress(mediaId)?.position, 40, "Recovered playback stopped saving progress");
+    assert.equal(saved.progressOwner(mediaId), owner);
+    assert.deepEqual(saved.sharedProgress(mediaId)!.playedBy, actor);
+    assert.deepEqual(client.state.playedBy, actor);
+    client.report({ playbackId, status: "ended", position: 100, duration: 100, seekable: true, error: null });
+    await until(() => saved.sharedProgress(mediaId)?.watched === true);
+    assert.equal(saved.sharedProgress(mediaId)?.watched, true);
+    assert.equal(saved.sharedProgress(mediaId)?.position, 0);
+  } finally { saved.close(); await f.close(); }
 });
 
 test("older queues migrate with compression off, and corrupt saved settings cannot enter the DSP", () => {

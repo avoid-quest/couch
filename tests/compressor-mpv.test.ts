@@ -29,7 +29,21 @@ test("mpv loads and replaces one named filter, reports rejection, and excludes l
     assert.equal(launches.length, 1, "changing settings must not start another mpv");
     lines.emit("line", JSON.stringify({ request_id: 1, error: "error running command" }));
     assert.equal(reports.at(-1).status, "error");
+    for (const event of [{ event: "file-loaded" }, { event: "property-change", name: "pause", data: true }, { event: "property-change", name: "paused-for-cache", data: true }, { event: "property-change", name: "paused-for-cache", data: false }]) {
+      lines.emit("line", JSON.stringify(event));
+      assert.equal(reports.at(-1).status, "error", "Playback events hid the rejected compressor");
+      assert.match(reports.at(-1).error, /couldn't apply the compressor/);
+    }
+    player.send({ type: "compressor", playbackId: "film", settings: active });
+    assert.equal(reports.at(-1).status, "error", "An unacknowledged edit hid the rejection");
+    lines.emit("line", JSON.stringify({ request_id: 1, error: "success" }));
+    assert.equal(reports.at(-1).status, "paused");
+    assert.equal(reports.at(-1).error, null);
+    lines.emit("line", JSON.stringify({ request_id: 1, error: "error running command" }));
     player.send({ type: "load", playbackId: "live", source: "https://example.test/live", liveSourceId: "capture", compressor: active }); await settle();
+    assert.equal(reports.at(-1).error, null, "A new load retained the previous rejection");
+    lines.emit("line", JSON.stringify({ event: "file-loaded" }));
+    assert.equal(reports.at(-1).status, "playing");
     assert.ok(!launches[1].some(arg => arg.startsWith("--af=")));
     const before = messages.length;
     player.send({ type: "compressor", playbackId: "live", settings: active });
