@@ -40,7 +40,7 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
     <main>
       <nav aria-label="Home"><a href="/"><img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" />couch.avoid.quest</a></nav>
       <h1>Download Couch</h1>
-      <p class="intro">When you open it, choose <strong>This computer</strong> or connect to another Couch.</p>
+      <p class="intro">Open it on the computer that will play and choose <strong>Host on this computer</strong>, or join another Couch. Phones don't need it: they join from the browser.</p>
 
       {channels.map(channel => <section aria-labelledby={channel} data-channel={channel} hidden={Object.keys(releases[channel]).length === 0}>
         <h2 id={channel}>{channel === "preview" ? "Preview" : "Stable"}</h2>
@@ -73,7 +73,7 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
         <pre><code id="deb-command">sudo apt install ./{deb?.filename}</code></pre>
         <p>Then run <code>sudo couch-setup --tv</code> and reboot. Couch gets its own account with automatic sign-in; your admin account stays. Pair your phone with the code on screen.</p>
       </details>
-      <footer>Dependency licenses and notices come with each package.</footer>
+      <footer><a href="/about">About Couch</a> Free and open source. Dependency licenses and notices come with each package.</footer>
     </main>
     <script is:inline define:vars={{ secondary }}>
       // Desktop-mode iPad Safari says Macintosh, and iPads can't run the Mac app. Only touch support tells them apart.
@@ -89,10 +89,11 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
   main { max-width: 48rem; margin: auto; padding: 2rem var(--gutter) 4rem; }
   nav a { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: var(--muted-foreground); }
   nav a:hover { color: var(--foreground); }
-  h1 { margin: 3rem 0 .5rem; font-size: 1.5rem; font-weight: 600; line-height: 2rem; letter-spacing: -.025em; }
+  h1 { margin: 3rem 0 .5rem; font-family: var(--font-heading); font-size: 1.5rem; font-weight: 600; line-height: 2rem; letter-spacing: -.012em; }
   .intro { font-size: .875rem; color: var(--muted-foreground); }
   section { margin-top: 3rem; }
   h2, summary { font-size: 1rem; font-weight: 500; }
+  h2 { font-family: var(--font-heading); font-weight: 600; }
   ul { display: flex; flex-direction: column; margin-top: 1rem; border-bottom: 1px solid var(--border); }
   li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.5rem; padding-block: 1.25rem; border-top: 1px solid var(--border); }
   li[data-mine] { order: -1; }
@@ -106,6 +107,7 @@ const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform ==
   details p { margin-top: .75rem; max-width: 60ch; font-size: .875rem; line-height: 1.6; color: var(--muted-foreground); }
   pre { overflow-x: auto; margin-top: .75rem; padding-block: 1rem; border-top: 1px solid var(--border); font-size: .875rem; }
   footer { margin-top: 3rem; font-size: .75rem; }
+  footer a { margin-right: 1rem; color: var(--foreground); }
   @media (max-width: 40rem) {
     li { grid-template-columns: 1fr auto; }
     li [data-version] { display: none; }
