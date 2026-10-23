@@ -25,10 +25,10 @@ let checked = { origin: "", at: 0 };
 // A pending check belongs to its Core's store and lifetime, never another Core's startup.
 const healing = new WeakMap<object, Promise<string>>();
 
-async function servingOrigin(origin: string, signal?: AbortSignal): Promise<string | undefined> {
+async function servingOrigin(origin: string, signal: AbortSignal | undefined, request: typeof fetch): Promise<string | undefined> {
   try {
     const requestSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
-    const response = await publicFetch(origin, { headers: { "User-Agent": userAgent }, signal: requestSignal });
+    const response = await request(origin, { headers: { "User-Agent": userAgent }, signal: requestSignal });
     requestSignal.throwIfAborted();
     const current = new URL(response.url).origin;
     if (response.ok && validStreamingCommunityOrigin(current) && parseInertiaPage(await response.text())) {
@@ -42,23 +42,23 @@ async function servingOrigin(origin: string, signal?: AbortSignal): Promise<stri
 // The stored origin, healed: a moved site is followed through its redirect, and a dead one is
 // replaced by the first published address that serves the site. A saved origin that still
 // serves the site is kept. Each origin is checked at most every ten minutes.
-export async function healStreamingCommunityOrigin(store: { streamingCommunityOrigin(): string; saveStreamingCommunityOrigin(origin: string): void }, signal?: AbortSignal): Promise<string> {
+export async function healStreamingCommunityOrigin(store: { streamingCommunityOrigin(): string; saveStreamingCommunityOrigin(origin: string): void }, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<string> {
   signal?.throwIfAborted();
   const stored = store.streamingCommunityOrigin();
   if (checked.origin === stored && Date.now() - checked.at < 600_000) return Promise.resolve(stored);
   const pending = healing.get(store);
   if (pending) return pending;
   const check = (async () => {
-    let found = await servingOrigin(stored, signal);
+    let found = await servingOrigin(stored, signal, request);
     for (const page of addressPages) {
       if (found) break;
       signal?.throwIfAborted();
       const requestSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
-      const text = await publicFetch(page, { headers: { "User-Agent": userAgent }, signal: requestSignal }).then(response => response.text(), () => "");
+      const text = await request(page, { headers: { "User-Agent": userAgent }, signal: requestSignal }).then(response => response.text(), () => "");
       signal?.throwIfAborted();
       if (requestSignal.aborted) continue;
       for (const candidate of new Set(text.toLowerCase().match(/https:\/\/[a-z0-9.-]+/g))) {
-        if (validStreamingCommunityOrigin(candidate) && (found = await servingOrigin(candidate, signal))) break;
+        if (validStreamingCommunityOrigin(candidate) && (found = await servingOrigin(candidate, signal, request))) break;
       }
     }
     // A fetch/body reader can ignore abort. Neither SQLite nor the completed-origin cache outlives Core.
