@@ -18,3 +18,10 @@ test("one-character words participate in close and strong matches", () => {
   expect(searchRelevance("nts").close({ title: "Quints", meta: "" })).toBe(false);
   expect(searchRelevance("café").strong({ title: "Cafe\u0301 live" })).toBe(true);
 });
+
+test("radio relevance includes metadata omitted from its caption, without matching the next show", () => {
+  const hit = { title: "NTS Radio", meta: "Early Bird, Jazz", radio: { id: "station", title: "NTS Radio", url: "https://example.com/radio", host: "Alex", tags: ["Talk"], categories: ["Experimental"], group: "Community network", next: { start: 0, title: "Afternoon selections" } } };
+  for (const query of ["Alex", "Talk", "Experimental", "Community"]) expect(searchRelevance(query).close(hit)).toBe(true);
+  expect(searchRelevance("Alex").strong(hit)).toBe(false);
+  expect(searchRelevance("Afternoon").close(hit)).toBe(false);
+});

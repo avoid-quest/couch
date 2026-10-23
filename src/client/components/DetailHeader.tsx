@@ -54,11 +54,13 @@ export function Description({ text, className }: { text?: string | null; classNa
  * Blender"; its length too until it's started), how far it got as Home's progress line, then one row of verbs before the synopsis: Play (or Resume, with From start beside it), Queue, Save and Play on, with
  * anything else in one "…" menu. The row is one focus stop per verb, and its first enabled verb is where the page starts.
  */
-export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", fit, duration, position, play, fromStart, queue, save, playOn, more = [], trail, children }: {
+export function DetailHeader({ title, meta, context, description, thumbnail, shape = "video", fit, duration, position, progress, play, fromStart, queue, save, playOn, more = [], trail, children }: {
   title: string; meta?: string; context?: ReactNode; description?: string | null; thumbnail?: string; shape?: ArtShape;
   /** Logos keep their margins: contain them in the frame. */
   fit?: "contain";
   duration?: number | null; position?: number;
+  /** Progress the item's own position doesn't give (a broadcast's window), in the progress line's place. */
+  progress?: ReactNode;
   /** Play, Resume or Play all; `aria` names what plays when it isn't the title (a station's show). */
   play?: Verb & { aria?: string };
   fromStart?: Verb; queue?: Verb;
@@ -82,9 +84,9 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
       {trail}
       <StageTitle title={title} />
     </div>
-    {(line || context || started) && <div className="grid w-full justify-items-start gap-2">
+    {(line || context || started || progress) && <div className="grid w-full justify-items-start gap-2">
       <p className="detail-meta text-base text-muted-foreground">{line && <span>{line}</span>}{context}</p>
-      {started && <ProgressLine position={position} duration={duration} />}
+      {started ? <ProgressLine position={position} duration={duration} /> : progress}
     </div>}
     {verbs && <div data-nav-row className={cn("mt-1 w-full", verbRow)}>
       {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="fill-current" />{on(play.label)}</Button>}
