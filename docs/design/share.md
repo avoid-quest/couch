@@ -46,10 +46,11 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   sound in the desktop app.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
-  place, disabled. Without a choice the share waits in Home's Shared sources,
-  as it always has.
+  place, disabled, and leaves the choice. Without a choice the share waits in
+  Home's Shared sources, as it always has.
 - **Start sharing** starts the capture, then plays it on the chosen devices in
-  order: Play on the first, then each other joins the same playback.
+  order: the first that takes it plays it, then each other joins the same
+  playback. Closing the dialog while it starts cancels it, as Cancel does.
 - **Disabled keeps its place:** a browser that can't capture a display (a
   phone's) keeps Screen, Window and Sound only, disabled, with today's reason
   under the chips.
@@ -77,7 +78,8 @@ Sheet on phones and the TV:
   `RTCPeerConnection.getStats()`). Where it plays names only exceptions; this
   panel is the sharer's own, so every row names its route. Behind and "Can't
   play: {reason}" (in red) read as Where it plays says them, and a row whose
-  sound plays shows the [level](../design.md#motion).
+  sound plays shows the [level](../design.md#motion), moving only where Where
+  it plays' would (online, unmuted, above zero).
 - **Picture**, changed live through `applyConstraints` on the captured track,
   without restarting it; **Mute microphone** turns the microphone's track off
   (`track.enabled`), keeping the capture and its connections.
@@ -96,7 +98,8 @@ Sheet on phones and the TV:
   sharing waits.
 - A receiver that can't play: its row says "Can't play: {reason}" in red.
 - The last viewer leaves while the capture still runs: one toast, "Still
-  sharing {name}, on no screens", with Stop sharing.
+  sharing {name}, on no screens", with Stop sharing. It leaves once a viewer
+  returns or the share ends.
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.

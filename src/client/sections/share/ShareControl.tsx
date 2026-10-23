@@ -11,7 +11,7 @@ import type { LiveSharing } from "@/session/live";
 import type { LiveRoute } from "@/session/live-route";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
-import { stillSharing } from "@/toasts";
+import { dismiss, stillSharing } from "@/toasts";
 import { QualitySelect, ShareDialog } from "./ShareDialog";
 import { shareKindOf, viewerLine, viewersOf, type Viewer } from "./share";
 import { useShowShare } from "./show-share";
@@ -29,12 +29,17 @@ export function ShareControl() {
   const viewers = source ? viewersOf(state, source.id) : [];
   const stop = useStop();
   const { shown } = useShowShare();
-  // The capture keeps running once nobody watches: one toast, each time the last viewer leaves.
+  // The capture keeps running once nobody watches: one toast, each time the last viewer leaves, gone once a viewer
+  // returns or the share ends; its Stop stops only the share it spoke of.
   const watched = useRef(false);
   useEffect(() => {
-    if (viewers.length) watched.current = true;
-    else if (watched.current && sharing) { watched.current = false; stillSharing(sharing.source.name, () => void stop.run()); }
-    if (!sharing) watched.current = false;
+    if (viewers.length) { watched.current = true; dismiss("sharing"); }
+    else if (watched.current && sharing) {
+      watched.current = false;
+      const id = sharing.source.id;
+      stillSharing(sharing.source.name, () => { if (liveSharing.current()?.source.id === id) void stop.run(); });
+    }
+    if (!sharing) { watched.current = false; dismiss("sharing"); }
   }, [viewers.length, sharing?.source.id]);
   if (sharing) return <Capsule sharing={sharing} viewers={viewers} stop={stop} tv={tvPresentation} />;
   if (!shown || !navigator.mediaDevices?.getUserMedia) return null;
@@ -145,7 +150,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
           <span className="text-body break-words">{viewer.device.name}</span>
           <span className={cn("text-meta", viewer.error ? "text-destructive" : "text-muted-foreground")}>{viewerLine(viewer, routes[viewer.device.id])}</span>
         </div>
-        {viewer.sound && <Level moving={viewer.playing && !viewer.behind && !viewer.error && !viewer.device.muted} className="text-muted-foreground" />}
+        {viewer.sound && <Level moving={viewer.playing && !viewer.behind && !viewer.error && viewer.device.online && !viewer.device.muted && viewer.device.volume > 0} className="text-muted-foreground" />}
       </li>)}
       {!viewers.length && <li className="border-t py-2.5 text-meta text-muted-foreground">Not playing anywhere yet.</li>}
     </ul>

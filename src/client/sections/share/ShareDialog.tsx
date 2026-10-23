@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -51,7 +51,7 @@ export function ShareDialog({ open, onOpenChange, tv }: { open: boolean; onOpenC
 }
 
 function ShareForm({ onDone }: { onDone: () => void }) {
-  const { state, connected, startLive, endLive, liveAudioInputs, run, command, setError: report } = useSessionGate();
+  const { state, connected, startLive, endLive, liveAudioInputs, liveSharing, run, command, setError: report } = useSessionGate();
   const navigate = useNavigate();
   const here = deviceId();
   const browser = { media: !!navigator.mediaDevices?.getUserMedia, display: !!navigator.mediaDevices?.getDisplayMedia };
@@ -76,6 +76,14 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   // Another window of this device already shares; Core keeps one source per capturing window.
   const elsewhere = state?.liveSources?.find(item => item.deviceId === here);
   const available = connected && !pending && !listing;
+  // A device that keeps its screen to itself still takes the sound, and one that keeps both can't take this.
+  const takes = (device: (typeof devices)[number]) => kind.pictures ? device.sharing?.video || device.sharing?.audio && sound : device.sharing?.audio;
+  // A chosen device that the kind or sound no longer suits drops out of the choice.
+  const chosen = devices.filter(device => targets.includes(device.id) && takes(device));
+  // Closing the dialog while the capture starts cancels it, as Cancel does. Once published, the header's capsule takes
+  // Share's place and unmounts the dialog itself, which ends nothing.
+  const starting = useRef(false);
+  useEffect(() => () => { if (starting.current && !liveSharing.current()) void endLive().catch(() => {}); }, []);
   const ready = available && !reason && !elsewhere && (!lists || !kind.pictures || !!source);
 
   const checkAccess = async (on = kind) => {
@@ -118,13 +126,16 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     if (!ready) return;
     setPending(true); setError(null);
     try {
-      const started = await startLive(selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, sound }));
-      const [first, ...rest] = devices.filter(device => targets.includes(device.id));
+      starting.current = true;
+      const started = await startLive(selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, sound })).finally(() => { starting.current = false; });
       onDone();
       // Without a choice it waits in Home's Shared sources, as it always has.
-      if (!first) { void navigate({ to: "/" }); return; }
-      if (await run({ type: "playLive", sourceId: started.id, deviceId: first.id })) {
-        for (const device of rest) await command({ type: "playLive", sourceId: started.id, deviceId: device.id }).catch(reason => report(errorText(reason)));
+      if (!chosen.length) { void navigate({ to: "/" }); return; }
+      // The first device that takes it plays it; each one after joins that playback.
+      let playing = false;
+      for (const device of chosen) {
+        if (!playing) playing = await run({ type: "playLive", sourceId: started.id, deviceId: device.id });
+        else await command({ type: "playLive", sourceId: started.id, deviceId: device.id }).catch(reason => report(errorText(reason)));
       }
     } catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setPending(false); }
@@ -157,14 +168,10 @@ function ShareForm({ onDone }: { onDone: () => void }) {
       </div>
     </Row>}
     {devices.length > 0 && <Row label="Play on">
-      <ToggleGroup type="multiple" aria-label="Play on" spacing={2} className="flex-wrap justify-end" value={targets} disabled={pending} onValueChange={setTargets}>
-        {devices.map(device => {
-          // A device that keeps its screen to itself still takes the sound, and one that keeps both can't take this.
-          const takes = kind.pictures ? device.sharing?.video || device.sharing?.audio && sound : device.sharing?.audio;
-          return <ToggleGroupItem key={device.id} value={device.id} className={chip} disabled={!takes} title={takes ? undefined : "Private"}>
-            {targets.includes(device.id) && <Check aria-hidden="true" />}{device.name}
-          </ToggleGroupItem>;
-        })}
+      <ToggleGroup type="multiple" aria-label="Play on" spacing={2} className="flex-wrap justify-end" value={chosen.map(device => device.id)} disabled={pending} onValueChange={setTargets}>
+        {devices.map(device => <ToggleGroupItem key={device.id} value={device.id} className={chip} disabled={!takes(device)} title={takes(device) ? undefined : "Private"}>
+          {chosen.includes(device) && <Check aria-hidden="true" />}{device.name}
+        </ToggleGroupItem>)}
       </ToggleGroup>
     </Row>}
     {kind.pictures && <>
