@@ -18,6 +18,9 @@ type Props = {
 };
 
 // Plain HTTP to another computer; the host's own window uses loopback, which never loses HTTP.
+/** Keys Share on network's save so first-run setup can wait for it and read what it saved. */
+export const sharingMutationKey = ["settings", "sharing"];
+
 const overHttp = (origin: string) => { const url = new URL(origin); return url.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname); };
 
 /** How the Couch reaches the network: sharing, transports, its address and the live relay. Admins change it from any paired device. */
@@ -31,7 +34,7 @@ export function NetworkSettings({ credentials, connected, urls, remoteControlEna
   const domain = domainDraft ?? savedDomain;
   const port = urls[0] && new URL(urls[0]).port;
   // The server bumps the devices revision, which refreshes remoteControlEnabled.
-  const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
+  const sharing = useMutation({ mutationKey: sharingMutationKey, mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
   const saveHttp = useMutation({
     mutationFn: (enabled: boolean) => apiSend<{ enabled: boolean }>(credentials, "/api/settings/http", { enabled }),
     onSuccess: result => queryClient.setQueryData(lanHttpQuery(credentials).queryKey, result),

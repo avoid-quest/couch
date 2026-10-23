@@ -5,7 +5,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { Spinner } from "@/components/ui/spinner";
 import { pairingCodeQuery } from "@/api/devices";
@@ -19,7 +19,7 @@ import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { TRY_AGAIN } from "@/copy";
 import { Onboarding } from "./Onboarding";
-import { NetworkSettings } from "@/sections/settings/couch/NetworkSettings";
+import { NetworkSettings, sharingMutationKey } from "@/sections/settings/couch/NetworkSettings";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
 import { AnotherCouchForm, ForgetCouchDialog } from "./CouchForms";
 import { StatusLine } from "./StatusLine";
@@ -246,6 +246,9 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
     },
   });
   const finish = useMutation({ mutationFn: () => device!.completeLocalSetup() });
+  // Network's own Share on network save: wait for it, and trust what it saved until the devices revision catches up.
+  const networkSave = useMutationState({ filters: { mutationKey: sharingMutationKey }, select: mutation => mutation.state }).at(-1);
+  const shared = networkSave?.status === "success" ? networkSave.variables === true : remoteControlEnabled;
   if (!pending) return null;
   const busy = saveName.isPending || sharing.isPending || finish.isPending;
   const error = saveName.error ?? sharing.error ?? finish.error;
@@ -270,7 +273,7 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
     {credentials && <div className="grid gap-10"><NetworkSettings credentials={credentials} connected={connected} urls={host?.urls ?? [credentials.origin]} remoteControlEnabled={remoteControlEnabled}
       managedLan={details?.lanError !== undefined} lanError={details?.lanError} device={scope.device} couch={scope.couch} host administrator /></div>}
     {failure}
-    <Button size="lg" className="justify-self-start" disabled={busy} onClick={() => remoteControlEnabled ? setStep("join") : finish.mutate()}>{remoteControlEnabled ? "Continue" : "Done"}</Button>
+    <Button size="lg" className="justify-self-start" disabled={busy || networkSave?.status === "pending"} onClick={() => shared ? setStep("join") : finish.mutate()}>{shared ? "Continue" : "Done"}</Button>
   </Onboarding>;
   // The window's own loopback origin stays first until the LAN address arrives over IPC.
   const url = host?.urls.find(value => new URL(value).hostname !== "127.0.0.1");
