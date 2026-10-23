@@ -11,7 +11,7 @@ const device = (id: string, extra: Partial<DeviceSummary> = {}): DeviceSummary =
 
 describe("what to share", () => {
   test("each kind captures as Couch does today, and the browser's picker opens on the chosen surface", () => {
-    expect(selectionOf(kind("window"), { source: screens[0], quality: "720p", sound: false })).toEqual({ kind: "screen", sourceId: "window:1", videoQuality: "720p", includeAudio: false, surface: "window", title: "Lisbon, May 2026" });
+    expect(selectionOf(kind("window"), { source: screens[0], quality: "720p", sound: false })).toEqual({ kind: "screen", sourceId: "window:1", videoQuality: "720p", includeAudio: false, surface: "window" });
     expect(selectionOf(kind("screen"), { quality: "1080p", sound: true })).toEqual({ kind: "screen", videoQuality: "1080p", includeAudio: true, surface: "monitor" });
     expect(selectionOf(kind("microphone"), { audioDeviceId: "usb", quality: "1080p", sound: true })).toEqual({ kind: "microphone", audioDeviceId: "usb" });
     expect(selectionOf(kind("microphone"), { audioDeviceId: "default", quality: "1080p", sound: true })).toEqual({ kind: "microphone" });

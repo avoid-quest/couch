@@ -5,8 +5,8 @@ import type { CaptureKind } from "./capture";
 export const AIRPLAY_PUBLISHER = "airplay";
 export type LiveSource = { id: string; deviceId: string; name: string; kind: CaptureKind | "airplay"; audio: boolean; video: boolean };
 export type LiveVideoQuality = "720p" | "1080p" | "original";
-// surface: the browser picker's first offer (a screen or a window). title: what this device calls its share.
-export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; videoQuality?: LiveVideoQuality; includeAudio?: boolean; surface?: "monitor" | "window"; title?: string };
+// surface: the browser picker's first offer (a screen or a window).
+export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; videoQuality?: LiveVideoQuality; includeAudio?: boolean; surface?: "monitor" | "window" };
 
 export type LivePeer = { peerId: string; deviceId: string; picture: boolean; sound: boolean };
 export type LiveSignal = { description?: { type: "offer" | "answer"; sdp: string }; candidate?: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null } | null };

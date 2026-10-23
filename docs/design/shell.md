@@ -62,9 +62,10 @@ top bar is the Couch switch, the search field, then Share as an icon. A narrow T
 header (`[data-window-controls]`). Unpaired there is no header (see First run
 and pairing).
 
-**Share.** On a device that can capture, Share opens the Share dialog; while
-this device shares, it becomes the capsule (its picture, title, viewers and
-Stop sharing) whose panel lists who watches and how ([Share](share.md)). While
+**Share.** On a device that can capture, Share opens the Share dialog (a TV
+hides it until Settings → This device shows it); while this device shares, it
+becomes the capsule (its picture, the share's name, viewers and Stop sharing)
+whose panel lists who watches and how ([Share](share.md)). While
 it shows, the right column takes the room it needs. It stays local to the
 publishing device: another device's Remote can't use it. The player's top band
 keeps "Sharing screen" with Stop sharing.

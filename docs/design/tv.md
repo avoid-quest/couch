@@ -5,7 +5,8 @@ it adds is for a remote with only arrows, OK and Back:
 
 - spatial navigation, with focus on page entry and Back restored;
 - its own name in the header instead of the Couch switch, a small clock, and
-  no Remote tab or Keyboard shortcuts;
+  no Remote tab or Keyboard shortcuts; Share waits in Settings → This device
+  unless shown in the header ([Share](share.md));
 - OK held 500 ms on a row or tile opens its menu; a short OK acts on release
   ([Menus](../design.md#menus));
 - no hover (the `hover` variant never applies), shelf scrollbars, Back arrows,

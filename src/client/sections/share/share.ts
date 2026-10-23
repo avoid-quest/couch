@@ -46,7 +46,7 @@ export function selectionOf(kind: ShareKind, choice: { source?: CaptureSource; s
   return {
     kind: kind.capture,
     ...kind.capture !== "microphone" && source ? { sourceId: source.id } : {},
-    ...kind.pictures ? { videoQuality: choice.quality, includeAudio: choice.sound, surface: kind.pictures === "screen" ? "monitor" as const : "window" as const, ...source ? { title: source.name } : {} } : {},
+    ...kind.pictures ? { videoQuality: choice.quality, includeAudio: choice.sound, surface: kind.pictures === "screen" ? "monitor" as const : "window" as const } : {},
     ...kind.inputs && choice.audioDeviceId && choice.audioDeviceId !== "default" ? { audioDeviceId: choice.audioDeviceId } : {},
   };
 }

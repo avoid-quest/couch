@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { SectionRowsSettings } from "./SectionRowsSettings";
 import { Switch } from "@/components/ui/switch";
 import { homeRowLabels, useHomeRows } from "@/sections/home/home-rows";
+import { ShareButton } from "@/sections/share/ShareControl";
+import { useShowShare } from "@/sections/share/show-share";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { videoQualityOptions } from "@/video-quality";
@@ -26,6 +28,7 @@ export function ThisDevicePage() {
   const { credentials } = useShell();
   const { nativeHost, tvPresentation, connected, details, state, videoQualityPreference, screenWakeLock } = useSessionGate();
   const { host, couch, administrator } = useSettingsScope();
+  const share = useShowShare();
   return <SettingsLayout section="device">
     <SettingsSection>
       <DeviceNameSettings />
@@ -42,6 +45,11 @@ export function ThisDevicePage() {
       <SettingsRow label="Online video quality" description="For video you start here, wherever it plays.">
         <ChoiceGroup label="Online video quality" value={videoQualityPreference.quality} options={videoQualityOptions} onValueChange={videoQualityPreference.save} />
       </SettingsRow>
+      {/* Hidden from the header (a TV's default), Share starts here. */}
+      {!!navigator.mediaDevices?.getUserMedia && <SettingsRow label="Show Share in the header" htmlFor="show-share">
+        <Switch id="show-share" checked={share.shown} onCheckedChange={share.save} />
+        {!share.shown && <ShareButton tv={tvPresentation}>Share screen or sound</ShareButton>}
+      </SettingsRow>}
     </SettingsSection>
     {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
     {!nativeHost && screenWakeLock.error && <Alert variant="destructive"><AlertDescription>{screenWakeLock.error}</AlertDescription></Alert>}

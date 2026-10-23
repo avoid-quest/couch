@@ -14,7 +14,10 @@ it.
 
 **Share** sits in the header's right cluster, before the search field (an icon
 after it in a phone's top bar), on every device whose browser can capture.
-It opens one Dialog on desktop and a bottom Sheet on phones and the TV:
+**Show Share in the header** (Settings → This device, saved per device) hides
+it; until chosen it is off on a TV and on everywhere else. While it is off, the
+same row offers Share screen or sound. It opens one Dialog on desktop and a
+bottom Sheet on phones and the TV:
 
 ```
 Share this device                                  ×
@@ -55,19 +58,18 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 
 The header's Share becomes the **capsule**: a silent picture of what goes out
 (the capture's own video track; a white disc with its kind's glyph for sound),
-its title (the chosen screen's or window's name, or the input's), how many
-devices watch, and Stop sharing. It floats on the toasts' surface and shadow,
+the share's name, how many devices watch, and Stop sharing, its one place. The
+name is the one Home, the Stage and the now-playing bar show ("Studio Mac ·
+Screen"). It floats on the toasts' surface and shadow,
 without the bar's filter, which stays the page's one backdrop filter
-([Glass](../design.md#glass)). Below `xl` the title leaves, below 960px the
-count too (thumbnail and Stop); on a phone it is the picture alone, and Stop
-waits in its panel, so a stray tap beside the search never ends sharing for
-every receiver.
+([Glass](../design.md#glass)). Below `xl` the name leaves, below 960px the
+count too (thumbnail and Stop); on a phone Stop keeps only its icon.
 
 Pressing it opens its panel, a Popover hanging from it on desktop and a bottom
 Sheet on phones and the TV:
 
-- The picture, the title, what it is ("Window, with this computer's sound")
-  and since when.
+- The picture, the name, what it is when the name doesn't say it ("Window,
+  with this computer's sound") and since when.
 - **Who's watching**, one divided row per device the share plays on, from the
   playbacks that play it: its channels and its route, "Picture and sound,
   direct" or "Sound, through the relay", read every two seconds from the
@@ -83,7 +85,7 @@ Sheet on phones and the TV:
   relay can fix it, linking Devices & network; with one, that it couldn't
   connect even through it.
 - **Where it plays**, while this window views the playback that plays the
-  share, and **Stop sharing**.
+  share. Stop sharing stays on the capsule.
 
 ## When it doesn't work
 
@@ -94,7 +96,7 @@ Sheet on phones and the TV:
   sharing waits.
 - A receiver that can't play: its row says "Can't play: {reason}" in red.
 - The last viewer leaves while the capture still runs: one toast, "Still
-  sharing {title}, on no screens", with Stop sharing.
+  sharing {name}, on no screens", with Stop sharing.
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.

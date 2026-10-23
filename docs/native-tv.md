@@ -145,7 +145,7 @@ entry on its first device you can choose, Down to the next and Back to its butto
 its Sync line (revealed by Sync… once the second output's sound joins) and from its fader onto it, Saved removal/Undo/order,
 a remote's Undo by Up past the tabs (Back leaves it, OK undoes and returns focus to the tab),
 retained favorite and Live TV actions, and a Remote that can't choose or open this device's
-capture on Sharing while its own pointer and keys still can (it drives the bundle's copy of
+capture in the Share dialog (from the header, or Settings → This device where a TV hides it) while its own pointer and keys still can (it drives the bundle's copy of
 `applyTvNavigation`, the path Remote keys take; `runSharingLocalOnlyRegression()` runs it alone). Cold and warm Saved Back retain the
 item opener after settling and continue arrow navigation from it. Live TV checks
 the labeled Play on device group, a successful Queue request and recipient selection.

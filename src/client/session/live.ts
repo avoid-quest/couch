@@ -5,13 +5,13 @@ import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 import { routeOf, type LiveRoute } from "./live-route";
 
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; title: string; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
+type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
 /**
  * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
  * silent preview; relay: a TURN relay is offered to its connections.
  */
-export type LiveSharing = { source: LiveSource; title: string; stream: MediaStream; quality: LiveVideoQuality; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
+export type LiveSharing = { source: LiveSource; stream: MediaStream; quality: LiveVideoQuality; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 // Bound capture before encoding it, at most 30 fps.
@@ -270,9 +270,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const label = selection.kind === "microphone" ? "Microphone" : selection.kind === "system-audio" ? "System audio" : "Screen";
         const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-        // Named by what was chosen in Couch, else by the input the browser opened ("iPhone Microphone").
-        const title = selection.title ?? (selection.kind === "microphone" && audioTracks[0]?.label || label);
-        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, title, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
+        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
@@ -294,7 +292,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     sharing(): LiveSharing | null {
       const current = publication?.published ? publication : undefined;
       if (!current) return null;
-      return { source: current.source, title: current.title, quality: current.quality, stream: current.preview, surface: current.surface, since: current.since, relay: options.iceServers.some(server => [server.urls].flat().some(url => /^turns?:/.test(url))), muted: current.source.kind === "microphone" && current.stream.getAudioTracks().every(track => !track.enabled) };
+      return { source: current.source, quality: current.quality, stream: current.preview, surface: current.surface, since: current.since, relay: options.iceServers.some(server => [server.urls].flat().some(url => /^turns?:/.test(url))), muted: current.source.kind === "microphone" && current.stream.getAudioTracks().every(track => !track.enabled) };
     },
     /** A new picture quality for the capture going out, without restarting it. */
     async setQuality(quality: LiveVideoQuality) {
