@@ -39,7 +39,7 @@ export function DisplaySettings({ credentials, connected, title }: { credentials
           <Button variant="outline" aria-label={`Try ${output.name}`} disabled={!connected || pending || !!state.preview || !output.connected || !output.width} onClick={() => change("preview", { output: output.id })}>Try</Button>
         </SettingsRow>
       ))}
-      {state?.preview && <SettingsRow label="Keep this screen?" description={`Reverting in ${Math.max(0, Math.ceil((state.preview.expiresAt - now) / 1_000))} s.`}>
+      {state?.preview && <SettingsRow role="status" label="Keep this screen?" description={`Reverting in ${Math.max(0, Math.ceil((state.preview.expiresAt - now) / 1_000))} s.`}>
         <Button disabled={pending || !connected} onClick={() => change("confirm", { token: state.preview!.token })}>Keep</Button>
         <Button variant="outline" disabled={pending || !connected} onClick={() => change("cancel", { token: state.preview!.token })}>Revert</Button>
       </SettingsRow>}

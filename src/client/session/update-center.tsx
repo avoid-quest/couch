@@ -303,7 +303,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
   const value: UpdateCenterValue = { targets, canMaintain, helpers: canMaintain ? helperQuery.data : undefined,
     helperError: helperActionError ?? (helperQuery.error ? errorText(helperQuery.error) : undefined), batch,
     busy: running || active, checking: checking || targets.some(target => activeState(target.state)) || helperQuery.data?.status === "checking",
-    checkFailed: !!helperActionError || Object.values(actionErrors).some(Boolean),
+    checkFailed: !!helperActionError || targets.some(target => !!actionErrors[target.id]),
     check, update, setChannel };
   return <UpdateCenterContext.Provider value={value}>{children}</UpdateCenterContext.Provider>;
 }

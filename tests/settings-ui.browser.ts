@@ -6,6 +6,7 @@ import { settingsPages } from "../src/shared/settings-pages";
 import { avoidRadioPlaylistId } from "../src/shared/radio";
 import type { SoundView } from "../src/client/api/settings";
 import type { SoundState } from "../src/shared/sound";
+import type { DisplayState } from "../src/shared/display";
 
 const wait = () => new Promise(resolve => setTimeout(resolve, 250));
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
@@ -37,7 +38,7 @@ export async function mountSettingsAudit() {
       codeReads++;
       return codeFailed ? Response.json({ error: "Couldn't load the code." }, { status: 503 }) : Response.json({ code: codeReads === 1 ? "123456" : "654321" });
     }
-    if (path in responses) return Response.json(responses[path]);
+    if (path in responses) return Response.json(await responses[path]);
     return uiFetch(input, init);
   };
   const hardware = () => audit.updateSession(gate => ({ ...gate,
@@ -51,6 +52,61 @@ export async function mountSettingsAudit() {
     codeReads: () => codeReads,
     respond(path: string, value: unknown) { responses[path] = value; },
   };
+}
+
+export async function runSoundTestFocusRegression() {
+  const audit = await mountSettingsAudit();
+  try {
+    await audit.go("/settings/couch/sound");
+    const sound = audit.client.getQueryData<SoundView>(["sound"])!;
+    const active = { ...sound, canTest: false, test: { id: "local-test", output: "hdmi", observedOutput: "hdmi", status: "playing", endsAt: Date.now() + 3000, message: null } };
+    let finish!: (value: unknown) => void;
+    audit.respond("/api/sound/test", new Promise(resolve => { finish = resolve; }));
+    const start = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Test TV speakers")!;
+    start.focus(); await audit.click("Test TV speakers");
+    assert(document.activeElement === start, "Sending a sound test loses keyboard focus");
+    audit.respond("/api/sound", active); finish(active); await wait();
+    assert(document.activeElement?.textContent === "Stop", "Starting a sound test loses focus instead of keeping it on Stop");
+    audit.respond("/api/sound/stop", sound); audit.respond("/api/sound", sound);
+    await audit.click("Stop");
+    assert(document.activeElement === start && start.textContent === "Test TV speakers", "Stopping a sound test does not return to its output");
+
+    const other = document.querySelector<HTMLElement>('[data-settings-page="sound"]')!;
+    other.focus();
+    audit.respond("/api/sound", { ...active, test: { ...active.test, id: "remote-test" } });
+    await audit.client.refetchQueries({ queryKey: ["sound"] }); await wait();
+    assert(document.activeElement === other, "A test started elsewhere steals focus");
+    audit.respond("/api/sound", sound);
+    await audit.client.refetchQueries({ queryKey: ["sound"] }); await wait();
+    start.focus();
+    audit.respond("/api/sound/test", new Promise(resolve => { finish = resolve; }));
+    await audit.click("Test TV speakers"); other.focus();
+    audit.respond("/api/sound", active); finish(active); await wait();
+    assert(document.activeElement === other, "A delayed test moves focus after the user left its controls");
+    return "Passed: Test/Stop preserves its output's focus, while remote tests and delayed responses do not steal focus.";
+  } finally { audit.close(); }
+}
+
+export async function runSettingsPreviewRegression() {
+  const audit = await mountSettingsAudit();
+  try {
+    await audit.go("/settings/couch/tv");
+    const display = audit.client.getQueryData<DisplayState>(["display"])!;
+    const preview = { token: "screen-preview", expiresAt: Date.now() + 20_000 };
+    audit.respond("/api/display/preview", { ...display, preview });
+    audit.respond("/api/display", { ...display, preview });
+    await audit.click("Try Living room TV");
+    await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, appearance: { size: 1.15, confirmedSize: 1, preview: { id: "size-preview", expiresAt: preview.expiresAt } } } }));
+    const previewStatus = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="status"]')].find(status => status.textContent?.includes(label));
+    const screen = previewStatus("Keep this screen?");
+    const size = previewStatus("Keep this size?");
+    assert(screen?.textContent?.includes("Reverting in") && size?.textContent?.includes("Reverting in"), "Screen and text-size previews do not announce their confirmation and countdown");
+    const before = [screen!.textContent, size!.textContent];
+    await new Promise(resolve => setTimeout(resolve, 1_200));
+    assert(screen!.textContent !== before[0] && size!.textContent !== before[1], "Preview countdown announcements stop updating");
+    assert(screen!.querySelectorAll("button").length === 2 && size!.querySelectorAll("button").length === 2, "A preview lost its Keep/Revert actions");
+    return "Passed: screen and text-size confirmations expose live countdowns and retain Keep/Revert actions.";
+  } finally { audit.close(); }
 }
 
 export async function runSettingsFeedbackRegression() {

@@ -32,7 +32,7 @@ export function TvInterfaceSize({ appearance, credentials, connected, administra
         </> : <span className="text-sm">{confirmed}</span>}
       </SettingsRow>
       {previewing && (
-        <SettingsRow label="Keep this size?" description={`Reverting in ${seconds} s.`} data-tv-local-only={native ? "" : undefined}>
+        <SettingsRow role="status" label="Keep this size?" description={`Reverting in ${seconds} s.`} data-tv-local-only={native ? "" : undefined}>
           {administrator && <>
             <Button disabled={!canWrite} onClick={() => change("/confirm", { previewId: appearance.preview!.id })}>Keep</Button>
             <Button variant="outline" disabled={!canWrite} onClick={() => change("/cancel", { previewId: appearance.preview!.id })}>Revert</Button>

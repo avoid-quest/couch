@@ -25,11 +25,11 @@ export async function mountUpdateShellAudit(completed = false) {
   if (completed) localStorage.setItem(key, JSON.stringify({ createdAt: Date.now(), helpers: "updated", items: [] }));
   else localStorage.removeItem(key);
   const audit = await mountUiAudit();
-  const targets = [{ id: "host", name: "Living room", tv: false }, { id: "tv", name: "Bedroom TV", tv: true }];
+  let targets = [{ id: "host", name: "Living room", tv: false }, { id: "tv", name: "Bedroom TV", tv: true }];
   const states: Record<string, UpdateState> = { host: { ...current }, tv: { ...current } };
   let toolResult: "current" | "updated" | "error" = "current";
   let toolReadsFail = false;
-  let checksFail = false;
+  let failedChecks: string[] = [];
   let tools: HelperUpdates = { status: "done", checkedAt: 1, items: [{ name: "yt-dlp", version: "2026.10.20", origin: "managed", status: "current", error: null }] };
   const requests: string[] = [];
   const uiFetch = window.fetch;
@@ -49,7 +49,7 @@ export async function mountUpdateShellAudit(completed = false) {
     }
     if (url.pathname === "/api/updates/releases") return Response.json({ more: false, releases: [{ version: "0.4.0-preview.3", publishedAt: "2026-10-23", url: "https://github.com/avoid-quest/couch/releases", items: ["Keep updates in one place and clear completed results automatically."] }] });
     if (url.pathname === "/api/updates/install") states[id] = { ...states[id]!, version: states[id]!.available!, available: null, status: "up-to-date" };
-    if (url.pathname === "/api/updates/check" && checksFail) return Response.json({ error: "Couldn’t check this device. Try again." }, { status: 503 });
+    if (url.pathname === "/api/updates/check" && failedChecks.includes(id)) return Response.json({ error: "Couldn’t check this device. Try again." }, { status: 503 });
     if (url.pathname === "/api/updates/channel") states[id] = { ...states[id]!, channel: JSON.parse(String(init?.body)).channel };
     return Response.json(states[id]);
   };
@@ -67,9 +67,37 @@ export async function mountUpdateShellAudit(completed = false) {
     async current() { for (const id of ["host", "tv"]) { states[id] = { ...current }; audit.client.setQueryData(["updates", id], states[id]); } await wait(); },
     tools(result: typeof toolResult) { toolResult = result; },
     async toolsUnavailable(value: boolean) { toolReadsFail = value; await audit.client.refetchQueries({ queryKey: ["updates", "helpers"] }); await wait(); },
-    checksFail(value: boolean) { checksFail = value; },
+    checksFail(value: boolean, ids = targets.map(target => target.id)) { failedChecks = value ? ids : []; },
+    async disconnect(id: string) {
+      targets = targets.filter(target => target.id !== id);
+      await audit.client.refetchQueries({ queryKey: ["updates", "targets"] }); await wait();
+    },
     close() { audit.close(); dismissAll(); if (previous === null) localStorage.removeItem(key); else localStorage.setItem(key, previous); },
   };
+}
+
+export async function runDisconnectedUpdateRegression() {
+  const audit = await mountUpdateShellAudit();
+  try {
+    await audit.go("/settings/couch/updates");
+    audit.checksFail(true, ["tv"]);
+    await audit.click("Check for updates");
+    await settled(() => !!document.body.textContent?.includes("Couldn’t check this device"));
+    await settled(() => [...document.querySelectorAll<HTMLButtonElement>("button")].some(button => button.textContent === "Check for updates" && !button.disabled));
+    await audit.go("/saved");
+    await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, playbacks: [] } }));
+    assert(cue()?.getAttribute("aria-label") === "Update failed", "A connected device's failed check is hidden");
+    await audit.disconnect("tv");
+    assert(!cue(), "A disconnected device leaves an orphaned failure cue");
+    await audit.go("/settings/couch/updates");
+    assert(!document.body.textContent?.includes("Bedroom TV"), "The disconnected updater is still listed");
+    await audit.click("Check for updates");
+    await settled(() => toast() === "Everything is up to date");
+    await audit.go("/saved");
+    await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, playbacks: [] } }));
+    assert(!cue(), "A successful check of the remaining devices keeps an orphaned failure cue");
+    return "Passed: failed checks stay visible only for current update targets; remaining devices can be checked successfully.";
+  } finally { audit.close(); }
 }
 
 export async function runUpdateShellRegression() {

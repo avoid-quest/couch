@@ -55,8 +55,13 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
         <DelayControl id="sound-audio-delay" value={state.audioDelay} disabled={!connected || pending} onApply={delay => change("delay", { delay })} />
       </SettingsRow>}
       <SettingsRow label="Test tone" description={<span role="status">{active ? state.test!.status === "starting" ? "Starting…" : "Playing tone…" : !state.canTest ? state.testUnavailableReason || "Stop playback to test sound." : state.test?.message || "Plays a 3-second left/right tone."}</span>}>
-        {active ? <><Spinner aria-hidden="true" /><Button variant="outline" disabled={!connected || pending} onClick={() => void change("stop", { testId: state.test!.id })}>Stop</Button></>
-          : state.outputs.map(output => <Button key={output.id} variant="outline" disabled={!connected || pending || !state.canTest || !!output.testBlocked || output.availability === "unavailable" || output.muted} onClick={() => void change("test", { output: output.id })}>Test {output.name}</Button>)}
+        {active && <Spinner aria-hidden="true" />}
+        {/* Keep the output's button mounted and focusable during requests as Test becomes Stop and back. */}
+        {(active ? [state.test!.output] : state.outputs.map(output => output.id)).map(id => {
+          const output = state.outputs.find(output => output.id === id);
+          return <Button key={id} variant="outline" aria-disabled={pending || undefined} className="aria-disabled:pointer-events-none aria-disabled:opacity-50" disabled={!connected || !active && (!state.canTest || !!output?.testBlocked || output?.availability === "unavailable" || !!output?.muted)}
+            onClick={() => void (active ? change("stop", { testId: state.test!.id }) : change("test", { output: id }))}>{active ? "Stop" : `Test ${output!.name}`}</Button>;
+        })}
       </SettingsRow>
     </SettingsSection>}
   </>;

@@ -98,11 +98,13 @@ the row stacks, a choice's check sits on the label's edge instead.
 
 Section headings use the same Mona Sans as the rest of Couch. A status or an
 admin restriction belongs to its row, rather than a heading with no controls.
-Screen and text-size previews put Keep/Revert in a row with the countdown;
-Default is already one of the text-size choices. Relay checks and saves give
+Screen and text-size previews put Keep/Revert in a row with a politely announced
+countdown; Default is already one of the text-size choices. Relay checks and saves give
 temporary toasts; connection state stays beside the relay's switch.
 Sound tests, AirPlay and relay state changes keep polite announcements in their
 row descriptions. An unavailable test explains why before any older result.
+Test and Stop reuse the output's button so focus stays through a sound test;
+tests started elsewhere leave the viewer's focus alone.
 
 Each item keeps its main verb visible (Switch, Connect, Refresh). Secondary
 verbs share the same **…** menu as media rows: role changes, Edit, Forget and
