@@ -56,13 +56,18 @@ screen readers. Nothing pushes the page down. Only the app pointed at another
 Couch keeps a line under the header, for its Try again and Use this computer.
 An updated Couch and a player error keep their line too.
 
-An available app update keeps a compact status line here with **Review update**
-and **Later**. Review opens the same [update view](settings.md#updates) as Settings,
-in a shadcn Dialog that supports TV focus and Back; its actions hold the dialog's
-bottom edge while the notes scroll. Later dismisses that version
-for this viewer and device; Settings remains available. The line stays out of the
-player, fullscreen and Updates settings, and off a TV while it plays. During a batch it shows progress;
-settled results stay reachable until dismissed. It never opens the dialog on its own.
+An available app update shows a ghost link beside the header's other controls:
+**Update ready**, or **N updates ready**, with a circle-arrow icon. On touch the
+icon stands alone with the same accessible name. It opens the viewer's one
+[Updates page](settings.md#updates). During an update the same link shows progress;
+a failed action says **Update failed** when no app is ready. Background read
+problems stay on the Updates page, and never hide an available update. The link
+stays out of the player, fullscreen and Updates
+settings, and off a TV while it plays. Success uses a brief toast and removes the
+link automatically. There is no update banner, review dialog or dismissal step.
+
+Connection and error lines belong to the measured header, above a Stage's artwork;
+when empty they occupy no space.
 
 **Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Saved, Remote
 while the Couch has a TV, Settings; lucide icons over labels), and the
@@ -329,6 +334,8 @@ only the pairing page, with no header: its mark and
 it. The app, or a browser that has known another Couch, gets one line under the
 description, the address then Change, which opens the Couch switch; a TV picks
 its Couch in Settings once paired. A TV shows a code and a QR instead, which an
-admin's phone approves ([TV](tv.md#pairing)). The pairing dialog warns about Couch's self-signed
-certificate and closes when a device pairs, with a toast naming it ("Phone
-paired as admin").
+admin's phone approves ([TV](tv.md#pairing)). Settings' pairing dialog and first
+run share `SetupQr`: a light QR object with the grouped code below. The dialog
+shows one address and its certificate guidance; Other addresses expands the
+alternatives, including the HTTP caveat when available. It closes when a device
+pairs, with a toast naming it ("Phone paired as admin").

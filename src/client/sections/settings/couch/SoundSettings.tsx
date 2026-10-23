@@ -28,19 +28,19 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
   const selectedOutput = state?.outputs.find(output => output.id === selected);
   const observedOutput = state?.outputs.find(output => output.id === state.routing?.observedOutput);
   const unavailableSelected = selected && !selectedChoice;
-  const playing = observedOutput && `Playing on ${observedOutput.name}${observedOutput.muted ? " · Muted" : observedOutput.volume !== null ? ` · Volume ${observedOutput.volume}%` : ""}`;
+  const playing = observedOutput && `Playing on ${observedOutput.name}${observedOutput.muted ? ", muted" : observedOutput.volume !== null ? `, volume ${observedOutput.volume}%` : ""}`;
 
   return <>
     <SettingsSection>
-      {(state || !error) && <SettingsRow label="Output" description={playing || "Add speakers in Bluetooth below."}>
+      {(state || !error) && <SettingsRow label="Output" description={playing || undefined}>
         {state ? state.choices.length ? (
           <Select value={selectedChoice?.key ?? ""} disabled={!connected || pending || !!active || !state.routing} onValueChange={key => {
             const choice = state.choices.find(choice => choice.key === key);
             if (choice) void ("output" in choice ? change("output", { output: choice.output.id }) : change("profile", { profile: { card: choice.profile.card, profile: choice.profile.id } }));
           }}>
-            <SelectTrigger aria-label="Sound output" className="w-full max-w-sm"><SelectValue placeholder={unavailableSelected ? `${selectedOutput?.name ?? "Output"} · Unavailable` : "Choose output"} /></SelectTrigger>
+            <SelectTrigger aria-label="Sound output" className="w-full max-w-sm"><SelectValue placeholder={unavailableSelected ? `${selectedOutput?.name ?? "Output"}, unavailable` : "Choose output"} /></SelectTrigger>
             <SelectContent position="popper">{state.choices.map(choice => <SelectItem key={choice.key} value={choice.key}>
-              {"output" in choice ? choice.output.name : `${choice.profile.name} · Pauses playback`}
+              {"output" in choice ? choice.output.name : `${choice.profile.name}, pauses playback`}
             </SelectItem>)}</SelectContent>
           </Select>
         ) : <Empty className="py-0"><EmptyHeader><EmptyDescription>No outputs found. Add speakers in Bluetooth below.</EmptyDescription></EmptyHeader></Empty>
@@ -54,14 +54,10 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
       {state.audioDelay !== undefined && <SettingsRow label="Audio delay" htmlFor="sound-audio-delay" description="Positive values play sound later.">
         <DelayControl id="sound-audio-delay" value={state.audioDelay} disabled={!connected || pending} onApply={delay => change("delay", { delay })} />
       </SettingsRow>}
-      <SettingsRow label="Test tone" description={!state.canTest && !active ? state.testUnavailableReason || "Stop playback to test sound." : "Plays a 3-second left/right tone."}>
-        {state.outputs.map(output => <Button key={output.id} variant="outline" disabled={!connected || pending || !state.canTest || !!active || !!output.testBlocked || output.availability === "unavailable" || output.muted} onClick={() => void change("test", { output: output.id })}>Test {output.name}</Button>)}
+      <SettingsRow label="Test tone" description={<span role="status">{active ? state.test!.status === "starting" ? "Starting…" : "Playing tone…" : !state.canTest ? state.testUnavailableReason || "Stop playback to test sound." : state.test?.message || "Plays a 3-second left/right tone."}</span>}>
+        {active ? <><Spinner aria-hidden="true" /><Button variant="outline" disabled={!connected || pending} onClick={() => void change("stop", { testId: state.test!.id })}>Stop</Button></>
+          : state.outputs.map(output => <Button key={output.id} variant="outline" disabled={!connected || pending || !state.canTest || !!output.testBlocked || output.availability === "unavailable" || output.muted} onClick={() => void change("test", { output: output.id })}>Test {output.name}</Button>)}
       </SettingsRow>
-      {state.test && <div role="status" className="flex flex-wrap items-center gap-3 text-sm">
-        {active && <Spinner />}
-        <span className={active ? "text-muted-foreground" : undefined}>{state.test.status === "starting" ? "Starting…" : state.test.status === "playing" ? "Playing tone…" : state.test.message}</span>
-        {active && <Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void change("stop", { testId: state.test!.id })}>Stop</Button>}
-      </div>}
     </SettingsSection>}
   </>;
 }

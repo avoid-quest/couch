@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { claimCodeQuery, devicesQuery } from "@/api/devices";
 import { PairingDialog } from "@/components/PairingDialog";
+import { RowOptions } from "@/components/RowMenu";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -88,11 +89,13 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
               label={<DeviceName kind={kind(device)} online={device.role === "host" || isOnline(device)}>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this device)</span>}</DeviceName>}
               description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", isOnline(device) ? "Online" : device.lastSeenAt ? `Seen ${formatSeen(device.lastSeenAt)}` : "Never seen", stale.includes(device) && "Older duplicate"].filter(Boolean).join(", ")}>
               {!host && manager && device.role === "host" && <RenameCouch credentials={credentials} connected={connected} name={device.name} onRenamed={refreshDevices} />}
-              {manager && device.role !== "host" && device.id !== selfId && <>
-                {/* A left-behind duplicate offers only Forget. */}
-                {!stale.includes(device) && <Button variant="outline" disabled={pending} onClick={() => act([device], "role")}>{device.role === "administrator" ? "Remove admin" : "Make admin"}</Button>}
-                <Button variant={stale.includes(device) ? "outline" : "ghost"} disabled={pending} onClick={() => setRemoving([device])}>Forget</Button>
-              </>}
+              {/* A left-behind duplicate offers only Forget. */}
+              {manager && device.role !== "host" && device.id !== selfId && (stale.includes(device)
+                ? <Button variant="outline" disabled={pending} onClick={() => setRemoving([device])}>Forget</Button>
+                : <RowOptions title={device.name} disabled={pending} actions={[
+                  { label: device.role === "administrator" ? "Remove admin" : "Make admin", run: () => act([device], "role") },
+                  { label: "Forget", run: () => setRemoving([device]) },
+                ]} />)}
             </SettingsRow>
           ))}
           {manager && stale.length > 1 && <SettingsRow label="Older duplicates" description={`${stale.length} offline devices share a name with a newer one.`}>
@@ -106,7 +109,7 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
         <div className="flex min-w-0 flex-col gap-1">
           {setupCode.isPending ? <SettingsRowsSkeleton />
             : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || setupCode.isFetching} onClick={() => void setupCode.refetch()}>Try again</Button></AlertAction></Alert>
-            : <><p className="font-mono text-3xl tracking-wider" data-administrator-code>{setupCode.data.code}</p><a data-text-link className="break-all text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" href={pairUrl}>{pairUrl}</a></>}
+            : <><p className="font-display text-5xl font-semibold break-all tabular-nums" data-administrator-code>{setupCode.data.code}</p><a data-text-link className="break-all text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" href={pairUrl}>{pairUrl}</a></>}
         </div>
       </SettingsSection>
     )}

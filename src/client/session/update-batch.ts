@@ -56,7 +56,7 @@ export function restoreUpdateBatch(text: string | null, now = Date.now()): Updat
     }
     // Preserve the planned order; rejecting edited ordering is safer than reordering an active install.
     if (value.items.some((item, index) => index > 0 && rank(item.id) < rank(value.items[index - 1]!.id))) return null;
-    // Restart intent expires; completed and failed results stay until dismissed.
+    // Restart intent expires; the provider retires success and keeps failures for retry.
     if (now - value.createdAt > batchLifetime && batchActive(value)) return null;
     return value;
   } catch { return null; }

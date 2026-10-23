@@ -64,17 +64,27 @@ export function useItemMenu(actions: MenuAction[]) {
   return { shown, on, open, setOpen, opener, item, target: { "data-item-menu": "" } };
 }
 
+/** Secondary verbs beside a settings row's main control. */
+export function RowOptions({ title, actions, disabled }: { title: string; actions: MenuAction[]; disabled?: boolean }) {
+  return <ItemMenu menu={useItemMenu(actions)} title={title} disabled={disabled} runAfterClose />;
+}
+
 /**
  * The item's "…" ("Options for {title}") and its one menu, a controlled DropdownMenu. It hangs from the "…", or from
  * the whole item where the "…" is hidden (a row whose page holds its verbs), so it opens in one place whatever opened
  * it. The "…" shows on touch screens, and elsewhere while the item is hovered or holds focus.
  */
-export function ItemMenu({ menu, title, hidden = false, className, ...props }: { menu: ReturnType<typeof useItemMenu>; title: string; hidden?: boolean } & ComponentProps<typeof Button>) {
+export function ItemMenu({ menu, title, hidden = false, runAfterClose = false, className, ...props }: { menu: ReturnType<typeof useItemMenu>; title: string; hidden?: boolean; runAfterClose?: boolean } & ComponentProps<typeof Button>) {
   const trigger = useRef<HTMLButtonElement>(null);
   const outside = useRef(false);
   const acted = useRef(false);
+  const deferred = useRef<(() => void) | undefined>(undefined);
   // A verb runs from the item, not the closing menu, so what it records (Details' opener, Up next's removal) is the item.
-  const select = (run?: () => void) => { (menu.opener.current ?? trigger.current)?.focus(); acted.current = true; run?.(); };
+  const select = (run?: () => void) => {
+    acted.current = true;
+    if (runAfterClose) deferred.current = run;
+    else { (menu.opener.current ?? trigger.current)?.focus(); run?.(); }
+  };
   // A verb that takes its own item away (Remove, Saved) leaves focus with the item's neighbour in its list or shelf, on
   // the same control where it has one; a list with its own rule (Up next, Library) has moved it already.
   useLayoutEffect(() => () => {
@@ -92,12 +102,16 @@ export function ItemMenu({ menu, title, hidden = false, className, ...props }: {
     <DropdownMenuTrigger asChild>{hidden ? <span aria-hidden="true" aria-label={`Options for ${title}`} className="pointer-events-none absolute inset-0" />
       : <Button ref={trigger} data-row-options variant="ghost" size="icon" aria-label={`Options for ${title}`} className={className} {...props}><MoreHorizontal aria-hidden="true" /></Button>}</DropdownMenuTrigger>
     {/* Radix lands a keyboard or a remote (whose keys it hears) on the first verb, and leaves a pointer on the menu itself. */}
-    <DropdownMenuContent align="end" onInteractOutside={() => { outside.current = true; }} onCloseAutoFocus={event => {
+    <DropdownMenuContent align="end" data-tv-local-only={trigger.current?.closest("[data-tv-local-only], .tv-local-only") ? "" : undefined} onInteractOutside={() => { outside.current = true; }} onCloseAutoFocus={event => {
       event.preventDefault();
       // Back to the item or its "…", unless a press went elsewhere or Remove took the row away (its list moves focus on).
       const to = menu.opener.current ?? trigger.current;
       if (!outside.current && to?.isConnected) to.focus();
       outside.current = false;
+      // A settings confirmation opens after the menu releases its focus scope, so Cancel returns to the row.
+      const run = deferred.current;
+      deferred.current = undefined;
+      run?.();
     }}><Items actions={menu.shown} on={menu.on} select={select} /></DropdownMenuContent>
   </DropdownMenu>;
 }

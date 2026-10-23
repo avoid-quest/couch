@@ -14,7 +14,8 @@ function AlertDialogTrigger({ ...props }: React.ComponentProps<typeof AlertDialo
   return <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
 }
 
-function AlertDialogContent({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+function AlertDialogContent({ className, onOpenAutoFocus, onCloseAutoFocus, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+  const opener = React.useRef<HTMLElement | null>(null);
   return (
     <AlertDialogPrimitive.Portal>
       <AlertDialogPrimitive.Overlay
@@ -23,6 +24,15 @@ function AlertDialogContent({ className, ...props }: React.ComponentProps<typeof
       />
       <AlertDialogPrimitive.Content
         data-slot="dialog-content"
+        onOpenAutoFocus={event => {
+          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={event => {
+          onCloseAutoFocus?.(event);
+          // Controlled confirmations (including row-menu actions) have no AlertDialogTrigger for Radix to restore.
+          if (!event.defaultPrevented && opener.current?.isConnected) { event.preventDefault(); opener.current.focus(); }
+        }}
         className={cn(
           "fixed top-1/2 left-1/2 z-[101] grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto rounded-lg bg-popover p-6 text-sm text-popover-foreground ring-1 ring-border duration-150 ease-out outline-none sm:max-w-md motion-safe:data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
           className

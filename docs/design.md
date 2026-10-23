@@ -255,7 +255,7 @@ screen alike. Two faces, clearly apart:
 - **Mona Sans** (display, `font-display`, `@fontsource-variable/mona-sans` with its width axis):
   a warm grotesque with width (75–125%) and weight axes. It sets the Stage's and the player's titles
   (`.display-title`, weight 680 to 760), page titles and the headings of shelves,
-  lists and sections (normal width, semibold). `index.html` preloads its latin
+  lists and sections, including Settings, dialogs and sheets (`font-heading`, normal width, semibold). `index.html` preloads its latin
   file.
 - **Inter Tight** (everything else, including the desktop header): regular, but
   for the bar's title (medium); metadata small, muted and tabular. `index.html`
@@ -282,7 +282,8 @@ breaks; a longer all-caps word may.
 | Stage and Now playing title | `.display-title` (above), leading .94 to 1.04 |
 | The player's title over a video | `text-3xl` semibold, two lines, then the whole title on hover |
 | Page title (`PageHeader`) | `text-page font-semibold` in Mona Sans |
-| Heading of a shelf, a list or a section (`ShelfHeading`) | `text-heading font-semibold` in Mona Sans |
+| Heading of a shelf, a list or a section (`ShelfHeading`, `SettingsSection`) | `text-heading font-semibold` in Mona Sans |
+| Dialog and sheet title | `font-heading text-lg font-semibold` in Mona Sans |
 | The bar's title, the palette's query row | `text-title font-medium`; the bar's stays on one line with ellipsis, its full title in the tooltip and accessible name |
 | Item title (tiles, rows), settings label, the search palette's rows | `text-body`, wrapped whole |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |
@@ -424,9 +425,11 @@ its results hold, as it finds them).
 
 ### Messages
 
-Available updates keep a compact line below the header, opening the shared
-[update review](design/settings.md#updates). Release notes, device selection and
-progress stay in the app; the notice never opens a dialog by itself.
+Available updates show a small **Update ready** link in the header, with a count
+for several devices. It opens the viewer's single [Updates page](design/settings.md#updates),
+where device status, release notes and actions live together. Nothing adds a banner
+or pushes Home's artwork down. Successful checks and updates finish with a brief
+toast and clear their saved results automatically; failures stay visible for retry.
 
 - **Toast** (sonner): errors, Undo, Queue confirmation and unexpected outcomes.
   Every toast is one of `src/client/toasts.ts`'s kinds (`failed`, `undo`,

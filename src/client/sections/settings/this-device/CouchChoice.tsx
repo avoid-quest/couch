@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { RowOptions } from "@/components/RowMenu";
 import type { Credentials } from "@/session/session";
 import { connectionHash, forgetConnection, knownConnections } from "@/session/connection";
 import { deviceNameHash } from "@/session/device-id";
@@ -44,8 +45,9 @@ function BrowserCouchChoice({ credentials, installationName }: Props) {
   return <>
     <SettingsSection title="Connection" description="The Couch this browser shows.">
       {[{ origin, name }, ...others].map(item => <SettingsRow key={item.origin} label={item.name} description={new URL(item.origin).host}>
-        {item.origin === origin ? <span className="text-sm text-muted-foreground">In use</span> : <Button variant="outline" onClick={() => choose(item.origin)}>Switch</Button>}
-        {(item.origin !== origin || credentials && gate) && <Button variant="ghost" aria-label={`Forget ${item.name}`} onClick={() => setForgetting(item)}>Forget</Button>}
+        {/* The Couch in use has no Switch, so its Forget stays a button. */}
+        {item.origin !== origin ? <><Button variant="outline" onClick={() => choose(item.origin)}>Switch</Button><RowOptions title={item.name} actions={[{ label: "Forget", run: () => setForgetting(item) }]} /></>
+          : <><span className="text-sm text-muted-foreground">In use</span>{credentials && gate && <Button variant="ghost" aria-label={`Forget ${item.name}`} onClick={() => setForgetting(item)}>Forget</Button>}</>}
       </SettingsRow>)}
       {target ? <SettingsRow label={`Switch this browser to ${new URL(target).host}?`} description={`${name} keeps playing. You may need to pair.`}>
         <Button onClick={() => location.assign(target + connectionHash(deviceNameHash(), { origin, name }, target))}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button>

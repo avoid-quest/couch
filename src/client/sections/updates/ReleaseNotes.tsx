@@ -39,7 +39,7 @@ function preview(releases: Release[]) {
   });
 }
 
-/** Mounted only when someone opens the review or expands notes in Settings. */
+/** Mounted only when someone expands What's new in Updates settings. */
 export function ReleaseNotes({ targets }: { targets: UpdateCenterTarget[] }) {
   const { credentials } = useSessionGate();
   const [selected, setSelected] = useState("");

@@ -39,7 +39,7 @@ import { PairForm } from "./PairForm";
 import { TvPairing } from "./TvPairing";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
-import { UpdateNotice } from "@/sections/updates/UpdateNotice";
+import { UpdateCue } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
@@ -336,27 +336,31 @@ export function ShellChrome({ children }: PropsWithChildren) {
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. Unpaired there is none: the pairing page stands alone. */}
-          {paired && <header ref={header} hidden={onPlayer} className="app-header group/header drag-region window-controls-inset sticky top-0 z-30 grid min-h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_minmax(16rem,30rem)] items-center has-[[data-live-sharing]]:grid-cols-[auto_minmax(0,1fr)_auto] gap-x-8 bg-background px-(--gutter) py-3 motion-safe:transition-colors motion-safe:duration-200 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
-            {/* On a phone the open search takes the whole row. */}
-            <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
-              {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
-              {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+          {paired && <header ref={header} hidden={onPlayer} className="app-header sticky top-0 z-30 shrink-0 bg-background motion-safe:transition-colors motion-safe:duration-200">
+            <div className="app-header-controls group/header drag-region window-controls-inset grid min-h-16 grid-cols-[auto_minmax(0,1fr)_minmax(16rem,30rem)] items-center has-[[data-live-sharing]]:grid-cols-[auto_minmax(0,1fr)_auto] gap-x-8 px-(--gutter) py-3 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
+              {/* On a phone the open search takes the whole row. */}
+              <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
+                {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
+                {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+              </div>
+              {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
+              <SectionTabs className="flex min-w-0 items-center gap-1 touch:hidden tv:flex tv:max-lg:col-span-2 tv:max-lg:row-start-2 tv:max-lg:justify-center" />
+              {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. On a
+                  phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
+              <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
+                <HeaderOffline />
+                {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && <UpdateCue />}
+                <ShareControl />
+                <HeaderSearch className="min-w-0 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:max-w-80 tv:has-[[data-search-token]]:max-w-96 tv:max-lg:min-w-44" />
+                {/* Only a keyboard can use its shortcuts. Remote's keys drive the TV, so there it keeps its place unseen and the field doesn't move. */}
+                {!tvPresentation && <Button variant="ghost" size="icon" className={cn("touch:hidden", section === "Remote" && "invisible")} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
+                <DigitalClock className="ml-3 hidden text-base text-muted-foreground tv:inline" />
+              </div>
             </div>
-            {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
-            <SectionTabs className="flex min-w-0 items-center gap-1 touch:hidden tv:flex tv:max-lg:col-span-2 tv:max-lg:row-start-2 tv:max-lg:justify-center" />
-            {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. On a
-                phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
-            <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
-              <HeaderOffline />
-              <ShareControl />
-              <HeaderSearch className="min-w-0 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:max-w-80 tv:has-[[data-search-token]]:max-w-96 tv:max-lg:min-w-44" />
-              {/* Only a keyboard can use its shortcuts. Remote's keys drive the TV, so there it keeps its place unseen and the field doesn't move. */}
-              {!tvPresentation && <Button variant="ghost" size="icon" className={cn("touch:hidden", section === "Remote" && "invisible")} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
-              <DigitalClock className="ml-3 hidden text-base text-muted-foreground tv:inline" />
-            </div>
+            {/* Notices are part of the measured header, above a Stage's artwork, with no space when empty. */}
+            {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>}
           </header>}
           <div className="app-page flex min-w-0 flex-1 flex-col" data-scroll-restoration-id="app-page">
-            {paired && !onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}{!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && <UpdateNotice />}</div>}
             {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
             {!paired ? <PairingPage status={status} /> : <>
               {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}

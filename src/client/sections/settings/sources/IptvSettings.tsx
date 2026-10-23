@@ -29,7 +29,7 @@ export function IptvSettings({ credentials, connected, canManage }: SourceSettin
     <div className="flex min-w-0 flex-col gap-8" data-tv-local-only>
       {page.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void page.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
       {credentials && connected && canManage && page.isPending && <SettingsRowsSkeleton />}
-      {credentials && (!canManage || page.data) && <GuideSources connected={connected && canManage} host={false} inline request={request} sources={page.data?.sources ?? []} />}
+      {credentials && (!canManage || page.data) && <GuideSources connected={connected && canManage} request={request} sources={page.data?.sources ?? []} />}
     </div>
   );
 }

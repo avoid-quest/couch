@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, type ApiCredentials } from "@/api/client";
 import { bluetoothQuery, bluetoothView, soundQuery, type ListedBluetoothState } from "@/api/settings";
+import { RowOptions } from "@/components/RowMenu";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -49,9 +50,10 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
     ? !own ? "Another device is using Bluetooth." : searching ? "Searching…" : current.message || "Connecting…"
     : current.message || (current.kind === "scan" ? "Search done." : "Device updated.");
 
+  // One section: the adapter's row (Turn on, or Search), what it is doing, then its devices.
   return <>
     <SettingsSection title="Bluetooth">
-      {state?.adapter === "off" && <SettingsRow label="Bluetooth" description="Off">
+      {state?.adapter === "off" && <SettingsRow label="Off">
         <Button disabled={!connected || pending || active} onClick={() => change({ op: "power" })}>Turn on</Button>
       </SettingsRow>}
       {state?.adapter === "available" && <SettingsRow label="Add a device" description="Put your device in pairing mode, then Search.">
@@ -64,20 +66,21 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
         {active && <Spinner />}<span className="text-muted-foreground">{status}</span>
         {active && own && !searching && <Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => change({ op: "cancel", token: current.id })}>Cancel</Button>}
       </div>}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{bluetooth.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void bluetooth.refetch()}>Try again</Button></AlertAction>}</Alert>}
-    </SettingsSection>
-    {state?.adapter === "available" && <SettingsSection title="Bluetooth devices" description="After connecting a speaker, pick it as the Output above.">
-      {state.devices.length === 0 && <Empty className="py-0"><EmptyHeader><EmptyDescription>{active ? "No devices found yet." : "No devices found. Put a device in pairing mode, then Search."}</EmptyDescription></EmptyHeader></Empty>}
-      {state.devices.map(device => {
+      {state?.adapter === "available" && state.devices.length === 0 && <Empty className="py-0"><EmptyHeader><EmptyDescription>{active ? "No devices found yet." : "No devices yet."}</EmptyDescription></EmptyHeader></Empty>}
+      {state?.adapter === "available" && state.devices.map(device => {
         const outputs = sound.data?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
         const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);
-        const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(", ");
-        return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}</>}>
-          <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
-          {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}
+        // The address only tells apart devices that share a name.
+        const twin = state.devices.some(other => other !== device && other.name === device.name);
+        const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output", twin && device.address].filter(Boolean).join(", ");
+        const disabled = deviceDisabled || !device.available;
+        return <SettingsRow key={device.address} label={device.name} description={label}>
+          <Button variant="outline" disabled={disabled} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
+          {device.paired && <RowOptions title={device.name} disabled={disabled} actions={[{ label: "Forget", run: () => setConfirm({ address: device.address, name: device.name, op: "forget" }) }]} />}
         </SettingsRow>;
       })}
-    </SettingsSection>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{bluetooth.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void bluetooth.refetch()}>Try again</Button></AlertAction>}</Alert>}
+    </SettingsSection>
     <AlertDialog open={!!confirm} onOpenChange={open => { if (!open) setConfirm(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>

@@ -22,7 +22,7 @@ export function SettingsNav({ active, index = false }: { active?: SettingsPage; 
     {groups.map((group, position) => <Group key={group.title} group={group} index={index}>
       {group.pages.map(({ id, locked }, row) => (
         <Button key={id} variant="ghost" asChild className={index
-          ? "h-auto min-h-12 w-full justify-start gap-2 rounded-none px-0 py-3 text-base font-normal"
+          ? "h-auto min-h-12 w-full justify-start gap-2 rounded-none px-0 py-3 text-body font-normal"
           : "h-control w-full justify-start gap-2 px-3.5 text-body font-normal text-muted-foreground hover:text-foreground aria-[current=page]:bg-secondary aria-[current=page]:text-foreground"}>
           <Link data-settings-page={id} activeOptions={{ exact: true }} data-page-first={(index ? position === 0 && row === 0 : current === id) || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path} onClick={event => {
             if (index || !tvPresentation || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -47,7 +47,7 @@ function Group({ group, index, children }: { group: SettingsGroup; index: boolea
   const id = useId();
   return <div role="group" aria-labelledby={id} className="grid min-w-0">
     <div className={cn("grid min-w-0 gap-caption pb-2", !index && "pl-3.5")}>
-      <h2 id={id} className={cn("truncate font-medium", index ? "text-xl tracking-tight" : "text-sm")}>{group.title}</h2>
+      <h2 id={id} className={cn("truncate", index ? "font-heading text-heading font-semibold" : "text-sm font-medium")}>{group.title}</h2>
       <p className="flex min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
         {group.connected !== undefined && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", group.connected ? "bg-foreground" : "border border-current")} />}
         <span className="truncate">{group.subtitle}</span>

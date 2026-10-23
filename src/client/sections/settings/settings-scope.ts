@@ -2,10 +2,14 @@ import { deviceName } from "@/copy";
 import { deviceId, useLocalDeviceName } from "@/session/device-id";
 import { couchApp } from "@/session/native-context";
 import { useSessionGate } from "@/session/session-context";
+import { updatesPage } from "@/sections/updates/update-presentation";
 import { defaultDeviceName } from "../../../shared/devices";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 
-/** Who is looking at Settings: this device's name, the Couch's name and whether this device can change the Couch. */
+/**
+ * Who is looking at Settings: this device's name, the Couch's name and whether this device can change the Couch. `known`
+ * is false until a remote app's identity arrives, when `administrator` is still a guess.
+ */
 export function useSettingsScope() {
   const { identity, localHost, state, details } = useSessionGate();
   const savedName = useLocalDeviceName();
@@ -13,16 +17,16 @@ export function useSettingsScope() {
   const host = identity ? identity.authority === "host" : localHost;
   const administrator = host || identity?.authority === "administrator";
   const device = host ? couch : savedName ?? identity?.device?.name ?? defaultDeviceName(deviceId());
-  return { device, couch, host, administrator };
+  return { device, couch, host, administrator, known: !!identity || localHost };
 }
 
 // Pages a non-admin can open but change nothing on; Devices & network, Playback and Sources each have a row anyone can use.
-const adminOnly: SettingsPage[] = ["sound", "display", "updates"];
+const adminOnly: SettingsPage[] = ["sound", "display"];
 export type SettingsGroup = { title: string; subtitle: string; /** The Couch's connection, shown as a dot. */ connected?: boolean; pages: { id: SettingsPage; locked: boolean }[] };
 
 /**
  * Settings' pages under their owners: This device, then the Couch by name with how it is connected. On the host they are
- * one Couch. Hardware pages need that hardware; nothing hides for a role, it locks.
+ * one Couch. Hardware pages need that hardware; a role locks pages, except Updates, which each viewer has once.
  */
 export function useSettingsGroups(): SettingsGroup[] {
   const { details, state, identity, status } = useSessionGate();
@@ -32,9 +36,9 @@ export function useSettingsGroups(): SettingsGroup[] {
     // Sound outputs and Bluetooth exist only where Couch controls the system's sound (Linux).
     && (id !== "sound" || !!details?.systemAudio)
     && (id !== "display" || !!(details?.tvPresentation || details?.tvModeChangeable || details?.tvAppliance))
-    // This app's own updater, unless it runs the Couch (then it is the Couch's), and the Couch's apps.
-    && (id !== "device-updates" || !!couchApp?.updates && !host)
-    && (id !== "updates" || !!details?.updates || !!otherApps);
+    // An admin's Updates holds this app's own updater too, so it shows when any app can update.
+    && (id !== "device-updates" || updatesPage(administrator) === id)
+    && (id !== "updates" || updatesPage(administrator) === id && (!!couchApp?.updates || !!details?.updates || !!otherApps));
   const pages = (owner?: "device" | "couch") => (Object.keys(settingsPages) as SettingsPage[])
     .filter(id => visible(id) && (!owner || settingsPages[id].owner === owner)).map(id => ({ id, locked: !administrator && adminOnly.includes(id) }));
   if (host) return [{ title: couch, subtitle: details?.tvPresentation || details?.tvAppliance ? "This TV runs it" : "This computer runs it", pages: pages() }];

@@ -41,13 +41,14 @@ test("an unknown address opens This device", () => {
   expect(open("/settings/nowhere")).toBe("/settings/device");
 });
 
-test("the old Updates address opens the Couch's updater on the app that hosts it, even before its identity", () => {
+test("the old Updates address opens an admin's Couch updates, on the host even before its identity", () => {
   expect(openIn("/settings/updates", "local")).toBe("/settings/couch/updates");
   expect(openIn("/settings/updates", "local", { authority: "host" })).toBe("/settings/couch/updates");
+  expect(openIn("/settings/updates", "remote", { authority: "administrator" })).toBe("/settings/couch/updates");
 });
 
-test("the old Updates address opens this app's own updater on an app connected to another Couch", () => {
+test("the old Updates address opens this app's own updater for anyone else, and the page corrects it once the role arrives", () => {
   expect(openIn("/settings/updates", "remote")).toBe("/settings/device/updates");
-  expect(openIn("/settings/updates", "remote", { authority: "administrator" })).toBe("/settings/device/updates");
+  expect(openIn("/settings/updates", "remote", { authority: "controller" })).toBe("/settings/device/updates");
   expect(openIn("/settings/connection", "remote")).toBe("/settings/couch/devices");
 });

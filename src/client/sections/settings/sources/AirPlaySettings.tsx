@@ -29,13 +29,13 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
     : state.status === "ready" ? `Ready. On your device, choose ${state.name} in AirPlay and enter ${state.code} the first time.`
     : state.status === "starting" ? "Starting AirPlay…"
     : state.status === "waiting" ? "Waiting for Share on network. AirPlay listens only while this Couch is shared on the network."
-    : state.status === "off" ? "Off. Nothing on the network can find or play to this Couch over AirPlay." : null;
+    : null;
   const failure = state?.error ?? query.error?.message ?? toggle.error?.message ?? renew.error?.message;
   // Off where it can't run: another platform hides it, a build or computer without the receiver says why in one line.
   if (state?.status === "unsupported" && !state.enabled) return null;
-  if (state?.status === "unavailable" && !state.enabled) return <SettingsSection title="AirPlay" description={state.error} />;
+  if (state?.status === "unavailable" && !state.enabled) return <SettingsSection><SettingsRow label="AirPlay" description={state.error} /></SettingsSection>;
   return <SettingsSection title="AirPlay" description={description}>
-    <SettingsRow label="Receive AirPlay" description="Sound only. It plays a few seconds behind the sending device.">
+    <SettingsRow label="Receive AirPlay" description={<span role="status">{status ?? "Sound only. It plays a few seconds behind the sending device."}</span>}>
       <Switch aria-label="Receive AirPlay" checked={toggle.isPending ? toggle.variables : state?.enabled ?? false} disabled={!connected || !state || !usable && !state.enabled || toggle.isPending || renew.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />
     </SettingsRow>
     {state?.enabled && usable && <SettingsRow label="Code" description="A device asks for it as its AirPlay password the first time it plays here. A new code makes every device enter it again.">
@@ -55,7 +55,6 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
         </AlertDialogContent>
       </AlertDialog>
     </SettingsRow>}
-    {failure ? <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>
-      : status && <p role="status" className="text-sm text-muted-foreground">{status}</p>}
+    {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>}
   </SettingsSection>;
 }

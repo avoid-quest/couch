@@ -1,4 +1,5 @@
 import { Switch } from "@/components/ui/switch";
+import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkLiveRelay } from "@/session/check-live-relay";
+import { notice } from "@/toasts";
 import type { LiveRelay, LiveRelaySettings as RelaySettings, LocalRelayState } from "../../../../shared/live-relay";
 
 const emptyRelay: LiveRelay = { urls: "", username: "", credential: "" };
@@ -20,11 +22,10 @@ export function LiveRelaySettings({ credentials, connected, device, couch, host 
   const local = useQuery({ ...localRelayQuery(credentials), enabled: connected });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => apiSend<LocalRelayState>(credentials, "/api/settings/live-relay/local", { enabled }),
-    onSuccess: result => { client.setQueryData(localRelayQuery(credentials).queryKey, result); check.reset(); setStatus(""); },
+    onSuccess: result => { client.setQueryData(localRelayQuery(credentials).queryKey, result); check.reset(); },
   });
   const [draft, setDraft] = useState<LiveRelay | null>(null);
   const relay = draft ?? query.data?.relay ?? emptyRelay;
-  const [status, setStatus] = useState("");
   const checking = useRef<AbortController | null>(null);
   useEffect(() => () => checking.current?.abort(), []);
   const check = useMutation({
@@ -33,40 +34,39 @@ export function LiveRelaySettings({ credentials, connected, device, couch, host 
       const controller = checking.current = new AbortController();
       await checkLiveRelay(value, controller.signal);
     },
-    onSuccess: () => setStatus(`Relay reachable from ${host ? "this device" : device}. Test playback on the receiving device too.`),
+    onSuccess: () => notice(`Relay reachable from ${host ? "this device" : device}. Test playback on the receiving device too.`),
   });
   const save = useMutation({
     mutationFn: (value: LiveRelay | null) => apiSend<RelaySettings>(credentials, "/api/settings/live-relay", { relay: value }),
     onSuccess: result => {
       client.setQueryData(liveRelayQuery(credentials).queryKey, result);
       setDraft(null);
-      setStatus(result.relay ? "Saved. New connections use this relay when needed. If a device is already marked Behind, stop sharing and start again." : "Relay removed. New connections use the local network.");
+      notice(result.relay ? "External relay saved" : "External relay removed");
     },
   });
   const busy = !connected || query.isPending || query.isError || save.isPending || check.isPending;
-  const change = (key: keyof LiveRelay, value: string) => { setDraft({ ...relay, [key]: value }); setStatus(""); check.reset(); save.reset(); };
-  const submit = (event: FormEvent) => { event.preventDefault(); if (!busy) { check.reset(); setStatus(""); save.mutate(relay); } };
-  const localStatus = local.data?.error ?? (local.data?.status === "running" ? `Running on ${couch}. Only paired devices on this LAN can use it.`
+  const change = (key: keyof LiveRelay, value: string) => { setDraft({ ...relay, [key]: value }); check.reset(); save.reset(); };
+  const submit = (event: FormEvent) => { event.preventDefault(); if (!busy) { check.reset(); save.mutate(relay); } };
+  const localStatus = local.data?.status === "running" ? "Only paired devices on this network can use it."
     : local.data?.status === "starting" ? "Starting the bundled relay…"
-    : local.data?.enabled ? "Waiting for Share on network and a usable LAN address." : "Off.");
-  return <SettingsSection title="Live playback relay" description="For devices that can't connect directly to a shared screen or sound.">
-    <SettingsRow label={`Run relay on ${couch}`} description="A device already marked Behind stays behind until its source is shared again.">
+    : local.data?.status === "waiting" ? "Waiting for Share on network and a usable LAN address."
+    : local.data && !local.data.enabled && query.data?.relay ? query.data.source === "environment" ? "Using an external relay from launch settings." : "Using the saved external relay." : undefined;
+  return <SettingsSection title="Live playback relay" description="Helps devices connect to a shared screen or sound. Changes apply when sharing starts again.">
+    <SettingsRow label={`Run relay on ${couch}`} description={localStatus && <span role="status">{localStatus}</span>}>
       <Switch aria-label={`Run relay on ${couch}`} checked={toggle.isPending ? toggle.variables : local.data?.enabled ?? false} disabled={!connected || local.isPending || local.isError || toggle.isPending || check.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />
     </SettingsRow>
-    {local.data?.error ? <Alert variant="destructive"><AlertDescription>{localStatus}</AlertDescription></Alert> : <p role="status" className="text-sm text-muted-foreground">{localStatus}</p>}
+    {local.data?.error && <Alert variant="destructive"><AlertDescription>{local.data.error}</AlertDescription></Alert>}
     {local.data?.enabled && <>
-      <p className="text-sm text-muted-foreground">The built-in relay takes priority. Saved external relay settings are not used while this switch is on.</p>
       <SettingsRow label="Check from this device" description={`Tests whether ${host ? "this device" : device} can reach the relay. Test playback on the receiving device too.`}>
-        <Button variant="outline" disabled={!connected || !local.data.relay || check.isPending} onClick={() => { setStatus(""); check.mutate(local.data!.relay!); }}>{check.isPending ? "Checking…" : "Check relay"}</Button>
+        <Button variant="outline" disabled={!connected || !local.data.relay || check.isPending} onClick={() => check.mutate(local.data!.relay!)}>{check.isPending ? "Checking…" : "Check relay"}</Button>
       </SettingsRow>
     </>}
     {(local.error || toggle.error) && <Alert variant="destructive"><AlertDescription>{local.error?.message ?? toggle.error?.message}</AlertDescription>{local.isError && <AlertAction><Button variant="outline" onClick={() => void local.refetch()}>Try again</Button></AlertAction>}</Alert>}
     <Collapsible>
-      <CollapsibleTrigger asChild><Button variant="ghost">External relay settings</Button></CollapsibleTrigger>
+      <CollapsibleTrigger asChild><Button variant="ghost" className="group -ml-3.5">External relay settings<ChevronDown aria-hidden="true" className="size-4 group-data-[state=open]:rotate-180" /></Button></CollapsibleTrigger>
       <CollapsibleContent>
-      <p className="py-3 text-sm text-muted-foreground">Optional: use an existing TURN service when the built-in relay is off. Get its address and credentials from your provider or network administrator.</p>
     <form onSubmit={submit}>
-      <SettingsRow label="TURN address" htmlFor="live-relay-url" description="A turn: or turns: address, including its port and transport if required.">
+      <SettingsRow label="TURN address" htmlFor="live-relay-url" description={`Used when the built-in relay is off. Get a turn: or turns: address from your provider.${query.data?.source === "environment" ? " Using launch settings until you save or remove them here." : ""}`}>
         <Input id="live-relay-url" value={relay.urls} placeholder="turn:relay.example:3478?transport=tcp" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={2048} required disabled={busy} onChange={event => change("urls", event.target.value.trim())} />
       </SettingsRow>
       <SettingsRow label="Username" htmlFor="live-relay-username">
@@ -77,14 +77,12 @@ export function LiveRelaySettings({ credentials, connected, device, couch, host 
       </SettingsRow>
       <div className="flex flex-wrap gap-2 pt-3">
         <Button type="submit" disabled={busy || !relay.urls || !relay.username || !relay.credential || !draft}>{save.isPending ? "Saving…" : "Save relay"}</Button>
-        <Button type="button" variant="outline" disabled={busy || !!draft || !query.data?.relay || local.data?.enabled} onClick={() => { setStatus(""); check.mutate(query.data!.relay!); }}>{check.isPending ? "Checking…" : "Check saved relay from this device"}</Button>
-        <Button type="button" variant="ghost" disabled={busy || !query.data?.relay} onClick={() => { check.reset(); setStatus(""); save.mutate(null); }}>Remove relay</Button>
+        <Button type="button" variant="outline" disabled={busy || !!draft || !query.data?.relay || local.data?.enabled} onClick={() => check.mutate(query.data!.relay!)}>{check.isPending ? "Checking…" : "Check external relay"}</Button>
+        <Button type="button" variant="ghost" disabled={busy || !query.data?.relay} onClick={() => { check.reset(); save.mutate(null); }}>Remove relay</Button>
       </div>
     </form>
       </CollapsibleContent>
     </Collapsible>
-    {query.data?.source === "environment" && <p className="text-sm text-muted-foreground">Using launch settings. Saving or removing a relay here overrides them, including after restarting Couch.</p>}
-    {status && <p role="status" className="text-sm text-muted-foreground">{status}</p>}
     {(query.error || save.error || check.error) && <Alert variant="destructive"><AlertDescription>{query.error?.message ?? save.error?.message ?? check.error?.message}{check.error && " Low-delay playback has not been verified."}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" disabled={!connected} onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>}
   </SettingsSection>;
 }

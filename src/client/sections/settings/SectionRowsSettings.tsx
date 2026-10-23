@@ -15,7 +15,7 @@ export function SectionRowsSettings<Id extends string>({ page, labels, layout }:
         {layout.rows.map((row, index) => <li key={row.id}>
           <Field orientation="horizontal" className="gap-3 border-b py-2">
             <Switch id={`${page.toLowerCase()}-row-${row.id}`} checked={row.shown} onCheckedChange={checked => layout.toggle(row.id, checked)} />
-            <FieldLabel htmlFor={`${page.toLowerCase()}-row-${row.id}`} className="min-h-8 items-center text-base font-normal touch:min-h-11">{labels[row.id]}</FieldLabel>
+            <FieldLabel htmlFor={`${page.toLowerCase()}-row-${row.id}`} className="min-h-8 items-center text-body font-normal touch:min-h-11">{labels[row.id]}</FieldLabel>
             <div className="-mr-2.5 flex gap-1">
               <Button variant="ghost" size="icon" aria-label={`Move ${labels[row.id]} up`} disabled={index === 0} onClick={event => { layout.move(row.id, -1); if (index === 1) event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>('[role="switch"]')?.focus(); }}><ChevronUp aria-hidden="true" /></Button>
               <Button variant="ghost" size="icon" aria-label={`Move ${labels[row.id]} down`} disabled={index === layout.rows.length - 1} onClick={event => { layout.move(row.id, 1); if (index === layout.rows.length - 2) event.currentTarget.closest("li")?.querySelector<HTMLButtonElement>('[role="switch"]')?.focus(); }}><ChevronDown aria-hidden="true" /></Button>
