@@ -28,6 +28,7 @@ import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
 import { createRadioProgramme } from "./radio-programme";
+import { createRadioRecognition } from "./radio-recognition";
 import { createRadioSettings } from "./radio-settings";
 import { createCatalog, type Viewing } from "./catalog";
 import { createProviderMetadata, providerMetadata } from "./provider-metadata";
@@ -1198,6 +1199,7 @@ export async function createHub(options: HubOptions) {
     } });
   const continuation = createContinuationResolver();
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => invalidate("radio") });
+  const radioRecognition = createRadioRecognition({ station: radio.getPlayable, signal: shutdown.signal });
   radioProgramme = createRadioProgramme({ station: radio.programmeStation, metadata: radio.metadata, publish: (playbackId, programme) => playing(playbackId)?.session.updateRadioProgramme(playbackId, programme) });
   const radioSettings = createRadioSettings(radio);
   const guide = createGuide({ databasePath: options.databasePath, onChange: () => invalidate("iptv"),
@@ -1656,6 +1658,7 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
       if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|programmes|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
+      if (!websocket && url.pathname === "/api/radio/recognize") return cors(request, await radioRecognition.handle(request, authorize));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
       if (!websocket && url.pathname === "/api/artwork") return cors(request, await artworkResponse(request, authorize));

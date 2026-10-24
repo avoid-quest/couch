@@ -21,7 +21,9 @@ and paired remotes.
   their public players. Whole-anime queueing and automatic continuation support
   lists of up to 500 episodes; choose individual episodes for longer anime.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
-  Browser search, with shared favorites.
+  Browser search, with shared favorites. While a station is playing, choose
+  **Identify song** to recognize a short excerpt. This is an on-demand
+  prototype using Shazam's service; see [song recognition](radio-recognition.md).
 - **AirPlay** sound from an iPhone, iPad or Mac, on a Couch that runs on Linux,
   once an admin turns it on in **Settings → Sources**: [Receive AirPlay](airplay.md).
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings →

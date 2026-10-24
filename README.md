@@ -114,6 +114,7 @@ comes with its dependencies' notices.
 
 - [Usage and development](docs/usage.md)
 - [Share a live device](docs/live-inputs.md)
+- [Identify a song on radio](docs/radio-recognition.md)
 - [Checks and releases](docs/ci.md)
 - [Current architecture](docs/architecture.md)
 - [Design system](docs/design.md)

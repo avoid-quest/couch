@@ -34,6 +34,7 @@ import { AmbientLight, roomStyle, useArtworkLight } from "@/components/AmbientLi
 import { titleFit, titleLength } from "@/components/Stage";
 import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
+import { RadioRecognition } from "@/components/RadioRecognition";
 import { radioProgrammesQuery, radioStationQuery } from "@/api/radio";
 import { useQuery } from "@tanstack/react-query";
 import { isRadio, radioHost, radioShowLabels, radioNext, type RadioGuide } from "../../../shared/radio";
@@ -361,6 +362,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {!radio && <PlayerEndTime state={state} className="text-sm text-muted-foreground tabular-nums" />}
           </div>
           {nowPlaying && <p role="status" className="text-sm text-pretty text-muted-foreground">{nowPlaying}</p>}
+          {radio && stationId && <RadioRecognition key={JSON.stringify([credentials.origin, credentials.token, state?.playback, player?.playbackId, current.id, stationId])} credentials={credentials} stationId={stationId} connected={connected} />}
           {statusView}
         </div>
       </div>}

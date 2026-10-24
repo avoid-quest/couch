@@ -373,6 +373,22 @@ Live media
 that can't seek has no timeline, no time and no label, and its Pause stays
 disabled. The band includes the phone's safe-area inset.
 
+### Identify a radio song
+
+A radio station's Now playing offers **Identify song** under its track line.
+The action samples the station only when pressed; it never starts from opening
+the player or on a timer. **Identifying…** keeps its slot while a ghost
+**Cancel** action is available beside it. Playback keeps running.
+
+The result is a flat artist-and-title line, followed by the sample's local time
+and **Open in Shazam** when a link is available. It belongs to this viewer's
+request, separate from the station and programme: it does not replace their
+title, host or artwork, and is not a continuously updated current-track label.
+A miss says "No song identified. Try another part of the stream." Failures
+stay beside the action so it can be tried again. Another Couch, station, queue
+entry or Playback, a disconnect, or leaving the player cancels the request and
+clears its result. There is no recognition history or automatic recognition.
+
 ### Calm and Info
 
 Now playing opens **calm**, on every screen: the artwork, the title, where it
