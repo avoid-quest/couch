@@ -2,10 +2,10 @@
 
 Implementation starts from `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`, exactly the audited baseline, on `refactor/couch-playback`. The checkout was clean. Planning documents were copied from the assigned research worktree before delegation; experimental source changes were not copied.
 
-Current assembly status: **encoder correction reviewed; explicit output
-preparation and both review corrections independently reviewed and clear**.
-Integrated build/package and a new physical attempt are pending.
-The original physical startup qualification remains failed.
+Current assembly status: **encoder, explicit preparation and initial-source
+routing corrections are independently reviewed and clear**. A fresh integrated
+build, Node sweep and Linux package are pending. The original physical startup
+qualification remains failed.
 
 Prior implementation commit: `5a18b8c4ebb80a8fa64e864ba533afae49b64e08`. That frozen
 candidate (`Hub 86e813c8…`) passed typecheck/build and R6's 39 scoped routing cases. Its
@@ -22,14 +22,53 @@ fixture correction. Its Linux package and extracted-ASAR worker checks pass. A
 recording is preserved; no subsequent physical stages ran. No merge or release
 has occurred.
 
+The new clean candidate `e7dad73e921ba9ab94a7291083efab8e01f51298` passes
+frozen install, all three TypeScript projects and production build. Its 84 separate
+Bun suites pass all 611 cases. The 59 Node suites contain 509 tests: 505 pass,
+one fails, three skip for the known AirPlay prerequisites. The failure is the
+first setup assertion in device-sharing's private-picture case: an output exposes
+“Playback outputs changed while preparing this source. Try again.” before the
+unauthorized control attempt. The unchanged case reproduces 3/3. Public traces
+show a persistent same-item preparation error and zero delivered loads. Restoring
+only the old output-error projection makes the original assertion pass while
+playback remains failed with zero loads: it hides a real initial-preparation race.
+A narrow Hub correction now retries only retired output preparation for the same
+current, non-moving item. Original assertions and genuine error precedence remain
+unchanged. Seven new deterministic public regressions cover real scheduled playback
+and encrypted PCM on both receivers, cancellation, current consent and genuine
+source failures. The affected owner suites pass 101/101 (device-sharing 18, routing
+18, admission 9, live outputs 56), with three-project typecheck/diff checks passing
+and 107 recorded process identities gone. The correction is frozen at Hub
+`7d873a157551f6e830a3cbd6e4819a810d305b7ad6b1d92961e7baf38916d0ec`;
+its independent review passed 21 unchanged-product checks but found one P2:
+withdrawing picture consent during held HLS preparation can retain the original
+picture master instead of selecting its available audio rendition. The standalone
+sound-only control passes, and a scratch current-selection correction passes both
+cases. Core has corrected the distinction between resolution coverage and current
+channel selection, preserving prospective moves' saved intent. The revised Hub
+`71842e08ce2de407f3a684357687e9237a89845b8bf120a2df2b9977b91fae4c`
+passes 53 affected cases and three-project typecheck. Fresh R2 is clear with
+28 focused checks, including prospective Move selection, repeated preparation
+and cancellation. Prior-selection and wrong-Move-selection controls fail at the
+expected rendition assertion; all 37 sampled identities and 19 groups are stopped.
+Its retained routing-runner failure came from scratch TMPDIR inheriting ESM;
+the identical test bundle passes after an explicit scratch CommonJS boundary.
+No product assertion or source changed for that environment correction. Original red/green and cleanup receipts remain in
+`core-integrated-output-error`; the independent report and probes are in
+`review-initial-preparation-r1.md` and `initial-preparation-review-r1`. All suite
+inputs stayed unchanged and owned process groups are empty. Receipts are in
+`physical-fix-root-checks`, `physical-fix-units` and `physical-fix-integrations`.
+The separate 790-input package clone is prepared but has not run Package.
+
 Post-physical corrections are tracked separately from those frozen receipts:
 
 - `bc40d15` bounds the existing capture encoder's input packets; its independent
   review is clear. The original failed physical package remains unchanged.
 - Explicit preparing/ready/failed state now separates output warmup from a
   terminal admission failure, with atomic SDK timing reports and current-tab
-  authority. All timing and capacity gates remain unchanged. The revised frozen Hub
-  is `ed065d279815b69c9b32b37e51db8e8b69f69ee82d43c66a9b06018f31f41ee0`.
+  authority. All timing and capacity gates remain unchanged. That reviewed admission snapshot used Hub
+  `ed065d279815b69c9b32b37e51db8e8b69f69ee82d43c66a9b06018f31f41ee0`;
+  later source-preparation corrections are recorded above.
 - Audio's 31 focused checks and isolated frozen-install SDK 2/2 pass. Core's
   admission 8/8, routing 18/18 and audience 7/7 pass; UI's 33 affected checks pass.
   These are separate owner receipts, not a new integrated suite total. The three

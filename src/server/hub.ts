@@ -902,7 +902,9 @@ export async function createHub(options: HubOptions) {
       if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       const entry = stateOf(playback).queue.find(item => item.id === stateOf(playback).currentEntryId);
       let isLiveMedia = !!(entry?.live || media.metadata?.live);
-      const output = pending.resolved.output ?? { picture: true, sound: true };
+      // Resolution coverage can exceed this attempt's channels. A prospective
+      // move retains its proposed selection until its destination is committed.
+      const output = pending.moving ? pending.resolved.output ?? { picture: true, sound: true } : { ...sourceOutput(playback) };
       const preparation = createSourcePreparation(signal);
       // Select channels before probing or relaying any bytes. Direct has no Core
       // decoder; keep the original resolution for a later group/picture change.
@@ -917,7 +919,12 @@ export async function createHub(options: HubOptions) {
       const core = coreRelay ? await passThrough.prepare(playbackId, coreSelected, headers, { origin: await passThrough.coreOrigin(), userAgent: "Couch" }, signal) : coreSelected;
       const coreHeaders = coreRelay ? {} : headers;
       signal.throwIfAborted();
-      if (playback.generation !== pending.generation || playback.pending !== pending) throw new Error("Playback outputs changed while preparing this source. Try again.");
+      if (playback.generation !== pending.generation || playback.pending !== pending) {
+        // Initial preparation can outlive an accepted output edit. Rebuild only
+        // that current route; prospective moves still reject a changed mix.
+        if (!pending.moving && !playback.moving && playback.pending === pending && stateOf(playback).player.playbackId === playbackId && playback.outputs.length) return null;
+        throw new Error("Playback outputs changed while preparing this source. Try again.");
+      }
       for (const output of playback.joining ? [playback.joining] : playback.outputs) requireOutput(output, output.local ? output.deviceId : "");
       pending.media = { playbackId, source: core.source, audioSource: core.audioSource, headers: coreHeaders, publicNetwork: media.publicNetwork, live: isLiveMedia, audioOnly: media.audioOnly, hasAudio: media.hasAudio, duration: media.metadata?.duration ?? entry?.duration, ...entry?.liveSourceId ? { liveSourceId: entry.liveSourceId, intent: live.source(entry.liveSourceId)?.intent } : {} };
       return isLiveMedia ? { ...prepared, metadata: { ...prepared.metadata, live: true } } : prepared;
@@ -927,19 +934,22 @@ export async function createHub(options: HubOptions) {
       playback.pending = pending;
       try {
         let media = await resolved.media;
-        // Outputs can join while an initial resolver is still pending. Prepare
-        // that current load for the current mix; prospective moves stay strict.
-        while (!pending.moving && playback.pending === pending && stateOf(playback).player.playbackId === pending.resolved.playbackId && playback.outputs.length) {
-          const output = { ...sourceOutput(playback) };
-          pending.tab = playback.renderer ?? newest(playback.outputs.find(output => output.picture)?.deviceId ?? playback.outputs[0]!.deviceId);
-          pending.generation = playback.generation;
-          if (media.mpv || coversOutput(pending.resolved.output, output) && (!pending.tab || pending.resolved.vp9 === pending.tab.data.vp9)) break;
-          const state = stateOf(playback), entry = state.queue.find(item => item.id === state.currentEntryId);
-          if (!entry) throw new Error("This source is no longer playing.");
-          pending.resolved = { playbackId: resolved.playbackId, vp9: pending.tab?.data.vp9 ?? true, output, media: resolveEntry(entry, resolved.playbackId, signal, pending.tab, playback, output) };
-          media = await pending.resolved.media;
+        while (true) {
+          // Outputs can change during resolution or byte preparation. Prepare
+          // that current load for the current mix; prospective moves stay strict.
+          while (!pending.moving && playback.pending === pending && stateOf(playback).player.playbackId === pending.resolved.playbackId && playback.outputs.length) {
+            const output = { ...sourceOutput(playback) };
+            pending.tab = playback.renderer ?? newest(playback.outputs.find(output => output.picture)?.deviceId ?? playback.outputs[0]!.deviceId);
+            pending.generation = playback.generation;
+            if (media.mpv || coversOutput(pending.resolved.output, output) && (!pending.tab || pending.resolved.vp9 === pending.tab.data.vp9)) break;
+            const state = stateOf(playback), entry = state.queue.find(item => item.id === state.currentEntryId);
+            if (!entry) throw new Error("This source is no longer playing.");
+            pending.resolved = { playbackId: resolved.playbackId, vp9: pending.tab?.data.vp9 ?? true, output, media: resolveEntry(entry, resolved.playbackId, signal, pending.tab, playback, output) };
+            media = await pending.resolved.media;
+          }
+          const prepared = await prepareMedia(media, pending, signal);
+          if (prepared !== null) return prepared;
         }
-        return await prepareMedia(media, pending, signal);
       }
       catch (error) { if (playback.pending === pending) playback.pending = undefined; throw error; }
     };
