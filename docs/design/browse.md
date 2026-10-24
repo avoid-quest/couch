@@ -108,7 +108,8 @@ screen; where a line sits says what it describes:
   categories and host, then the station with its tags ("NTS Radio, Community,
   Talk"; a link on Home), the progress line, the verbs, the synopsis. The
   player keeps its own order: the station's link and tags under the title, then
-  categories and host.
+  categories and host. A host the show is named after ("DJ Alé" by DJ Alé)
+  isn't said twice: the title already names them (`radioHost`).
 - **Progress** is the Stage's line, with what's left and the local window
   beside it ("30 min left, 21:12–22:12", Couch's 24-hour clock). Only a real
   broadcast window gives it; it never seeks.

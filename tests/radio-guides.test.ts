@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { parseGuideChannels, parseGuidePrograms, xmltvTime } from "../src/server/iptv-feeds";
 import { readRadioSource } from "../src/server/radio-playlists";
 import { createRadioGuides } from "../src/server/radio-guides";
-import { radioLabels, radioNow, radioNext, radioShowLabels, radioMatches, type RadioGuide, type RadioProgrammeDetails } from "../src/shared/radio";
+import { radioLabels, radioNow, radioNext, radioHost, radioShowLabels, radioMatches, type RadioGuide, type RadioProgrammeDetails } from "../src/shared/radio";
 
 const playlist = readFileSync(new URL("./fixtures/radio/community.m3u", import.meta.url), "utf8");
 const xml = readFileSync(new URL("./fixtures/radio/community.xml", import.meta.url), "utf8");
@@ -42,6 +42,9 @@ test("schedule precedence, enrichment matching, freshness, gaps and next entries
   const current = radioNow(guide, "station", now)!;
   expect(current).toMatchObject({ title: "Night Shift", description: "Guide description", artworkUrl: live.artworkUrl, artist: "Alex", expiresAt: end, start, end });
   expect(radioShowLabels(current)).toEqual(["Experimental", "Jazz"]);
+  expect(radioHost(current)).toBe("Alex");
+  // A show named after its host says the host once, in its title.
+  expect(radioHost({ ...current, title: "DJ Alé", artist: "dj ale" })).toBeUndefined();
   expect(radioNow({ ...guide, programmes: [{ ...guide.programmes[0]!, artworkUrl: "https://example.com/scheduled.jpg" }] }, "station", now)?.artworkUrl).toBe("https://example.com/scheduled.jpg");
   expect(radioNow({ ...guide, live: { ...live, sampledAt: start - 1 } }, "station", now)?.artworkUrl).toBeUndefined();
   expect(radioNow({ ...guide, live: { ...live, expiresAt: now } }, "station", now)?.artworkUrl).toBeUndefined();
