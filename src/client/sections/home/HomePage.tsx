@@ -29,9 +29,10 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
+import { PlaysOnLine } from "@/sections/shell/Outputs";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
-import { avoidRadioPlaylistId, isRadio, radioShowLabels, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
+import { avoidRadioPlaylistId, isRadio, radioHost, radioShowLabels, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
 import type { HistoryItem, HistorySelection } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
@@ -153,14 +154,14 @@ export function HomePage() {
   const live = !!(current?.live || current?.kind === "radio");
   const at = playsOn(state);
   const show = useStationShow();
-  // Where it plays reads "on {name}" here too, as in the now-playing bar and the player. A station without its show
-  // reads Radio, as the player does, never its stream's host.
+  // Where it plays reads "on {name}" before the links, on one line, as in the now-playing bar and the player. A
+  // station without its show reads Radio, as the player does, never its stream's host.
   const status = playbackStatus(state, connected);
   const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
-  const playingMeta = metaLine(playing?.lead, playing?.subtitle, ...radioShowLabels(show), show?.artist, current && !isRadio(current) && sourceLabel(current.source), !status.quiet && status.label, at?.elsewhere && `on ${at.name}`);
+  const playingMeta = metaLine(playing?.lead, playing?.subtitle, ...radioShowLabels(show), radioHost(show), current && !isRadio(current) && sourceLabel(current.source), !status.quiet && status.label);
   const heroCaption = hero?.kind === "continue" ? historyCaption(hero.item) : undefined;
 
-  const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
+  const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<PlaysOnLine at={at}><MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} /></PlaysOnLine>} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}
       progress={live ? <RadioProgress show={show} /> : <PlayingProgress current={current} speed={state?.player.speed || 1} />}
       // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
       open={() => shell.changeSection("Now")} />
@@ -172,7 +173,7 @@ export function HomePage() {
       {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
       <Button variant="ghost" size="lg" aria-label={`Details ${hero.item.title}`} onClick={() => details.open(itemLocation("history", hero.item.mediaId))}>Details</Button>
     </HomeHero>
-    : hero.kind === "radio" ? <HomeHero context={<RadioStationLine className="text-sm" station={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} tags={hero.station.tags} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={metaLine(...radioShowLabels(hero.show), hero.show.artist)} progress={<RadioProgress show={hero.show} />}>
+    : hero.kind === "radio" ? <HomeHero context={<RadioStationLine className="text-sm" station={<MediaContext radio={{id: hero.station.id, title: hero.station.name}} />} tags={hero.station.tags} />} thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl} shape="square" title={hero.show.title} meta={metaLine(...radioShowLabels(hero.show), radioHost(hero.show))} progress={<RadioProgress show={hero.show} />}>
       <Button data-page-first size="lg" aria-label={on(`Play ${hero.station.name}`)} disabled={!available} onClick={() => playRadioHero(hero.station)}><Play aria-hidden="true" />{on("Play")}</Button>
     </HomeHero> : null;
 

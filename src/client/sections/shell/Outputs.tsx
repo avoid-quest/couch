@@ -253,6 +253,11 @@ export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> })
   return <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>;
 }
 
+/** Where it plays, then where it comes from (its links), as one line: the player's summary and Home's Stage say it alike. */
+export function PlaysOnLine({ at, children }: { at: ReturnType<typeof playsOn>; children?: ReactNode }) {
+  return at?.elsewhere ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"><PlaysOn at={at} />{children}</div> : <>{children}</>;
+}
+
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:
 // Sendspin's static delay, 0–500 ms. "Lip sync" while another device shows the picture. It applies only while the
 // device plays in sync, and few people touch it, so a row shows it only while it isn't 0, or once "…" revealed it.

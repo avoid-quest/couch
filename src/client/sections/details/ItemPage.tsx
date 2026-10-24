@@ -27,7 +27,7 @@ import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
 import type { ForLaterItem, ForLaterReference } from "../../../shared/for-later";
 import type { HistoryItem } from "../../../shared/viewing";
-import { isRadio, radioNow, radioNext, radioShowLabels, type RadioStation } from "../../../shared/radio";
+import { isRadio, radioNow, radioNext, radioHost, radioShowLabels, type RadioStation } from "../../../shared/radio";
 import type { PlaybackCollection } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
@@ -235,7 +235,7 @@ function RadioDetails({ item }: { item: RadioStation }) {
   const programme = connected ? radioNow(guide, item.id, now) : null;
   const next = connected ? radioNext(guide, now) : undefined;
   // The show leads with its categories and host, then the station with its tags; without a show the station is the title.
-  const show = programme && metaLine(...radioShowLabels(programme), programme.artist, programme.album, !!programme.bitrate && `${programme.bitrate} kbps`);
+  const show = programme && metaLine(...radioShowLabels(programme), radioHost(programme), programme.album, !!programme.bitrate && `${programme.bitrate} kbps`);
   return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} shape="square" fit={programme?.artworkUrl ? undefined : "contain"}
     meta={programme ? undefined : metaLine(...item.tags ?? [], item.groupTitle || item.countryCode)}
     context={programme && <span className="grid gap-caption">{show && <span>{show}</span>}<span>{metaLine(item.name, ...item.tags ?? [])}</span></span>}
