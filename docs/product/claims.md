@@ -14,7 +14,7 @@ says *in preview* until a stable release exists, and never says *stable*.
 
 | Claim | Evidence | Public wording limits |
 | --- | --- | --- |
-| Runs as a desktop app on macOS 14+ (Apple Silicon), Windows 11 (x64) and Linux (x64 AppImage, Debian 13 `.deb`) | `apps/web/src/pages/download.astro`, release assets | Name the platforms; not "every computer" |
+| Packages desktop apps for macOS 14+ (Apple Silicon), macOS 13+ (Intel), Windows 11 (x64) and Linux (x64 AppImage, Debian 13 `.deb`) | `apps/web/src/pages/download.astro`, Package workflow, release assets | Name the platforms; not "every computer". Intel 13–14 needs a compatible local mpv for some TV codecs; automatic Intel mpv needs 15+. Intel downloads appear after publication; Ventura runtime/install/update validation remains required ([audit](../intel-macos-research.md)) |
 | Can be set up as a dedicated Debian TV | `couch-setup --tv`, [native-tv](../native-tv.md) | The TV layout has only been run on a Mac ([usage](../usage.md#what-plays-where)); say "set up", not "tested on TVs" |
 | Phones and laptops join through a browser by scanning a QR code or typing a six-digit code; no app install | [usage](../usage.md#connect-a-phone) | The first visit shows a certificate warning; mention it in how-to copy |
 | No accounts; it runs on your own network | Pairing is per Couch, on the LAN ([architecture](../architecture.md)) | Online sources still need the internet |

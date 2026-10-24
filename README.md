@@ -46,9 +46,12 @@ the [vision](docs/product/vision.md) and its
 Couch is in preview. Download it from
 [couch.avoid.quest/download](https://couch.avoid.quest/download) or
 [Releases](https://github.com/avoid-quest/couch/releases): the `.dmg` for
-Apple Silicon Macs (macOS 14+), the `.exe` for Windows 11, or the `.AppImage`
-or `.deb` for Linux (x86_64). It updates itself. Phones and laptops that only
-join don't install anything.
+Apple Silicon Macs (macOS 14+) or Intel Macs (macOS 13+), the `.exe` for
+Windows 11, or the `.AppImage` or `.deb` for Linux (x86_64). It updates itself.
+Phones and laptops that only join don't install anything.
+
+On Intel macOS 13–14, some TV channels need a compatible mpv installation.
+Mac system audio sharing requires macOS 14.2 or later.
 
 See the [installation notes](docs/usage.md#install) for macOS's first-launch
 command and Windows's SmartScreen prompt.

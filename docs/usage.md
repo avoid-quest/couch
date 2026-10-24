@@ -158,6 +158,16 @@ Download Couch, or Couch Preview, from
 dmg on a Mac, the exe on Windows, the AppImage or deb on Linux. After that it
 updates itself.
 
+Choose **Apple Silicon** (`-arm64.dmg`, macOS **14+**) or **Intel**
+(`-x64.dmg`, macOS **13 Ventura or later**). The [download page](https://couch.avoid.quest/download)
+lists each architecture when that channel has published it. System audio
+capture requires macOS 14.2 or later; Ventura can share a screen or audio input.
+On Intel macOS 13–14, channels needing the native TV player require a compatible
+mpv 0.35 or later on `PATH`, or a working compatible copy already in Couch's
+cache. Otherwise only that channel reports the installation requirement;
+ordinary media remains available. Automatic Intel mpv downloads require
+macOS 15+. Couch does not build or pin an older mpv distribution.
+
 Couch isn't notarized by Apple, so the first time macOS won't open it. Move it
 to Applications, then run this once in Terminal (`Couch Preview.app` for the
 preview):
@@ -190,10 +200,11 @@ bun run app
   on port 1420, which proxies `/api` to Core.
 - `bun run build && bun run start` runs Core alone under Node and serves the
   built UI on port 4100.
-- `bun run package --mac dmg` (or `--win nsis`, `--linux AppImage deb`) builds
+- `bun run package --mac dmg zip --arm64 --x64` (or `--win nsis`, `--linux AppImage deb`) builds
   installers into `.artifacts/app` with electron-builder. A `-preview.N`
   version in `package.json` builds Couch Preview. The
-  [Package](../.github/workflows/package.yml) workflow builds all three, and
+  [Package](../.github/workflows/package.yml) workflow builds all three platforms,
+  including both Mac architectures, and
   [releases](ci.md#releases) publish them. The installed app checks for updates
   at start and every 4 hours. **Settings → Updates** shows them: the
   Couch's apps on the host, the app's own in **Another Couch** mode.

@@ -36,8 +36,13 @@ security find-identity -v -p codesigning
 
 ## Package and launch the isolated app
 
-Install Go 1.27.2 on PATH for packaging the bundled live relay. The package hook
-builds its arm64 executable inside the app before code signing.
+Install Go 1.27.2 on PATH, CMake, git and Xcode command line tools for packaging.
+The package hook builds the live relay and bundled QuickJS for the selected
+architecture inside the app before code signing ([packaging](ci.md)).
+The app supports Intel macOS 13+ and Apple Silicon macOS 14+. Bundled QuickJS
+targets macOS 13 for either CPU. On Intel 13–14, some TV codecs need a compatible
+mpv 0.35+ already on PATH or in Couch's cache; automatic Intel mpv downloads
+start at macOS 15. Couch does not supply a Ventura mpv build.
 
 These overrides use the repository's electron-builder v26 configuration. Keep
 the same bundle ID and certificate across rebuilds. `forceCodeSigning` makes a
@@ -72,6 +77,9 @@ package `identifier` keeps even that fallback separate from installed Couch. Use
 LaunchServices (`open`), because Electron launched directly from a terminal or
 IDE can attribute audio capture to that parent. Couch already supplies the
 required `NSAudioCaptureUsageDescription` and microphone description.
+Ventura supports screen and audio-input sharing; system audio requires 14.2+.
+Cross-packaging and signature verification on a newer ARM Mac do not establish
+Ventura execution: check ordinary media on the target Intel Mac as well.
 [Electron's capture requirements](https://www.electronjs.org/docs/latest/api/desktop-capturer).
 
 ## Diagnose a stale decision

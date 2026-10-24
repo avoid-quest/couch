@@ -5,7 +5,7 @@ import { access, constants, mkdir, readdir, rename, rm, writeFile } from "node:f
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { unzipSync } from "fflate";
 import type { HelperUpdate } from "../shared/helper-updates";
-import { activeHold, pin, pinned, readHelperStatus, readHold, readStatus, removeHold, updateStatus, writeJson, type HelperHold } from "./helper-status";
+import { activeHold, pin, pinned, readHelperStatus, readHold, readStatus, removeHold, updateStatus, writeJson, type HelperHold, type SelectedHelper } from "./helper-status";
 
 // Core's media helpers. It uses the system's copy when it is recent enough.
 // Otherwise it downloads the official build into <data>/helpers/<name>/<version>,
@@ -111,7 +111,7 @@ let root = "";
 // Executables a run is still using; pruning leaves their copies for a later check.
 const inUse = new Map<string, number>();
 type Copy = { version: string; path: string };
-type Choice = Copy & { origin: "system" | "managed"; sha256?: string; latest?: string; held?: boolean; error?: string };
+type Choice = Copy & { origin: SelectedHelper["origin"]; sha256?: string; latest?: string; held?: boolean; error?: string };
 const newestFirst = (a: string, b: string) => b.localeCompare(a, "en", { numeric: true });
 
 // A yt-dlp copy being removed is first renamed to <version>.removing; see remove.
@@ -247,7 +247,25 @@ async function check(name: Helper, update = false): Promise<Choice> {
   if (system && systemVersion && recentEnough(name, systemVersion, current?.version ?? offlineCopy?.version))
     // Couch's own yt-dlp copies stay bounded, with their previous one, while PATH's is used.
     return select(name, { origin: "system", path: system, version: systemVersion, latest: current?.version, error }, name === "yt-dlp" ? await managed() : copies);
+  // Packaged Macs ship a compatible QuickJS. Never replace it with upstream's
+  // macOS-26-only binary, including during manual checks or after a cache reset.
+  if (name === "qjs" && process.env.COUCH_QJS_PATH) {
+    const path = process.env.COUCH_QJS_PATH;
+    const found = await version(name, path);
+    if (!found || !recentEnough(name, found)) throw new Error("Couch's bundled QuickJS doesn't run. Reinstall Couch or install QuickJS-NG 0.12 or later on PATH.");
+    return select(name, { origin: "bundled", path, version: found }, copies);
+  }
   const copy = (await managed())[0];
+  // Ask macOS for its product version, not Darwin's differently numbered kernel.
+  // The official Intel mpv requires 15; older Macs can keep a compatible local copy.
+  if (name === "mpv" && process.platform === "darwin" && process.arch === "x64"
+    && !(Number.parseInt(await run("/usr/bin/sw_vers", ["-productVersion"]) ?? "", 10) >= 15)) {
+    for (const cached of await managed()) {
+      const found = await version(name, cached.path);
+      if (found && recentEnough(name, found)) return select(name, { ...cached, origin: "managed" }, copies);
+    }
+    throw new Error("This channel needs mpv. Automatic Intel mpv downloads require macOS 15 or later. Install a compatible mpv 0.35 or later on PATH, then try this channel again.");
+  }
   // Manual checks also refresh managed builds. Compatible PATH copies stay with their
   // package manager, and startup/daily checks retain their compatibility-only policy.
   if (update && name !== "yt-dlp") current = await release();
@@ -311,7 +329,7 @@ export async function updateHelper(directory: string, name: Helper): Promise<Hel
   return {
     name, version: selected?.version ?? null, origin: selected?.origin ?? null, error,
     status: error ? "error" : choice?.held ? "held"
-      : name !== "yt-dlp" && choice?.origin === "system" ? name === "mpv" ? "system" : "compatible"
+      : name !== "yt-dlp" && (choice?.origin === "system" || choice?.origin === "bundled") ? name === "mpv" ? "system" : "compatible"
       : choice?.version !== before ? "updated" : "current",
   };
 }

@@ -103,6 +103,36 @@ electron-builder loads `scripts/after-pack.ts` with Node, not Bun, so its import
 name their `.ts` extension; `bun test tests/package-hooks.test.ts` loads the hook
 as electron-builder does.
 
+## Bundled Mac JavaScript runtime
+
+Mac packages also need CMake, git and Xcode command line tools. Package installs
+CMake if missing. The `afterPack` hook builds unmodified QuickJS-NG **0.17.0**
+from pinned commit `6d46d07d04041b40f4f49eaa7fdebe44c314c699`, for the
+**target** architecture, into `Resources/quickjs`, with its MIT license and
+source notice. CMake's `CMAKE_OSX_ARCHITECTURES` selects arm64 or x86_64 and
+`CMAKE_OSX_DEPLOYMENT_TARGET=13.0` covers Intel Ventura while the Apple Silicon
+app keeps its macOS 14 floor.
+Packaging checks the Mach-O architecture and deployment target before signing;
+only the host architecture is smoke-tested there. The official prebuilt
+QuickJS-NG 0.17.0 binaries require macOS 26, so packaged Macs use this bundled
+runtime instead of downloading them. It updates with Couch; manual helper
+checks keep it. A compatible `qjs` on PATH can still take precedence.
+
+After packaging, the Mac job verifies both app bundles with
+`codesign --verify --deep --strict` and each bundled QuickJS executable with
+`codesign --verify --strict`. Its explicit `mac/*.app` and `mac-arm64/*.app`
+patterns also fail if either architecture is missing.
+
+For development on a Mac without a compatible system QuickJS:
+
+```sh
+bun scripts/build-quickjs.ts
+# Supply COUCH_QJS_PATH="$PWD/build/quickjs/qjs" to the isolated development Core.
+```
+
+`tests/helper-updates.integration.ts` covers bundled selection and manual checks
+using isolated executable fixtures on Linux. This does not validate the Mac binary.
+
 ## Releases
 
 Couch ships on two channels, both published in
@@ -140,6 +170,35 @@ sentences: they become the release notes. Package can also be dispatched on its
 own for a test build of `package.json`'s version, kept as run artifacts and
 never published.
 
+The single Mac invocation builds **arm64 and x64 DMGs and ZIPs** with architecture
+in every filename. ZIPs are the updater payloads. The pinned electron-builder
+merges both architectures into one `preview-mac.yml` or `latest-mac.yml`;
+electron-updater chooses the matching ZIP. Keep both architectures in this
+invocation: separate jobs uploading the same feed with `--clobber` would lose
+one architecture. `bun test tests/package-hooks.test.ts` exercises the pinned
+builder's merge and updater's selection on both channels.
+
+Mac support is **Apple Silicon on macOS 14+**, **Intel on macOS 13+**. The app's
+`LSMinimumSystemVersionByArchitecture` declares those floors; the common floor
+is 13. Intel's optional native TV codec fallback downloads an official mpv build
+only on 15+. Intel 13–14 can use a compatible mpv 0.35+ on PATH or in the helper
+cache; otherwise just the channel needing it reports the installation requirement.
+Core reads Apple's `/usr/bin/sw_vers -productVersion` before an automatic Intel
+mpv download, leaving other platforms unchanged. System audio needs 14.2.
+`tests/intel-mpv.integration.ts`, run on Node as above, covers first-use failure,
+PATH/cache precedence, manual checks and the newer-OS download route using
+simulated Mac selection and executable fixtures on Linux.
+The Intel FFmpeg supplier stops making
+new Intel releases in January 2027; migrate that verified distribution source
+before promising continued maintained support ([audit](intel-macos-research.md)).
+Cross-packaging on the ARM runner and Linux `act` are not Intel runtime tests:
+before shipping, validate clean helper setup, playback (including native TV
+codecs with a compatible local mpv, and their clear failure without one), screen
+and audio-input capture, pairing and signed install/update on an Intel Ventura
+Mac. System audio on 14.2+ and the existing Apple Silicon 14 floor need their
+own device checks. A hosted ARM Package run proves cross-build/targets/signatures,
+not Ventura execution.
+
 The Mac app is signed with Couch's own self-signed certificate,
 [`Couch Releases`](../packaging/couch-releases.pem), without an Apple account or
 notarization. macOS keeps an app's permissions, and Squirrel.Mac installs an
@@ -167,7 +226,9 @@ its releases without authentication. Workflow dispatches do not change its
 visibility. Keep the Blacksmith GitHub App enabled for this repository.
 
 The website's fallback catalog should list only installers that have actually
-been published here.
+been published here. Intel downloads come from real release assets; add no
+Intel entry to `apps/web/src/releases.json` until one has shipped. Catalog
+coverage runs with `bun test tests/release-catalog.test.ts`.
 
 ## Workflow changes
 
