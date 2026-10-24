@@ -15,11 +15,12 @@ import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 import { logMediaResolution } from "./media-diagnostics";
+import type { SelectedChannels } from "./source-preparation";
 
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; audioOnly?: boolean; hls?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -111,7 +112,7 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     }
   }
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  return { source, ...(audioSource ? { audioSource } : {}), ...(selected.every(stream => String(stream.protocol).startsWith("m3u8")) ? { hls: true } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
@@ -134,10 +135,13 @@ function sourceSubtitles(info: Metadata, preferred: string): ExternalSubtitle[] 
 // Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it).
 const playable = "[protocol!*=dash]";
 
-function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): string {
+function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean, output?: SelectedChannels): string {
   if (!["best", "1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
   const filter = youtube || quality === "best" ? "" : `[height<=?${quality.slice(0, -1)}]`;
-  const selector = `bv*${filter}${playable}+ba${playable}/b${filter}${playable}`;
+  const selector = output?.picture === false && output.sound
+    ? `ba${playable}/b${filter}${playable}`
+    : output?.picture && !output.sound ? `bv${filter}${playable}/b${filter}${playable}`
+    : `bv*${filter}${playable}+ba${playable}/b${filter}${playable}`;
   // Filter every branch, including muxed fallback and separate audio. A codec preference
   // can still select an incompatible stream when no H.264/AAC format exists.
   return youtube && !vp9 ? `(${selector})[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']` : selector;
@@ -145,7 +149,7 @@ function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): 
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = "", playbackId?: string): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = "", playbackId?: string, output?: SelectedChannels): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
@@ -162,8 +166,8 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const selection = youtube ? ["--check-formats", "--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
     // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
-    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9), ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
-      const info = parseInfo(output);
+    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9, output), ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async extracted => {
+      const info = parseInfo(extracted);
       // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
       // maximum instead; formats with no known dimensions remain eligible.
       if (youtube && selectedQuality !== "best") {
@@ -176,6 +180,9 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       }
       if (info._has_drm === true) await rejectDrm(info, signal);
       const media = parseMedia(info, subtitleLanguage);
+      // Audio selected for an output does not make a video item intrinsically
+      // audio-only. Picture can be restored with another preparation of this item.
+      if (output?.picture === false && output.sound && media.audioOnly) media.audioOnly = Array.isArray(info.formats) && info.formats.length > 0 && info.formats.every(format => object(format) && format.vcodec === "none") || undefined;
       media.publicNetwork = true;
       if (direct) {
         media.metadata = { ...media.metadata, ...direct.metadata };
@@ -205,7 +212,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           await response.body?.cancel();
           cancellation.throwIfAborted();
           if (response.status !== 410) return null;
-          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage, playbackId);
+          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage, playbackId, output);
           const replacement = new URL(fresh.source);
           if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
           return fresh;

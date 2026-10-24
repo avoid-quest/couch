@@ -115,13 +115,19 @@ source"). A private picture disables Picture for other devices, while its
 shared sound keeps its Sound and fader. This device keeps its own
 controls while viewing another Playback.
 
+## Live audio
+
+A Live audio audience sees its own volume and **Join/Leave** instead of the shared
+mixer, compressor or programme controls. A failed listener shows its own error;
+leaving never pauses other listeners or ends the source.
+
 ## Fader and Sync
 
 The fader is the device's one volume; 0 takes its sound out.
 
 "Sync … ms earlier" (0–500 ms) plays a late speaker sooner (Sendspin's static
-delay). It applies only while the device's sound plays in sync with other
-devices. It reads **Lip sync** while another device shows the picture. A row
+delay). It applies while the device receives scheduled sound, including a
+single listener of relaxed timestamped capture or AirPlay. It reads **Lip sync** while another device shows the picture. A row
 shows its line only while it isn't 0; **Sync…** (or **Lip sync…**) in "…"
 reveals it and moves focus to its slider; Back or Esc there, or closing the
 panel, hides a line still at 0.
@@ -144,10 +150,13 @@ time it moves.
 
 ## In sync
 
-A live input plays directly on each device unless In sync is on
+A relaxed captured screen, or an audio publisher without timestamped capture,
+plays directly on each device unless In sync is on
 ([ADR 0001](../adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).
 Its switch sits under the Volume while the source plays on several devices,
-or while it is on.
+or while it is on. Timestamped audio inputs and AirPlay always use scheduled
+sound, including a single listener, so they have no In sync switch. Ordinary
+picture-only groups retain a shared timeline without generating silent audio.
 
 ## The chooser
 
@@ -163,7 +172,8 @@ dismissal.
 
 Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
 between rows, Left and Right change its level by 5 at once, with no OK to
-take the arrows. OK opens its options: Picture, Sound and Sync…. Back closes the panel with focus back on its button. It opens on the
+take the arrows. OK opens its options: Picture, Sound, **Move here** where
+permitted, and Sync…. Back closes the panel with focus back on its button. It opens on the
 first row. A revealed Sync line is a stop of its own whose slider Left and
 Right move directly.
 

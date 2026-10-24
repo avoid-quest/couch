@@ -115,10 +115,10 @@ setInterval(() => {}, 1000);
     publish: async (sourceId: string, kind: "screen" | "system-audio" | "microphone" = "screen", audio = true) => {
       assert.equal((await publisher.command({ type: "publishLive", sourceId, uploadToken, kind, audio, video: kind === "screen" })).ok, true);
     },
-    speaker: async (index: number) => {
+    speaker: async (index: number, codec = AudioCodec.PCM, state?: Parameters<SendspinClient["sendPlayerState"]>[0]) => {
       const identity = identities[index]!, delays: number[] = [];
       const speaker = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], { encryption: { identity: identity.key },
-        playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.SET_STATIC_DELAY] } });
+        playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.SET_STATIC_DELAY] } });
       speakers.push(speaker);
       chunks[index] = 0;
       speaker.addAudioChunkListener(() => chunks[index]!++);
@@ -130,6 +130,7 @@ setInterval(() => {}, 1000);
         void speaker.sendPlayerState({ static_delay_ms: delay });
       });
       await speaker.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+      if (state) await speaker.sendPlayerState(state);
       return delays;
     },
     // PCM chunks the speaker last connected for a Device has received.

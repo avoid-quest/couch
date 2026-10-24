@@ -1,4 +1,6 @@
 import { Description } from "@/components/DetailHeader";
+import { livePlayback, playbackControls } from "@/session/playback-controls";
+import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
@@ -60,7 +62,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
-  const queueOpen = requestedQueueOpen ?? localQueueOpen;
+  const queueOpen = playbackControls(state).queue && (requestedQueueOpen ?? localQueueOpen);
   const setQueueOpen = useCallback((open: boolean) => { if (onQueueOpenChange) onQueueOpenChange(open); else setLocalQueueOpen(open); }, [onQueueOpenChange]);
   const queueTrigger = useRef<HTMLButtonElement>(null);
   const gear = useRef<HTMLButtonElement>(null);
@@ -99,6 +101,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const player = state?.player;
   const panel = current && active && panelState?.playbackId === player?.playbackId ? panelState?.panel ?? null : null;
   const playing = player?.status === "playing";
+  const pictureUnmapped = usePictureMapping(player?.playbackId) || player?.timeline?.mapping === "unavailable";
   const playback = state?.playbacks?.find(playback => playback.id === state.playback);
   const audioOnly = isAudioOnly(playback, current, player?.tracks);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
@@ -220,7 +223,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       // A TV's first key on the picture enters the controls, even before their initial timeout.
       if (tvPresentation && !panel && (!shown || document.activeElement === surface()) && inPlayer && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation(); wake();
-        if (event.key === "ArrowLeft" || event.key === "ArrowRight") void seekBy(event.key === "ArrowLeft" ? -10 : 10);
+        if (playbackControls(state).seek && (event.key === "ArrowLeft" || event.key === "ArrowRight")) void seekBy(event.key === "ArrowLeft" ? -10 : 10);
         const timeline = event.key.startsWith("Arrow");
         requestAnimationFrame(() => (timeline ? root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])') ?? firstTransport() : firstTransport())?.focus());
         return;
@@ -288,11 +291,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const linkedTitle = detailHref ? <ContentLink href={detailHref} className="no-underline hover:underline">{title}</ContentLink> : title;
   // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
   const queueOrigin = queueOpen ? `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%` : undefined;
-  const settings = player && state?.preferences ? { entry: current, player, ready: transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
+  const settings = player && state?.preferences && playbackControls(state).programme ? { entry: current, player, ready: transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run, controls: state.controls } : null;
   // Over a picture the status is the picture's (a spinner centred on it, as YouTube's and Apple's HIG; a problem as a
   // short centred line with its one remedy); beside artwork it follows the title. Plain loading says nothing else.
   const remedy = connected && player?.status === "unavailable" && state?.playback ? <WhereItPlays state={state} connected={connected} run={run} label="Choose device" className="pointer-events-auto" />
-    : player?.status === "error" && current ? <Button variant="secondary" className="pointer-events-auto" disabled={!connected} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button> : null;
+    : player?.status === "error" && current && playbackControls(state).programme ? <Button variant="secondary" className="pointer-events-auto" disabled={!connected} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button> : null;
   const statusView = current && !status.quiet && <div data-player-status className={osd ? "player-status" : "flex items-start gap-2 text-sm"}>
     {status.busy && <Spinner className={osd ? "size-8" : "mt-0.5 shrink-0"} role="presentation" aria-hidden="true" />}
     <div className={cn("min-w-0", osd && status.busy && !status.detail && "sr-only")}><p role="status" className="font-medium">{status.label}</p>{status.detail && <p aria-live={player?.status === "loading" && state?.radioRetry ? "off" : "polite"} className="max-w-prose break-words text-muted-foreground">{status.detail}</p>}</div>
@@ -321,6 +324,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       onDoubleClick={() => { if (tap.current === null && canFullscreen) void fullscreen.toggle(); }}>
     </div>
     {osd && statusView}
+    {pictureUnmapped && <p role="status" className="absolute left-(--gutter) top-20 z-20 max-w-prose text-sm text-muted-foreground">This browser cannot align this picture with the shared sound. Try another browser or device.</p>}
     {/* The top line shows and hides with the band. Over a video it is one line, as in YouTube's and Netflix's fullscreen:
         Back, the title (opening Details) with its relationship links under it, and at the right the end time and, on the
         TV, the clock. Beside artwork Info sits at the top right, with Back and a Remote's TV status on desktop and
@@ -401,15 +405,15 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
               {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
                   with the same Volume, so the narrowest row leaves it out and keeps one line. */}
-              {state && <VolumeButton state={state} connected={connected} run={run} className="max-sm:hidden" />}
-              {state && <WhereItPlays state={state} connected={connected} run={run} />}
+              {state && <VolumeButton state={state} connected={connected} run={run} className={livePlayback(state) ? undefined : "max-sm:hidden"} />}
+              {state && !livePlayback(state) && <WhereItPlays state={state} connected={connected} run={run} />}
               <UpNextButton ref={queueTrigger} state={state} aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)} />
               {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
                   turns subtitles on and off. It opens over the picture above the gear. */}
-              <Popover open={panel === "settings"} onOpenChange={open => setPanel(open ? "settings" : null)}>
+              {!livePlayback(state) && <Popover open={panel === "settings"} onOpenChange={open => setPanel(open ? "settings" : null)}>
                 <PopoverTrigger asChild><Button ref={gear} data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
                 {panel === "settings" && settings && <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} details={detailHref && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref} aria-label="Details" onClick={openDetails}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
-              </Popover>
+              </Popover>}
               {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                   already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
               {!tvPresentation
@@ -447,7 +451,7 @@ function NextUp({ state, run }: { state: ClientSessionState; run: (action: Actio
   const next = state.queue[index + 1] ?? (state.autoplay?.enabled ? state.autoplay.upcoming[0] : undefined);
   const length = playbackClock.duration || current?.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
-  if (!current || !next || current.live || isRadio(current) || !length || remaining > 30 || remaining <= 0 || !player.playbackId || !["playing", "paused"].includes(player.status)) return null;
+  if (!playbackControls(state).programme || !playbackControls(state).queue || !current || !next || current.live || isRadio(current) || !length || remaining > 30 || remaining <= 0 || !player.playbackId || !["playing", "paused"].includes(player.status)) return null;
   return <Button data-next-up variant="ghost" aria-label={`Next: ${next.title}`} className="player-next-up h-auto text-foreground w-[min(22rem,calc(100%-2*var(--gutter)))] justify-start gap-3 rounded-md p-2 text-left font-normal whitespace-normal"
     onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}>
     <span aria-hidden="true" className="aspect-video w-28 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={next.thumbnail} title={next.title} /></span>

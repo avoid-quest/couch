@@ -24,7 +24,7 @@ describe("what to share", () => {
 
   test("a browser without display capture keeps every kind in place but the microphone, with today's reason", () => {
     const phone = { media: true, display: false };
-    expect(shareKinds.map(item => !unavailable(item, phone))).toEqual([false, false, false, true]);
+    expect(shareKinds.map(item => !unavailable(item, phone))).toEqual([false, false, false, true, true]);
     expect(unavailable(kind("screen"), phone)).toBe("This browser can share audio inputs. Use the desktop app to share a screen or system audio.");
     expect(unavailable(kind("microphone"), { media: false, display: false })).toContain("HTTPS");
   });
@@ -76,6 +76,15 @@ describe("who's watching", () => {
     expect(viewerLine(bedroom!, undefined)).toBe("Picture, behind");
     expect(viewerLine({ ...bedroom!, error: "FFmpeg stopped" }, undefined)).toBe("Can't play: FFmpeg stopped");
   });
+
+  test("scheduled sound uses Core's sync status rather than stale WebRTC route statistics", () => {
+    const scheduled = { ...state, playbacks: state.playbacks.map(playback => ({ ...playback, delivery: "scheduled" as const, outputs: playback.outputs.map(output => ({ ...output, delayActive: output.deviceId === "tv" })) })) };
+    const [tv, kitchen] = viewersOf(scheduled, "s");
+    expect(viewerLine(tv!, undefined)).toBe("Picture and sound, in sync");
+    expect(viewerLine(tv!, "direct")).toBe("Picture and sound, in sync");
+    expect(viewerLine(kitchen!, "relay")).toBe("Sound, connecting");
+    expect(viewerLine({ ...tv!, error: "This output cannot keep up." }, "direct")).toBe("Can't play: This output cannot keep up.");
+  });
 });
 
 describe("routes", () => {
@@ -87,4 +96,13 @@ describe("routes", () => {
     expect(routeOf(report({ p: { type: "candidate-pair", nominated: true, state: "succeeded", localCandidateId: "l", remoteCandidateId: "r" }, l: { candidateType: "relay" }, r: { candidateType: "host" } }))).toBe("relay");
     expect(routeOf(report({ p: { type: "candidate-pair", state: "in-progress", localCandidateId: "l" } }))).toBeUndefined();
   });
+});
+
+
+test("Live audio uses the chosen input with explicit intent and keeps relaxed audio input behavior", () => {
+  expect(kind("microphone").label).toBe("Audio input");
+  expect(kind("live-audio").label).toBe("Live audio");
+  expect(selectionOf(kind("live-audio"), { audioDeviceId: "interface", quality: "1080p", sound: true })).toEqual({ kind: "microphone", audioDeviceId: "interface", intent: "live" });
+  expect(shareKindOf("microphone", undefined, "live").label).toBe("Live audio");
+  expect(shareKindOf("microphone").label).toBe("Audio input");
 });

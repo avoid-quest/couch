@@ -12,7 +12,7 @@ import { loopbackPeer } from "./lan-listener";
 // against: each request becomes a Request, each Response is streamed back.
 export type Socket<T> = WebSocket & { data: T };
 // A function takes the socket as it is instead of Couch's own handlers (Sendspin, #644 ticket 10).
-export type Upgrade<T> = (data: T | ((socket: WebSocket, request: IncomingMessage) => void)) => boolean;
+export type Upgrade<T> = (data: T | ((socket: WebSocket, request: IncomingMessage) => void) | { rawUpgrade: (request: IncomingMessage, socket: NetSocket, head: Buffer) => void }) => boolean;
 // Turning HTTP off closes plaintext connections; the one carrying `current` closes once its response is sent.
 export type Listener = { port: number; setAllowHttp: (enabled: boolean, current?: Request) => void; stop: () => Promise<void> };
 type Options<T> = {
@@ -122,6 +122,10 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
     try {
       const result = await fetch(toRequest(message), data => {
         upgraded = true;
+        if (typeof data === "object" && data !== null && "rawUpgrade" in data && typeof data.rawUpgrade === "function") {
+          data.rawUpgrade(message, stream, head);
+          return true;
+        }
         sockets.handleUpgrade(message, stream, head, raw => {
           alive.add(raw);
           raw.on("pong", () => alive.add(raw));

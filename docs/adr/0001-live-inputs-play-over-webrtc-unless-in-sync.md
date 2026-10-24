@@ -4,6 +4,12 @@ status: accepted
 
 # Live inputs play over WebRTC unless In sync is chosen
 
+Scope since [ADR 0002](0002-playback-delivery-and-authority.md): this decision
+continues to cover relaxed captured video and unsupported timestamped-audio
+publishers. Timestamped audio-only capture and decoded AirPlay now use scheduled
+audio at any audience size. Live audio has fixed deadlines and separate audience
+rights; it does not remove WebRTC/TURN or delayed screen fallback.
+
 A shared screen or sound has to stay interactive, so every receiver gets the capture over WebRTC with its picture and sound together, however many receivers there are. Couch's buffered path (a recording uploaded to Core, FFmpeg HLS, the Sendspin clock) is used only for a playback where someone chose **In sync**, which trades seconds of delay for devices playing together, and for a receiver that couldn't connect directly, which Where it plays marks **Buffered**; neither is ever chosen because the receiver count rose.
 
 ## Consequences

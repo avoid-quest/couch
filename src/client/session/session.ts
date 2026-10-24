@@ -207,14 +207,16 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
-        live.current = createLiveSession({ iceServers, send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, command: action => command(action), upload: (sourceId, key) => {
+        const uploadUrl = (sourceId: string, key: string, uploadId?: string) => {
           const upload = new URL("/api/live/upload", origin);
           upload.protocol = upload.protocol === "https:" ? "wss:" : "ws:";
           upload.searchParams.set("sourceId", sourceId);
           upload.searchParams.set("token", credentials.token);
           upload.searchParams.set("key", key);
-          return new WebSocket(upload);
-        }, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) { publishing = !!source; setLocalLiveSourceId(source?.id ?? null); reportPlayback(); } } });
+          if (uploadId) upload.searchParams.set("uploadId", uploadId);
+          return upload.href;
+        };
+        live.current = createLiveSession({ iceServers, send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, command: action => command(action), upload: (sourceId, key) => new WebSocket(uploadUrl(sourceId, key)), uploadUrl, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) { publishing = !!source; setLocalLiveSourceId(source?.id ?? null); reportPlayback(); } } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -265,7 +267,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         } else if (message.type === "livePeers" || message.type === "liveSignal" || message.type === "liveIceServers") {
           live.current?.receive(message);
         } else if (message.type === "sendspin") {
-          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
+          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch", message.intent);
         } else if (message.type === "text") {
           void (textInput?.receive(message) ?? Promise.resolve(false)).then(ok => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok })); });
         } else if (message.type === "navigation") {

@@ -6,12 +6,8 @@ import { WebSocket, type RawData } from "ws";
 import { useHelper } from "./helpers";
 
 export type LiveRendition = "av" | "audio" | "video";
-// upload: the capturing window's MediaRecorder over a WebSocket; pcm: Core's own 44.1 kHz
-// stereo S16BE, already on Core's clock (AirPlay, src/server/airplay-audio.ts).
-export type LiveInput = "upload" | "pcm";
-
+// Retained for recorder/video compatibility. Timestamped PCM uses scheduled audio.
 type Stream = {
-  input: LiveInput;
   directory?: string;
   child?: ChildProcessWithoutNullStreams;
   exited?: Promise<void>;
@@ -66,11 +62,11 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
   };
 
   return {
-    async start(sourceId: string, source: { audio: boolean; video: boolean }, input: LiveInput = "upload") {
+    async start(sourceId: string, source: { audio: boolean; video: boolean }) {
       if (closed || streams.has(sourceId)) throw new Error("This input is already sharing or has stopped.");
-      if (!source.audio && !source.video || input === "pcm" && (!source.audio || source.video)) throw new Error("Choose an input with sound or picture.");
+      if (!source.audio && !source.video) throw new Error("Choose an input with sound or picture.");
       const pending = Promise.withResolvers<void>();
-      const stream: Stream = { input, lastData: Date.now(), startedAt: Date.now(), polling: false, available: false, ended: false, ready: pending.promise, resolve: pending.resolve, reject: pending.reject };
+      const stream: Stream = { lastData: Date.now(), startedAt: Date.now(), polling: false, available: false, ended: false, ready: pending.promise, resolve: pending.resolve, reject: pending.reject };
       // Readiness can fail before a receiver asks for the URL.
       void stream.ready.catch(() => {});
       streams.set(sourceId, stream);
@@ -90,9 +86,10 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
         // keep platform temp-directory syntax out of tee's parser.
         const outputs = renditions.map(rendition => `[f=hls${rendition === "av" ? "" : `:select=${rendition === "audio" ? "a" : "v"}`}:avoid_negative_ts=disabled:hls_segment_options=avoid_negative_ts=disabled:hls_time=1:hls_list_size=8:hls_delete_threshold=2:hls_flags=delete_segments+independent_segments+temp_file:hls_segment_filename=${rendition}/segment-%09d.ts]${rendition}/stream.m3u8`).join("|");
         const child = stream.child = spawn(ffmpeg.path, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-protocol_whitelist", "pipe",
-          ...input === "pcm" ? ["-f", "s16be", "-ar", "44100", "-ac", "2"] : ["-probesize", "1000000", "-analyzeduration", "1000000"], "-i", "pipe:0",
-          // Picture-only inputs still need a silent reference clock for the
-          // ordinary multi-device picture follower. This is not shared sound.
+          "-probesize", "1000000", "-analyzeduration", "1000000", "-i", "pipe:0",
+          // Adapter constraint: retained captured-video HLS provides AAC PTS to
+          // the legacy follower until its video PTS reaches the shared clock.
+          // Ordinary picture-only groups use a timeline without any audio track.
           ...source.audio ? [] : ["-re", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"],
           // MediaRecorder may advertise 1000 fps despite 30 fps capture. Bound
           // the inferred output rate without duplicating lower-rate inputs.
@@ -143,7 +140,7 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
     },
     accept(sourceId: string, socket: WebSocket) {
       const stream = streams.get(sourceId);
-      if (!stream?.child || stream.ended || stream.socket || stream.input !== "upload") return false;
+      if (!stream?.child || stream.ended || stream.socket) return false;
       stream.socket = socket;
       stream.startedAt = stream.lastData = Date.now();
       socket.on("message", (raw: RawData, binary: boolean) => {
@@ -158,16 +155,6 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
       });
       socket.once("close", () => fail(sourceId, stream, "The device stopped sharing this input."));
       socket.once("error", () => fail(sourceId, stream, "The live input upload failed."));
-      return true;
-    },
-    // Core's own PCM: it can't wait, so an encoder that falls this far behind ends the stream.
-    write(sourceId: string, pcm: Buffer) {
-      const stream = streams.get(sourceId);
-      if (!stream?.child || stream.ended || stream.input !== "pcm") return false;
-      const input = stream.child.stdin;
-      if (pcm.length + input.writableLength > uploadLimit) { fail(sourceId, stream, "The live input is arriving faster than Couch can process it."); return false; }
-      stream.lastData = Date.now();
-      input.write(pcm);
       return true;
     },
     async ready(sourceId: string, signal?: AbortSignal) {

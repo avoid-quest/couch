@@ -89,16 +89,39 @@ test("YouTube playback selection and safe extraction errors", async t => {
   startHelpers(root);
   await Promise.all([helper("yt-dlp"), helper("qjs"), helper("ffmpeg")]);
   const resolve = createWebMediaResolver();
-  const select = (formats: Format[], quality: VideoQuality = "auto", vp9 = false, url = "https://www.youtube.com/watch?v=fixture") => {
+  const select = (formats: Format[], quality: VideoQuality = "auto", vp9 = false, url = "https://www.youtube.com/watch?v=fixture", output?: { picture: boolean; sound: boolean }) => {
     writeFileSync(fixture, JSON.stringify({
       id: "fixture", title: "Offline format selection", extractor: "youtube", extractor_key: "Youtube", webpage_url: url, formats,
       subtitles: { en: [{ url: "https://media.example/en.vtt", ext: "vtt" }], it: [{ url: "https://media.example/it.vtt", ext: "vtt" }] },
       automatic_captions: { de: [{ url: "https://media.example/automatic.vtt", ext: "vtt" }] },
     }));
-    return resolve(url, undefined, quality, undefined, vp9, "it");
+    return resolve(url, undefined, quality, undefined, vp9, "it", undefined, output);
   };
   const noFormat = (pending: ReturnType<typeof select>) => assert.rejects(pending, error => error instanceof ExtractionError && error.message === unavailable);
   const real = { skip: !executable && "Set COUCH_TEST_YT_DLP to run the real offline selector" };
+  await t.test("sound-only chooses audio in one extraction and picture restoration reselects video", real, async () => {
+    const formats = [video("picture", 1920, 1080), aac, opus];
+    const before = extractions;
+    const sound = await select(formats, "auto", false, undefined, { picture: false, sound: true });
+    assert.equal(extractions, before + 1);
+    assert.equal(new URL(sound.source).pathname, "/aac.m4a");
+    assert.equal(sound.audioSource, undefined);
+    assert.notEqual(sound.audioOnly, true, "selected channels do not remove the source's picture capability");
+    const picture = await select(formats, "auto", false, undefined, { picture: true, sound: true });
+    assert.equal(new URL(picture.source).pathname, "/picture.mp4");
+    assert.equal(new URL(picture.audioSource!).pathname, "/aac.m4a");
+  });
+  await t.test("sound-only retains a muxed fallback when the provider has no audio rendition", real, async () => {
+    const media = await select([video("muxed", 854, 480, "avc1.4d401e", { acodec: "mp4a.40.2" })], "auto", false, undefined, { picture: false, sound: true });
+    assert.equal(new URL(media.source).pathname, "/muxed.mp4");
+    assert.equal(media.audioSource, undefined);
+    assert.notEqual(media.audioOnly, true);
+  });
+  await t.test("picture-only does not select a separate audio rendition", real, async () => {
+    const media = await select([video("picture", 1920, 1080), aac], "auto", false, undefined, { picture: true, sound: false });
+    assert.equal(new URL(media.source).pathname, "/picture.mp4");
+    assert.equal(media.audioSource, undefined);
+  });
   const qualities = [["480p", 480], ["720p", 720], ["1080p", 1080], ["auto", 1080], ["best", 2160]] as const;
   for (const portrait of [false, true]) for (const vp9 of [false, true]) for (const [quality, cap] of qualities) {
     await t.test(`${portrait ? "portrait" : "landscape"} ${quality}, vp9=${vp9}`, real, async () => {

@@ -30,6 +30,17 @@ The update regressions run with `bun test tests/updates.test.ts` and
 coverage runs with `bun test tests/browser-device-identity.test.ts`, and browser
 server switching with `bun test tests/browser-connections.test.ts`.
 
+Run Bun test files separately: some suites mock the same modules globally and
+pollute one another in a combined `bun test` process. For the playback refactor,
+current commands/results and skipped prerequisites live in the
+[validation ledger](audio-video-refactor-validation.md).
+
+Core builds `build/core.mjs` and `build/audio-worker.mjs`; both ship inside the
+app. Development watch restarts Core for changes to either bundle. Run
+`bun scripts/core.ts` before Node integrations that create the scheduled engine.
+Frozen install applies the pinned [Sendspin client/server patches](../patches/README.md); no
+post-install text substitution or private SDK field access is required.
+
 An integration test, `tests/<name>.integration.ts`, runs on Core's Node runtime:
 
 ```sh

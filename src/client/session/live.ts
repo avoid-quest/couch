@@ -1,11 +1,12 @@
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
 import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource, LiveUploadFailedMessage, LiveVideoQuality } from "../../shared/live-input";
+import { canCaptureAudio, prepareCaptureAudio, uploadCaptureAudio } from "./capture-audio";
 import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 import { routeOf, type LiveRoute } from "./live-route";
 
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
+type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>; stopAudio?: () => void; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
 /**
  * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
@@ -29,7 +30,7 @@ const captureError = (reason: unknown, kind: LiveSelection["kind"]) => {
 
 // Capture belongs to the authenticated session. Every receiver gets it directly over WebRTC;
 // Core asks for an encoded upload only while it plays the source buffered (docs/adr/0001).
-export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage | LiveFailedMessage | LiveUploadFailedMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
+export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage | LiveFailedMessage | LiveUploadFailedMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; uploadUrl?: (sourceId: string, key: string, uploadId: string) => string; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
   let generation = 0;
   let closed = false;
   let starting = false;
@@ -113,7 +114,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     publication = undefined;
     for (const peer of publishers.values()) peer.connection.close();
     publishers.clear();
-    if (current) { stopUpload(current); stopTracks(current.capture); }
+    if (current) { stopUpload(current); void current.audioFrames?.cancel().catch(() => {}); stopTracks(current.capture); }
     options.published(null);
   };
   const end = async () => {
@@ -132,6 +133,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   const stopUpload = (current: Publication, error?: Error) => {
     const { recorder, socket } = current;
     current.recorder = current.socket = undefined;
+    current.stopAudio?.(); current.stopAudio = undefined;
     if (recorder) { recorder.ondataavailable = recorder.onerror = null; if (recorder.state !== "inactive") recorder.stop(); }
     if (socket) { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; socket.close(); }
     if (error && publication === current && current.uploadId) {
@@ -141,6 +143,15 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   };
   const startUpload = (current: Publication) => {
     try {
+      if (current.source.audioDelivery === "pcm") {
+        if (!current.audioFrames || !options.uploadUrl || !current.uploadId) throw new Error("The timestamped audio upload is unavailable. Start sharing again.");
+        const frames = current.audioFrames; current.audioFrames = undefined;
+        const uploadId = current.uploadId;
+        current.stopAudio = uploadCaptureAudio(frames, options.uploadUrl(current.source.id, current.key, uploadId), error => {
+          if (publication === current && current.uploadId === uploadId) stopUpload(current, error);
+        });
+        return;
+      }
       if (typeof MediaRecorder === "undefined") throw new Error("This browser cannot record a live input for buffered playback.");
       const types = current.source.video
         ? ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
@@ -254,7 +265,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId, audio: sound });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const quality = selection.videoQuality ?? "1080p";
-        const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+        const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(selection.kind !== "screen" ? { channelCount: { ideal: 2 }, sampleRate: { ideal: 48_000 } } : {}) };
         // Audio-only display capture still needs a video track, but none of those pixels are transmitted.
         // A browser's own picker opens on the surface chosen in Couch (a screen or a window), and still offers the rest.
         const video: MediaTrackConstraints = selection.kind === "system-audio"
@@ -267,14 +278,21 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
         if (selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
         if (selection.kind === "screen" && !videoTracks.length) throw new Error("The selected capture did not provide a screen.");
-        const label = selection.kind === "microphone" ? "Microphone" : selection.kind === "system-audio" ? "System audio" : "Screen";
-        const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length };
+        let audioFrames: Awaited<ReturnType<typeof prepareCaptureAudio>> | undefined;
+        if (!videoTracks.length && audioTracks.length && canCaptureAudio() && options.uploadUrl) {
+          try { audioFrames = await prepareCaptureAudio(audioTracks[0]!, selection.intent === "live"); }
+          catch (error) { if (selection.intent === "live") throw error; }
+        }
+        if (closed || attempt !== generation) { await audioFrames?.cancel().catch(() => {}); throw new Error("Capture was canceled."); }
+        if (selection.intent === "live" && !audioFrames) throw new Error("Live audio needs timestamped stereo capture on the Couch computer.");
+        const label = selection.kind === "microphone" ? "Audio input" : selection.kind === "system-audio" ? "System audio" : "Screen";
+        const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length, intent: selection.intent, ...(audioFrames ? { audioDelivery: "pcm" as const } : {}) };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
+        const current: Publication = { source, capture, audioFrames, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
-        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: selection.kind, name: source.name, audio: source.audio, video: source.video });
+        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: selection.kind, name: source.name, audio: source.audio, video: source.video, intent: source.intent, audioDelivery: source.audioDelivery });
         if (closed || attempt !== generation || publication !== current) throw new Error("Capture was canceled.");
         current.published = true;
         options.published(source);

@@ -43,7 +43,17 @@ returned 403 through curl and Core even with per-format headers and matching
 IPv4 egress, then worked when replayed later. yt-dlp's downloadability check made
 the immediate relay requests succeed, without cookies or a pinned player client.
 
-Core stores protected loopback media for Synced playback. A media-only loopback
+Source preparation selects separate audio or an HLS audio rendition before any
+relay probe when only sound is selected. yt-dlp likewise requests audio-only
+formats for that destination. A muxed fallback stays available without adding
+transcoding. An audio-only HLS master retains alternate languages for Direct
+listening. Scheduled takeover carries the current audio identity and uses the
+profile language only when no explicit selection exists; a separate rendition
+decodes its own first stream while retaining its original logical track index.
+Picture restoration and return from scheduled playback retain that selection,
+queue and output intent; the original credential origin survives rendition selection.
+
+Core prepares protected loopback media only for scheduled playback. A media-only loopback
 listener keeps native decoding independent of the UI listener’s bind address and
 TLS configuration; it closes with Core. FFmpeg also uses the
 restricted proxy and a media format allowlist; its only local exception is the

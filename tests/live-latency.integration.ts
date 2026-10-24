@@ -98,6 +98,7 @@ for (const kind of ["live-hls", "vod-hls", "radio-hls", "live-mpegts"] as const)
   });
   const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Options fixture", admit: () => false, changed() {}, ffmpeg: async () => executable });
   const group = core.group("options", () => {});
+  group.members([{ deviceId: "speaker", level: 100 }]);
   t.after(async () => { group.close(); core.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address === "object");

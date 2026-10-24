@@ -255,6 +255,9 @@ test("revoking consent while a source resolves prevents its late load from start
     await f.device.command({ type: "sharing", sharing: defaultDeviceSharing });
     release!();
     await until(() => f.admin.state.playbacks?.some(playback => playback.status === "unavailable") === true);
+    assert.match(f.admin.state.player.error ?? "", /Device is not sharing audio/);
+    assert.deepEqual(f.admin.state.outputs, []);
+    assert.deepEqual(f.admin.state.queue.map(entry => entry.id), ["pending"]);
     assert.equal(f.device.messages.some(message => message.type === "player" && message.command.type === "load"), false);
   } finally { source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve())); await f.close(); }
 });

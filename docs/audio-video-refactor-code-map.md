@@ -10,6 +10,17 @@ Paths below are relative to the repo. A listed dependency can remain unchanged
 when its interface already meets the contract. Find all callers before moving
 or deleting an interface. Extend this map for newly discovered dependencies.
 
+Implementation accounting and validation are recorded in the
+[disposition ledger](audio-video-refactor-validation.md#final-code-disposition).
+The original change map below remains the audited plan. Added implementation
+modules are `src/shared/playback-policy.ts`; server `source-preparation.ts`,
+`scheduled-audio.ts`, `scheduled-capture.ts`, `audio-worker.ts`, `audio-packets.ts`,
+`capture-audio.ts` and `capture-ingest.ts`; client `capture-audio.ts`,
+`capture-audio-worker.ts`, `receiver-admission.ts`, `picture-mapping.ts` and
+`playback-controls.ts`. The maintained SDK patches and removal gates are in
+[`patches/README.md`](../patches/README.md); `scripts/core.ts`, `package.json` and
+`bun.lock` own their build/distribution integration.
+
 ## M1. Shared contract, Playback state and persistence — P0/P1
 
 **Change surface:** `src/shared/protocol.ts`, `src/shared/live-input.ts`,

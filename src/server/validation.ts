@@ -42,10 +42,15 @@ function validAction(value: unknown): value is Action {
   switch (value.type) {
     case "publishLive": return id(value.sourceId) && typeof value.uploadToken === "string" && /^[a-f0-9]{64}$/.test(value.uploadToken) && typeof value.kind === "string" && ["microphone", "system-audio", "screen"].includes(value.kind)
       && typeof value.audio === "boolean" && typeof value.video === "boolean"
+      && (value.intent === undefined || value.intent === "relaxed" || value.intent === "live")
+      && (value.audioDelivery === undefined || value.audioDelivery === "pcm" && value.audio === true && value.video === false)
+      && (value.intent !== "live" || value.audioDelivery === "pcm" && value.audio === true && value.video === false)
       && (value.kind === "screen" ? value.video === true : value.audio === true && value.video === false)
       && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
     case "endLive": return id(value.sourceId);
-    case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow });
+    case "leave": return id(value.playbackId);
+    case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow })
+      && (value.picture === undefined || typeof value.picture === "boolean") && (value.sound === undefined || typeof value.sound === "boolean");
     case "askEveryDevice": return typeof value.enabled === "boolean";
     case "inSync": return typeof value.inSync === "boolean";
     case "compressor": return id(value.playbackId) && isCompressorPatch(value.settings);
@@ -134,11 +139,12 @@ export function parsePlayer(message: string): PlayerState | null {
   let value: unknown;
   try { value = JSON.parse(message); } catch { return null; }
   if (!object(value) || value.type !== "player" || !object(value.state)) return null;
-  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed, tracks = [], audioDelay, subtitleDelay = 0 } = value.state;
+  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed, tracks = [], audioDelay, subtitleDelay = 0, timeline } = value.state;
   if (!(playbackId === null || id(playbackId)) || !playerStatuses.includes(status as string) || typeof buffering !== "boolean" || !finite(position) || !(duration === null || finite(duration))
     || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed) || audioDelay !== undefined && !finite(audioDelay) || !finite(subtitleDelay)
-    || !Array.isArray(tracks) || tracks.length > 64 || !tracks.every(mediaTrack)) return null;
-  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error === null ? null : safePlaybackError(error), speed, tracks: tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label: label.slice(0, 120), language: language.slice(0, 35), selected })), audioDelay, subtitleDelay };
+    || !Array.isArray(tracks) || tracks.length > 64 || !tracks.every(mediaTrack)
+    || timeline !== undefined && (!object(timeline) || !["hls", "media", "unavailable"].includes(String(timeline.mapping)) || timeline.error !== undefined && typeof timeline.error !== "string")) return null;
+  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error === null ? null : safePlaybackError(error), speed, tracks: tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label: label.slice(0, 120), language: language.slice(0, 35), selected })), audioDelay, subtitleDelay, ...(timeline === undefined ? {} : { timeline: { mapping: timeline.mapping as NonNullable<PlayerState["timeline"]>["mapping"], ...(typeof timeline.error === "string" ? { error: safePlaybackError(timeline.error) } : {}) } }) };
 }
 
 export function parseCommand(message: string): ClientMessage {

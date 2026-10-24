@@ -27,9 +27,10 @@ renames the Couch from any paired device in Devices & network
 (`/api/settings`); every other device names only itself.
 
 A TV pairs without typing (`src/server/tv-pairing.ts`). Unauthenticated, it
-asks `POST /api/pair/tv` with its device ID and name, under the same origin,
-sharing and rate limits as `POST /api/pair` (20 a minute), and gets a six-digit
-code and a 256-bit secret. The request lives in Core's memory for ten minutes.
+asks `POST /api/pair/tv` with its device ID and name, under the same origin and sharing checks as `POST /api/pair`, with its own
+limit of 20 request attempts per minute, and gets a six-digit code and a 256-bit
+secret. Ordinary `/api/pair` separately permits 120 successful admissions per
+minute, with failed-code limits of 20 per peer and 300 total per minute. The request lives in Core's memory for ten minutes.
 Whoever may read the pairing code, the host or an admin, reads the TV's name
 (`GET /api/pair/tv/<code>`) and approves it (`POST`), which pairs the device
 through the same `store.pair` as `/api/pair`. The TV polls
@@ -74,9 +75,12 @@ native mpv fallback. An Output's `local` flag records an explicit self-play or
 self-join. Move here (`solo`) is exclusive, across the queue too: Core refuses it, changing
 nothing, while another device's private output, or a publisher's private `held`
 output, would stay behind or return, checking again where the move lands after the
-item resolves. Joining a Playback is allowed only where
+item resolves. Joining an ordinary or relaxed Playback is allowed only where
 the joining device could already control it, because joining brings its group
-transport and queue controls; direct output changes still require that device's
+transport and queue controls. Live audio audience membership grants neither;
+Core sends actor-specific programme, queue and transport capabilities and rejects
+legacy/crafted actions too. Its Leave action removes only the actor's receiver;
+local volume/mute remain distinct from shared programme authority. Direct output changes still require that device's
 sharing consent. A fully private Playback can only be controlled by its output
 devices, and joining one is refused. A publisher's output held out of its own
 source (`held`) is part of that Playback's mix: it counts for control, joining,
@@ -159,8 +163,8 @@ with the Playback's picture and sound, and `allSpeakers` is the All fader older
 clients offer: it changes only the Playback's trim, preserving output selection and Device
 levels and mute. A Device that joins reloads the item where it was with its pause
 state, speed, tracks and subtitle delay, and windows controlling a Device the
-Playback left follow it. An output that goes offline
-pauses its Playback until it returns, and a Playback ends when its queue does.
+Playback left follow it. An ordinary output that goes offline
+pauses its Playback until it returns; a Live audio listener disconnects independently, and a Playback ends when its queue does.
 After Stop it keeps its queue for 10 s, so the controller's Undo can play the
 stopped item again.
 Each Playback keeps its Up next in the `playback` table.
@@ -170,8 +174,8 @@ the app window included: Core sends `{ type: "player", command }` over the
 Device's WebSocket and listens to `{ type: "player", state }` only from the tab it
 chose. A Playback renders on its output Device; the newest tab of that Device
 takes over and reloads the item where it was, and when that tab closes the next
-newest one does. The Device fetches the source itself (Direct delivery, no bytes
-through Core): URLs play in `<video>`, YouTube's separate audio in an `<audio>`
+newest one does. The Device decodes the source itself (Direct delivery; bytes may use Core's
+protected relay): URLs play in `<video>`, YouTube's separate audio in an `<audio>`
 that follows the video, Couch-hosted HLS through hls.js where supported with
 native HLS as the fallback, and raw MPEG-TS through mpegts.js. Direct cross-origin
 HLS retains native playback with hls.js as the fallback because a provider's
@@ -189,11 +193,26 @@ WebVTT from memory. A browser that needs a gesture before sound plays the pictur
 muted and shows "Tap to hear". In the app, Main caps googlevideo's open-ended
 `Range` requests at 10 MB, because YouTube sends those at about playback speed.
 
-When a Device can't fetch a stream itself because of its Origin, CORS or headers,
+Source preparation selects the requested channels before probing or relaying
+bytes (`src/server/source-preparation.ts`). Sound-only Direct prefers separate
+audio or an HLS audio rendition, and yt-dlp requests audio-only formats. The
+renderer never assigns the unused video URL. Muxed-only sources stay usable
+without a mandatory server transcode. Restoring picture re-resolves the item,
+retaining its Playback, queue and permitted output intent. Source credentials
+stay bound to the original origin even when selection changes the rendition.
+
+Session retains the current item's audio selection as runtime state. Scheduled
+source preparation matches that track's language/name before its numeric index or
+profile default, and reports the actual chosen track. A separate HLS rendition
+uses decoder stream 0 while retaining its logical master index for a return to
+Direct. Seek/restart retain selection; a new item clears it. This does not add a
+general group audio-track picker.
+
+All public web extraction uses Core's protected relay. For explicitly configured
+non-public sources, when a Device can't fetch a stream because of Origin, CORS or headers,
 Core relays it (Pass-through, `src/server/pass-through.ts`). At Play, Core asks
 each stream once with the Device's Origin and User-Agent and hands out a relay
-address only for what fails there but works for Core: Twitch's playlists answer
-403 to a browser on a LAN origin. Relayed HLS playlists are rewritten so nested
+address only for what fails there but works for Core. Relayed HLS playlists are rewritten so nested
 playlists go through Core and segments stay direct when the Device may read
 them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
@@ -204,7 +223,8 @@ Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
 element. Core grants signaling only between the exact publishing and receiving
 connections. ICE configuration, including optional authenticated TURN, is returned
 only after pairing and never appears in public discovery.
-Every receiver of a live input plays it Direct, each with its own peer, unless the
+Every receiver of relaxed captured video or unsupported timestamped audio plays
+it Direct, each with its own peer, unless the
 Playback is In sync ([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).
 Only while a Playback plays the source In sync, or to a receiver that couldn't connect
 directly, does Core ask the publisher (`livePeers.upload`) for one MediaRecorder upload
@@ -227,15 +247,29 @@ On Linux, an admin can also turn on an AirPlay receiver ([Receive AirPlay](airpl
 Core runs the pinned UxPlay it ships as a separate process, only while that switch and
 Share on network are on, and reads the decoded sound of an admitted sender from a private
 pipe. Core owns that publication (`airplay`, never a Device): every receiver plays it
-through the same buffered HLS, and In sync, as a capture's fallback. It ends when the
+through relaxed scheduled audio. RTP jitter buffering remains in the ingress;
+timestamped PCM goes to the audio worker without an AAC/HLS intermediary. It ends when the
 sender leaves, and an admitted sender counts as playing for unattended updates.
 
-When a Playback has outputs on several Devices, its sound is Synced
-(`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
+Delivery is chosen in `src/shared/playback-policy.ts` from publication intent
+and selected channels, with authorization and generation rechecks in Hub. Ordinary
+outputs spanning Devices use a shared clock even with just one speaker. Supported
+timestamped audio uses scheduled delivery even with one listener. The old
+`inSync` choice applies only to retained relaxed capture compatibility.
+
+`src/server/sendspin.ts` is Core's lifecycle facade. Its `audio-worker.ts` worker
+owns the scheduled engines, clocks, encoder pipes, encrypted Sendspin and fanout.
+The authenticated public socket is forwarded through Core, so a stalled Hub can
+still delay bytes; the worker does not claim complete transport isolation. The
+Sendspin endpoint remains at
 `/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
 BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
-Sendspin key is their ID. The newest tab of every Device whose sound is in the mix
-plays it with the official player (`@sendspin/sendspin-js`,
+Sendspin key is their ID. The maintained server SDK patch validates decrypted
+message shapes and contains handler exceptions at the offending connection;
+malformed listeners do not restart or retime healthy groups. The newest tab of
+every Device whose sound is in the mix
+plays it with the pinned player and maintained preparation/clock patch
+(`@sendspin/sendspin-js`, [patch notes](../patches/README.md),
 `src/client/session/sendspin.ts`), and a browser that needs a gesture shows "Tap to
 hear". One FFmpeg per Playback reads the audio-only rendition (YouTube's separate
 audio, an HLS master's audio playlist or audio-only variant) with network protocols
@@ -243,7 +277,28 @@ only and a 10 s read timeout, decodes once and encodes once per wire format: Opu
 60 ms packets, and 100 ms PCM chunks for players that don't take Opus (Firefox). Every
 speaker on a wire gets the same chunk with the same timestamp; each applies its Device's
 volume and its own delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
-the Playback is; when the outputs are back on one Device, it plays directly again.
+the Playback is; when ordinary outputs are back on one Device, it plays directly
+again. Picture-only ordinary groups use a timer timeline without a source decoder
+or fabricated audio. Adding sound starts the decoder at the current timeline.
+
+Audio-only capture reads timestamped AudioData where supported and transfers each
+frame's ownership to an upload worker, with its source realm's time origin.
+This avoids browser-version-dependent rebasing when transferring the native
+readable stream. Capture time is never replaced with callback arrival time.
+The handoff is bounded; relaxed unsupported publishers retain WebRTC/recorder compatibility.
+Live audio is host-only and actual stereo. Sample positions, sequence, generation,
+actual sample rate and capture timestamps cross the upload boundary. The worker
+normalizes source drift with bounded resampling and encodes shared 10 ms stereo
+Opus at 128 kbit/s. Live deadlines are capture time plus 100 ms; this is a software
+deadline, not measured input-to-ear. Missing/late data fails within explicit bounds
+rather than repeatedly moving the deadline. No history is replayed to a late join.
+Relaxed capture also supports PCM receivers; live does not renegotiate the group
+to PCM or restart healthy listeners for a new incompatible receiver.
+
+Live receiver preparation checks decoder, clock and output readiness and estimated
+budget. Sink/timing changes require fresh admission. These are runtime safeguards,
+not hardware qualification. The initial 100 ms / 50 physical receiver goals remain
+unmeasured; see the [validation ledger](audio-video-refactor-validation.md).
 
 Every Device showing the picture of a synced Playback fetches the video itself,
 resolved for its own engine and origin, and plays it muted. It connects to Sendspin
@@ -252,7 +307,9 @@ and the picture follows it with `timingsrc` (`src/client/session/picture-clock.t
 which nudges the playback rate for small drift and seeks for large drift. For a live
 source the position is the source's own timestamp: FFmpeg keeps it (`-copyts`) and
 reports the first one, and hls.js maps it to its own timeline (`INIT_PTS_FOUND`), so a
-picture that joins the stream anywhere lines up with the sound. A screen's report
+picture that joins the stream can follow the sound timeline. Follow metadata names
+the load generation and mapping. Native HLS/MPEG-TS adapters without that mapping
+keep usable picture and report the limitation; no frame-accurate promise is made. A screen's report
 adds its picture and subtitle tracks to the Playback's only when it has a video
 track: a screen still loading, or a tab that just reconnected, has none yet.
 

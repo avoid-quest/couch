@@ -112,7 +112,7 @@ test("with shared requests off, a waiting source opens only in the window that p
   expect(mount("p:here:2", "p:here:1")).toBe(true);
 });
 
-type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: () => void; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => Promise<boolean> };
+type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: () => void; onSelect?: () => void; onKeyDown?: (event: { key: string; preventDefault: () => void }) => void; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => Promise<boolean> };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" || typeof node === "number" ? String(node) : "";
 const inSync = { deviceId: "tv", picture: true, sound: true, delay: 80, delayActive: true };
@@ -186,6 +186,17 @@ test("a source waiting for receivers asks where it plays instead of the Volume",
   expect(all.filter(item => item.type === "ul").map(item => item.props["aria-label"])).toEqual(["Not playing"]);
 });
 
+test("the real mixer retains captured-video In sync but omits the no-op switch for PCM audio", () => {
+  const outputs = [{ deviceId: "tv", picture: false, sound: true, delayActive: true }, { deviceId: "mac", picture: false, sound: true }];
+  const source = { id: "s", deviceId: "publisher", name: "Audio input", kind: "microphone" as const, audio: true, video: false, audioDelivery: "pcm" as const };
+  const state = { ...waiting(0), outputs, playbacks: [{ id: "p", title: "Audio input", status: "playing", delivery: "scheduled", inSync: true, audioOnly: true, liveSourceId: "s", outputs }], liveSources: [source], player: { playbackId: "load", status: "playing", volume: 50 } } as unknown as ClientSessionState;
+  const html = renderToStaticMarkup(<>{Mixer({ state, connected: true, run: async () => true })}</>);
+  expect(html).not.toContain('id="where-it-plays-in-sync"');
+  expect(html).toContain("In sync 1");
+  const captured = { ...state, liveSources: [{ ...source, kind: "screen", video: true, audioDelivery: undefined }] } as ClientSessionState;
+  expect(renderToStaticMarkup(<>{Mixer({ state: captured, connected: true, run: async () => true })}</>)).toContain('id="where-it-plays-in-sync"');
+});
+
 test("a receiver's row says Behind, or Can't play with Core's reason in red", () => {
   for (const output of [{ deviceId: "tv", picture: true, sound: true, buffered: true }, { deviceId: "tv", picture: true, sound: true, buffered: true, error: "The live input encoder stopped." }]) {
     const state = { ...waiting(0), outputs: [output], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
@@ -217,4 +228,25 @@ test("a filter or search whose control has gone no longer filters the list", () 
   expect(rows({ query: "speaker 1" })).toBe(8);
   const crowded = { ...state, devices: many.map(device => ({ ...device, online: true })) } as ClientSessionState;
   expect(elements(Mixer({ state: crowded, connected: true, run: async () => true, filter: "behind" })).filter(item => item.type === "li").length).toBe(10);
+});
+
+
+test("TV output OK menu exposes exclusive Move here, including a device already in the playback", async () => {
+  const sent: unknown[] = [];
+  const phone = { id: "phone", name: "Phone", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } };
+  const outputs = [{ deviceId: "tv", picture: true, sound: true }, { deviceId: "phone", picture: false, sound: true }];
+  const state = { ...waiting(0), devices: [...devices, phone], outputs, playbacks: [{ id: "p", title: "Film", status: "playing", outputs }], liveSources: [], player: { status: "playing", volume: 50 } } as unknown as ClientSessionState;
+  const all = elements(Mixer({ state, connected: true, run: async action => { sent.push(action); return true; }, tv: true }));
+  const tv = all.find(item => item.props["aria-label"] === "TV")!;
+  expect(tv.props.onKeyDown).toBeFunction();
+  tv.props.onKeyDown!({ key: "ArrowRight", preventDefault() {} });
+  const move = all.find(item => item.props["aria-label"] === "Move here: TV")!;
+  expect(move.props.disabled).toBe(false);
+  move.props.onSelect!();
+  expect(sent).toEqual([{ type: "output", deviceId: "tv", level: 55 }, { type: "solo", deviceId: "tv" }]);
+  const privateState = { ...state, devices: [...devices, { ...phone, sharing: { audio: false, video: false } }] };
+  const denied = elements(Mixer({ state: privateState, connected: true, run: async () => true, tv: true }));
+  expect(denied.find(item => item.props["aria-label"] === "Move here: TV")!.props.disabled).toBe(true);
+  const alone = { ...state, outputs: [outputs[0]!], playbacks: [{ ...state.playbacks![0]!, outputs: [outputs[0]!] }] };
+  expect(elements(Mixer({ state: alone, connected: true, run: async () => true, tv: true })).some(item => item.props["aria-label"] === "Move here: TV")).toBe(false);
 });

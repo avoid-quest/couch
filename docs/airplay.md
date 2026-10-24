@@ -34,9 +34,10 @@ speakers from its previous playback; other devices keep what they were playing
 and the previous queue stays. **Play**, **Play on**, **Play next** and **Queue**
 still work as for any shared source, and the sender's volume still applies.
 
-Every device that plays it gets Couch's buffered stream, a few seconds behind
-the sending device. With several devices, **In sync** in **Where it plays**
-plays them together, as for other live sources. When the sender stops AirPlay
+Every device that plays it gets relaxed scheduled audio, including a single
+listener. No In sync switch or recorder/AAC/HLS intermediate is needed. UxPlay
+and RTP ingress buffering remain, so this is not the Live audio concert path;
+its physical delay has not been measured. When the sender stops AirPlay
 or disconnects, the source ends: playback of it stops and the rest of the queue
 stays. One sender plays at a time; another is refused until the first leaves.
 After a sender that played leaves, AirPlay restarts, so for a second or two
@@ -86,11 +87,13 @@ it with `src/server/airplay-audio.ts`: it checks every packet, places each
 sample by its RTP timestamp a quarter second behind the first one, fills loss
 and pauses with silence, and emits exactly the elapsed samples on Core's own
 clock. It holds at most two seconds ahead; a sender whose clock jumps (pause,
-seek) or falls behind starts again from where it is. FFmpeg reads that PCM from
-its standard input, as it reads a browser's upload, into the same rolling HLS
-the buffered and In sync paths of live inputs use (`src/server/live-stream.ts`).
-If FFmpeg falls behind by more than 4 MB, the stream ends with an error rather
-than buffering.
+seek) or falls behind starts again from where it is. The adapter converts that jitter-buffer output to Float32 packets with sample
+positions and Core monotonic timestamps. These are local ingress timestamps,
+not the remote AirPlay ADC clock. The audio worker normalizes and encodes Opus
+once, with PCM compatibility for relaxed receivers; every listener follows the
+same scheduled deadlines. Bounded queues fail explicitly when processing cannot
+keep up. The former PCM-to-AAC/HLS stage and its live-stream write interface are
+removed.
 
 A sender becomes a source only when its decoded sound arrives, which UxPlay
 produces only after the sender answered its password challenge, never from a TCP
@@ -212,7 +215,12 @@ exits, as it would on such a network.
 
 ## Validation
 
-Checked: the pinned, patched UxPlay built on Ubuntu 24.04 (Package's runner) starts on
+The historical checks below describe the former HLS output. The current scheduled
+adapter's checks and remaining gaps are recorded in the
+[refactor validation ledger](audio-video-refactor-validation.md); historical HLS
+measurements are not evidence for its new output path.
+
+Previously checked: the pinned, patched UxPlay built on Ubuntu 24.04 (Package's runner) starts on
 Debian 13 with Couch's arguments, answers an unpaired sender's request without
 Couch publishing anything, challenges a sender's key SETUP without the code or
 with a wrong one and gives it no stream (the all-zero-key attack that plays

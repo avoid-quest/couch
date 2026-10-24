@@ -23,6 +23,7 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   await new Promise<void>(resolve => source.listen(42701, "127.0.0.1", resolve));
   const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Test Couch", admit: () => false, changed: () => {}, ffmpeg: executable ?? (() => Promise.resolve(script)) });
   const group = server.group("a".repeat(36), state => states.push(state));
+  group.members([{ deviceId: "unconnected", level: 100 }]);
   const load: SyncedLoad = { type: "load", playbackId: "p".repeat(36), source: "http://127.0.0.1:42701/input?sig=synthetic-secret" };
   t.after(async () => {
     group.close(); server.close();
@@ -67,7 +68,8 @@ test("stopping a pending FFmpeg start ignores its later rejection", { timeout: 1
   f.group.send({ type: "stop" });
   reject(new DOMException("Synthetic start aborted", "AbortError"));
   // The rejection handlers are microtasks queued before this turn yields.
-  await new Promise(resolve => setImmediate(resolve));
+  await until(() => f.states.at(-1)?.status === "idle");
+  await new Promise(resolve => setTimeout(resolve, 50));
   assert.equal(f.errors().length, 0);
   assert.equal(f.states.at(-1)?.status, "idle");
   assert.equal(existsSync(f.marker), false);

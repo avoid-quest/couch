@@ -14,6 +14,11 @@ one serves, and **Where it plays**, a Playback's Devices with their picture and
 sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
+Share offers **Audio input** for ordinary collaborative listening and **Live audio**
+on the Couch computer. A live audience gets **Join/Leave** and its own volume;
+programme and queue controls remain with ordinary playback. These choices use the
+same source discovery and player ([Share](design/share.md)).
+
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset
 to default; see [Where it plays](design/where-it-plays.md#compressor).

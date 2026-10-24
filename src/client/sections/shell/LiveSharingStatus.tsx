@@ -12,7 +12,7 @@ export function LiveSharingStatus({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const source = state?.liveSources?.find(item => item.id === localLiveSourceId);
   if (!source) return null;
-  const status = `Sharing ${source.kind === "system-audio" ? "system audio" : source.kind === "screen" ? "screen" : "microphone"}`;
+  const status = `Sharing ${source.intent === "live" ? "live audio" : source.kind === "system-audio" ? "system audio" : source.kind === "screen" ? "screen" : "an audio input"}`;
   const stop = (className?: string) => <Button variant="ghost" size="sm" className={className} disabled={pending} onClick={async () => {
     if (pending) return;
     setPending(true);

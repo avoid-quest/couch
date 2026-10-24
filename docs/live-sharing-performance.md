@@ -6,6 +6,15 @@ where earlier builds had been much faster. The resulting decision is
 [ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md); synchronization
 research is in [live-sync-research.md](live-sync-research.md).
 
+## Current refactor scope
+
+The measurements below describe their named historical revisions. The playback
+refactor retains WebRTC/TURN and buffered captured-video fallback. Timestamped
+audio-only capture and AirPlay now bypass recorder/AAC/HLS and use the shared
+scheduled audio worker. This is not new evidence for the screen-sharing latency
+reported below. Current validation and qualification gaps are in the
+[refactor ledger](audio-video-refactor-validation.md).
+
 ## What changed between builds
 
 Recovered from the original Mac Git stores and T3 history on 2026-10-14 (handoff

@@ -1,3 +1,4 @@
+import { playbackControls } from "@/session/playback-controls";
 import { metaLine } from "@/media-caption";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
@@ -59,7 +60,7 @@ function knownLength(entry: QueueEntry): number | null {
  * Empty, it isn't offered as a panel that only says so.
  */
 export function hasUpNext(state: ClientSessionState | null | undefined) {
-  return !!state && (state.queue.some(entry => entry.id !== state.currentEntryId) || !!state.autoplay?.upcoming.length || !!state.autoplay?.enabled && !!state.autoplay.pending || !!state.queueError);
+  return !!state && playbackControls(state).queue && (state.queue.some(entry => entry.id !== state.currentEntryId) || !!state.autoplay?.upcoming.length || !!state.autoplay?.enabled && !!state.autoplay.pending || !!state.queueError);
 }
 
 /**
@@ -67,6 +68,7 @@ export function hasUpNext(state: ClientSessionState | null | undefined) {
  * says so as its tooltip (a disabled button takes no pointer, so its slot holds the tooltip).
  */
 export function UpNextButton({ state, className, ...props }: ComponentProps<typeof Button> & { state: ClientSessionState | null }) {
+  if (!playbackControls(state).queue) return null;
   const empty = !hasUpNext(state) && props["aria-expanded"] !== true;
   return <span title={empty ? "Nothing queued" : undefined} className={cn("inline-flex", className)}>
     <Button data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" disabled={empty} {...props}><ListMusic aria-hidden="true" /></Button>
@@ -134,6 +136,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     replacement?.focus({ preventScroll: true });
   });
 
+  if (!playbackControls(state).queue) return null;
   return <Dialog open={saveOpen} onOpenChange={setSaveOpen}><section ref={panelRef} data-queue-panel className="flex min-h-0 flex-col gap-4" aria-labelledby="queue-title" onFocusCapture={event => {
     const element = event.target;
     if (!panelRef.current?.contains(element)) return;
