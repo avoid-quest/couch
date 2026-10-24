@@ -235,8 +235,32 @@ The immutable report is `physical-mac/continuation-1/physical-report.md` (SHA-25
 Verified cleanup at 20:20:07 UTC found no owned processes, open UMC streams or
 dedicated ports. No retry or later stage ran. The stopped experiment and its
 latency search remain stopped; historical measurements are not this refactor's
-evidence. A bounded software diagnosis is examining the retained startup evidence
-without changing product timing or reopening hardware.
+evidence.
+
+The bounded offline diagnosis subsequently reproduced a software defect twice:
+FFmpeg 9.0.2's raw-float demuxer reads 4096 frames at once (85.33 ms at 48 kHz),
+consuming most of the fixed 100 ms budget before encoding. Regular 10 ms input
+then loses scheduled intervals and produces recurring loading/playing transitions.
+A scratch substitution using documented streaming WAV input with 3840-byte
+packets removes the recurring gaps at declared input ages of 0, 20 and 40 ms,
+without changing lead, clocks or admission gates. This reproduces the observed
+class of failure; it does not prove the physical source's exact age or sole cause.
+The product now writes a streaming float WAV header directly to the existing
+encoder and bounds its input packets to 3840 bytes. All timing, clock, resampling,
+Opus and admission policies remain unchanged. The correction passes 23 affected
+checks and typecheck; independent review found no actionable issue. Its three
+frozen regression cases pass, while the original raw input and WAV without the
+packet bound each fail both continuity controls. Additional review checks cover
+fragmented input, generation cancellation and relaxed PCM compatibility. These
+are software results; this revision has not yet been packaged or physically tested.
+
+A separate public-logic probe confirms that pending decoder/clock preparation can
+temporarily produce the same incompatibility warning, then recover automatically.
+The actual Mac refusal branch remains unknown. The diagnosis also verifies that
+state churn alone does not reset the receiver in its isolated test. Exact red,
+repeat and scratch-correction receipts and official FFmpeg references are in
+`physical-startup-diagnosis.md` and its evidence directory. No physical retry or
+runtime timing adjustment was performed during diagnosis.
 
 Earlier routing/renderer/source findings and selected-language transitions pass
 independent review. Audio round three verified 65 invalid encrypted cases isolate

@@ -4,6 +4,18 @@ import { createCaptureClock, type CaptureAudioPacket, type CapturePolicy } from 
 import { oggPackets, opusDuration } from "./audio-packets";
 
 type Event = { type: "chunk"; wire: "opus" | "pcm"; at: number; duration: number; data: Buffer } | { type: "reset" } | { type: "error"; error: string };
+// Streaming IEEE-float WAV: normalized 48 kHz stereo, unknown RIFF/data/sample
+// lengths. Non-PCM has WAVEFORMATEX's empty extension and a fact sample count.
+function captureWaveHeader() {
+  const header = Buffer.alloc(58);
+  header.write("RIFF", 0); header.writeUInt32LE(0xffffffff, 4); header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(18, 16); header.writeUInt16LE(3, 20); header.writeUInt16LE(2, 22);
+  header.writeUInt32LE(48000, 24); header.writeUInt32LE(384000, 28);
+  header.writeUInt16LE(8, 32); header.writeUInt16LE(32, 34); // cbSize at 36 is zero.
+  header.write("fact", 38); header.writeUInt32LE(4, 42); header.writeUInt32LE(0xffffffff, 46);
+  header.write("data", 50); header.writeUInt32LE(0xffffffff, 54);
+  return header;
+}
 /** One normalized capture and Opus encoder, shared by all of this publication's consumers. */
 export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Promise<string>, failed: (error: string) => void) {
   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
@@ -32,7 +44,10 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
     try {
       const executable = await ffmpeg();
       if (closed || error || attempt !== generation) return;
-      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
+      // Raw PCM's demuxer batches 4096 frames (85 ms). WAV's documented max_size
+      // bounds input packets to the existing 480-frame/10 ms Opus cadence.
+      // https://ffmpeg.org/ffmpeg-formats.html#wav
+      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
       baseUs = pending[0]!.at; offsetUs = lateUs = 0;
       process.stdout.on("data", oggPackets(packet => {
         if (child !== process) return;
@@ -55,6 +70,7 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
       process.stdin.on("error", () => { if (child === process) fail("The capture encoder stopped accepting audio."); });
       process.on("error", () => { if (child === process) fail("Couch could not start the capture encoder."); });
       process.on("close", () => { if (child === process) fail(`The capture encoder stopped. ${diagnostic.trim()}`); });
+      process.stdin.write(captureWaveHeader());
       for (const block of pending) write(block);
       pending = []; queuedFrames = 0;
     } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
