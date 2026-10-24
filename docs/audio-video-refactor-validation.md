@@ -2,10 +2,51 @@
 
 Implementation starts from `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`, exactly the audited baseline, on `refactor/couch-playback`. The checkout was clean. Planning documents were copied from the assigned research worktree before delegation; experimental source changes were not copied.
 
-Current assembly status: **encoder, explicit preparation and initial-source
-routing corrections are independently reviewed and clear**. A fresh integrated
-build, Node sweep and Linux package are pending. The original physical startup
-qualification remains failed.
+Current assembly status: **the reviewed product at
+`cf267a2f61f24a43949d6fb7d2788e37d1da9ef3` passes typecheck, production build,
+the integrated Node sweep and Linux packaging**. Physical qualification remains
+failed. The latest attempt retained all 60 seconds and matched both headphone
+channels, but its witness aborted during shutdown. No leave/rejoin, sustained
+run or retry followed. Neither the earlier failed attempt nor this one is a
+physical pass. No merge or release has occurred.
+
+## Current software and package evidence
+
+The fresh cf267 sweep covers **59 Node suites: 518 tests, 515 pass, zero failures
+or cancellations, three known GStreamer/UxPlay prerequisite skips**. All three
+TypeScript projects and the production build pass. Inputs remained unchanged;
+all owned process groups were stopped. The prior e7dad run's **84 separate Bun
+suites / 611 passes** remain separate evidence: only Hub and
+`device-sharing.integration.ts` changed afterward, as recorded in the input
+comparison. There was no fresh cf267 Bun sweep.
+
+The actual Linux Package workflow passed under act with
+`catthehacker/ubuntu:full-latest` and the recorded local upload-artifact v4
+substitution. The deb was extracted, never installed. The packaged Electron
+executable started its actual ASAR audio worker, received timeline-only state
+and closed with exit 0. Package Core/worker executable text matches the local
+build apart from 12 dependency-location comments in each bundle.
+
+| Frozen cf267 input or artifact | SHA-256 |
+| --- | --- |
+| Hub source | `71842e08ce2de407f3a684357687e9237a89845b8bf120a2df2b9977b91fae4c` |
+| 790-input package manifest | `ee102f49437c2755d389c939af0a0250273918bb21097f537444050a93e9a6cf` |
+| Linux archive | `d5ec392524296a18c3f5413e4636218c248e90d72f85762fd696f66b59da34e2` |
+| ASAR | `bd96680ad20ed492d59dacdcc7bb64e58b44de5f1b743a0c18df5b267b36aabb` |
+| Packaged Core | `73ae2b5360ab6a567e3a320b71a36b7b9fe2b3794567f79345948facc0250c79` |
+| Packaged audio worker | `f806c3cdd226fe0aaef585c8519cb6eb13e1f64a3aedf40dfa481bd18ba42d77` |
+
+The actual package is retained in
+`.scratch/playback-refactor/packaged-physical-fix-r2-root/opt/Couch`; the archive
+is in `package-artifacts-physical-fix-r2/1/couch-linux/couch-linux.zip` under
+the same scratch root. Exact commands, source comparisons, counts and cleanup
+are in `physical-fix-root-checks-r2`, `physical-fix-integrations-r2`,
+`physical-fix-r2-software-complete.json`, `physical-fix-r2-package-handoff.json`,
+`package-run-physical-fix-r2` and `packaged-physical-fix-r2-*.json`.
+The local worker hash `6521ef2b…` is not the shipped worker identity.
+Older packages and failed receipts remain unchanged.
+
+## Earlier candidates and correction evidence
 
 Prior implementation commit: `5a18b8c4ebb80a8fa64e864ba533afae49b64e08`. That frozen
 candidate (`Hub 86e813c8…`) passed typecheck/build and R6's 39 scoped routing cases. Its
@@ -22,7 +63,7 @@ fixture correction. Its Linux package and extracted-ASAR worker checks pass. A
 recording is preserved; no subsequent physical stages ran. No merge or release
 has occurred.
 
-The new clean candidate `e7dad73e921ba9ab94a7291083efab8e01f51298` passes
+The preceding clean candidate `e7dad73e921ba9ab94a7291083efab8e01f51298` passes
 frozen install, all three TypeScript projects and production build. Its 84 separate
 Bun suites pass all 611 cases. The 59 Node suites contain 509 tests: 505 pass,
 one fails, three skip for the known AirPlay prerequisites. The failure is the
@@ -58,7 +99,7 @@ No product assertion or source changed for that environment correction. Original
 `review-initial-preparation-r1.md` and `initial-preparation-review-r1`. All suite
 inputs stayed unchanged and owned process groups are empty. Receipts are in
 `physical-fix-root-checks`, `physical-fix-units` and `physical-fix-integrations`.
-The separate 790-input package clone is prepared but has not run Package.
+The subsequent cf267 integration and package results are recorded above.
 
 Post-physical corrections are tracked separately from those frozen receipts:
 
@@ -86,7 +127,7 @@ Post-physical corrections are tracked separately from those frozen receipts:
   projection control. Audio R2 is clear with 17 checks; the original-worker
   control reproduces all three expected failures. Frozen inputs are unchanged
   and both reviewers verified their processes stopped. These bounded verdicts
-  precede the new integrated build, suite sweep and package.
+  precede the successful cf267 integrated build, suite sweep and package.
 - The continuous Live-source transfer case uses two authorized publisher tabs
   so both sources coexist. It failed before the final acquisition-order fix and
   passes with the same listener token, no transient Leave instruction and real
@@ -113,7 +154,7 @@ Raw baseline commands, per-suite logs and machine-readable results are retained 
 ## Story coverage
 
 Implementation and verification are separate. The matrix records current software
-evidence; the remaining review and physical checks are listed below.
+evidence; remaining physical qualification gaps are listed below.
 
 | Stories / acceptance | Implemented behavior | Evidence / disposition |
 | --- | --- | --- |
@@ -124,19 +165,19 @@ evidence; the remaining review and physical checks are listed below.
 | R2 split picture/sound | Common timeline, picture-only timer and sound-only selection; hardware correction remains distinct from content offset. | Split routing, timeline, delay and renderer checks. Native HLS/MPEG-TS follows play/pause/rate and reports unavailable source mapping; those decoder boundaries are stubbed in tests. No physical presentation-alignment claim. |
 | R4 relaxed screen sharing | Retain shared recorder HLS, mapped picture follower and isolated fallback. | Upload, stream, clock and six real-media live-latency checks pass. Actual captured WebM upload → rolling HLS → browser hls.js/group clock passes pause/resume, buffered re-entry and cleanup with 119 new nonzero software PCM packets. RTC fallback decoding, independent late third viewer, absolute position continuity across re-ingest and physical A/V alignment remain unverified. |
 | R5/R6 AirPlay and relaxed capture | Timestamped PCM enters scheduled module at every listener count; redundant audio-only HLS removed for supported adapters. | Capture upload/lifecycle checks; AirPlay has 13 passes and 3 explicit missing GStreamer/UxPlay prerequisite skips; unavailable-host takeover regression repaired. Unsupported relaxed publishers retain compatibility. |
-| L1 capture → Opus → receiver | Timestamped stereo host capture, bounded source normalization, 10 ms Opus and fixed deadlines. | Source drift/gap/reset tests and real encoder/worker tests pass. Native fake-file capture → production upload → prepared browser decoded 49,440 stereo frames, with no MediaRecorder or reported errors. Actual Mac/Behringer startup qualification failed; sparse electrical matches do not qualify the complete physical path. |
+| L1 capture → Opus → receiver | Timestamped stereo host capture, bounded source normalization, 10 ms Opus and fixed deadlines. | Source drift/gap/reset tests and real encoder/worker tests pass. Native fake-file capture → production upload → prepared browser decoded 49,440 stereo frames, with no MediaRecorder or reported errors. The cf267 Mac run reached public Opus readiness and matched 56/56 steady pilots on each headphone channel; witness shutdown and affine-fit gates failed. The complete physical path remains unqualified. |
 | L2/L4 joins and recovery | Decoder/clock/output admission; fixed format and deadlines; incompatible receiver isolated; route changes re-admit. | 50 encrypted software clients receive shared Opus; PCM-only and one-byte-buffer clients refuse independently. A 100 ms Hub stall preserves the deadline grid but causes late network packets (1–8 in recorded runs). Receiver readiness regressions pass. These are not 50 browser decoders or physical outputs. |
 | L3 audience authority | Join/Leave and own volume; programme/queue/seek/speed/delays denied, including crafted/legacy/REST. | Real Hub audience tests and UI entry-point tests; phone Join/Leave/volume journey. Publisher source end remains separate. |
 | All: lifecycle | Load/publication generations, source ownership, newest tab, consent, Stop/Undo, restart and disposal. | Lifecycle/consent suites, native close/reopen and packaged worker cleanup pass. Stale preparation success and failure share the same guard; its reproduced overlap regression passes. Final scoped independent reviews are clear. |
 | All: access/output | Protected relays, Range, source authorization, Sendspin identity and isolation, native preflight, local volume and optional URL compression remain. | Relay/proxy, capture consent, audience/isolation, volume and compressor suites; real TURN allocation/revocation 7/7. Physical Bluetooth and hardware route changes remain unqualified. |
-| All: distribution/docs | Bundled audio worker and maintained pinned client/server SDK patches; no new native capture helper. | Frozen install, typecheck/build, final Linux act Package and extracted-ASAR worker lifecycle pass against the frozen product hashes below. Built-state docs and M1–M11 accounting are updated. |
+| All: distribution/docs | Bundled audio worker and maintained pinned client/server SDK patches; no new native capture helper. | Frozen install, typecheck/build, cf267 Linux act Package and extracted-ASAR worker lifecycle pass against the current package hashes above. Built-state docs and M1–M11 accounting are updated. |
 
-## Validation receipts
+## Earlier validation receipts
 
 The unchanged baseline is described above. Integrated checks use pinned Bun 1.4.2,
 Node 24.21.0 and isolated data/ports; one Bun file per process.
 
-- Final independent-process Bun sweep: 83 files, 592 cases pass, zero failures.
+- The earlier independent-process Bun sweep: 83 files, 592 cases pass, zero failures.
   Source preparation now has 26 tests plus two public Hub Direct-language cases, and
   renderer fallback coverage includes 25 tests; SDK fallback has 4, receiver
   route retention 4, and admission 5. Logs/results are in `final-units`.
@@ -148,7 +189,7 @@ Node 24.21.0 and isolated data/ports; one Bun file per process.
   reruns are retained in `core-consent-restart-fix`; the final sweep includes it.
   The expanded routing suite also covers stale preparations, compressor edits,
   pending transport commands and Next resetting source-specific intent.
-- The current 55-suite evidence totals 491 tests: 488 pass, zero failures or
+- The earlier 55-suite evidence totals 491 tests: 488 pass, zero failures or
   cancellations, three GStreamer/UxPlay prerequisite skips. This combines 54
   unchanged passing suites with the entire corrected 56-case `live-outputs`
   rerun. Its PCM-only fixture now connects the receiver before format selection
@@ -221,7 +262,7 @@ Node 24.21.0 and isolated data/ports; one Bun file per process.
   Electron executable started the ASAR worker, received timeline-only group state
   and closed with exit 0. Product inputs match the frozen source; package and local
   Core/worker executable text match, differing only in 12 dependency-location
-  comments per bundle. This final run includes stale-preparation isolation,
+  comments per bundle. That run includes stale-preparation isolation,
   compressor edits, pending transport/Next preservation and replacement of retired
   cached preparations. Local artifact SHA-256:
   `13ed80143d0d88c5973b55841cb502da2caff5e96b79e4e2d507879e12d68ae8`.
@@ -231,18 +272,18 @@ UI screenshots and journey notes are in `ui-browser`. These local receipts are
 not shipped product assets. Native cleanup events are in
 `native-release-candidate-live-close/events.json` and
 `native-final-capture-consent-fixed/events.json`; product stereo decoding is in
-`product-audio/final/result.json`. Final packaging receipts are
+`product-audio/final/result.json`. That package's receipts are
 `act-package-final.log`, `package-inputs-final.json`, `packaged-final-receipt.json`,
 `packaged-final-asar.json`, `packaged-final-worker-result.json` and
 `packaged-final-build-comparison.json`. Typecheck/build logs are
 `typecheck-final.log` and `build-final.log`.
 
-The fake-input browser and native lifecycle receipts precede the last ordinary
-URL group-preparation corrections. Their capture, renderer and worker modules are
-unchanged; those receipts are not a rerun of every native journey on the final Hub.
-The extracted-package worker check uses the final Hub/package identities below.
+The fake-input browser and native lifecycle receipts precede the later encoder,
+admission and ordinary URL preparation corrections. They are not a rerun of every
+native journey on cf267. The latest actual package and physical route are recorded
+separately; the following manifest belongs to the earlier package.
 
-The final package's source manifest has SHA-256
+The earlier package's source manifest has SHA-256
 `ba8da54d73c7cb4ff1c5205dc5ea20597741c607b7b47850dd964dbbd989239c`;
 it inventories 784 inputs. Its Hub source is
 `86e813c825ff6fd35192cef0b97cb1532e2057932a034a8417747caf493bf06f`.
@@ -253,6 +294,100 @@ worker bundles; the package manifest retains its original source hash. Both sour
 hashes and the unchanged runtime hashes are in `final-source-whitespace.json`.
 
 ## Remaining qualification and verification
+
+### Latest cf267 physical attempt: acquisition failed
+
+The actual extracted cf267 package ran Main/preload Share → Live audio with the
+explicit UMC stereo remap, normal capture/upload and the scheduled Opus worker.
+The paired Mac's actual product UI joined over direct wired LAN HTTPS. The
+Mac remained on headphones at 48 kHz, volume 100%, unmuted, with Wi-Fi off.
+Its freshly observed versions were macOS 14.8.7 and Helium/Chromium
+156.0.8078.47. One private PulseAudio instance owned the four-channel ADC;
+a no-remix ADC1/2 remap fed normal product capture and ADC3/4 witnessed the Mac
+headphones. Generator DAC3/4 supplied the electrical source reference.
+
+These are disclosed audio-stack substitutions: product capture was 48 kHz S16LE
+stereo, the witness 48 kHz S32LE four-channel, and the remap S32LE stereo,
+with unity/unmuted copy streams and no resampler. Observed PA source latency
+was about 5.1–5.2 ms; this is not a complete input-latency bound. Witness
+fragsize was 1,536,000 bytes and maxlength 4,194,304 bytes, without a buffer
+override. No lab PCM sender, SDK transform, experimental runtime or timing
+override replaced the product path. The **100 ms sender lead and all admission
+gates stayed unchanged**. Physical controls/cabling stayed as recorded; software
+cannot independently establish knob positions.
+
+Before activation, the operator froze a display-only rebind to Xvfb :108 because
+:99–107 had unowned socket/lock paths, which were left untouched. The actual
+product origin remained `https://10.10.10.11:48376`. The documented per-site
+certificate Continue flow used the dedicated profile after the served
+fingerprint matched Couch's generated certificate. There was no global TLS
+bypass, OS trust import or HTTP fallback. SSH carried browser control only.
+
+Only the prospectively specified startup stage ran: **60 seconds,
+2,880,000 four-channel frames, 46,080,000 bytes**. The witness began before
+publication and Join; capture input selection/preparation had already occurred.
+Main Start sharing was bracketed at 22:39:57.842–57.987 UTC and Mac Join at
+22:39:58.052–58.317 UTC on 24 October 2026. Receipt/frame brackets do not
+establish exact DAC onset or completely cold device-startup timing.
+The journal ended with `reason=complete, exit=0`, but the process then aborted
+with **SIGABRT / exit −6**, reporting `m->state == STATE_PASSIVE` in
+`pa_mainloop_prepare()`. The generator exited 0. The process-exit gate therefore
+**failed acquisition**, despite the complete raw file. No leave/rejoin,
+610-second sustained recording, retry or tuning followed.
+
+After all owned services were stopped, the unchanged trusted evaluator analyzed
+the complete recording and the prospectively fixed steady interval **[20,48)s**.
+All 20 evaluator files and six stimulus files remained unchanged.
+
+| Fixed steady metric | Left, ADC1→ADC3 | Right, ADC2→ADC4 | Interpretation |
+| --- | --- | --- | --- |
+| Identified pilots | 56/56 | 56/56 | Intended-pair electrical correspondence; 10 ms pilots every 500 ms sample only 2% of the waveform. |
+| Median electrical lag | 100.232956 ms | 100.233392 ms | Sender lead is not subtracted. No fresh absolute uncertainty bound or ≤100 ms qualification. |
+| p95 electrical lag | 100.553220 ms | 100.552199 ms | Descriptive observations on this route. |
+| Maximum affine residual | 12.453211 samples | 12.453801 samples | Both fail the ≤1-sample gate. |
+| Diagnostic affine slope | 3.271977 ppm | 3.266258 ppm | Invalid global fit; no long-run drift qualification. |
+| Maximum detrended adjacent jump | 0.396318 ms | 0.399290 ms | Passing this individual threshold does not repair the failed fit. |
+
+Across the full 60 seconds the detector identified 72/120 left and 74/120 right
+pilots. Planned quiet, isolation and tail intervals explain some unknowns;
+the remainder cannot be counted as either confirmed dropouts or confirmed
+delivery. Zero missed steady pilots does not establish continuous fidelity:
+retained synthetic sensitivity controls miss some inter-pilot defects, including
+100 ms gaps. Leave suppression, recovery and sustained deadlines were not tested.
+Both intended channel pairs match, but the separate ≥30 dB stereo-isolation
+criterion remains unmeasured. Peaks on ADC1–4 were −33.09, −32.86, −57.44 and
+−57.10 dBFS, with no clips. Steady/baseline ratios of 56.33, 55.94, 31.81 and
+31.78 dB are descriptive, not calibrated SNR. Historical ADC calibration does
+not supply absolute uncertainty for this PA/Opus route.
+
+Public client preparation reached running/synced and ready at epoch 2, with
+failures 0 and an estimated output latency of 26 ms. Normal worker logs recorded
+preparing → ready, wire Opus, capacity 5,875,200, required lead 37 ms,
+minimum buffer 25 ms and static delay 0; no refusal or parser gap was observed.
+Unknown/nonfinite fields and the coalesced preparing report remain explicit.
+These fields show control/admission behavior. Alongside matched headphone
+samples they support limited downstream completion on the actual route, but
+do not independently enumerate upload bytes, encoded/decoded packets, scheduled
+buffers or completions. They cannot fill the historical evaluator's unavailable
+runtime journals or qualify every stage of the requested path.
+
+Cleanup completed at **22:44:00 UTC**, before analysis: owned ledger and
+process-group survivors empty, acquisition PIDs gone, UMC streams closed,
+Mac CDP and Linux product/control ports closed. The installed app, personal
+profiles and unrelated processes remained untouched. All analysis workloads
+also ended. A separate hardware-free witness diagnosis cannot amend this failed
+run; any corrected collector requires a distinct freeze and new attempt.
+
+Immutable evidence under `.scratch/playback-refactor/physical-mac/post-fix-cf267`:
+
+- `physical-report.md`: `7ab5dc1dd839940f34879bf88d2dbba17e05858472257d4319cf72a55c546b5e`.
+- `result.json`: `3aaa9a60698af0561d12bdd4965fab8ed5296cf3e58cf1623cc2bb61f83d85b3`.
+- `evidence-index.json`: `931f012f1b469b07881407249fa0d08451d640dc83613f344e91a066d58c9b6f`.
+- `runs/startup/capture.s32le`: `153d17e1e632bdf03b7facf0cfe86052eb8c08982758bb81ffa62fa8f6b8794a`.
+- `activation/cleanup-complete.json` and `reports/analysis-command-receipt.json`
+  retain exact cleanup and evaluator commands.
+
+### Earlier routing and physical evidence
 
 Round five's cached full-A/V preparation
 replacement passes R6's 39 scoped cases and five negative controls. The refreshed
@@ -336,7 +471,8 @@ checks and typecheck; independent review found no actionable issue. Its three
 frozen regression cases pass, while the original raw input and WAV without the
 packet bound each fail both continuity controls. Additional review checks cover
 fragmented input, generation cancellation and relaxed PCM compatibility. These
-are software results; this revision has not yet been packaged or physically tested.
+are software results; the subsequent cf267 package and physical attempt are
+recorded above and do not retroactively qualify the original run.
 
 A separate public-logic probe confirms that pending decoder/clock preparation can
 temporarily produce the same incompatibility warning, then recover automatically.
