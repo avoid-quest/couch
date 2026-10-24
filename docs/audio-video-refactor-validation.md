@@ -2,8 +2,8 @@
 
 Implementation starts from `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`, exactly the audited baseline, on `refactor/couch-playback`. The checkout was clean. Planning documents were copied from the assigned research worktree before delegation; experimental source changes were not copied.
 
-Current assembly status: **software verification complete; physical testing
-resuming after the owner addressed the Mac desktop lock**.
+Current assembly status: **software suites pass; physical startup qualification
+failed and its cause is under bounded software diagnosis**.
 Implementation commit: `5a18b8c4ebb80a8fa64e864ba533afae49b64e08`. The final candidate
 (`Hub 86e813c8…`) passes typecheck/build and R6's 39 scoped routing cases. Its
 55-suite integration evidence has 491 tests: 488 pass and three AirPlay prerequisite
@@ -14,8 +14,9 @@ bundle's apparent pass had no audio packets. The corrected fixture connects its
 receiver before format selection and requires real packets as well as playing
 state. R7 independently clears that correction, including real late PCM and Opus
 admission and a failing consent-bypass control. Hub is unchanged. The updated Linux
-package and extracted-ASAR worker checks pass. No physical
-recording has begun and no merge or release has occurred.
+package and extracted-ASAR worker checks pass. A 31.088-second partial physical
+recording is preserved; no subsequent physical stages ran. No merge or release
+has occurred.
 
 ## Baseline before product edits
 
@@ -39,7 +40,7 @@ evidence; the remaining review and physical checks are listed below.
 | R2 split picture/sound | Common timeline, picture-only timer and sound-only selection; hardware correction remains distinct from content offset. | Split routing, timeline, delay and renderer checks. Native HLS/MPEG-TS follows play/pause/rate and reports unavailable source mapping; those decoder boundaries are stubbed in tests. No physical presentation-alignment claim. |
 | R4 relaxed screen sharing | Retain shared recorder HLS, mapped picture follower and isolated fallback. | Upload, stream, clock and six real-media live-latency checks pass. Actual captured WebM upload → rolling HLS → browser hls.js/group clock passes pause/resume, buffered re-entry and cleanup with 119 new nonzero software PCM packets. RTC fallback decoding, independent late third viewer, absolute position continuity across re-ingest and physical A/V alignment remain unverified. |
 | R5/R6 AirPlay and relaxed capture | Timestamped PCM enters scheduled module at every listener count; redundant audio-only HLS removed for supported adapters. | Capture upload/lifecycle checks; AirPlay has 13 passes and 3 explicit missing GStreamer/UxPlay prerequisite skips; unavailable-host takeover regression repaired. Unsupported relaxed publishers retain compatibility. |
-| L1 capture → Opus → receiver | Timestamped stereo host capture, bounded source normalization, 10 ms Opus and fixed deadlines. | Source drift/gap/reset tests and real encoder/worker tests pass. Native fake-file capture → production upload → prepared browser decoded 49,440 stereo frames, with no MediaRecorder or reported errors. Physical qualification absent. |
+| L1 capture → Opus → receiver | Timestamped stereo host capture, bounded source normalization, 10 ms Opus and fixed deadlines. | Source drift/gap/reset tests and real encoder/worker tests pass. Native fake-file capture → production upload → prepared browser decoded 49,440 stereo frames, with no MediaRecorder or reported errors. Actual Mac/Behringer startup qualification failed; sparse electrical matches do not qualify the complete physical path. |
 | L2/L4 joins and recovery | Decoder/clock/output admission; fixed format and deadlines; incompatible receiver isolated; route changes re-admit. | 50 encrypted software clients receive shared Opus; PCM-only and one-byte-buffer clients refuse independently. A 100 ms Hub stall preserves the deadline grid but causes late network packets (1–8 in recorded runs). Receiver readiness regressions pass. These are not 50 browser decoders or physical outputs. |
 | L3 audience authority | Join/Leave and own volume; programme/queue/seek/speed/delays denied, including crafted/legacy/REST. | Real Hub audience tests and UI entry-point tests; phone Join/Leave/volume journey. Publisher source end remains separate. |
 | All: lifecycle | Load/publication generations, source ownership, newest tab, consent, Stop/Undo, restart and disposal. | Lifecycle/consent suites, native close/reopen and packaged worker cleanup pass. Stale preparation success and failure share the same guard; its reproduced overlap regression passes. Final scoped independent reviews are clear. |
@@ -181,33 +182,61 @@ The preceding package and 486-pass sweep remain archived. Round four's
 compressor-preparation and subsequent pending transport/Next defects are corrected.
 The actual buffered captured-A/V browser check has passed.
 
-The owner additionally authorized fresh physical testing with the existing wired
-MacBook Air and Behringer UMC404HD lab. SSH, Ethernet, Wi-Fi off and the external
-headphone output at 48 kHz/100%/unmuted were verified. Activation on 24 October
-2026 at 20:03 UTC stopped before acquisition: the Mac's logged-in desktop was
-locked (`CGSSessionScreenIsLocked=Yes`), dedicated Helium reported Keychain
-`errSecInteractionNotAllowed`, and CDP HTTP timed out locally and through SSH.
-The required intervention is to unlock that desktop and address any visible
-Helium/Keychain prompt, leaving routing, volume and cabling unchanged.
-The owner subsequently reported ready; a fresh access check and continuation use
-the same frozen runtime and measurement protocol.
+The authorized physical attempt used one wired MacBook Air, macOS 14.8.7,
+Helium/Chromium 156.0.8078.47, headphones at 48 kHz/100%/unmuted, Ethernet and
+Wi-Fi off, plus the Behringer UMC404HD. The first activation stopped before
+acquisition on a locked desktop/Keychain startup problem; its receipt remains in
+`physical-mac/activation/result.json`. After the owner's intervention, normal
+LaunchServices launch restored the dedicated browser. No consent bypass or
+physical setting change was applied; the personal browser remained untouched.
 
-All 136 frozen preparation pins matched. The private PulseAudio capture opened
-the UMC at 48 kHz, four-channel S32_LE with a stereo 1/2 remap and no remix; the
-packaged Couch reached normal Host setup on an isolated display. **No publication,
-Join, stimulus or recording started.** Measured latency, stereo identity, drift,
-dropouts and recovery are therefore unknown. This was an activation attempt, not
-an end-to-end product-path result.
+The actual packaged Main/preload UI selected Share → Live audio and the real
+stereo input, and the actual Mac product UI paired and joined. Direct LAN access
+redirected to HTTPS, frozen in new manifests before recording; SSH carried only
+browser control. All 136 preparation pins matched. Private PulseAudio was the
+sole four-channel 48 kHz S32_LE hardware capture owner; a no-remix stereo remap
+fed Couch's normal 48 kHz S16_LE capture. Its observed 42.67 ms capture latency
+and the witness's default 2000 ms buffering are disclosed stack substitutions,
+not corrections subtracted from electrical measurements. Linux used an isolated
+display; no fake source, experimental PCM sender, SDK transform or timing override
+was used. The sender lead stayed **100 ms**.
 
-All owned product/display/audio/browser/tunnel/keep-awake processes were stopped
-by verified identities. UMC capture and playback streams, owned local ports and
-Mac CDP are closed; the personal Helium profile remains untouched. Failure and
-cleanup receipts are in `physical-mac/activation/result.json` and the surrounding
-activation directory. Runtime/evaluator/stimulus pins remain unchanged. The
-updated handoff's former frozen bytes are preserved as
-`physical-mac/activation/preparation-interface-frozen-r2.md`; a continuation must
-reference that same-hash snapshot. The stopped experiment and its latency search
-remain stopped; historical measurements are not evidence for this refactor.
+The planned 60-second startup qualification **failed**. At 20:18:44.830 UTC on
+24 October 2026, the Mac UI reported that its output could not meet Live audio's
+Opus deadline. The operator stopped the attempt and retained all 31.088 seconds
+(1,492,224 four-channel frames). The exact refusal predicate is unknown: standard
+browser latency/capacity/timing values were not captured. Public state alternated
+504 loading and 501 playing observations, and later showed “Waiting for audio”.
+The owner independently saw rapid Play/Buffering flicker on the Mac during the
+run, confirming that the state churn reached the visible UI. These observations
+do not establish permanent hardware incompatibility.
+
+| Measurement | Recorded observation | Disposition |
+| --- | --- | --- |
+| Electrical source-to-headphone correspondence | Accepted local pilots span 100.184–100.672 ms left and 100.184–100.673 ms right; no sender lead or ADC/DAC estimate subtracted. | Only 9/63 left and 6/63 right pilots identified. No 100 ms qualification; current analog uncertainty is uncalibrated. |
+| Stereo identity | Four trusted generator→ADC pilots support source channel identity; sparse corresponding headphone activity exists on both channels. | Output stereo separation and sustained stereo delivery remain unqualified. Output was not uniformly silent. |
+| Drift | Maximum affine residuals 11.54 samples left and 5.47 right exceed the one-sample gate. | Sparse fits are not an established drift measurement. |
+| Dropouts and recovery | Intermittent output and low coverage; no validated continuous-fidelity or dropout count. | Leave/rejoin and the 610-second sustained check were not run. No recovery or deadline-margin qualification. |
+| Acquisition | Complete raw prefix retained; the original 60-second evaluator rejects the missing tail. Final block journal line was truncated by stopping; 11,152 raw frames lack a complete final receipt record. | Failed prospective run. Separate prefix diagnostics do not replace its verdict. |
+
+The unchanged trusted evaluator produced the original incomplete-run failure.
+Only afterward, its unchanged trajectory functions described the recorded prefix
+with the same matching thresholds; that is diagnostic evidence, not a shortened
+acceptance run. Historical calibration and unavailable native/source/receiver
+journals do not transfer to this Opus/Pulse path. Actual stereo capture/publication
+is observed, but upload packet counts, encoder output, decoder completion and
+per-packet scheduling were not independently recorded. Sparse correlated analog
+output does not qualify the full requested chain.
+
+The immutable report is `physical-mac/continuation-1/physical-report.md` (SHA-256
+`7c423cd318cf326e66876891ea050237fc716523ce27722017fa1feb0c8301fd`);
+`result.json` pins retained evidence. Raw recording SHA-256 is
+`a1c08e367f822e945834d5d7de338fe24701c33416195143b3f25c5e0d6fb95c`.
+Verified cleanup at 20:20:07 UTC found no owned processes, open UMC streams or
+dedicated ports. No retry or later stage ran. The stopped experiment and its
+latency search remain stopped; historical measurements are not this refactor's
+evidence. A bounded software diagnosis is examining the retained startup evidence
+without changing product timing or reopening hardware.
 
 Earlier routing/renderer/source findings and selected-language transitions pass
 independent review. Audio round three verified 65 invalid encrypted cases isolate
