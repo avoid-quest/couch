@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground,#18222c);font:14px/1.5 var(--font-sans,system-ui)}button,input,select{font:inherit}p{margin:8px 0 14px}h2{font-size:20px;line-height:1.25;font-weight:650;letter-spacing:-.025em;margin:30px 0 12px}h3{font-size:15px;margin:0 0 8px}small,.small{font-size:12px}.muted{color:var(--muted-foreground,#606976)}.intro{font-size:18px;line-height:1.45;max-width:660px;margin:0 0 8px}.kicker{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted-foreground,#606976)}.rule{border-top:1px solid var(--border,#ddd);margin-top:25px;padding-top:20px}
+.controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:18px 0}
+.segmented{display:flex;gap:3px;flex-wrap:wrap}.segmented button{border:0;border-radius:5px;background:transparent;color:var(--muted-foreground,#606976);padding:7px 11px;cursor:pointer}.segmented button[aria-pressed=true]{background:var(--secondary,#e9edf1);color:var(--foreground,#18222c);font-weight:650}.segmented button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--ring,#5289b9);outline-offset:3px}select{min-width:0;max-width:100%;padding:8px 24px 8px 0;background:transparent;color:inherit;border:0;border-bottom:1px solid var(--border,#ddd);font-weight:600}.version{margin-left:auto}.version button{font-size:12px;padding:6px 9px}
+.flow{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1.25fr) 22px minmax(0,1fr);align-items:stretch;gap:8px;margin-top:18px}
+.node{padding:12px 0 0;border-top:3px solid var(--chart-2,#209d9c)}.node.hot{border-color:var(--warning,#bc7413)}.node.clock{border-color:var(--chart-3,#8563bc)}.node .where{display:block;color:var(--muted-foreground,#606976);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}.node strong{font-size:16px;line-height:1.3;display:block;margin-bottom:6px}.node p{margin:0;font-size:12px}.arrow{align-self:center;font-size:22px;color:var(--muted-foreground,#606976)}.callout{font-size:13px;margin:15px 0 0;line-height:1.6}.facts{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:18px 0}.fact b{display:block;font-size:12px}.fact span{font-size:13px}.codec{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 6px;align-items:center}.codec label{font-size:12px;color:var(--muted-foreground,#606976);margin-right:8px}.pass{padding:2px 8px;border-radius:4px;background:var(--secondary,#e9edf1);font-size:12px}.pass.encode{color:var(--warning,#9d5c00)}.pass.decode{color:var(--chart-2,#087d7e)}.legend{font-size:11px;color:var(--muted-foreground,#606976)}.warning{color:var(--warning,#995d08)}.strong{font-weight:650}
+.scaling{display:grid;grid-template-columns:126px 1fr;gap:9px 16px;font-size:13px;margin-top:10px}.scaling .label{font-weight:600}.scaling .route{font-family:var(--font-mono,monospace);font-size:12px;line-height:1.6}.note{font-size:12px;color:var(--muted-foreground,#606976);margin:9px 0}
+.budget{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.budget th{text-align:left;color:var(--muted-foreground,#606976);font-weight:500;font-size:11px;padding:0 10px 7px 0}.budget td{border-top:1px solid var(--border,#ddd);vertical-align:top;padding:10px 10px 10px 0;overflow-wrap:anywhere}.budget th:first-child{width:22%}.budget th:nth-child(2){width:36%}.budget td:first-child{font-weight:600}.budget small{display:block;margin-top:3px;color:var(--muted-foreground,#606976);font-size:11px}.target{color:var(--chart-3,#7451aa)}
+.slidergrid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:17px 0}.slidergrid label{font-size:13px;display:flex;justify-content:space-between;gap:8px}.slidergrid output{font-weight:650;font-variant-numeric:tabular-nums}input[type=range]{width:100%;accent-color:var(--chart-2,#278b91);margin:12px 0 0}.rates{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted-foreground,#606976)}.rates select{font-weight:400;font-size:12px;padding:3px 22px 3px 0}
+.barrow{display:grid;grid-template-columns:120px minmax(0,1fr) 86px;gap:12px;align-items:center;margin:12px 0;font-size:12px}.track{height:22px;background:var(--secondary,#eceff3);display:flex;overflow:hidden;border-radius:2px}.audio{background:var(--chart-2,#258d94);height:100%;min-width:0}.picture{background:var(--chart-3,#8667b8);height:100%;min-width:0}.barval{text-align:right;font-variant-numeric:tabular-nums;font-weight:650}.barlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted-foreground,#606976)}.dot{width:8px;height:8px;display:inline-block;border-radius:50%;margin-right:5px}.equation{font-size:13px;margin-top:15px}.equation strong{font-size:20px;letter-spacing:-.02em}.evidence{display:flex;gap:25px;margin-top:14px}.evidence>div{flex:1}.evidence strong{font-size:25px;line-height:1.2;display:block;font-variant-numeric:tabular-nums}.evidence span{font-size:11px;display:block;color:var(--muted-foreground,#606976)}details{margin:18px 0;border-top:1px solid var(--border,#ddd);padding-top:12px}summary{cursor:pointer;font-size:13px;font-weight:600}details p{font-size:12px}details ul{font-size:12px;padding-left:18px;margin:9px 0}details li{margin:7px 0}footer{font-size:11px;color:var(--muted-foreground,#606976);margin:22px 0 5px}
+@media(max-width:500px){.intro{font-size:17px}.flow{grid-template-columns:1fr;gap:3px}.node{padding-top:8px}.node strong{font-size:15px}.arrow{font-size:18px;line-height:1;transform:rotate(90deg);justify-self:center;margin:4px}.node p{font-size:12px}.version{margin-left:0}.controls{gap:8px}.facts{gap:12px}.budget{font-size:11px}.budget td{padding-right:8px}.budget th:first-child{width:23%}.budget th:nth-child(2){width:34%}.barrow{grid-template-columns:84px minmax(0,1fr) 72px;gap:7px;font-size:11px}.slidergrid{gap:14px}.scaling{grid-template-columns:92px 1fr;gap:10px}.evidence{gap:14px}.evidence strong{font-size:22px}h2{font-size:19px}.small{font-size:11px}}
+</style></head><body>
+<p class="intro">Three product behaviors. <strong>Buffers cost time.</strong> Codec conversions cost CPU. Sending a copy to each device costs bandwidth.</p>
+<p class="note">CPU hotspots below are architectural, not profiler measurements. Device limits are unknown unless explicitly stated.</p>
+<p class="note"><strong>Current scope:</strong> Direct can target any permitted single device. Prioritize synchronized live audio; new live video is deferred. Captured-media candidate diagrams below describe audio only. Relaxed screen sharing retains its current buffered A/V path until a replacement is agreed. Zones are future work.</p>
+
+<div class="controls">
+<label for="mode" class="kicker">Explore</label>
+<select id="mode" aria-label="Product behavior">
+<option value="direct">1 · Direct — independent playback</option>
+<option value="relaxed">2 · Relaxed synced — shared media</option>
+<option value="live" selected>3 · Low-latency synced — audio first</option>
+</select>
+<label id="inputControl" class="small" hidden>Input <select id="inputType" aria-label="Source type"><option value="url">Ordinary media</option><option value="capture">Live capture</option></select></label>
+<div class="segmented version" role="group" aria-label="Architecture version">
+<button id="today" aria-pressed="true">Today</button><button id="proposal" aria-pressed="false">Simpler candidate</button>
+</div>
+</div>
+<p id="scope" class="small muted"></p>
+<div id="flow" class="flow" aria-live="polite"></div>
+<div class="facts">
+<div class="fact"><b>Where delay accumulates</b><span id="delay"></span></div>
+<div class="fact"><b>Where processing grows</b><span id="cpu"></span></div>
+</div>
+<div id="codec" class="codec"></div>
+<p class="legend">Stage counts are not CPU or latency measurements. Encode = compress; decode = unpack. Counts follow one audio path, excluding provider encoding and OS conversion; Core work is shared.</p>
+<p id="consequence" class="callout"></p>
+
+<div class="rule">
+<h3>Adding listeners still means sending more copies</h3>
+<div class="scaling">
+<div class="label">WebRTC today</div><div><div class="route">Publisher ── N stream copies ──→ receivers</div><div class="note">1 encode → 1 decode per track/path. Publisher upload and peer work grow with listeners; encoder sharing is not guaranteed. No safe viewer ceiling is measured. TURN adds connectivity, not shared fanout.</div></div>
+<div class="label">Shared engine</div><div><div class="route">Source ── 1 feed ──→ Core ── N copies ──→ receivers</div><div class="note">Encode once per shared format. Core sends the copies; every receiver still decodes. The live source feed may be raw or encoded, depending on capture design.</div></div>
+</div>
+<p class="note"><strong>Conditional WebRTC option:</strong> keep it for captured sources only if it demonstrates a meaningful latency advantage. It aligns A/V locally, but does not synchronize receivers. That advantage has not yet been established against the proposed engine.</p>
+</div>
+
+<h2>What is the device budget?</h2>
+<table class="budget">
+<thead><tr><th>Behavior</th><th>How devices count</th><th>What we can claim</th></tr></thead>
+<tbody>
+<tr><td>Direct</td><td>1 receiver per Playback.<small>Many people can run different Playbacks simultaneously.</small></td><td>No verified total ceiling.<small>Client decode, relay traffic and source-resolution bursts are the limits to assess.</small></td></tr>
+<tr><td>Relaxed synced</td><td>Many receivers per shared Playback.<small>Encoding is shared; transmission is per receiver.</small></td><td>No qualified physical ceiling.<small>Do not read the 50-browser experiment as current-main support.</small></td></tr>
+<tr><td>Low-latency synced</td><td><strong class="target">Target: 50 audio</strong><small>Audio first. Future video aspiration: 5–10 screens.</small></td><td>50 real outputs is unproven.<small>Latest timing work: 1 wired physical receiver. Video synchronization is unqualified.</small></td></tr>
+</tbody>
+</table>
+<div class="evidence">
+<div><strong>1</strong><span>physical stereo receiver<br>latest clock experiment</span></div>
+<div><strong>50</strong><span>virtual receiver outputs<br>older browser experiment</span></div>
+<div><strong class="target">50</strong><span>audio receivers<br>product target, not a pass</span></div>
+</div>
+
+<h2>How much bandwidth do the copies need?</h2>
+<p class="small muted">Receiver payload only. Audio uses main’s 96 kbit/s setting; future live bitrate is undecided. These calculations are not supported-device predictions.</p>
+<div class="slidergrid">
+<div><label for="listeners">Audio receivers <output id="audioCount">50</output></label><input id="listeners" type="range" min="1" max="50" value="50"></div>
+<div><label for="screens">Future video screens <output id="videoCount">0</output></label><input id="screens" type="range" min="0" max="10" value="0"></div>
+</div>
+<div class="rates"><span>Opus: 96 kbit/s (current main) · PCM: 48 kHz, 16-bit stereo</span><label>Video per screen <select id="videoRate" aria-label="Illustrative video bitrate"><option value="2">2 Mbit/s</option><option value="4" selected>4 Mbit/s</option><option value="8">8 Mbit/s</option></select></label></div>
+<div class="barrow"><span>Opus + video</span><div class="track"><div id="opusAudio" class="audio"></div><div id="opusVideo" class="picture"></div></div><span id="opusValue" class="barval"></span></div>
+<div class="barrow"><span>PCM + video</span><div class="track"><div id="pcmAudio" class="audio"></div><div id="pcmVideo" class="picture"></div></div><span id="pcmValue" class="barval"></span></div>
+<div class="barlegend"><span><i class="dot" style="background:var(--chart-2,#258d94)"></i>Audio</span><span><i class="dot" style="background:var(--chart-3,#8667b8)"></i>Video</span><span>Both bars use the same scale.</span></div>
+<p id="equation" class="equation"></p>
+<p class="note">This excludes capture uplink, protocol overhead, retries and Wi-Fi contention. On the same Wi-Fi, traffic may use airtime on both the source and receiver hops. A router’s advertised speed is not this usable budget. Slider endpoints are examples, not product limits.</p>
+
+<details><summary>Other existing techniques, without inventing more product modes</summary>
+<table class="budget" style="margin-top:12px"><thead><tr><th>Technique</th><th>Cost / device count</th><th>Architectural role</th></tr></thead><tbody>
+<tr><td>Generated HLS fallback</td><td>Audio/video: 2 encodes + 2 decodes per path.<small>Shared server transcode; per-viewer traffic/decode. No qualified viewer ceiling.</small></td><td>Extra compatibility and delay.<small>Still serves relaxed screen sharing and compatibility; replace those capabilities before deletion.</small></td></tr>
+<tr><td>AirPlay input</td><td>Today: decode → PCM → AAC/HLS → decode again.<small>Grouped audio adds the Sendspin conversion. 250 ms ingress buffer.</small></td><td>An input adapter.<small>Feed decoded audio into relaxed scheduling; receiver count follows that engine.</small></td></tr>
+<tr><td>mpv</td><td>1 host output.<small>Native decode, no group fanout.</small></td><td>Codec fallback.<small>Removing it loses some host IPTV support or requires another decoder/transcoder.</small></td></tr>
+<tr><td>HTTP proxy / TURN</td><td>Copies bytes; no media codec pass.<small>Traffic still grows with receiver copies.</small></td><td>Access / connectivity.<small>HTTP proxy supports providers. TURN is needed only if its WebRTC path stays.</small></td></tr>
+</tbody></table>
+<p class="note">Browser capture APIs, native output routing and Bluetooth are inputs or sinks, not additional delivery modes. Optional compression adds DSP; it is not required for Direct.</p>
+</details>
+<details><summary>How to read the timing and capacity evidence</summary>
+<ul>
+<li>The 100 ms concert goal is input-to-ear, not just network delay. Capture, packetization, codec lookahead, scheduling and hardware all consume it.</li>
+<li>Latest source-clock work passed a 350 ms checkpoint on one wired receiver. R5 has passing 100/95 ms long runs; earlier revisions contain lower passes and later failures. This is not a repeatable phone/Wi-Fi guarantee.</li>
+<li>Older 50-browser runs exercised real decoding with synthetic capture and virtual output. They do not prove physical speaker skew, radio capacity or synchronized video.</li>
+<li>Current yt-dlp runs at most 3 extractions concurrently and queues up to 16. Pairing is limited to 20 attempts per minute. These constrain startup/join bursts, not the number of already-playing users.</li>
+<li>More receivers multiply network/output work. More independent shared Playbacks also multiply Core decoding/encoding. More buffering mainly costs delay and memory; it is not the same thing as more codec CPU.</li>
+<li>Clock resampling/correction is additional processing beyond the codec counts. Display refresh and OS/Bluetooth output delay are outside those counts.</li>
+</ul>
+</details>
+<footer>Based on main 59ac6cd and the retained experiment/official-source audits, 24 Oct 2026. No new benchmark. The simpler candidate is not implemented or approved for release.</footer>
+<script>
+const cases={
+direct:{
+today:{scope:"Ordinary media: each person can choose any permitted single destination, including a shared TV or another connected device.",nodes:[["Provider","Encoded media","The source is already compressed.",""],["Selected Couch","Resolve → relay bytes","yt-dlp/provider URLs always use the protected relay. Some configured sources can bypass it.",""],["Each receiver","Decode → output","One decode per selected media track. Optional compression adds DSP.","hot"]],e:0,d:1,cpu:"Each device does its own decoding. Core forwards bytes and resolves sources; it does not transcode.",delay:"Provider buffering and the local player/output. No interreceiver synchronization buffer.",consequence:"Direct is one receiver per Playback, not one user per Couch. Independent users do not become a synchronized group."},
+proposal:{scope:"Keep the efficient native-media path and existing Play on behavior.",nodes:[["Provider","Encoded media","No new format conversion.",""],["Selected Couch","Resolve → needed relay","Keep source access and queues. Avoid unnecessary track fetching where possible.",""],["Each receiver","Decode → output","No mandatory shared-audio pipeline or DSP.","hot"]],e:0,d:1,cpu:"The same local decode cost; do not add a server codec pass to ordinary solo playback.",delay:"The same native-player path. Server-independent/private playback is separate work.",consequence:"For a captured source with one receiver, compare the common timed engine with WebRTC. Keep a separate WebRTC path only if its latency benefit earns the extra implementation."}},
+relaxed:{
+today:{scope:"Ordinary encoded media shared by a group. Audio is shown; screens decode video separately.",nodes:[["Provider","Encoded media","One programme for this Playback.",""],["Core · shared work","Decode → encode audio","Normalize / optional DSP → encode once per requested Sendspin format.","hot"],["Each receiver","Decode → timed output","Speakers follow common deadlines. Screens follow the clock.","clock"]],e:1,d:2,cpu:"Core codec work is shared per Playback. Each added receiver adds decode and network work.",delay:"Current 1 s initial audio lead. Up to 8 s send-ahead is a queue budget, not a fixed 8 s delay.",consequence:"Video uses rate/seek following, not physically locked frames. Creating another independent group adds another shared processing job."},
+proposal:{scope:"Ordinary media that can read ahead: same receiver and shared delivery, with generous buffering.",nodes:[["Source","Encoded URL","Decode the programme once for the group.",""],["Shared audio engine","Normalize → encode once","The same scheduling engine as live, with more buffering.","hot"],["Each receiver","Decode → timed output","Reuse the video follower where it meets the visual requirement.","clock"]],e:1,d:2,cpu:"For URL media: the useful source decode and shared Opus encode remain. Added listeners add transmission and endpoint decode.",delay:"A larger group buffer buys resilience. That changes waiting time and memory, not the number of codec passes.",consequence:"Share the receiver, formats and fanout. Read-ahead media and fixed-deadline live capture need different sender policies. Current timeline rebasing and format-triggered restarts cannot carry into live unchanged."}},
+live:{
+today:{scope:"Nearest current path: Live → In sync. This buffered path is not the proposed 100 ms concert implementation.",nodes:[["Publisher","Capture → recorder encode","MediaRecorder produces chunks.","hot"],["Core · shared work","HLS transcode → audio transcode","Decode/encode HLS, then decode/encode audio for Sendspin.","hot"],["Each receiver","Decode → timed output","Video decodes from HLS and follows the group clock.","clock"]],e:3,d:3,cpu:"The most avoidable codec work: Core transcodes video and converts the captured audio twice.",delay:"The clearest latency obstacle is buffered recording/HLS: nominal 250 ms recorder chunks, 1 s segments and a 1 s group lead. Do not add these into a claimed measurement; removing codec passes alone will not solve that waiting.",consequence:"Audio: 3 encodes + 3 decodes through Opus. Video: 2 encodes + 2 decodes. The shared Core stages are not repeated 50 times."},
+proposal:{scope:"First live milestone: audio only, one shared encoder and common capture-to-playout timing.",nodes:[["Publisher","Timestamped capture","One source feed. Source clock correction precedes shared audio encoding.",""],["Shared processing","Encode once → send copies","Source clock normalization + one Opus encode.","hot"],["Each receiver","Decode → timed output","Decode audio and correct the local output clock.","clock"]],e:1,d:1,cpu:"Eliminate HLS conversions for this audio path. Keep clock correction, encoding and receiver decoding; relaxed video still uses its existing path.",delay:"100 ms input-to-ear is the concert goal. New live-video scheduling and its qualification are deferred.",consequence:"Proposed Opus: 1 encode + 1 decode; the native lab instead used PCM, with no compressed-codec passes. Opus timing remains unqualified. Start with qualified host/desktop capture → Core clock normalization → one encode. This milestone does not replace captured video."}}
+};
+const captureCases={
+direct:{
+today:{scope:"Captured Direct today: WebRTC to one receiver. The same transport can serve more viewers without cross-device sync.",nodes:[["Publisher","Capture → encode","One logical sender/peer per receiving device.","hot"],["Core / TURN","Signal or relay packets","Core does not decode media. TURN is used only when connectivity needs it.",""],["Receiver","Decode → play","Browser handles its local A/V timing, not timing between devices.","clock"]],e:1,d:1,cpu:"Publisher encoding and receiver decoding. Multiple peers add upload and peer work; encoder sharing is not guaranteed.",delay:"Capture, codec, adaptive jitter buffering and output. The old 200–300 ms recollection is not a verified current result.",consequence:"This is the conditional fast path under review. No same-source comparison establishes its delay advantage over the timed engine. UDP behavior and bitrate adaptation are additional tradeoffs."},
+proposal:{scope:"Captured audio with one receiver: reuse scheduled audio. The captured-video replacement decision is deferred; WebRTC remains conditional on a meaningful faster experience.",nodes:[["Qualified publisher","Timestamped capture","Initially Couch-computer audio input or desktop-app capture.",""],["Core","Normalize → encode once","One common capture path, even with one listener.","hot"],["One receiver","Decode → timed output","Same receiver as a group, with an explicit lead.","clock"]],e:1,d:1,cpu:"Same proposed Opus codec count as WebRTC; differences are timing control, transport and supporting machinery.",delay:"The timed path adds a chosen lead. Whether it costs meaningfully more latency than WebRTC is unproven.",consequence:"No separate private-mode session system. Preserve independent Playbacks. Native PCM lab results do not qualify this proposed Opus path."}},
+relaxed:{
+today:{scope:"Captured source with In sync: relaxed playback currently takes the recorded/HLS route.",nodes:[["Publisher","Capture → recorder encode","Recorded upload feeds Core.","hot"],["Core","HLS → Sendspin conversion","Two successive audio decode/encode stages.","hot"],["Each receiver","Decode → timed output","Picture follows the HLS/group timeline.","clock"]],e:3,d:3,cpu:"Repeated audio conversions and video transcoding in Core; server work is shared per source/Playback.",delay:"Recorder chunks, HLS segmentation and scheduled buffering. This is not the concert live target.",consequence:"For ordinary media, choose the other Input. Different inputs explain the different codec counts; this is not another product mode."},
+proposal:{scope:"Captured audio-only relaxed playback: use the same fixed live timeline with a larger lead. Screen sharing retains the current A/V path.",nodes:[["Publisher","Timestamped capture","No recorded/HLS audio intermediate.",""],["Core","Normalize → encode once","Same fixed-deadline sender as low-latency capture.","hot"],["Each receiver","Decode → timed output","More lead for relaxed operation.","clock"]],e:1,d:1,cpu:"One shared Opus encode; one decode per receiver, plus clock correction.",delay:"Larger lead allows more delivery variation. It does not create permission to silently retime only one synchronized receiver.",consequence:"Capture uses fixed deadlines in both relaxed and low-latency behavior. Read-ahead ordinary media keeps its own sender policy. AirPlay can enter this relaxed timeline."}}
+};
+let version="today";
+function draw(){
+const mode=document.getElementById("mode").value;
+document.getElementById("inputControl").hidden=mode==="live";
+const data=(mode!=="live" && document.getElementById("inputType").value==="capture" ? captureCases[mode] : cases[mode])[version];
+document.getElementById("scope").textContent=data.scope;
+document.getElementById("flow").innerHTML=data.nodes.map(function(n,i){return (i?'<span class="arrow" aria-hidden="true">→</span>':'')+'<div class="node '+n[3]+'"><span class="where">'+n[0]+'</span><strong>'+n[1]+'</strong><p>'+n[2]+'</p></div>';}).join("");
+document.getElementById("codec").innerHTML='<label>Audio codec passes</label><span class="pass encode">'+data.e+' encode'+(data.e===1?'':'s')+'</span><span class="pass decode">'+data.d+' decode'+(data.d===1?'':'s')+'</span>';
+["cpu","delay","consequence"].forEach(function(id){document.getElementById(id).textContent=data[id];});
+}
+["today","proposal"].forEach(function(id){document.getElementById(id).onclick=function(){version=id;["today","proposal"].forEach(function(key){document.getElementById(key).setAttribute("aria-pressed",String(key===id));});draw();};});
+document.getElementById("mode").onchange=draw;
+document.getElementById("inputType").onchange=draw;
+function calc(a,v,r){return {audio:a*.096,pcm:a*1.536,video:v*r};}
+function bandwidth(){
+const a=Number(document.getElementById("listeners").value),v=Number(document.getElementById("screens").value),r=Number(document.getElementById("videoRate").value),b=calc(a,v,r),max=b.pcm+b.video;
+document.getElementById("audioCount").textContent=a;
+document.getElementById("videoCount").textContent=v;
+[["opusAudio",b.audio],["opusVideo",b.video],["pcmAudio",b.pcm],["pcmVideo",b.video]].forEach(function(pair){document.getElementById(pair[0]).style.width=String(100*pair[1]/max)+"%";});
+document.getElementById("opusValue").textContent=(b.audio+b.video).toFixed(1)+" Mbit/s";
+document.getElementById("pcmValue").textContent=(b.pcm+b.video).toFixed(1)+" Mbit/s";
+document.getElementById("equation").innerHTML=a+' audio × 0.096 + '+v+' screens × '+r+' = <strong>'+(b.audio+b.video).toFixed(1)+' Mbit/s</strong>';
+}
+["listeners","screens","videoRate"].forEach(function(id){document.getElementById(id).oninput=bandwidth;});
+draw();bandwidth();
+const sample=calc(50,4,4);
+console.assert(Math.abs(sample.audio-4.8)<1e-9 && Math.abs(sample.pcm-76.8)<1e-9 && sample.video===16,"Payload arithmetic");
+console.assert(cases.live.today.e===3 && cases.live.proposal.e===1,"Codec labels");
+console.log("Visual checks: all six mode/version states defined; 50 audio + 4 screens = 20.8 Mbit/s at main’s 96 kbit/s audio setting and illustrative 4 Mbit/s video.");
+requestAnimationFrame(function(){console.log("Horizontal overflow:",document.documentElement.scrollWidth>window.innerWidth);});
+</script></body></html>
