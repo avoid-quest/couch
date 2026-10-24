@@ -15,7 +15,7 @@ Implementation accounting and validation are recorded in the
 The original change map below remains the audited plan. Added implementation
 modules are `src/shared/playback-policy.ts`; server `source-preparation.ts`,
 `scheduled-audio.ts`, `scheduled-capture.ts`, `audio-worker.ts`, `audio-packets.ts`,
-`capture-audio.ts` and `capture-ingest.ts`; client `capture-audio.ts`,
+`capture-audio.ts`, `capture-ingest.ts` and `output-admission.ts`; client `capture-audio.ts`,
 `capture-audio-worker.ts`, `receiver-admission.ts`, `picture-mapping.ts` and
 `playback-controls.ts`. The maintained SDK patches and removal gates are in
 [`patches/README.md`](../patches/README.md); `scripts/core.ts`, `package.json` and

@@ -8,7 +8,7 @@ import { WebSocket } from "ws";
 import { logPlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { loopbackPeer } from "./lan-listener";
-import type { PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { OutputAdmission, PlaybackCommand, PlayerState } from "../shared/protocol";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
 export type { Member, SyncedLoad } from "./scheduled-audio";
@@ -22,6 +22,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { policy: CapturePolicy; epoch: string; queued: number; error?: string }>();
   const groupMembers = new Map<string, Member[]>(), groupIntents = new Map<string, string>();
   let timing = new Map<string, number | undefined>();
+  let admissions = new Map<string, { group: string; receiverId?: string; admission: OutputAdmission }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();
   let clients = new Set<string>(), delays = new Map<string, number>(), receivers = new Map<string, string>();
@@ -33,7 +34,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const post = (message: Record<string, unknown>) => { if (!closed && !failed) worker.postMessage(message); };
   const fail = (error: Error) => {
     if (closed || failed) return;
-    failed = true; readyReject(error); clients.clear();
+    failed = true; readyReject(error); clients.clear(); admissions.clear();
     for (const [id, source] of sources) { source.error = error.message; options.sourceFailed?.(id, error.message); }
     for (const observe of groups.values()) observe({ playbackId: null, status: "error", error: error.message, position: 0, duration: null, volume: 100, seekable: false });
     options.changed();
@@ -52,7 +53,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     else if (message.type === "delay") options.saveDelay?.(message.clientId, message.delay);
     else if (message.type === "sourceFailed") { const source = sources.get(message.sourceId); if (!source || source.epoch !== message.epoch) return; source.error = message.error; options.sourceFailed?.(message.sourceId, message.error); options.changed(); }
     else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.queued = Math.max(0, source.queued - message.bytes); }
-    else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); options.changed(); }
+    else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
   });
   const bridge = (socket: WebSocket, query: string) => {
     connections.add(socket); socket.pause();
@@ -127,6 +128,12 @@ export function createSendspin(options: { identity: string; name: string; admit:
     hasSource: (id: string) => sources.has(id),
     sourceError: (id: string) => sources.get(id)?.error,
     receiverError: (id: string, _intent?: string) => receivers.get(id),
+    receiverAdmission(id: string, receiverId?: string): OutputAdmission | undefined {
+      const member = [...groupMembers].find(([group, members]) => (receiverId !== undefined || groupIntents.get(group) === "live") && members.some(member => member.deviceId === id && member.receiverId === receiverId));
+      if (!member) return undefined;
+      const current = admissions.get(id);
+      return current && current.group === member[0] && current.receiverId === receiverId ? current.admission : receiverId ? { state: "preparing" } : undefined;
+    },
     connected: (id: string) => clients.has(id),
     delay: (id: string) => delays.get(id) ?? options.savedDelay?.(id) ?? (clients.has(id) ? 0 : undefined),
     setDelay(id: string, delay: number) {

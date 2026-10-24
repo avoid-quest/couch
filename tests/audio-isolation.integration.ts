@@ -80,6 +80,8 @@ test("malformed frames before and after admission isolate the socket while healt
   }
   // Valid WebSocket frames and valid Noise encryption do not imply valid JSON
   // protocol messages. Exercise the exported handshake, never private SDK fields.
+  const receiverId = "91cf4d2b-e08a-45c8-8f81-b010259e30bf";
+  const preparation = { receiverId, epoch: 1, state: "preparing" };
   const hello = { type: "client/hello", payload: { name: "Protocol fixture", supported_roles: ["player@v1"], "player@v1_support": { supported_formats: [{ codec: "opus", sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 131072, supported_commands: [] } } };
   const state = { type: "client/state", payload: { player: { required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 } } };
   const applicationCases: { name: string; text: string; beforeHello?: boolean; valid?: boolean }[] = [
@@ -95,6 +97,15 @@ test("malformed frames before and after admission isolate the socket while healt
     ...["client/state", "client/time", "client/command", "client/goodbye", "client_stream/start", "stream/request-format"].map(type => ({ name: `${type} missing payload`, text: JSON.stringify({ type }) })),
     ...[null, [], 42, "invalid"].map(payload => ({ name: `state payload ${JSON.stringify(payload)}`, text: JSON.stringify({ type: "client/state", payload }) })),
     { name: "nested state shape", text: '{"type":"client/state","payload":{"player":[]}}' },
+    ...[null, [], 42, "ready", {},
+      { ...preparation, receiverId: "invalid" }, { ...preparation, receiverId: "x".repeat(5000) },
+      { ...preparation, epoch: -1 }, { ...preparation, epoch: 1.5 }, { ...preparation, epoch: Number.MAX_SAFE_INTEGER + 1 },
+      { ...preparation, state: "invalid" }, { ...preparation, error: "unexpected" }, { ...preparation, extra: true },
+      { ...preparation, state: "failed" }, { ...preparation, state: "failed", error: "" },
+      { ...preparation, state: "failed", error: "x".repeat(241) }, { ...preparation, state: "failed", error: "bad\nreason" },
+    ].map(couch_preparation => ({ name: `invalid preparation ${JSON.stringify(couch_preparation).slice(0, 120)}`, text: JSON.stringify({ type: "client/state", payload: { player: { couch_preparation } } }) })),
+    ...[{}, { required_lead_time_ms: 25 }, { required_lead_time_ms: -1, min_buffer_ms: 25 }, { required_lead_time_ms: "25", min_buffer_ms: 25 }].map(timing => ({ name: `non-atomic ready ${JSON.stringify(timing)}`, text: JSON.stringify({ type: "client/state", payload: { player: { ...timing, couch_preparation: { ...preparation, state: "ready" } } } }) })),
+    ...[preparation, { ...preparation, state: "ready" }, { ...preparation, state: "failed", error: "No output clock" }].map(couch_preparation => ({ name: `valid preparation ${couch_preparation.state}`, text: JSON.stringify({ type: "client/state", payload: { player: { required_lead_time_ms: 25, min_buffer_ms: 25, couch_preparation } } }), valid: true })),
     { name: "valid extension and clock", text: '{"type":"future/extension","payload":{}}', valid: true },
   ];
   for (const sample of applicationCases) {

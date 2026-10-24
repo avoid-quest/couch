@@ -289,16 +289,29 @@ The handoff is bounded; relaxed unsupported publishers retain WebRTC/recorder co
 Live audio is host-only and actual stereo. Sample positions, sequence, generation,
 actual sample rate and capture timestamps cross the upload boundary. The worker
 normalizes source drift with bounded resampling and encodes shared 10 ms stereo
-Opus at 128 kbit/s. Live deadlines are capture time plus 100 ms; this is a software
+Opus at 128 kbit/s. Streaming float WAV input bounds each FFmpeg input packet to
+480 stereo frames, avoiding the raw demuxer's 4096-frame accumulation. Live
+deadlines are capture time plus 100 ms; this is a software
 deadline, not measured input-to-ear. Missing/late data fails within explicit bounds
 rather than repeatedly moving the deadline. No history is replayed to a late join.
 Relaxed capture also supports PCM receivers; live does not renegotiate the group
 to PCM or restart healthy listeners for a new incompatible receiver.
 
 Live receiver preparation checks decoder, clock and output readiness and estimated
-budget. Sink/timing changes require fresh admission. These are runtime safeguards,
+budget. A modern Couch control tab declares preparation support; Core binds its
+continuous listening lifetime to a runtime token. The maintained public SDK
+extension sends preparing, ready or failed together with final timing in one
+encrypted state message. A missing or mismatched modern report waits for
+preparation; connected older clients retain numeric admission. The newest
+control tab owns the sound even if an older tab reconnects its audio socket.
+Live control disconnect removes only that listener's scheduling membership and
+keeps its selected output. Changing sources reuses healthy output preparation;
+leaving, tab handover, reconnect and output/clock changes renew the applicable
+listening or preparation lifetime. Terminal failures include the decisive gate;
+preparing is a local status and does not conceal a source failure.
+These are runtime safeguards,
 not hardware qualification. The initial 100 ms / 50 physical receiver goals remain
-unmeasured; see the [validation ledger](audio-video-refactor-validation.md).
+unqualified; see the [validation ledger](audio-video-refactor-validation.md).
 
 Every Device showing the picture of a synced Playback fetches the video itself,
 resolved for its own engine and origin, and plays it muted. It connects to Sendspin

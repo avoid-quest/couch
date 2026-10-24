@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Action, PlaybackControls } from "../src/shared/protocol";
+import type { Action, OutputAdmission, PlaybackControls } from "../src/shared/protocol";
 import type { ClientSessionState } from "../src/client/session/session";
 
 // Exercise the product components and their emitted commands. Only browser/hook
@@ -81,6 +81,7 @@ test("Join always targets this listener even while its browser controls a TV", a
 
 test("audience volume and mute read and change only its own device; Remote can name an authorized output", async () => {
   state = fixture(); sent.length = 0;
+  state.outputs![0]!.audioAdmission = { state: "preparing" };
   const tree = PlaybackVolume({ state, connected: true, run });
   const all = elements(tree);
   expect(all.find(item => item.props.label === "Your volume")!.props.value).toBe(27);
@@ -129,11 +130,128 @@ test("Media Session installs no shared programme handlers for a live audience, a
 
 test("failed admission is actionable and disconnected audience controls cannot send", () => {
   state = fixture();
-  state.outputs![0]!.error = "This output cannot decode live Opus.";
+  state.outputs![0]!.error = "This output cannot decode live Opus. Use relaxed sharing.";
   const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).toContain("This output cannot decode live Opus.");
-  expect(html).toContain("leave and join again");
+  expect(html).toContain("This output cannot decode live Opus. Use relaxed sharing.");
+  expect(html).not.toContain("leave and join again");
   connected = false;
   expect(renderToStaticMarkup(<PlaybackTransport state={state} connected={connected} run={run} />)).toContain("disabled");
   connected = true;
+});
+
+test("a receiving live listener prepares as status even while the source alternates loading and playing", () => {
+  for (const status of ["loading", "playing", "loading", "playing"] as const) {
+    const state = fixture();
+    state.outputs![0]!.audioAdmission = { state: "preparing" };
+    state.player = { ...state.player, status, buffering: status === "loading" };
+    const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Preparing audio…");
+    expect(html).toContain(">Leave</button>");
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("text-destructive");
+    expect(html).not.toMatch(/Listening|Waiting for audio|leave and join again/);
+  }
+});
+
+test("ready admission follows real source starvation immediately and does not claim output success by itself", () => {
+  const state = fixture();
+  for (const audioAdmission of [{ state: "ready" } as const, undefined]) {
+    state.outputs![0]!.audioAdmission = audioAdmission;
+    for (const [status, buffering, label] of [
+      ["loading", true, "Waiting for audio…"],
+      ["playing", false, "Listening"],
+      ["loading", true, "Waiting for audio…"],
+      ["playing", true, "Waiting for audio…"],
+      ["playing", false, "Listening"],
+    ] as const) {
+      state.player = { ...state.player, status, buffering };
+      const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+      expect(html).toContain(`>${label}</span>`);
+      expect(html).not.toContain("Preparing audio");
+      expect(html).not.toContain('role="alert"');
+    }
+  }
+});
+
+test("current terminal admission reasons remain actionable without requiring a leave/rejoin", () => {
+  for (const admission of [
+    { state: "failed", reason: "preparation", error: "Audio output preparation failed: decoder unavailable. Check this device's audio output or use relaxed sharing." },
+    { state: "failed", reason: "required-lead", error: "This output requires 82 ms; live audio allows 70 ms. Use relaxed sharing." },
+  ] satisfies OutputAdmission[]) {
+    const state = fixture();
+    state.outputs![0]!.audioAdmission = admission;
+    const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("text-destructive");
+    // Check supplied text exactly, including React's escaping of the apostrophe.
+    expect(html).toContain(renderToStaticMarkup(<p>{admission.error}</p>).slice(3, -4));
+    expect(html).toContain(">Leave</button>");
+    expect(html).not.toMatch(/Preparing audio|Listening|leave and join again/);
+  }
+});
+
+test("native and source errors stay visible through preparing, ready and failed admission", () => {
+  for (const audioAdmission of [
+    { state: "preparing" }, { state: "ready" },
+    { state: "failed", reason: "minimum-buffer", error: "Receiver buffer exceeds the live budget. Use relaxed sharing." },
+    undefined,
+  ] satisfies (OutputAdmission | undefined)[]) {
+    const state = fixture();
+    state.outputs![0]!.audioAdmission = audioAdmission;
+    state.player = { ...state.player, status: "error", error: "The live input stopped sending media." };
+    let html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("The live input stopped sending media.");
+    expect(html).not.toMatch(/Preparing audio|Receiver buffer exceeds/);
+    state.outputs![0]!.error = "System audio output unavailable. Choose an audio output.";
+    html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+    expect(html).toContain("System audio output unavailable. Choose an audio output.");
+    expect(html).not.toMatch(/Preparing audio|Receiver buffer exceeds|The live input stopped sending media/);
+    state.outputs![0]!.error = "The capture clock stopped. Restart sharing on the Couch computer.";
+    state.player.error = null;
+    html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+    expect(html).toContain("The capture clock stopped. Restart sharing on the Couch computer.");
+    expect(html).not.toMatch(/Preparing audio|Receiver buffer exceeds/);
+  }
+});
+
+test("preparation belongs to this listener's receiving sound; reconnect and Join remain local", async () => {
+  const state = fixture();
+  state.outputs![0]!.audioAdmission = { state: "preparing" };
+  let html = renderToStaticMarkup(<PlaybackTransport state={state} connected={false} run={run} />);
+  expect(html).toContain("Reconnecting…");
+  expect(html).not.toContain("Preparing audio");
+  state.outputs![0]!.sound = false;
+  html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+  expect(html).not.toContain("Preparing audio");
+  state.controls = { ...audience, leave: false };
+  state.outputs = [{ deviceId: "tv", picture: false, sound: true, audioAdmission: { state: "preparing" } }];
+  html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+  expect(html).toContain(">Join</button>");
+  expect(html).not.toMatch(/Preparing audio|Listening|Waiting for audio/);
+  sent.length = 0;
+  const tree = read(() => LiveParticipation({ state, connected: true, run }));
+  await buttons(tree)[0]!.props.onClick!();
+  expect(sent).toEqual([{ type: "playLive", sourceId: "source", deviceId: here }]);
+});
+
+
+for (const priority of ["native", "group", "receiver"] as const) test(`Core-projected ${priority} failure remains visible with current terminal admission`, () => {
+  const state = fixture();
+  const nativeError = "System audio output unavailable. Choose an audio output.";
+  const groupError = "Captured audio exceeded its bounded queue.";
+  const receiverError = "Audio output preparation failed: no output timestamp. Check this device's audio output or use relaxed sharing.";
+  // Match the actual corrected Hub projection: native > source/group > receiver.
+  // A terminal admission remains present even when Output.error carries a higher-priority failure.
+  const expected = priority === "native" ? nativeError : priority === "group" ? groupError : receiverError;
+  state.player = { ...state.player, status: priority === "receiver" ? "playing" : "error", error: priority === "receiver" ? null : groupError };
+  state.outputs![0] = { ...state.outputs![0]!, audioAdmission: { state: "failed", reason: "preparation", error: receiverError }, error: expected };
+  const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+  expect(html).toContain('role="alert"');
+  expect(html).toContain(renderToStaticMarkup(<p>{expected}</p>).slice(3, -4));
+  for (const hidden of [nativeError, groupError, receiverError].filter(error => error !== expected)) expect(html).not.toContain(hidden);
+  expect(html).toContain(">Leave</button>");
+  expect(html).not.toMatch(/Preparing audio|Listening|Waiting for audio|leave and join again/);
+  expect(html).not.toMatch(/aria-label="(?:Pause|Stop|Next)"/);
 });

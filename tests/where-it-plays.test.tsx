@@ -3,6 +3,7 @@ import { createElement, isValidElement, type ComponentProps, type FunctionCompon
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClientSessionState } from "../src/client/session/session";
 import type { SessionGateValue } from "../src/client/session/session-context";
+import type { OutputAdmission } from "../src/shared/protocol";
 
 // The real Sheet renders; the wrapper records the controlled props Radix receives, so Close can be pressed without a DOM.
 const real = { ...await import("../src/client/components/ui/sheet") };
@@ -249,4 +250,63 @@ test("TV output OK menu exposes exclusive Move here, including a device already 
   expect(denied.find(item => item.props["aria-label"] === "Move here: TV")!.props.disabled).toBe(true);
   const alone = { ...state, outputs: [outputs[0]!], playbacks: [{ ...state.playbacks![0]!, outputs: [outputs[0]!] }] };
   expect(elements(Mixer({ state: alone, connected: true, run: async () => true, tv: true })).some(item => item.props["aria-label"] === "Move here: TV")).toBe(false);
+});
+
+async function liveListener(audioAdmission?: OutputAdmission): Promise<ClientSessionState> {
+  const { deviceId } = await import("../src/client/session/device-id");
+  const here = deviceId(), outputs = [{ deviceId: here, picture: false, sound: true, audioAdmission }];
+  return { ...waiting(0), outputs,
+    devices: [...devices, { id: here, name: "This phone", online: true, volume: 27, muted: false }],
+    controls: { programme: false, queue: false, seek: false, speed: false, audioDelay: false, subtitleDelay: false, leave: true },
+    playbacks: [{ id: "p", title: "Concert", status: "playing", intent: "live", delivery: "scheduled", liveSourceId: "s", outputs }],
+    liveSources: [{ id: "s", deviceId: "mac", name: "Concert", kind: "microphone", audio: true, video: false, intent: "live" }],
+    player: { playbackId: "load", status: "playing", position: 0, duration: null, volume: 50, seekable: false, error: null },
+  } as ClientSessionState;
+}
+
+test("live Where it plays presents output preparation as status and retains Leave and own volume", async () => {
+  const state = await liveListener({ state: "preparing" });
+  for (const status of ["loading", "playing"] as const) {
+    state.player.status = status;
+    const html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Preparing audio…");
+    expect(html).toContain(">Leave</button>");
+    expect(html).toContain('aria-label="Your volume"');
+    expect(html).not.toMatch(/role="alert"|text-destructive|leave and join again|Listening|Waiting for audio/);
+    expect(html).not.toMatch(/aria-label="(?:Pause|Stop|Next)"|where-it-plays-in-sync/);
+  }
+});
+
+test("live Where it plays exposes current terminal reasons and preserves native/source errors during preparation", async () => {
+  const state = await liveListener({ state: "failed", reason: "capacity", error: "This output has too little audio buffer. Use relaxed sharing." });
+  let html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
+  expect(html).toContain('role="alert"');
+  expect(html).toContain("This output has too little audio buffer. Use relaxed sharing.");
+  expect(html).not.toContain("leave and join again");
+  state.outputs![0]!.audioAdmission = { state: "preparing" };
+  state.outputs![0]!.error = "Native audio output unavailable. Choose an audio output.";
+  html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
+  expect(html).toContain('role="alert"');
+  expect(html).toContain("Native audio output unavailable. Choose an audio output.");
+  expect(html).not.toContain("Preparing audio");
+  state.outputs![0]!.error = undefined;
+  state.player = { ...state.player, status: "error", error: "The live input stopped sending media." };
+  html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
+  expect(html).toContain("The live input stopped sending media.");
+  expect(html).not.toContain("Preparing audio");
+});
+
+test("live Where it plays keeps genuine starvation visible after readiness and with a legacy absent field", async () => {
+  for (const admission of [{ state: "ready" } as const, undefined]) {
+    const state = await liveListener(admission);
+    state.player = { ...state.player, status: "loading", buffering: true };
+    let html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
+    expect(html).toContain("Waiting for audio…");
+    expect(html).not.toMatch(/Preparing audio|Listening|role="alert"/);
+    state.player = { ...state.player, status: "playing", buffering: false };
+    html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
+    expect(html).toContain(">Listening</span>");
+    expect(html).not.toMatch(/Preparing audio|Waiting for audio|role="alert"/);
+  }
 });

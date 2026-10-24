@@ -108,7 +108,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
 // sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; pendingCommands?: number };
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; receiverPreparation: boolean; receiverId?: string; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; pendingCommands?: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -373,9 +373,9 @@ export async function createHub(options: HubOptions) {
   const sharingSource = (deviceId: string) => `${nameOf(deviceId)} is sharing this source. Choose where it plays.`;
   const requireReceiver = (playback: Playback, deviceId: string) => {
     if (capturing(playback, deviceId)) throw new ControllerError(sharingSource(deviceId), 409);
-    if (intentOf(playback) === "live") {
-      const error = sendspin.receiverError(deviceId, "live");
-      if (error) throw new ControllerError(error, 409);
+    if (intentOf(playback) === "live" && playback.outputs.some(output => output.deviceId === deviceId && output.sound) && newest(deviceId)) {
+      const admission = sendspin.receiverAdmission(deviceId, receiverId(playback, deviceId));
+      if (admission?.state === "failed") throw new ControllerError(admission.error, 409);
     }
   };
   // Counted from Core's start time, so a request after a restart is never one a window already dismissed.
@@ -462,7 +462,26 @@ export async function createHub(options: HubOptions) {
   };
   // A speaker's Sendspin delay applies only while its sound plays in this Playback's group.
   const syncing = (playback: Playback, deviceId: string) => !!playback.synced && sendspin.connected(deviceId) && playback.outputs.some(output => output.deviceId === deviceId && output.sound);
-  const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(playback, output) }] : []);
+  // Preparation belongs to a listening tab/output, so the token survives Live source changes.
+  const receiverId = (playback: Playback, deviceId: string) => {
+    const socket = newest(deviceId);
+    if (intentOf(playback) !== "live" || !playback.outputs.some(output => output.deviceId === deviceId && output.sound) || !socket?.data.receiverPreparation) return;
+    return socket.data.receiverId ??= crypto.randomUUID();
+  };
+  const members = (playback: Playback) => playback.outputs.flatMap(output => {
+    if (!output.sound || intentOf(playback) === "live" && !newest(output.deviceId)) return [];
+    const token = receiverId(playback, output.deviceId);
+    return [{ deviceId: output.deviceId, level: rendered(playback, output), ...token ? { receiverId: token } : {} }];
+  });
+  const stagedMembers = new WeakMap<object, string>();
+  const syncMembers = (playback: Playback) => {
+    const group = playback.synced;
+    if (!group) return;
+    const next = members(playback), key = JSON.stringify(next);
+    if (stagedMembers.get(group) === key) return;
+    stagedMembers.set(group, key);
+    group.members(next);
+  };
   // The Devices a volume without a Device acts on: those in the Playback's sound, else the window's own.
   const sounding = (playback: Playback | undefined, deviceId: string) => { const ids = playback?.outputs.flatMap(output => output.sound ? [output.deviceId] : []) ?? []; return ids.length ? ids : [deviceId]; };
   // Of those, the sound an actor's Volume shows and moves: what its Device may control, as outputFor grants it.
@@ -553,14 +572,14 @@ export async function createHub(options: HubOptions) {
         playback.renderer = playback.outputs[0] ? newest(playback.outputs[0].deviceId) ?? null : null;
       } else {
         playback.synced = newGroup(playback);
-        playback.synced.members(members(playback));
+        syncMembers(playback);
         if (playback.renderer) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
       }
     }
     if (playback.synced) {
       playback.synced.send(command.type === "load" ? { ...command, ...playback.media?.playbackId === command.playbackId ? playback.media : {}, ...groupSelection(playback) } : command);
       // Screens follow the clock; only what they show reaches them.
-      if (command.type === "load") { playback.synced.members(members(playback)); show(playback); }
+      if (command.type === "load") { syncMembers(playback); show(playback); }
       else if (command.type === "stop") hide(playback);
       else if (command.type === "addSubtitle" || command.type === "subtitleDelay" || command.type === "track" && command.kind === "subtitle") for (const tab of playback.screens.keys()) send(tab, playerCommand(command));
       return;
@@ -595,7 +614,7 @@ export async function createHub(options: HubOptions) {
     // Solo hands everything to one Device, which plays it directly.
     if (playback.synced && !grouped(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
     // A group's speakers follow its outputs at once, so a publisher held out of them stops hearing its capture.
-    playback.synced?.members(members(playback));
+    syncMembers(playback);
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
     if (outputs[0]) playback.choosing = undefined;
     // Controllers of the publisher keep viewing its playback where it continues.
@@ -634,6 +653,8 @@ export async function createHub(options: HubOptions) {
   // A Device that stops serving anything (its fader to 0, consent withdrawn, unpaired) leaves its
   // controllers, away ones too, on the rest of the mix. One that moves to another Playback keeps them.
   const leave = (playback: Playback, deviceId: string) => {
+    const socket = newest(deviceId);
+    if (socket) delete socket.data.receiverId;
     release(playback, deviceId);
     const remaining = playback.outputs.find(output => output.picture) ?? playback.outputs[0];
     if (remaining) follow([deviceId], remaining.deviceId);
@@ -744,7 +765,7 @@ export async function createHub(options: HubOptions) {
   // A level reaches every player: a group's speakers, each receiver of a Direct live input at its own, else the renderer.
   const level = (playback: Playback) => {
     const sourceId = sourceOf(playback);
-    if (playback.synced) playback.synced.members(members(playback));
+    if (playback.synced) syncMembers(playback);
     else if (sourceId && mpvPlayback !== playback) routeLive(playback, sourceId);
     else deliver(playback, { type: "volume", volume: levelOf(playback) });
   };
@@ -782,7 +803,7 @@ export async function createHub(options: HubOptions) {
       const preparing = !!pending && pending.group === playback.synced && pending.loaded === playback.loaded && pending.generation === playback.generation;
       // A first speaker cannot decode a prior picture-only resolution while its
       // audio is being selected. Admit it after the prepared group load instead.
-      if (!missingSound) playback.synced.members(members(playback));
+      if (!missingSound) syncMembers(playback);
       // Cached audio still needs a replacement if an output edit retired its
       // pending selection. Unchanged reconciliations keep the current work.
       if (!preparing && (fresh || missingSound || !!pending) && playback.loaded?.playbackId === player.playbackId && active(player.status)) {
@@ -818,7 +839,7 @@ export async function createHub(options: HubOptions) {
             const current = stateOf(playback).player;
             group.send(transportLoad({ ...loaded, ...media, ...groupSelection(playback), ...loaded.radio || media?.live ? {} : { startPosition: current.position }, paused: current.status === "paused",
               preferences: { ...loaded.preferences!, ...current.speed ? { speed: current.speed } : {} } }, preparing.transport));
-            group.members(members(playback));
+            syncMembers(playback);
             playback.groupPreparation = undefined;
           }).catch(error => { if (isCurrent()) { playback.groupPreparation = undefined; unavailable(playback, error instanceof Error ? error.message : "The audio couldn't be prepared."); } });
         }
@@ -1063,7 +1084,10 @@ export async function createHub(options: HubOptions) {
       claim(playback, deviceId);
       playback.outputs = [...playback.outputs, next];
     } else if (!next.picture && !next.sound) leave(playback, deviceId);
-    else playback.outputs = playback.outputs.map(output => output === current ? next : output);
+    else {
+      if (current.sound && !next.sound) { const socket = newest(deviceId); if (socket) delete socket.data.receiverId; }
+      playback.outputs = playback.outputs.map(output => output === current ? next : output);
+    }
     playback.generation = (playback.generation ?? 0) + 1;
     // As in sendTo, an output a waiting shared source uses starts it.
     if (playback.choosing && source && playbackId && (next.picture && source.video || next.sound && source.audio)) {
@@ -1186,6 +1210,13 @@ export async function createHub(options: HubOptions) {
     if (!pending) return;
     pending = false;
     if (closed || !sockets.size) return;
+    for (const socket of sockets) {
+      try { socket.data.authorize(); } catch { sockets.delete(socket); delete socket.data.receiverId; socket.close(4001, "Pair this device again."); continue; }
+      const playback = servedBy(deviceOf(socket));
+      if (newest(deviceOf(socket)) !== socket || !playback?.synced || intentOf(playback) !== "live" || !playback.outputs.some(output => output.deviceId === deviceOf(socket) && output.sound)) delete socket.data.receiverId;
+    }
+    // The worker must expect the newest receiving tab before it gets a listen instruction.
+    for (const playback of all()) if (intentOf(playback) === "live") syncMembers(playback);
     // Its publisher hears this after any message already being sent, which may still ask for the upload.
     for (const source of live.sources()) if (liveStreams.has(source.id) && !buffered(source.id)) { liveStreams.end(source.id); queueMicrotask(() => live.upload(source.id, false)); }
     for (const playback of all()) {
@@ -1195,7 +1226,13 @@ export async function createHub(options: HubOptions) {
       playback.delivery = delivery;
     }
     // A speaker's delay is its player's own, as it last reported it; it applies while the speaker is in sync.
-    const delays = (playback: Playback) => playback.outputs.map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback), error = (systemAudio && output.deviceId === hostId() && output.sound ? common.systemAudio?.error : undefined) || (playback.synced ? sendspin.receiverError(output.deviceId, intentOf(playback)) ?? (sourceId ? sendspin.sourceError(sourceId) : undefined) : undefined); return { ...output, ...error ? { error } : {}, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
+    const delays = (playback: Playback) => playback.outputs.map(output => {
+      const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback), token = receiverId(playback, output.deviceId);
+      const audioAdmission = playback.synced && intentOf(playback) === "live" && output.sound ? (newest(output.deviceId) ? sendspin.receiverAdmission(output.deviceId, token) : undefined) ?? (token ? { state: "preparing" as const } : undefined) : undefined;
+      const error = (systemAudio && output.deviceId === hostId() && output.sound ? common.systemAudio?.error : undefined)
+        || (playback.synced ? (sourceId ? sendspin.sourceError(sourceId) : undefined) || stateOf(playback).player.error || (audioAdmission?.state === "failed" ? audioAdmission.error : intentOf(playback) !== "live" ? sendspin.receiverError(output.deviceId) : undefined) : undefined);
+      return { ...output, ...audioAdmission ? { audioAdmission } : {}, ...error ? { error } : {}, ...delay === undefined ? {} : { delay }, ...syncing(playback, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback) ? { error: bufferFailed(playback) } : { buffered: true } : {} };
+    });
     const outputViews = new Map(all().map(playback => [playback, delays(playback)]));
     const shared = {
       ...common,
@@ -1223,8 +1260,9 @@ export async function createHub(options: HubOptions) {
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
       const receiving = servedBy(deviceOf(socket)), intent = receiving && intentOf(receiving) === "live" ? "live" : "relaxed";
-      const instruction = `${listen}${watch}${intent}`;
-      if (socket.data.sendspin !== instruction) { socket.data.sendspin = instruction; send(socket, JSON.stringify({ type: "sendspin", listen, watch, intent } satisfies ServerMessage)); }
+      const token = listen && receiving ? receiverId(receiving, deviceOf(socket)) : undefined;
+      const instruction = `${listen}${watch}${intent}:${token ?? ""}`;
+      if (socket.data.sendspin !== instruction) { socket.data.sendspin = instruction; send(socket, JSON.stringify({ type: "sendspin", listen, watch, intent, ...token ? { receiverId: token } : {} } satisfies ServerMessage)); }
     }
   };
   const publish = (playback: Playback, state: SessionState, clock?: PlaybackClock) => {
@@ -1881,7 +1919,7 @@ export async function createHub(options: HubOptions) {
       }));
       if (!websocket) return cors(request, await (/^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
       const sharing = { audio: url.searchParams.get("audio") === "1", video: url.searchParams.get("video") === "1" };
-      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", updates: url.searchParams.get("updates") === "1", sharing, tv: url.searchParams.get("tv") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", updates: url.searchParams.get("updates") === "1", receiverPreparation: url.searchParams.get("receiverPreparation") === "1", sharing, tv: url.searchParams.get("tv") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
   });
   const serveOptions = {
@@ -1922,7 +1960,9 @@ export async function createHub(options: HubOptions) {
       maxPayload: 65_536, // Control messages and individual capture upload chunks are bounded.
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
+        for (const previous of sockets) if (deviceOf(previous) === deviceOf(socket)) delete previous.data.receiverId;
         sockets.add(socket);
+        for (const playback of all()) if (intentOf(playback) === "live") syncMembers(playback);
         send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
         store.saveDeviceTv(deviceOf(socket), socket.data.tv);
         log(`device online ${nameOf(deviceOf(socket))}`);
@@ -1938,10 +1978,12 @@ export async function createHub(options: HubOptions) {
       },
       close(socket: Socket<SocketData>) {
         if (sockets.delete(socket) && !closed) log(`device offline ${nameOf(deviceOf(socket))}`);
+        delete socket.data.receiverId;
         remote.close(socket);
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
+        for (const playback of all()) if (intentOf(playback) === "live") syncMembers(playback);
         // The Device is a TV while its newest tab is; with none left it stays what it last was.
         const next = newest(deviceOf(socket));
         if (next) store.saveDeviceTv(deviceOf(socket), next.data.tv);
@@ -2093,7 +2135,7 @@ export async function createHub(options: HubOptions) {
             const joining = playNow && !there && target !== source.deviceId ? receiving.length ? receiving : waiting ? [waiting] : [] : [];
             if (playNow) { requireControl(target, deviceId); requireOutput(output, deviceId); }
             if (joining.length > 1) throw new ControllerError(`${source.name} is playing in several places. Open one in Now Playing and add ${nameOf(target)} in Where it plays.`, 409);
-            let fresh = false;
+            let fresh = false, continuing = false;
             if (there) playback = there;
             else if (joining[0]) {
               playback = joining[0];
@@ -2112,7 +2154,10 @@ export async function createHub(options: HubOptions) {
               const mix = memberOf(target), outputs = (action.deviceId ? [output] : mix ? mixOf(mix) : [output]).filter(output => output.deviceId !== source.deviceId);
               if (outputs.length && !outputs.some(usable)) throw new Error(`${nameOf(target)} is not sharing an output this source uses.`);
               if (outputs.length && !outputs.some(output => usable(output) && newest(output.deviceId))) throw new Error(`${nameOf(target)} is offline.`);
-              playback = mediaPlayback(playingOn(playedBy, action.deviceId ?? null), true);
+              // Acquire the output only after the incoming Live item enters, so
+              // a continuous listener never visits an idle, non-listening route.
+              continuing = !!action.deviceId && source.intent === "live" && !!mix && intentOf(mix) === "live";
+              playback = continuing ? createPlayback() : mediaPlayback(playingOn(playedBy, action.deviceId ?? null), true);
             } else { fresh = true; playback = mediaPlayback(playedBy, false); }
             const select = () => { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); };
             // Play where its buffered stream failed tries that stream again; the other receivers keep their peers.
@@ -2121,7 +2166,12 @@ export async function createHub(options: HubOptions) {
             if (fresh) {
               // A new item's selection and outputs change only once the Session admits it, so a refused Play changes neither.
               const entering = playback;
-              if (playNow) entering.entered = () => { select(); if (action.deviceId) assign(entering, [output], source); else transition(entering, source); };
+              if (playNow) entering.entered = () => {
+                if (continuing) entering.state = entering.session.state; // entered precedes the Session's next publication.
+                select();
+                if (action.deviceId) assign(entering, [output], source); else transition(entering, source);
+                if (continuing) reconcile(entering);
+              };
               try { await entering.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow, ...(action.placement ? { placement: action.placement } : {}) }, () => { authorize(); if (live.source(source.id) !== source) throw new Error("That live source has ended."); if (source.intent !== "live") requirePlayback(entering, deviceId); }, playedBy); }
               finally { entering.entered = undefined; }
             }

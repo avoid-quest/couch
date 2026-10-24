@@ -18,6 +18,10 @@ Share offers **Audio input** for ordinary collaborative listening and **Live aud
 on the Couch computer. A live audience gets **Join/Leave** and its own volume;
 programme and queue controls remain with ordinary playback. These choices use the
 same source discovery and player ([Share](design/share.md)).
+Listeners see **Preparing audio…** while their output gets ready. Preparation
+is status, and an actual failure shows its reason. Once ready, a starved source
+still shows **Waiting for audio…**; preparation does not require leaving and
+joining again.
 
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset

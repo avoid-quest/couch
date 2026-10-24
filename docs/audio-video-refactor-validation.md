@@ -2,10 +2,13 @@
 
 Implementation starts from `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`, exactly the audited baseline, on `refactor/couch-playback`. The checkout was clean. Planning documents were copied from the assigned research worktree before delegation; experimental source changes were not copied.
 
-Current assembly status: **software suites pass; physical startup qualification
-failed and its cause is under bounded software diagnosis**.
-Implementation commit: `5a18b8c4ebb80a8fa64e864ba533afae49b64e08`. The final candidate
-(`Hub 86e813c8…`) passes typecheck/build and R6's 39 scoped routing cases. Its
+Current assembly status: **encoder correction reviewed; explicit output
+preparation and both review corrections independently reviewed and clear**.
+Integrated build/package and a new physical attempt are pending.
+The original physical startup qualification remains failed.
+
+Prior implementation commit: `5a18b8c4ebb80a8fa64e864ba533afae49b64e08`. That frozen
+candidate (`Hub 86e813c8…`) passed typecheck/build and R6's 39 scoped routing cases. Its
 55-suite integration evidence has 491 tests: 488 pass and three AirPlay prerequisite
 skips, after rerunning the corrected 56-case live-output suite. Causal tracing
 attributes the earlier startup failure to the
@@ -13,10 +16,52 @@ fixture's PCM-only encoder starting without a connected PCM receiver; the prior
 bundle's apparent pass had no audio packets. The corrected fixture connects its
 receiver before format selection and requires real packets as well as playing
 state. R7 independently clears that correction, including real late PCM and Opus
-admission and a failing consent-bypass control. Hub is unchanged. The updated Linux
-package and extracted-ASAR worker checks pass. A 31.088-second partial physical
+admission and a failing consent-bypass control. No Hub change was needed for that
+fixture correction. Its Linux package and extracted-ASAR worker checks pass. A
+31.088-second partial physical
 recording is preserved; no subsequent physical stages ran. No merge or release
 has occurred.
+
+Post-physical corrections are tracked separately from those frozen receipts:
+
+- `bc40d15` bounds the existing capture encoder's input packets; its independent
+  review is clear. The original failed physical package remains unchanged.
+- Explicit preparing/ready/failed state now separates output warmup from a
+  terminal admission failure, with atomic SDK timing reports and current-tab
+  authority. All timing and capacity gates remain unchanged. The revised frozen Hub
+  is `ed065d279815b69c9b32b37e51db8e8b69f69ee82d43c66a9b06018f31f41ee0`.
+- Audio's 31 focused checks and isolated frozen-install SDK 2/2 pass. Core's
+  admission 8/8, routing 18/18 and audience 7/7 pass; UI's 33 affected checks pass.
+  These are separate owner receipts, not a new integrated suite total. The three
+  TypeScript projects and diff checks pass. Independent audio review reran all
+  31 focused checks and found one P2: a relaxed receiver's refusal remains cached
+  after membership removal. Its public regression fails on the current worker
+  and passes against `bc40d15`. Routing/UI review independently passes 71 checks
+  and finds a second P2: a terminal receiver error can hide a genuine scheduled
+  group failure. Its public-state/component reproduction fails and a scratch
+  projection correction passes. Both corrections are now frozen: Audio's 11
+  targeted checks pass with group-owned receiver errors; Core's expanded 9-case
+  public suite and 15-case audience UI suite pass with genuine group errors ahead
+  of terminal receiver errors. Both original reviews and failed cases remain
+  retained. Core/UI R2 is clear with 25 checks and an expected failing prior-
+  projection control. Audio R2 is clear with 17 checks; the original-worker
+  control reproduces all three expected failures. Frozen inputs are unchanged
+  and both reviewers verified their processes stopped. These bounded verdicts
+  precede the new integrated build, suite sweep and package.
+- The continuous Live-source transfer case uses two authorized publisher tabs
+  so both sources coexist. It failed before the final acquisition-order fix and
+  passes with the same listener token, no transient Leave instruction and real
+  encrypted audio from B without another preparation report. Earlier trials on
+  one publisher socket intentionally ended A and were invalid continuity probes;
+  their logs remain preserved.
+
+Exact new receipts are in `encoder-packetization-fix`,
+`output-admission-audio`, `core-output-admission` and `ui-output-admission` under
+`.scratch/playback-refactor`. The encoder review's original root scratch directory
+was moved byte-for-byte into that directory; `encoder-review-relocation.json`
+records the old and current locations and all hashes. None of these software
+checks qualifies the actual Mac's output or resolves its unrecorded refusal
+predicate retroactively.
 
 ## Baseline before product edits
 

@@ -59,10 +59,51 @@ and object role payloads. Invalid JSON/type/shape closes only that session.
 Unknown message extensions stay ignorable; payload-free client_stream/end remains
 valid. The connection message callback catches remaining handler exceptions and
 terminates only its socket. No process-wide exception handler or audience restart.
-No public SDK API changed or application access to private SDK fields was added.
+Application code does not access private SDK fields; the additive public preparation API is documented below.
 
 Remove when an upstream release provides equivalent validation/isolation and
 `tests/audio-isolation.integration.ts` passes. That test performs real AES-GCM
 handshakes and malicious/valid application traffic while another receiver keeps
 receiving real Opus on its original timestamp grid, including a handler-throw case
 beyond basic envelope validation.
+
+## Couch output preparation extension
+
+These maintained patches additionally expose an optional Couch-specific extension,
+not an upstream Sendspin standard. `SendspinPlayer.setOutputPreparation(report,
+timing?)` sends `player.couch_preparation` with `receiverId` (UUID), safe nonnegative
+`epoch`, and `state: preparing | ready | failed`. Only failed carries `error`
+(nonempty, control-free, at most 240 characters). Ready requires finite nonnegative
+`requiredLeadTimeMs` and `minBufferMs`; preparation and both numeric declarations
+are published atomically in one `client/state`, including when the numbers have
+not changed. Setting before activation stores the state for the initial message.
+
+`SendspinPlayerConfig.onConnectionChange(connected)` runs on transport open before
+handshake/initial state and on close before reconnect handling. Couch invalidates
+live preparation through this public hook. Transport close clears the extension
+and its time-filter observations only if this optional extension was in use;
+legacy and relaxed reconnect policy stays unchanged. Activation itself does not
+clear preparation, because that would erase the new preparing report from open.
+
+The server exports `OutputPreparation`, types `PlayerStatePayload.couch_preparation`
+and `SendspinPlayerStateUpdate.outputPreparation`, and exposes
+`SendspinSession.getOutputPreparation()`. It validates the optional report before
+retaining or merging timing, rejects malformed reports only on their own socket,
+ignores a lower epoch for the same receiver ID before merging any fields, and
+returns a copy from the accessor. Preparation survives unrelated deltas on that
+same session; a new session starts without it. Initial identification observes
+already-merged preparation and timing. Error URLs are redacted.
+
+Couch's worker selects the session matching the current expected control-tab token
+and independently applies all existing format, capacity and deadline gates. The
+SDK assertion never confers admission by itself. Token expectations are explicit;
+legacy clients without the extension retain numeric admission. No per-source ID,
+source-switch decoder reset, deadline increase or live PCM fallback is introduced.
+
+Removal requires an upstream release providing equivalent public atomic state,
+connection lifecycle, validation and isolation semantics and passing
+`output-preparation-sdk.integration.ts`, `receiver-admission.test.ts`,
+`sendspin-route.test.ts`, `output-admission.test.ts`, and the encrypted malformed
+preparation cases in `audio-isolation.integration.ts`, plus Core's public
+`output-admission.integration.ts`. The isolated frozen install/runtime receipt is
+in `.scratch/playback-refactor/output-admission-audio/`; it opens no audio output.

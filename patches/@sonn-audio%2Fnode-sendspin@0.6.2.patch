@@ -38,11 +38,45 @@ index 8550ca59fc8ac76b873a2f26021f8b76f16ffb57..3db2f8db5a28f8568245fdf74ed2edbf
              }
          });
          ws.on('close', () => {
+diff --git a/dist/server/session.d.ts b/dist/server/session.d.ts
+index d1f65d6141ead1da5afda3b46c01aeabc15082db..6849eeb3cd38d4a42dd28a85f194ad16a71f9271 100644
+--- a/dist/server/session.d.ts
++++ b/dist/server/session.d.ts
+@@ -1,3 +1,4 @@
++import type { OutputPreparation } from '../types.js';
+ import type { IncomingMessage } from 'node:http';
+ import WebSocket from 'ws';
+ import { AudioCodec, ClientStateType, ClientHelloSourceSupport, SupportedAudioFormat, SourceStateType, SourceSignalType, ConnectionReason, ControllerStatePayload, DeviceInfo, GoodbyeReason, MediaCommand, PlaybackStateType, PlayerCommand, RepeatMode, RoleName, ServerCommandPayload, SessionUpdateColor, VisualizerSupport, VisualizerStreamConfig, SourceClientCommand, TrustLevel } from '../types.js';
+@@ -47,6 +48,7 @@ export type PlayerFormatWithBitDepth<T extends number = number> = Omit<PlayerFor
+     bitDepth: T;
+ };
+ export interface SendspinPlayerStateUpdate {
++    outputPreparation?: OutputPreparation;
+     clientId: string | null;
+     roles: RoleName[];
+     /**
+@@ -232,6 +234,8 @@ export declare class SendspinSession {
+      * hints shape the first chunk's timestamp. Waiting for the next `client/state` would mean a stream
+      * that begins before one arrives is scheduled as if the client had declared nothing.
+      */
++    /** Merged, validated Couch preparation for this session only. */
++    getOutputPreparation(): OutputPreparation | undefined;
+     getPlayerTiming(): {
+         staticDelayMs: number | undefined;
+         requiredLeadTimeMs: number | undefined;
 diff --git a/dist/server/session.js b/dist/server/session.js
-index b7f79f5c81c6fa1a10757078cfc12984cd092069..5dd08aa7a3a1ecd678f52300dc87ee8cf868dc12 100644
+index b7f79f5c81c6fa1a10757078cfc12984cd092069..ca390bd306366f8695c6762158cdd9945c5330f5 100644
 --- a/dist/server/session.js
 +++ b/dist/server/session.js
-@@ -275,6 +275,27 @@ export class SendspinSession {
+@@ -120,6 +120,7 @@ export class SendspinSession {
+      * hints shape the first chunk's timestamp. Waiting for the next `client/state` would mean a stream
+      * that begins before one arrives is scheduled as if the client had declared nothing.
+      */
++    getOutputPreparation() { return this.outputPreparation ? { ...this.outputPreparation } : undefined; }
+     getPlayerTiming() {
+         return {
+             staticDelayMs: this.staticDelayMs,
+@@ -275,6 +276,27 @@ export class SendspinSession {
              msg = JSON.parse(text);
          }
          catch {
@@ -70,3 +104,72 @@ index b7f79f5c81c6fa1a10757078cfc12984cd092069..5dd08aa7a3a1ecd678f52300dc87ee8c
              return;
          }
          if (!this.ready) {
+@@ -570,13 +592,34 @@ export class SendspinSession {
+         this.sendJson(message);
+     }
+     handleClientState(payload) {
++        const preparation = payload.player?.couch_preparation;
++        if (preparation !== undefined) {
++            const object = preparation !== null && typeof preparation === 'object' && !Array.isArray(preparation);
++            if (!object || typeof preparation.receiverId !== 'string'
++                || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(preparation.receiverId)
++                || !Number.isSafeInteger(preparation.epoch) || preparation.epoch < 0
++                || !['preparing', 'ready', 'failed'].includes(preparation.state)
++                || Object.keys(preparation).some(key => !['receiverId', 'epoch', 'state', 'error'].includes(key))
++                || (preparation.state === 'failed'
++                    ? typeof preparation.error !== 'string' || !preparation.error.trim() || preparation.error.length > 240 || /[\x00-\x1f\x7f]/.test(preparation.error)
++                    : preparation.error !== undefined)
++                || (preparation.state === 'ready' && (!Number.isFinite(payload.player.required_lead_time_ms) || payload.player.required_lead_time_ms < 0
++                    || !Number.isFinite(payload.player.min_buffer_ms) || payload.player.min_buffer_ms < 0))) {
++                this.closeWith(1008, 'invalid Couch output preparation');
++                return;
++            }
++            // Reject the entire stale update before it can replace current timing.
++            if (this.outputPreparation?.receiverId === preparation.receiverId && preparation.epoch < this.outputPreparation.epoch) return;
++            this.outputPreparation = { ...preparation, ...(preparation.state === 'failed'
++                ? { error: preparation.error.replace(/(?:https?|wss?):\/\/\S+/gi, '[url]') } : {}) };
++        }
+         if (!this.initialStateReceived) {
+             this.initialStateReceived = true;
+             if (this.initialStateTimer) {
+                 clearTimeout(this.initialStateTimer);
+                 this.initialStateTimer = null;
+             }
+-            this.maybeNotifyIdentified();
++
+         }
+         const roles = [...this.roles];
+         const state = typeof payload.state === 'string'
+@@ -616,6 +659,7 @@ export class SendspinSession {
+         if (typeof payload.player?.min_buffer_ms === 'number') {
+             this.minBufferMs = payload.player.min_buffer_ms;
+         }
++        this.maybeNotifyIdentified();
+         const update = {
+             clientId: this.clientId,
+             roles,
+@@ -626,6 +670,7 @@ export class SendspinSession {
+             staticDelayMs: this.staticDelayMs,
+             requiredLeadTimeMs: this.requiredLeadTimeMs,
+             minBufferMs: this.minBufferMs,
++            outputPreparation: this.getOutputPreparation(),
+         };
+         if (this.expectVolume && update.volume === undefined && !this.warnedMissingVolume) {
+             this.warnedMissingVolume = true;
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index 5aa93a96e8c07c855cad14e899c54f8753fe1dfb..bfe768e823ee3d2d0ed70a71ab3b8d8cb8e35213 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -373,7 +373,12 @@ export interface ClientTimeMessage {
+     type: 'client/time';
+     payload: ClientTimePayload;
+ }
++/** Optional Couch extension; scoped to this authenticated receiver connection. */
++export type OutputPreparation = { receiverId: string; epoch: number } & (
++    { state: 'preparing' } | { state: 'ready' } | { state: 'failed'; error: string }
++);
+ export interface PlayerStatePayload {
++    couch_preparation?: OutputPreparation;
+     state?: ClientStateType;
+     volume?: number;
+     muted?: boolean;

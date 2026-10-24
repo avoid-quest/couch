@@ -184,6 +184,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
+      url.searchParams.set("receiverPreparation", "1");
       advertised = localDeviceSharing();
       for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
@@ -267,7 +268,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         } else if (message.type === "livePeers" || message.type === "liveSignal" || message.type === "liveIceServers") {
           live.current?.receive(message);
         } else if (message.type === "sendspin") {
-          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch", message.intent);
+          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch", message.intent, message.receiverId);
         } else if (message.type === "text") {
           void (textInput?.receive(message) ?? Promise.resolve(false)).then(ok => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok })); });
         } else if (message.type === "navigation") {

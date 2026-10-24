@@ -143,7 +143,10 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
   const source = state.liveSources?.find(item => item.id === playback?.liveSourceId);
   const receiving = controls.leave;
   const publisher = source?.deviceId === deviceId();
-  const error = state.outputs?.find(output => output.deviceId === deviceId())?.error;
+  const output = state.outputs?.find(output => output.deviceId === deviceId());
+  // Core projects native/source failures before admission; preparation must not hide them.
+  const error = output?.error || state.player.error || (output?.audioAdmission?.state === "failed" ? output.audioAdmission.error : undefined);
+  const preparing = output?.sound && output.audioAdmission?.state === "preparing";
   if (!source || publisher) return null;
   const label = receiving ? "Leave" : failed ? "Try joining again" : "Join";
   return <div className={cn("flex flex-wrap items-center gap-2", className)}>
@@ -154,8 +157,8 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
       catch { setFailed(true); }
       finally { busy.current = false; setPending(false); }
     }}>{pending ? receiving ? "Leaving…" : "Joining…" : label}</Button>
-    {receiving && !error && <span role="status" className="text-sm text-muted-foreground">{!connected ? "Reconnecting…" : state.player.status === "playing" ? "Listening" : "Waiting for audio…"}</span>}
-    {error && <p role="alert" className="text-sm text-destructive">{error} Check this device's audio output, then leave and join again.</p>}
+    {receiving && !error && <span role="status" className="text-sm text-muted-foreground">{!connected ? "Reconnecting…" : preparing ? "Preparing audio…" : state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…"}</span>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {failed && <p role="alert" className="text-sm text-destructive">Couldn't {receiving ? "leave" : "join"}. Check this device's connection and audio output, then try again.</p>}
   </div>;
 }

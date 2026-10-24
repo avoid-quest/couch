@@ -120,6 +120,10 @@ controls while viewing another Playback.
 A Live audio audience sees its own volume and **Join/Leave** instead of the shared
 mixer, compressor or programme controls. A failed listener shows its own error;
 leaving never pauses other listeners or ends the source.
+While the listener's output gets ready, **Preparing audio…** appears as status.
+Once ready, **Listening** follows actual playback and **Waiting for audio…**
+remains visible when the source is buffering. Source and output failures keep
+their reasons; no blanket leave-and-rejoin instruction is appended.
 
 ## Fader and Sync
 

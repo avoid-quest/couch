@@ -50,7 +50,17 @@ export type PlayerState = {
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
 // buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
 // error: that buffered stream failed, so the live input doesn't reach it this item.
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string };
+export type AudioPreparation =
+  | { state: "preparing" }
+  | { state: "ready" }
+  | { state: "failed"; error: string };
+export type ReceiverPreparation = AudioPreparation & { receiverId: string; epoch: number };
+export type AudioAdmissionFailure = "preparation" | "format" | "capacity" | "timing-missing" | "required-lead" | "minimum-buffer" | "output-correction";
+export type OutputAdmission =
+  | { state: "preparing" }
+  | { state: "ready" }
+  | { state: "failed"; reason: AudioAdmissionFailure; error: string };
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string; audioAdmission?: OutputAdmission };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
@@ -170,7 +180,7 @@ export type ServerMessage =
   | { type: "player"; command: PlaybackCommand }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
-  | { type: "sendspin"; listen: boolean; watch: boolean; intent?: "relaxed" | "live" }
+  | { type: "sendspin"; listen: boolean; watch: boolean; intent?: "relaxed" | "live"; receiverId?: string }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 // A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the
