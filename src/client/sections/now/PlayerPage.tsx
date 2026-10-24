@@ -27,7 +27,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
-import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
+import { PlaysOnLine, WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
 import { AmbientLight, roomStyle, useArtworkLight } from "@/components/AmbientLight";
@@ -36,7 +36,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { radioProgrammesQuery, radioStationQuery } from "@/api/radio";
 import { useQuery } from "@tanstack/react-query";
-import { isRadio, radioShowLabels, radioNext, type RadioGuide } from "../../../shared/radio";
+import { isRadio, radioHost, radioShowLabels, radioNext, type RadioGuide } from "../../../shared/radio";
 import { useRadioClock } from "@/radio-clock";
 import { useStationShow } from "@/sections/home/on-air";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
@@ -103,7 +103,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const audioOnly = isAudioOnly(playback, current, player?.tracks);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
   const at = playsOn(state);
-  const elsewhere = !!at?.elsewhere;
   // An mpv channel shows its picture in mpv's own window, so this one shows the artwork.
   const separate = !!playback?.hostOnly && showsPicture(state);
   const picture = showsPicture(state) && !separate;
@@ -275,7 +274,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // said twice.
   // A station's tags follow its link under the show, or stand in for the byline while the station is the title.
   const stationTags = radio ? stationDetails.data?.tags ?? [] : [];
-  const byline = !current ? "" : currentProgramme ? [...radioShowLabels(currentProgramme), currentProgramme.artist].filter(Boolean).join(", ") : stationTags.length ? stationTags.join(", ") : current.subtitle && !mediaSubtitle(current) ? "" : current.subtitle || (radio ? "Radio" : source);
+  const byline = !current ? "" : currentProgramme ? [...radioShowLabels(currentProgramme), radioHost(currentProgramme)].filter(Boolean).join(", ") : stationTags.length ? stationTags.join(", ") : current.subtitle && !mediaSubtitle(current) ? "" : current.subtitle || (radio ? "Radio" : source);
   const osd = !!current && !artworkStage;
   const separateWindow = separate && ["playing", "paused"].includes(player?.status ?? "");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
@@ -354,7 +353,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {/* Set whole in the display face, its size and width by its length, as the Stage's title. */}
           {title && <h1 data-length={titleLength(title)} style={titleFit(title)} className="display-title min-w-0 text-balance">{linkedTitle}</h1>}
           {/* Where it plays leads the line under the title, as in the now-playing bar. */}
-          {elsewhere && at ? <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"><PlaysOn at={at} />{copyContext}</div> : copyContext}
+          <PlaysOnLine at={at}>{copyContext}</PlaysOnLine>
           {separateWindow && <p className="text-sm text-muted-foreground">In a separate window</p>}
           <div ref={infoRegion} id="player-info" hidden={!info} className="grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0">
             {byline && <p className="text-sm text-pretty text-muted-foreground">{byline}</p>}

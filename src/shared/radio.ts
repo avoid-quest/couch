@@ -91,6 +91,8 @@ export function radioNow(guide: RadioGuide | undefined, stationId: string, now =
 
 export const radioNext = (guide: RadioGuide | undefined, now = Date.now()) => guide?.programmes.filter(item => item.start > now).sort((a, b) => a.start - b.start)[0];
 export const radioShowLabels = (show: RadioProgrammeDetails | null | undefined) => radioLabels([...(show?.categories ?? []), ...(show?.genre ? [show.genre] : [])]);
+/** A show's host, unless the show is named after them ("DJ Alé" hosted by DJ Alé): its title already says it. */
+export const radioHost = (show: RadioProgrammeDetails | null | undefined) => show?.artist && show.artist.localeCompare(show.title, undefined, { sensitivity: "base" }) ? show.artist : undefined;
 export function radioMatches(station: RadioStation, query: string, show?: RadioProgrammeDetails | null) {
   return [station.name, station.groupTitle, ...(station.tags ?? []), show?.title, show?.artist, ...radioShowLabels(show)].filter(Boolean).join(" ").toLowerCase().includes(query.trim().toLowerCase());
 }

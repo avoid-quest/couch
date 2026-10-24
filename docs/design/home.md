@@ -19,8 +19,9 @@ and the copy under it, the primary verb growing along the verbs' one line. Its
 item is the first of:
 
 1. **What you control, playing now.** Meta: the station or subtitle, its
-   source, a status only when it isn't plain playing or paused, and "on
-   {device}" when it plays elsewhere. A slim progress line advances as it plays
+   source, and a status only when it isn't plain playing or paused. When it
+   plays elsewhere, "on {device}" leads the links' line, as in the now-playing
+   bar and the player ("on Living room  Lyl Radio"). A slim progress line advances as it plays
    beside "4:27 left, ends 22:01". No verbs: the now-playing bar right below
    holds the transport and Open player, so the Stage doesn't repeat them. Its
    title is the one stop (`data-page-first`, "Open player: {title}") and opens
