@@ -39,12 +39,13 @@ Over a picture, these surfaces are one translucent black,
 darker so that subtitles behind a panel don't fight its text. There is no
 blur, no shadow and no hairline.
 
-The bars around a contained picture are lit by the item's artwork, as
+In a window, the bars around a contained picture are lit by the item's artwork, as
 YouTube's ambient mode lights its player ([Room](../design.md#room)): its
 first colour glows 8rem out of the picture's edges, over a dark haze of its
 second. The light lies
 behind the video element, so it shows only in the bars, and it is painted
-once: nothing reads or redraws the picture while it plays.
+once: nothing reads or redraws the picture while it plays. Fullscreen video and
+the always-fullscreen TV presentation keep these bars black.
 
 The four panels the tools open, Volume, Where it plays, Up next and the gear's
 menu, are one family wherever they open, from the band or the now-playing bar:
