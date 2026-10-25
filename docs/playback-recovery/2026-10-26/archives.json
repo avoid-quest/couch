@@ -1,0 +1,66 @@
+[
+  {
+    "name": "evidence.tar.zst",
+    "sha256": "4f653d007a7a15f403e3c9b21eb39746384ef6091ab68dac37c092e79e5eaad2",
+    "size": 282146338,
+    "parts": [
+      {
+        "path": "evidence.tar.zst.part-000",
+        "size": 41943040,
+        "sha256": "206312bce1da45df6fcf02a76c846f0cbbd9da96a7e9e3c505c8a443ed4c2b6d"
+      },
+      {
+        "path": "evidence.tar.zst.part-001",
+        "size": 41943040,
+        "sha256": "713eb45fcfd579f9920e1fcccf4552672f232a294455f5edd1a6c07b8fcaf62d"
+      },
+      {
+        "path": "evidence.tar.zst.part-002",
+        "size": 41943040,
+        "sha256": "953db553e1fc638103beb1b469ad63b15196b4ddb8abbc5dff2d97ef887f2ba5"
+      },
+      {
+        "path": "evidence.tar.zst.part-003",
+        "size": 41943040,
+        "sha256": "136733fc619a60ca471f20d28de5776916aacd59ab16fbad1282118e3246aab0"
+      },
+      {
+        "path": "evidence.tar.zst.part-004",
+        "size": 41943040,
+        "sha256": "ccf93daaf06aa3e5707d6ccf275d57d32602d82d37f0fde9bca6fcc8ab6e6bed"
+      },
+      {
+        "path": "evidence.tar.zst.part-005",
+        "size": 41943040,
+        "sha256": "1eb1c05e07561882b26cbe3d5bd76491b9f1e60ce912b9aaa0ef76631e6f1b4b"
+      },
+      {
+        "path": "evidence.tar.zst.part-006",
+        "size": 30488098,
+        "sha256": "382642dbb192670da380a901b0c614b5cbe3f33883e72a510f61c5b51ac6ee9d"
+      }
+    ]
+  },
+  {
+    "name": "recordings.tar.zst",
+    "sha256": "daad2795c24381e8b50c9899e15ec50a94328582f5adf026d096a41f72ed427e",
+    "size": 103980097,
+    "parts": [
+      {
+        "path": "recordings.tar.zst.part-000",
+        "size": 41943040,
+        "sha256": "074bb9d49972cdf9ece716ba46042c6325112d118d3a65203de191017ad03803"
+      },
+      {
+        "path": "recordings.tar.zst.part-001",
+        "size": 41943040,
+        "sha256": "33029516bfed7a89e73dba32b6c4ce43364f1dbf532f85d31258c889811d7be3"
+      },
+      {
+        "path": "recordings.tar.zst.part-002",
+        "size": 20094017,
+        "sha256": "c289bf17fbdcbe722570974bc1a50afd0015d274d45572ecb048f464735e60f3"
+      }
+    ]
+  }
+]

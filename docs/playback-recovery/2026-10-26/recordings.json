@@ -1,0 +1,32 @@
+{
+  "purpose": "Representative synthetic-signal recordings: clean browser intervals r12/r15, repeat r16, and native-host sample-coherence comparison. Other experiment traces/results are retained in the evidence archive.",
+  "files": [
+    {
+      "path": "audio-roundtrip-sync/mac-host-swap-r12/remote-evidence/capture-r12.s32le",
+      "size": 46080000,
+      "sha256": "9679e7409317cb57ef19383a071d9098ce3e260b18cd5e28ad76a2fce43bfd6d"
+    },
+    {
+      "path": "audio-roundtrip-sync/mac-host-swap-r15/remote-evidence/capture-r15.s32le",
+      "size": 46080000,
+      "sha256": "a31916e587cd80b103c99f0670ac1012f65e7402f82a09361768dec44c54050a"
+    },
+    {
+      "path": "audio-roundtrip-sync/mac-host-swap-r16/remote-evidence/capture-r16.s32le",
+      "size": 46080000,
+      "sha256": "35fec55bca92cad716894d2052f5ccec5511150266149e00811e36cbd082ef27"
+    },
+    {
+      "path": "audio-portaudio-candidate-r1/collected-native-witness-r2/native-witness-r2/pcm.bin",
+      "size": 23558904,
+      "sha256": "4dcdbc9a68dd6de722c866e34807216aed8a67103fb88d5a47a6a315bb1113cf"
+    },
+    {
+      "path": "audio-portaudio-candidate-r1/collected-native-witness-r2/native-witness-r2/witness.s32le",
+      "size": 46080000,
+      "sha256": "9f19bb25f0645f05bcf9d16b68dd5aa4493fba4896cb8946059f6b9990c3a3b8"
+    }
+  ],
+  "archiveSha256": "daad2795c24381e8b50c9899e15ec50a94328582f5adf026d096a41f72ed427e",
+  "archiveSize": 103980097
+}

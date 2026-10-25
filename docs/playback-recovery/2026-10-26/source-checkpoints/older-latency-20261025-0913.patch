@@ -1,0 +1,2601 @@
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 14fee41..d4d3ca1 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -288,12 +288,21 @@ readable stream. Capture time is never replaced with callback arrival time.
+ The handoff is bounded; relaxed unsupported publishers retain WebRTC/recorder compatibility.
+ Live audio is host-only and actual stereo. Sample positions, sequence, generation,
+ actual sample rate and capture timestamps cross the upload boundary. The worker
+-normalizes source drift with bounded resampling and encodes shared 10 ms stereo
+-Opus at 128 kbit/s. Streaming float WAV input bounds each FFmpeg input packet to
+-480 stereo frames, avoiding the raw demuxer's 4096-frame accumulation. Live
+-deadlines are capture time plus 100 ms; this is a software
+-deadline, not measured input-to-ear. Missing/late data fails within explicit bounds
++normalizes source drift with bounded resampling and encodes shared stereo
++Opus at 128 kbit/s. Live capture uses 5 ms packets; relaxed capture retains 10 ms.
++Streaming float WAV bounds each FFmpeg input packet and Ogg page to that cadence
++(240 stereo frames for Live). The Ogg muxer retains the newest completed page
++until the next packet; a smaller page-duration setting does not remove that wait.
++Live opens a header-only encoder before PCM; its first real block establishes
++the timestamp base. Later generations replace that encoder, and close invalidates
++pending helper resolution. Relaxed encoding remains lazy. Live
++deadlines are capture time plus 95 ms; this is a software
++deadline, not measured input-to-ear. A shared server policy derives the output
++admission/correction cap by reserving 25 ms of that lead for upstream delivery.
++Missing/late data fails within explicit bounds
+ rather than repeatedly moving the deadline. No history is replayed to a late join.
++Encoded Live chunks enter the existing fanout pass immediately; its 5 ms timer
++continues housekeeping without holding newly available audio.
+ Relaxed capture also supports PCM receivers; live does not renegotiate the group
+ to PCM or restart healthy listeners for a new incompatible receiver.
+ 
+@@ -304,6 +313,8 @@ extension sends preparing, ready or failed together with final timing in one
+ encrypted state message. A missing or mismatched modern report waits for
+ preparation; connected older clients retain numeric admission. The newest
+ control tab owns the sound even if an older tab reconnects its audio socket.
++Prepared direct output processes decoded arrivals in a coalesced microtask;
++unprepared output retains the SDK's 15 ms batching. Future refills remain timed.
+ Live control disconnect removes only that listener's scheduling membership and
+ keeps its selected output. Changing sources reuses healthy output preparation;
+ leaving, tab handover, reconnect and output/clock changes renew the applicable
+@@ -311,7 +322,8 @@ listening or preparation lifetime. Terminal failures include the decisive gate;
+ preparing is a local status and does not conceal a source failure.
+ These are runtime safeguards,
+ not hardware qualification. The initial 100 ms / 50 physical receiver goals remain
+-unqualified; see the [validation ledger](audio-video-refactor-validation.md).
++unqualified; see the [validation ledger](audio-video-refactor-validation.md) and
++the [roundtrip measurements](audio-roundtrip-performance.md).
+ 
+ Every Device showing the picture of a synced Playback fetches the video itself,
+ resolved for its own engine and origin, and plays it muted. It connects to Sendspin
+diff --git a/docs/audio-roundtrip-performance.md b/docs/audio-roundtrip-performance.md
+new file mode 100644
+index 0000000..0bd0221
+--- /dev/null
++++ b/docs/audio-roundtrip-performance.md
+@@ -0,0 +1,594 @@
++# Live audio roundtrip measurements
++
++25 October 2026. Work continues from `27e580c` using the Behringer UMC404HD and
++wired MacBook Air. This record separates measured electrical delay from the
++configured sender deadline and from calibrated physical qualification.
++
++The current working goal is 50 ms full electrical roundtrip, with 30 ms a stretch
++direction. These are optimization goals, not fixed configuration requirements.
++Passing an intermediate 100 ms check does not finish this work.
++
++One experimental setup passes the sampled 50 ms check. Ordinary capture has not
++yet passed the unchanged coverage gate:
++
++| Setup | Accepted windows, left / right | Accepted maximum | 50 ms diagnostic |
++| --- | --- | --- | --- |
++| Original fresh baseline | 54/55 / 54/55 | 100.597 ms | Delay fails |
++| WASM48, source256 and constructor hint | 54/55 / 54/55 | 48.679 ms | Pass; experimental capture/output configuration |
++| Public hint, normal capture, latest fresh default-ring control | 51/55 / 51/55 | 49.089 ms | Coverage fails |
++| Public hint, normal capture, 2.5 ms encoder | 46/55 / 45/55 | 49.101 ms | Coverage fails |
++
++Maxima describe accepted windows. Rejected windows remain failures; these results
++are uncalibrated diagnostics. A separate public-hint/source256 run aborted with
++a capture-clock interruption before the steady interval and has no acceptance
++result. The detailed evidence below retains both successes and failures.
++
++The actual path is electrical stereo input → packaged Couch Main/preload capture
++→ timestamped upload → scheduled audio worker/Opus → normal Mac product receiver
++→ headphone output. One private PulseAudio process owns the four-channel 48 kHz
++capture. ADC1/2 record the source reference; ADC3/4 record the Mac headphone return.
++The same coherent recording supplies both channel pairs. Installed Couch and its
++data, personal browser profiles, routing and hardware volumes are preserved.
++
++## Measurement
++
++The [sync-test evaluation](sync-test-evaluation.md) explains why stock upstream's
++±5 ms relative-output detector cannot directly measure this route. The small
++[offline adapter](../scripts/audio-roundtrip.py) derives its numerical detector
++from pinned Sendspin/sync-test, reads retained S32_LE recordings, and searches
++reference-to-return delay at the recorded 48 kHz rate. It needs only NumPy/SciPy,
++not PortAudio or a second device open. The original acquisition writer remains;
++this replaces the latency-analysis loop, not the actual product path.
++
++Checks require at least 95% accepted windows per pair, no confidently
++invalid delay, and every accepted delay within the configured threshold. The
++adapter defaults to 100 ms; current experiments explicitly use `--threshold-ms 50`.
++Rejected windows remain in the
++report. Windows cover the complete requested interval; gapped schedules reject.
++Reversed and cross-channel controls must accept no windows. Fifteen deterministic
++tests and an independent review cover these gates, including two aggregate
++false-pass bugs found and corrected before candidate measurement.
++
++The interpolation grid is not calibrated accuracy. ADC channel/path bias,
++absolute sample-rate accuracy, continuous fidelity and per-packet completion
++remain separate measurements. Reports explicitly retain
++`physical_qualification: false` and `calibration: uncalibrated`. The earlier
++failed affine timing gates in the [validation ledger](audio-video-refactor-validation.md)
++remain failed; this method does not reinterpret them as passes.
++
++## Baseline
++
++The original 610-second recording, unchanged, gives approximately 101.34 ms median
++with either the prior pilot evaluator or the new waveform detector. The new
++detector's accepted-window maximum is 101.593 ms; both intended pairs accept
++1,096/1,119 windows. Reversed and cross pairs accept zero.
++
++A fresh 60-second recording uses the original 52-second stimulus and the fixed
++steady interval [20,48). The corrected detector gives:
++
++| Pair | Accepted windows | Median | p95 | Maximum | ≤100 ms diagnostic |
++| --- | --- | --- | --- | --- | --- |
++| ADC1→3 | 54/55 (98.18%) | 100.115 ms | 100.576 ms | 100.597 ms | Fail |
++| ADC2→4 | 54/55 (98.18%) | 100.115 ms | 100.576 ms | 100.597 ms | Fail |
++
++Each pair has one low-correlation window; reversed and cross pairs accept zero.
++All 2,880,000 frames were retained; witness, generator, observers and publication
++completed with exit 0. A UI cleanup locator correction is recorded separately.
++Raw SHA-256: `93efba31e2b7f9b43005e11811ae4245cd3b51690c18d67932af902013a80e11`.
++Evidence is under `.scratch/audio-roundtrip-sync/runs/baseline-01/`; corrected
++reports are `roundtrip-v2.json` and `roundtrip-negative-v2.json`. Original v1
++reports remain unchanged.
++
++## Candidate and software checks
++
++Live sender lead changes from 100 to 95 ms. Live Opus packets, WAV demuxer packets
++and Ogg pages change together from 10 to 5 ms (240 stereo frames / 1,920 float
++bytes). This lets the encoder emit from the first 479-frame normalized capture
++block without waiting for another 10 ms input block. Relaxed capture retains its
++1-second lead and 10 ms Opus cadence. Receiver admission remains at 70 ms.
++
++An 18-trial real-FFmpeg comparison covers three repeats at 20/40 ms ingress age:
++100 ms lead/10 ms packets, 95/5, and a 100/5 isolation control. All trials exit 0
++with valid cadence and every complete packet. The isolation control gains about
++5 ms of steady encoding headroom. Candidate steady p5 headroom is comparable to
++baseline; startup and worst-case margins are not uniformly better. Encoder CPU
++increases from approximately 54–59 to 74–81 ms per one-second trial, and Ogg bytes
++increase about 17.8%, with approximately twice as many packets. This is an
++encoder-only experiment, not proof for every admitted receiver.
++
++Candidate checks pass: all three TypeScript projects, production build, ten
++focused Bun clock/admission tests, and eight real-FFmpeg Node cases, including
++all 299 complete 5 ms intervals at both capture ages, no repeated buffering,
++relaxed-generation behavior, fixed deadlines and 50 encrypted software clients.
++New timing expectations failed against the original encoder before the change.
++Software clients do not stand in for physical receivers.
++
++The physical candidate is a scratch copy of the previous verified package with
++only `build/audio-worker.mjs` changed inside its ASAR. Main, preload, renderer,
++executable and other archive files remain byte-identical. This is an experimental
++worker overlay, not a release package; embedded baseline build metadata is not a
++candidate source identity. Exact source and runtime hashes are in
++`.scratch/audio-roundtrip-sync/candidate-95-5-r2/receipt.json`.
++
++The first candidate recording retained all 2,880,000 frames over 60 seconds with
++the same 52-second stimulus and prospectively fixed [20,48) steady interval:
++
++| Pair | Accepted windows | Median | p95 | Maximum | ≤50 ms diagnostic |
++| --- | --- | --- | --- | --- | --- |
++| ADC1→3 | 53/55 (96.36%) | 95.394 ms | 95.586 ms | 95.607 ms | Fail |
++| ADC2→4 | 52/55 (94.55%) | 95.402 ms | 95.586 ms | 95.607 ms | Fail |
++
++Median delay improved about 4.7 ms against the fresh baseline. The right pair
++also fails the unchanged 95% coverage requirement; rejected windows remain
++failures. Reversed and cross pairs accept zero windows. Native writers,
++observers and publication completed successfully; controller cleanup failures
++and their corrections remain retained separately. Reports are
++`.scratch/audio-roundtrip-sync/runs/candidate95-01/roundtrip-50ms-v2.json` and
++`roundtrip-negative-50ms-v2.json`. No sustained 95 ms soak was started because
++this is an intermediate candidate toward the new goal.
++
++Two instrumented, source-only 20-second diagnostics compared the normal capture
++request with an ideal 5 ms latency preference. Both real stereo tracks reported
++21.333 ms and delivered 1,024-frame batches at 48 kHz. Reader sample-age medians
++were approximately 28 ms, p95 approximately 33.2 ms, with retained maxima of
++88.5/96.8 ms. The preference had no observed benefit and was not added to product
++code. These ages use Chromium's estimated capture timestamps; they are not
++electrical floors. The permission-only mono processing probe is distinct from
++the selected stereo, processing-off product track. Results and unchanged settings
++are in `.scratch/audio-roundtrip-sync/timing-diagnostics/source-diagnostic-pair-complete.json`.
++
++An instrumented 20-second source/Mac diagnostic measured Core ingress age at
++28.325 ms median and 33.134 ms p95. The Mac reported 10 ms base latency plus
++16 ms output latency. These are runtime estimates, not calibrated sequential
++floors. Startup, tail and outliers remain in the exports under
++`.scratch/audio-roundtrip-sync/timing95-preparation/run-01/`.
++
++A separate process-scoped `--audio-buffer-size=256` experiment, using the same
++95/5 instrumented worker and original receiver scheduling, changed actual stereo
++capture to 256-frame batches and a reported 5.333 ms latency. Reader age fell to
++11.401 ms median, 15.901 ms p95 and 32.901 ms maximum. Core ingress recent median
++was 11.857 ms. All 4,097 output starts carried matched decoded-buffer identities;
++decode-ready → start-call wait was 11.5 ms median and 16.6 ms p95. Evidence is in
++`.scratch/audio-roundtrip-sync/buffer256-preparation/run-01/`. This diagnostic had
++no electrical stimulus or witness recording. The Chromium debugging switch is
++an experimental launch argument; it has not become a product capture setting.
++
++A live-only sender change now invokes the existing fanout pass as each encoded
++chunk arrives; the 5 ms timer remains for housekeeping. A regression holds that
++timer while real FFmpeg, encryption and WebSocket delivery run: before the change
++it receives zero chunks, and afterward it receives continuously on the unchanged
++5 ms grid. Relaxed sending keeps its polling behavior. All four real-FFmpeg
++continuity cases and the three TypeScript projects pass. This recovers deadline
++headroom; electrical RTT at a lower sender lead is still to be measured.
++
++The maintained SDK patch also uses its existing coalesced microtask path after
++successful direct output preparation. Unprepared direct and media-element output
++keep the original 15 ms batching; future refills keep their timers. Source
++generations cancel pending microtasks and retired preparation. Sixteen SDK,
++six route and eight admission regressions pass in separate processes, including
++red-before-fix prompt scheduling and retired preparation cases. Combined execution
++exposed existing test mock leakage; it is not reported as a pass. The new SDK
++is included in the scratch prompt candidate. The first overlay loaded the new
++bytes but failed the frontend/Core revision guard before publication or Join;
++both retained probes have zero rows. `candidate-95-prompt-r2` rebuilds the same
++frozen client with the unchanged Core's compatibility identity and preserves the
++prompt worker byte-for-byte. Actual source/runtime hashes are recorded separately
++from that compatibility label. Packaging alone establishes no lower electrical
++roundtrip.
++
++The corrected prompt95/source256 20-second comparison completed with no probe
++drops or errors. All 4,103 scheduled buffers were matched: decode-ready → start
++median 0.100 ms, p95 0.200 ms and maximum 0.700 ms, versus 11.5/16.6/19.5 ms with
++the old scheduling. Source reader age stayed comparable at 11.5 ms median and
++16.0 ms p95. The Mac retained 10+16 ms reported output latency. Probe exports and
++`root-probe-summary-v1.json` are in
++`.scratch/audio-roundtrip-sync/prompt95-preparation/run-02/`. This package has no
++Core latency instrumentation; zero Core probe records is expected, not evidence
++of zero upstream delay. No electrical measurement was made.
++
++The next source128/default-output run delivered real 128-frame stereo blocks but
++source age rose to 13.001 ms median and 22.8 ms p95. In the subsequent source128
++run with only the Mac's standard `latencyHint: 0.002` changed, source ages were
++8.9/13.3 ms. This variation leaves the 128-versus-256 comparison unresolved;
++reported block size alone does not prove a lower capture floor. The Mac hint
++changed steady reported output latency from 10+16 ms to 0+8 ms. Its matched
++decode-ready → start median/p95 remained 0.1/0.2 ms. Neither run lost probe rows.
++Exports are under `prompt95-buffer128-preparation/run-01` and
++`prompt95-buffer128-outputhint002-preparation/run-01` in the same scratch root.
++The hint is currently an explicit scratch experiment, with its actual negotiated
++latency observed; it does not establish an 8 ms electrical output floor.
++
++Live-only encoder prewarming starts FFmpeg with its WAV header before PCM arrives.
++The first real PCM establishes its unchanged timestamp base; later generations
++restart normally, and close invalidates pending helper resolution. Relaxed capture
++remains lazy. Six real-FFmpeg continuity cases and source typecheck pass, including
++red-before-fix startup and async lifecycle regressions. Six paired software trials
++reduced first-ingress → first-Opus median from 13.606 to 6.356 ms. The retained
++41-packet prefix is contiguous in each trial; the pending codec tail is not a
++completed-packet claim. Savings depend on time available to prewarm. Source and
++measurement pins are in `.scratch/audio-roundtrip-sync/latency-probes-prewarm/`.
++This change is not in the measured prompt95 timing package and has no electrical
++result yet.
++
++The server's Live deadline and both admission/correction gates now share one
++small policy module. Current lead remains 95 ms; reserving 25 ms for upstream
++delivery derives the same 70 ms output cap. Lower scratch candidates must change
++the deadline and upstream reserve together. The receiver continues to report its
++actual preparation requirement; the default Mac currently requests 36 ms.
++
++The first 50 ms scratch candidate includes matched Core/worker policy, prewarm,
++prompt dispatch/scheduling, source256 and the explicitly requested Mac `.002`
++hint. Its output cap is 25 ms; actual runtime admission is lead25/min25/correction0
++with the Mac reporting an 8 ms output estimate. Nine real variant admission
++integrations and boundary checks pass. The default product policy remains 95 ms.
++
++`runs/candidate50-01` retains all 2,880,000 frames from the same 60-second protocol.
++Fixed [20,48) analysis remains **red**: each pair accepts 48/55 windows (87.27%),
++median 50.699 ms, p95 50.894 ms and maximum 50.947/50.946 ms. Each pair rejects
++seven low-correlation windows; neither the delay nor coverage gate passes.
++Reversed and cross pairs accept zero windows. Corrected detector reports are
++`roundtrip-50ms-v2.json` and `roundtrip-negative-50ms-v2.json`; raw SHA-256 is
++`d59e6b02a5af2a77ef4e3a78d5c943d05897c46349341f390cd03419fa01b916`.
++All native writers/controllers completed successfully and cleanup stopped the
++publication and removed the shim. A separate instrumented diagnostic follows;
++low-correlation windows have not been relabeled as successful audio delivery.
++
++The subsequent 20-second diagnostic retains 4,330 encoded packets, including 16
++already overdue at emission (worst headroom −17.572 ms). Nine occur before the
++first periodic report and seven more during the run. Source reader age is
++16.5 ms median, 25.6 ms p95 and 54.2 ms maximum. Mac decode-ready → start stays
++0.1/0.2 ms median/p95, but only 3,819 of 4,101 decoded buffers have observed
++starts; the unstarted buffers span the run. This records missing starts without
++inferring a reason code. Decode input timestamps include two 35 ms gaps and one
++10 ms gap. These observations motivate reducing upstream wait while preserving
++late-drop rules; they do not map individual missing starts to the earlier raw
++recording's rejected windows. Deduplicated Core records and scheduling metadata
++are in `candidate50-diagnostic-preparation/run-01/root-timing-summary-v2.json`
++and `root-scheduling-summary-v1.json`.
++
++A separate Live-only WASM encoder candidate now passes bounded software checks.
++It uses the existing pinned `opus-encdec` dependency, one shared runtime per audio
++worker and source-owned stereo encoders. Relaxed capture keeps the identical
++FFmpeg branch. Generation/reset/close reentrancy, nonzero stereo decoding,
++queue bounds, fixed sample-index timestamps and owner/shared failure handling
++are covered. The first packet retains the actual queried 120-sample lookahead;
++late packets advance the original timeline rather than shifting later audio.
++All five FFmpeg children and three check workers closed.
++
++Two reversed-order paced comparisons, retaining the common first 50 packets,
++reduce median upstream consumption by 5.37/5.45 ms against current Ogg. These
++synthetic source timings include first packets and pre-skip, but omit physical
++capture, network and receiver work. The frozen candidate remains scratch-only;
++actual Electron/ASAR loading and electrical performance are separate gates.
++Sources, artifacts and results are pinned in
++`wasm-live-candidate/handoff.json` under the scratch root. No production encoder
++or capture setting has been changed by this experiment.
++
++Actual Electron utilityProcess → audio worker ASAR loading subsequently passed.
++A disposable clone missing only the WASM member produced an explicit archive
++`ENOENT`/compile abort, zero Mac decode/output and no observed fallback; no UI
++alert was captured. Restoring the pinned package delivered 2,089 decoded buffers
++and 2,064 matched output starts over 10.39 seconds. Normal readiness reported
++1 ms public clock uncertainty, 8 ms output estimate, 25 ms required lead/buffer
++and zero correction. All three packaged codec asset pins matched. These are
++instrumented loading/delivery checks, with startup/tail retained, rather than an
++electrical continuity result. Receipt:
++`wasm-restored-positive-preparation/gate-result.json` under the scratch root.
++
++The matched 50 ms WASM electrical run retains all 2,880,000 frames. Both pairs
++accept 53/55 windows (96.36%), with median 50.368 ms, p95 50.634 ms and maximum
++50.664 ms in fixed [20,48). Coverage passes, while delay remains **red** at 50 ms.
++Both pairs retain two low-correlation windows. Reversed and cross-channel
++controls accept zero. This single run improves observed acceptance relative to
++the native candidate's 48/55; it is not continuous-fidelity qualification.
++Raw SHA-256: `3588b9e2b105149b95154cb15f9bcca5e9d91a42709317e7c55f6fbaf40a4af7`.
++Reports and unchanged detector/raw hash receipt:
++`runs/candidate50-wasm-01/analysis-receipt-v2.json` under the scratch root.
++
++The subsequent 48 ms lead / 23 ms upstream reserve / 25 ms output-cap candidate
++passes the unchanged ≤50 ms **sampled electrical diagnostic**. Each intended
++pair accepts 54/55 windows (98.18%), median 48.387 ms, p95 48.670 ms and maximum
++48.679 ms; one low-correlation window per pair remains rejected. Reversed and
++cross pairs accept zero. All 2,880,000 frames were retained, native/controller
++exits were zero, and normal readiness reported 1 ms public clock error, 8 ms
++output estimate, 25 ms required/minimum buffer and zero correction.
++
++This result uses experimental source256 and the Mac `.002` constructor shim.
++It is not calibrated or continuous-fidelity qualification, and it does not prove
++a supported production capture path. The 23 ms upstream allowance remains an
++experimental policy, with no guaranteed tail bound. Raw SHA-256:
++`fe856bfc20a79d120206741eccaa6f5094f5fe370cc534830e312889309f00f7`.
++Reports and hash receipt are in `runs/candidate48-wasm-01/` under the scratch root;
++all earlier red runs remain unchanged. Work continues toward supported output
++configuration, smaller frames, ordinary capture and lower latency.
++
++Review also found a readiness-units bug: the SDK public clock-error getter
++returns rounded milliseconds, while Couch compared it with 10,000 and logged it
++as microseconds. The guard now requires finite, nonnegative public error ≤10 ms
++and logs `clockErrorMs`. Fourteen focused tests pass after boundary regressions
++failed against the old code. Public rounding and statistical uncertainty remain;
++this is not a hard calibrated clock-error bound. Frozen comparison packages keep
++their original frontend bytes and are labeled accordingly; the correction is
++included only after a new frontend build. The 25 ms receiver buffer floor remains
++unchanged.
++
++The first-class output-hint path is now implemented through the maintained
++SDK patch: optional numeric seconds flow from player config to the AudioContext
++constructor, with finite/nonnegative validation and unchanged omitted defaults.
++Couch supplies 0.002 for Live only. Tests keep actual 26 ms and 8 ms runtime
++estimates despite the requested 2 ms; preparation/admission and relaxed batching
++remain intact. SDK 25/25 and receiver 14/14 pass, with red evidence retained.
++A fresh cache and clean frozen install reproduced all four changed runtime/type
++files and passed the 25 SDK tests. The lockfile stayed unchanged. All three
++TypeScript projects and the production build pass, and source review is clear.
++The new frontend includes the clock-unit correction; historical comparison
++packages retain their earlier bytes. Evidence is in `public-output-validation/`.
++
++A distinct scratch 48/23 candidate changes only the Opus frame size from 240 to
++120 samples (2.5 ms). Actual lookahead remains 120 samples, first packets are
++retained and nonzero stereo decoding, variable-block normalization, lifecycle,
++late-index timing and the queued+sent bound pass. Matched software medians recover
++2.73–2.79 ms of upstream time, with a separately retained 5.294 ms cold first
++encode. This is not yet a physical result. Its exact source/artifact receipt is
++`wasm-live-candidate/lead48-frame2p5-r1/receipt.json` under the scratch root.
++
++Ordinary capture with that public hint, no constructor shim and no source-buffer
++switch does **not** pass at 48 ms. Its separate 20-second diagnostic observed
++1,024-frame blocks, with reported post-first-two-second first-sample ages
++32.4 ms median / 42.2 ms p95. Actual output estimate remained 8 ms and clock error
++1 ms. In the complete 60-second electrical run, fixed [20,48) accepts only 38/55
++left and 37/55 right windows (69.09% / 67.27%); accepted medians are
++48.677/48.680 ms and maxima 48.976/48.978 ms. Reversed/cross controls accept zero.
++The rejected windows remain failures; accepted-delay statistics alone do not
++establish supported ≤50 ms delivery. Raw SHA-256:
++`ba2b361935ce2a0e06dfc4ae929ed23c18705e643a3e8717e20efa1393f77fcf`.
++Evidence is under `runs/candidate48-public-normal-01/` and
++`electrical48-public-normal-preparation/`. A same-package source256 control follows;
++no causal conclusion is drawn from the non-overlapping capture-age diagnostics.
++
++The same public-hint 48 ms package with only source256 restored aborted after
++620,800 frames (12.93 seconds): the product reported “The audio input's capture
++clock was interrupted.” The upload worker rejects timestamp steps below −2 ms
++or gaps above 40 ms; the retained message alone does not identify which condition
++occurred. The fixed [20,48) interval was never reached, so no electrical acceptance
++is available. Witness exit −15 and controller abort exits remain aborts; cleanup
++verified all processes absent. Evidence: `runs/candidate48-public-256-01/`.
++No thresholds or timestamp handling were relaxed.
++
++The private Pulse session log independently records progressive overrun-driven
++adaptation (reported minimum latency 1→106 ms and watermarks reaching 86 ms).
++It lacks event timestamps and establishes no causal link to the interruption or
++higher ordinary-capture ages. The audit recommends a fresh-daemon, same-config
++control before any tuning. Official Pulse17 scheduling uses requested latency
++minus watermark; a smaller watermark is not automatically a faster capture
++cadence. Audit: `latency-probes-pulse-adaptation-audit.md` under the scratch root.
++
++A subsequent 20-second source256 diagnostic used the 2.5 ms WASM encoder and
++bounded packet-emission instrumentation. It also failed: a capture-clock
++interruption arrived during export, before Leave/Stop. The initial controller's
++"observation elapsed" label does not override that error. The host export ends
++0.387 seconds before the error, so it cannot identify the failing timestamp
++step. Source age was 16.4 ms median / 25.4 ms p95 after the first two seconds.
++Of 8,630 encoded packets, 13 were already overdue and dropped, including packet
++index zero with −13.184 ms headroom. First-packet loss remains in the result.
++All 13 precede the Mac's contiguous decoded indices 452–8,629. Cumulative
++reports add no new Core expirations across 7,811 packets after the first report.
++The Mac still has 31 decoded buffers without observed starts, including 19 later
++in the run; the reason is unproved. The 101 ms read-timestamp discontinuity is
++the initial preparation pair, whose first frame was never transferred. It does
++not identify the later capture failure. Saved calculations are in
++`wasm-live-candidate/diagnostic48-public-2p5-review-01/`.
++The final 512-packet upstream-consumption median/p95 was 21.507/29.262 ms;
++these recent quantiles are not whole-run quantiles. Instrumentation may affect
++timing. Evidence: `timing48-public-2p5-preparation/diagnostic-01/`.
++
++The diagnostic controller now stops sharing normally before exporting large
++probe objects, retains probes through terminal callbacks, and scans errors
++through cleanup. This reduces an avoidable observer effect without establishing
++the cause of either interruption. Existing failures remain failures. A separate
++same-config private-daemon restart preserves the original logs and settings and
++updates owned-process watchdog identities; its next measurement is a control,
++not evidence that a restart solves capture reliability.
++
++The first fresh-daemon normal-capture diagnostic completed cleanly through
++Stop/export/removal. It still delivered 1,024-frame blocks; post-first-two-second
++transfer age was 27.8 ms median / 32.9 ms p95 / 102.4 ms maximum. Readiness
++reported 1 ms clock error, 8 ms output, 25 ms required/minimum buffer and zero
++correction. No runtime/admission/export/cleanup errors were retained. This one
++comparison does not isolate the reason for the lower ages. Evidence:
++`fresh-pulse-public-normal-preparation/diagnostic-01/`. A matched electrical
++control used the same public frame5 package and no capture-buffer switch.
++
++That complete 60-second control remains **red on coverage**: left 50/55 (90.91%),
++right 49/55 (89.09%). Accepted medians are 48.888/48.891 ms, p95
++49.139/49.140 ms and maxima 49.164/49.166 ms. Reversed/cross controls accept zero.
++All 2,880,000 frames were retained without an observed product error, and native,
++controller and observer exits were zero. A clean runtime and sub-50 ms accepted
++delays do not override the rejected windows. This run improves observed coverage
++relative to the earlier normal-capture run, but does not establish a causal Pulse
++fix or reliable supported delivery. Raw SHA-256:
++`925b91d3d01c4c4bff51d2f05c95f384aac22fa66633b22ff39353490cc5b71d`.
++Evidence and unchanged detector/raw hash receipt:
++`runs/candidate48-public-normal-freshpulse-01/analysis-receipt-v2.json`.
++
++The following normal-capture trial changes only the encoder to 2.5 ms frames on
++the same private daemon. It also remains **red on coverage**: left 46/55 (83.64%),
++right 45/55 (81.82%); accepted medians 48.782/48.778 ms and maxima
++49.101/49.101 ms. Reversed/cross controls accept zero. All 2,880,000 frames and
++zero process exits were retained with no observed product error. This single
++trial does not isolate why coverage differs; the software encoding-headroom
++gain has not established reliable normal-capture delivery. Raw SHA-256:
++`3b9b4ac158c1e568098804646a9594a3d3d9bc20a31625e5423c760addb15c2a`.
++Evidence: `runs/candidate48-public-normal-2p5-01/analysis-receipt-v2.json`.
++
++A separate packaged native-readable probe compares two processors on the same
++real stereo track: a Window reader and the actual unlocked native readable
++transferred to a worker. It retains bounded full-block fingerprints, raw
++timestamps, startup and ambiguity counts; it never selects or corrects an origin.
++Only three same-origin static assets are added to a copied package. The initial
++controller attempt stopped before `run` because idle enumeration could not
++confirm an explicit device. Corrected confirmation uses the product's temporary
++native microphone grant and preserves the enumeration before checking it.
++
++The five-second no-stall control yields 232 unique common blocks, all matching
++the predetermined destination-origin timestamp difference; one ambiguous
++fingerprint remains retained. Both readers have zero discontinuities and every
++observed AudioData is closed. Thus this actual binary changes native readable
++timestamps to the worker's origin. The existing per-AudioData upload remains
++correctly tagged with its Window origin; its unsupported Electron44 stream-origin
++comment has been corrected without changing runtime behavior.
++
++One subsequent 200 ms Window stall records 228 Window frames and a 128.167 ms
++maximum gap, versus 233 worker frames with zero discontinuities and a 0.167 ms
++maximum residual. There are 227 unique destination-origin matches and six
++unmatched worker blocks. Both runs finish with no errors, owned tracks stopped,
++worker absent and native preparation cleared. This supports bounded UI isolation;
++it does not prove the cause of the earlier electrical abort or a timestamp-safe
++product replacement. The pinned implementation can retain old-origin queued
++buffers during handoff, which needs a separate queued-startup control. Receipts:
++`native-transfer-device-preflight-r2/{no-stall-02,stall-01}/`.
++
++A separate queued-startup control then requests a 100 ms delay between releasing
++the preparation reader and transferring the native stream (observed 100.100 ms).
++All 238 uniquely matched candidate blocks are retained: the first four use the
++unchanged Window origin, followed by 234 using the destination origin. No
++ambiguous or unmatched candidate blocks remain. The worker records one
++−23,306.533 ms raw timestamp discontinuity while the Window records none.
++This reproduces mixed origins in one actual native readable; a single fixed
++origin cannot safely replace the current upload seam. No timestamps or startup
++frames were rewritten or removed by the probe. Cleanup completes without errors.
++Evidence: `native-transfer-queued-preparation-r2/queued-handoff-01/`.
++Pinned Chromium's [transfer implementation](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/breakout_box/frame_queue_underlying_source.cc#L337)
++updates the producer's realm information without rebasing the shared queue;
++[audio copying](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/breakout_box/media_stream_audio_track_underlying_source.cc#L64)
++can also be in flight. No public counter or acknowledged producer boundary was
++found that proves a safe finite warmup. Paired content matching cannot guarantee
++identity for silence or repeated blocks. Native transfer remains diagnostic;
++the existing product timestamp seam is retained.
++
++Before a ring-capacity trial, another fresh unchanged-daemon control retains the
++same public frame5 package and ordinary capture. Its clean 20-second diagnostic
++reports 1,024-frame blocks, first-sample age 27.901 ms median / 33.100 ms p95 /
++112.400 ms maximum, and unchanged readiness (clock1/output8/required25/min25,
++zero correction). Its full 60-second electrical run remains **red**: each pair
++accepts 51/55 windows (92.73%), medians 48.803/48.803 ms and maxima
++49.089/49.089 ms. Reversed/cross controls accept zero. All 2,880,000 frames are
++retained and native/controller/observer exits are zero. Raw SHA-256:
++`fa986b9b06bfc0d58aa0814d9968ecb316808b323e32ca33467ba8d6aa4d2b75`.
++Evidence: `runs/candidate48-public-normal-ringcontrol-01/`.
++
++The one-knob trial appends only `tsched_buffer_size=30720` to the private
++four-channel s32le/48 kHz ALSA source. Negotiation confirms 1,920 frames / 40 ms
++ring capacity, 960-frame / 20 ms periods and timer scheduling. The watermark
++configuration is unchanged; capacity is not capture cadence. No overrun/underrun
++message appears in its retained since-startup log. Actual browser blocks remain
++1,024 frames, and age worsens to 30.300 ms median / 37.800 ms p95 / 112.801 ms
++maximum. This fails the prospectively required ≥5 ms p95 gain from 33.100 ms.
++
++Its complete electrical run also remains **red**: left 45/55 (81.82%), right
++43/55 (78.18%), accepted medians 48.773/48.773 ms and maxima 49.103/49.103 ms.
++Reversed/cross controls accept zero. All 2,880,000 frames and zero process exits
++are retained; readiness stays unchanged. The configuration is rejected and the
++next hardware run must use the original private-daemon configuration.
++This trial establishes no performance benefit. Raw SHA-256:
++`3774c2a4ddcc27358077581ab5ecf81aee1fce87d59edd1944fd6f5a6a78f5e7`.
++Evidence: `runs/candidate48-public-normal-ring40-01/` and
++`preflight/private-pulse-ring40-01/`.
++
++A bounded software fairness check subsequently goes **red** against the frozen
++WASM capture implementation. It queues a real MessagePort task and timer before
++preparation resolves, then feeds 400 ms and two-second historical input backlogs.
++Both tasks run only after the first source finishes draining or reaches its
++unchanged missed-deadline failure. Expired packets bypass the existing slice
++branch, and microtask slices do not yield to those worker tasks. The second source
++remains healthy; actual encoded packet indices, payloads, lookahead and deadlines
++are retained, including late packets. This tests cooperative scheduling at the
++capture→WASM seam, not the complete HTTP/WebSocket path or production starvation
++duration. Two workers exit cleanly. Evidence:
++`wasm-live-candidate/io-fairness-preparation/RESULTS.md`.
++
++A separate 95 ms / 5 ms scratch revision turns that same scheduling check
++**green**. It resumes draining through cancellable `setImmediate` tasks after
++bounded encoded slices, counting expired packets too. Close, reset and failure
++cancel the continuation; new writes preserve FIFO behind it. Task-time lifecycle
++checks, owner-local errors and shared-fatal cancellation pass. All 80/100 encoded
++payloads match the red inputs, and 34 unaffected emitted packets retain their
++bytes and timestamps. Real task yields can increase lateness: the historical
++400 ms case emits three packets rather than four. The original deadline failure
++is retained. All six test workers exit, and source typecheck and the matching
++worker build pass. Root source review finds no blocking issue. Product and prior
++freezes remain unchanged; no hardware performance improvement follows from this
++software check. Evidence: `wasm-live-candidate/io-fairness-r1/README.md`.
++
++The next scratch experiment keeps MSTP in a Main-owned hidden capture Window and
++transfers individual AudioData objects to that Window's worker, with its explicit
++capture origin. Packaged r3 proves different actual UI/helper OS PIDs, the same
++Session/local origin, no opener and Main-reported hidden state before GUM. Its
++temporary exact-frame microphone lease passes unprepared, sibling, subframe and
++stale-target denial controls. Source review first found and fixed hidden-state,
++owner-crash and stale ordinary-preparation cleanup gaps; prior freezes remain.
++
++One five-second no-stall run and one five-second run with a reviewed 200 ms UI
++stall each deliver all 235 native stereo/48 kHz, 1,024-frame blocks to the worker.
++Every transferred frame is closed, with matching retained fingerprints and
++explicit origin conversion, zero errors/discontinuities and a drained queue.
++During the actual 200 ms UI stall, helper and worker each process ten frames.
++The consumed preparation frame is retained separately; preparation-to-first-read
++timestamp residuals are about −33 µs. Both runs stop tracks, remove helper/worker,
++clear native preparation and leave no Pulse client capture. Maximum positive
++native timestamp residual is 0.167 ms in each run.
++
++This qualifies only the documented bounded capture/serialization isolation.
++Default r3 opens no Core upload socket; it establishes no electrical latency or
++long-duration reliability improvement and is not integrated into production
++Live/mute/rejoin. A later upload trial must preserve real preparation before
++publication on the same acquisition and use the existing publisher connection.
++Evidence: `owned-capture-qualification-r3-preparation/` and
++`latency-probes-owned-capture-core-upload-plan.md`.
++
++Pinned Electron44.4.5/Chromium152 source tracing finds no supported public
++latency-constraint route to smaller raw blocks on this Pulse backend. It supplies
++1,024-frame input parameters without variable buffer capabilities, so the raw
++constraint candidate has identical minimum and maximum sizes. The public latency
++capability can still include a nominal 10 ms processing candidate; with processing
++disabled, that candidate does not supply a smaller raw buffer allocation. A
++required 5 ms upper bound is predicted to reject rather than force 240/256 frames.
++Settings report configured source-buffer duration, not measured sample age.
++No new constraint trial was run. The cited trace and reporting correction are in
++`latency-probes-public-capture-latency-constraint.md` under the scratch root.
++
++The first controlled owner-Close attempt failed before `run()` because the
++controller used an unsupported CDP attachment mode. No helper or GUM started;
++the result remains inconclusive. The replacement flattened-session controller
++passes offline checks, but review found that its failure path could release the
++debugger hold before verifying process retirement. A separate controller revision
++fixes that ordering and passes 18 offline tests; four regression cases fail
++against the earlier frozen controller. Root source review and all 12 frozen-file
++hash checks pass. Actual owner-Close qualification and the ordered Core-upload experiment
++remain pending; the successful serialization runs do not establish either gate.
++
++A source review of the maintained product changes found a relaxed-capture
++regression: counting released, unplayed chunks toward the new200-chunk ceiling
++could terminate healthy128-frame PCM input under its unchanged one-second lead.
++The minimal repair counts retained sent chunks only for Live, preserving the
++original relaxed queue limit. A regression through the real capture encoder,
++scheduler and encrypted PCM receiver fails against the old line, then delivers
++all240 paced chunks with exact stereo samples and original timestamps after
++the fix. Existing continuity cases pass6/6; source and regression typechecks
++pass, and all28 recorded command/encoder PIDs are absent. This is software
++regression coverage, not an electrical result. Evidence:
++`relaxed-pcm-queue-fix-r1/README.md` under the scratch root.
++
++The ordered Core-upload R4 scratch revision passes62 focused contract tests,
++three typechecks and isolated frontend/Main/helper builds. Root materialization
++verifies all92 allowed overlay paths, with62 added ASAR members, four changed,
++none removed, and all unlisted members/native resources unchanged. Core,
++audio-worker, codec assets and embedded compatibility identity stay pinned.
++The package has never launched. A fresh independent source review found two
++blocking contract gaps: the serialization API still accepts a direct upload URL,
++and successful ordered upload does not require an observed first Core-source
++presence. R4 and its package are preserved as blocked; a new R5 scratch revision
++will reject entrypoint upload URLs and enforce bounded source confirmation.
++Actual owner-Close, ordered upload and electrical gates remain pending.
++
++No release or installed-app change has occurred.
+diff --git a/docs/design/share.md b/docs/design/share.md
+index f118775..ae341d6 100644
+--- a/docs/design/share.md
++++ b/docs/design/share.md
+@@ -111,13 +111,16 @@ Sheet on phones and the TV:
+   audio, so a speakers-only device takes nothing): Core's refusal shows as the
+   page's error, and the share keeps playing where it can.
+ 
+-Live audio uses a fixed scheduled deadline after runtime decoder/clock/output
+-checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
++Live audio uses a fixed 95 ms sender deadline and 5 ms Opus packets after runtime
++decoder/clock/output checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
+ synchronization on every output. While those checks run, the listener sees
+ **Preparing audio…**. An incompatible output reports its reason on that listener;
+ changing the output requires fresh admission. Normal preparation and recovery
+-do not require leaving and joining again. See the
+-[validation ledger](../audio-video-refactor-validation.md).
++do not require leaving and joining again. Live requests a 2 ms browser output
++latency hint; preparation and admission still use the actual reported output
++latency if the browser chooses another value. See the
++[validation ledger](../audio-video-refactor-validation.md) and
++[roundtrip measurements](../audio-roundtrip-performance.md).
+ 
+ ## Not yet
+ 
+diff --git a/docs/sync-test-evaluation.md b/docs/sync-test-evaluation.md
+new file mode 100644
+index 0000000..b2fe486
+--- /dev/null
++++ b/docs/sync-test-evaluation.md
+@@ -0,0 +1,117 @@
++# Sendspin sync-test evaluation
++
++Evaluated 25 October 2026 at **`abb99c0bb7c6e4dee95c5b174181db76aa96a31c`** (cloned into `/tmp/couch-sync-test-research/sync-test`; upstream tracked files unchanged).
++
++**Recommendation:** reuse its small numerical detector offline, with explicit sample rate, wider lag search and rejection gates. Stock sync-test is useful for relative output synchronization; it cannot directly qualify Couch's ≤100 ms full live-input-to-Mac-analog-output goal. The implemented [offline adapter](../scripts/audio-roundtrip.py) reads retained four-channel recordings without PortAudio, hardware access or product changes. Its independent diagnostic reproduces the existing **~101.34 ms red baseline**. A new detector does not lower product latency or erase the earlier qualification failure.
++
++## What upstream actually measures
++
++The README describes two devices playing the same content, with one analog output from each fed into a common stereo USB capture. The detector measures their **relative waveform lag**. Shared end-to-end latency cancels: two outputs can be perfectly aligned while both are late. Analyzer “absolute offset” is `abs(relative_offset)`, not independently measured absolute roundtrip latency. With one channel instead wired to the actual electrical input reference and the other to the corresponding headphone return, correlation can measure that route's electrical delay, subject to capture-path bias/calibration. That wiring and a wider search are required adaptations.[1][2][3]
++
++Production defaults are 96 kHz capture, a **750 ms window**, processing roughly every 500 ms, **±5 ms** lag search, correlation ≥0.5, and 100× FFT sinc peak interpolation. The README/docstring's 500 ms capture-window description is stale. Nominal sample spacing is 10.42 µs; interpolation grid spacing of ~0.104 µs does **not** establish calibrated accuracy. Analyzer statistics round offsets to whole microseconds.[2][3]
++
++The generator actually creates a 48 kHz mono, one-hour FLAC: 50 ms linear **100 Hz→18 kHz** chirps, 5 ms fades, repeated every 500 ms. Its docstring incorrectly says 10 kHz. Generation writes `sync_test_chirps.flac`; the repository also includes `sync_test_chirps_18khz.flac`. It does not play the file, publish into Couch, control a browser, record raw audio, calibrate hardware or measure packet deadlines.[4][5]
++
++## Hardware, platform and calibration
++
++- Stock capture opens exactly **two channels at 96 kHz** with a numeric device ID. There is no channel/rate selector, calibration option or offline raw-file input. Existing ADC1/2 source plus ADC3/4 return routing therefore needs a remap or an adapter; pointing stock capture at the first two UMC inputs would compare source left/right instead of input/output.[2]
++- For Couch stereo, keep a **single coherent four-channel ADC recording**: ADC1 reference L→ADC3 Mac headphone L, ADC2 reference R→ADC4 headphone R. Split/witness the physical signal entering Couch, then return the Mac's real analog output. Use appropriate line levels, independent channel content, and a route with no direct-monitor/loopback signal masquerading as the browser return. The existing Linux UMC capture and separate wired Mac headphone route already provide this topology; the latest report records the exact audio-stack substitutions.[6]
++- A common ADC clock removes capture-start timestamp uncertainty between channels. It does not establish ADC channel skew/filter phase, source/return path bias, absolute sample-rate accuracy, SNR or isolation. Establish current same-signal channel calibration and channel-swap controls, and report an uncertainty budget before claiming a calibrated ≤100 ms bound. Keep the configured **100 ms sender lead** separate; subtracting it from analog lag would discard actual route latency.[6]
++- Python **≥3.11**, NumPy, SciPy, sounddevice, soundfile and matplotlib are declared dependencies. Upstream states no explicit tested-OS matrix. Its sounddevice/PortAudio dependency supports macOS, Windows and Linux; official installation docs say pip wheels bundle PortAudio on macOS/Windows, while Linux may need `libportaudio2`. Actual UMC device/rate availability, macOS recording permission and simultaneous capture access still need a host preflight; no Mac or hardware validation occurred in this research.[5][7]
++- This host had Python 3.13.5 but no `uv`, no usable `ensurepip`, and no PortAudio. A standalone uv downloaded into the assigned scratch directory completed `uv sync --frozen`. The unmodified `python -m sync_test.test_measurement` command failed at import with **`OSError: PortAudio library not found`**. The maintained adapter uses only NumPy/SciPy and requires none of these audio-library workarounds.
++
++## Failure and false-positive traps
++
++1. **Wrong range or ambiguous content:** ±5 ms cannot locate ~101 ms. A periodic waveform may align at the wrong whole period; duplicated routing can look perfectly synchronized. Upstream has no peak-boundary or competing-peak rejection. Tonal/narrow-band content can also have many plausible peaks.[2][4]
++2. **Missing signal can disappear from headline statistics:** below-0.5 correlations are retained in CSV but filtered from analysis. There is no minimum coverage, count, duration or ≤100 ms acceptance gate. One surviving valid row permits a summary. “Drift stability” is standard deviation of non-snap deltas, excluding jumps >8 µs; a constant drift can have zero delta variance. Neither that label nor “excellent” proves an affine clock model or continuous fidelity.[2][3]
++3. **Duration trap:** the low-correlation branch continues before checking `--duration`, so silent/uncorrelated capture can run indefinitely. Stop an owned run by PID; do not rely on the duration option as a hard deadline. The CSV is opened/truncated before checking device selection. Use a new output path.[2]
++4. **Weak automation contract:** upstream synthetic tests print failure markers/return a Boolean that the script ignores; exit 0 is not a sufficient test verdict. The analyzer reports statistics rather than threshold qualification. `--plot` writes beside its CSV; `--last-seconds` can conceal earlier failures and should not replace a prospectively fixed interval.[3][8]
++
++The first-party GitHub issues endpoint returned an empty list on the evaluation date; there was no issue evidence supplying additional guarantees.[9]
++
++## Minimal offline integration implemented
++
++[The adapter](../scripts/audio-roundtrip.py) explicitly adapts upstream mean/std normalization, SciPy FFT correlation and its FFT sinc peak helper at the pinned commit. It computes at the supplied **48 kHz directly**; there is no need to upsample the retained recording. Upstream has **no sample-rate/resampling helper**. An alternative that preserves its 96 kHz arithmetic is identical `scipy.signal.resample_poly(pair, 2, 1, axis=0)` on both channels, followed by adjusted search limits; resampling adds no new measured timing information. Direct parameterization is smaller.[2][10]
++
++The adapter reads interleaved four-channel **S32_LE** using a read-only memmap, normalizes integer samples, and analyzes default pairs `1:3,2:4`. CLI duration is mandatory; start/duration are validated against the raw frame count. Default windows are 1 s every 0.5 s. A nonaligned interval adds a final full window ending exactly at the requested frame boundary; `step > window` is rejected to prevent interior gaps. JSON records actual inspected bounds and covered/uninspected frame counts. Positive lag means the return follows the reference. Acceptance is **0..250 ms**, with a one-sample margin at either boundary. The detector inspects both signs out to half a window (±500 ms by default), rejecting a confidently established stronger reversed/out-of-range peak instead of choosing an in-range sidelobe. Ambiguity is checked before range classification.
++
++Each window, including each rejection, retains frame coordinates, lag when available, correlation, competing-peak separation and reason. Default confidence is correlation ≥0.5 and separation ≥6 dB from competing peaks outside a ±1 ms same-lobe exclusion. Silence, clipping, nonfinite samples, ambiguity and search boundaries reject. Each pair's diagnostic passes only with **≥95% accepted windows, every accepted lag ≤100 ms, and zero confidently established range/boundary violations**. Such violations are counted as `invalid_lag_windows` and hard-fail independently of the unknown-window allowance. JSON also records source path/hash/size/format/duration, configuration, upstream pin/source URL, adapter hash and dependency versions. Existing output files are refused. Exit codes: **0 diagnostic pass, 1 diagnostic failure, 2 invalid input/configuration**. Reports use schema `couch-offline-roundtrip/2`, always with `physical_qualification: false` and `calibration: uncalibrated`.
++
++The correlation routine has no chirp-template dependency: it can compare **old arbitrary pilots or ordinary common audio** when both observed signals have sufficient shared waveform structure. It does not prove that *any* stimulus is suitable. Pure tones, repeated identical pilots, codec changes, insufficient overlap, crosstalk and unequal filtering can cause ambiguous or biased peaks. The one-second analysis is a separate detector from the old 10 ms pilot method. Window acceptance/coverage is not independent pilot identity, calibrated SNR/isolation, sample-perfect delivery, continuous dropout detection, clock-drift qualification or per-packet deadline evidence. For fresh tests, prefer independent broadband left/right content with unique/nonperiodic structure; keep startup, quiet/isolation and tail phases rather than silently trimming them. Physical route/disconnection controls remain necessary even when digital negative controls pass.
++
++The [15 deterministic tests](../tests/audio-roundtrip.test.py) exercise 90 ms success, 101 ms threshold failure, reversed and 300 ms out-of-range paths, unrelated signals, silence, duplicated/zero-delay routing, boundary lag, tonal ambiguity, clipping/nonfinite samples, missing coverage, raw-format/duration errors, metadata/input preservation and CLI failure/no-overwrite behavior. They include mixed 20×90 ms + one 300/−90 ms aggregate failures despite 95.238% accepted coverage, ambiguous reversed peaks, nonaligned interval tails, rejected gapped schedules, and FFT-generated broadband delays at 4,799.5/4,800.5 samples (99.989583/100.010417 ms) on opposite sides of the threshold. All passed. Attribution and modification notice are in the adapter; the complete upstream Apache-2.0 license is retained in [LICENSE.sync-test](../scripts/LICENSE.sync-test). The upstream tree contains no NOTICE file.[5][11]
++
++## Read-only cf267-s1 comparison
++
++The existing [validation record](audio-video-refactor-validation.md#latest-cf267-s1-diagnostic-sustained-recording-complete) reports 610 sample seconds, with steady **[30,590)** fixed before acquisition. Its pilot-based results are median **101.339039/101.337865 ms**, p95 **101.475196/101.477313 ms**, 98.8393%/99.3750% pilot coverage and failed ≤1-sample affine residuals (**29.870465/29.780547 samples**). The original outcome stays failed/unqualified; calibrated uncertainty, continuous fidelity and packet deadlines remain unknown.[6]
++
++The new offline diagnostic used that same fixed steady interval, without editing the recording or old reports:
++
++- Raw: `/home/avoid/.t3/worktrees/couch/t3-9bc48314/.scratch/playback-refactor/physical-mac/cf267-s1/runs/sustained/capture.s32le`; **468,480,000 bytes**, SHA-256 **`872b8bd9648e77b329ae2fff0459ee919c29e41823885fc81e6d23ec17f8aef5`**, matching the original record.
++- Both intended pairs accepted **1,096/1,119 windows (97.9446%)**, with 23 low-correlation rejections each. Median L/R **101.3396875/101.3391667 ms**; p95 **101.4740625/101.4744792 ms**; maximum **101.591875/101.5925 ms**. Both fail ≤100 ms; process exit **1**.
++- Reversed `3:1,4:2`: **zero accepted** of 1,119 each; 1,096 out-of-range and 23 low-correlation rejections. Cross pairs `1:4,2:3`: **zero accepted**, all low-correlation. This supports correspondence for this recording, without furnishing calibrated channel isolation or arbitrary-stimulus guarantees.
++- New reports only: `/tmp/couch-sync-test-research/cf267-s1-offline-v1.json` (SHA-256 `ade0b469b1b6c342343ddb928cc3158b63bff66ae3338584ab976155df449c52`) and `cf267-s1-negative-v1.json` (`a9d228dfdf86c8f63250b6bf388b512d74f768f9a2a5295fcac2e7373cd6abfa`). Test receipt: `adapter-tests.log` in the same scratch directory. These are local artifacts, not committed prior physical evidence.
++
++This agreement is evidence that the adapted detector can recover the old waveform's electrical lag. It is **not stock sync-test validation at 101 ms**, nor a second physical acquisition, nor a replacement pass for the affine gate.
++
++## Fresh baseline-01 analysis
++
++After the hardware owner reported the new 60-second witness/generator complete (both exit 0) and root opened the software window, the unchanged adapter analyzed `.scratch/audio-roundtrip-sync/runs/baseline-01/capture.s32le`, fixed **[20,48)**. Both intended pairs accepted **54/55 windows (98.1818%)**, with one low-correlation rejection each. Median L/R was **100.1150000/100.1151042 ms**, p95 **100.5759583/100.5761667 ms**, maximum **100.5970833 ms** on both channels. Coverage passes; the ≤100 ms gate fails, with exit **1**. Reversed pairs accept zero (54 out-of-range and one low-correlation each); cross pairs accept zero (all 55 low-correlation each).
++
++Immutable new outputs in that run directory: `roundtrip-v1.json` (SHA-256 `fcd7f88a6ecdc095577f1376ad70e8dba830d59ccdb3bbc25c54e242ac50bc54`) and `roundtrip-negative-v1.json` (`b1bc0d062b47265db28e7aafb8c4d6e1365c5835295bb153429eb5f0a8fa3d28`). This is an offline electrical diagnostic of the newly supplied recording, with the same uncalibrated/continuous-fidelity limitations; hardware-route, lifecycle and acquisition qualification belong to the hardware owner's separate receipts.
++
++Independent review R1 reproduced two detector defects: a confident invalid lag could hide within the coverage allowance, and nonaligned tails or a step larger than the window could leave samples uninspected. Both failures were reproduced by regressions before their fixes; targeted regressions then passed, followed by all 15 tests. Red/green receipts are `/tmp/couch-sync-test-research/review-r1-p1-{red,green}.log`, `review-r1-p2-{red,green}.log` and `review-r1-all-green.log`.
++
++After those corrections, the unchanged raw was analyzed **once** again over the same [20,48) interval, with one corresponding negative-control run. `roundtrip-v2.json` (SHA-256 `eea9e6ff513a6d68fbdc14bf20b95b12f3c05b05ecb62c7eed6b3749b9387726`) retains exactly the same accepted counts and lag statistics: both intended pairs still **fail** ≤100 ms. Inspection covers raw frames **[960000,2304000)**, all **1,344,000 frames**, with no uninspected frames. `roundtrip-negative-v2.json` (`4ef5425e9257cacc7ac565c0389793b2b22f02886e98899f9a817d3f9f69c1a8`) again accepts zero windows in every control pair; each reversed pair explicitly counts 54 confidently invalid lags. Both v2 commands exit 1. The v1 files/hashes and original red baseline are preserved. The corrected adapter is frozen at SHA-256 `9c6fb9f9b01656850b8961b04813f33b6856d5f397398df9627434f68b53668d`.
++
++## Exact setup and commands
++
++Upstream inspection/install, with `uv` already available (official installation: [uv docs](https://docs.astral.sh/uv/getting-started/installation/)):
++
++```bash
++git clone https://github.com/Sendspin/sync-test.git /tmp/sync-test-pinned
++cd /tmp/sync-test-pinned
++git checkout --detach abb99c0bb7c6e4dee95c5b174181db76aa96a31c
++uv sync --frozen
++uv run --frozen python -m sync_test.test_measurement
++uv run --frozen sync-generate-chirp
++uv run --frozen sync-measure --list
++# Set CAPTURE_DEVICE_ID to the chosen numeric ID; requires separately arranged playback/wiring.
++uv run --frozen sync-measure --device "$CAPTURE_DEVICE_ID" --duration 60 --output new-sync.csv
++uv run --frozen sync-analyze new-sync.csv --plot
++```
++
++These are stock commands, **not** the recommended absolute-delay test, and no capture/playback command above was executed in this research. The duration and output caveats above apply. For a live-Couch test, the generator signal must enter actual physical Live capture→Couch→Sendspin browser→analog return; loading the FLAC as a shared URL bypasses live capture and tests a different path.[1][2][4]
++
++Minimal offline dependency setup, from the Couch checkout (no system install, Couch build or sounddevice needed):
++
++```bash
++uv venv --python 3.13 /tmp/couch-roundtrip-venv
++uv pip install --python /tmp/couch-roundtrip-venv/bin/python numpy==2.3.5 scipy==1.16.3
++PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
++  /tmp/couch-roundtrip-venv/bin/python tests/audio-roundtrip.test.py
++PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
++  /tmp/couch-roundtrip-venv/bin/python scripts/audio-roundtrip.py \
++  /home/avoid/.t3/worktrees/couch/t3-9bc48314/.scratch/playback-refactor/physical-mac/cf267-s1/runs/sustained/capture.s32le \
++  --sample-rate 48000 --pairs 1:3,2:4 --start 30 --duration 560 \
++  --min-lag-ms 0 --max-lag-ms 250 --threshold-ms 100 --min-coverage 0.95 \
++  --output /tmp/cf267-s1-new-roundtrip.json
++```
++
++The final command intentionally returns **1** for the retained baseline. Our executed commands used the identically pinned NumPy/SciPy in `/tmp/couch-sync-test-research/sync-test/.venv/bin/python`; the standalone uv binary/cache and every analysis result stayed under the assigned scratch directory. Controls and old-raw analysis finished before fresh acquisition was authorized; do not run analysis/tests/builds during an acquisition quiet window.
++
++Remaining dependencies for a new **physical qualification** are a separately coordinated four-channel recording, verified actual product input/output routing and independent analog controls, current calibration/uncertainty, agreed startup/recovery and continuity criteria, and an actual product change if the measured path remains over 100 ms. The adapter supplies measurement diagnostics; it supplies no capture driver, product latency fix or hardware qualification.
++
++## Primary sources
++
++[1]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/README.md
++[2]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/src/sync_test/measure_sync.py#L31-L49
++[3]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/src/sync_test/analyze.py#L56-L138
++[4]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/src/sync_test/generate_chirp.py
++[5]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/pyproject.toml
++[6]: audio-video-refactor-validation.md#latest-cf267-s1-diagnostic-sustained-recording-complete
++[7]: https://python-sounddevice.readthedocs.io/en/latest/installation.html
++[8]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/src/sync_test/test_measurement.py#L58-L190
++[9]: https://api.github.com/repos/Sendspin/sync-test/issues?state=all&per_page=100
++[10]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.resample_poly.html
++[11]: https://github.com/Sendspin/sync-test/blob/abb99c0bb7c6e4dee95c5b174181db76aa96a31c/LICENSE
+diff --git a/patches/@sendspin%2Fsendspin-js@5.0.0.patch b/patches/@sendspin%2Fsendspin-js@5.0.0.patch
+index f9795c3..f52ba8b 100644
+--- a/patches/@sendspin%2Fsendspin-js@5.0.0.patch
++++ b/patches/@sendspin%2Fsendspin-js@5.0.0.patch
+@@ -208,10 +208,33 @@ index 8a5d7a449beadbe2dfb1251b3e72f7fe1f35c110..be948e9ec40ab1fcd483e24e1633dd80
+          this.useNativeOpus = true;
+          this.flacDecodingContext = null;
+ diff --git a/dist/audio/scheduler.d.ts b/dist/audio/scheduler.d.ts
+-index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665028fca01 100644
++index 872beb035e861ab6f81ba0a98b711c5336d1a97a..c90860636cf75f23c243fe3c5d6b6a2f11ac0cd3 100644
+ --- a/dist/audio/scheduler.d.ts
+ +++ b/dist/audio/scheduler.d.ts
+-@@ -98,6 +98,10 @@ export declare class AudioScheduler {
++@@ -14,6 +14,7 @@ export interface AudioSchedulerOptions {
++     stateManager: StateManager;
++     timeFilter: SendspinTimeFilter;
++     outputMode?: AudioOutputMode;
+++    outputLatencyHint?: number;
++     audioElement?: HTMLAudioElement;
++     isAndroid?: boolean;
++     isCastRuntime?: boolean;
++@@ -50,12 +51,14 @@ export declare class AudioScheduler {
++     private scheduleTimeout;
++     private refillTimeout;
++     private queueProcessScheduled;
+++    private promptQueueProcessing;
++     private clockSource;
++     private recorrectionMonitor;
++     private latencyTracker;
++     private stateManager;
++     private timeFilter;
++     private outputMode;
+++    private outputLatencyHint;
++     private audioElement?;
++     private isAndroid;
++     private isCastRuntime;
++@@ -98,6 +101,10 @@ export declare class AudioScheduler {
+      private resetSyncErrorEma;
+      private copyBuffer;
+      private adjustBufferSamples;
+@@ -222,7 +245,7 @@ index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665
+      initAudioContext(): void;
+      resumeAudioContext(): Promise<void>;
+      private cutScheduledSources;
+-@@ -122,7 +126,7 @@ export declare class AudioScheduler {
++@@ -122,7 +129,7 @@ export declare class AudioScheduler {
+      private computeTargetPlaybackTime;
+      startAudioElement(): void;
+      stopAudioElement(): void;
+@@ -232,10 +255,30 @@ index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665
+      getAudioContext(): AudioContext | null;
+  }
+ diff --git a/dist/audio/scheduler.js b/dist/audio/scheduler.js
+-index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9fa5d010c6 100644
++index b06314d3dcf68511af39f63168709d53d7752ed6..5b1b6bd641e595fde57fd0e431cb63f4fb738003 100644
+ --- a/dist/audio/scheduler.js
+ +++ b/dist/audio/scheduler.js
+-@@ -416,6 +416,21 @@ export class AudioScheduler {
++@@ -69,6 +69,11 @@ const DEFAULT_CORRECTION_THRESHOLDS = {
++ };
++ export class AudioScheduler {
++     constructor(options) {
+++        const outputLatencyHint = options.outputLatencyHint;
+++        if (outputLatencyHint !== undefined && (!Number.isFinite(outputLatencyHint) || outputLatencyHint < 0)) {
+++            throw new RangeError("outputLatencyHint must be finite non-negative seconds");
+++        }
+++        this.outputLatencyHint = outputLatencyHint;
++         this.audioContext = null;
++         this.gainNode = null;
++         this.streamDestination = null;
++@@ -89,6 +94,7 @@ export class AudioScheduler {
++         this.scheduleTimeout = null;
++         this.refillTimeout = null;
++         this.queueProcessScheduled = false;
+++        this.promptQueueProcessing = false;
++         // Sub-modules
++         this.clockSource = new ClockSource();
++         this.stateManager = options.stateManager;
++@@ -416,6 +422,22 @@ export class AudioScheduler {
+              return buffer;
+          }
+      }
+@@ -244,12 +287,13 @@ index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9f
+ +    get outputReady() { return this.audioContext?.state === "running" && this.clockSource.active === "timestamp" && this.outputMode === "direct"; }
+ +    async prepareOutput() {
+ +        this.initAudioContext();
+++        const generation = this.stateManager.streamGeneration;
+ +        await this.resumeAudioContext();
+ +        const context = this.audioContext;
+ +        for (let attempt = 0; attempt < 75; attempt++) {
+-+            if (this.audioContext !== context || context.state !== "running") throw new Error("Audio output changed during preparation.");
+++            if (generation !== this.stateManager.streamGeneration || this.audioContext !== context || context.state !== "running") throw new Error("Audio output changed during preparation.");
+ +            this.clockSource.getTimingSnapshot(context, this.measurePlayoutLatencySec());
+-+            if (this.outputReady) return;
+++            if (this.outputReady) { this.promptQueueProcessing = true; return; }
+ +            await new Promise(resolve => setTimeout(resolve, 40));
+ +        }
+ +        throw new Error("This output has no stable timestamp clock for live audio: " + (this.clockSource.lastRejectReason ?? "timestamp warmup incomplete"));
+@@ -257,7 +301,35 @@ index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9f
+      initAudioContext() {
+          if (this.audioContext)
+              return;
+-@@ -843,7 +858,7 @@ export class AudioScheduler {
++@@ -428,7 +450,7 @@ export class AudioScheduler {
++             navigator.audioSession.type = "playback";
++         }
++         const streamSampleRate = this.stateManager.currentStreamFormat?.sample_rate || 48000;
++-        this.audioContext = new AudioContext({ sampleRate: streamSampleRate });
+++        this.audioContext = new AudioContext({ sampleRate: streamSampleRate, ...(this.outputLatencyHint === undefined ? {} : { latencyHint: this.outputLatencyHint }) });
++         this.gainNode = this.audioContext.createGain();
++         const audioElement = this.audioElement;
++         if (this.outputMode === "direct") {
++@@ -582,7 +604,7 @@ export class AudioScheduler {
++         if (this.queueProcessScheduled)
++             return;
++         this.queueProcessScheduled = true;
++-        if (typeof globalThis.setTimeout === "function") {
+++        if (!(this.promptQueueProcessing && this.outputMode === "direct") && typeof globalThis.setTimeout === "function") {
++             this.scheduleTimeout = globalThis.setTimeout(() => {
++                 this.scheduleTimeout = null;
++                 this.queueProcessScheduled = false;
++@@ -590,7 +612,9 @@ export class AudioScheduler {
++             }, 15);
++             return;
++         }
+++        const generation = this.stateManager.streamGeneration;
++         const run = () => {
+++            if (generation !== this.stateManager.streamGeneration) return;
++             this.queueProcessScheduled = false;
++             this.processAudioQueue();
++         };
++@@ -843,7 +867,7 @@ export class AudioScheduler {
+              this.audioElement.pause();
+          }
+      }
+@@ -266,13 +338,13 @@ index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9f
+          this.recorrectionMonitor.fullReset();
+          this.cancelScheduledRefill();
+          this.scheduledSources.forEach((entry) => {
+-@@ -864,8 +879,7 @@ export class AudioScheduler {
++@@ -864,8 +888,7 @@ export class AudioScheduler {
+          this.stateManager.resetStreamAnchors();
+          this.resetScheduledPlaybackState();
+          this.resyncCount = 0;
+ -        this.latencyTracker.reset();
+ -        this.clockSource.reset();
+-+        if (!preserveClock) { this.latencyTracker.reset(); this.clockSource.reset(); }
+++        if (!preserveClock) { this.promptQueueProcessing = false; this.latencyTracker.reset(); this.clockSource.reset(); }
+      }
+      close() {
+          this.clearBuffers();
+@@ -460,7 +532,7 @@ index 862743776d68a8975f71c12a7d01e3fce8cb45b5..c7adec4fd53ba0a6fd9f9c3ef2a40cf4
+       * Set the sync correction mode at runtime.
+       */
+ diff --git a/dist/index.js b/dist/index.js
+-index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf67227630 100644
++index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..1c5ab439a233ae63c7afeee28d0f1118189d5b1c 100644
+ --- a/dist/index.js
+ +++ b/dist/index.js
+ @@ -34,7 +34,7 @@ export class SendspinPlayer {
+@@ -472,7 +544,15 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
+          this.ownsAudioElement =
+              outputMode === "media-element" && !config.audioElement;
+          if (this.ownsAudioElement && typeof document === "undefined") {
+-@@ -106,7 +106,7 @@ export class SendspinPlayer {
++@@ -84,6 +84,7 @@ export class SendspinPlayer {
++             stateManager: this.core._stateManager,
++             timeFilter: this.core._timeFilter,
++             outputMode,
+++            outputLatencyHint: config.outputLatencyHint,
++             audioElement: config.audioElement,
++             isAndroid,
++             isCastRuntime,
++@@ -106,7 +107,7 @@ export class SendspinPlayer {
+                  console.warn("Sendspin: Failed to resume AudioContext:", error);
+              });
+              if (!isFormatUpdate) {
+@@ -481,7 +561,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
+              }
+              this.scheduler.startAudioElement();
+          };
+-@@ -125,9 +125,11 @@ export class SendspinPlayer {
++@@ -125,9 +126,11 @@ export class SendspinPlayer {
+          };
+          // Wire connection lifecycle for disconnect playback deferral
+          this.core.onConnectionOpen = () => {
+@@ -493,7 +573,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
+              if (this.suppressDisconnectPlaybackReset) {
+                  return;
+              }
+-@@ -167,6 +169,16 @@ export class SendspinPlayer {
++@@ -167,6 +170,16 @@ export class SendspinPlayer {
+       * Initialize and resume audio playback. Call this directly from a click or
+       * tap handler, before any other await, to satisfy browser autoplay policies.
+       */
+@@ -510,7 +590,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
+      async unlock() {
+          this.scheduler.initAudioContext();
+          await this.scheduler.resumeAudioContext();
+-@@ -181,6 +193,7 @@ export class SendspinPlayer {
++@@ -181,6 +194,7 @@ export class SendspinPlayer {
+       * @param reason - Optional reason for disconnecting (default: 'restart')
+       */
+      disconnect(reason = "restart") {
+@@ -518,7 +598,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
+          this.cancelPendingDisconnectPlaybackReset();
+          this.suppressDisconnectPlaybackReset = true;
+          this.core.disconnect(reason);
+-@@ -218,6 +231,7 @@ export class SendspinPlayer {
++@@ -218,6 +232,7 @@ export class SendspinPlayer {
+       * to transient fluctuations. Throws RangeError if not a non-negative finite
+       * number.
+       */
+@@ -527,7 +607,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
+          this.core.setMinBufferMs(minBufferMs);
+      }
+ diff --git a/dist/types.d.ts b/dist/types.d.ts
+-index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead34887dc4 100644
++index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..f97dd081f2c404f4fed4b79204721064ae25e16e 100644
+ --- a/dist/types.d.ts
+ +++ b/dist/types.d.ts
+ @@ -98,6 +98,11 @@ export interface ClientTime {
+@@ -550,7 +630,7 @@ index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead
+              required_lead_time_ms?: number;
+              min_buffer_ms?: number;
+              supported_commands?: string[];
+-@@ -384,6 +390,10 @@ export interface SupportedFormat {
++@@ -384,6 +390,16 @@ export interface SupportedFormat {
+      bit_depth: number;
+  }
+  export interface SendspinPlayerConfig extends SendspinCoreConfig {
+@@ -558,6 +638,12 @@ index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead
+ +    onConnectionChange?: (connected: boolean) => void;
+ +    /** Explicit direct output for deadline-admitted playback; relaxed defaults unchanged. */
+ +    outputMode?: "direct" | "media-element";
+++    /**
+++     * Preferred AudioContext output latency in seconds; finite and nonnegative.
+++     * The browser may choose another latency. Omitted keeps its default.
+++     * This request does not replace the measured output latency estimate.
+++     */
+++    outputLatencyHint?: number;
+      /**
+       * HTMLAudioElement for media-element output mode.
+       * Auto-created on mobile browsers if not provided.
+diff --git a/patches/README.md b/patches/README.md
+index 56e15b9..2bd2c3d 100644
+--- a/patches/README.md
++++ b/patches/README.md
+@@ -43,6 +43,40 @@ cannot overwrite its replacement. Full close destroys the libopus decoder and
+ resampler. The regression cancels during dynamic imports, prepares again and
+ actually decodes a stereo Opus packet using the upstream fallback.
+ 
++Explicitly prepared direct output processes decoded arrivals through the existing
++coalesced microtask path instead of waiting 15 ms. Couch uses this preparation for
++live audio; unprepared relaxed direct output and media-element output retain the
++15 ms batching timer. Upstream explains the original wait as batching out-of-order
++asynchronous FLAC decodes in
++[the pre-refactor source](https://github.com/Sendspin/sendspin-js/blob/7f388ca24d897c77229e71d8831c68fce9b9bc0d/src/audio-processor.ts#L1657).
++
++Future horizon refills retain their timers. Stream generation invalidates pending
++microtasks and retired preparation; full clear, output invalidation and disconnect
++withdraw prompt processing. A clock-preserving stream start keeps prepared output
++prompt. Deadlines, output-latency compensation and late-packet dropping stay in
++the existing scheduler. This removes a scheduling wait, not a measured amount of
++physical RTT. `tests/sendspin-sdk.test.ts` feeds decoded arrivals through the real
++SDK with fake Web Audio/time boundaries and covers coalescing, timestamp order,
++preparation/clear/disconnect, expired input and timed future refills.
++
++After changing patch bytes, refresh/verify patched-dependency metadata with the
++project-pinned Bun during an authorized install window, and verify a frozen install
++materializes this scheduler before packaging. Any resulting `bun.lock` update
++belongs with that install; do not edit dependency checksums by hand. The local
++runtime edit used for focused tests is not a substitute for clean materialization.
++
++`SendspinPlayerConfig.outputLatencyHint?: number` requests an AudioContext output
++latency in seconds. Player forwards it to the scheduler, which rejects supplied
++nonfinite or negative values and passes `latencyHint` only when supplied; zero is
++valid. Omission retains the browser default. Couch requests `0.002` only for Live.
++The browser may choose another latency: `OutputLatencyTracker`, compensation,
++preparation declarations, admission and expired-packet dropping still use the
++actual runtime path. The hint never replaces an output estimate or lowers a
++declared requirement. See the official
++[AudioContext option](https://www.w3.org/TR/webaudio-1.1/#dom-audiocontextoptions-latencyhint).
++`tests/sendspin-sdk.test.ts` exercises actual public player forwarding, omitted
++and zero hints, invalid values, and actual latency differing from the request.
++
+ # Node Sendspin 0.6.2 isolation patch
+ 
+ `@sonn-audio/node-sendspin@0.6.2.patch` applies through the same frozen Bun
+diff --git a/scripts/LICENSE.sync-test b/scripts/LICENSE.sync-test
+new file mode 100644
+index 0000000..de1fe61
+--- /dev/null
++++ b/scripts/LICENSE.sync-test
+@@ -0,0 +1,190 @@
++                                 Apache License
++                           Version 2.0, January 2004
++                        http://www.apache.org/licenses/
++
++   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
++
++   1. Definitions.
++
++      "License" shall mean the terms and conditions for use, reproduction,
++      and distribution as defined by Sections 1 through 9 of this document.
++
++      "Licensor" shall mean the copyright owner or entity authorized by
++      the copyright owner that is granting the License.
++
++      "Legal Entity" shall mean the union of the acting entity and all
++      other entities that control, are controlled by, or are under common
++      control with that entity. For the purposes of this definition,
++      "control" means (i) the power, direct or indirect, to cause the
++      direction or management of such entity, whether by contract or
++      otherwise, or (ii) ownership of fifty percent (50%) or more of the
++      outstanding shares, or (iii) beneficial ownership of such entity.
++
++      "You" (or "Your") shall mean an individual or Legal Entity
++      exercising permissions granted by this License.
++
++      "Source" form shall mean the preferred form for making modifications,
++      including but not limited to software source code, documentation
++      source, and configuration files.
++
++      "Object" form shall mean any form resulting from mechanical
++      transformation or translation of a Source form, including but
++      not limited to compiled object code, generated documentation,
++      and conversions to other media types.
++
++      "Work" shall mean the work of authorship made available under
++      the License, as indicated by a copyright notice that is included in
++      or attached to the work (an example is provided in the Appendix below).
++
++      "Derivative Works" shall mean any work, whether in Source or Object
++      form, that is based on (or derived from) the Work and for which the
++      editorial revisions, annotations, elaborations, or other transformations
++      represent, as a whole, an original work of authorship. For the purposes
++      of this License, Derivative Works shall not include works that remain
++      separable from, or merely link (or bind by name) to the interfaces of,
++      the Work and Derivative Works thereof.
++
++      "Contribution" shall mean, as submitted to the Licensor for inclusion
++      in the Work by the copyright owner or by an individual or Legal Entity
++      authorized to submit on behalf of the copyright owner. For the purposes
++      of this definition, "submitted" means any form of electronic, verbal,
++      or written communication sent to the Licensor or its representatives,
++      including but not limited to communication on electronic mailing lists,
++      source code control systems, and issue tracking systems that are managed
++      by, or on behalf of, the Licensor for the purpose of discussing and
++      improving the Work, but excluding communication that is conspicuously
++      marked or designated in writing by the copyright owner as "Not a
++      Contribution."
++
++      "Contributor" shall mean Licensor and any Legal Entity on behalf of
++      whom a Contribution has been received by the Licensor and included
++      within the Work.
++
++   2. Grant of Copyright License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      copyright license to reproduce, prepare Derivative Works of,
++      publicly display, publicly perform, sublicense, and distribute the
++      Work and such Derivative Works in Source or Object form.
++
++   3. Grant of Patent License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      (except as stated in this section) patent license to make, have made,
++      use, offer to sell, sell, import, and otherwise transfer the Work,
++      where such license applies only to those patent claims licensable
++      by such Contributor that are necessarily infringed by their
++      Contribution(s) alone or by the combination of their Contribution(s)
++      with the Work to which such Contribution(s) was submitted. If You
++      institute patent litigation against any entity (including a cross-claim
++      or counterclaim in a lawsuit) alleging that the Work or any Contribution
++      embodied within the Work constitutes direct or contributory patent
++      infringement, then any patent licenses granted to You under this License
++      for that Work shall terminate as of the date such litigation is filed.
++
++   4. Redistribution. You may reproduce and distribute copies of the
++      Work or Derivative Works thereof in any medium, with or without
++      modifications, and in Source or Object form, provided that You
++      meet the following conditions:
++
++      (a) You must give any other recipients of the Work or Derivative
++          Works a copy of this License; and
++
++      (b) You must cause any modified files to carry prominent notices
++          stating that You changed the files; and
++
++      (c) You must retain, in the Source form of any Derivative Works
++          that You distribute, all copyright, patent, trademark, and
++          attribution notices from the Source form of the Work,
++          excluding those notices that do not pertain to any part of
++          the Derivative Works; and
++
++      (d) If the Work includes a "NOTICE" text file as part of its
++          distribution, You must include a readable copy of the
++          attribution notices contained within such NOTICE file, in
++          at least one of the following places: within a NOTICE text
++          file distributed as part of the Derivative Works; within
++          the Source form or documentation, if provided along with the
++          Derivative Works; or, within a display generated by the
++          Derivative Works, if and wherever such third-party notices
++          normally appear. The contents of the NOTICE file are for
++          informational purposes only and do not modify the License.
++          You may add Your own attribution notices within Derivative
++          Works that You distribute, alongside or in addition to the
++          NOTICE text from the Work, provided that such additional
++          attribution notices cannot be construed as modifying the License.
++
++      You may add Your own license statement for Your modifications and
++      may provide additional grant of rights to use, copy, modify, merge,
++      publish, distribute, sublicense, and/or sell copies of the
++      Contribution, either on its own or as part of a larger Work.
++
++   5. Submission of Contributions. Unless You explicitly state otherwise,
++      any Contribution intentionally submitted for inclusion in the Work
++      by You to the Licensor shall be under the terms and conditions of
++      this License, without any additional terms or conditions.
++      Notwithstanding the above, nothing herein shall supersede or modify
++      the terms of any separate license agreement you may have executed
++      with Licensor regarding such Contributions.
++
++   6. Trademarks. This License does not grant permission to use the trade
++      names, trademarks, service marks, or product names of the Licensor,
++      except as required for reasonable and customary use in describing the
++      origin of the Work and reproducing the content of the NOTICE file.
++
++   7. Disclaimer of Warranty. Unless required by applicable law or
++      agreed to in writing, Licensor provides the Work (and each
++      Contributor provides its Contributions) on an "AS IS" BASIS,
++      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++      implied, including, without limitation, any warranties or conditions
++      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
++      PARTICULAR PURPOSE. You are solely responsible for determining the
++      appropriateness of using or reproducing the Work and assume any
++      risks associated with Your exercise of permissions under this License.
++
++   8. Limitation of Liability. In no event and under no legal theory,
++      whether in tort (including negligence), contract, or otherwise,
++      unless required by applicable law (such as deliberate and grossly
++      negligent acts) or agreed to in writing, shall any Contributor be
++      liable to You for damages, including any direct, indirect, special,
++      incidental, or exemplary damages of any character arising as a
++      result of this License or out of the use or inability to use the
++      Work (including but not limited to damages for loss of goodwill,
++      work stoppage, computer failure or malfunction, or all other
++      commercial damages or losses), even if such Contributor has been
++      advised of the possibility of such damages.
++
++   9. Accepting Warranty or Additional Liability. While redistributing
++      the Work or Derivative Works thereof, You may choose to offer,
++      and charge a fee for, acceptance of support, warranty, indemnity,
++      or other liability obligations and/or rights consistent with this
++      License. However, in accepting such obligations, You may offer only
++      conditions consistent with this License, in a completely
++      separate legal document, and in a manner that does not create a
++      conflict of interest or ambiguity regarding the terms of this License,
++      and shall not modify the terms of this License.
++
++   END OF TERMS AND CONDITIONS
++
++   APPENDIX: How to apply the Apache License to your work.
++
++      To apply the Apache License to your work, attach the following
++      boilerplate notice, with the fields enclosed by brackets "[]"
++      replaced with your own identifying information. (Don't include
++      the brackets!)  The text should be enclosed in the appropriate
++      comment syntax for the programming file format. Please also include
++      a "NOTICE" file with the copyright notice.
++
++      Copyright [yyyy] [name of copyright owner]
++
++      Licensed under the Apache License, Version 2.0 (the "License");
++      you may not use this file except in compliance with the License.
++      You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++      Unless required by applicable law or agreed to in writing, software
++      distributed under the License is distributed on an "AS IS" BASIS,
++      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++      See the License for the specific language governing permissions and
++      limitations under the License.
+diff --git a/scripts/audio-roundtrip.py b/scripts/audio-roundtrip.py
+new file mode 100644
+index 0000000..2e4c518
+--- /dev/null
++++ b/scripts/audio-roundtrip.py
+@@ -0,0 +1,225 @@
++#!/usr/bin/env python3
++"""Offline electrical reference-to-return delay from interleaved four-channel S32_LE.
++
++Normalization, FFT correlation and sinc interpolation adapted from Kevin Ahrendt's
++Sendspin/sync-test, commit abb99c0bb7c6e4dee95c5b174181db76aa96a31c,
++src/sync_test/measure_sync.py (Apache-2.0; see LICENSE.sync-test).
++Changes: explicit rate/lag limits, offline input, confidence guards and fail gates.
++This reports a sampled, uncalibrated electrical diagnostic, not physical qualification.
++"""
++import argparse
++import hashlib
++import json
++import math
++from pathlib import Path
++import sys
++
++import numpy as np
++import scipy
++from scipy import signal
++
++UPSTREAM_COMMIT = "abb99c0bb7c6e4dee95c5b174181db76aa96a31c"
++UPSTREAM_SOURCE = f"https://github.com/Sendspin/sync-test/blob/{UPSTREAM_COMMIT}/src/sync_test/measure_sync.py"
++
++
++def sinc_offset(correlation, peak, factor=100, radius=50):
++    """Upstream's FFT sinc peak refinement, in original sample coordinates."""
++    start = max(0, peak - radius)
++    window = correlation[start:min(len(correlation), peak + radius + 1)]
++    n = len(window)
++    if n < 3:
++        return 0.0
++    spectrum = np.fft.fft(window)
++    padded = np.zeros(n * factor, dtype=complex)
++    padded[:(n + 1) // 2] = spectrum[:(n + 1) // 2]
++    padded[-(n // 2):] = spectrum[-(n // 2):]
++    refined = np.argmax(np.fft.ifft(padded).real)
++    return float(refined / factor - (peak - start))
++
++
++def measure(reference, returned, sample_rate=48000, min_lag_ms=0, max_lag_ms=250,
++            min_correlation=0.5, min_separation_db=6):
++    """Find delay; inspect both signs and longer delays before accepting a peak."""
++    result = {"accepted": False, "reason": None, "lag_ms": None,
++              "correlation": None, "separation_db": None}
++    if len(reference) != len(returned) or len(reference) < 3:
++        raise ValueError("equal nonempty windows required")
++    channels = [np.asarray(x, dtype=np.float64) for x in (reference, returned)]
++    if not all(np.all(np.isfinite(x)) for x in channels):
++        result["reason"] = "nonfinite"
++        return result
++    if any(np.max(np.abs(x)) >= 0.999999 for x in channels):
++        result["reason"] = "clipping"
++        return result
++    channels = [x - np.mean(x) for x in channels]
++    scales = [np.std(x) for x in channels]
++    if min(scales) < 1e-7:
++        result["reason"] = "silence"
++        return result
++    reference, returned = [x / scale for x, scale in zip(channels, scales)]
++    n = len(reference)
++    # Swapping upstream's correlate arguments gives positive reference->return delay.
++    corr = signal.correlate(returned, reference, mode="full", method="fft") / n
++    # At least half a window overlaps. Looking outside the acceptance range catches
++    # reversed paths and stronger out-of-range peaks instead of reporting a sidelobe.
++    guard = n // 2
++    center = n - 1
++    correlation = corr[center - guard:center + guard + 1]
++    peak = int(np.argmax(correlation))
++    strength = float(correlation[peak])
++    lag_samples = peak - guard
++    result["correlation"] = strength
++    if strength < min_correlation:
++        result["reason"] = "low_correlation"
++        return result
++    lag_ms = lag_samples * 1000 / sample_rate
++    result["lag_ms"] = lag_ms
++    # Ignore the same correlation lobe within 1 ms, then compare competing peaks.
++    competitors = correlation.copy()
++    radius = max(1, round(sample_rate / 1000))
++    competitors[max(0, peak - radius):peak + radius + 1] = -np.inf
++    second = max(0.0, float(np.max(competitors)))
++    separation = 20 * math.log10(strength / max(second, 1e-15))
++    result["separation_db"] = separation
++    if separation < min_separation_db:
++        result["reason"] = "ambiguous"
++        return result
++    refined = lag_samples + sinc_offset(correlation, peak)
++    lag_ms = refined * 1000 / sample_rate
++    result["lag_ms"] = lag_ms
++    if not min_lag_ms <= lag_ms <= max_lag_ms:
++        result["reason"] = "out_of_range"
++        return result
++    margin = 1000 / sample_rate
++    if lag_ms <= min_lag_ms + margin or lag_ms >= max_lag_ms - margin:
++        result["reason"] = "boundary"
++        return result
++    result.update(accepted=True, reason="accepted")
++    return result
++
++
++def sha256(path):
++    digest = hashlib.sha256()
++    with path.open("rb") as stream:
++        for block in iter(lambda: stream.read(1024 * 1024), b""):
++            digest.update(block)
++    return digest.hexdigest()
++
++
++def analyze(path, *, sample_rate=48000, pairs=((1, 3), (2, 4)), start=0,
++            duration, window=1, step=0.5, min_lag_ms=0, max_lag_ms=250,
++            threshold_ms=100, min_coverage=0.95, min_correlation=0.5,
++            min_separation_db=6):
++    path = Path(path).resolve()
++    if sample_rate <= 0 or start < 0 or duration <= 0 or window <= 0 or step <= 0:
++        raise ValueError("rate/duration/window/step must be positive; start must be nonnegative")
++    if step > window:
++        raise ValueError("step must not exceed window (uninspected gaps)")
++    if not all(math.isfinite(x) for x in (start, duration, window, step, min_lag_ms,
++                                         max_lag_ms, threshold_ms, min_coverage,
++                                         min_correlation, min_separation_db)):
++        raise ValueError("configuration must be finite")
++    if not 0 <= min_lag_ms < max_lag_ms < window * 500:
++        raise ValueError("require 0 <= min lag < max lag < half the window in ms")
++    if not min_lag_ms <= threshold_ms <= max_lag_ms:
++        raise ValueError("threshold must lie within lag range")
++    if not 0 < min_coverage <= 1 or not 0 < min_correlation <= 1 or min_separation_db <= 0:
++        raise ValueError("invalid confidence or coverage threshold")
++    if not pairs or any(a == b or not 1 <= a <= 4 or not 1 <= b <= 4 for a, b in pairs):
++        raise ValueError("pairs must name distinct channels in 1..4")
++    size = path.stat().st_size
++    if not size or size % 16:
++        raise ValueError("input must contain complete four-channel S32_LE frames")
++    frames = size // 16
++    first, count = round(start * sample_rate), round(duration * sample_rate)
++    width, stride = round(window * sample_rate), round(step * sample_rate)
++    if width < 3 or stride < 1 or count < width or first + count > frames:
++        raise ValueError("requested interval must fit input and contain a full window")
++    starts = list(range(first, first + count - width + 1, stride))
++    if starts[-1] + width < first + count:
++        starts.append(first + count - width)
++    raw = np.memmap(path, dtype="<i4", mode="r", shape=(frames, 4))
++    windows = []
++    for begin in starts:
++        block = raw[begin:begin + width].astype(np.float64) / 2147483648
++        for a, b in pairs:
++            result = measure(block[:, a - 1], block[:, b - 1], sample_rate,
++                             min_lag_ms, max_lag_ms, min_correlation, min_separation_db)
++            windows.append({"pair": f"{a}:{b}", "start_frame": begin,
++                            "end_frame": begin + width, **result})
++    summaries = []
++    for a, b in pairs:
++        rows = [x for x in windows if x["pair"] == f"{a}:{b}"]
++        lags = [x["lag_ms"] for x in rows if x["accepted"]]
++        coverage = len(lags) / len(rows)
++        invalid_lags = sum(x["reason"] in ("out_of_range", "boundary") for x in rows)
++        reasons = {reason: sum(x["reason"] == reason for x in rows)
++                   for reason in sorted({x["reason"] for x in rows})}
++        summaries.append({"pair": f"{a}:{b}", "expected_windows": len(rows),
++                          "accepted_windows": len(lags), "coverage": coverage,
++                          "invalid_lag_windows": invalid_lags,
++                          "reasons": reasons,
++                          "median_ms": float(np.median(lags)) if lags else None,
++                          "p95_ms": float(np.percentile(lags, 95)) if lags else None,
++                          "max_ms": max(lags) if lags else None,
++                          "pass": bool(lags and not invalid_lags and coverage >= min_coverage
++                                       and max(lags) <= threshold_ms)})
++    return {"schema": "couch-offline-roundtrip/2", "diagnostic_pass": all(x["pass"] for x in summaries),
++            "physical_qualification": False, "calibration": "uncalibrated",
++            "inspection": {"start_frame": starts[0], "end_frame": starts[-1] + width,
++                           "covered_frames": count, "uninspected_frames": 0},
++            "source": {"path": str(path), "sha256": sha256(path), "bytes": size,
++                       "frames": frames, "duration_seconds": frames / sample_rate,
++                       "format": "S32_LE", "channels": 4},
++            "detector": {"upstream_commit": UPSTREAM_COMMIT, "upstream_source": UPSTREAM_SOURCE,
++                         "script_sha256": sha256(Path(__file__)),
++                         "numpy": np.__version__, "scipy": scipy.__version__,
++                         "interpolation_factor": 100, "competing_peak_exclusion_ms": 1,
++                         "guard_lag_ms": [-width * 500 / sample_rate, width * 500 / sample_rate]},
++            "config": {"sample_rate": sample_rate, "pairs": [f"{a}:{b}" for a, b in pairs],
++                       "start_seconds": start, "duration_seconds": duration,
++                       "first_frame": first, "interval_frames": count,
++                       "window_frames": width, "step_frames": stride,
++                       "min_lag_ms": min_lag_ms, "max_lag_ms": max_lag_ms,
++                       "threshold_ms": threshold_ms, "min_coverage": min_coverage,
++                       "min_correlation": min_correlation, "min_separation_db": min_separation_db},
++            "pairs": summaries, "windows": windows}
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("input", type=Path)
++    parser.add_argument("--output", type=Path, required=True, help="new JSON file; never overwrite")
++    parser.add_argument("--sample-rate", type=int, default=48000)
++    parser.add_argument("--pairs", default="1:3,2:4")
++    parser.add_argument("--start", type=float, default=0)
++    parser.add_argument("--duration", type=float, required=True)
++    parser.add_argument("--window", type=float, default=1)
++    parser.add_argument("--step", type=float, default=0.5)
++    parser.add_argument("--min-lag-ms", type=float, default=0)
++    parser.add_argument("--max-lag-ms", type=float, default=250)
++    parser.add_argument("--threshold-ms", type=float, default=100)
++    parser.add_argument("--min-coverage", type=float, default=0.95)
++    parser.add_argument("--min-correlation", type=float, default=0.5)
++    parser.add_argument("--min-separation-db", type=float, default=6)
++    args = parser.parse_args()
++    try:
++        if args.output.exists():
++            raise ValueError("output already exists; choose a new evidence path")
++        pairs = tuple(tuple(map(int, pair.split(":"))) for pair in args.pairs.split(","))
++        if any(len(pair) != 2 for pair in pairs) or len(set(pairs)) != len(pairs):
++            raise ValueError("pairs must be unique reference:return entries")
++        config = vars(args).copy()
++        del config["input"], config["output"], config["pairs"]
++        report = analyze(args.input, pairs=pairs, **config)
++        with args.output.open("x") as stream:
++            json.dump(report, stream, indent=2, allow_nan=False)
++            stream.write("\n")
++    except (ValueError, OSError) as error:
++        parser.error(str(error))
++    print(json.dumps({"diagnostic_pass": report["diagnostic_pass"], "pairs": report["pairs"]}))
++    return 0 if report["diagnostic_pass"] else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/src/client/session/capture-audio.ts b/src/client/session/capture-audio.ts
+index 2aa36e2..d55f835 100644
+--- a/src/client/session/capture-audio.ts
++++ b/src/client/session/capture-audio.ts
+@@ -48,9 +48,9 @@ export function uploadCaptureAudio(readable: ReadableStream<CaptureFrame>, url:
+           const frame = result.value;
+           if (stopped) { frame.close(); break; }
+           if (++queued > 8) { frame.close(); throw new Error("The capture worker cannot keep up with this input."); }
+-          // Explicit source realm: transferring the native ReadableStream changes
+-          // its timestamp origin on some Chromium releases, but not on Electron44.
+-          // AudioData transfers ownership; no sample copy or arrival timestamp here.
++          // AudioData keeps this source realm's timestamps when ownership transfers.
++          // Native ReadableStream transfer can change the producer's origin instead.
++          // No sample copy or arrival timestamp here.
+           try { worker.postMessage({ frame, timeOrigin: performance.timeOrigin }, [frame as unknown as Transferable]); }
+           catch (error) { frame.close(); throw error; }
+         }
+diff --git a/src/client/session/receiver-admission.ts b/src/client/session/receiver-admission.ts
+index deca010..0c5d16e 100644
+--- a/src/client/session/receiver-admission.ts
++++ b/src/client/session/receiver-admission.ts
+@@ -4,6 +4,7 @@ import type { AudioPreparation } from "../../shared/protocol";
+ export type PreparedReceiver = {
+   readonly outputReady: boolean;
+   readonly outputState: string;
++  /** The SDK's public clock uncertainty is in milliseconds. */
+   readonly timeSyncInfo: { synced: boolean; error: number };
+   readonly syncInfo: { outputLatencyMs: number };
+   prepareAudio(format: { codec: "opus"; sample_rate: number; channels: number; bit_depth: number }): Promise<void>;
+@@ -14,13 +15,16 @@ export function createReceiverAdmission(receiver: PreparedReceiver, active: () =
+   let epoch = 0, closed = false, preparing: number | undefined, admitted = false, nextAttempt = 0, latency = 0, failures = 0, eligibility = "", lastError: string | undefined;
+   let loggedAt = -Infinity, diagnostic: object | undefined, logTimer: ReturnType<typeof setTimeout> | undefined, coalesced = 0;
+   const flush = () => { logTimer = undefined; if (!closed && diagnostic) { console.info("[audio-preparation]", { ...diagnostic, receiptMs: now(), coalesced }); loggedAt = now(); diagnostic = undefined; coalesced = 0; } };
+-  const synchronized = () => receiver.timeSyncInfo.synced && receiver.timeSyncInfo.error <= 10_000;
++  const synchronized = () => {
++    const { synced, error } = receiver.timeSyncInfo;
++    return synced && Number.isFinite(error) && error >= 0 && error <= 10;
++  };
+   const emit = (report: AudioPreparation, timing?: { requiredLeadTimeMs: number; minBufferMs: number }) => {
+     if (closed || !active()) return;
+     publish({ ...report, epoch }, timing);
+     if (diagnostic) coalesced++;
+     diagnostic = { state: report.state, epoch, failures, lastError, outputState: receiver.outputState, outputReady: receiver.outputReady,
+-      synced: receiver.timeSyncInfo.synced, clockErrorUs: receiver.timeSyncInfo.error, outputLatencyMs: receiver.syncInfo.outputLatencyMs };
++      synced: receiver.timeSyncInfo.synced, clockErrorMs: receiver.timeSyncInfo.error, outputLatencyMs: receiver.syncInfo.outputLatencyMs };
+     if (now() - loggedAt >= 1000) { clearTimeout(logTimer); flush(); }
+     else logTimer ??= setTimeout(flush, 1000 - (now() - loggedAt));
+   };
+diff --git a/src/client/session/sendspin.ts b/src/client/session/sendspin.ts
+index 4cc4d0c..76fb447 100644
+--- a/src/client/session/sendspin.ts
++++ b/src/client/session/sendspin.ts
+@@ -53,7 +53,7 @@ export function listen(on: boolean, watch: boolean, name: string, nextIntent: "r
+   if (!on) waitForTap(null);
+   const current: Promise<SendspinPlayer> = player ??= import("@sendspin/sendspin-js").then(({ SendspinPlayer }) => {
+     // AES-GCM: Core runs on Electron's Node, whose BoringSSL has no ChaCha20-Poly1305.
+-    const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", ...(intent === "live" ? { outputMode: "direct" as const, requiredLeadTimeMs: 1000 } : {}), suite: "aesgcm", storage,
++    const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", ...(intent === "live" ? { outputMode: "direct" as const, outputLatencyHint: .002, requiredLeadTimeMs: 1000 } : {}), suite: "aesgcm", storage,
+       onConnectionChange: () => { if (connected === created && hearing && intent === "live") readiness?.outputChanged(); },
+       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });
+     if (player !== current) return created;
+diff --git a/src/server/capture-audio.ts b/src/server/capture-audio.ts
+index e622c45..2b39968 100644
+--- a/src/server/capture-audio.ts
++++ b/src/server/capture-audio.ts
+@@ -1,3 +1,5 @@
++import { liveAudioLeadMs } from "./live-audio-policy";
++
+ /** Source-clock timestamps are integer microseconds; PCM is interleaved, never invented stereo. */
+ export type CaptureAudioPacket = {
+   generation: string;
+@@ -9,7 +11,7 @@ export type CaptureAudioPacket = {
+   pcm: Float32Array;
+ };
+ export type CapturePolicy = { intent: "relaxed" | "live" };
+-export const captureLeadUs = (policy: CapturePolicy) => policy.intent === "live" ? 100_000 : 1_000_000;
++export const captureLeadUs = (policy: CapturePolicy) => policy.intent === "live" ? liveAudioLeadMs * 1000 : 1_000_000;
+ const maxFrames = 4096;
+ 
+ export function validateCapturePacket(packet: CaptureAudioPacket) {
+diff --git a/src/server/live-audio-policy.ts b/src/server/live-audio-policy.ts
+new file mode 100644
+index 0000000..eef01bb
+--- /dev/null
++++ b/src/server/live-audio-policy.ts
+@@ -0,0 +1,4 @@
++// Keep capture deadlines and both receiver/correction gates on the same budget.
++export const liveAudioLeadMs = 95;
++const sourceReserveMs = 25;
++export const liveOutputBudgetMs = liveAudioLeadMs - sourceReserveMs;
+diff --git a/src/server/output-admission.ts b/src/server/output-admission.ts
+index 58acc7e..8efd950 100644
+--- a/src/server/output-admission.ts
++++ b/src/server/output-admission.ts
+@@ -1,5 +1,6 @@
+ import type { SendspinSession } from "@sonn-audio/node-sendspin";
+ import type { AudioAdmissionFailure, OutputAdmission } from "../shared/protocol";
++import { liveOutputBudgetMs } from "./live-audio-policy";
+ 
+ /** Preparation and the fixed live budget are separate facts. Never infer one from timing. */
+ export function liveOutputAdmission(session: SendspinSession | undefined, wire: string | undefined, receiverId?: string): OutputAdmission {
+@@ -16,8 +17,8 @@ export function liveOutputAdmission(session: SendspinSession | undefined, wire:
+   }
+   const { requiredLeadTimeMs: lead, minBufferMs: buffer, staticDelayMs: delay } = session.getPlayerTiming();
+   if (lead === undefined || buffer === undefined) return failed("timing-missing", "This output has not declared its audio timing. Use relaxed sharing.");
+-  if (lead > 70) return failed("required-lead", `This output requires ${lead} ms; the live audio deadline allows 70 ms. Use relaxed sharing.`);
+-  if (buffer > 70) return failed("minimum-buffer", `This output requires a ${buffer} ms buffer; live audio allows 70 ms. Use relaxed sharing.`);
+-  if (lead + Math.max(0, delay ?? 0) > 70) return failed("output-correction", `This output's lead and correction require ${lead + Math.max(0, delay ?? 0)} ms; the live audio deadline allows 70 ms. Use relaxed sharing.`);
++  if (lead > liveOutputBudgetMs) return failed("required-lead", `This output requires ${lead} ms; the live audio deadline allows ${liveOutputBudgetMs} ms. Use relaxed sharing.`);
++  if (buffer > liveOutputBudgetMs) return failed("minimum-buffer", `This output requires a ${buffer} ms buffer; live audio allows ${liveOutputBudgetMs} ms. Use relaxed sharing.`);
++  if (lead + Math.max(0, delay ?? 0) > liveOutputBudgetMs) return failed("output-correction", `This output's lead and correction require ${lead + Math.max(0, delay ?? 0)} ms; the live audio deadline allows ${liveOutputBudgetMs} ms. Use relaxed sharing.`);
+   return { state: "ready" };
+ }
+diff --git a/src/server/scheduled-audio.ts b/src/server/scheduled-audio.ts
+index d91aba2..b888861 100644
+--- a/src/server/scheduled-audio.ts
++++ b/src/server/scheduled-audio.ts
+@@ -232,7 +232,8 @@ export function createScheduledAudio(options: { identity: string; name: string;
+             }
+             if (event.at <= serverNowUs()) return; // Missed input is silence, never a new audience deadline.
+             next.queues[event.wire].push({ offset: event.at - next.base, duration: event.duration, data: event.data });
+-            if (next.queues[event.wire].length > 200) fail("Captured audio exceeded its bounded queue.");
++            if (next.queues[event.wire].length + (current.intent === "live" ? next.sent[event.wire].length : 0) > 200) fail("Captured audio exceeded its bounded queue.");
++            else if (current.intent === "live") tick(next);
+           });
+           report(); return;
+         }
+diff --git a/src/server/scheduled-capture.ts b/src/server/scheduled-capture.ts
+index ad35881..4e77365 100644
+--- a/src/server/scheduled-capture.ts
++++ b/src/server/scheduled-capture.ts
+@@ -20,7 +20,7 @@ function captureWaveHeader() {
+ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Promise<string>, failed: (error: string) => void) {
+   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
+   let child: ChildProcessWithoutNullStreams | undefined, starting = false, closed = false, generation = 0;
+-  let error: string | undefined, baseUs = 0, offsetUs = 0, lateUs = 0;
++  let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0, captured = false;
+   let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
+   const emit = (event: Event) => { for (const listener of listeners) listener(event); };
+   const fail = (message: string) => {
+@@ -31,6 +31,7 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
+   const write = (block: { at: number; pcm: Float32Array }) => {
+     if (!child || error) return;
+     if (child.stdin.writableLength > 48_000 * 8 * .2) return fail("The audio encoder cannot keep up with capture.");
++    baseUs ??= block.at;
+     child.stdin.write(Buffer.from(block.pcm.buffer, block.pcm.byteOffset, block.pcm.byteLength));
+     if (policy.intent !== "live") {
+       const pcm = Buffer.alloc(block.pcm.length * 2);
+@@ -44,16 +45,18 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
+     try {
+       const executable = await ffmpeg();
+       if (closed || error || attempt !== generation) return;
+-      // Raw PCM's demuxer batches 4096 frames (85 ms). WAV's documented max_size
+-      // bounds input packets to the existing 480-frame/10 ms Opus cadence.
++      // Bound demuxer packets and Ogg pages to the Opus cadence, so live capture
++      // can emit 5 ms packets without waiting for another 10 ms input block.
+       // https://ffmpeg.org/ffmpeg-formats.html#wav
+-      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
+-      baseUs = pending[0]!.at; offsetUs = lateUs = 0;
++      const frameMs = policy.intent === "live" ? 5 : 10;
++      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", String(frameMs * 48 * 8), "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", String(frameMs), "-f", "ogg", "-page_duration", String(frameMs * 1000), "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
++      offsetUs = lateUs = 0;
+       process.stdout.on("data", oggPackets(packet => {
+         if (child !== process) return;
+         const magic = packet.toString("latin1", 0, 8);
+         if (magic === "OpusHead") { offsetUs = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
+         if (magic === "OpusTags") return;
++        if (baseUs === undefined) return fail("The capture encoder emitted audio before capture started.");
+         const duration = opusDuration(packet), at = Math.round(baseUs + offsetUs);
+         offsetUs += duration;
+         // Startup/probe delays and late data are not repaired by moving healthy listeners.
+@@ -76,14 +79,20 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
+     } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
+     finally { if (attempt === generation) starting = false; }
+   };
++  if (policy.intent === "live") void start();
+   return {
+     write(packet: CaptureAudioPacket) {
+       if (closed || error) return false;
+       try {
+         const normalized = clock.push(packet, serverNowUs());
+         if (normalized.reset) {
+-          generation++; const old = child; child = undefined; old?.kill("SIGKILL");
+-          pending = []; queuedFrames = 0; starting = false; emit({ type: "reset" });
++          // The first Live generation adopts the header-only encoder, including
++          // an in-flight helper lookup. Later generations retain a fresh stream.
++          if (captured || policy.intent !== "live") {
++            generation++; const old = child; child = undefined; old?.kill("SIGKILL");
++            pending = []; queuedFrames = 0; starting = false; baseUs = undefined;
++          }
++          captured = true; emit({ type: "reset" });
+         }
+         const block = { at: normalized.atUs, pcm: normalized.pcm };
+         if (!block.pcm.length) return true;
+diff --git a/src/server/sendspin.ts b/src/server/sendspin.ts
+index d90e705..9069dae 100644
+--- a/src/server/sendspin.ts
++++ b/src/server/sendspin.ts
+@@ -11,6 +11,7 @@ import { loopbackPeer } from "./lan-listener";
+ import type { OutputAdmission, PlaybackCommand, PlayerState } from "../shared/protocol";
+ import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
+ import type { Member, SyncedLoad } from "./scheduled-audio";
++import { liveOutputBudgetMs } from "./live-audio-policy";
+ export type { Member, SyncedLoad } from "./scheduled-audio";
+ export { audioRendition, liveHls } from "./source-preparation";
+ 
+@@ -97,7 +98,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
+   const validateDelay = (id: string, delay: number, intent?: string) => {
+     if (intent !== "live" || delay === 0) return;
+     const required = timing.get(id);
+-    if (required === undefined || required + Math.max(0, delay) > 70) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
++    if (required === undefined || required + Math.max(0, delay) > liveOutputBudgetMs) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
+   };
+   return {
+     accept, upgrade, validateDelay,
+diff --git a/tests/audio-roundtrip.test.py b/tests/audio-roundtrip.test.py
+new file mode 100644
+index 0000000..907b52a
+--- /dev/null
++++ b/tests/audio-roundtrip.test.py
+@@ -0,0 +1,205 @@
++"""Run with: python tests/audio-roundtrip.test.py (NumPy + SciPy required)."""
++import hashlib
++import importlib.util
++import json
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++import unittest
++
++import numpy as np
++
++SCRIPT = Path(__file__).resolve().parents[1] / "scripts/audio-roundtrip.py"
++spec = importlib.util.spec_from_file_location("audio_roundtrip", SCRIPT)
++audio = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(audio)
++
++
++class RoundtripTests(unittest.TestCase):
++    rate = 48000
++
++    def signals(self, delay_ms, seconds=1):
++        rng = np.random.default_rng(417)
++        reference = rng.normal(0, 0.03, round(seconds * self.rate))
++        delay = round(abs(delay_ms) * self.rate / 1000)
++        returned = np.zeros_like(reference)
++        if delay_ms >= 0:
++            returned[delay:] = reference[:len(reference) - delay]
++        else:
++            returned[:len(reference) - delay] = reference[delay:]
++        return reference, returned
++
++    def test_known_delays_and_sign(self):
++        for delay in (90, 101):
++            with self.subTest(delay=delay):
++                result = audio.measure(*self.signals(delay))
++                self.assertTrue(result["accepted"], result)
++                self.assertAlmostEqual(result["lag_ms"], delay, delta=0.03)
++
++    def test_reversed_and_out_of_range_do_not_report_sidelobes(self):
++        for delay in (-90, 300):
++            with self.subTest(delay=delay):
++                result = audio.measure(*self.signals(delay))
++                self.assertFalse(result["accepted"])
++                self.assertEqual(result["reason"], "out_of_range")
++
++    def test_silence_and_unrelated(self):
++        a, _ = self.signals(90)
++        b = np.random.default_rng(908).normal(0, 0.03, len(a))
++        self.assertEqual(audio.measure(a, b)["reason"], "low_correlation")
++        self.assertEqual(audio.measure(a, a * 0)["reason"], "silence")
++        self.assertEqual(audio.measure(a * 0, a * 0)["reason"], "silence")
++
++    def test_boundaries_and_duplicate_routing(self):
++        for delay in (0, 250):
++            with self.subTest(delay=delay):
++                self.assertEqual(audio.measure(*self.signals(delay))["reason"], "boundary")
++
++    def test_periodic_tone_is_ambiguous(self):
++        t = np.arange(self.rate) / self.rate
++        reference = 0.03 * np.sin(2 * np.pi * 1000 * t)
++        self.assertEqual(audio.measure(reference, np.roll(reference, 4320))["reason"], "ambiguous")
++
++    def test_clipping_and_nonfinite(self):
++        a, b = self.signals(90)
++        b[0] = 1
++        self.assertEqual(audio.measure(a, b)["reason"], "clipping")
++        b[0] = np.nan
++        self.assertEqual(audio.measure(a, b)["reason"], "nonfinite")
++
++    def fixture(self, directory, delay_ms):
++        a, c = self.signals(delay_ms, seconds=3)
++        rng = np.random.default_rng(51)
++        b = rng.normal(0, 0.03, len(a))
++        delay = round(delay_ms * self.rate / 1000)
++        d = np.concatenate([np.zeros(delay), b[:-delay]])
++        path = Path(directory) / "capture.s32le"
++        (np.column_stack([a, b, c, d]) * 2147483648).astype("<i4").tofile(path)
++        return path
++
++    def test_full_report_pass90_fail101_and_preserve_input(self):
++        for delay, passed in ((90, True), (101, False)):
++            with self.subTest(delay=delay), tempfile.TemporaryDirectory() as directory:
++                path = self.fixture(directory, delay)
++                before = hashlib.sha256(path.read_bytes()).hexdigest()
++                report = audio.analyze(path, duration=3)
++                self.assertEqual(report["diagnostic_pass"], passed)
++                self.assertFalse(report["physical_qualification"])
++                self.assertEqual(report["source"]["sha256"], before)
++                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), before)
++                self.assertEqual(len(report["windows"]), 10)
++                self.assertEqual([x["pair"] for x in report["pairs"]], ["1:3", "2:4"])
++                self.assertTrue(all(x["coverage"] == 1 for x in report["pairs"]))
++                self.assertEqual(report["detector"]["upstream_commit"], audio.UPSTREAM_COMMIT)
++
++    def test_unknown_windows_remain_and_fail_coverage(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = self.fixture(directory, 90)
++            raw = np.fromfile(path, dtype="<i4").reshape(-1, 4)
++            raw[self.rate:, 2:] = 0
++            raw.tofile(path)
++            report = audio.analyze(path, duration=3)
++            self.assertFalse(report["diagnostic_pass"])
++            self.assertEqual(len(report["windows"]), 10)
++            self.assertTrue(any(x["reason"] == "silence" for x in report["windows"]))
++            self.assertTrue(all(x["coverage"] < 0.95 for x in report["pairs"]))
++
++    def test_confident_invalid_lag_fails_despite_sufficient_coverage(self):
++        for invalid_lag in (300, -90):
++            with self.subTest(invalid_lag=invalid_lag), tempfile.TemporaryDirectory() as directory:
++                rng = np.random.default_rng(971)
++                blocks = []
++                for lag in [90] * 20 + [invalid_lag]:
++                    reference = rng.normal(0, 0.03, (self.rate, 2))
++                    returned = np.zeros_like(reference)
++                    delay = round(abs(lag) * self.rate / 1000)
++                    if lag > 0:
++                        returned[delay:] = reference[:-delay]
++                    else:
++                        returned[:-delay] = reference[delay:]
++                    blocks.append(np.column_stack([reference, returned]))
++                path = Path(directory) / "mixed.s32le"
++                (np.concatenate(blocks) * 2147483648).astype("<i4").tofile(path)
++                report = audio.analyze(path, duration=21, step=1)
++                self.assertTrue(all(x["coverage"] >= 0.95 for x in report["pairs"]))
++                self.assertFalse(report["diagnostic_pass"])
++                self.assertTrue(all(x["invalid_lag_windows"] == 1 for x in report["pairs"]))
++
++    def test_non_aligned_tail_is_inspected_and_bounds_are_reported(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = self.fixture(directory, 90)
++            raw = np.fromfile(path, dtype="<i4").reshape(-1, 4)
++            raw[self.rate:] = 0
++            raw.tofile(path)
++            report = audio.analyze(path, duration=1.49)
++            self.assertEqual(max(x["end_frame"] for x in report["windows"]), 71520)
++            self.assertEqual(len(report["windows"]), 4)
++            self.assertEqual(report["inspection"], {"start_frame": 0, "end_frame": 71520,
++                                                   "covered_frames": 71520, "uninspected_frames": 0})
++
++    def test_gapped_schedule_is_rejected(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = self.fixture(directory, 90)
++            with self.assertRaisesRegex(ValueError, "step.*window"):
++                audio.analyze(path, duration=3, step=1.5)
++
++    def test_ambiguous_reversed_peak_is_not_a_confident_invalid_lag(self):
++        a, delayed = self.signals(90)
++        _, advanced = self.signals(-90)
++        result = audio.measure(a, advanced + 0.85 * delayed)
++        self.assertFalse(result["accepted"])
++        self.assertEqual(result["reason"], "ambiguous")
++        self.assertLess(result["lag_ms"], 0)
++
++    def test_fractional_delays_on_both_sides_of_threshold(self):
++        for delay, passed in ((4799.5, True), (4800.5, False)):
++            with self.subTest(delay_samples=delay), tempfile.TemporaryDirectory() as directory:
++                rng = np.random.default_rng(840)
++                spectrum = np.fft.rfft(rng.normal(0, 0.03, (self.rate * 3, 2)), axis=0)
++                frequency = np.fft.rfftfreq(self.rate * 3)
++                spectrum[frequency > 16000 / self.rate] = 0
++                reference = np.fft.irfft(spectrum, n=self.rate * 3, axis=0)
++                returned = np.fft.irfft(spectrum * np.exp(-2j * np.pi * frequency[:, None] * delay),
++                                        n=self.rate * 3, axis=0)
++                path = Path(directory) / "fractional.s32le"
++                (np.column_stack([reference, returned]) * 2147483648).astype("<i4").tofile(path)
++                report = audio.analyze(path, duration=3)
++                self.assertEqual(report["diagnostic_pass"], passed)
++                for pair in report["pairs"]:
++                    self.assertEqual(pair["coverage"], 1)
++                    self.assertAlmostEqual(pair["max_ms"], delay * 1000 / self.rate, delta=0.001)
++
++    def test_bad_format_duration_and_configuration(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = self.fixture(directory, 90)
++            for config in ({"duration": 4}, {"duration": 0.5},
++                           {"duration": 3, "max_lag_ms": 500},
++                           {"duration": 3, "pairs": ((1, 1),)},
++                           {"duration": 3, "min_coverage": 0}):
++                with self.subTest(config=config), self.assertRaises(ValueError):
++                    audio.analyze(path, **config)
++            with path.open("ab") as stream:
++                stream.write(b"!")
++            with self.assertRaises(ValueError):
++                audio.analyze(path, duration=3)
++
++    def test_cli_exit_codes_and_no_overwrite(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = self.fixture(directory, 101)
++            output = Path(directory) / "result.json"
++            argv = [sys.executable, str(SCRIPT), str(path), "--duration", "3", "--output", str(output)]
++            result = subprocess.run(argv, capture_output=True, text=True)
++            self.assertEqual(result.returncode, 1, result.stderr)
++            self.assertFalse(json.loads(output.read_text())["diagnostic_pass"])
++            before = output.read_bytes()
++            result = subprocess.run(argv, capture_output=True, text=True)
++            self.assertEqual(result.returncode, 2)
++            self.assertEqual(output.read_bytes(), before)
++            result = subprocess.run(argv[:-1] + [str(output.with_name("invalid.json")), "--pairs", "1:3:2"],
++                                    capture_output=True, text=True)
++            self.assertEqual(result.returncode, 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/capture-clock.test.ts b/tests/capture-clock.test.ts
+index e92b2fb..6ef6f55 100644
+--- a/tests/capture-clock.test.ts
++++ b/tests/capture-clock.test.ts
+@@ -6,8 +6,8 @@ describe("timestamped capture clock", () => {
+   test("stereo and deadlines survive packet boundaries; no callback-arrival anchoring", () => {
+     const clock = createCaptureClock({ intent: "live" });
+     const first = clock.push(packet(), 1_030_000), second = clock.push(packet(480), 1_080_000);
+-    expect(first.atUs).toBe(1_100_000);
+-    expect(second.atUs).toBe(1_100_000 + Math.round(first.pcm.length / 2 / 48_000 * 1e6));
++    expect(first.atUs).toBe(1_095_000);
++    expect(second.atUs).toBe(1_095_000 + Math.round(first.pcm.length / 2 / 48_000 * 1e6));
+     for (let i = 0; i < second.pcm.length; i += 2) { expect(second.pcm[i]).toBe(.25); expect(second.pcm[i + 1]).toBe(-.25); }
+   });
+   test("44.1 kHz normalization follows a slow oscillator without unbounded drift", () => {
+@@ -41,7 +41,7 @@ describe("timestamped capture clock", () => {
+   });
+   test("late arrivals retain the source deadline", () => {
+     const clock = createCaptureClock({ intent: "live" });
+-    expect(clock.push(packet(), 2e6).atUs).toBe(1_100_000); expect(clock.stats.late).toBe(1);
++    expect(clock.push(packet(), 2e6).atUs).toBe(1_095_000); expect(clock.stats.late).toBe(1);
+   });
+   test("malformed and oversized samples fail before encoding", () => {
+     expect(() => validateCapturePacket(packet(0, { pcm: new Float32Array(8194) }))).toThrow();
+@@ -56,5 +56,5 @@ describe("timestamped capture clock", () => {
+   data.writeUInt16LE(40, 6); data.writeUInt32LE(48000, 8); data.writeBigInt64LE(-150_000n, 24); data.writeUInt32LE(480, 32);
+   const decoded = decodeCapturePacket(data, "source-realm", 1_000_000);
+   expect(decoded.capturedAtUs).toBe(850_000);
+-  expect(createCaptureClock({ intent: "live" }).push(decoded, 900_000).atUs).toBe(950_000);
++  expect(createCaptureClock({ intent: "live" }).push(decoded, 900_000).atUs).toBe(945_000);
+ });
+diff --git a/tests/capture-continuity.integration.ts b/tests/capture-continuity.integration.ts
+index e8b3d31..7512a73 100644
+--- a/tests/capture-continuity.integration.ts
++++ b/tests/capture-continuity.integration.ts
+@@ -2,7 +2,9 @@ import { test } from "node:test";
+ import assert from "node:assert/strict";
+ import childProcess from "node:child_process";
+ import { syncBuiltinESMExports } from "node:module";
+-import { Identity, serverNowUs } from "@sonn-audio/node-sendspin";
++import { createServer } from "node:http";
++import { WebSocketServer } from "ws";
++import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
+ import { createScheduledCapture } from "../src/server/scheduled-capture";
+ import { createScheduledAudio } from "../src/server/scheduled-audio";
+ import { opusDuration } from "../src/server/audio-packets";
+@@ -13,6 +15,152 @@ async function at(deadline: number) {
+   while (serverNowUs() < deadline) await sleep(Math.max(1, (deadline - serverNowUs()) / 1000));
+ }
+ 
++test("live capture prewarms only its header, adopts the first generation and restarts later generations", { timeout: 5000 }, async t => {
++  const children: { writes: Buffer[]; child: ReturnType<typeof childProcess.spawn>; closed: Promise<void> }[] = [];
++  const spawn = childProcess.spawn;
++  const observer = t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
++    const child = spawn(...args), writes: Buffer[] = [];
++    children.push({ child, writes, closed: new Promise(resolve => child.once("close", () => resolve())) });
++    const write = child.stdin!.write;
++    t.mock.method(child.stdin!, "write", function (this: NonNullable<typeof child.stdin>, ...values: Parameters<typeof write>) {
++      writes.push(Buffer.from(values[0])); return write.apply(this, values);
++    });
++    return child;
++  });
++  syncBuiltinESMExports();
++  const errors: string[] = [], chunks: { at: number; duration: number; received: number }[][] = [[], []];
++  let generation = 0;
++  const source = createScheduledCapture({ intent: "live" }, async () => ffmpeg, error => errors.push(error));
++  t.after(async () => { source.close(); await Promise.all(children.map(child => child.closed)); observer.mock.restore(); syncBuiltinESMExports(); });
++  source.subscribe(event => { if (event.type === "chunk" && event.wire === "opus") chunks[generation]!.push({ at: event.at, duration: event.duration, received: serverNowUs() }); });
++  const preparedBy = performance.now() + 1000;
++  while (!children.length && performance.now() < preparedBy) await sleep(1);
++  assert.equal(children.length, 1, "Live must open its actual encoder before the first PCM packet");
++  await sleep(30);
++  assert.equal(Buffer.concat(children[0]!.writes).length, 58, "preparation writes one WAV header and no fabricated samples");
++  assert.deepEqual(chunks, [[], []], "a header-only encoder emits no audio");
++  for (generation = 0; generation < 2; generation++) {
++    const origin = serverNowUs(), captured = origin - 20_000;
++    const left = (generation + 1) / 8, right = -(generation + 1) / 4;
++    const pcm = Float32Array.from({ length: 960 }, (_, i) => i % 2 ? right : left);
++    for (let sequence = 0; sequence < 12; sequence++) {
++      await at(origin + sequence * 10_000);
++      assert.equal(source.write({ generation: `prewarm-${generation}`, sequence, samplePosition: sequence * 480,
++        capturedAtUs: captured + sequence * 10_000, sampleRate: 48000, channels: 2, pcm }), true);
++    }
++    const firstDeadline = captured + 95_000 - 2500, lastDeadline = firstDeadline + 22 * 5000;
++    while (chunks[generation]!.length < 23 && serverNowUs() < lastDeadline) await sleep(1);
++    assert.equal(chunks[generation]!.length, 23, "all complete packets survive, including each generation's first packet");
++    chunks[generation]!.forEach((chunk, index) => {
++      assert.equal(chunk.at, firstDeadline + index * 5000); assert.equal(chunk.duration, 5000);
++      assert.ok(chunk.received < chunk.at, "preparation never moves a deadline to hide startup");
++    });
++    assert.equal(children.length, generation + 1, "the initial generation adopts the prewarmed child; later generations restart once");
++    const encodedInput = Buffer.concat(children[generation]!.writes).subarray(58);
++    assert.ok(encodedInput.length > 0 && encodedInput.length % 8 === 0);
++    for (let i = 0; i < encodedInput.length; i += 8) {
++      assert.equal(encodedInput.readFloatLE(i), left, "prewarm/reset preserves the generation's real left samples");
++      assert.equal(encodedInput.readFloatLE(i + 4), right, "prewarm/reset preserves distinct right samples without padding");
++    }
++  }
++  assert.deepEqual(errors, []);
++});
++
++test("capture prewarm respects close and replacement while the helper is resolving", { timeout: 5000 }, async t => {
++  const children: { child: ReturnType<typeof childProcess.spawn>; closed: Promise<void> }[] = [];
++  const spawn = childProcess.spawn;
++  const observer = t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
++    const child = spawn(...args);
++    children.push({ child, closed: new Promise(resolve => child.once("close", () => resolve())) });
++    return child;
++  });
++  syncBuiltinESMExports();
++  const errors: string[] = [], sources: ReturnType<typeof createScheduledCapture>[] = [];
++  t.after(async () => { sources.forEach(source => source.close()); await Promise.all(children.map(child => child.closed)); observer.mock.restore(); syncBuiltinESMExports(); });
++  for (const reject of [false, true]) {
++    const helper = Promise.withResolvers<string>();
++    let requested = 0;
++    const source = createScheduledCapture({ intent: "live" }, () => { requested++; return helper.promise; }, error => errors.push(error));
++    sources.push(source);
++    assert.equal(requested, 1, "Live requests its helper before PCM");
++    source.close();
++    if (reject) helper.reject(new Error("closed helper lookup")); else helper.resolve(ffmpeg);
++    await sleep(10);
++    assert.equal(children.length, 0, "a closed pending prewarm cannot spawn");
++    assert.equal(source.error(), undefined, "a closed helper rejection cannot fail the publication");
++  }
++  let relaxedLookups = 0;
++  const relaxed = createScheduledCapture({ intent: "relaxed" }, async () => { relaxedLookups++; return ffmpeg; }, error => errors.push(error));
++  sources.push(relaxed);
++  await sleep(10); assert.equal(relaxedLookups, 0, "relaxed capture remains lazy");
++  const helpers = [Promise.withResolvers<string>(), Promise.withResolvers<string>()];
++  let requested = 0;
++  const source = createScheduledCapture({ intent: "live" }, () => helpers[requested++]!.promise, error => errors.push(error));
++  sources.push(source);
++  const captured = serverNowUs() - 20_000;
++  const packet = { sequence: 0, samplePosition: 0, capturedAtUs: captured, sampleRate: 48000, channels: 2 as const, pcm: new Float32Array(960) };
++  assert.equal(source.write({ ...packet, generation: "initial" }), true);
++  assert.equal(requested, 1, "first PCM adopts the unresolved prewarm");
++  assert.equal(source.write({ ...packet, generation: "replacement" }), true);
++  assert.equal(requested, 2, "a later generation requests a fresh encoder");
++  helpers[0]!.resolve(ffmpeg); await sleep(10);
++  assert.equal(children.length, 0, "the replaced helper cannot resurrect its child");
++  const chunks: number[] = [];
++  source.subscribe(event => { if (event.type === "chunk") chunks.push(event.at); });
++  helpers[1]!.resolve(ffmpeg);
++  assert.equal(source.write({ ...packet, generation: "replacement", sequence: 1, samplePosition: 480, capturedAtUs: captured + 10_000 }), true);
++  const deadline = captured + 95_000 - 2500;
++  while (!chunks.length && serverNowUs() < deadline) await sleep(1);
++  assert.equal(chunks[0], deadline, "the replacement retains its real first Opus packet");
++  chunks.forEach((chunk, index) => assert.equal(chunk, deadline + index * 5000));
++  assert.equal(children.length, 1);
++  source.close(); await children[0]!.closed;
++  // An already-spawned header-only prewarm must also be reaped without PCM.
++  const idle = createScheduledCapture({ intent: "live" }, async () => ffmpeg, error => errors.push(error));
++  sources.push(idle);
++  const until = performance.now() + 1000;
++  while (children.length < 2 && performance.now() < until) await sleep(1);
++  assert.equal(children.length, 2);
++  idle.close(); await children[1]!.closed;
++  assert.deepEqual(errors, []);
++});
++
++test("live encoded chunks reach the receiver without waiting for the housekeeping poll", { timeout: 5000 }, async t => {
++  const key = Identity.generate(), errors: string[] = [], frames: number[] = [];
++  const core = createScheduledAudio({ identity: Identity.generate().privateB64u, name: "Prompt capture fixture", admit: id => id === key.peerId, changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
++  const group = core.group("prompt", () => {}), server = createServer(), sockets = new WebSocketServer({ server });
++  sockets.on("connection", (socket, request) => core.accept(socket, request));
++  const client = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER], { encryption: { identity: key }, playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 128 * 1024, supported_commands: [] } });
++  client.addAudioChunkListener(at => frames.push(at));
++  t.after(async () => { group.close(); core.close(); await client.disconnect(); await new Promise<void>(resolve => sockets.close(() => resolve())); await new Promise<void>(resolve => server.close(() => resolve())); });
++  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
++  await client.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}/sendspin`, { timeoutMs: 2000 });
++  await client.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
++  const readyUntil = performance.now() + 1000;
++  while (!core.status().timings.some(([id, lead]) => id === key.peerId && lead === 25) && performance.now() < readyUntil) await sleep(5);
++  assert.equal(core.connected(key.peerId), true, "the real encrypted receiver identified");
++  assert.ok(core.status().timings.some(([id, lead]) => id === key.peerId && lead === 25), "receiver timing reached Core before capture");
++  // Hold only the fixed capture's housekeeping callback. Real encoding,
++  // encryption, sockets and receiver delivery must still make progress.
++  const interval = globalThis.setInterval;
++  let held = 0;
++  t.mock.method(globalThis, "setInterval", (callback: (...args: any[]) => void, delay?: number, ...args: any[]) => {
++    if (delay === 5) { held++; return interval(() => {}, 60_000); }
++    return interval(callback, delay, ...args);
++  });
++  core.registerSource("capture", { intent: "live" }); group.members([{ deviceId: key.peerId, level: 100 }]);
++  group.send({ type: "load", playbackId: "prompt", source: "", liveSourceId: "capture", live: true, intent: "live" });
++  const origin = serverNowUs();
++  for (let sequence = 0; sequence < 40; sequence++) {
++    await at(origin + sequence * 10_000);
++    assert.equal(core.writeSource("capture", { generation: "prompt", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10_000 - 10_000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) }), true);
++  }
++  assert.equal(held, 1, "the fixed capture poll was held");
++  assert.deepEqual(errors, []);
++  assert.ok(frames.length >= 20, `received ${frames.length} chunks while the poll was held`);
++  for (let i = 1; i < frames.length; i++) assert.equal(frames[i]! - frames[i - 1]!, 5000, "prompt sends retain the source's fixed grid");
++});
++
+ for (const ageMs of [20, 40]) test(`10 ms capture aged ${ageMs} ms retains every Opus interval and does not repeatedly buffer`, { timeout: 5000 }, async t => {
+   const errors: string[] = [], chunks: { at: number; received: number; duration: number }[] = [];
+   const states: { at: number; status: string; buffering?: boolean }[] = [];
+@@ -33,16 +181,17 @@ for (const ageMs of [20, 40]) test(`10 ms capture aged ${ageMs} ms retains every
+   }
+   // The encoder's lookahead leaves the final Opus frame incomplete without an
+   // EOF flush. All other frames, including startup, must arrive by their deadlines.
+-  const firstDeadline = captured + 100_000 - 2500; // libopus lowdelay's 120-sample pre-skip.
+-  const lastDeadline = firstDeadline + (count - 2) * 10_000;
+-  while (chunks.length < count - 1 && serverNowUs() < lastDeadline) await sleep(1);
++  const expectedChunks = count * 2 - 1; // Two 5 ms packets per 10 ms input; the final packet needs EOF.
++  const firstDeadline = captured + 95_000 - 2500; // libopus lowdelay's 120-sample pre-skip.
++  const lastDeadline = firstDeadline + (expectedChunks - 1) * 5000;
++  while (chunks.length < expectedChunks && serverNowUs() < lastDeadline) await sleep(1);
+   t.diagnostic(JSON.stringify({ ageMs, inputPackets: count, chunks, states }));
+   assert.deepEqual(errors, []);
+-  assert.equal(chunks.length, count - 1, "every complete frame must survive; no startup/warmup exclusion");
++  assert.equal(chunks.length, expectedChunks, "every complete frame must survive; no startup/warmup exclusion");
+   assert.equal(chunks[0]!.at, firstDeadline, "startup cannot silently skip the first frame");
+   for (let i = 0; i < chunks.length; i++) {
+-    assert.equal(chunks[i]!.at, firstDeadline + i * 10_000, "no missing or retimed intervals");
+-    assert.equal(chunks[i]!.duration, 10_000);
++    assert.equal(chunks[i]!.at, firstDeadline + i * 5000, "no missing or retimed intervals");
++    assert.equal(chunks[i]!.duration, 5000);
+     assert.ok(chunks[i]!.received < chunks[i]!.at, "each frame is emitted before its unchanged deadline");
+   }
+   const playing = states.findIndex(state => state.status === "playing");
+diff --git a/tests/output-admission.integration.ts b/tests/output-admission.integration.ts
+index c393bf7..d98fb7d 100644
+--- a/tests/output-admission.integration.ts
++++ b/tests/output-admission.integration.ts
+@@ -255,7 +255,9 @@ test("Leave and rejoin rotate only the listening token; a continuously listening
+     await f.join(listener, "second");
+     assert.ok(token(listener) === firstToken, "Live source transfer must retain the current listening token");
+     assert.ok(listener.messages.slice(transferStart).filter(message => message.type === "sendspin").every(message => message.listen && message.intent === "live" && message.receiverId === firstToken), "a source transfer must not briefly retire output preparation");
+-    const before = sink.frames; await until(() => sink.frames > before + 10 && listener.output?.audioAdmission?.state === "ready");
++    // Packets arrive ahead of their deadlines: 10 packets no longer imply the
++    // programme has started at the 5 ms live cadence. Leave an actually playing item.
++    const before = sink.frames; await until(() => sink.frames > before + 10 && listener.output?.audioAdmission?.state === "ready" && listener.state.player.status === "playing");
+     assert.equal(token(listener), firstToken, "same format/output/server clock needs no source-scoped re-preparation");
+     assert.notEqual(listener.state.player.playbackId, firstPlayback);
+     assert.equal((await listener.command({ type: "leave", playbackId: listener.state.player.playbackId! })).ok, true);
+diff --git a/tests/receiver-admission.test.ts b/tests/receiver-admission.test.ts
+index abd1878..269701f 100644
+--- a/tests/receiver-admission.test.ts
++++ b/tests/receiver-admission.test.ts
+@@ -29,8 +29,18 @@ test("suspended output and clock loss recover without rejoin", async () => {
+   f.receiver.outputState = "running"; await f.guard.tick(); expect(f.last().report.state).toBe("ready"); expect(f.calls()).toBe(2);
+   f.receiver.timeSyncInfo.synced = false; await f.guard.tick(); expect(f.last().report.state).toBe("preparing");
+   f.receiver.timeSyncInfo.synced = true; await f.guard.tick(); expect(f.last().report.state).toBe("ready");
+-  f.receiver.timeSyncInfo.error = 20_000; await f.guard.tick(); expect(f.last().report.state).toBe("preparing");
+-  f.receiver.timeSyncInfo.error = 10_000; await f.guard.tick(); expect(f.last().report.state).toBe("ready");
++  f.receiver.timeSyncInfo.error = 20; await f.guard.tick(); expect(f.last().report.state).toBe("preparing");
++  f.receiver.timeSyncInfo.error = 10; await f.guard.tick(); expect(f.last().report.state).toBe("ready");
++});
++for (const error of [10.001, 11, NaN, Infinity, -Infinity, -.001]) test(`clock uncertainty ${error} ms cannot start or retain admission`, async () => {
++  const f = fixture(); f.receiver.timeSyncInfo.error = error;
++  await f.guard.tick(); expect(f.last().report.state).toBe("preparing"); expect(f.calls()).toBe(0);
++  f.receiver.timeSyncInfo.error = 10;
++  await f.guard.tick(); expect(f.last().report.state).toBe("ready"); expect(f.calls()).toBe(1);
++  f.receiver.timeSyncInfo.error = error;
++  await f.guard.tick(); expect(f.last().report.state).toBe("preparing"); expect(f.last().timing).toBeUndefined();
++  f.receiver.timeSyncInfo.error = 10;
++  await f.guard.tick(); expect(f.last().report.state).toBe("ready"); expect(f.calls()).toBe(2);
+ });
+ for (const reject of [false, true]) test(`route replacement cancels old ${reject ? "failure" : "success"} after new readiness`, async () => {
+   const f = fixture(); let finish!: () => void;
+diff --git a/tests/relaxed-pcm-queue.integration.ts b/tests/relaxed-pcm-queue.integration.ts
+new file mode 100644
+index 0000000..76e2c0a
+--- /dev/null
++++ b/tests/relaxed-pcm-queue.integration.ts
+@@ -0,0 +1,78 @@
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import childProcess from "node:child_process";
++import { syncBuiltinESMExports } from "node:module";
++import { createServer } from "node:http";
++import { WebSocketServer } from "ws";
++import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
++import { createScheduledAudio } from "../src/server/scheduled-audio";
++
++const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
++
++test("relaxed PCM retains more than 200 small capture blocks until their original deadlines", { timeout: 5000 }, async t => {
++  const children: { pid: number | undefined; closed: Promise<void> }[] = [];
++  const spawn = childProcess.spawn;
++  const observer = t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
++    const child = spawn(...args);
++    children.push({ pid: child.pid, closed: new Promise(resolve => child.once("close", () => resolve())) });
++    return child;
++  });
++  syncBuiltinESMExports();
++  const key = Identity.generate(), errors: string[] = [], chunks: { at: number; received: number; data: Buffer }[] = [];
++  const core = createScheduledAudio({ identity: Identity.generate().privateB64u, name: "Relaxed PCM fixture", admit: id => id === key.peerId, changed() {},
++    ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", sourceFailed: (_id, error) => errors.push(error), logError: (_id, _source, error) => errors.push(error) });
++  const group = core.group("relaxed", state => { if (state.error) errors.push(state.error); });
++  const server = createServer(), sockets = new WebSocketServer({ server });
++  sockets.on("connection", (socket, request) => core.accept(socket, request));
++  const client = new SendspinClient(key.peerId, "PCM receiver", [Roles.PLAYER], { encryption: { identity: key }, playerSupport: {
++    supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 1024 * 1024, supported_commands: [] } });
++  const unsubscribe = client.addAudioChunkListener((at, data) => chunks.push({ at, received: serverNowUs(), data: Buffer.from(data) }));
++  t.after(async () => {
++    unsubscribe(); group.close(); core.close();
++    await client.disconnect();
++    await new Promise<void>(resolve => sockets.close(() => resolve()));
++    await new Promise<void>(resolve => server.close(() => resolve()));
++    await Promise.all(children.map(child => child.closed));
++    sockets.removeAllListeners(); server.removeAllListeners();
++    observer.mock.restore(); syncBuiltinESMExports();
++    assert.equal(server.listening, false); assert.equal(sockets.clients.size, 0);
++    for (const child of children) if (child.pid) assert.throws(() => process.kill(child.pid!, 0), { code: "ESRCH" });
++    t.diagnostic(JSON.stringify({ cleanup: "closed", encoderPids: children.map(child => child.pid), workersCreated: 0, listening: server.listening, sockets: sockets.clients.size }));
++  });
++  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
++  await client.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}/sendspin`, { timeoutMs: 2000 });
++  const identifiedBy = performance.now() + 1000;
++  while (!core.connected(key.peerId) && performance.now() < identifiedBy) await sleep(1);
++  assert.equal(core.connected(key.peerId), true);
++  core.registerSource("capture", { intent: "relaxed" });
++  group.members([{ deviceId: key.peerId, level: 100 }]);
++  group.send({ type: "load", playbackId: "relaxed", source: "", liveSourceId: "capture", live: true, intent: "relaxed" });
++  const origin = serverNowUs(), count = 240;
++  const pcm = Float32Array.from({ length: 256 }, (_, index) => index % 2 ? -.5 : .25);
++  for (let sequence = 0; sequence < count; sequence++) {
++    // A real 128-frame block becomes available after its last sample, not early.
++    const available = origin + Math.round((sequence + 1) * 128 / 48_000 * 1e6);
++    while (serverNowUs() < available) await sleep(Math.max(1, (available - serverNowUs()) / 1000));
++    assert.equal(core.writeSource("capture", { generation: "small-blocks", sequence, samplePosition: sequence * 128,
++      capturedAtUs: origin + Math.round(sequence * 128 / 48_000 * 1e6), sampleRate: 48000, channels: 2, pcm }), true);
++  }
++  const receivedBy = origin + 900_000;
++  while (chunks.length < count && !errors.length && serverNowUs() < receivedBy) await sleep(1);
++  const now = serverNowUs(), future = chunks.filter(chunk => chunk.at > now).length;
++  t.diagnostic(JSON.stringify({ inputBlocks: count, receivedChunks: chunks.length, futureChunks: future, elapsedUs: now - origin, errors }));
++  assert.deepEqual(errors, [], "healthy small-block relaxed capture must not fail its group");
++  assert.equal(chunks.length, count, "every real capture block reaches the PCM receiver");
++  assert.ok(future > 200, "more than 200 delivered chunks coexist before their one-second deadlines");
++  let frames = 0;
++  for (const chunk of chunks) {
++    assert.equal(chunk.at, origin + 1_000_000 + Math.round(frames / 48_000 * 1e6), "source sample positions retain the original relaxed deadline");
++    assert.ok(chunk.received < chunk.at, "PCM arrives before its deadline");
++    assert.equal(chunk.data.length % 4, 0);
++    for (let offset = 0; offset < chunk.data.length; offset += 4) {
++      assert.equal(chunk.data.readInt16LE(offset), 8192); assert.equal(chunk.data.readInt16LE(offset + 2), -16384);
++    }
++    frames += chunk.data.length / 4;
++  }
++  assert.equal(frames, 30_720, "normalized PCM retains the complete 240-block sample count");
++  assert.equal(children.length, 1, "the real capture encoder ran once");
++});
+diff --git a/tests/scheduled-capture.integration.ts b/tests/scheduled-capture.integration.ts
+index 48b0dd2..a848690 100644
+--- a/tests/scheduled-capture.integration.ts
++++ b/tests/scheduled-capture.integration.ts
+@@ -45,7 +45,7 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
+     }
+   }, 5);
+   await until(() => first.length > 30, `no live Opus: ${errors.join(", ")}`);
+-  assert.equal(opusDuration(first[0]!.data), 10_000);
++  assert.equal(opusDuration(first[0]!.data), 5000);
+   const second = await receive(1, AudioCodec.OPUS), incompatible = await receive(2, AudioCodec.PCM);
+   group.members(keys.slice(0, 3).map(key => ({ deviceId: key.peerId, level: 100 })));
+   await until(() => second.length > 20 && !!core.receiverError(keys[2]!.peerId), "join not admitted/refused independently");
+@@ -56,7 +56,7 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
+   const stall = performance.now(); while (performance.now() - stall < 100) { /* Deliberate Hub main-loop stall. */ }
+   await until(() => first.length > before + 25, "audience did not recover after a bounded Hub stall");
+   const anchor = first[0]!.at;
+-  for (const frame of first) assert.equal((frame.at - anchor) % 10_000, 0, "stall/join must not retime the audience");
++  for (const frame of first) assert.equal((frame.at - anchor) % 5000, 0, "stall/join must not retime the audience");
+   assert.equal(errors.length, 0);
+   assert.ok(!states.some(state => state.status === "error"));
+   const audience: Awaited<ReturnType<typeof receive>>[] = [first, second];
+@@ -66,7 +66,7 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
+   await until(() => audience.every(frames => frames.length >= 8) && !!core.receiverError(keys[51]!.peerId), "50-client fanout or bounded-buffer refusal failed");
+   assert.equal(tiny.length, 0, "an undersized receiver cannot hold up healthy fanout");
+   assert.equal(audience.length, 50); assert.equal(errors.length, 0);
+-  for (const frames of audience) for (const frame of frames) assert.equal((frame.at - anchor) % 10_000, 0);
++  for (const frames of audience) for (const frame of frames) assert.equal((frame.at - anchor) % 5000, 0);
+   t.diagnostic("50 encrypted software clients received shared Opus timestamps; one PCM and one one-byte-capacity client refused independently. Not 50 browser decoders or physical receivers.");
+   t.diagnostic(`100 ms Hub stall: ${first.filter(frame => frame.received > frame.at).length} late network deliveries; no audience retiming. Software packets, no physical timing claim.`);
+ });
+diff --git a/tests/sendspin-sdk.test.ts b/tests/sendspin-sdk.test.ts
+index 4e37d31..b7e8e71 100644
+--- a/tests/sendspin-sdk.test.ts
++++ b/tests/sendspin-sdk.test.ts
+@@ -1,7 +1,277 @@
+ import { test, expect } from "bun:test";
+-import { SendspinDecoder } from "@sendspin/sendspin-js";
++import { SendspinDecoder, SendspinPlayer, type SendspinPlayerConfig } from "@sendspin/sendspin-js";
+ // Maintenance regression for the pinned SDK patch, which intentionally tests this exported module's clock.
+ import { ClockSource } from "../node_modules/@sendspin/sendspin-js/dist/audio/clock-source.js";
++import { AudioScheduler } from "../node_modules/@sendspin/sendspin-js/dist/audio/scheduler.js";
++import { StateManager } from "../node_modules/@sendspin/sendspin-js/dist/core/state-manager.js";
++import { SendspinTimeFilter } from "../node_modules/@sendspin/sendspin-js/dist/core/time-filter.js";
++
++// Only the Web Audio and time boundaries are fake. Decoded arrivals exercise the
++// real SDK queue, clocks, preparation, deadlines and lifecycle without audio I/O.
++function schedulerFixture(outputMode: "direct" | "media-element" = "direct", correctionMode: "quality" | "sync" = "quality") {
++  const originals = new Map(["AudioContext", "navigator", "performance", "setTimeout", "clearTimeout", "queueMicrotask"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
++  let nowMs = 1000, nextTimer = 0, timestampReads = 0;
++  const timers = new Map<number, { at: number; run: () => void }>(), microtasks: (() => void)[] = [];
++  const starts: { calledAtMs: number; when: number; duration: number; stopped: boolean }[] = [];
++  const contextOptions: AudioContextOptions[] = [];
++  let baseLatencySec = .002, outputLatencySec = .004;
++  const install = (key: string, value: unknown) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
++  install("navigator", { userAgent: "fixture" });
++  install("performance", { now: () => nowMs });
++  install("setTimeout", (run: () => void, delay = 0) => { const id = ++nextTimer; timers.set(id, { at: nowMs + delay, run }); return id; });
++  install("clearTimeout", (id: number) => timers.delete(id));
++  install("queueMicrotask", (run: () => void) => microtasks.push(run));
++  install("AudioContext", class {
++    constructor(options: AudioContextOptions) { contextOptions.push(options); }
++    state = "running"; sampleRate = 48_000; destination = {};
++    get baseLatency() { return baseLatencySec; }
++    get outputLatency() { return outputLatencySec; }
++    get currentTime() { return nowMs / 1000; }
++    getOutputTimestamp() { timestampReads++; return { contextTime: nowMs / 1000 - baseLatencySec - outputLatencySec, performanceTime: nowMs }; }
++    createGain() { return { connect() {}, disconnect() {}, gain: { value: 1, setTargetAtTime() {} } }; }
++    createMediaStreamDestination() { return { stream: {} }; }
++    createBuffer(channels: number, frames: number, rate: number) {
++      const samples = Array.from({ length: channels }, () => new Float32Array(frames));
++      return { duration: frames / rate, getChannelData: (channel: number) => samples[channel] };
++    }
++    createBufferSource() {
++      let started: (typeof starts)[number] | undefined;
++      return { buffer: null as { duration: number } | null, playbackRate: { value: 1 }, onended: null, connect() {},
++        start(when: number) { starts.push(started = { when, duration: this.buffer!.duration, calledAtMs: nowMs, stopped: false }); },
++        stop() { if (started) started.stopped = true; },
++      };
++    }
++    async resume() { this.state = "running"; }
++    async close() { this.state = "closed"; }
++  });
++  const state = new StateManager(), timeFilter = new SendspinTimeFilter();
++  timeFilter.update(0, 1, nowMs * 1000);
++  state.currentStreamFormat = { codec: "opus", sample_rate: 48_000, channels: 2, bit_depth: 16 };
++  state.isPlaying = true;
++  const scheduler = new AudioScheduler({ stateManager: state, timeFilter, outputMode, correctionMode, audioElement: { style: {}, play: async () => {}, pause() {}, removeAttribute() {}, load() {}, volume: 1 } as unknown as HTMLAudioElement });
++  scheduler.initAudioContext();
++  const settle = async () => {
++    for (let turn = 0; turn < 4; turn++) {
++      let count = 0;
++      while (microtasks.length) { if (++count > 1000) throw new Error("Scheduler microtask loop"); microtasks.shift()!(); }
++      await Promise.resolve();
++    }
++  };
++  const advance = async (milliseconds: number) => {
++    const target = nowMs + milliseconds;
++    await settle();
++    let count = 0;
++    while (true) {
++      const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
++      if (!next) break;
++      if (++count > 1000) throw new Error("Scheduler timer loop");
++      nowMs = next[1].at; timers.delete(next[0]); next[1].run(); await settle();
++    }
++    nowMs = target; await settle();
++  };
++  return {
++    scheduler, state, starts, settle, advance, contextOptions,
++    setOutputLatency(baseSec: number, outputSec: number) { baseLatencySec = baseSec; outputLatencySec = outputSec; },
++    get nowMs() { return nowMs; },
++    get timestampReads() { return timestampReads; },
++    get timerDelays() { return [...timers.values()].map(timer => timer.at - nowMs); },
++    async prepare() { const pending = scheduler.prepareOutput(); await advance(800); await pending; },
++    chunk(serverTimeUs = nowMs * 1000 + 50_000, frames = 240) {
++      scheduler.handleDecodedChunk({ samples: [new Float32Array(frames), new Float32Array(frames)], sampleRate: 48_000, serverTimeUs, generation: state.streamGeneration });
++    },
++    restore() { try { scheduler.close(); } finally { for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); } } },
++  };
++}
++
++for (const config of [{}, { outputLatencyHint: undefined }, { outputLatencyHint: 0 }, { outputLatencyHint: .002 }] satisfies Partial<SendspinPlayerConfig>[]) {
++  test(`public output hint ${"outputLatencyHint" in config ? String(config.outputLatencyHint) : "omitted"} reaches AudioContext without changing omitted defaults`, async () => {
++    const fixture = schedulerFixture();
++    let player: SendspinPlayer | undefined;
++    try {
++      player = new SendspinPlayer({ storage: null, ...config });
++      await player.unlock();
++      expect(fixture.contextOptions).toHaveLength(2);
++      expect(fixture.contextOptions[0]).toEqual({ sampleRate: 48_000 });
++      expect(fixture.contextOptions[1]).toEqual(config.outputLatencyHint === undefined
++        ? { sampleRate: 48_000 } : { sampleRate: 48_000, latencyHint: config.outputLatencyHint });
++      expect(Object.hasOwn(fixture.contextOptions[1]!, "latencyHint")).toBe(config.outputLatencyHint !== undefined);
++    } finally { try { player?.disconnect(); } finally { fixture.restore(); } }
++  });
++}
++
++for (const outputLatencyHint of [-.001, NaN, Infinity, -Infinity]) test(`public output hint ${outputLatencyHint} rejects before creating AudioContext`, () => {
++  const fixture = schedulerFixture();
++  let player: SendspinPlayer | undefined;
++  try {
++    expect(() => { player = new SendspinPlayer({ storage: null, outputLatencyHint }); }).toThrow(RangeError);
++    expect(fixture.contextOptions).toHaveLength(1);
++  } finally { try { player?.disconnect(); } finally { fixture.restore(); } }
++});
++
++test("a requested output hint never replaces the actual public latency estimate", async () => {
++  const fixture = schedulerFixture();
++  let player: SendspinPlayer | undefined;
++  try {
++    fixture.setOutputLatency(.010, .016);
++    player = new SendspinPlayer({ storage: null, outputLatencyHint: .002 });
++    await player.unlock();
++    expect(fixture.contextOptions[1]).toEqual({ sampleRate: 48_000, latencyHint: .002 });
++    expect(player.syncInfo.outputLatencyMs).toBeCloseTo(26, 10);
++    fixture.setOutputLatency(0, .008);
++    expect(player.syncInfo.outputLatencyMs).toBe(8);
++  } finally { try { player?.disconnect(); } finally { fixture.restore(); } }
++});
++
++for (const mode of ["quality", "sync"] as const) test(`prepared direct ${mode} output schedules decoded arrivals promptly without moving their deadlines`, async () => {
++  const fixture = schedulerFixture("direct", mode);
++  try {
++    await fixture.prepare();
++    const arrivedAt = fixture.nowMs;
++    fixture.chunk();
++    expect(fixture.starts).toHaveLength(0);
++    await fixture.settle();
++    expect(fixture.starts).toHaveLength(1);
++    expect(fixture.starts[0]!.calledAtMs).toBe(arrivedAt);
++    expect(fixture.starts[0]!.when).toBeCloseTo((arrivedAt + 44) / 1000, 6);
++  } finally { fixture.restore(); }
++});
++
++test("prepared direct output coalesces same-turn arrivals in timestamp order", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    const first = fixture.nowMs * 1000 + 50_000, observations = fixture.timestampReads;
++    fixture.chunk(first + 10_000); fixture.chunk(first); fixture.chunk(first + 5000);
++    await fixture.settle();
++    expect(fixture.starts).toHaveLength(3);
++    expect(fixture.timestampReads - observations).toBe(1);
++    for (let i = 0; i < 3; i++) expect(fixture.starts[i]!.when).toBeCloseTo((first - 6000 + i * 5000) / 1e6, 6);
++    expect(fixture.timerDelays).toEqual([]);
++  } finally { fixture.restore(); }
++});
++
++test("clearing a prepared output cancels old queued work while retaining prompt scheduling for its replacement", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    fixture.chunk();
++    fixture.scheduler.clearBuffers(true);
++    const observations = fixture.timestampReads;
++    fixture.chunk(fixture.nowMs * 1000 + 70_000);
++    await fixture.settle();
++    expect(fixture.starts).toHaveLength(1);
++    expect(fixture.timestampReads - observations).toBe(1);
++    expect(fixture.starts[0]!.when).toBeCloseTo((fixture.nowMs + 64) / 1000, 6);
++  } finally { fixture.restore(); }
++});
++
++test("closing a prepared output discards a pending decoded arrival", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    fixture.chunk(); fixture.scheduler.close();
++    const observations = fixture.timestampReads;
++    await fixture.settle(); await fixture.advance(100);
++    expect(fixture.starts).toHaveLength(0);
++    expect(fixture.timestampReads).toBe(observations);
++    expect(fixture.timerDelays).toEqual([]);
++  } finally { fixture.restore(); }
++});
++
++test("invalidating output cancels pending work and restores batching until preparation completes again", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    fixture.chunk(); fixture.scheduler.invalidateOutput(); fixture.chunk();
++    await fixture.settle();
++    expect(fixture.starts).toHaveLength(0);
++    await fixture.advance(15);
++    expect(fixture.starts).toHaveLength(1);
++    await fixture.prepare();
++    fixture.chunk(); await fixture.settle();
++    expect(fixture.starts).toHaveLength(2);
++    expect(fixture.starts[1]!.calledAtMs).toBe(fixture.nowMs);
++  } finally { fixture.restore(); }
++});
++
++test("invalidating during preparation prevents retired work from enabling prompt scheduling", async () => {
++  const fixture = schedulerFixture();
++  try {
++    const pending = fixture.scheduler.prepareOutput().catch(error => error);
++    await fixture.advance(80);
++    fixture.scheduler.invalidateOutput();
++    await fixture.advance(800);
++    expect(await pending).toBeInstanceOf(Error);
++    fixture.chunk(); await fixture.settle();
++    expect(fixture.starts).toHaveLength(0);
++    await fixture.advance(15);
++    expect(fixture.starts).toHaveLength(1);
++  } finally { fixture.restore(); }
++});
++
++for (const mode of ["direct", "media-element"] as const) test(`unprepared ${mode} output retains its 15 ms decode batching`, async () => {
++  const fixture = schedulerFixture(mode);
++  try {
++    expect(fixture.contextOptions).toEqual([{ sampleRate: 48_000 }]);
++    const arrivedAt = fixture.nowMs;
++    fixture.chunk(); await fixture.settle();
++    expect(fixture.starts).toHaveLength(0);
++    await fixture.advance(14);
++    expect(fixture.starts).toHaveLength(0);
++    await fixture.advance(1);
++    expect(fixture.starts).toHaveLength(1);
++    expect(fixture.starts[0]!.calledAtMs).toBe(arrivedAt + 15);
++    expect(fixture.starts[0]!.when).toBeCloseTo((arrivedAt + 44) / 1000, 6);
++  } finally { fixture.restore(); }
++});
++
++test("prepared direct output keeps future refills timed rather than spinning microtasks", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    const arrivedAt = fixture.nowMs, first = arrivedAt * 1000 + 50_000;
++    for (let i = 0; i < 30; i++) fixture.chunk(first + i * 1e6, 48_000);
++    await fixture.settle();
++    expect(fixture.starts).toHaveLength(20);
++    expect(fixture.timerDelays).toHaveLength(1);
++    expect(fixture.timerDelays[0]).toBeCloseTo(15_044, 6);
++    await fixture.advance(15_043);
++    expect(fixture.starts).toHaveLength(20);
++    await fixture.advance(2);
++    expect(fixture.starts).toHaveLength(30);
++    expect(fixture.starts[20]!.calledAtMs).toBeCloseTo(arrivedAt + 15_044, 6);
++    expect(fixture.starts[29]!.when).toBeCloseTo((arrivedAt + 44) / 1000 + 29, 6);
++    expect(fixture.timerDelays).toEqual([]);
++  } finally { fixture.restore(); }
++});
++
++test("closing a prepared output cancels its pending future refill", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    const first = fixture.nowMs * 1000 + 50_000;
++    for (let i = 0; i < 30; i++) fixture.chunk(first + i * 1e6, 48_000);
++    await fixture.settle();
++    expect(fixture.starts).toHaveLength(20);
++    expect(fixture.timerDelays).toHaveLength(1);
++    fixture.scheduler.close();
++    await fixture.advance(20_000);
++    expect(fixture.starts).toHaveLength(20);
++    expect(fixture.starts.every(source => source.stopped)).toBe(true);
++    expect(fixture.timerDelays).toEqual([]);
++  } finally { fixture.restore(); }
++});
++
++test("prepared direct output discards expired decoded arrivals instead of moving their deadlines", async () => {
++  const fixture = schedulerFixture();
++  try {
++    await fixture.prepare();
++    fixture.chunk(fixture.nowMs * 1000 - 5000);
++    await fixture.settle(); await fixture.advance(20);
++    expect(fixture.starts).toHaveLength(0);
++    expect(fixture.timerDelays).toEqual([]);
++  } finally { fixture.restore(); }
++});
+ 
+ test("output-clock predictions use observation intervals when timestamp sampling jitters", () => {
+   const original = globalThis.performance;

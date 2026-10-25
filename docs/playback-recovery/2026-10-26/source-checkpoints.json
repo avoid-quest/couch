@@ -1,0 +1,22 @@
+[
+  {
+    "name": "older-latency-20261025-0913",
+    "commit": "9daefea093ee025d85694d91103a80d83d2fb77a",
+    "tree": "5f23c9c44a3dc8b5258a6eae3aac2e3b9476b2c6",
+    "timestamp": "2026-10-25T10:13:00+01:00",
+    "base": "27e580cc3d0b3fc7b4925100777af38324f2b5e3",
+    "patch": "source-checkpoints/older-latency-20261025-0913.patch",
+    "patchSha256": "3cb54e84be3aef4a1acd9a4113f064e2dfc0c6e24b723de317a91a04b6f1c693",
+    "identicalToBase": false
+  },
+  {
+    "name": "later-assigned-checkpoint-20261025-2319",
+    "commit": "00ee2bacce34dd4d559f4a7baa0177c97269727e",
+    "tree": "c1dc3321fbeb02f977b7537a7c27cde84d6a38fe",
+    "timestamp": "2026-10-26T00:19:11+01:00",
+    "base": "27e580cc3d0b3fc7b4925100777af38324f2b5e3",
+    "patch": null,
+    "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "identicalToBase": true
+  }
+]

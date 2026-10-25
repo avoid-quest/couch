@@ -1,0 +1,10 @@
+bb3aab225d301d95fbd0288bba9ebf273d0adc5a 2026-10-24T19:18:22+02:00 Record the playback refactor contract and baseline
+5a18b8c4ebb80a8fa64e864ba533afae49b64e08 2026-10-24T21:57:41+02:00 Unify playback routing and scheduled audio
+9587595e213cbf5372ca06b00569761b1e25a205 2026-10-24T22:05:48+02:00 Record final playback verification and physical test preparation
+0a57f91a32286f0a45a2b455f2947069aa0b666b 2026-10-24T22:26:27+02:00 Record physical playback startup failure and measurement limits
+bc40d15e2f136a9f9c4eba9d0e3f1bc0c108e2d5 2026-10-24T22:51:38+02:00 Bound capture encoder input to preserve live deadlines
+e7dad73e921ba9ab94a7291083efab8e01f51298 2026-10-24T23:36:51+02:00 Track output preparation before admitting live listeners
+cf267a2f61f24a43949d6fb7d2788e37d1da9ef3 2026-10-25T00:11:49+02:00 Preserve initial playback when selected outputs change
+f77392220398879e2718ba2b91443fc151f0ebcb 2026-10-25T00:53:26+02:00 Record playback package validation and physical startup results
+a7a5d1d62438504b01aab867761ee6203f33c259 2026-10-25T01:53:14+02:00 Record Mac startup and rejoin diagnostics
+27e580cc3d0b3fc7b4925100777af38324f2b5e3 2026-10-25T02:55:58+02:00 Record sustained Mac playback diagnostic

@@ -1,0 +1,230 @@
+{
+  "createdUtc": "2026-10-25T23:35:11.391833+00:00",
+  "sourceWorktree": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6",
+  "baseCommit": "27e580cc3d0b3fc7b4925100777af38324f2b5e3",
+  "pushedRefactorCommit": "27e580cc3d0b3fc7b4925100777af38324f2b5e3",
+  "preservedSourceFiles": {
+    ".github/workflows/package.yml": "8bee8300b11fda846c99a670da652beec1aa98b7acde003a30f406f3a3c42f46",
+    "app/audio-peer.ts": "17a1b3f492990adf3ec09e4afc4709cdca72a5fbeacc3d45f17486aac82144f7",
+    "app/capture.ts": "9f9d37e91b582cba117ec51ce1d548865557f9b59c963b0b4adfe28ee8e00a29",
+    "app/live-audio.ts": "8dc58fdd3e874d2f97820813e3a607f85a0e9cb30f49348dfc2d058322b5aa27",
+    "app/live-output.ts": "9378d7e3df9414a99298b87597b06fa0795bddd98d2cd665ccef584b9439cc8f",
+    "app/main.ts": "f5e64805893e82549eb10420f33bc831f6dece37dea9c2fef8cd903f8dfabd5d",
+    "app/native-audio-input.ts": "f50b0f776d7ae4db28ab1e1fd3ac76640b773b38be20e7d0a6d55c2ba16d2006",
+    "app/native-audio-output.ts": "9565bef4ddbb5fa3be55cb72d8b25bb2107df63604707a14511fb04e3589557b",
+    "app/native-capture.ts": "f18ba3c173533efdb3fed644d849dea5f8a48ae88cb7af167020f16b37db33c8",
+    "app/native-playback.ts": "1a26e23d6fc09baf296e5ae3930ed2591fbf14f56859a4e59231389e6f350515",
+    "app/preload.ts": "446f509210bc01d95914f38d1879eb5a4602ec32e79e87c68484cd2c248ec341",
+    "docs/architecture.md": "46546f84a628e47129b3c66618e38b80f7c1f00c142c88c0fb3a54598d900b05",
+    "docs/audio-linux-defaults-research.md": "80f807e84480ba2bc60cd4393cb473d0cae71600d295e4d0b40561c7b9a636d0",
+    "docs/audio-native-device-controls-research.md": "243565800a661f393b179a8155d401f6e6698e5817783290fd58bb7b1d0dae51",
+    "docs/audio-native-receiver-reuse-research.md": "fafb966590c564e1b3730823140173a72698ab855a13b93993e91a6f9482a30e",
+    "docs/audio-native-reuse-options.md": "0908cff6520edfe2cb8b0f4d21828da5c537300fbea8cc1a6f9dd1213d2e5c4d",
+    "docs/audio-roundtrip-performance.md": "1b0debfddd08cc92c7be9d96a6bbc09dcae48356920fb8a446428d5418082057",
+    "docs/ci.md": "1e3c5d415c5911efd0495ca90d43beda2344371c3dda3ad5963e3ab1a7b0b781",
+    "docs/design.md": "227a195c847b2c773ca92e730e05ad4c91e7982e7c9865997b23a386a90cd787",
+    "docs/design/settings.md": "482f210e08b9c9967ac929356df1fa4e2b7ddf621d5fb99598e4bfa9e7695b6b",
+    "docs/design/share.md": "f47e8488d02f30910752fabf42d748a1404675cd5d048ff201fbeed329c68ea6",
+    "docs/lan-origin.md": "699710d1544ad3e31a03420bdeccb1ef57e828104f9ad040a31cdac7d5a72522",
+    "docs/sync-test-evaluation.md": "b083a1ea36f0a4bca59a8e3b6018aa729910fab1d2e90ebabe33c9714bf078af",
+    "native/live-audio/README.md": "1ead387ed721010b61c56730d54fd3dd4fa2ace42fc3ab8020a76147e097e550",
+    "native/live-audio/capture-queue.h": "0c3df275846124250df17a62f4a8fa9331f2ee6c795c305c67bd22478e6ad21f",
+    "native/live-audio/capture-queue.test.c": "594f46c3af8a151f894a8de00c29542f234043e8fe88c7f117783f5c94d601b2",
+    "native/live-audio/capture.c": "4a64549cc5bb5632fa25eb36a98053831996a4931163465bb1a1e9d8df4da0ff",
+    "native/live-audio/playback/LICENSE": "6162a487490d3903fdfdb74b5a7a1143503d6ba83b90d8b4ed7406c175aa8f63",
+    "native/live-audio/playback/README.md": "156bc574728f5cb4a3c5d4ac2c9f24688f0c7f4d7e13e4218a1c2f8cec9c803a",
+    "native/live-audio/playback/adapter/sendspin/client.h": "b6042f7cd81e35e103e2db8018d8a88b779ef271ded73edd3da4d55ee0384f23",
+    "native/live-audio/playback/audio_sink.cpp": "de1d0ffe918b8414adb1135e3dd0073c57e178d66ef0777e19a6864a76fad3f4",
+    "native/live-audio/playback/audio_sink.h": "d4e081802f784daaad765d2c3a21a74badeb4c73b8c99fa35bc78707a7499e1e",
+    "native/live-audio/playback/clock-servo-test.cpp": "353896ade4b31e125c7b1e8af8e0c576cc371414c22ce224a42f9416eed86140",
+    "native/live-audio/playback/clock-servo.h": "821b351cfe6920bf98963b369b13c2879533fa4f62d8be7a949d141da4c4bcef",
+    "native/live-audio/playback/log.h": "8d003d9c5c69520b7064e30d702e96ff3d7ae7bbebd3d641736a68b977f672a5",
+    "native/live-audio/playback/null_sink.h": "3f610d9bd3628476747f8cdbf432545a0ec49efba670cb224f9a5a929397782e",
+    "native/live-audio/playback/pcm_volume.cpp": "0fff0d15402ef2d7b686d48870fc213000cb95bfe807c0c6ec17d8ad35149695",
+    "native/live-audio/playback/pcm_volume.h": "48db07fb344748c9fa811be743b911901cbc2f177e6b4a061782fb5c8bc0db46",
+    "native/live-audio/playback/playback.cpp": "acba0ccb1b714d50c9b21fd4f9fd2b16d34d8d82c86823bf5aaf55033c1436dc",
+    "native/live-audio/playback/pulse_sink.cpp": "26bffcbd8f86867de43e681b44b3f0a257c37ccede9388baaa3b135e20dbfa00",
+    "native/live-audio/playback/pulse_sink.h": "9610f81777e80affa52154f6e3e73a81e90513e461f6ffb3ec40e03282d6161e",
+    "native/live-audio/playback/sink_recovery.cpp": "87051ed9a5e7efb9062229322b4eb3e8f1cee44a9afd8269f8101f90dd407cba",
+    "native/live-audio/playback/sink_recovery.h": "2a6c3a2ac724cc6782826a4b7fd162197043d390e0e9a96821bb951a54240ee4",
+    "native/live-audio/playback/upstream-pins.json": "262a270aaf65754459042d3a031f11025d04d84ce7cb24d4d982941288fb387a",
+    "patches/@sendspin%2Fsendspin-js@5.0.0.patch": "9045b4f90b281b6fb676a3415fd3d43d18ec623d0340e23bef80425b0c3d8c67",
+    "patches/@sonn-audio%2Fnode-sendspin@0.6.2.patch": "ddd524647ba22c2ebda62efa871537462ad8d26adf411e0a1df555d551f13c94",
+    "patches/README.md": "8417cb16a021c58c5ab66f6560fac7622189599f91512ddc617c9be40d3bd3dd",
+    "scripts/LICENSE.sync-test": "fcf911ad0759cfaca441327d70e8cba02903be571a8b183ce4af3152a272e071",
+    "scripts/after-pack.ts": "c281787ff0dc4bb5d4cc6c36ef6e6544d10ba8942e55b12fa32fc993da89a172",
+    "scripts/audio-roundtrip.py": "9c6fb9f9b01656850b8961b04813f33b6856d5f397398df9627434f68b53668d",
+    "scripts/build-live-audio.ts": "d04f1e57d9f9eab599514485a7f3d49d2893fcb8223ad2fdb51b3cfb6e5696c0",
+    "scripts/build-live-playback.ts": "ba435dd640ae41c580132644047bd41a4e9ac4d7fdbf74da4c191c4f01b5ab21",
+    "src/client/api/settings.ts": "4d09d3fb2bf40362e4d5355965d8016aba28ca60c9adef61bac3d8e336d91424",
+    "src/client/audio-settings.ts": "b1abdecdbc994138d149f0fbc00ad4e5cab5db9545bd382c1c64f29274d4cc8a",
+    "src/client/capture-audio.html": "219d1dc3f04a275862d8e97e34c46d63a24193fd7c820965726ad93cc120c992",
+    "src/client/components/DurationBar.tsx": "53d10d88685ba78b7134a612d6f91d4149108b6309a8f5d94322e1afd77898bb",
+    "src/client/radio-clock.ts": "d456a5fe4ef5eec6a0284d2cd1a5bffcd40c9e585f4630f07653941fff62dddb",
+    "src/client/sections/settings/AdvancedAudioSettings.tsx": "0a964aa03380709157dbb4f93aa3ecd34e098e8a75f6793312931ab895b0a90f",
+    "src/client/sections/settings/CouchPages.tsx": "e7ae509d451ecfc4330711c3bcfe567871dcd7aab228a2a6cb262ff5f3066565",
+    "src/client/sections/settings/ThisDevicePages.tsx": "51413288b282adb6030c048d319fe08689afd1f80f7338a93aee78a0bea9dd13",
+    "src/client/sections/share/ShareControl.tsx": "aecf5b055968fadc7871eadd3e587dd86e394efbcf35345bc14929c9f9e39842",
+    "src/client/sections/share/ShareDialog.tsx": "20e8ee41e062650244346d30cfd86f4e11253688fad1157fc93d02e9f8a89990",
+    "src/client/session/capture-audio.ts": "ae173ac34d27c29e14eae23be37cd6b2f6eb54c59ba80248aea09cf940bb8173",
+    "src/client/session/live.ts": "61db0908e20756a2a92448f8801f7db24bcc9fd77467d4bcd305dff3c4ba70b4",
+    "src/client/session/native-audio.ts": "08cf9311cc18b66269df2e0af89d3b7941b43bda7d6b3c076caa63a48f581915",
+    "src/client/session/receiver-admission.ts": "10d1762cb9a56bdb9fca021b80eb57bdbf775a4c8e10da8086808344324c3bf8",
+    "src/client/session/sendspin.ts": "7a02a1aebce3a1a51edc0ee7f9d109c12efd439729aa5aed66c4b917d61a0ed4",
+    "src/client/session/session.ts": "6cad927c0693f7b4b53f94a29cd87d649ab8c7338b584d9529449a5b824cc444",
+    "src/server/capture-audio.ts": "7c1b10cdfb407efb9cc2202fd6f9ffcb6a2f0a990f1134b9a7a6ab21a2fdda38",
+    "src/server/hub.ts": "7c39b58df758c26a3a2d071ea4686f10ee39a2d06d2f49adcff39a63f09ff41f",
+    "src/server/lan-listener.ts": "0f429b41de999e0b38d8c80f638c86db4526b57249c47ff28ed2c35f7da57c25",
+    "src/server/live-audio-policy.ts": "b40e8b4f908076895f2fb8cda16ae2a60d64ab5820e8f8e4c360301b752b200a",
+    "src/server/live-pcm.ts": "ce43d40095b1a4388592a8febcb13e3abcc666ce538b6917ecd665247e2db9a0",
+    "src/server/output-admission.ts": "2f8da64e113d0b03d0f5f6d528c34b4f36b7753e29b3561dd563ba735668cef9",
+    "src/server/scheduled-audio.ts": "0ca062a181eeb91bfa3ec2776754598b5e4b8f62e115831d447cbecf269db042",
+    "src/server/scheduled-capture.ts": "9d903f8010dd8f5c6f0144f14640fd03af79c44e2df9672ffb85d6abf37a5fa7",
+    "src/server/sendspin.ts": "e4036010271d978055945a392db341b98f29aa471acd2ecf10b3924ba592d255",
+    "src/server/sound-pulse.ts": "0f816ec9ef210a53f7529f568f51866c62e398371ea069976f3eaec287bf2d54",
+    "src/server/sound-routing.ts": "9c0d4b595dba8b922f268a97820e228b870756024f5ff14affb1a392f8fc462a",
+    "src/server/store.ts": "28e3a2d460bb5fc0956d424e5b059da455018ad55928033634b3d86f73ec4701",
+    "src/shared/app-bridge.ts": "662cf771a20b4cb7961ca34e03b1f7224c9adbd697c7f1376bcc91f7c743f1bb",
+    "src/shared/audio-settings.ts": "61cc9e083d5d40f337a561366866fb515afbd4438b78ef0c726b4f373eccf91e",
+    "src/shared/capture.ts": "2d28234610c6d68f79eb4e81e3bca73e39d7682cb8be3c15e91c09f272a59521",
+    "src/shared/native-output.ts": "b9a024c2d2aaddd0eb5407d5a7902781318ac49073107e0e01f73bb2d6e859f3",
+    "tests/audio-roundtrip.test.py": "d696a2424c4d9cf24ac8a4b62706a4b103f012bd6dbbc692442cbcdf3ffd6eef",
+    "tests/audio-settings.test.ts": "f2e90a58845f6105d8434f0134aa2a300d880b46d6c11749af1dc4a0b3c6fb54",
+    "tests/capture-clock.test.ts": "898fa82198525d02c37fb8dc9a0bff8422f39868d174b85961f8af36ac999730",
+    "tests/capture-continuity.integration.ts": "2e40a2f7af5e3d6e1f90040ab7acc7b951274645bfd6acd8dc074352fc80ea77",
+    "tests/capture-format.test.ts": "19beeff6ec6ee294d4733d8d5ce47dfe2710364bcfd476d1ffac9b86e27845e4",
+    "tests/capture.test.ts": "3c1e0a908dae4f5adb5984828bc012e2e9cbe40e8210a4b6afc0777c3b792ff2",
+    "tests/fixtures/mac-chrome-output-timestamps.json": "f999c887c48cc26988c72a4575aca360010e2eeb612d5255fadb720d836ce302",
+    "tests/fixtures/native-capture-helper.mjs": "ae68c9048d94d6012fa260b74a7206b2ba447d2fb286ba5f6493d43eb1be4d43",
+    "tests/fixtures/native-playback-helper.mjs": "c20cf42bda735c8492b2d12dd1f71a46637a1b707fa1ba82a41b9d48e09be64a",
+    "tests/lan-peer.test.ts": "15670dde8107ff41d12f2d7b9e59951141a22352c004195779bec78d8b359740",
+    "tests/live-input.fixture.ts": "2380ea3f780b0ed2a7f0763eb639a27550b82b0433d1b465d84c4ded6df5c74e",
+    "tests/live-join-lead.integration.ts": "ef3b2fbdff1e3b3f8dcfc30ed34091ce3bc4c0a2b2a338c4e45141fd8c69dd74",
+    "tests/live-pcm.test.ts": "58f5c765398c0318346ad3b2e7e79582810759feeb3319fab6b73ededabfff83",
+    "tests/native-capture.integration.ts": "450b777ea828b5513e1c876f5b8b751ef5aa14733d33e6b73e66d8f9d7dce95e",
+    "tests/native-live-authority.test.ts": "1edb38c05399a5390c82d872ef46f290e26f9f7f67c9bf897b03f99da8246e8b",
+    "tests/native-output.integration.ts": "b866e16cc5f95f7a5a66f9f7a90b2316a5a277d2de6925000b5e40144fc64f7a",
+    "tests/native-playback.test.ts": "4334f23d75b221fb5decbb69177350508a0faec09239bf84cc8e32a6935fce3f",
+    "tests/output-admission.integration.ts": "42cd50923803cc9057ff370fb99a3ed01f354d63a85a3bf7bc4e9bd9e0b0db76",
+    "tests/output-admission.test.ts": "371b7a61d2ffcc0fdc797647750c5d11d22b650156bb9a9dbe895e3927ce35ee",
+    "tests/output-clock.test.ts": "72df4e1d4d042e70018a4e21d76606e0a3092f6739cfb590ce10ba653fcda079",
+    "tests/radio-clock.browser.tsx": "69d4ee30dece3a75fd552a0ed6425d0f33908caa9b1f813150171fb2bf8afda2",
+    "tests/receiver-admission.test.ts": "a45b8d8679bba648b6c532266e4af0b65e885d1087c681cf39b413f58d37fc1e",
+    "tests/relaxed-pcm-queue.integration.ts": "b463ce454d42df5427c0dbda94231bb751fc80c9b0668ece0466cc5747cca1ff",
+    "tests/scheduled-capture.integration.ts": "c2de49e34d6c9a31a1e346d4c94fa327d06620222a0fdd7f51f590083785ac40",
+    "tests/sendspin-sdk.test.ts": "382715c2b38be416a791b4fe8f9ab28a1de175cf4b956f804d99e8cf3a238786",
+    "tests/settings-authority.integration.ts": "0dfb5a62c4628c379c5b4183d7d2361a8e4758404b828644c15d90c63a361cd5",
+    "tests/sound-session.integration.ts": "5998e7ea5ced82ab6a9eef5150bfa29ed1e142ee25478ac855b753f45a0de6ba",
+    "vite.config.ts": "32d3fde1fad2d1b9c5944af62e4cf0b77464697a9c309994132734c399111172"
+  },
+  "overlaySha256": "4f99ba91f277fa4800b0f24351da6b75fd1f8de9c62eda1e678d4dcf3f383af0",
+  "trackedPatchSha256": "343835f8134d3eb65f99e2b592e993e019cc72d667b861dd84286b36304e774f",
+  "verifiedLocalArchives": [
+    {
+      "name": "candidate-owned45-r6-pcm-rate100-r1",
+      "utc": "2026-10-25T16:53:51.046Z",
+      "asarSha256": "366ca7c1dee36ec86f18888634a8e44db98c1569735c17007651f35e0098b1c4",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-rate100-r1/Couch/resources/app.asar",
+      "changed": [
+        "dist/assets/PlaybackDevice-BuWovjpK.js",
+        "dist/assets/PlaybackDevice-bFgCHrsS.js",
+        "dist/assets/dist-CB01lDz9.js"
+      ]
+    },
+    {
+      "name": "candidate-owned45-r6-pcm-rate100-routed-r1",
+      "utc": "2026-10-25T17:06:01.433Z",
+      "asarSha256": "32c96a1b48db13bb15bbb50a547a3f8a3d3a82f1b5decbc4495c219cfa4c580e",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-rate100-routed-r1/Couch/resources/app.asar",
+      "changed": [
+        "build/core.mjs"
+      ]
+    },
+    {
+      "name": "candidate-owned45-r6-pcm-clock200-r1",
+      "utc": "2026-10-25T17:38:55.510Z",
+      "asarSha256": "cf696a8095e079aa761cb4b5bbe8c3d2fc072b5cdd07086a675c3902bbbf6142",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-clock200-r1/Couch/resources/app.asar",
+      "changed": [
+        "dist/assets/dist-CB01lDz9.js"
+      ]
+    },
+    {
+      "name": "candidate-owned45-r6-pcm-clock200-budget37-r1",
+      "utc": "2026-10-25T17:38:55.965Z",
+      "asarSha256": "d1f89ea59663a45e23cd08d24b8e207d0911f56c27b5dfbdc76687c0761e4aff",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-clock200-budget37-r1/Couch/resources/app.asar",
+      "changed": [
+        "build/audio-worker.mjs",
+        "build/core.mjs"
+      ]
+    },
+    {
+      "name": "candidate-owned55-r6-pcm-clock200-r1",
+      "utc": "2026-10-25T18:06:43.916Z",
+      "asarSha256": "5ce1d68ecb8ec96cffff0505770032fbb8ccd7955803154fe32c60e25de9d211",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned55-r6-pcm-clock200-r1/Couch/resources/app.asar",
+      "changed": [
+        "build/audio-worker.mjs",
+        "build/core.mjs"
+      ]
+    },
+    {
+      "name": "audio-native-desktop-r1",
+      "asarSha256": "200eb6d0e4fee82b7dced4f356b6dfb13bad0d0ee1c451431110d13538d9c9a0",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r1/app.asar",
+      "changed": [
+        "build/main.mjs",
+        "build/preload.cjs",
+        "dist/index.html",
+        "dist/sw.js"
+      ]
+    },
+    {
+      "name": "audio-native-desktop-r2",
+      "asarSha256": "9d1bb37a27d8d34a89e5f54e2baed3f2afab74572905b22eb8c403a89b1625ee",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r2/app.asar",
+      "changed": [
+        "build/main.mjs"
+      ]
+    },
+    {
+      "name": "audio-native-desktop-r3",
+      "asarSha256": "9a608ffac878485e47f7cdc2e4017d42aa37b2e8c90a861809dda7571c016819",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r3/app.asar",
+      "changed": [
+        "build/audio-worker.mjs"
+      ]
+    },
+    {
+      "name": "audio-native-desktop-r4",
+      "asarSha256": "ee16cdca9457f3db4f0bd930d901bdc1d9468abfc725e7e5d5458737ea283219",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r4/app.asar",
+      "changed": [
+        "build/audio-worker.mjs",
+        "build/core.mjs"
+      ]
+    },
+    {
+      "name": "audio-supported-live-host-r1",
+      "asarSha256": "9a118bd6978897a19d88ee088a2d72559cab4dbd566b1cf407741c7f50831c6f",
+      "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-supported-live-host-r1/app.asar",
+      "changed": [
+        "build/audio-worker.mjs",
+        "build/core.mjs",
+        "build/main.mjs",
+        "build/preload.cjs",
+        "dist/index.html",
+        "dist/sw.js"
+      ]
+    }
+  ],
+  "macDeploymentVerification": "Read-only SSH hash audit on 2026-10-26; matching remote app.asar hashes printed in this thread. No services started.",
+  "gitAudit": {
+    "t3CheckpointRefs": 2313,
+    "unreachableCommitsInspected": 429,
+    "matchingLaterNativeCaptureOrJoinOrBrowserClockCommits": 0,
+    "laterAssignedWorktree": "/home/avoid/.t3/worktrees/couch/t3-69a4c8d1",
+    "actualEditedWorktree": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6"
+  }
+}

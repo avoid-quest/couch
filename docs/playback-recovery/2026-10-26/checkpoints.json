@@ -1,0 +1,130 @@
+[
+  {
+    "name": "candidate-owned45-r6-pcm-rate100-r1",
+    "utc": "2026-10-25T16:53:51.046Z",
+    "asarSha256": "366ca7c1dee36ec86f18888634a8e44db98c1569735c17007651f35e0098b1c4",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-rate100-r1/Couch/resources/app.asar",
+    "changed": [
+      "dist/assets/PlaybackDevice-BuWovjpK.js",
+      "dist/assets/PlaybackDevice-bFgCHrsS.js",
+      "dist/assets/dist-CB01lDz9.js"
+    ],
+    "archive": "checkpoints/candidate-owned45-r6-pcm-rate100-r1.asar.zst",
+    "archiveSha256": "4f73815f052bb0b221f1920e5439d6f1550c3de08d02450639945f9dab13f650",
+    "archiveSize": 2004221
+  },
+  {
+    "name": "candidate-owned45-r6-pcm-rate100-routed-r1",
+    "utc": "2026-10-25T17:06:01.433Z",
+    "asarSha256": "32c96a1b48db13bb15bbb50a547a3f8a3d3a82f1b5decbc4495c219cfa4c580e",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-rate100-routed-r1/Couch/resources/app.asar",
+    "changed": [
+      "build/core.mjs"
+    ],
+    "archive": "checkpoints/candidate-owned45-r6-pcm-rate100-routed-r1.asar.zst",
+    "archiveSha256": "1e17f48824b1a18fde23e9aaac1961ba5c4db9797d18293aeccb9298843d69f1",
+    "archiveSize": 2004523
+  },
+  {
+    "name": "candidate-owned45-r6-pcm-clock200-r1",
+    "utc": "2026-10-25T17:38:55.510Z",
+    "asarSha256": "cf696a8095e079aa761cb4b5bbe8c3d2fc072b5cdd07086a675c3902bbbf6142",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-clock200-r1/Couch/resources/app.asar",
+    "changed": [
+      "dist/assets/dist-CB01lDz9.js"
+    ],
+    "archive": "checkpoints/candidate-owned45-r6-pcm-clock200-r1.asar.zst",
+    "archiveSha256": "ca2e319c1996626075ce78639ab9a5f6235296078cd7b74827e138e530bbdfb0",
+    "archiveSize": 2004010
+  },
+  {
+    "name": "candidate-owned45-r6-pcm-clock200-budget37-r1",
+    "utc": "2026-10-25T17:38:55.965Z",
+    "asarSha256": "d1f89ea59663a45e23cd08d24b8e207d0911f56c27b5dfbdc76687c0761e4aff",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned45-r6-pcm-clock200-budget37-r1/Couch/resources/app.asar",
+    "changed": [
+      "build/audio-worker.mjs",
+      "build/core.mjs"
+    ],
+    "archive": "checkpoints/candidate-owned45-r6-pcm-clock200-budget37-r1.asar.zst",
+    "archiveSha256": "44da07528e42e2305b5bcfe71c6264b139c33e9dd5af4a1db09c96b6f47ceca7",
+    "archiveSize": 2003704
+  },
+  {
+    "name": "candidate-owned55-r6-pcm-clock200-r1",
+    "utc": "2026-10-25T18:06:43.916Z",
+    "asarSha256": "5ce1d68ecb8ec96cffff0505770032fbb8ccd7955803154fe32c60e25de9d211",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-roundtrip-sync/candidate-owned55-r6-pcm-clock200-r1/Couch/resources/app.asar",
+    "changed": [
+      "build/audio-worker.mjs",
+      "build/core.mjs"
+    ],
+    "archive": "checkpoints/candidate-owned55-r6-pcm-clock200-r1.asar.zst",
+    "archiveSha256": "f2e7910d8eb2fcf3869328dbd9581aaf41ed531714766ff51321a975bf6f0604",
+    "archiveSize": 2003705
+  },
+  {
+    "name": "audio-native-desktop-r1",
+    "asarSha256": "200eb6d0e4fee82b7dced4f356b6dfb13bad0d0ee1c451431110d13538d9c9a0",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r1/app.asar",
+    "changed": [
+      "build/main.mjs",
+      "build/preload.cjs",
+      "dist/index.html",
+      "dist/sw.js"
+    ],
+    "archive": "checkpoints/audio-native-desktop-r1.asar.zst",
+    "archiveSha256": "ce0d38212d5a34f4a304345eee13833125dbdadf844c3f8449864a1adf4827e4",
+    "archiveSize": 1976489
+  },
+  {
+    "name": "audio-native-desktop-r2",
+    "asarSha256": "9d1bb37a27d8d34a89e5f54e2baed3f2afab74572905b22eb8c403a89b1625ee",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r2/app.asar",
+    "changed": [
+      "build/main.mjs"
+    ],
+    "archive": "checkpoints/audio-native-desktop-r2.asar.zst",
+    "archiveSha256": "c58a5adc47e9d8c803228ae949349a9d83d29cbdc5d439a660d491cca743e058",
+    "archiveSize": 1976413
+  },
+  {
+    "name": "audio-native-desktop-r3",
+    "asarSha256": "9a608ffac878485e47f7cdc2e4017d42aa37b2e8c90a861809dda7571c016819",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r3/app.asar",
+    "changed": [
+      "build/audio-worker.mjs"
+    ],
+    "archive": "checkpoints/audio-native-desktop-r3.asar.zst",
+    "archiveSha256": "4099d2b2f8f55962b7a2ed2de5af510be3d16a6fb0ba54ff48ab5abe3e1a268c",
+    "archiveSize": 1976417
+  },
+  {
+    "name": "audio-native-desktop-r4",
+    "asarSha256": "ee16cdca9457f3db4f0bd930d901bdc1d9468abfc725e7e5d5458737ea283219",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-native-desktop-r4/app.asar",
+    "changed": [
+      "build/audio-worker.mjs",
+      "build/core.mjs"
+    ],
+    "archive": "checkpoints/audio-native-desktop-r4.asar.zst",
+    "archiveSha256": "9ee1d3f645b30f6dc39753a38fe0ede30af2dbdbe6dec600886b81d5cea358a6",
+    "archiveSize": 1976423
+  },
+  {
+    "name": "audio-supported-live-host-r1",
+    "asarSha256": "9a118bd6978897a19d88ee088a2d72559cab4dbd566b1cf407741c7f50831c6f",
+    "path": "/home/avoid/.t3/worktrees/couch/t3-3c4248e6/.scratch/audio-supported-live-host-r1/app.asar",
+    "changed": [
+      "build/audio-worker.mjs",
+      "build/core.mjs",
+      "build/main.mjs",
+      "build/preload.cjs",
+      "dist/index.html",
+      "dist/sw.js"
+    ],
+    "archive": "checkpoints/audio-supported-live-host-r1.asar.zst",
+    "archiveSha256": "6069a821f8726a913255c874b03bf02657eaf0c1e9a0de98a0b505995994cb61",
+    "archiveSize": 1982391
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "createdUtc": "2026-10-25T23:54:32.861662+00:00",
+  "baseCommit": "27e580cc3d0b3fc7b4925100777af38324f2b5e3",
+  "sourceSnapshotCommit": "8147fc98fbeda5b415c3351a10a98c7cab816d4a",
+  "sourceFilesVerified": 112,
+  "allSourceFileHashesMatchOriginalSnapshot": true,
+  "archiveVerification": {
+    "evidence": {
+      "filesVerified": 15822,
+      "allFileHashesMatch": true,
+      "safeRelativePaths": true
+    },
+    "recordings": {
+      "filesVerified": 5,
+      "allFileHashesMatch": true,
+      "safeRelativePaths": true
+    }
+  },
+  "deployedApplicationArchivesVerified": 10,
+  "macNativeHelperVerified": true,
+  "credentialScan": {
+    "tool": "gitleaks 8.30.1",
+    "remainingEvidenceFindings": 0,
+    "reviewedEvidenceFalsePositives": {
+      "count": 14,
+      "reason": "SHA-256 source-content hashes for pairing-token.js/.d.ts and keys.js/.d.ts in provenance manifests"
+    },
+    "reviewedSourceAndDiffFalsePositives": {
+      "count": 2,
+      "reason": "The same unchanged test-token fixture already present in pushed baseline tests/output-admission.test.ts"
+    },
+    "remainingApplicationArchiveFindings": 0
+  },
+  "runtimeValidation": "No Couch services started and no product tests or CI dispatched by this preservation task. These checks establish preservation integrity, not release readiness.",
+  "originalInvestigationWorktreesModified": false
+}

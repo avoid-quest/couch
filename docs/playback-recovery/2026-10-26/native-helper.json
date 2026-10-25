@@ -1,0 +1,9 @@
+{
+  "remotePath": "/Users/devit/Library/Application Support/Couch Audio Roundtrip Sync/native-desktop-r4/Couch Audio Lab Native R4.app/Contents/Resources/live-audio/couch-capture",
+  "sha256": "50436ff6e3685274a7bb7dc2ace8689cb22226cdcee692cbc8c05ac7929d453b",
+  "size": 169960,
+  "archive": "checkpoints/couch-capture-macos-arm64.zst",
+  "archiveSha256": "3ccebf67927aa6d23904266e9a4841ebe38a9b5d66a504502881379c444f4504",
+  "architecture": "macOS arm64",
+  "matchesSupportedHostR1": true
+}
