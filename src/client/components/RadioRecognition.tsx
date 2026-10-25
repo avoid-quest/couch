@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AudioLines } from "lucide-react";
 import { identifyRadioSong } from "@/api/radio";
 import type { ApiCredentials } from "@/api/client";
-import { originalPageUrl } from "@/original-page";
+import { MediaArtwork } from "./MediaArtwork";
 import { Button } from "./ui/button";
+import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "./ui/item";
 import { Spinner } from "./ui/spinner";
 import type { RadioRecognitionResult } from "../../shared/radio-recognition";
 
-export function RadioRecognition({ credentials, stationId, connected }: {
-  credentials: ApiCredentials; stationId: string; connected: boolean;
+export function RadioRecognition({ credentials, stationId, connected, controls }: {
+  credentials: ApiCredentials; stationId: string; connected: boolean; controls: HTMLElement | null;
 }) {
   const request = useRef<AbortController | null>(null);
   const [pending, setPending] = useState(false);
@@ -66,25 +68,29 @@ export function RadioRecognition({ credentials, stationId, connected }: {
   }
 
   const track = result?.track;
-  const url = originalPageUrl(track?.url);
-  const shazamUrl = url && ["shazam.com", "www.shazam.com"].includes(new URL(url).hostname) ? url : undefined;
-  return <div data-radio-recognition className="grid justify-items-start gap-2" aria-busy={pending}>
-    <div className="flex flex-wrap items-center gap-2">
-      <Button ref={trigger} variant="secondary" size="sm" disabled={!connected || pending} onClick={() => void identify()}>
+  return <>
+    {controls && createPortal(<div data-radio-recognition-controls className="flex items-center gap-0.5">
+      <Button ref={trigger} variant="ghost" size="icon-lg" className="size-(--player-target)" aria-label={pending ? "Identifying…" : "Identify song"} title="Identify song" disabled={!connected || pending} onClick={() => void identify()}>
         {pending ? <Spinner aria-hidden="true" role="presentation" className="motion-reduce:animate-none" /> : <AudioLines aria-hidden="true" />}
-        {pending ? "Identifying…" : "Identify song"}
       </Button>
       {pending && <Button ref={cancelControl} variant="ghost" size="sm" onClick={cancel}>Cancel</Button>}
-    </div>
-    <div role="status" aria-live="polite" aria-atomic="true" className="grid gap-1 text-sm text-pretty">
-      {result && (track ? <>
-        <p>{[track.artist, track.title].filter(Boolean).join(" — ")}</p>
-        <p className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
-          <span>Identified at <time dateTime={new Date(result.sampledAt).toISOString()}>{new Date(result.sampledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></span>
-          {shazamUrl && <a data-text-link data-tv-local-only href={shazamUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 decoration-foreground/40 hover:decoration-foreground">Open in Shazam<span className="sr-only"> (opens in a new tab)</span></a>}
-        </p>
-      </> : <p className="text-muted-foreground">No song identified. Try another part of the stream.</p>)}
-    </div>
-    {error && <p role="alert" className="text-sm text-pretty text-destructive">{error}</p>}
-  </div>;
+    </div>, controls)}
+    {(pending || result || error) && <div data-radio-recognition className="min-w-0 text-sm text-pretty" aria-busy={pending}>
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {pending && <p className="text-muted-foreground">Identifying…</p>}
+        {result && (track ? <Item size="sm" className="max-w-md flex-nowrap items-start gap-3 rounded-none border-0 p-0">
+          <ItemMedia>
+            <MediaArtwork thumbnail={track.artworkUrl} title={track.title} className="aspect-square size-16 rounded-sm object-contain" />
+          </ItemMedia>
+          <ItemContent className="min-w-0 gap-0.5">
+            <ItemTitle className="line-clamp-none text-base break-words">{track.title}</ItemTitle>
+            {track.artist && <ItemDescription className="line-clamp-none break-words text-foreground">{track.artist}</ItemDescription>}
+            {track.album && <ItemDescription className="line-clamp-none break-words">{track.album}</ItemDescription>}
+            <p className="mt-1 text-meta text-muted-foreground">Identified at <time dateTime={new Date(result.sampledAt).toISOString()}>{new Date(result.sampledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></p>
+          </ItemContent>
+        </Item> : <p className="text-muted-foreground">No song identified. Try another part of the stream.</p>)}
+      </div>
+      {error && <p role="alert" className="text-destructive">{error}</p>}
+    </div>}
+  </>;
 }

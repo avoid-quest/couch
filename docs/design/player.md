@@ -375,22 +375,26 @@ disabled. The band includes the phone's safe-area inset.
 
 ### Identify a radio song
 
-A radio station's Now playing offers **Identify song** under its track line.
-The action samples the station only when pressed; it never starts from opening
-the player or on a timer. **Identifying…** keeps its slot while a ghost
-**Cancel** action is available beside it. Playback keeps running.
+A radio station's Now playing offers **Identify song** as a ghost audio-wave
+icon beside Info in the top-right controls, with a tooltip and accessible name.
+It samples the station only when pressed; it never starts
+from opening the player or on a timer. A spinner keeps the icon's slot while
+a ghost **Cancel** action is available beside it. Playback keeps running.
 Saved Radio Browser favorites also offer it when their queue entry holds the
 stream URL. On cancellation or completion, focus on Cancel returns to Identify
 song after it becomes available.
 
-The result is a flat artist-and-title line, followed by the sample's local time
-and **Open in Shazam** when a link is available. It belongs to this viewer's
+The result stays beneath the station details as a flat shadcn `Item`: a small
+whole cover, the song's title, artist, album when supplied and the sample's
+local time. Missing artwork uses `MediaArtwork`'s fallback. The item has no
+external link, border, panel or repeated heading. It belongs to this viewer's
 request, separate from the station and programme: it does not replace their
 title, host or artwork, and is not a continuously updated current-track label.
 A miss says "No song identified. Try another part of the stream." Failures
-stay beside the action so it can be tried again. Another Couch, station, queue
-entry or Playback, a disconnect, or leaving the player cancels the request and
-clears its result. There is no recognition history or automatic recognition.
+stay in the result's place so the action can be tried again. Another Couch,
+station, queue entry or Playback, a disconnect, or leaving the player cancels
+the request and clears its result. There is no recognition history or automatic
+recognition.
 
 ### Calm and Info
 

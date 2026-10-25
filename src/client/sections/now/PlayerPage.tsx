@@ -125,6 +125,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const info = artworkStage && !!infoKey && infoFor === infoKey;
   useEffect(() => { setInfoFor(null); }, [infoKey]);
   const infoToggle = useRef<HTMLButtonElement>(null);
+  const [recognitionControls, setRecognitionControls] = useState<HTMLDivElement | null>(null);
   const infoRegion = useRef<HTMLDivElement>(null);
   // What Info hides takes its focus with it (a synopsis' More, the trail's links): Info's button, else the picture, takes it.
   const wasInfo = useRef(info);
@@ -334,6 +335,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
           <LiveSharingStatus />
+          <div ref={setRecognitionControls} className="empty:hidden" />
           {current && artworkStage && <Button ref={infoToggle} data-info-toggle variant="ghost" size="icon-lg" className="-mr-2.5 size-(--player-target) shrink-0" aria-label="Info" title="Info" aria-expanded={info} aria-controls="player-info" onClick={event => { toggleInfo(); if (event.detail) surface()?.focus({ preventScroll: true }); }}><Info aria-hidden="true" /></Button>}
         </div>
       </div>}
@@ -363,7 +365,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {!radio && <PlayerEndTime state={state} className="text-sm text-muted-foreground tabular-nums" />}
           </div>
           {nowPlaying && <p role="status" className="text-sm text-pretty text-muted-foreground">{nowPlaying}</p>}
-          {radio && stationId && <RadioRecognition key={JSON.stringify([credentials.origin, credentials.token, state?.playback, player?.playbackId, current.id, stationId])} credentials={credentials} stationId={stationId} connected={connected} />}
+          {radio && stationId && <RadioRecognition key={JSON.stringify([credentials.origin, credentials.token, state?.playback, player?.playbackId, current.id, stationId])} credentials={credentials} stationId={stationId} connected={connected} controls={recognitionControls} />}
           {statusView}
         </div>
       </div>}

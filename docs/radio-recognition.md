@@ -1,9 +1,11 @@
 # Identify a song on radio
 
-Play a radio station and open its player. Choose **Identify song** to take a
-short excerpt and look up the song. Playback continues while it listens. A
-match shows the artist, title, time of the excerpt and a link to Shazam. If
-there is no match, try another part of the stream. **Cancel** stops the request.
+Play a radio station and open its player. Choose the **Identify song** audio-wave
+icon beside Info to take a short excerpt and look up the song. Playback
+continues while it listens. A match stays in Couch as a compact item with cover
+art, title, artist, album when available and time of the excerpt. Missing cover
+art uses a fallback. If there is no match, try another part of the stream.
+**Cancel** stops the request.
 
 Recognition runs only when someone presses the button. Opening the player,
 playing a station and receiving state updates never start it. The result

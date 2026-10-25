@@ -416,8 +416,9 @@ Shared building blocks in `src/client/components`:
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
   ([Player](design/player.md)). The timeline's pointer preview owns its state;
   pointer motion leaves the slider, chapter markers and playback labels alone.
-- `RadioRecognition`: the player's manual **Identify song** action and its flat,
-  timestamped result ([Player](design/player.md#identify-a-radio-song)).
+- `RadioRecognition`: the player's manual **Identify song** icon beside Info
+  and its native result, a flat shadcn `Item` with cover, title, artist, album
+  and sample time ([Player](design/player.md#identify-a-radio-song)).
   Saved favorites queued by stream URL resolve to their station ID too; Cancel
   returns keyboard focus to the action once it is available.
 - `playbackStatus`: one status vocabulary for Home, the player, the

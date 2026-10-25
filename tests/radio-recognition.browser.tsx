@@ -4,8 +4,10 @@ import { mountUiAudit } from "./ui-audit.browser";
 const wait = () => new Promise(resolve => setTimeout(resolve, 180));
 const assert = (value: unknown, message: string) => { if (!value) throw new Error(message); };
 const recognition = () => document.querySelector<HTMLElement>("[data-radio-recognition]");
-const button = (label: string) => [...recognition()!.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent?.trim() === label)!;
-const matched = (title = "Identified song") => Response.json({ track: { title, artist: "Recognized artist", provider: "shazam", url: "https://www.shazam.com/song/123/identified-song" }, sampledAt: Date.now() });
+const controls = () => document.querySelector<HTMLElement>("[data-radio-recognition-controls]");
+const button = (label: string) => [...controls()!.querySelectorAll<HTMLButtonElement>("button")].find(button => (button.getAttribute("aria-label") || button.textContent?.trim()) === label)!;
+const artworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/0c/72/a1/0c72a174-9208-6c86-e479-79865376e904/19UMGIM66006.rgb.jpg/400x400cc.jpg";
+const matched = (title = "Identified song") => Response.json({ track: { title, artist: "Recognized artist", album: "Recognized album", artworkUrl, provider: "shazam", url: "https://www.shazam.com/song/123/identified-song" }, sampledAt: Date.now() });
 
 export async function runRadioRecognitionRegression() {
   const audit = await mountUiAudit();
@@ -25,6 +27,8 @@ export async function runRadioRecognitionRegression() {
     await check("opening and updating radio never starts recognition", async () => {
       await audit.go("/now", { player: "playing", live: true });
       assert(button("Identify song") && !button("Identify song").disabled, "The radio player lacks its action");
+      assert(controls()?.closest("[data-player-header]"), "The action is outside the player's header controls");
+      assert(!recognition(), "Opening the player adds an empty result");
       await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player, position: 10 } } }));
       assert(calls.length === 0, "Recognition started without a click");
     });
@@ -37,12 +41,20 @@ export async function runRadioRecognitionRegression() {
       assert(button("Identifying…").disabled && button("Cancel"), "Pending recognition has no usable cancellation");
       button("Cancel").focus();
       call.resolve(matched()); await wait();
-      assert(recognition()?.textContent?.includes("Recognized artist — Identified song"), "The matched track is missing");
+      assert(recognition()?.querySelector('[data-slot="item-title"]')?.textContent === "Identified song", "The matched track is missing");
+      assert(recognition()?.textContent?.includes("Recognized artist") && recognition()?.textContent?.includes("Recognized album"), "The artist or album is missing");
+      assert(recognition()?.querySelector("img")?.src === artworkUrl, "The cover image is missing");
       assert(recognition()?.querySelector("time")?.dateTime, "The result has no sample time");
-      assert(recognition()?.querySelector("a")?.textContent?.includes("Open in Shazam"), "The track link is missing");
+      assert(!recognition()?.querySelector("a"), "Recognition sends the viewer to another service");
       assert(document.querySelector("h1")?.textContent === "Early Bird", "Recognition overwrote the programme title");
       assert(audit.actions.length === commands, "Recognition sent a playback command");
       assert(document.activeElement === button("Identify song"), "Completion lost focus when Cancel disappeared");
+    });
+    await check("a match without artwork, album or artist still has an in-Couch result", async () => {
+      (await start()).resolve(Response.json({ track: { title: "A title only", provider: "shazam" }, sampledAt: Date.now() })); await wait();
+      assert(recognition()?.querySelector('[data-slot="item-title"]')?.textContent === "A title only", "A sparse match lost its title");
+      assert(recognition()?.querySelector('[data-slot="item-media"] .media-artwork'), "A sparse match has no cover fallback");
+      assert(!recognition()?.querySelector("img, a"), "A sparse match has a broken image or external link");
     });
     await check("a miss and an upstream failure can be retried manually", async () => {
       (await start()).resolve(Response.json({ track: null, sampledAt: Date.now() })); await wait();
@@ -61,7 +73,7 @@ export async function runRadioRecognitionRegression() {
       button("Cancel").focus(); button("Cancel").click(); await wait();
       assert(call.init?.signal?.aborted, "Cancel did not abort the request");
       call.resolve(matched("Canceled song")); await wait();
-      assert(!recognition()?.textContent?.includes("Canceled song"), "A canceled result appeared");
+      assert(!recognition(), "A canceled result appeared or left an empty result");
       assert(document.activeElement === button("Identify song"), "Cancel lost focus when it disappeared");
     });
     await check("switching station or playback discards pending work", async () => {
@@ -83,7 +95,7 @@ export async function runRadioRecognitionRegression() {
       call.resolve(matched("Saved favorite")); await wait();
       assert(recognition()?.textContent?.includes("Saved favorite"), "A saved directory station could not be identified");
       await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, queue: gate.state!.queue.map(entry => entry.id === "concert" ? { ...entry, source: "https://unsaved.example/stream" } : entry) } }));
-      assert(!recognition(), "An unsaved stream offers recognition");
+      assert(!controls(), "An unsaved stream offers recognition");
       await audit.go("/now", { player: "playing", live: true });
     });
     await check("switching Couch cancels the old request and uses the new credentials", async () => {
@@ -114,7 +126,7 @@ export async function runRadioRecognitionRegression() {
     });
     await check("non-radio playback has no recognition action", async () => {
       await audit.go("/now", { player: "playing" });
-      assert(!recognition(), "A non-radio item offers radio recognition");
+      assert(!controls(), "A non-radio item offers radio recognition");
     });
     return { passed: true, checks };
   } finally {
