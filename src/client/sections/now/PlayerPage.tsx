@@ -305,8 +305,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         takes focus when the player opens, and keys on it are shortcuts (useCouchHotkeys counts a tabindex of -1 as
         background). As on YouTube, a click on a video plays or pauses (on audio, a stray click leaves the music alone),
         a click while Up next is open only closes it, and a double-click toggles fullscreen; a tap shows or hides the controls. */}
-    {/* A playing picture lights its letterbox; artwork stands in its room, painted with its colours. */}
-    {current && osd && <AmbientLight src={current.thumbnail} anchor={stage} className="[--backlight:8rem]" />}
+    {/* Windowed video lights its letterbox; fullscreen and TV keep black bars. Artwork stands in its room. */}
+    {current && osd && !fullscreen.fullscreen && !tvPresentation && <AmbientLight src={current.thumbnail} anchor={stage} className="[--backlight:8rem]" />}
     {current && artworkStage && <div aria-hidden="true" className="room" />}
     <div ref={showPicture} data-player-surface tabIndex={-1} role="group" aria-label={title ? `Player: ${title}` : "Player"} className="player-video absolute inset-0 outline-none"
       onPointerDown={event => { tap.current = event.pointerType === "touch" ? shown : null; }}

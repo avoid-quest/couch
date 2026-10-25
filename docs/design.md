@@ -107,10 +107,10 @@ colours are registered custom properties, so when the artwork changes they
 cross-fade over 600 ms; reduced motion swaps them at once. Everything is
 painted once: no blurred copy of the picture, nothing animated.
 
-Elsewhere the artwork lights its surroundings: a playing video's letterbox is lit around
+Elsewhere the artwork lights its surroundings: a windowed video's letterbox is lit around
 the contained picture as YouTube's ambient mode (`AmbientLight`: a backlight
 hugging its edges and a haze three pictures wide, painted once, so a playing
-video costs nothing per frame), and a hovered or focused tile or row glows
+video costs nothing per frame). Fullscreen video and TV keep black letterbox bars. A hovered or focused tile or row glows
 under its picture in its first colour (`useItemLight`).
 
 ## Glass
