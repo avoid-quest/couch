@@ -373,6 +373,40 @@ Live media
 that can't seek has no timeline, no time and no label, and its Pause stays
 disabled. The band includes the phone's safe-area inset.
 
+### Identify a radio song
+
+A radio station's Now playing offers **Identify song** as a ghost audio-wave
+icon beside Info in the top-right controls, with a tooltip and accessible name.
+It samples the station only when pressed; it never starts
+from opening the player or on a timer. A spinner keeps the icon's slot while
+a ghost **Cancel** action is available beside it. Playback keeps running.
+Saved Radio Browser favorites also offer it when their queue entry holds the
+stream URL. On cancellation or completion, focus on Cancel returns to Identify
+song after it becomes available.
+
+The result sits below the station line, before the expanded programme details,
+with its own breathing room in both calm and Info views. A flat shadcn `Item`
+shows a whole 56px cover, title, artist and excerpt time. Missing artwork uses
+`MediaArtwork`'s fallback. The underlined title and whole item link directly to
+Couch Search with the artist and song title filled in, in the Audio scope:
+YouTube, Bandcamp and SoundCloud. Film, series, TV and radio catalogues are
+excluded.
+There is no modal, external Shazam link or chevron. One clear cross sits
+centred beside the item.
+
+The **Clear result** cross dismisses the player item and returns focus to
+Identify song. A miss says "No song identified. Try another part of the stream."
+and uses the same aligned cross, as do failures; there is no text Clear button.
+Another Couch, station, queue entry or Playback, a disconnect, or leaving the
+player cancels the request and clears this viewer's result. It does not replace
+the programme or affect other viewers' players.
+
+Completed lookups, including misses, are automatically kept in Couch's shared
+SQLite history. They retain the excerpt time, station name and ID, programme
+when available, requester ID/name and returned song metadata. Clearing the
+player does not remove that history. Canceled and failed requests add nothing.
+There is no automatic recognition.
+
 ### Calm and Info
 
 Now playing opens **calm**, on every screen: the artwork, the title, where it

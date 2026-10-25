@@ -7,7 +7,7 @@ it never starts an empty search across the sources or flashes unfiltered results
 (`tests/search-navigation.browser.tsx`).
 
 The header's palette ([Shell](shell.md#search-field)) submits to
-`/search?q=…&kind=…&source=…`; an empty query is Home. Every source is asked
+`/search?q=…&kind=…&source=…`; an empty query is Home. Eligible sources are asked
 at once and answers independently. Counts and "still asking" are a
 screen-reader status; on screen the header's Spinner and a skeleton in the
 results' geometry (a closest match, then a shelf of tiles; one kind's grid when
@@ -15,17 +15,20 @@ a kind is chosen) show the wait.
 
 **The scope is the field's token.** A kind and a source live in the URL
 (`/search?q=jazz&kind=music&source=Bandcamp`, kind one of
-`films|live|radio|music|videos`) and show as the header field's tokens: choosing
+`films|live|radio|music|videos|audio`) and show as the header field's tokens: choosing
 one on the page changes the token, and changing the token in the palette
-re-scopes the page in place, without asking the sources again. A scope chosen
+re-scopes the page in place, reusing answers already held. A scope chosen
 in the palette applies before any result arrives (its skeleton shows); if it
 holds nothing once the sources have answered, the page says "Nothing in Music
 on Bandcamp for “jazz”" with "Show all N results", which clears it.
 
 Each source declares the kinds it can return (`sourceKinds` in `search.ts`:
 Bandcamp and SoundCloud music, the catalogues films and series, the radio lists
-radio, and so on). Under a kind, only those sources are waited on, counted as
-still asking, or reported: a failure from a source that never returns the kind
+radio, and so on). Audio searches YouTube, Bandcamp and SoundCloud together,
+including music videos, while skipping film, series, TV and radio catalogue
+requests and any results held from them. Recognized songs open this scope.
+Under a kind, only those sources are waited on, counted as still asking, or
+reported: a failure from a source that never returns the kind
 isn't shown. Sources that didn't answer close the page in one muted line,
 "StreamingCommunity, AnimeSaturn and AnimeUnity didn't answer. Try again", so
 the results lead; their reasons wait on the source's own page. A Details page's
@@ -222,7 +225,8 @@ the app) and never travels through Remote.
 
 `/saved`, one section per `?tab=`: For later, Channels & stations (saved
 channels, playlists, albums and series, then favourite stations), Lists and
-Played (History, newest first). A saved YouTube channel's Play, Play on and
+Played (History, newest first), and Identified songs (completed radio lookups,
+newest first). A saved YouTube channel's Play, Play on and
 Queue read its Videos section, with the same 500-video limit as other lists.
 Channel Details use the canonical address when available; opening an older
 saved alias keeps its Saved/Remove state and merges an already saved canonical
@@ -243,6 +247,18 @@ A list keeps its own title and verbs. An empty tab says what goes there and
 offers Search, which focuses the header's field. Removing says "Removed …
 from Saved." with Undo. Artwork this page has already shown appears at once on
 every tab; only a cold load fades.
+
+Identified songs uses the same small artwork/link item as the player. Each
+row shows the song title, artist and album when known, radio, programme when
+known, date/time and requesting device's saved name. A matched song links
+directly to Couch Search with its artist and title in the Audio scope (YouTube,
+Bandcamp and SoundCloud); no modal or external recognition-service link
+intervenes. A no-match observation
+is plain text. These observations are kept automatically by Couch, shared
+across paired devices and retained across restarts; a station rename,
+programme change or device rename does not rewrite an earlier lookup.
+Clearing a result in the player leaves it here. Its empty state directs people
+to Identify song in a radio player.
 
 ## Rows and tiles
 

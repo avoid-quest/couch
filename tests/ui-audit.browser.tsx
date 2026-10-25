@@ -61,6 +61,7 @@ export async function mountUiAudit(onRender: ProfilerOnRenderCallback = () => {}
     else if(path.startsWith('/api/playlists/')) body={playlist:{id:'audit-list',name:'Sunday listening',entries:[entry,{...entry,id:'next',title:'The next concert'}]}};
     else if(path==='/api/radio/avoid') body={playlist:{id:avoidRadioPlaylistId,name:'avoid radio',stationCount:1,error:null},stations:mode==='empty'?[]:[station]};
     else if(path==='/api/radio/programmes') body={programmes:mode==='empty'?{}:{[station.id]:{programmes:[{id:'morning',title:'Early Bird',start:Date.now()-1800000,end:Date.now()+1800000,artworkUrl:thumbnail,description:'Music for the beginning of the day.',categories:['Jazz','Experimental']},{id:'afternoon',title:'Afternoon selections',start:Date.now()+1800000,end:Date.now()+5400000,categories:['Ambient'],description:'Selections from the community studio.'}],live:{stationId:station.id,provider:'radio.avoid.quest',title:'Early Bird',artist:'Alex',genre:'Jazz',sampledAt:Date.now()-1000,expiresAt:Date.now()+60000}}}};
+    else if(path==='/api/radio/recognitions') body={items:[]};
     else if(path==='/api/radio/favorites') body={favorites:mode==='empty'?[]:[station]};
     else if(path.startsWith('/api/radio/stations/')) body={station};
     else if(path==='/api/radio/stations') body={stations:mode==='empty'?[]:[station]};

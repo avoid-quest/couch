@@ -253,7 +253,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
 
   return {
     metadata: {
-      async get(id: string, streamUrl: string, signal?: AbortSignal) {
+      async get(id: string, streamUrl: string, signal?: AbortSignal, at?: number) {
         if (closed || signal?.aborted) return { programme: null, retryAt: Date.now() + 60_000 };
         const row = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(id);
         if (!row) return { programme: null, retryAt: Date.now() + 60_000 };
@@ -263,7 +263,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
         if (closed || signal?.aborted) return { programme: null, retryAt: Date.now() + 60_000 };
         const latest = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(id);
         if (!latest || station(JSON.parse(latest.station)).url !== streamUrl) return { programme: null, retryAt: Date.now() + 60_000 };
-        const programme = radioNow(guide, current.id), next = radioNext(guide);
+        const programme = radioNow(guide, current.id, at), next = radioNext(guide, at);
         return { programme, retryAt: Math.min(retryAt, programme?.expiresAt ?? Infinity, next?.start ?? Infinity) };
       },
     },

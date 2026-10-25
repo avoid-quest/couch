@@ -34,7 +34,8 @@ import { AmbientLight, roomStyle, useArtworkLight } from "@/components/AmbientLi
 import { titleFit, titleLength } from "@/components/Stage";
 import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
-import { radioProgrammesQuery, radioStationQuery } from "@/api/radio";
+import { RadioRecognition } from "@/components/RadioRecognition";
+import { radioFavoritesListQuery, radioProgrammesQuery, radioStationQuery } from "@/api/radio";
 import { useQuery } from "@tanstack/react-query";
 import { isRadio, radioHost, radioShowLabels, radioNext, type RadioGuide } from "../../../shared/radio";
 import { useRadioClock } from "@/radio-clock";
@@ -94,7 +95,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   }, []);
   const [now, setNow] = useState(Date.now());
   const radioGuides = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && isRadio(current), refetchInterval: 60_000 });
-  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : "";
+  const radioFavorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && isRadio(current) && !current?.source.startsWith("radio:") });
+  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : radioFavorites.data?.favorites.find(station => station.url === current?.source)?.id ?? "";
   const stationDetails = useQuery({ ...radioStationQuery(credentials, stationId), enabled: connected && !!stationId });
   const player = state?.player;
   const panel = current && active && panelState?.playbackId === player?.playbackId ? panelState?.panel ?? null : null;
@@ -123,6 +125,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const info = artworkStage && !!infoKey && infoFor === infoKey;
   useEffect(() => { setInfoFor(null); }, [infoKey]);
   const infoToggle = useRef<HTMLButtonElement>(null);
+  const [recognitionControls, setRecognitionControls] = useState<HTMLDivElement | null>(null);
   const infoRegion = useRef<HTMLDivElement>(null);
   // What Info hides takes its focus with it (a synopsis' More, the trail's links): Info's button, else the picture, takes it.
   const wasInfo = useRef(info);
@@ -332,6 +335,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
           <LiveSharingStatus />
+          <div ref={setRecognitionControls} className="empty:hidden" />
           {current && artworkStage && <Button ref={infoToggle} data-info-toggle variant="ghost" size="icon-lg" className="-mr-2.5 size-(--player-target) shrink-0" aria-label="Info" title="Info" aria-expanded={info} aria-controls="player-info" onClick={event => { toggleInfo(); if (event.detail) surface()?.focus({ preventScroll: true }); }}><Info aria-hidden="true" /></Button>}
         </div>
       </div>}
@@ -355,6 +359,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {/* Where it plays leads the line under the title, as in the now-playing bar. */}
           <PlaysOnLine at={at}>{copyContext}</PlaysOnLine>
           {separateWindow && <p className="text-sm text-muted-foreground">In a separate window</p>}
+          {radio && stationId && <RadioRecognition key={JSON.stringify([credentials.origin, credentials.token, state?.playback, player?.playbackId, current.id, stationId])} credentials={credentials} stationId={stationId} connected={connected} controls={recognitionControls} />}
           <div ref={infoRegion} id="player-info" hidden={!info} className="grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0">
             {byline && <p className="text-sm text-pretty text-muted-foreground">{byline}</p>}
             {radio && <><RadioProgress show={currentProgramme} /><Description text={currentProgramme?.description} /><PlayerNextProgramme guide={stationId ? radioGuides.data?.[stationId] : undefined} /></>}

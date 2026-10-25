@@ -142,7 +142,7 @@ export function HeaderSearch({ className }: { className?: string }) {
           {/* The scope's tokens: a press removes one (the keyboard's Backspace, the TV's own row in the palette). */}
           {labels.map(label => <button key={label} type="button" tabIndex={-1} data-search-token aria-label={`Remove ${label}`} title={`Remove ${label}`} onPointerDown={event => event.preventDefault()}
             onClick={() => { rescope(label === scope.source ? { kind: scope.kind, source: "All" } : { source: scope.source }); input.current?.focus(); }}
-            className={cn("min-w-0 max-w-32 truncate rounded-full bg-foreground/15 px-2.5 py-0.5 text-sm font-medium text-foreground", !open && "group-has-[input:focus]/input-group:bg-background/15 group-has-[input:focus]/input-group:text-background")}>{label}</button>)}
+            className={cn("min-w-0 max-w-32 truncate rounded-full bg-foreground/15 px-2.5 py-0.5 text-sm font-medium text-foreground", !open && "max-sm:hidden group-has-[input:focus]/input-group:bg-background/15 group-has-[input:focus]/input-group:text-background")}>{label}</button>)}
         </InputGroupAddon>
         <span id={tokens} hidden>{labels.length ? `In ${labels.join(", ")}` : ""}</span>
         <PaletteInput ref={input} open={open} id="media-search" data-remote-field="find" type="search" aria-label="Search or paste a link" aria-describedby={labels.length ? tokens : undefined} placeholder="Search" maxLength={4096} autoComplete="off"

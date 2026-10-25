@@ -140,7 +140,8 @@ under it, at its left edge and width, on the menus' ground (`bg-popover`,
 is. Its rows are `min-h-10` at `text-body` with `rounded-sm` thumbnails
 (`size-10`), its headings `text-meta`, and the query row `text-title`. On a phone
 it fills the screen under the header, the field takes the whole row and Cancel
-closes it.
+closes it. Below `sm`, the closed field hides its scope tokens to leave room for
+the query; opening it reveals the tokens.
 On the TV it fills the screen too: OK on the field opens it (arrows pass a
 closed field, which is a plain field to the remote), a phone's Remote types
 into it ([Type on TV](remote.md#type-on-tv)), and the typed query reads large

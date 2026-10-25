@@ -4,13 +4,14 @@ import { canReturn, searchRelevance, type SearchKind, type SearchRouteState } fr
 export type SearchScope = Pick<SearchRouteState, "kind" | "source">;
 export type Scope = { label: string; words: string[] } & ({ kind: SearchKind; source?: never } | { source: string; kind?: never });
 
-export const kindLabels: Record<SearchKind, string> = { films: "Films & series", live: "Live", radio: "Radio", music: "Music", videos: "Videos" };
+export const kindLabels: Record<SearchKind, string> = { films: "Films & series", live: "Live", radio: "Radio", music: "Music", videos: "Videos", audio: "Audio" };
 // The kinds in the results' order, then the sources; each answers to its name and the short forms people type.
 export const scopes: Scope[] = [
   { kind: "films", label: kindLabels.films, words: ["film", "movies", "movie", "series", "shows"] },
   { kind: "radio", label: kindLabels.radio, words: ["stations", "station", "fm"] },
   { kind: "live", label: kindLabels.live, words: ["streams", "stream"] },
   { kind: "music", label: kindLabels.music, words: ["songs", "albums", "album"] },
+  { kind: "audio", label: kindLabels.audio, words: [] },
   { kind: "videos", label: kindLabels.videos, words: ["video"] },
   { source: "YouTube", label: "YouTube", words: ["yt"] },
   { source: "Bandcamp", label: "Bandcamp", words: ["bc"] },
@@ -66,7 +67,7 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(t
   const { strong } = searchRelevance(text);
   const typed = text.trim().toLocaleLowerCase();
   const radio = !current.kind || current.kind === "radio";
-  const titled = <I extends Titled>(items: I[]) => current.kind === "radio" ? [] : items.filter(item => strong({ title: `${item.title} ${item.context ?? ""}` }) && (current.source === "All" || !item.source || item.source === current.source)).slice(0, limit);
+  const titled = <I extends Titled>(items: I[]) => current.kind === "radio" ? [] : items.filter(item => strong({ title: `${item.title} ${item.context ?? ""}` }) && (current.source === "All" || !item.source || item.source === current.source) && (current.kind !== "audio" || !item.source || canReturn(item.source, "audio"))).slice(0, limit);
   const seen = new Set<string>();
   const once = <I extends Titled>(item: I) => { const key = item.title.toLocaleLowerCase(); if (seen.has(key)) return false; seen.add(key); return true; };
   return {

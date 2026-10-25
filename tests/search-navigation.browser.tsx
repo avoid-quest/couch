@@ -29,7 +29,14 @@ export async function runSearchNavigationRegression() {
     await navigation;
     await wait();
     assert(!document.querySelector('[data-page="Search"]'), "The destination did not replace Search");
-    return { passed: true, extraSourceReads: requests.length };
+    await audit.go("/search?q=concert");
+    assert(document.querySelector('[data-page="Search"]')?.textContent?.includes("Films and series"), "The unrestricted fixture has no film results to exclude");
+    await audit.router.navigate({ href: "/search?q=concert&kind=audio" });
+    await wait(350);
+    const audio = document.querySelector('[data-page="Search"]');
+    assert(audio && !audio.textContent?.includes("Films and series") && !audio.textContent?.includes("Films & series"), "Audio retained cached film results or their filter");
+    assert(audio.textContent?.includes("Bandcamp") && audio.textContent?.includes("SoundCloud") && audio.textContent?.includes("YouTube"), "Audio lost a song source");
+    return { passed: true, extraSourceReads: requests.length, audioScoped: true };
   } finally {
     release();
     await navigation;
