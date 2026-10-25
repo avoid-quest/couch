@@ -245,14 +245,16 @@ offers Search, which focuses the header's field. Removing says "Removed …
 from Saved." with Undo. Artwork this page has already shown appears at once on
 every tab; only a cold load fades.
 
-Identified songs uses the same small artwork/button item as the player. Each
-row shows the song title and artist (or No song identified), radio, programme
-when known, and date/time. Pressing it opens the native details dialog with
-album, larger cover and the requesting device's saved name too. These are
-observations kept automatically by Couch, shared across paired devices and
-retained across restarts; a station rename, programme change or device rename
-does not rewrite an earlier lookup. Clearing a result in the player leaves it
-here. Its empty state directs people to Identify song in a radio player.
+Identified songs uses the same small artwork/link item as the player. Each
+row shows the song title, artist and album when known, radio, programme when
+known, date/time and requesting device's saved name. A matched song links
+directly to Couch Search with its artist and title across All sources; no
+modal or external recognition-service link intervenes. A no-match observation
+is plain text. These observations are kept automatically by Couch, shared
+across paired devices and retained across restarts; a station rename,
+programme change or device rename does not rewrite an earlier lookup.
+Clearing a result in the player leaves it here. Its empty state directs people
+to Identify song in a radio player.
 
 ## Rows and tiles
 

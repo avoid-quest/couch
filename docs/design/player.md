@@ -387,13 +387,12 @@ song after it becomes available.
 The result sits below the station line, before the expanded programme details,
 with its own breathing room in both calm and Info views. A flat shadcn `Item`
 shows a whole 56px cover, title, artist and excerpt time. Missing artwork uses
-`MediaArtwork`'s fallback. The whole row is a button: its chevron and hover
-underline lead to a native shadcn Dialog with larger artwork, title, artist,
-album, full date/time, radio, programme when known and the requesting device's
-name. **View history** opens Saved → Identified songs. No result links out to
-Shazam. Closing details restores focus to the row.
+`MediaArtwork`'s fallback. The underlined title and whole item link directly to
+Couch Search with the artist and song title filled in, across All sources.
+There is no modal, external Shazam link or chevron. One clear cross sits
+centred beside the item.
 
-A visible **Clear result** cross dismisses the player item and returns focus to
+The **Clear result** cross dismisses the player item and returns focus to
 Identify song. A miss says "No song identified. Try another part of the stream."
 and offers Clear result too, as do failures. Another Couch, station, queue
 entry or Playback, a disconnect, or leaving the player cancels the request and

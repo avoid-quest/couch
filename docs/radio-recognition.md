@@ -4,8 +4,9 @@ Play a radio station and open its player. Choose the **Identify song** audio-wav
 icon beside Info to take a short excerpt and look up the song. Playback
 continues while it listens. A match stays in Couch as a compact clickable item
 with cover art, title, artist and excerpt time, above the expanded programme
-information. Open it for larger artwork, album, time, station, programme when
-known and the requesting device's name. **Clear result** dismisses it;
+information. The item opens Couch Search directly with its artist and title,
+across all available sources. There is no modal or Shazam link. The **Clear
+result** cross dismisses it;
 **Cancel** stops a pending request. If there is no match, try another part of
 the stream.
 
@@ -18,7 +19,9 @@ Completed lookups, including no-match results, are saved automatically under
 **Saved → Identified songs**, newest first. That history is shared by paired
 devices on this Couch and survives restarts. It retains the excerpt time,
 station ID/name, programme title when available, requesting device ID/name and
-returned song metadata. Names are snapshots, so renaming a station or device
+returned song metadata. Each saved row shows that context, including album
+and requester, and matched songs link to the same Couch search. Names are
+snapshots, so renaming a station or device
 does not rewrite earlier lookups. Canceled, unauthorized and failed requests
 add no history. Clearing the player's result leaves the saved history intact.
 
@@ -110,6 +113,7 @@ cancellation, bounded decoding and rejected
 private stream destinations. The browser regression
 `tests/radio-recognition.browser.tsx` exercises the actual player route with
 deterministic provider replies at desktop, phone and TV sizes, including full
-Info, opening/closing details, clearing without losing history and Saved. Neither suite
+Info, direct searches across available sources, clearing without losing history
+and Saved. Neither suite
 depends on a live Shazam response. Synthetic PCM fixtures check the fingerprint
 port without committing recorded music.

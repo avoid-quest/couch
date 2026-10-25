@@ -22,9 +22,10 @@ and paired remotes.
   lists of up to 500 episodes; choose individual episodes for longer anime.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites. While a station is playing, choose
-  **Identify song** to recognize a short excerpt. Open the result for details,
-  or clear it with the cross. Completed lookups are kept in **Saved → Identified
-  songs**, with time, station, programme when available and requester. This is an on-demand
+  **Identify song** to recognize a short excerpt. Click the result to search
+  for its artist and title across Couch's sources, or clear it with the cross.
+  Completed lookups are kept in **Saved → Identified songs**, with time,
+  station, programme when available and requester. This is an on-demand
   prototype using Shazam's service; see [song recognition](radio-recognition.md).
 - **AirPlay** sound from an iPhone, iPad or Mac, on a Couch that runs on Linux,
   once an admin turns it on in **Settings → Sources**: [Receive AirPlay](airplay.md).
