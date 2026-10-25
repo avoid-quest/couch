@@ -97,7 +97,28 @@ host admitted by the relay's subnet policy (for example, a /32 is ineligible).
 They log interface eligibility and the TCP client source to diagnose runner
 network differences. A skipped test is not relay runtime validation.
 
+## Native Live audio input on Mac
+
+The `afterPack` hook also runs `scripts/build-live-audio.ts` on macOS before
+signing. It verifies the pinned PortAudio source archive by SHA-256, builds its
+static CoreAudio backend with Xcode command-line tools, and includes
+`Resources/live-audio/couch-capture`, PortAudio's license and a build receipt.
+Build on the target architecture; cross-compiling this helper is not supported.
+Linux/Windows skip this helper, and ordinary frontend/Core builds are unchanged.
+For development on a Mac: `bun scripts/build-live-audio.ts`.
+Build logs stay under `.artifacts/portaudio`. Compilation/discovery alone do not
+qualify microphone permission attribution or physical capture performance.
+
 ## Bundled AirPlay receiver
+
+Linux packaging also builds `native/live-audio/playback` with a C++20 compiler,
+`pkg-config` and `libpulse-dev`. The `afterPack` hook places `couch-playback`, the
+adapted Sendspin CLI license and a source/binary receipt in `Resources/live-audio`.
+It uses the system Pulse server at runtime and does not install or configure one.
+For development: `bun scripts/build-live-playback.ts`. Native protocol/identity,
+TLS pinning and cancellation regressions run on Node with
+`tests/native-output.integration.ts`; process/pipe tests are in
+`tests/native-playback.test.ts`. Neither test suite opens hardware audio.
 
 On Linux, the same `afterPack` hook builds the pinned UxPlay with CMake
 (`scripts/build-airplay.ts`) with Couch's patch

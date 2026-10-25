@@ -1,3 +1,5 @@
+import { liveAudioLeadMs, liveOutputBudget } from "./live-audio-policy";
+
 /** Source-clock timestamps are integer microseconds; PCM is interleaved, never invented stereo. */
 export type CaptureAudioPacket = {
   generation: string;
@@ -8,8 +10,8 @@ export type CaptureAudioPacket = {
   channels: 1 | 2;
   pcm: Float32Array;
 };
-export type CapturePolicy = { intent: "relaxed" | "live" };
-export const captureLeadUs = (policy: CapturePolicy) => policy.intent === "live" ? 100_000 : 1_000_000;
+export type CapturePolicy = { intent: "relaxed" | "live"; liveAudioLeadMs?: number };
+export const captureLeadUs = (policy: CapturePolicy) => policy.intent === "live" ? (policy.liveAudioLeadMs ?? liveAudioLeadMs) * 1000 : 1_000_000;
 const maxFrames = 4096;
 
 export function validateCapturePacket(packet: CaptureAudioPacket) {
@@ -23,6 +25,9 @@ export function validateCapturePacket(packet: CaptureAudioPacket) {
 
 /** Bounded continuous source-rate conversion. The first deadline never moves to hide late input. */
 export function createCaptureClock(policy: CapturePolicy) {
+  if (policy.intent === "live") liveOutputBudget(policy.liveAudioLeadMs);
+  // A setting saved mid-share must not retime this source's existing timeline.
+  const leadUs = captureLeadUs(policy);
   let generation: string | undefined, sequence = -1, nextSample = 0, rate = 0, channels = 0;
   let originUs = 0, measuredAt = 0, measuredSample = 0, ppm = 0;
   let inputAt = 0, outputAt = 0;
@@ -78,7 +83,7 @@ export function createCaptureClock(policy: CapturePolicy) {
       }
       inputAt -= count;
       previous = Array.from({ length: channels }, (_, ch) => packet.pcm[(frames - 1) * channels + ch]!);
-      const atUs = Math.round(originUs + outputAt / 48_000 * 1e6 + captureLeadUs(policy));
+      const atUs = Math.round(originUs + outputAt / 48_000 * 1e6 + leadUs);
       outputAt += values.length / 2;
       if (atUs < nowUs) stats.late++;
       return { reset, atUs, pcm: new Float32Array(values) };

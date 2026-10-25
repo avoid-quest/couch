@@ -12,7 +12,13 @@ from application code or a build-time search/replace.
 
 - Projected output-clock slope uses the interval between projected observation
   times. Raw output timestamp slope retains its original sample-time interval.
-  Original thresholds and sync correction policy remain intact.
+  Rate validation uses a separate anchor at least 200 ms apart, retaining the
+  0.95–1.05 slope limits. Adjacent observations still check backward timestamps,
+  freshness and discontinuities. A recorded Chrome Mac trace reproduces false
+  0.934 slope rejections over 40 ms despite a near-unity longer-span rate; the
+  regression now prepares within the existing startup bound. Sustained 0.94/1.06
+  clocks and stale/backward timestamps still fail. This is startup validation,
+  not electrical or continuous-fidelity qualification.
 - `SendspinPlayer.prepareAudio(format)` prepares codec/output before admission.
   `outputReady` reflects running AudioContext state. Disconnect cancels pending
   preparation. Native decoder reset preserves synchronous configured readiness;
@@ -23,6 +29,17 @@ from application code or a build-time search/replace.
 References: https://github.com/Sendspin/sendspin-js and
 https://www.w3.org/TR/webaudio-1.1/#dom-audiocontext-getoutputtimestamp .
 API readiness and browser latency estimates are not measured hardware latency.
+
+Live playback opts into `sampleCorrectionMode: "rate"`. For small clock errors,
+the scheduler preserves decoded buffers and uses proportional Web Audio playback
+rate correction (two-second settling target, capped at ±100 ppm) instead of sample
+insertion/deletion and its repeated short fades. The selected correction mode's
+deadband, larger-error policy and late-packet checks remain in force. Omission
+keeps upstream sample correction, including relaxed playback. Tests reproduce
+the old sample mutation, cover both correction directions and contiguous
+scheduling, and check the public player option. The 100 ppm diagnostic had 55/55 accepted windows per pair and no short-waveform
+flags, but its 51.327 ms maximum still failed the 50 ms electrical limit. Sustained
+continuous fidelity remains unqualified; see `docs/audio-roundtrip-performance.md`.
 
 The root manifest pins the SDK's four upstream runtime dependencies (`@noble/ciphers`,
 `@noble/curves`, `@noble/hashes`, `opus-encdec`) as development/build dependencies.
@@ -43,7 +60,56 @@ cannot overwrite its replacement. Full close destroys the libopus decoder and
 resampler. The regression cancels during dynamic imports, prepares again and
 actually decodes a stereo Opus packet using the upstream fallback.
 
+Explicitly prepared direct output processes decoded arrivals through the existing
+coalesced microtask path instead of waiting 15 ms. Couch uses this preparation for
+live audio; unprepared relaxed direct output and media-element output retain the
+15 ms batching timer. Upstream explains the original wait as batching out-of-order
+asynchronous FLAC decodes in
+[the pre-refactor source](https://github.com/Sendspin/sendspin-js/blob/7f388ca24d897c77229e71d8831c68fce9b9bc0d/src/audio-processor.ts#L1657).
+
+Future horizon refills retain their timers. Stream generation invalidates pending
+microtasks and retired preparation; full clear, output invalidation and disconnect
+withdraw prompt processing. A clock-preserving stream start keeps prepared output
+prompt. Deadlines, output-latency compensation and late-packet dropping stay in
+the existing scheduler. This removes a scheduling wait, not a measured amount of
+physical RTT. `tests/sendspin-sdk.test.ts` feeds decoded arrivals through the real
+SDK with fake Web Audio/time boundaries and covers coalescing, timestamp order,
+preparation/clear/disconnect, expired input and timed future refills.
+
+After changing patch bytes, refresh/verify patched-dependency metadata with the
+project-pinned Bun during an authorized install window, and verify a frozen install
+materializes this scheduler before packaging. Any resulting `bun.lock` update
+belongs with that install; do not edit dependency checksums by hand. The local
+runtime edit used for focused tests is not a substitute for clean materialization.
+
+`SendspinPlayerConfig.outputLatencyHint?: number` requests an AudioContext output
+latency in seconds. Player forwards it to the scheduler, which rejects supplied
+nonfinite or negative values and passes `latencyHint` only when supplied; zero is
+valid. Omission retains the browser default. Couch requests `0.002` only for Live.
+The browser may choose another latency: `OutputLatencyTracker`, compensation,
+preparation declarations, admission and expired-packet dropping still use the
+actual runtime path. The hint never replaces an output estimate or lowers a
+declared requirement. See the official
+[AudioContext option](https://www.w3.org/TR/webaudio-1.1/#dom-audiocontextoptions-latencyhint).
+`tests/sendspin-sdk.test.ts` exercises actual public player forwarding, omitted
+and zero hints, invalid values, and actual latency differing from the request.
+
 # Node Sendspin 0.6.2 isolation patch
+
+Native desktop output additionally uses the explicit browser API
+`exportSendspinClientIdentity(storage)` for a private-key handoff to trusted Main.
+Ordinary `loadSendspinClientIdentity` results remain unchanged. Never log the
+exported credentials. `tests/native-output.integration.ts` verifies that the Node
+identity matches the browser's paired Device, including memory-backed storage.
+
+The Node client exposes read-only `clockErrorUs` and per-connection
+`connect(url, { webSocketOptions })` (upstream `ws` options). Couch supplies an
+HTTPS agent using its existing SPKI pin and a verified peer certificate as CA;
+actual media sockets retain TLS validation and disallow redirects. No global TLS
+override is used. Opening timeouts now reject their pending promise, and cleanup
+terminates the underlying socket even during preparation. The same integration
+tests exercise encrypted PCM/deadline preservation, volume/mute, missing-block
+failure, wrong pins and cancellation of a connection that never upgrades.
 
 `@sonn-audio/node-sendspin@0.6.2.patch` applies through the same frozen Bun
 mechanism. The server SDK declares MIT licensing in its package metadata. Its

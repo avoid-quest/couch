@@ -11,6 +11,7 @@ import { loopbackPeer } from "./lan-listener";
 import type { OutputAdmission, PlaybackCommand, PlayerState } from "../shared/protocol";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
+import { liveOutputBudget } from "./live-audio-policy";
 export type { Member, SyncedLoad } from "./scheduled-audio";
 export { audioRendition, liveHls } from "./source-preparation";
 
@@ -20,7 +21,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const beside = new URL("./audio-worker.mjs", import.meta.url);
   const worker = new Worker(existsSync(beside) ? beside : resolve("build/audio-worker.mjs"), { workerData: { identity: options.identity, name: options.name, secret } });
   const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { policy: CapturePolicy; epoch: string; queued: number; error?: string }>();
-  const groupMembers = new Map<string, Member[]>(), groupIntents = new Map<string, string>();
+  const groupMembers = new Map<string, Member[]>(), groupLoads = new Map<string, SyncedLoad>();
   let timing = new Map<string, number | undefined>();
   let admissions = new Map<string, { group: string; receiverId?: string; admission: OutputAdmission }>();
   const connections = new Set<WebSocket | Socket>();
@@ -94,10 +95,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
     }).catch(() => socket.destroy());
   };
   const accept = Object.assign((socket: WebSocket, request: IncomingMessage) => bridge(socket, `loopback=${loopbackPeer(request.socket.remoteAddress ?? "")}`), { upgrade });
-  const validateDelay = (id: string, delay: number, intent?: string) => {
+  const validateDelay = (id: string, delay: number, intent?: string, sourceId?: string) => {
     if (intent !== "live" || delay === 0) return;
     const required = timing.get(id);
-    if (required === undefined || required + Math.max(0, delay) > 70) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
+    if (required === undefined || required + Math.max(0, delay) > liveOutputBudget(sourceId ? sources.get(sourceId)?.policy.liveAudioLeadMs : undefined)) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
   };
   return {
     accept, upgrade, validateDelay,
@@ -107,11 +108,11 @@ export function createSendspin(options: { identity: string; name: string; admit:
       return {
         members(next: Member[]) { groupMembers.set(id, next); call("members", next); },
         screens: (next: string[]) => call("screens", next),
-        send(command: SyncedLoad | PlaybackCommand) { if (command.type === "load") groupIntents.set(id, (command as SyncedLoad).intent ?? "relaxed"); call("send", command); },
-        close() { groups.delete(id); groupMembers.delete(id); groupIntents.delete(id); call("close"); },
+        send(command: SyncedLoad | PlaybackCommand) { if (command.type === "load") groupLoads.set(id, { ...command } as SyncedLoad); call("send", command); },
+        close() { groups.delete(id); groupMembers.delete(id); groupLoads.delete(id); call("close"); },
       };
     },
-    registerSource(id: string, policy: CapturePolicy) { if (!sources.has(id)) { const epoch = randomUUID(); sources.set(id, { policy, epoch, queued: 0 }); post({ type: "register", sourceId: id, policy, epoch }); } },
+    registerSource(id: string, policy: CapturePolicy) { if (!sources.has(id)) { if (policy.intent === "live") liveOutputBudget(policy.liveAudioLeadMs); policy = { ...policy }; const epoch = randomUUID(); sources.set(id, { policy, epoch, queued: 0 }); post({ type: "register", sourceId: id, policy, epoch }); } },
     writeSource(id: string, packet: CaptureAudioPacket) {
       const source = sources.get(id);
       if (!source || source.error || closed || failed) return false;
@@ -129,7 +130,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     sourceError: (id: string) => sources.get(id)?.error,
     receiverError: (id: string, _intent?: string) => receivers.get(id),
     receiverAdmission(id: string, receiverId?: string): OutputAdmission | undefined {
-      const member = [...groupMembers].find(([group, members]) => (receiverId !== undefined || groupIntents.get(group) === "live") && members.some(member => member.deviceId === id && member.receiverId === receiverId));
+      const member = [...groupMembers].find(([group, members]) => (receiverId !== undefined || groupLoads.get(group)?.intent === "live") && members.some(member => member.deviceId === id && member.receiverId === receiverId));
       if (!member) return undefined;
       const current = admissions.get(id);
       return current && current.group === member[0] && current.receiverId === receiverId ? current.admission : receiverId ? { state: "preparing" } : undefined;
@@ -137,8 +138,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
     connected: (id: string) => clients.has(id),
     delay: (id: string) => delays.get(id) ?? options.savedDelay?.(id) ?? (clients.has(id) ? 0 : undefined),
     setDelay(id: string, delay: number) {
-      const live = [...groupMembers].some(([group, members]) => groupIntents.get(group) === "live" && members.some(member => member.deviceId === id));
-      validateDelay(id, delay, live ? "live" : undefined);
+      for (const [group, members] of groupMembers) {
+        const load = groupLoads.get(group);
+        if (members.some(member => member.deviceId === id)) validateDelay(id, delay, load?.intent, load?.liveSourceId);
+      }
       post({ type: "setDelay", clientId: id, delay });
     },
     drop: (id: string) => post({ type: "drop", clientId: id }),

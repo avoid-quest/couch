@@ -12,7 +12,7 @@ const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean, message: string, ms = 5000) => { const deadline = Date.now() + ms; while (!check()) { if (Date.now() > deadline) throw new Error(message); await sleep(10); } };
 
-test("live worker sends stereo Opus with fixed deadlines, rejects incompatible joins and survives bounded Hub stalls", { timeout: 15_000 }, async t => {
+test("live worker shares Opus and native PCM deadlines and survives bounded Hub stalls", { timeout: 15_000 }, async t => {
   const keys = Array.from({ length: 52 }, () => Identity.generate());
   const errors: string[] = [], states: PlayerState[] = [];
   const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture fixture", admit: id => keys.some(key => key.peerId === id), changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
@@ -45,18 +45,20 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
     }
   }, 5);
   await until(() => first.length > 30, `no live Opus: ${errors.join(", ")}`);
-  assert.equal(opusDuration(first[0]!.data), 10_000);
-  const second = await receive(1, AudioCodec.OPUS), incompatible = await receive(2, AudioCodec.PCM);
+  assert.equal(opusDuration(first[0]!.data), 5000);
+  const second = await receive(1, AudioCodec.OPUS), native = await receive(2, AudioCodec.PCM);
   group.members(keys.slice(0, 3).map(key => ({ deviceId: key.peerId, level: 100 })));
-  await until(() => second.length > 20 && !!core.receiverError(keys[2]!.peerId), "join not admitted/refused independently");
-  assert.equal(incompatible.length, 0); assert.equal(errors.length, 0);
+  await until(() => second.length > 20 && native.length > 20, "Opus/PCM join not admitted independently");
+  assert.equal(core.receiverError(keys[2]!.peerId), undefined); assert.equal(errors.length, 0);
+  assert.ok(native.every(frame => frame.data.length > 0 && frame.data.length <= 240 * 4 && frame.data.length % 4 === 0));
+  for (let i = 1; i < native.length; i++) assert.ok(Math.abs(native[i]!.at - native[i - 1]!.at - native[i - 1]!.data.length / 4 / 48000 * 1e6) <= 2, "PCM joins preserve contiguous sample deadlines");
   const original = new Map(first.map(frame => [frame.at, frame.data]));
   for (const frame of second) if (original.has(frame.at)) assert.deepEqual(original.get(frame.at), frame.data);
   const before = first.length;
   const stall = performance.now(); while (performance.now() - stall < 100) { /* Deliberate Hub main-loop stall. */ }
   await until(() => first.length > before + 25, "audience did not recover after a bounded Hub stall");
   const anchor = first[0]!.at;
-  for (const frame of first) assert.equal((frame.at - anchor) % 10_000, 0, "stall/join must not retime the audience");
+  for (const frame of first) assert.equal((frame.at - anchor) % 5000, 0, "stall/join must not retime the audience");
   assert.equal(errors.length, 0);
   assert.ok(!states.some(state => state.status === "error"));
   const audience: Awaited<ReturnType<typeof receive>>[] = [first, second];
@@ -66,8 +68,8 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
   await until(() => audience.every(frames => frames.length >= 8) && !!core.receiverError(keys[51]!.peerId), "50-client fanout or bounded-buffer refusal failed");
   assert.equal(tiny.length, 0, "an undersized receiver cannot hold up healthy fanout");
   assert.equal(audience.length, 50); assert.equal(errors.length, 0);
-  for (const frames of audience) for (const frame of frames) assert.equal((frame.at - anchor) % 10_000, 0);
-  t.diagnostic("50 encrypted software clients received shared Opus timestamps; one PCM and one one-byte-capacity client refused independently. Not 50 browser decoders or physical receivers.");
+  for (const frames of audience) for (const frame of frames) assert.equal((frame.at - anchor) % 5000, 0);
+  t.diagnostic("50 encrypted software Opus clients and one PCM client received shared source deadlines; one one-byte-capacity client refused independently. Not browser decoders or physical receivers.");
   t.diagnostic(`100 ms Hub stall: ${first.filter(frame => frame.received > frame.at).length} late network deliveries; no audience retiming. Software packets, no physical timing claim.`);
 });
 

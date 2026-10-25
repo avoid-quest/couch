@@ -16,6 +16,8 @@ import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
 import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
+import { createLiveAudio } from "./live-audio";
+import { createLiveOutput } from "./live-output";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
 
@@ -69,6 +71,11 @@ const save = (next: Choice) => {
 
 let window: BrowserWindow | null = null;
 const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin, localOrigin);
+const liveAudio = createLiveAudio(() => window?.webContents ?? null, capture, localOrigin, () => core?.token,
+  process.platform === "darwin" ? join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "live-audio", "couch-capture") : undefined);
+const liveOutput = createLiveOutput(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin,
+  hostname => choice.pins?.[hostname], localOrigin,
+  process.platform === "linux" ? join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "live-audio", "couch-playback") : undefined);
 let tray: Tray | null = null;
 let quitting = false;
 let updating = false;
@@ -330,6 +337,7 @@ function createWindow() {
     // Couch keeps hosting in the background; the tray, dock or a second launch shows it again.
     event.preventDefault();
     // Closing still ends this window's sharing, and any capture it is starting, as unloading would.
+    liveAudio.stop();
     void capture.prepare(null).catch(() => {});
     window?.webContents.send("couch:window-closed");
     if (process.platform === "linux") window?.minimize(); else window?.hide();
@@ -374,6 +382,10 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
 handle("mode", () => choice);
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
+handle("live-audio", (_event, action) => liveAudio.action(action));
+handle("native-audio-inputs", () => liveAudio.inputs());
+handle("native-audio-output-available", () => liveOutput.available());
+handle("live-output", (_event, action) => liveOutput.action(action));
 handle("capture-access", (_event, kind) => capture.access(kind));
 handle("capture-settings", (_event, kind) => capture.openSettings(kind));
 // Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.
@@ -458,6 +470,8 @@ handle("interface-size", (_event, size) => {
 async function quit() {
   if (quitting) return;
   quitting = true;
+  await liveAudio.stop();
+  await liveOutput.stop();
   saveBounds();
   await stopCore();
   stopped = true;

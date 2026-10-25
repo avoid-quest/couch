@@ -68,6 +68,9 @@ export const displayQuery = (credentials: ApiCredentials) =>
     retry: false,
   });
 
+export const audioSettingsQuery = (credentials: ApiCredentials) =>
+  queryOptions({ queryKey: ["settings", "audio"], queryFn: ({ signal }) => apiJson<{ liveAudioLeadMs: number }>(credentials, "/api/settings/audio", { signal }) });
+
 export const startupQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["settings", "startup"],

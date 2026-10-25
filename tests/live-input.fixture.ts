@@ -25,9 +25,9 @@ export async function liveFixture({ local = false } = {}) {
   writeFileSync(join(directory, "ffmpeg"), `#!${process.execPath}
 const fs = require('node:fs');
 const path = require('node:path');
-if (process.argv.includes('-version')) { console.log('ffmpeg version 7.0'); process.exit(0); }
+if (process.argv.includes('-version')) { console.log('ffmpeg version 9.0.2'); process.exit(0); }
 // Each capture chunk becomes the next segment; the playlist lists the newest four.
-if (process.argv.includes('pipe:0')) {
+if (process.argv.includes('pipe:0') && process.argv.at(-1) !== 'pipe:1') {
   const playlists = process.argv.at(-1).split('|').map(output => output.slice(output.indexOf(']') + 1));
   let n = 0;
   process.stdin.on('data', () => {
@@ -42,7 +42,7 @@ if (process.argv.includes('pipe:0')) {
     n++;
   });
 }
-else if (process.argv.includes('s16le')) {
+else if (!process.argv.includes('pipe:0') && process.argv.includes('s16le')) {
   process.stderr.write('[Parsed_ashowinfo_0] n:0 pts:0 pts_time:0\\n');
   setInterval(() => fs.writeSync(3, Buffer.alloc(19200)), 100);
 }

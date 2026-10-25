@@ -77,6 +77,8 @@ bar for thumb reach.
   and end times are small muted metadata. Live media that can't seek has no
   seek timeline. Radio may show broadcast progress from an XMLTV programme
   window, with its local times and remaining minutes ([Radio](design/browse.md#radio-and-live-tv)).
+  Empty radio metadata does not subscribe to progress ticks, so the shell and
+  window title stay idle when there is no programme to update.
 - **Undo, not confirm**, for shared actions; destructive admin actions confirm
   inline or in an AlertDialog.
 - **Disabled keeps its place.** A control that can't act stays in its slot at
@@ -546,3 +548,15 @@ the [website notes](product/website.md#analytics) describe the download counters
   inputs update them, including the current profile, credentials and Play on
   destination (`tests/collection-rendering.browser.ts`).
 - A surface's doc changes with its code.
+
+Advanced Live audio settings expose host scheduling lead in Couch → Playback
+and a per-browser output-buffer preference in This device → General. Both apply
+on the next share/join; details and limits are in [Settings](design/settings.md#advanced-audio).
+The host’s General page also offers a Live-only capture sample-rate request;
+Share reports the verified delivered format, separately from hardware settings.
+Mac builds with the native helper also offer Native Live inputs and a native
+input-buffer preference. Their sharing controls distinguish requested frames
+from the running device readback; hardware qualification remains outstanding.
+Linux builds with the playback helper also offer a Native system output for
+audio-only Live listening, with a separate stream-buffer request in milliseconds.
+Browser output remains the default and handles video and relaxed playback.

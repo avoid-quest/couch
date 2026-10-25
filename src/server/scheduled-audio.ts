@@ -121,7 +121,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
     const admit = (member: Member, session: SendspinSession | undefined, wire: Wire | undefined) => {
       if (load?.intent !== "live" && !member.receiverId) { clearAdmission(member.deviceId); return true; }
       if (expected.get(member.deviceId)?.group !== id) return false;
-      const admission = liveOutputAdmission(session, wire, member.receiverId), previous = admissions.get(member.deviceId);
+      const admission = liveOutputAdmission(session, wire, member.receiverId, load?.liveSourceId ? sources.get(load.liveSourceId)?.outputBudgetMs : undefined), previous = admissions.get(member.deviceId);
       if (previous?.group !== id || previous?.receiverId !== member.receiverId || JSON.stringify(previous?.admission) !== JSON.stringify(admission)) {
         admissions.set(member.deviceId, { group: id, receiverId: member.receiverId, admission });
         if (admission.state === "failed") receiverErrors.set(member.deviceId, { group: id, error: admission.error }); else clearReceiverError(member.deviceId);
@@ -178,7 +178,10 @@ export function createScheduledAudio(options: { identity: string; name: string; 
       if (!run.wires.has(wire)) { void restart(); return; }
       session.sendStreamStart(wireFormat(wire));
       session.sendGroupUpdate(PlaybackStateType.PLAYING, id, options.name);
-      run.cursors.set(session, serverNowUs());
+      const timing = session.getPlayerTiming();
+      // Join at a deadline this output can still meet; keep the audience timeline fixed.
+      const joinLeadMs = load?.intent === "live" ? (timing.requiredLeadTimeMs ?? 0) + Math.max(0, timing.staticDelayMs ?? 0) : 0;
+      run.cursors.set(session, serverNowUs() + joinLeadMs * 1000);
     };
     const each = (action: (session: SendspinSession) => void) => { for (const member of members) { const session = listening(member.deviceId); if (session) action(session); } };
     // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
@@ -215,7 +218,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const source = sources.get(current.liveSourceId)!;
-          const next: Run = { fixed: true, start: 0, live: true, anchored: true, speed: 1, wires: new Set(current.intent === "live" ? ["opus"] : ["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
+          const next: Run = { fixed: true, start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
           run = next;
           next.dispose = source.subscribe(event => {
             if (run !== next) return;
@@ -232,7 +235,8 @@ export function createScheduledAudio(options: { identity: string; name: string; 
             }
             if (event.at <= serverNowUs()) return; // Missed input is silence, never a new audience deadline.
             next.queues[event.wire].push({ offset: event.at - next.base, duration: event.duration, data: event.data });
-            if (next.queues[event.wire].length > 200) fail("Captured audio exceeded its bounded queue.");
+            if (next.queues[event.wire].length + (current.intent === "live" ? next.sent[event.wire].length : 0) > 200) fail("Captured audio exceeded its bounded queue.");
+            else if (current.intent === "live") tick(next);
           });
           report(); return;
         }

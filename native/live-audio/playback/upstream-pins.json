@@ -1,0 +1,16 @@
+{
+  "commit": "7c7f5e015a894e62b1673f9debdc23b8800d0241",
+  "sha256": {
+    "src/pulse_sink.cpp": "161fddde1e63093a13e904a94fb8b1e57eb41dfd1bd57dbe1a866cf1ad7da896",
+    "src/pulse_sink.h": "66dd397843d25011e9f2db70c48fb525caf80b5306f5465bf9e51a0227d76464",
+    "src/audio_sink.h": "d4e081802f784daaad765d2c3a21a74badeb4c73b8c99fa35bc78707a7499e1e",
+    "LICENSE": "6162a487490d3903fdfdb74b5a7a1143503d6ba83b90d8b4ed7406c175aa8f63",
+    "src/pcm_volume.h": "48db07fb344748c9fa811be743b911901cbc2f177e6b4a061782fb5c8bc0db46",
+    "src/pcm_volume.cpp": "0fff0d15402ef2d7b686d48870fc213000cb95bfe807c0c6ec17d8ad35149695",
+    "src/sink_recovery.h": "2a6c3a2ac724cc6782826a4b7fd162197043d390e0e9a96821bb951a54240ee4",
+    "src/sink_recovery.cpp": "87051ed9a5e7efb9062229322b4eb3e8f1cee44a9afd8269f8101f90dd407cba",
+    "src/log.h": "8d003d9c5c69520b7064e30d702e96ff3d7ae7bbebd3d641736a68b977f672a5",
+    "src/audio_sink.cpp": "de1d0ffe918b8414adb1135e3dd0073c57e178d66ef0777e19a6864a76fad3f4",
+    "src/null_sink.h": "3f610d9bd3628476747f8cdbf432545a0ec49efba670cb224f9a5a929397782e"
+  }
+}

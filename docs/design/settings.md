@@ -13,11 +13,11 @@ hand, and the Couch everyone shares, its hardware included:
 
 | Page | Owner | Path | Holds |
 | --- | --- | --- | --- |
-| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Show Share in the header, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
+| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Show Share in the header, advanced Live audio output buffering, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
 | Home | This device | `/settings/device/home` | Home's sections, one list |
 | Updates | This device | `/settings/device/updates` | this app's updates and logs, only for a non-admin in the desktop app |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
-| Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays |
+| Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays; advanced Live audio scheduling lead |
 | Sources | Couch | `/settings/couch/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under Sources), AirPlay (hidden off Linux; one muted line when this build or computer lacks the receiver), Hidden |
 | Sound | Couch | `/settings/couch/sound` | output, test and delay, Bluetooth (where Couch controls the system's sound) |
 | TV | Couch | `/settings/couch/tv` | TV mode, Start on boot, Screen, text size (where the Couch is or can be a TV) |
@@ -177,3 +177,65 @@ network is on.
 This device owns its name, which is also the name of a Couch it hosts; an
 admin renames another host from its row in Devices & network. First run and
 pairing: [Shell](shell.md#first-run-and-pairing).
+
+## Advanced audio
+
+Couch → Playback offers an administrator-only **Live audio scheduling lead**
+Select: 45, 50, 55, 75, 95 (unchanged default), 150 and 250 ms. Core persists it and
+snapshots it for each newly published Live source. Capture deadlines, receiver
+admission and positive sync-correction validation share that source's budget;
+25 ms remains reserved for capture/encoding/transport at 75 ms and above. The
+explicit 45/50/55 ms presets reserve 8 ms, leaving 37/42/47 ms for the receiver,
+as in the native-capture comparisons; slower capture needs a longer preset.
+A lower lead can miss deadlines and is not a physical-latency guarantee. Saving does not retime
+an active source. Relaxed sharing retains its one-second capture lead.
+
+This device → General offers **Live browser output buffering**: Automatic
+(browser default), 128, 256, 512 and 1024 frames, with equivalent milliseconds
+at 48 kHz. This requests `AudioContext.latencyHint`, not an exact hardware buffer.
+The browser may choose differently. It is saved in this browser's local storage
+for this Couch origin and read when the next Live player is created. Leave and
+rejoin to apply; saving never rebuilds an active player. Larger preferences can
+need more host scheduling lead. Storage failures are visible and invalid saved
+values fall back to Automatic. Neither dropdown reports electrical latency.
+
+Linux desktop builds containing the native playback helper also show **Live audio
+output**: Browser (default) or Native · system output. Native applies only to
+audio-only Live sessions; video and relaxed playback retain the browser path.
+Its **Native output buffering** Select requests 20 (default), 30, 40, 60 or 100 ms
+from Pulse. It is a stream request, not a hardware buffer setting. The output
+uses stereo PCM16 at 48 kHz with bounded automatic clock correction; hardware
+volumes, rate, routing and daemon settings stay under the system's control.
+These preferences apply on leaving and rejoining. Unsupported/failed native
+preparation is reported, never silently replaced by a second browser receiver.
+Native playback reuses this origin's paired Device identity and current receiver
+token. Changing sync correction during playback, a stream reset, lost timing or
+an output failure requires leaving and rejoining. No physical qualification is
+implied by the dropdown or its buffering value.
+
+On the host desktop, This device → General also offers **Live audio capture
+sample rate**: Automatic, 44.1 kHz and 48 kHz. For browser inputs, Automatic keeps
+the existing ideal 48 kHz request.
+Explicit choices require that delivered rate and check the first timestamped
+capture frame before publication. A browser that ignores the constraint fails
+visibly; an older desktop helper that cannot verify it also fails. The share
+panel reports the observed capture rate, channels and first block size. These
+are delivered-frame facts, not proof of the hardware clock or allocation.
+The preference is local to this browser/host and applies on the next Live share.
+Ordinary Audio input sharing, screens, music and video playback are unaffected.
+Couch still normalizes scheduled capture/network audio to 48 kHz.
+
+When the native Mac helper is available, Live audio also lists inputs marked
+**Native**. For these inputs, an explicit sample rate requests a real CoreAudio
+device rate and verifies its readback; Automatic keeps the current rate. A rate
+change can affect other apps using that device. **Native input buffer** appears
+only when native inputs are available: 128, 256 (default), 512 and 1024 frames.
+It applies on the next share. The sharing panel reports requested and observed
+native buffer sizes separately; it does not call the request an effective size.
+The backend and rate setter still require hardware qualification.
+
+The MediaStream/Web Audio path does not expose a writable sound-card buffer.
+Capture `latency` and output `latencyHint` remain browser preferences, not hardware
+frame counts. Ordinary Audio input sharing does not use the native helper.
+See the [capture constraints specification](https://www.w3.org/TR/mediacapture-streams/#constrainable-properties)
+and [Web Audio latency options](https://www.w3.org/TR/webaudio-1.1/#dom-audiocontextoptions-latencyhint).

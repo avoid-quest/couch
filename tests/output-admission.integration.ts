@@ -255,7 +255,9 @@ test("Leave and rejoin rotate only the listening token; a continuously listening
     await f.join(listener, "second");
     assert.ok(token(listener) === firstToken, "Live source transfer must retain the current listening token");
     assert.ok(listener.messages.slice(transferStart).filter(message => message.type === "sendspin").every(message => message.listen && message.intent === "live" && message.receiverId === firstToken), "a source transfer must not briefly retire output preparation");
-    const before = sink.frames; await until(() => sink.frames > before + 10 && listener.output?.audioAdmission?.state === "ready");
+    // Packets arrive ahead of their deadlines: 10 packets no longer imply the
+    // programme has started at the 5 ms live cadence. Leave an actually playing item.
+    const before = sink.frames; await until(() => sink.frames > before + 10 && listener.output?.audioAdmission?.state === "ready" && listener.state.player.status === "playing");
     assert.equal(token(listener), firstToken, "same format/output/server clock needs no source-scoped re-preparation");
     assert.notEqual(listener.state.player.playbackId, firstPlayback);
     assert.equal((await listener.command({ type: "leave", playbackId: listener.state.player.playbackId! })).ok, true);
@@ -385,5 +387,33 @@ test("a real group failure precedes terminal or pending admission while a curren
     await sink.report({ receiverId, epoch: 2, state: "failed", error: "The replacement output is unavailable" });
     await until(() => listener.output?.audioAdmission?.state === "failed");
     assert.equal(listener.output?.error, groupError, "a later current terminal verdict must not replace the genuine group failure");
+  } finally { await f.close(); }
+});
+
+test("new shares adopt the saved lead, while active admission and correction retain their source budget", { timeout: 20000 }, async () => {
+  const f = await fixture();
+  try {
+    const save = async (liveAudioLeadMs: number) => assert.equal((await f.api("/api/settings/audio", "POST", { liveAudioLeadMs })).status, 200);
+    await save(75); // 50 ms remains for output.
+    const listener = await f.control(); await f.publish("first"); await f.join(listener, "first");
+    const sink = await f.speaker();
+    await sink.report({ receiverId: token(listener), epoch: 1, state: "ready" }, 37);
+    await until(() => listener.output?.audioAdmission?.state === "ready" && sink.frames > 5);
+    await save(50); // New sources only: 42 ms output budget.
+    assert.equal((await listener.command({ type: "output", deviceId: listener.id, delay: 13 })).ok, true);
+    const refused = await listener.command({ type: "output", deviceId: listener.id, delay: 14 });
+    assert.equal(refused.ok, false); assert.match(refused.error!, /deadline/);
+    await listener.command({ type: "output", deviceId: listener.id, delay: 0 });
+    const before = sink.frames;
+    await until(() => sink.frames > before + 5 && listener.output?.audioAdmission?.state === "ready");
+    await listener.command({ type: "leave", playbackId: listener.state.playback! });
+    await f.publish("second"); await f.join(listener, "second");
+    await sink.report({ receiverId: token(listener), epoch: 1, state: "ready" }, 43);
+    await until(() => listener.output?.audioAdmission?.state === "failed");
+    assert.match(listener.output!.error!, /allows 42 ms/);
+    await save(150);
+    await sink.report({ receiverId: token(listener), epoch: 2, state: "ready" }, 43);
+    await until(() => listener.output?.audioAdmission?.state === "failed");
+    assert.match(listener.output!.error!, /allows 42 ms/);
   } finally { await f.close(); }
 });

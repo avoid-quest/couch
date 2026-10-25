@@ -1,7 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { createCaptureClock, type CaptureAudioPacket, type CapturePolicy } from "./capture-audio";
+import { liveOutputBudget } from "./live-audio-policy";
 import { oggPackets, opusDuration } from "./audio-packets";
+import { createLivePcm } from "./live-pcm";
 
 type Event = { type: "chunk"; wire: "opus" | "pcm"; at: number; duration: number; data: Buffer } | { type: "reset" } | { type: "error"; error: string };
 // Streaming IEEE-float WAV: normalized 48 kHz stereo, unknown RIFF/data/sample
@@ -20,17 +22,19 @@ function captureWaveHeader() {
 export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Promise<string>, failed: (error: string) => void) {
   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
   let child: ChildProcessWithoutNullStreams | undefined, starting = false, closed = false, generation = 0;
-  let error: string | undefined, baseUs = 0, offsetUs = 0, lateUs = 0;
+  let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0, captured = false;
   let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
+  let livePcm: ReturnType<typeof createLivePcm> | undefined;
   const emit = (event: Event) => { for (const listener of listeners) listener(event); };
   const fail = (message: string) => {
     if (closed || error) return;
-    error = message; child?.kill("SIGKILL"); child = undefined; pending = []; queuedFrames = 0;
+    error = message; child?.kill("SIGKILL"); child = undefined; pending = []; queuedFrames = 0; livePcm?.close();
     emit({ type: "error", error }); failed(error);
   };
   const write = (block: { at: number; pcm: Float32Array }) => {
     if (!child || error) return;
     if (child.stdin.writableLength > 48_000 * 8 * .2) return fail("The audio encoder cannot keep up with capture.");
+    baseUs ??= block.at;
     child.stdin.write(Buffer.from(block.pcm.buffer, block.pcm.byteOffset, block.pcm.byteLength));
     if (policy.intent !== "live") {
       const pcm = Buffer.alloc(block.pcm.length * 2);
@@ -44,16 +48,18 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
     try {
       const executable = await ffmpeg();
       if (closed || error || attempt !== generation) return;
-      // Raw PCM's demuxer batches 4096 frames (85 ms). WAV's documented max_size
-      // bounds input packets to the existing 480-frame/10 ms Opus cadence.
+      // Bound demuxer packets and Ogg pages to the Opus cadence, so live capture
+      // can emit 5 ms packets without waiting for another 10 ms input block.
       // https://ffmpeg.org/ffmpeg-formats.html#wav
-      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
-      baseUs = pending[0]!.at; offsetUs = lateUs = 0;
+      const frameMs = policy.intent === "live" ? 5 : 10;
+      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", String(frameMs * 48 * 8), "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", String(frameMs), "-f", "ogg", "-page_duration", String(frameMs * 1000), "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
+      offsetUs = lateUs = 0;
       process.stdout.on("data", oggPackets(packet => {
         if (child !== process) return;
         const magic = packet.toString("latin1", 0, 8);
         if (magic === "OpusHead") { offsetUs = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
         if (magic === "OpusTags") return;
+        if (baseUs === undefined) return fail("The capture encoder emitted audio before capture started.");
         const duration = opusDuration(packet), at = Math.round(baseUs + offsetUs);
         offsetUs += duration;
         // Startup/probe delays and late data are not repaired by moving healthy listeners.
@@ -76,24 +82,32 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
     } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
     finally { if (attempt === generation) starting = false; }
   };
+  if (policy.intent === "live") { livePcm = createLivePcm(emit, fail); void start(); }
   return {
+    outputBudgetMs: policy.intent === "live" ? liveOutputBudget(policy.liveAudioLeadMs) : undefined,
     write(packet: CaptureAudioPacket) {
       if (closed || error) return false;
       try {
         const normalized = clock.push(packet, serverNowUs());
         if (normalized.reset) {
-          generation++; const old = child; child = undefined; old?.kill("SIGKILL");
-          pending = []; queuedFrames = 0; starting = false; emit({ type: "reset" });
+          // The first Live generation adopts the header-only encoder, including
+          // an in-flight helper lookup. Later generations retain a fresh stream.
+          if (captured || policy.intent !== "live") {
+            generation++; const old = child; child = undefined; old?.kill("SIGKILL");
+            pending = []; queuedFrames = 0; starting = false; baseUs = undefined;
+          }
+          captured = true;
+          if (!livePcm) emit({ type: "reset" });
         }
         const block = { at: normalized.atUs, pcm: normalized.pcm };
-        if (!block.pcm.length) return true;
-        if (child) write(block);
-        else {
+        if (block.pcm.length && child) write(block);
+        else if (block.pcm.length) {
           queuedFrames += block.pcm.length / 2;
           if (queuedFrames > 48_000 * 2) throw new Error("The capture encoder did not start within two seconds.");
           pending.push(block);
           if (!starting) void start();
         }
+        livePcm?.write(normalized);
         return !error;
       } catch (reason) { fail(reason instanceof Error ? reason.message : "Invalid capture audio."); return false; }
     },
@@ -103,6 +117,6 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
       return () => { listeners.delete(listener); };
     },
     error: () => error,
-    close() { closed = true; generation++; const old = child; child = undefined; old?.kill("SIGKILL"); pending = []; listeners.clear(); },
+    close() { closed = true; generation++; const old = child; child = undefined; old?.kill("SIGKILL"); livePcm?.close(); pending = []; listeners.clear(); },
   };
 }

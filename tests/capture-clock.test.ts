@@ -6,8 +6,8 @@ describe("timestamped capture clock", () => {
   test("stereo and deadlines survive packet boundaries; no callback-arrival anchoring", () => {
     const clock = createCaptureClock({ intent: "live" });
     const first = clock.push(packet(), 1_030_000), second = clock.push(packet(480), 1_080_000);
-    expect(first.atUs).toBe(1_100_000);
-    expect(second.atUs).toBe(1_100_000 + Math.round(first.pcm.length / 2 / 48_000 * 1e6));
+    expect(first.atUs).toBe(1_095_000);
+    expect(second.atUs).toBe(1_095_000 + Math.round(first.pcm.length / 2 / 48_000 * 1e6));
     for (let i = 0; i < second.pcm.length; i += 2) { expect(second.pcm[i]).toBe(.25); expect(second.pcm[i + 1]).toBe(-.25); }
   });
   test("44.1 kHz normalization follows a slow oscillator without unbounded drift", () => {
@@ -41,7 +41,7 @@ describe("timestamped capture clock", () => {
   });
   test("late arrivals retain the source deadline", () => {
     const clock = createCaptureClock({ intent: "live" });
-    expect(clock.push(packet(), 2e6).atUs).toBe(1_100_000); expect(clock.stats.late).toBe(1);
+    expect(clock.push(packet(), 2e6).atUs).toBe(1_095_000); expect(clock.stats.late).toBe(1);
   });
   test("malformed and oversized samples fail before encoding", () => {
     expect(() => validateCapturePacket(packet(0, { pcm: new Float32Array(8194) }))).toThrow();
@@ -56,5 +56,17 @@ describe("timestamped capture clock", () => {
   data.writeUInt16LE(40, 6); data.writeUInt32LE(48000, 8); data.writeBigInt64LE(-150_000n, 24); data.writeUInt32LE(480, 32);
   const decoded = decodeCapturePacket(data, "source-realm", 1_000_000);
   expect(decoded.capturedAtUs).toBe(850_000);
-  expect(createCaptureClock({ intent: "live" }).push(decoded, 900_000).atUs).toBe(950_000);
+  expect(createCaptureClock({ intent: "live" }).push(decoded, 900_000).atUs).toBe(945_000);
+});
+
+test("each live source snapshots its scheduling lead; relaxed deadlines stay unchanged", () => {
+  const policy = { intent: "live" as const, liveAudioLeadMs: 55 };
+  const clock = createCaptureClock(policy);
+  const first = clock.push(packet(), 1_030_000);
+  expect(first.atUs).toBe(1_055_000);
+  policy.liveAudioLeadMs = 150;
+  expect(clock.push(packet(480), 1_040_000).atUs).toBe(first.atUs + Math.round(first.pcm.length / 2 / 48000 * 1e6));
+  expect(createCaptureClock(policy).push(packet(), 1_030_000).atUs).toBe(1_150_000);
+  expect(createCaptureClock({ intent: "relaxed", liveAudioLeadMs: 55 }).push(packet(), 1_030_000).atUs).toBe(2_000_000);
+  expect(() => createCaptureClock({ intent: "live", liveAudioLeadMs: -1 })).toThrow();
 });

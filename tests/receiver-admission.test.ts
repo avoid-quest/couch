@@ -29,8 +29,18 @@ test("suspended output and clock loss recover without rejoin", async () => {
   f.receiver.outputState = "running"; await f.guard.tick(); expect(f.last().report.state).toBe("ready"); expect(f.calls()).toBe(2);
   f.receiver.timeSyncInfo.synced = false; await f.guard.tick(); expect(f.last().report.state).toBe("preparing");
   f.receiver.timeSyncInfo.synced = true; await f.guard.tick(); expect(f.last().report.state).toBe("ready");
-  f.receiver.timeSyncInfo.error = 20_000; await f.guard.tick(); expect(f.last().report.state).toBe("preparing");
-  f.receiver.timeSyncInfo.error = 10_000; await f.guard.tick(); expect(f.last().report.state).toBe("ready");
+  f.receiver.timeSyncInfo.error = 20; await f.guard.tick(); expect(f.last().report.state).toBe("preparing");
+  f.receiver.timeSyncInfo.error = 10; await f.guard.tick(); expect(f.last().report.state).toBe("ready");
+});
+for (const error of [10.001, 11, NaN, Infinity, -Infinity, -.001]) test(`clock uncertainty ${error} ms cannot start or retain admission`, async () => {
+  const f = fixture(); f.receiver.timeSyncInfo.error = error;
+  await f.guard.tick(); expect(f.last().report.state).toBe("preparing"); expect(f.calls()).toBe(0);
+  f.receiver.timeSyncInfo.error = 10;
+  await f.guard.tick(); expect(f.last().report.state).toBe("ready"); expect(f.calls()).toBe(1);
+  f.receiver.timeSyncInfo.error = error;
+  await f.guard.tick(); expect(f.last().report.state).toBe("preparing"); expect(f.last().timing).toBeUndefined();
+  f.receiver.timeSyncInfo.error = 10;
+  await f.guard.tick(); expect(f.last().report.state).toBe("ready"); expect(f.calls()).toBe(2);
 });
 for (const reject of [false, true]) test(`route replacement cancels old ${reject ? "failure" : "success"} after new readiness`, async () => {
   const f = fixture(); let finish!: () => void;

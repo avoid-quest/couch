@@ -1049,7 +1049,7 @@ export async function createHub(options: HubOptions) {
   const requireOutputDelay = (playback: Playback, deviceId: string, delay: number) => {
     // Direct playback has no shared clock to align with; the saved value waits for the next group.
     if (!syncing(playback, deviceId)) throw new ControllerError(`Sync adjustment applies while ${nameOf(deviceId)} plays in sync with other devices.`, 409);
-    sendspin.validateDelay(deviceId, delay, intentOf(playback));
+    sendspin.validateDelay(deviceId, delay, intentOf(playback), sourceOf(playback));
   };
   const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; sound?: boolean; delay?: number }, authorize: () => void, actor: string) => {
     authorize();
@@ -1525,8 +1525,9 @@ export async function createHub(options: HubOptions) {
   const failedPairing = new Map<string, number>();
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
+  const extraLanPeers = (process.env.COUCH_LAN_PEERS ?? "").split(",").map(peer => peer.trim()).filter(Boolean);
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
-    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
+    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request), extraLanPeers))) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
@@ -1766,6 +1767,18 @@ export async function createHub(options: HubOptions) {
         await airplay.setEnabled(enabled);
         return cors(request, json(airplay.state()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the AirPlay setting." }, error instanceof ControllerError ? error.status : 500)); }
+    }
+    if (url.pathname === "/api/settings/audio") {
+      const refused = administrator();
+      if (refused) return refused;
+      if (request.method === "GET") return cors(request, json({ liveAudioLeadMs: store.liveAudioLeadMs() }));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const leadMs = await settingField(request, "liveAudioLeadMs");
+        stillAdministrator();
+        store.saveLiveAudioLeadMs(leadMs);
+        return cors(request, json({ liveAudioLeadMs: store.liveAudioLeadMs() }));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn’t save the audio setting." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/settings/live-relay") {
       const refused = administrator();
@@ -2117,7 +2130,7 @@ export async function createHub(options: HubOptions) {
             // Nothing is encoded yet: receivers connect to the publisher, and Core asks for an upload only when it buffers.
             if (action.intent === "live" && !socket.data.trusted) throw new ControllerError("Live audio capture starts on the Couch computer in the desktop app.", 403);
             const source = live.publish(socket, action);
-            if (source.audioDelivery === "pcm") { sendspin.registerSource(source.id, { intent: source.intent ?? "relaxed" }); live.upload(source.id, true); }
+            if (source.audioDelivery === "pcm") { sendspin.registerSource(source.id, { intent: source.intent ?? "relaxed", ...(source.intent === "live" ? { liveAudioLeadMs: store.liveAudioLeadMs() } : {}) }); live.upload(source.id, true); }
           } else if (action.type === "leave") {
             playback = playing(action.playbackId);
             if (!playback || !playback.outputs.some(output => output.deviceId === deviceId)) throw new ControllerError("This device is no longer receiving that playback.", 409);

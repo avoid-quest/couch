@@ -40,6 +40,15 @@ Set the variables in the desktop app's launching environment, or in
 `/etc/couch/appliance.env` for TV setup, then restart Couch. Schedule the restart
 around playback.
 
+For a trusted client on another routed LAN subnet, add its exact IPv4 address to
+`COUCH_LAN_PEERS` in the host's launching environment, then restart Couch. For
+example, `COUCH_LAN_PEERS=10.10.2.96` admits that peer alongside the selected
+subnet. Separate multiple addresses with commas; CIDRs and wildcards are not
+accepted. This does not change interface binding, routing, Host/Origin checks,
+pairing, or the sharing switch. Remove the entry when that test device is no
+longer trusted. This allowance covers the HTTP/WebSocket path used by scheduled
+audio; it does not expand the built-in STUN or relay's network scope.
+
 ## TVs that refuse the certificate
 
 HTTPS remains the default. Some TV browsers cannot bypass a self-signed

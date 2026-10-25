@@ -288,14 +288,29 @@ readable stream. Capture time is never replaced with callback arrival time.
 The handoff is bounded; relaxed unsupported publishers retain WebRTC/recorder compatibility.
 Live audio is host-only and actual stereo. Sample positions, sequence, generation,
 actual sample rate and capture timestamps cross the upload boundary. The worker
-normalizes source drift with bounded resampling and encodes shared 10 ms stereo
-Opus at 128 kbit/s. Streaming float WAV input bounds each FFmpeg input packet to
-480 stereo frames, avoiding the raw demuxer's 4096-frame accumulation. Live
-deadlines are capture time plus 100 ms; this is a software
-deadline, not measured input-to-ear. Missing/late data fails within explicit bounds
+normalizes source drift with bounded resampling and encodes shared stereo
+Opus at 128 kbit/s. Live Opus uses 5 ms packets; relaxed capture retains 10 ms. Live also emits
+PCM16 from the same normalized samples and deadlines, in chunks of at most
+240 frames. Partial tails are sent immediately without padding or retiming.
+Streaming float WAV bounds each FFmpeg input packet and Ogg page to that cadence
+(240 stereo frames for Live). The Ogg muxer retains the newest completed page
+until the next packet; a smaller page-duration setting does not remove that wait.
+Live opens a header-only encoder before PCM; its first real block establishes
+the timestamp base. Later generations replace that encoder, and close invalidates
+pending helper resolution. Relaxed encoding remains lazy. Live
+deadlines are capture time plus the source’s selected lead (95 ms by default);
+this is a software deadline, not measured input-to-ear. A shared server policy
+reserves 25 ms for upstream delivery at 75 ms and above, and 8 ms for the explicit
+45/50/55 ms presets used with native capture. Default output budget stays 70 ms.
+Missing/late data fails within explicit bounds
 rather than repeatedly moving the deadline. No history is replayed to a late join.
-Relaxed capture also supports PCM receivers; live does not renegotiate the group
-to PCM or restart healthy listeners for a new incompatible receiver.
+Encoded Live chunks enter the existing fanout pass immediately; its 5 ms timer
+continues housekeeping without holding newly available audio.
+Both Live and relaxed capture support PCM receivers. Live keeps Opus and PCM
+available concurrently without restarting healthy listeners when one joins.
+Live PCM requires at least 65,536 bytes of receiver capacity; Opus requires
+4,096. Both retain preparation and timing admission. Encoder failure currently
+fails the shared source, including its PCM listeners.
 
 Live receiver preparation checks decoder, clock and output readiness and estimated
 budget. A modern Couch control tab declares preparation support; Core binds its
@@ -304,6 +319,8 @@ extension sends preparing, ready or failed together with final timing in one
 encrypted state message. A missing or mismatched modern report waits for
 preparation; connected older clients retain numeric admission. The newest
 control tab owns the sound even if an older tab reconnects its audio socket.
+Prepared direct output processes decoded arrivals in a coalesced microtask;
+unprepared output retains the SDK's 15 ms batching. Future refills remain timed.
 Live control disconnect removes only that listener's scheduling membership and
 keeps its selected output. Changing sources reuses healthy output preparation;
 leaving, tab handover, reconnect and output/clock changes renew the applicable
@@ -311,7 +328,8 @@ listening or preparation lifetime. Terminal failures include the decisive gate;
 preparing is a local status and does not conceal a source failure.
 These are runtime safeguards,
 not hardware qualification. The initial 100 ms / 50 physical receiver goals remain
-unqualified; see the [validation ledger](audio-video-refactor-validation.md).
+unqualified; see the [validation ledger](audio-video-refactor-validation.md) and
+the [roundtrip measurements](audio-roundtrip-performance.md).
 
 Every Device showing the picture of a synced Playback fetches the video itself,
 resolved for its own engine and origin, and plays it muted. It connects to Sendspin

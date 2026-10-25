@@ -4,6 +4,7 @@ import type { AudioPreparation } from "../../shared/protocol";
 export type PreparedReceiver = {
   readonly outputReady: boolean;
   readonly outputState: string;
+  /** The SDK's public clock uncertainty is in milliseconds. */
   readonly timeSyncInfo: { synced: boolean; error: number };
   readonly syncInfo: { outputLatencyMs: number };
   prepareAudio(format: { codec: "opus"; sample_rate: number; channels: number; bit_depth: number }): Promise<void>;
@@ -14,13 +15,16 @@ export function createReceiverAdmission(receiver: PreparedReceiver, active: () =
   let epoch = 0, closed = false, preparing: number | undefined, admitted = false, nextAttempt = 0, latency = 0, failures = 0, eligibility = "", lastError: string | undefined;
   let loggedAt = -Infinity, diagnostic: object | undefined, logTimer: ReturnType<typeof setTimeout> | undefined, coalesced = 0;
   const flush = () => { logTimer = undefined; if (!closed && diagnostic) { console.info("[audio-preparation]", { ...diagnostic, receiptMs: now(), coalesced }); loggedAt = now(); diagnostic = undefined; coalesced = 0; } };
-  const synchronized = () => receiver.timeSyncInfo.synced && receiver.timeSyncInfo.error <= 10_000;
+  const synchronized = () => {
+    const { synced, error } = receiver.timeSyncInfo;
+    return synced && Number.isFinite(error) && error >= 0 && error <= 10;
+  };
   const emit = (report: AudioPreparation, timing?: { requiredLeadTimeMs: number; minBufferMs: number }) => {
     if (closed || !active()) return;
     publish({ ...report, epoch }, timing);
     if (diagnostic) coalesced++;
     diagnostic = { state: report.state, epoch, failures, lastError, outputState: receiver.outputState, outputReady: receiver.outputReady,
-      synced: receiver.timeSyncInfo.synced, clockErrorUs: receiver.timeSyncInfo.error, outputLatencyMs: receiver.syncInfo.outputLatencyMs };
+      synced: receiver.timeSyncInfo.synced, clockErrorMs: receiver.timeSyncInfo.error, outputLatencyMs: receiver.syncInfo.outputLatencyMs };
     if (now() - loggedAt >= 1000) { clearTimeout(logTimer); flush(); }
     else logTimer ??= setTimeout(flush, 1000 - (now() - loggedAt));
   };

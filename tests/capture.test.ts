@@ -471,3 +471,17 @@ test("only this app's Couch window reads or opens capture settings", async () =>
   await expect(h.capture.openSettings("screen")).rejects.toThrow("Start sharing from this computer's Couch window.");
   expect(h.opened).toEqual([]);
 });
+
+test("native capture consumes only a fresh local microphone grant, once", async () => {
+  const h = harness();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  await h.capture.prepare({ kind: "microphone" });
+  h.capture.consumeMicrophone();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  expect(h.request("media", ["audio"])).toBe(false);
+  await h.capture.prepare({ kind: "microphone" }); h.expire();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  h.selectCouch("https://remote.example"); h.navigate("https://remote.example");
+  await h.capture.prepare({ kind: "microphone" });
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+});

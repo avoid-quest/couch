@@ -111,16 +111,36 @@ Sheet on phones and the TV:
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
 
-Live audio uses a fixed scheduled deadline after runtime decoder/clock/output
-checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
+Live audio defaults to a 95 ms sender deadline and 5 ms Opus packets after runtime
+decoder/clock/output checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
 synchronization on every output. While those checks run, the listener sees
 **Preparing audio…**. An incompatible output reports its reason on that listener;
 changing the output requires fresh admission. Normal preparation and recovery
-do not require leaving and joining again. See the
-[validation ledger](../audio-video-refactor-validation.md).
+do not require leaving and joining again. Live uses the saved browser output
+buffering preference; preparation and admission still use the actual reported output
+latency if the browser chooses another value. Startup checks timestamp rate over
+at least 200 ms, keeping checks for stale timestamps and backward jumps on every
+observation, so short timestamp variation need not prevent preparation. See the
+[validation ledger](../audio-video-refactor-validation.md) and
+[roundtrip measurements](../audio-roundtrip-performance.md).
+
+Live corrects small playback-clock drift with bounded playback-rate changes,
+preserving decoded buffers instead of inserting or deleting samples. Relaxed
+playback retains its existing correction policy. This implementation still needs
+electrical and continuous-fidelity validation; it is not an artifact-free guarantee.
 
 ## Not yet
 
 The built-in relay serves only the LAN, and pairing is LAN-only: inviting a
 guest outside it needs a rendezvous, a guest identity scoped to one share and
 a relay a guest can reach, none of which exist yet.
+
+Advanced Live audio settings are in [Settings](settings.md#advanced-audio).
+New publications snapshot the saved host lead; existing publications keep their
+deadlines and admission budget. The receiver reads its browser buffer preference
+on the next join, without interrupting ongoing sound when the setting is saved.
+On Mac builds with the native helper, Live audio input selection also offers
+devices marked Native. The share panel shows requested and reported native
+buffer frames, distinct from the first delivered block shown for browser input.
+Native capture uses the same authorized Couch upload and network path; it still
+needs physical qualification.
