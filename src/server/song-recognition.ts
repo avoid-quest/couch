@@ -9,31 +9,6 @@ export class SongRecognitionError extends Error {
 const providerError = () => new SongRecognitionError("Couldn't identify this song. The recognition service may be unavailable; try again.");
 const audioError = () => new SongRecognitionError("Couldn't prepare audio for song recognition.");
 
-// FFmpeg's normalized sample is PCM16, mono, 16 kHz. Walk RIFF chunks because
-// valid WAV files can also contain metadata before the audio data.
-function pcmAudio(wave: Buffer): Buffer {
-  if (wave.length < 44 || wave.length > 512 * 1024 || wave.toString("ascii", 0, 4) !== "RIFF"
-    || wave.toString("ascii", 8, 12) !== "WAVE" || wave.readUInt32LE(4) + 8 !== wave.length) throw audioError();
-  let format = false, pcm: Buffer | undefined, offset = 12;
-  while (offset + 8 <= wave.length) {
-    const name = wave.toString("ascii", offset, offset + 4), size = wave.readUInt32LE(offset + 4);
-    const start = offset + 8, end = start + size;
-    if (end > wave.length) throw audioError();
-    if (name === "fmt ") {
-      if (format || size < 16 || wave.readUInt16LE(start) !== 1 || wave.readUInt16LE(start + 2) !== 1
-        || wave.readUInt32LE(start + 4) !== 16_000 || wave.readUInt32LE(start + 8) !== 32_000
-        || wave.readUInt16LE(start + 12) !== 2 || wave.readUInt16LE(start + 14) !== 16) throw audioError();
-      format = true;
-    } else if (name === "data") {
-      if (pcm) throw audioError();
-      pcm = wave.subarray(start, end);
-    }
-    offset = end + size % 2;
-  }
-  if (offset !== wave.length || !format || !pcm || pcm.length < 32_000 || pcm.length > 12 * 32_000 || pcm.length % 2) throw audioError();
-  return pcm;
-}
-
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue | undefined => value !== null && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : undefined;
 const label = (value: unknown) => typeof value === "string" && value.length <= 512 && value.trim() ? value.trim() : undefined;
@@ -97,11 +72,12 @@ async function readJson(response: Response, signal: AbortSignal): Promise<unknow
 
 /** Shazam's unofficial protocol, using only the locally generated fingerprint.
  * Reference: MIT ShazamIO; see vendor/shazam-signature/README.md. */
-export async function recognizeSong(sample: Buffer, signal: AbortSignal,
+export async function recognizeSong(pcm: Buffer, signal: AbortSignal,
   request: (url: string, options: RequestInit) => Promise<Response> = fetch,
   beforeRequest: () => void = () => {}): Promise<RecognizedSong | null> {
   signal.throwIfAborted();
-  const signature = await generateShazamSignature(pcmAudio(sample), signal);
+  if (pcm.length < 32_000 || pcm.length > 12 * 32_000 || pcm.length % 2) throw audioError();
+  const signature = await generateShazamSignature(pcm, signal);
   signal.throwIfAborted();
   if (!signature.peakCount) return null;
   // Fingerprinting yields to Core, so a device may have been revoked since sampling.

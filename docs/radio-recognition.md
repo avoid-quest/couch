@@ -20,6 +20,7 @@ up. The fingerprint generator is TypeScript and bundles with Core; `fft.js`
 provides its Fourier transform.
 
 Only saved public HTTP(S) radio streams are supported by this prototype.
+This includes Radio Browser favorites queued with their stream URL.
 Private-network streams, local files and stations requiring custom headers or
 sign-in cannot be sampled. A station can still play in Couch even when it
 cannot be identified. One identification runs at a time per Couch; another
@@ -27,8 +28,9 @@ viewer can try again after it finishes. The whole request has a 45-second
 deadline, including a maximum 20 seconds for the service request.
 
 Couch opens a separate connection to the station and decodes up to 12 seconds
-into mono, 16 kHz audio. The sample stays in memory. It generates an acoustic
-fingerprint locally and sends that fingerprint and duration to Shazam, along
+into mono, 16 kHz PCM, passed directly to the fingerprint generator. The sample
+stays in memory. It generates an acoustic fingerprint locally and sends that
+fingerprint and duration to Shazam, along
 with a request timestamp, random request identifiers and protocol headers.
 It sends no raw audio, station URL, Couch identity or device token. No location
 is supplied; Shazam can see the server's IP address as with any network request.
@@ -42,10 +44,23 @@ the catalog may produce no match. A match is a best effort, not a guarantee.
 
 Because sampling uses a new connection, it may be ahead of buffered playback
 on a listening device. The displayed time is when Couch started the excerpt,
-not a promise that the identified song is still playing. Press the button
+after helper preparation, not a promise that the identified song is still
+playing. Press the button
 again when you want a fresh result.
 
 ## Implementation and checks
+
+To try this branch beside an installed Couch, use an isolated data directory
+and port from the checkout:
+
+```sh
+COUCH_DATA_DIR="$PWD/.data/pr-901" COUCH_PORT=49101 bun run app
+```
+
+Choose **This computer**, play a saved public radio station, open its player
+and press **Identify song**. Try Cancel, retry, switching stations and leaving
+the player. Quit this scratch app when finished; the installed Couch and its
+data stay untouched.
 
 The authenticated `POST /api/radio/recognize` endpoint accepts only
 `{ "stationId": "<saved station id>" }`. Core resolves the URL from its saved

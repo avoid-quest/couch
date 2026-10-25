@@ -11,22 +11,12 @@ const sampleRate = 16_000;
 const sampleLimit = 512 * 1024;
 const sampleError = () => new SongRecognitionError("Couldn't sample this station. Identification needs a reachable public radio stream.");
 
-// A complete WAV header also works with decoders that reject FFmpeg's unseekable
-// WAV output (whose RIFF/data lengths are unknown). Samples never touch disk.
-function wave(pcm: Buffer) {
-  const header = Buffer.alloc(44);
-  header.write("RIFF"); header.writeUInt32LE(36 + pcm.length, 4); header.write("WAVEfmt ", 8);
-  header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24); header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
-  header.write("data", 36); header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
-}
+type RadioSample = { pcm: Buffer; sampledAt: number };
 
 /** Read a short independent excerpt; this never changes the playing stream. */
 export async function sampleRadio(source: string, signal: AbortSignal, {
   helper = useHelper, proxy: createProxy = createPublicMediaProxy,
-}: { helper?: typeof useHelper; proxy?: typeof createPublicMediaProxy } = {}): Promise<Buffer> {
+}: { helper?: typeof useHelper; proxy?: typeof createPublicMediaProxy } = {}): Promise<RadioSample> {
   signal.throwIfAborted();
   // Provisioning is shared with playback and can outlive this request. Stop
   // waiting on cancel, and release a lease that arrives after we have left.
@@ -44,6 +34,7 @@ export async function sampleRadio(source: string, signal: AbortSignal, {
     signal.throwIfAborted();
     proxy = await createProxy(signal);
     signal.throwIfAborted();
+    const sampledAt = Date.now();
     const pcm = await new Promise<Buffer>((resolve, reject) => {
       const child = spawn(executable.path, [
         "-hide_banner", "-nostdin", "-nostats", "-loglevel", "error",
@@ -76,7 +67,7 @@ export async function sampleRadio(source: string, signal: AbortSignal, {
         else resolve(Buffer.concat(chunks));
       });
     });
-    return wave(pcm.subarray(0, sampleSeconds * sampleRate * 2));
+    return { pcm: pcm.subarray(0, sampleSeconds * sampleRate * 2), sampledAt };
   } finally {
     executable.release();
     await proxy?.close();
@@ -86,7 +77,7 @@ export async function sampleRadio(source: string, signal: AbortSignal, {
 export function createRadioRecognition({ station, signal: shutdown, sample = sampleRadio, recognize = recognizeSong }: {
   station: (stationId: string) => { source: string };
   signal: AbortSignal;
-  sample?: (source: string, signal: AbortSignal) => Promise<Buffer>;
+  sample?: (source: string, signal: AbortSignal) => Promise<RadioSample>;
   recognize?: typeof recognizeSong;
 }) {
   // Manual requests only. One decoder/recognizer at a time bounds Core's work.
@@ -108,11 +99,10 @@ export function createRadioRecognition({ station, signal: shutdown, sample = sam
         signal.throwIfAborted();
         if (busy) return respond({ error: "A song is already being identified. Try again shortly." }, 429);
         busy = acquired = true;
-        const sampledAt = Date.now();
-        const audio = await sample(source, signal);
+        const { pcm, sampledAt } = await sample(source, signal);
         signal.throwIfAborted();
         authorize();
-        const track = await recognize(audio, signal, undefined, authorize);
+        const track = await recognize(pcm, signal, undefined, authorize);
         signal.throwIfAborted();
         authorize();
         return respond({ track, sampledAt } satisfies RadioRecognitionResult);

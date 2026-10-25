@@ -379,6 +379,9 @@ A radio station's Now playing offers **Identify song** under its track line.
 The action samples the station only when pressed; it never starts from opening
 the player or on a timer. **Identifying…** keeps its slot while a ghost
 **Cancel** action is available beside it. Playback keeps running.
+Saved Radio Browser favorites also offer it when their queue entry holds the
+stream URL. On cancellation or completion, focus on Cancel returns to Identify
+song after it becomes available.
 
 The result is a flat artist-and-title line, followed by the sample's local time
 and **Open in Shazam** when a link is available. It belongs to this viewer's

@@ -76,6 +76,16 @@ export async function runRadioRecognitionRegression() {
       playbackRequest.resolve(matched("Previous playback")); await wait();
       assert(!recognition()?.textContent?.includes("Previous playback"), "The new playback shows an old result");
     });
+    await check("saved radio favorites queued by stream URL can be identified", async () => {
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, queue: gate.state!.queue.map(entry => entry.id === "concert" ? { ...entry, source: "https://stream.example.com/nts" } : entry) } }));
+      const call = await start();
+      assert(JSON.parse(String(call.init?.body)).stationId === "audit-radio", "The saved stream lost its station ID");
+      call.resolve(matched("Saved favorite")); await wait();
+      assert(recognition()?.textContent?.includes("Saved favorite"), "A saved directory station could not be identified");
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, queue: gate.state!.queue.map(entry => entry.id === "concert" ? { ...entry, source: "https://unsaved.example/stream" } : entry) } }));
+      assert(!recognition(), "An unsaved stream offers recognition");
+      await audit.go("/now", { player: "playing", live: true });
+    });
     await check("switching Couch cancels the old request and uses the new credentials", async () => {
       const previous = await start();
       await audit.updateSession(gate => ({ ...gate, credentials: { ...gate.credentials!, origin: "https://another.couch.example", token: "replacement-token" } }));

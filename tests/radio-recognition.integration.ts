@@ -29,7 +29,7 @@ test("recognition is manual, resolves only the saved station, and returns an unc
   let samples = 0, matches = 0;
   const audio = Buffer.from("fixture");
   const recognition = createRadioRecognition({ station, signal: new AbortController().signal,
-    sample: async (url, signal) => { assert.equal(url, source); assert.equal(signal.aborted, false); samples++; return audio; },
+    sample: async (url, signal) => { assert.equal(url, source); assert.equal(signal.aborted, false); samples++; return { pcm: audio, sampledAt: 1_700_000_000_000 }; },
     recognize: async value => { assert.equal(value, audio); matches++; return null; },
   });
   await immediate();
@@ -43,14 +43,13 @@ test("recognition is manual, resolves only the saved station, and returns an unc
   assert.equal((await recognition.handle(post({ stationId: source }), allow)).status, 404);
   assert.equal((await recognition.handle(new Request("http://localhost/api/radio/recognize", { method: "POST", body: "{}" }), allow)).status, 415);
   assert.equal(samples, 0);
-  const before = Date.now();
   const response = await recognition.handle(post(), allow);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   const result = await response.json();
   assert.deepEqual(Object.keys(result).sort(), ["sampledAt", "track"]);
   assert.equal(result.track, null);
-  assert.ok(result.sampledAt >= before && result.sampledAt <= Date.now());
+  assert.equal(result.sampledAt, 1_700_000_000_000, "the result uses the capture time, not the request time");
   await immediate();
   assert.equal(samples, 1);
   assert.equal(matches, 1);
@@ -61,7 +60,7 @@ test("authorization is rechecked before recognition and before returning a recog
     let authorized = true, matches = 0;
     const authorize = () => { if (!authorized) throw new ControllerError("This device was removed. Pair again.", 401); };
     const recognition = createRadioRecognition({ station, signal: new AbortController().signal,
-      sample: async () => { if (revokedAt === "sample") authorized = false; return Buffer.from("audio"); },
+      sample: async () => { if (revokedAt === "sample") authorized = false; return { pcm: Buffer.from("audio"), sampledAt: Date.now() }; },
       recognize: async () => { matches++; authorized = false; return { title: "Must not escape", provider: "shazam" }; },
     });
     const response = await recognition.handle(post(), authorize);
@@ -77,8 +76,8 @@ test("concurrent manual requests are bounded, cancellation releases the slot, an
   let samples = 0, matches = 0;
   const recognition = createRadioRecognition({ station, signal: shutdown.signal,
     sample: async (_url, signal) => {
-      if (++samples > 1) return Buffer.from("audio");
-      return new Promise<Buffer>((_resolve, reject) => { signal.addEventListener("abort", () => reject(signal.reason), { once: true }); started.resolve(); });
+      if (++samples > 1) return { pcm: Buffer.from("audio"), sampledAt: Date.now() };
+      return new Promise<never>((_resolve, reject) => { signal.addEventListener("abort", () => reject(signal.reason), { once: true }); started.resolve(); });
     },
     recognize: async () => { matches++; return null; },
   });
@@ -101,7 +100,7 @@ test("concurrent manual requests are bounded, cancellation releases the slot, an
 test("a provider failure releases the manual-request slot", async () => {
   let attempts = 0;
   const recognition = createRadioRecognition({ station, signal: new AbortController().signal,
-    sample: async () => Buffer.from("audio"),
+    sample: async () => ({ pcm: Buffer.from("audio"), sampledAt: Date.now() }),
     recognize: async () => { if (++attempts === 1) throw new SongRecognitionError("Provider unavailable."); return null; },
   });
   assert.equal((await recognition.handle(post(), allow)).status, 502);
@@ -171,6 +170,7 @@ test("FFmpeg sampling caps audio, protects nested requests, and cleans up on can
   const port = await listen(server);
   t.after(() => { server.closeAllConnections(); return new Promise<void>(resolve => server.close(() => resolve())); });
   const proxies: string[] = [], checked: string[] = [];
+  let preparedAt = 0;
   const dependencies = {
     helper: async () => ({ path: ffmpeg, release() { released++; } }),
     proxy: async (signal: AbortSignal) => {
@@ -179,22 +179,16 @@ test("FFmpeg sampling caps audio, protects nested requests, and cleans up on can
         // Only this public-name fixture is routed locally; production uses lookupPublic.
         return hostname === "radio.test" ? [{ address: "127.0.0.1", family: 4 }] : lookupPublic(hostname);
       });
+      preparedAt = Date.now();
       proxies.push(proxy.url);
       return proxy;
     },
   };
-  await t.test("a 15-second stereo source becomes a complete 12-second 16 kHz mono WAV", async () => {
-    const wav = await sampleRadio(`http://radio.test:${port}/radio.wav`, AbortSignal.timeout(5000), dependencies);
-    assert.equal(wav.toString("ascii", 0, 4), "RIFF");
-    assert.equal(wav.toString("ascii", 8, 16), "WAVEfmt ");
-    assert.equal(wav.readUInt32LE(4), wav.length - 8);
-    assert.equal(wav.readUInt16LE(20), 1);
-    assert.equal(wav.readUInt16LE(22), 1);
-    assert.equal(wav.readUInt32LE(24), 16_000);
-    assert.equal(wav.readUInt16LE(34), 16);
-    assert.equal(wav.readUInt32LE(40), 12 * 16_000 * 2);
-    assert.equal(wav.length, 44 + 12 * 16_000 * 2);
-    assert.ok(wav.subarray(44).some(byte => byte !== 0));
+  await t.test("a 15-second stereo source becomes timestamped 12-second 16 kHz mono PCM", async () => {
+    const { pcm, sampledAt } = await sampleRadio(`http://radio.test:${port}/radio.wav`, AbortSignal.timeout(5000), dependencies);
+    assert.equal(pcm.length, 12 * 16_000 * 2);
+    assert.ok(pcm.some(byte => byte !== 0));
+    assert.ok(sampledAt >= preparedAt && sampledAt <= Date.now(), "capture time excludes helper and proxy preparation");
     assert.equal(released, 1);
     await closedProxy(proxies.at(-1)!);
   });

@@ -418,6 +418,8 @@ Shared building blocks in `src/client/components`:
   pointer motion leaves the slider, chapter markers and playback labels alone.
 - `RadioRecognition`: the player's manual **Identify song** action and its flat,
   timestamped result ([Player](design/player.md#identify-a-radio-song)).
+  Saved favorites queued by stream URL resolve to their station ID too; Cancel
+  returns keyboard focus to the action once it is available.
 - `playbackStatus`: one status vocabulary for Home, the player, the
   now-playing bar, Remote and Up next. Its `quiet` states (Playing, Paused,
   Ready to play) are left to the Play/Pause glyph, so status lines show only

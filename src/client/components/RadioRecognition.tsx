@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AudioLines } from "lucide-react";
 import { identifyRadioSong } from "@/api/radio";
 import type { ApiCredentials } from "@/api/client";
@@ -16,6 +16,13 @@ export function RadioRecognition({ credentials, stationId, connected }: {
   const [error, setError] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
   const cancelControl = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+
+  useLayoutEffect(() => {
+    if (pending || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    trigger.current?.focus();
+  }, [pending]);
 
   // The player keys this component to the Couch, station and playback. Leaving it stops the request.
   useEffect(() => () => { request.current?.abort(); request.current = null; }, []);
@@ -39,13 +46,14 @@ export function RadioRecognition({ credentials, stationId, connected }: {
       const found = await identifyRadioSong(credentials, stationId, controller.signal);
       if (request.current === controller && !controller.signal.aborted) setResult(found);
     } catch (reason) {
-      if (request.current === controller && !controller.signal.aborted) setError(reason instanceof Error && reason.name === "TimeoutError" ? "Identification took too long. Try again." : reason instanceof Error ? reason.message : "Couldn't identify the song. Try again.");
+      if (request.current !== controller || controller.signal.aborted) return;
+      if (reason instanceof Error && reason.name === "TimeoutError") setError("Identification took too long. Try again.");
+      else setError(reason instanceof Error ? reason.message : "Couldn't identify the song. Try again.");
     } finally {
       if (request.current === controller) {
-        const restoreFocus = document.activeElement === cancelControl.current;
+        restoreFocus.current = document.activeElement === cancelControl.current;
         request.current = null;
         setPending(false);
-        if (restoreFocus) requestAnimationFrame(() => trigger.current?.focus());
       }
     }
   }
@@ -53,9 +61,8 @@ export function RadioRecognition({ credentials, stationId, connected }: {
   function cancel() {
     request.current?.abort();
     request.current = null;
+    restoreFocus.current = true;
     setPending(false);
-    // The Cancel button disappears; keep keyboard and TV focus on the action that remains.
-    requestAnimationFrame(() => trigger.current?.focus());
   }
 
   const track = result?.track;

@@ -35,7 +35,7 @@ import { titleFit, titleLength } from "@/components/Stage";
 import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { RadioRecognition } from "@/components/RadioRecognition";
-import { radioProgrammesQuery, radioStationQuery } from "@/api/radio";
+import { radioFavoritesListQuery, radioProgrammesQuery, radioStationQuery } from "@/api/radio";
 import { useQuery } from "@tanstack/react-query";
 import { isRadio, radioHost, radioShowLabels, radioNext, type RadioGuide } from "../../../shared/radio";
 import { useRadioClock } from "@/radio-clock";
@@ -95,7 +95,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   }, []);
   const [now, setNow] = useState(Date.now());
   const radioGuides = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && isRadio(current), refetchInterval: 60_000 });
-  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : "";
+  const radioFavorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && isRadio(current) && !current?.source.startsWith("radio:") });
+  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : radioFavorites.data?.favorites.find(station => station.url === current?.source)?.id ?? "";
   const stationDetails = useQuery({ ...radioStationQuery(credentials, stationId), enabled: connected && !!stationId });
   const player = state?.player;
   const panel = current && active && panelState?.playbackId === player?.playbackId ? panelState?.panel ?? null : null;

@@ -1,25 +1,15 @@
 import { expect, test } from "bun:test";
 import { recognizeSong, SongRecognitionError } from "../src/server/song-recognition";
 
-function wave(silence = false) {
+function audio(silence = false) {
   const pcm = Buffer.alloc(3 * 16000 * 2);
   if (!silence) for (let index = 0; index < pcm.length / 2; index++) {
     const t = index / 16000;
     pcm.writeInt16LE(Math.round(12000 * Math.sin(2 * Math.PI * (440 * t + 180 * t * t)) + 5000 * Math.sin(2 * Math.PI * 1700 * t)), index * 2);
   }
-  const header = Buffer.alloc(36);
-  header.write("RIFF"); header.write("WAVEfmt ", 8);
-  header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(16000, 24); header.writeUInt32LE(32000, 28);
-  header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
-  // Include an odd-length, padded metadata chunk: data need not start at byte44.
-  const metadata = Buffer.from([74, 85, 78, 75, 3, 0, 0, 0, 1, 2, 3, 0]);
-  const data = Buffer.alloc(8); data.write("data"); data.writeUInt32LE(pcm.length, 4);
-  const result = Buffer.concat([header, metadata, data, pcm]);
-  result.writeUInt32LE(result.length - 8, 4);
-  return result;
+  return pcm;
 }
-const sample = wave();
+const sample = audio();
 const signal = () => new AbortController().signal;
 const match = { matches: [{ id: "123" }], track: { title: " I Will Survive ", subtitle: "Gloria Gaynor", sections: [{ metadata: [{ title: "Album", text: "Love Tracks" }] }], url: "https://www.shazam.com/track/53982678/i-will-survive", images: { coverarthq: "javascript:alert(1)" } } };
 
@@ -46,7 +36,7 @@ test("one request sends a fingerprint, duration and empty location, returning on
 
 test("silence is no match without contacting the service", async () => {
   let calls = 0;
-  expect(await recognizeSong(wave(true), signal(), async () => { calls++; return Response.json(match); })).toBeNull();
+  expect(await recognizeSong(audio(true), signal(), async () => { calls++; return Response.json(match); })).toBeNull();
   expect(calls).toBe(0);
 });
 
@@ -111,13 +101,9 @@ test("cancellation stops reading the provider response and preserves the caller'
   expect(calls).toBe(0);
 });
 
-test("invalid and unsupported audio is rejected before a service request", async () => {
-  const stereo = Buffer.from(sample); stereo.writeUInt16LE(2, 22);
-  const wrongRate = Buffer.from(sample); wrongRate.writeUInt32LE(44100, 24);
-  const truncated = sample.subarray(0, sample.length - 1);
-  const corruptChunk = Buffer.from(sample); corruptChunk.writeUInt32LE(0xffff_ffff, 40);
+test("incomplete, short and oversized PCM is rejected before a service request", async () => {
   let calls = 0;
-  for (const audio of [Buffer.alloc(0), Buffer.alloc(1024 * 1024), stereo, wrongRate, truncated, corruptChunk]) {
+  for (const audio of [Buffer.alloc(0), Buffer.alloc(31_998), Buffer.alloc(1024 * 1024), sample.subarray(0, sample.length - 1)]) {
     await expect(recognizeSong(audio, signal(), async () => { calls++; return Response.json(match); })).rejects.toMatchObject({ status: 502 });
   }
   expect(calls).toBe(0);
