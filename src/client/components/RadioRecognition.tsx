@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AudioLines } from "lucide-react";
+import { AudioLines, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { identifyRadioSong, radioRecognitionsQuery } from "@/api/radio";
 import type { ApiCredentials } from "@/api/client";
@@ -71,6 +71,12 @@ export function RadioRecognition({ credentials, stationId, connected, controls }
     setPending(false);
   }
 
+  function clearResult() {
+    setResult(null);
+    setError("");
+    trigger.current?.focus();
+  }
+
   return <>
     {controls && createPortal(<div data-radio-recognition-controls className="flex items-center gap-0.5">
       <Button ref={trigger} variant="ghost" size="icon-lg" className="size-(--player-target)" aria-label={pending ? "Identifying…" : "Identify song"} title="Identify song" disabled={!connected || pending} onClick={() => void identify()}>
@@ -79,13 +85,17 @@ export function RadioRecognition({ credentials, stationId, connected, controls }
       {pending && <Button ref={cancelControl} variant="ghost" size="sm" onClick={cancel}>Cancel</Button>}
     </div>, controls)}
     {(pending || result || error) && <div data-radio-recognition className="my-3 grid max-w-md min-w-0 gap-2 text-sm text-pretty" aria-busy={pending}>
-      <div role="status" aria-live="polite" aria-atomic="true" className={result?.track ? "sr-only" : undefined}>
-        {pending && <p className="text-muted-foreground">Identifying…</p>}
-        {result && (result.track ? `${result.track.title}${result.track.artist ? `, ${result.track.artist}` : ""}` : "No song identified. Try another part of the stream.")}
+      <div className={result?.track ? "sr-only" : "flex min-w-0 items-center gap-3"}>
+        <div className="min-w-0 flex-1">
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {pending && <p className="text-muted-foreground">Identifying…</p>}
+            {result && (result.track ? `${result.track.title}${result.track.artist ? `, ${result.track.artist}` : ""}` : "No song identified. Try another part of the stream.")}
+          </div>
+          {error && <p role="alert" className="text-destructive">{error}</p>}
+        </div>
+        {(error || result && !result.track) && <Button variant="ghost" size="icon-sm" aria-label="Clear result" title="Clear result" onClick={clearResult}><X aria-hidden="true" /></Button>}
       </div>
-      {result?.track && <RadioRecognitionItem entry={result} onDismiss={() => { setResult(null); trigger.current?.focus(); }} />}
-      {(error || result && !result.track) && <Button variant="ghost" size="sm" className="justify-self-start" onClick={() => { setResult(null); setError(""); trigger.current?.focus(); }}>Clear result</Button>}
-      {error && <p role="alert" className="text-destructive">{error}</p>}
+      {result?.track && <RadioRecognitionItem entry={result} onDismiss={clearResult} />}
     </div>}
   </>;
 }

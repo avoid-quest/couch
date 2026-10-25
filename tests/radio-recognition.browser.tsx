@@ -100,8 +100,16 @@ export async function runRadioRecognitionRegression() {
       (await start()).resolve(Response.json({ ...observation, id: crypto.randomUUID(), track: null, sampledAt: Date.now() })); await wait();
       assert(recognition()?.textContent?.includes("No song identified"), "A no-match result is missing");
       assert(!recognition()?.textContent?.includes("Recognized artist"), "A miss retained the old song");
+      const clearMiss = recognition()?.querySelector<HTMLButtonElement>('button[aria-label="Clear result"]');
+      assert(clearMiss?.querySelector("svg") && !clearMiss.textContent?.trim(), "A miss must use the clear cross without a text button");
+      clearMiss!.click(); await wait();
+      assert(!recognition() && document.activeElement === button("Identify song"), "Clearing a miss must dismiss it and restore focus");
       (await start()).resolve(Response.json({ error: "Recognition is unavailable. Try again." }, { status: 503 })); await wait();
       assert(recognition()?.querySelector('[role="alert"]')?.textContent?.includes("Recognition is unavailable"), "The provider error is missing");
+      const clearError = recognition()?.querySelector<HTMLButtonElement>('button[aria-label="Clear result"]');
+      assert(clearError?.querySelector("svg") && !clearError.textContent?.trim(), "An error must use the clear cross without a text button");
+      clearError!.click(); await wait();
+      assert(!recognition() && document.activeElement === button("Identify song"), "Clearing an error must dismiss it and restore focus");
       const before = calls.length;
       await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player, position: 20 } } }));
       assert(calls.length === before, "Failure retried automatically");

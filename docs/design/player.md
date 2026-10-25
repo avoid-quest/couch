@@ -394,7 +394,8 @@ centred beside the item.
 
 The **Clear result** cross dismisses the player item and returns focus to
 Identify song. A miss says "No song identified. Try another part of the stream."
-and offers Clear result too, as do failures. Another Couch, station, queue
+and uses the same aligned cross, as do failures; there is no text Clear button.
+Another Couch, station, queue
 entry or Playback, a disconnect, or leaving the player cancels the request and
 clears this viewer's result. It does not replace the programme or affect other
 viewers' players.
