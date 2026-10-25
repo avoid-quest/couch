@@ -9,7 +9,7 @@ export function mergeSearchHits(sources: readonly string[], hits: Record<string,
 
 export const searchSources = ["All", "Shared sources", "YouTube", "Bandcamp", "SoundCloud", "RaiPlay", "StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity", "avoid radio", "Radio playlists", "Radio directory", "Twitch"];
 /** What Search narrows by first; channels and lists show under videos. */
-export const searchKinds = ["films", "live", "radio", "music", "videos"] as const;
+export const searchKinds = ["films", "live", "radio", "music", "videos", "audio"] as const;
 export type SearchKind = typeof searchKinds[number];
 export type SearchRouteState = { query: string; source: string; kind?: SearchKind };
 /**
@@ -17,7 +17,7 @@ export type SearchRouteState = { query: string; source: string; kind?: SearchKin
  * it. Catalogues' series and RaiPlay's programmes are films and series; channels and lists are videos.
  */
 export const sourceKinds: Record<string, readonly SearchKind[]> = {
-  "Shared sources": ["live"], YouTube: ["videos", "live"], Bandcamp: ["music"], SoundCloud: ["music"], Twitch: ["live", "videos"],
+  "Shared sources": ["live"], YouTube: ["videos", "live", "audio"], Bandcamp: ["music", "audio"], SoundCloud: ["music", "audio"], Twitch: ["live", "videos"],
   RaiPlay: ["films", "videos", "live"], StreamingCommunity: ["films"], "123MoviesFree": ["films", "videos"], AnimeSaturn: ["films"], AnimeUnity: ["films"],
   "avoid radio": ["radio"], "Radio playlists": ["radio"], "Radio directory": ["radio"],
 };

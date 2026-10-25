@@ -6,7 +6,7 @@ import { MediaArtwork } from "./MediaArtwork";
 import { Button } from "./ui/button";
 import { Item } from "./ui/item";
 
-/** A found song opens Couch's existing search across all sources. */
+/** A found song searches Couch's audio sources, including music videos. */
 export function RadioRecognitionItem({ entry, history = false, onDismiss }: {
   entry: RadioRecognitionEntry; history?: boolean; onDismiss?: () => void;
 }) {
@@ -27,7 +27,7 @@ export function RadioRecognitionItem({ entry, history = false, onDismiss }: {
   </>;
   return <div className="flex min-w-0 items-center gap-3">
     <Item asChild size="sm" className="min-w-0 flex-1 flex-nowrap gap-3 rounded-sm border-0 p-0 text-left">
-      {track ? <Link to={searchLocation({ query, source: "All" })} aria-label={`Search Couch for ${query}`}>{content}</Link> : <div>{content}</div>}
+      {track ? <Link to={searchLocation({ query, source: "All", kind: "audio" })} aria-label={`Search Couch for ${query}`}>{content}</Link> : <div>{content}</div>}
     </Item>
     {onDismiss && <Button variant="ghost" size="icon-sm" aria-label="Clear result" title="Clear result" onClick={onDismiss}><X aria-hidden="true" /></Button>}
   </div>;

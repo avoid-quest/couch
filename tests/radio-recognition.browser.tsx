@@ -55,7 +55,7 @@ export async function runRadioRecognitionRegression() {
       assert(audit.actions.length === commands, "Recognition sent a playback command");
       assert(document.activeElement === button("Identify song"), "Completion lost focus when Cancel disappeared");
     });
-    await check("the found song searches all Couch sources directly without a modal", async () => {
+    await check("the found song searches audio sources directly without a modal", async () => {
       const info = document.querySelector<HTMLButtonElement>('button[aria-label="Info"]')!;
       info.click(); await wait();
       const link = recognition()?.querySelector<HTMLAnchorElement>('a[aria-label="Search Couch for Recognized artist Identified song"]')!;
@@ -66,10 +66,12 @@ export async function runRadioRecognitionRegression() {
       link.click(); await wait();
       const url = new URL(audit.router.state.location.href, location.href);
       assert(url.pathname === "/search" && url.searchParams.get("q") === "Recognized artist Identified song", "The result did not search its artist and title");
-      assert(!url.searchParams.has("source") && !url.searchParams.has("kind"), "The song search excludes available sources");
+      assert(!url.searchParams.has("source") && url.searchParams.get("kind") === "audio", "The song search must use the Audio scope across its sources");
       assert(!document.querySelector('[role="dialog"]'), "A song search opened a modal");
       assert((document.querySelector('#media-search') as HTMLInputElement)?.value === "Recognized artist Identified song", "The header did not receive the search hint");
       for (const provider of ["youtube", "bandcamp", "soundcloud"]) assert(audit.calls.some(path => path.startsWith(`/api/providers/${provider}/items?`) && new URL(path, location.href).searchParams.get("q") === "Recognized artist Identified song"), `The song was not searched on ${provider}`);
+      const searched = audit.calls.filter(path => path.startsWith("/api/") && new URL(path, location.href).searchParams.get("q") === "Recognized artist Identified song");
+      assert(searched.every(path => /^\/api\/providers\/(youtube|bandcamp|soundcloud)\/items\?/.test(path)), `The song search asked a non-audio catalogue: ${searched.join(", ")}`);
       assert(audit.actions.length === commands, "Searching the song changed playback");
       await audit.go("/now", { player: "playing", live: true });
       (await start()).resolve(matched()); await wait();
@@ -84,7 +86,7 @@ export async function runRadioRecognitionRegression() {
       assert(row && saved?.textContent?.includes("NTS Radio") && saved.textContent?.includes("Early Bird") && saved.querySelector("time"), "Saved history lost the song or context");
       assert(saved?.textContent?.includes("Recognized album") && saved.textContent?.includes("Requested by Studio browser"), "History lost the album or requester");
       row!.click(); await wait();
-      assert(new URL(audit.router.state.location.href, location.href).searchParams.get("q") === "Recognized artist Identified song" && !document.querySelector('[role="dialog"]'), "History does not link directly to Couch search");
+      assert(new URL(audit.router.state.location.href, location.href).searchParams.get("q") === "Recognized artist Identified song" && new URL(audit.router.state.location.href, location.href).searchParams.get("kind") === "audio" && !document.querySelector('[role="dialog"]'), "History does not link directly to Couch search");
       await audit.go("/now", { player: "playing", live: true });
       assert(!recognition(), "Returning from history restored the cleared result");
     });

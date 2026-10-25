@@ -54,7 +54,7 @@ type Entry = [source: string, summary: SearchResultSummary];
 const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
-type GroupId = SearchKind | "channels";
+type GroupId = Exclude<SearchKind, "audio"> | "channels";
 type Group = { id: GroupId; title: string; shape: ArtShape };
 // What's on the board first, then what you'd listen to, then the long tail of videos and channels, every kind a shelf.
 // The kinds above already count, so the headings don't.
@@ -87,6 +87,7 @@ const fluidTile = { poster: "[--tile-art:150cqi]", square: "[--tile-art:100cqi]"
 export function SearchPanel(props: Props) {
   const { searchState } = props;
   const query = searchState.query;
+  const kind = searchState.kind;
   const [remoteSummaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
   const liveHits = useLiveSourceHits(query);
   const latest = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Shared sources": { count: liveHits.length, hits: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
@@ -99,7 +100,8 @@ export function SearchPanel(props: Props) {
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(query) ? query : undefined;
-  const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[];
+  const providers = url ? [] : (["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[])
+    .filter(provider => kind !== "audio" || canReturn(providerNames[provider], kind));
   const pending = (source: string) => !summaries[source] || summaries[source].loading;
   // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
   // strong when its title holds every word.
@@ -108,11 +110,11 @@ export function SearchPanel(props: Props) {
   // The kind and source are the header field's scope, chosen before or after the results. The filters come from what
   // was found, so no choice made here can come up empty: a kind is offered once it has a hit, and inside a kind, a
   // source once it has a hit of it. A scope chosen in the field shows too, and says so when it holds nothing.
-  const found = merged.filter(close);
+  const found = merged.filter(hit => close(hit) && (kind !== "audio" || canReturn(hit.source, kind)));
   const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
-  const kind = searchState.kind;
-  const foundKinds = kinds.flatMap(option => { const n = found.filter(hit => kindOfHit(hit) === option.value).length; return n || option.value === kind && found.length ? [{ ...option, count: n }] : []; });
-  const inKind = (hit: SearchHit, of = kind) => !of || kindOfHit(hit) === of;
+  const inKind = (hit: SearchHit, of = kind) => !of || (of === "audio" ? canReturn(hit.source, of) : kindOfHit(hit) === of);
+  const choices = kind === "audio" ? [{ value: kind, label: kindLabels.audio }, ...kinds] : kinds;
+  const foundKinds = choices.flatMap(option => { const n = found.filter(hit => inKind(hit, option.value)).length; return n || option.value === kind && found.length ? [{ ...option, count: n }] : []; });
   const filter = searchState.source;
   const foundSources = sourceOrder.map(source => ({ value: source, count: found.filter(hit => hit.source === source && inKind(hit)).length })).filter(source => source.count || source.value === filter && found.length);
   // Only the sources that can return the kind are waited on, or report a problem.
@@ -194,7 +196,7 @@ export function SearchPanel(props: Props) {
       <SourcesUnanswered summaries={shown} />
     </>}
     {providers.map(provider => <SearchOnlineResults key={`${provider}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(providerNames[provider])} provider={provider} query={query} quality={quality} onEnqueued={resetQuality} />)}
-    {!url && radioSources.map(source => <SearchRadioResults key={`${source}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(source)} query={query} source={source} />)}
+    {!url && kind !== "audio" && radioSources.map(source => <SearchRadioResults key={`${source}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(source)} query={query} source={source} />)}
     {url && <PastedLink key={url} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
   </section>;
 }

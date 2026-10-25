@@ -23,7 +23,8 @@ and paired remotes.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites. While a station is playing, choose
   **Identify song** to recognize a short excerpt. Click the result to search
-  for its artist and title across Couch's sources, or clear it with the cross.
+  for its artist and title on YouTube, Bandcamp and SoundCloud, or clear it with
+  the cross.
   Completed lookups are kept in **Saved → Identified songs**, with time,
   station, programme when available and requester. This is an on-demand
   prototype using Shazam's service; see [song recognition](radio-recognition.md).

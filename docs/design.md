@@ -419,7 +419,7 @@ Shared building blocks in `src/client/components`:
 - `RadioRecognition`: the player's manual **Identify song** icon beside Info,
   cancellation and a dismissible, clickable `RadioRecognitionItem` below the
   station line, before Info's programme details. The shared item links directly
-  to Couch Search with artist/title across All sources and is also used by
+  to Couch Search with artist/title in the Audio scope and is also used by
   Saved → Identified songs, which displays album and requester too. Core keeps
   completed lookups with time, station, programme when known and requester;
   clearing the player leaves history intact. Saved favorites queued by stream

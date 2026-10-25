@@ -388,17 +388,18 @@ The result sits below the station line, before the expanded programme details,
 with its own breathing room in both calm and Info views. A flat shadcn `Item`
 shows a whole 56px cover, title, artist and excerpt time. Missing artwork uses
 `MediaArtwork`'s fallback. The underlined title and whole item link directly to
-Couch Search with the artist and song title filled in, across All sources.
+Couch Search with the artist and song title filled in, in the Audio scope:
+YouTube, Bandcamp and SoundCloud. Film, series, TV and radio catalogues are
+excluded.
 There is no modal, external Shazam link or chevron. One clear cross sits
 centred beside the item.
 
 The **Clear result** cross dismisses the player item and returns focus to
 Identify song. A miss says "No song identified. Try another part of the stream."
 and uses the same aligned cross, as do failures; there is no text Clear button.
-Another Couch, station, queue
-entry or Playback, a disconnect, or leaving the player cancels the request and
-clears this viewer's result. It does not replace the programme or affect other
-viewers' players.
+Another Couch, station, queue entry or Playback, a disconnect, or leaving the
+player cancels the request and clears this viewer's result. It does not replace
+the programme or affect other viewers' players.
 
 Completed lookups, including misses, are automatically kept in Couch's shared
 SQLite history. They retain the excerpt time, station name and ID, programme

@@ -5,7 +5,8 @@ icon beside Info to take a short excerpt and look up the song. Playback
 continues while it listens. A match stays in Couch as a compact clickable item
 with cover art, title, artist and excerpt time, above the expanded programme
 information. The item opens Couch Search directly with its artist and title,
-across all available sources. There is no modal or Shazam link. The **Clear
+in the Audio scope: YouTube, Bandcamp and SoundCloud. Film, series, TV and
+radio catalogues are excluded. There is no modal or Shazam link. The **Clear
 result** cross dismisses it;
 **Cancel** stops a pending request. If there is no match, try another part of
 the stream.

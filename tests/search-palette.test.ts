@@ -58,6 +58,9 @@ test("every source has the kinds it can return, and a kind only asks those", () 
   expect(canReturn("YouTube", "live")).toBe(true);
   expect(canReturn("YouTube")).toBe(true);
   expect(canReturn("All", "films")).toBe(true);
+  expect(searchSources.filter(source => source !== "All" && canReturn(source, "audio"))).toEqual(["YouTube", "Bandcamp", "SoundCloud"]);
+  expect(chooseScope({ kind: "audio", source: "All" }, scope("YouTube"))).toEqual({ kind: "audio", source: "YouTube" });
+  expect(scopeLabels(readSearchState("?q=artist+song&kind=audio"))).toEqual(["Audio"]);
 });
 
 test("suggestions come only from what the client holds, narrowed by the scope", () => {
@@ -75,5 +78,6 @@ test("suggestions come only from what the client holds, narrowed by the scope", 
   expect(found.stations.map(station => station.name)).toEqual(["Jazz FM"]);
   expect(suggest("jazz", { kind: "radio", source: "All" }, held)).toMatchObject({ saved: [], played: [], stations: [{ name: "Jazz FM" }] });
   expect(suggest("jazz", { kind: "music", source: "SoundCloud" }, held)).toMatchObject({ saved: [{ title: "Jazz Cabbage" }], played: [], stations: [] });
+  expect(suggest("jazz", { kind: "audio", source: "All" }, held)).toMatchObject({ saved: [{ title: "Jazz Cabbage" }], played: [{ title: "Late jazz" }], stations: [] });
   expect(suggest("yt", all, held).scopes.map(item => item.label)).toEqual(["YouTube"]);
 });
