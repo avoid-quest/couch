@@ -471,6 +471,11 @@ toast and clear their saved results automatically; failures stay visible for ret
   the Couch switch and Where it plays on desktop, **Sheet** for longer panels
   (Where it plays on phones and the TV).
 
+Portalled surfaces and their backdrops share `z-50`, above the page and its bars.
+Later portals cover earlier ones: a confirmation covers the Couch switch that
+opened it, and a menu or Select opened inside a dialog or sheet stays above it.
+Keep this order across overlay types rather than giving one type a higher layer.
+
 ## Menus
 
 One item, one menu: a controlled shadcn Dropdown Menu fed one verb list
