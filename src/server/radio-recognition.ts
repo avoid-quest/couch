@@ -86,7 +86,7 @@ export function createRadioRecognition({ databasePath, onChange, station, progra
   recognize?: typeof recognizeSong;
 }) {
   const db = new Database(databasePath);
-  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
   db.exec("CREATE TABLE IF NOT EXISTS radio_recognitions (id TEXT PRIMARY KEY, sampledAt INTEGER NOT NULL, entry TEXT NOT NULL)");
   // Manual requests only. One decoder/recognizer at a time bounds Core's work.
   let busy = false;
