@@ -7,15 +7,20 @@ const recognition = () => document.querySelector<HTMLElement>("[data-radio-recog
 const controls = () => document.querySelector<HTMLElement>("[data-radio-recognition-controls]");
 const button = (label: string) => [...controls()!.querySelectorAll<HTMLButtonElement>("button")].find(button => (button.getAttribute("aria-label") || button.textContent?.trim()) === label)!;
 const artworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/0c/72/a1/0c72a174-9208-6c86-e479-79865376e904/19UMGIM66006.rgb.jpg/400x400cc.jpg";
-const matched = (title = "Identified song") => Response.json({ track: { title, artist: "Recognized artist", album: "Recognized album", artworkUrl, provider: "shazam", url: "https://www.shazam.com/song/123/identified-song" }, sampledAt: Date.now() });
+const observation = { id: "lookup-1", station: { id: "audit-radio", name: "NTS Radio" }, programme: "Early Bird", requestedBy: { deviceId: "studio-browser", name: "Studio browser" } };
+const matched = (title = "Identified song") => Response.json({ ...observation, track: { title, artist: "Recognized artist", album: "Recognized album", artworkUrl, provider: "shazam", url: "https://www.shazam.com/song/123/identified-song" }, sampledAt: Date.now() });
 
 export async function runRadioRecognitionRegression() {
   const audit = await mountUiAudit();
   const originalFetch = window.fetch;
+  const history: unknown[] = [];
   const calls: { init?: RequestInit; resolve: (response: Response) => void }[] = [];
   window.fetch = (input, init) => new URL(String(input), location.href).pathname === "/api/radio/recognize"
-    ? new Promise<Response>(resolve => calls.push({ init, resolve }))
-    : originalFetch(input, init);
+    ? new Promise<Response>(resolve => calls.push({ init, resolve: response => {
+      if (response.ok) void response.clone().json().then(entry => { history.unshift(entry); resolve(response); });
+      else resolve(response);
+    } }))
+    : new URL(String(input), location.href).pathname === "/api/radio/recognitions" ? Promise.resolve(Response.json({ items: history })) : originalFetch(input, init);
   const checks: string[] = [];
   const check = async (name: string, run: () => Promise<void>) => { await run(); checks.push(name); };
   async function start() {
@@ -41,8 +46,8 @@ export async function runRadioRecognitionRegression() {
       assert(button("Identifying…").disabled && button("Cancel"), "Pending recognition has no usable cancellation");
       button("Cancel").focus();
       call.resolve(matched()); await wait();
-      assert(recognition()?.querySelector('[data-slot="item-title"]')?.textContent === "Identified song", "The matched track is missing");
-      assert(recognition()?.textContent?.includes("Recognized artist") && recognition()?.textContent?.includes("Recognized album"), "The artist or album is missing");
+      assert(recognition()?.querySelector('[data-recognition-title]')?.textContent === "Identified song", "The matched track is missing");
+      assert(recognition()?.textContent?.includes("Recognized artist"), "The artist is missing");
       assert(recognition()?.querySelector("img")?.src === artworkUrl, "The cover image is missing");
       assert(recognition()?.querySelector("time")?.dateTime, "The result has no sample time");
       assert(!recognition()?.querySelector("a"), "Recognition sends the viewer to another service");
@@ -50,14 +55,43 @@ export async function runRadioRecognitionRegression() {
       assert(audit.actions.length === commands, "Recognition sent a playback command");
       assert(document.activeElement === button("Identify song"), "Completion lost focus when Cancel disappeared");
     });
+    await check("the result opens native details and stays separate from full Info", async () => {
+      const info = document.querySelector<HTMLButtonElement>('button[aria-label="Info"]')!;
+      info.click(); await wait();
+      const details = recognition()?.querySelector<HTMLButtonElement>('button[aria-label="Details for Identified song"]')!;
+      assert(details && document.querySelector('#player-info:not([hidden])'), "Result and full Info are not both visible");
+      assert(!!(recognition()!.compareDocumentPosition(document.querySelector('#player-info')!) & Node.DOCUMENT_POSITION_FOLLOWING), "The found song is mixed into the next programme");
+      details.click(); await wait();
+      const dialog = document.querySelector('[role="dialog"]');
+      assert(dialog?.textContent?.includes("Recognized album"), "Details lost the album");
+      assert(dialog?.textContent?.includes("NTS Radio") && dialog.textContent?.includes("Early Bird") && dialog.textContent?.includes("Studio browser"), "Details lost the station, programme or requester");
+      assert(!dialog?.querySelector('a[href*="shazam.com"]'), "Details sends viewers to Shazam");
+      (dialog?.querySelector('[data-slot="dialog-close"]') as HTMLButtonElement).click(); await wait();
+      assert(document.activeElement === details, "Closing details lost focus");
+      info.click(); await wait();
+    });
+    await check("clearing the result keeps its persistent Saved history", async () => {
+      recognition()!.querySelector<HTMLButtonElement>('button[aria-label="Clear result"]')!.click(); await wait();
+      assert(!recognition(), "Clear left a found song in the player");
+      assert(document.activeElement === button("Identify song"), "Clear lost keyboard focus");
+      await audit.router.navigate({ to: "/saved", search: { tab: "identified" } }); await wait();
+      const saved = document.querySelector('[aria-label="Identified songs"]');
+      const row = saved?.querySelector<HTMLButtonElement>('button[aria-label="Details for Identified song"]');
+      assert(row && saved?.textContent?.includes("NTS Radio") && saved.textContent?.includes("Early Bird") && saved.querySelector("time"), "Saved history lost the song or context");
+      row!.click(); await wait();
+      assert(document.querySelector('[role="dialog"]')?.textContent?.includes("Studio browser"), "History cannot open the saved requester's details");
+      document.querySelector<HTMLButtonElement>('[role="dialog"] [data-slot="dialog-close"]')!.click(); await wait();
+      await audit.go("/now", { player: "playing", live: true });
+      assert(!recognition(), "Returning from history restored the cleared result");
+    });
     await check("a match without artwork, album or artist still has an in-Couch result", async () => {
-      (await start()).resolve(Response.json({ track: { title: "A title only", provider: "shazam" }, sampledAt: Date.now() })); await wait();
-      assert(recognition()?.querySelector('[data-slot="item-title"]')?.textContent === "A title only", "A sparse match lost its title");
-      assert(recognition()?.querySelector('[data-slot="item-media"] .media-artwork'), "A sparse match has no cover fallback");
+      (await start()).resolve(Response.json({ ...observation, track: { title: "A title only", provider: "shazam" }, sampledAt: Date.now() })); await wait();
+      assert(recognition()?.querySelector('[data-recognition-title]')?.textContent === "A title only", "A sparse match lost its title");
+      assert(recognition()?.querySelector('.media-artwork'), "A sparse match has no cover fallback");
       assert(!recognition()?.querySelector("img, a"), "A sparse match has a broken image or external link");
     });
     await check("a miss and an upstream failure can be retried manually", async () => {
-      (await start()).resolve(Response.json({ track: null, sampledAt: Date.now() })); await wait();
+      (await start()).resolve(Response.json({ ...observation, track: null, sampledAt: Date.now() })); await wait();
       assert(recognition()?.textContent?.includes("No song identified"), "A no-match result is missing");
       assert(!recognition()?.textContent?.includes("Recognized artist"), "A miss retained the old song");
       (await start()).resolve(Response.json({ error: "Recognition is unavailable. Try again." }, { status: 503 })); await wait();

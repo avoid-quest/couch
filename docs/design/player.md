@@ -384,17 +384,27 @@ Saved Radio Browser favorites also offer it when their queue entry holds the
 stream URL. On cancellation or completion, focus on Cancel returns to Identify
 song after it becomes available.
 
-The result stays beneath the station details as a flat shadcn `Item`: a small
-whole cover, the song's title, artist, album when supplied and the sample's
-local time. Missing artwork uses `MediaArtwork`'s fallback. The item has no
-external link, border, panel or repeated heading. It belongs to this viewer's
-request, separate from the station and programme: it does not replace their
-title, host or artwork, and is not a continuously updated current-track label.
-A miss says "No song identified. Try another part of the stream." Failures
-stay in the result's place so the action can be tried again. Another Couch,
-station, queue entry or Playback, a disconnect, or leaving the player cancels
-the request and clears its result. There is no recognition history or automatic
-recognition.
+The result sits below the station line, before the expanded programme details,
+with its own breathing room in both calm and Info views. A flat shadcn `Item`
+shows a whole 56px cover, title, artist and excerpt time. Missing artwork uses
+`MediaArtwork`'s fallback. The whole row is a button: its chevron and hover
+underline lead to a native shadcn Dialog with larger artwork, title, artist,
+album, full date/time, radio, programme when known and the requesting device's
+name. **View history** opens Saved → Identified songs. No result links out to
+Shazam. Closing details restores focus to the row.
+
+A visible **Clear result** cross dismisses the player item and returns focus to
+Identify song. A miss says "No song identified. Try another part of the stream."
+and offers Clear result too, as do failures. Another Couch, station, queue
+entry or Playback, a disconnect, or leaving the player cancels the request and
+clears this viewer's result. It does not replace the programme or affect other
+viewers' players.
+
+Completed lookups, including misses, are automatically kept in Couch's shared
+SQLite history. They retain the excerpt time, station name and ID, programme
+when available, requester ID/name and returned song metadata. Clearing the
+player does not remove that history. Canceled and failed requests add nothing.
+There is no automatic recognition.
 
 ### Calm and Info
 

@@ -6,6 +6,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import type { Credentials } from "../../session/session";
 import { ForLaterSection } from "./ForLaterSection";
 import { PlayedSection } from "./PlayedSection";
+import { IdentifiedSection } from "./IdentifiedSection";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";
 import { SavedPlaylists } from "@/components/SavedPlaylists";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,11 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { forLaterQuery } from "@/api/for-later";
 import { providerFavoritesQuery } from "@/api/providers";
-import { radioFavoritesListQuery } from "@/api/radio";
+import { radioFavoritesListQuery, radioRecognitionsQuery } from "@/api/radio";
 import { playlistsQuery } from "@/api/playlists";
 import { historyQuery } from "@/api/progress";
 
-export const savedTabs = ["later", "channels", "lists", "played"] as const;
+export const savedTabs = ["later", "channels", "lists", "played", "identified"] as const;
 export type SavedTab = typeof savedTabs[number];
 
 /** Saved's sections the way Settings shows its pages: a rail on wide screens, a Select on narrow ones. */
@@ -38,11 +39,13 @@ export function SavedSections({ state, credentials, connected, canPlay, tab: nam
   const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const lists = useQuery({ ...playlistsQuery(credentials), enabled: connected });
   const played = useQuery({ ...historyQuery(credentials), enabled: connected });
+  const identified = useQuery({ ...radioRecognitionsQuery(credentials), enabled: connected });
   const tabs = [
     ["later", "For later", later.data?.items.length, later.isPending],
     ["channels", "Channels & stations", online.data && radio.data && online.data.favorites.length + radio.data.favorites.length, online.isPending || radio.isPending],
     ["lists", "Lists", lists.data?.playlists.length, lists.isPending],
     ["played", "Played", played.data?.items.length, played.isPending],
+    ["identified", "Identified songs", identified.data?.items.length, identified.isPending],
   ] as const;
   // Saved opens on the first tab that holds something, as soon as the tabs before it are known to be empty.
   const first = tabs.find(([, , count, pending]) => connected && pending || !!count);
@@ -85,6 +88,7 @@ export function SavedSections({ state, credentials, connected, canPlay, tab: nam
       {tab === "channels" && <><PageHeader title="Channels & stations" hidden /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
       {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} onFind={onFind} />}
       {tab === "played" && <><PageHeader title="Played" hidden /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
+      {tab === "identified" && <><PageHeader title="Identified songs" hidden /><IdentifiedSection credentials={credentials} connected={connected} /></>}
     </>}</div>
   </section>;
 }

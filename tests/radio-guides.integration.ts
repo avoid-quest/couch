@@ -41,6 +41,11 @@ test("generic source-scoped guides, explicit override, favourites, directory tag
     assert.equal(radio.getPlayable(failedStation.id).source, failedStation.url);
     assert.equal(calls.includes("https://other.example/guide.xml"), false);
     assert.equal((await radio.metadata.get(one.id, one.url)).programme?.title, "Night Shift");
+    const capturedAt = Date.now();
+    Date.now = () => Date.parse("2026-10-25T00:45:00Z");
+    assert.equal((await radio.metadata.get(one.id, one.url)).programme, null);
+    assert.equal((await radio.metadata.get(one.id, one.url, undefined, capturedAt)).programme?.title, "Night Shift", "Recognition keeps the programme at capture time after its slot ends");
+    Date.now = () => capturedAt;
     const [directory] = await radio.search({ q: "Directory" });
     assert.deepEqual(directory!.tags, ["Jazz", "Talk", "Deep House"]);
     radio.saveFavorite(directory);

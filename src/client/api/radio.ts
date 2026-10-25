@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioGuide, type RadioStation } from "../../shared/radio";
-import type { RadioRecognitionResult } from "../../shared/radio-recognition";
+import type { RadioRecognitionEntry } from "../../shared/radio-recognition";
 import { apiFetch, type ApiCredentials } from "./client";
 
 const radioRequest = (credentials: ApiCredentials, path: string, init: RequestInit = {}) =>
@@ -10,7 +10,13 @@ const radioRequest = (credentials: ApiCredentials, path: string, init: RequestIn
 export const identifyRadioSong = (credentials: ApiCredentials, stationId: string, signal: AbortSignal) =>
   apiFetch(credentials, "/api/radio/recognize", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stationId }), signal,
-  }, 60_000).then(response => response.json() as Promise<RadioRecognitionResult>);
+  }, 60_000).then(response => response.json() as Promise<RadioRecognitionEntry>);
+
+export const radioRecognitionsQuery = (credentials: ApiCredentials) => queryOptions({
+  queryKey: ["radio", "recognitions", credentials.origin, credentials.token] as const,
+  queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/recognitions", { signal })
+    .then(response => response.json() as Promise<{ items: RadioRecognitionEntry[] }>),
+});
 
 export const radioStationQuery = (credentials: ApiCredentials, id: string) => queryOptions({
   queryKey: ["radio", "item", id], staleTime: 30_000, retry: false,

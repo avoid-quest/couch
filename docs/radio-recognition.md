@@ -2,16 +2,25 @@
 
 Play a radio station and open its player. Choose the **Identify song** audio-wave
 icon beside Info to take a short excerpt and look up the song. Playback
-continues while it listens. A match stays in Couch as a compact item with cover
-art, title, artist, album when available and time of the excerpt. Missing cover
-art uses a fallback. If there is no match, try another part of the stream.
-**Cancel** stops the request.
+continues while it listens. A match stays in Couch as a compact clickable item
+with cover art, title, artist and excerpt time, above the expanded programme
+information. Open it for larger artwork, album, time, station, programme when
+known and the requesting device's name. **Clear result** dismisses it;
+**Cancel** stops a pending request. If there is no match, try another part of
+the stream.
 
 Recognition runs only when someone presses the button. Opening the player,
-playing a station and receiving state updates never start it. The result
-belongs to that open player; changing the station, playback or Couch, leaving
-the player or disconnecting clears it. It does not replace the station or
-programme title, change playback, create a history or update other viewers.
+playing a station and receiving state updates never start it. Changing the
+station, playback or Couch, leaving the player or disconnecting clears that
+viewer's result. It does not replace the programme or change playback.
+
+Completed lookups, including no-match results, are saved automatically under
+**Saved → Identified songs**, newest first. That history is shared by paired
+devices on this Couch and survives restarts. It retains the excerpt time,
+station ID/name, programme title when available, requesting device ID/name and
+returned song metadata. Names are snapshots, so renaming a station or device
+does not rewrite earlier lookups. Canceled, unauthorized and failed requests
+add no history. Clearing the player's result leaves the saved history intact.
 
 ## What the prototype needs
 
@@ -36,7 +45,8 @@ fingerprint and duration to Shazam, along
 with a request timestamp, random request identifiers and protocol headers.
 It sends no raw audio, station URL, Couch identity or device token. No location
 is supplied; Shazam can see the server's IP address as with any network request.
-Couch does not persist the sample or recognition result.
+Couch persists the result and lookup context in its local database, but never
+the audio sample or fingerprint.
 
 Recognition uses Shazam's **unofficial** protocol and proprietary catalog.
 The TypeScript implementation is open source; the matching service is external
@@ -67,7 +77,10 @@ data stay untouched.
 The authenticated `POST /api/radio/recognize` endpoint accepts only
 `{ "stationId": "<saved station id>" }`. Core resolves the URL from its saved
 radio data, rechecks authorization before sending the fingerprint and before
-returning the result, and uses its public-media proxy for the sample. Redirects
+saving and returning the result, and uses its public-media proxy for the sample.
+Core supplies the requester identity and station/programme metadata; the
+client cannot submit those fields. `GET /api/radio/recognitions` reads the
+authenticated history. Both responses disable caching. Redirects
 and HLS child requests pass through that proxy too. Canceling, disconnecting or
 shutting down Core aborts active work and releases its decoder/helper resources.
 
@@ -92,9 +105,11 @@ bun run build
 The integration tests use an isolated stream fixture and real FFmpeg selected
 with `COUCH_TEST_FFMPEG`, plus injected recognition responses. Without that
 override, the decoder cases explicitly skip. They cover the manual API,
-authorization changes, concurrency, cancellation, bounded decoding and rejected
+authorization changes, persisted history and metadata snapshots, concurrency,
+cancellation, bounded decoding and rejected
 private stream destinations. The browser regression
 `tests/radio-recognition.browser.tsx` exercises the actual player route with
-deterministic provider replies at desktop, phone and TV sizes. Neither suite
+deterministic provider replies at desktop, phone and TV sizes, including full
+Info, opening/closing details, clearing without losing history and Saved. Neither suite
 depends on a live Shazam response. Synthetic PCM fixtures check the fingerprint
 port without committing recorded music.

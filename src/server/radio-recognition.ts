@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
-import type { RadioRecognitionResult } from "../shared/radio-recognition";
+import type { RadioRecognitionEntry } from "../shared/radio-recognition";
+import type { PlaybackActor } from "../shared/protocol";
+import { Database } from "./sqlite";
 import { ControllerError } from "./devices";
 import { useHelper } from "./helpers";
 import { createPublicMediaProxy } from "./public-media-proxy";
@@ -74,38 +76,59 @@ export async function sampleRadio(source: string, signal: AbortSignal, {
   }
 }
 
-export function createRadioRecognition({ station, signal: shutdown, sample = sampleRadio, recognize = recognizeSong }: {
-  station: (stationId: string) => { source: string };
+export function createRadioRecognition({ databasePath, onChange, station, programme, signal: shutdown, sample = sampleRadio, recognize = recognizeSong }: {
+  databasePath: string;
+  onChange: () => void;
+  station: (stationId: string) => { source: string; title: string };
+  programme?: (stationId: string, source: string, sampledAt: number, signal: AbortSignal) => Promise<string | undefined>;
   signal: AbortSignal;
   sample?: (source: string, signal: AbortSignal) => Promise<RadioSample>;
   recognize?: typeof recognizeSong;
 }) {
+  const db = new Database(databasePath);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("CREATE TABLE IF NOT EXISTS radio_recognitions (id TEXT PRIMARY KEY, sampledAt INTEGER NOT NULL, entry TEXT NOT NULL)");
   // Manual requests only. One decoder/recognizer at a time bounds Core's work.
   let busy = false;
   return {
-    async handle(request: Request, authorize: () => void): Promise<Response> {
+    close: () => db.close(),
+    async handle(request: Request, authorize: () => void, requestedBy: PlaybackActor): Promise<Response> {
       let acquired = false;
       const signal = AbortSignal.any([request.signal, shutdown, AbortSignal.timeout(45_000)]);
       const respond = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
       try {
         authorize();
+        if (new URL(request.url).pathname === "/api/radio/recognitions") {
+          if (request.method !== "GET") return new Response(null, { status: 405, headers: { Allow: "GET" } });
+          const items = db.query<{ entry: string }, []>("SELECT entry FROM radio_recognitions ORDER BY sampledAt DESC, id DESC").all().map(row => JSON.parse(row.entry) as RadioRecognitionEntry);
+          return respond({ items });
+        }
         if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
         if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new RadioError("Send a JSON object.", 415);
         const body: unknown = await request.json().catch(() => { throw new RadioError("Invalid JSON body."); });
         authorize();
         if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || !("stationId" in body)
           || typeof body.stationId !== "string" || body.stationId.length > 80) throw new RadioError("Choose a saved radio station to identify.");
-        const { source } = station(body.stationId);
+        const { source, title } = station(body.stationId);
+        const requester = { ...requestedBy };
         signal.throwIfAborted();
         if (busy) return respond({ error: "A song is already being identified. Try again shortly." }, 429);
         busy = acquired = true;
         const { pcm, sampledAt } = await sample(source, signal);
         signal.throwIfAborted();
         authorize();
+        // Programme metadata is optional; a guide outage must not lose a match.
+        const programmeTitle = await programme?.(body.stationId, source, sampledAt, signal).catch(() => undefined);
+        signal.throwIfAborted();
+        authorize();
         const track = await recognize(pcm, signal, undefined, authorize);
         signal.throwIfAborted();
         authorize();
-        return respond({ track, sampledAt } satisfies RadioRecognitionResult);
+        const entry: RadioRecognitionEntry = { id: crypto.randomUUID(), track, sampledAt,
+          station: { id: body.stationId, name: title }, requestedBy: requester, ...(programmeTitle ? { programme: programmeTitle } : {}) };
+        db.query("INSERT INTO radio_recognitions (id, sampledAt, entry) VALUES (?, ?, ?)").run(entry.id, sampledAt, JSON.stringify(entry));
+        onChange();
+        return respond(entry);
       } catch (error) {
         try { authorize(); } catch (rejected) { error = rejected; }
         if (error instanceof ControllerError || error instanceof RadioError || error instanceof SongRecognitionError) return respond({ error: error.message }, error.status);
