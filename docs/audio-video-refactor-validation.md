@@ -5,12 +5,14 @@ Implementation starts from `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`, exactly t
 Current assembly status: **the reviewed product at
 `cf267a2f61f24a43949d6fb7d2788e37d1da9ef3` passes typecheck, production build,
 the integrated Node sweep and Linux packaging**. Physical qualification remains
-failed. With the independently reviewed collector correction, the latest
-diagnostic completed 60-second startup and leave/rejoin recordings through the
-actual Mac headphones. Both short-run measurable usability checks passed;
-electrical latency and affine qualifications did not. Input-selection automation
-then timed out before the sustained recording began. Its cause remains unknown.
-No overall physical pass, merge or release has occurred.
+failed. With the independently reviewed collector correction, separate diagnostics
+completed 60-second startup and leave/rejoin recordings and one 610-second
+sustained recording through the actual Mac headphones. Sampled correspondence
+and coverage gates passed; affine timing gates failed. Sustained median electrical
+lag was approximately 101.34 ms, separate from the unchanged 100 ms sender lead.
+Continuous fidelity, calibrated SNR/isolation and per-packet deadlines remain
+unknown. All owned processes and audio streams are closed. No overall physical
+pass, merge or release has occurred.
 
 ## Current software and package evidence
 
@@ -167,7 +169,7 @@ evidence; remaining physical qualification gaps are listed below.
 | R2 split picture/sound | Common timeline, picture-only timer and sound-only selection; hardware correction remains distinct from content offset. | Split routing, timeline, delay and renderer checks. Native HLS/MPEG-TS follows play/pause/rate and reports unavailable source mapping; those decoder boundaries are stubbed in tests. No physical presentation-alignment claim. |
 | R4 relaxed screen sharing | Retain shared recorder HLS, mapped picture follower and isolated fallback. | Upload, stream, clock and six real-media live-latency checks pass. Actual captured WebM upload → rolling HLS → browser hls.js/group clock passes pause/resume, buffered re-entry and cleanup with 119 new nonzero software PCM packets. RTC fallback decoding, independent late third viewer, absolute position continuity across re-ingest and physical A/V alignment remain unverified. |
 | R5/R6 AirPlay and relaxed capture | Timestamped PCM enters scheduled module at every listener count; redundant audio-only HLS removed for supported adapters. | Capture upload/lifecycle checks; AirPlay has 13 passes and 3 explicit missing GStreamer/UxPlay prerequisite skips; unavailable-host takeover regression repaired. Unsupported relaxed publishers retain compatibility. |
-| L1 capture → Opus → receiver | Timestamped stereo host capture, bounded source normalization, 10 ms Opus and fixed deadlines. | Source drift/gap/reset tests and real encoder/worker tests pass. Native fake-file capture → production upload → prepared browser decoded 49,440 stereo frames, with no MediaRecorder or reported errors. The cf267-w2 Mac startup/rejoin runs completed with public Opus readiness and sampled correspondence on both headphone channels. Short measurable gates pass; electrical/affine qualifications fail and continuous/per-packet completion remains unknown. |
+| L1 capture → Opus → receiver | Timestamped stereo host capture, bounded source normalization, 10 ms Opus and fixed deadlines. | Source drift/gap/reset tests and real encoder/worker tests pass. Native fake-file capture → production upload → prepared browser decoded 49,440 stereo frames, with no MediaRecorder or reported errors. The cf267-w2 startup/rejoin and cf267-s1 sustained Mac runs completed with public Opus readiness and sampled correspondence on both headphone channels. Coverage gates pass; electrical/affine qualifications fail and continuous/per-packet completion remains unknown. |
 | L2/L4 joins and recovery | Decoder/clock/output admission; fixed format and deadlines; incompatible receiver isolated; route changes re-admit. | 50 encrypted software clients receive shared Opus; PCM-only and one-byte-buffer clients refuse independently. A 100 ms Hub stall preserves the deadline grid but causes late network packets (1–8 in recorded runs). Receiver readiness regressions pass. These are not 50 browser decoders or physical outputs. |
 | L3 audience authority | Join/Leave and own volume; programme/queue/seek/speed/delays denied, including crafted/legacy/REST. | Real Hub audience tests and UI entry-point tests; phone Join/Leave/volume journey. Publisher source end remains separate. |
 | All: lifecycle | Load/publication generations, source ownership, newest tab, consent, Stop/Undo, restart and disposal. | Lifecycle/consent suites, native close/reopen and packaged worker cleanup pass. Stale preparation success and failure share the same guard; its reproduced overlap regression passes. Final scoped independent reviews are clear. |
@@ -297,7 +299,94 @@ hashes and the unchanged runtime hashes are in `final-source-whitespace.json`.
 
 ## Remaining qualification and verification
 
-### Latest cf267-w2 diagnostic: short runs complete, sustained unmeasured
+### Latest cf267-s1 diagnostic: sustained recording complete
+
+Exactly one **610-sample-second four-channel acquisition**, with the original
+600-second stimulus, completed through the frozen cf267 packaged Main/preload
+capture/upload, scheduled Opus worker and actual wired Mac product receiver and
+headphone output. The reviewed collector, package, input guard, evaluator,
+stimuli, 100 ms sender lead and admission thresholds were unchanged. Prior w2
+short runs remain separate evidence, with no fresh-session startup/rejoin credit.
+
+The raw file contains **468,480,000 bytes / 29,280,000 frames**, with 53,777
+contiguous blocks. Witness and generator both exited 0. Full-record integrity
+passed with no clips or unexplained all-channel digital-zero intervals. Peaks
+on ADC1–4 were −33.005, −32.864, −57.136 and −57.025 dBFS. Prospectively fixed
+intervals were startup [0,30), steady [30,590) and tail [590,610); no interval was
+trimmed or shifted.
+
+| Fixed steady metric, [30,590)s | Left ADC1→3 | Right ADC2→4 |
+| --- | --- | --- |
+| Identified pilots | 1107/1120 | 1113/1120 |
+| Coverage, ≥95% gate | 98.8393% | 99.3750% |
+| Unknown pilots / longest consecutive unknown | 13 / 1 | 7 / 1 |
+| Maximum identified-center gap | 1 s | 1 s |
+| Median electrical lag | 101.339039 ms | 101.337865 ms |
+| p95 electrical lag | 101.475196 ms | 101.477313 ms |
+| Maximum affine residual, ≤1-sample gate | **29.870465 samples — fail** | **29.780547 samples — fail** |
+| Diagnostic affine slope | 0.382905 ppm | 0.381462 ppm |
+
+Intended stereo correspondence and sampled coverage are demonstrated. Both
+unchanged affine residual gates fail, so the small fitted slopes do not qualify
+drift. The measured electrical lag is in common ADC sample coordinates; the
+configured 100 ms sender lead is not subtracted. Absolute uncertainty remains
+uncalibrated and the 100 ms physical latency goal is not qualified.
+
+The detector samples 10 ms every 500 ms, at most 2% of the waveform. Unknown
+pilots are unidentified sampled windows, not confirmed dropouts; continuous
+fidelity and dropout freedom remain unknown. Calibrated ≥30 dB SNR/isolation,
+numerical recovery and per-packet encode/decode/schedule/completion/deadline
+metrics also remain unknown. **No overall physical qualification pass follows.**
+
+Public worker logs show preparing → ready, Opus, epoch 2, capacity 5,875,200 bytes,
+required lead 37 ms, minimum buffer 25 ms and static delay 0. The Mac reached
+running/synced/ready with failures 0, clock error 1 µs and output-latency estimate
+26 ms. Three preparation notifications include one coalesced report, with no
+dropped events, replay or reported preparation/admission/output failure. These
+are bounded control observations, not continuous packet journals or analog
+latency measurements.
+
+Native acquisition ran from 00:27:06.580047 to 00:37:16.586986 UTC on
+25 October 2026. Its receipt wall span was 610.006939 s, while first-to-last block
+receipt span was 608.109656 s. PA backlog means receipt times and UI frame bounds
+are not ADC timestamps. The generator-start receipt upper bound was 95,744
+frames, within the unchanged 96,000-frame limit. Exact application onset/recovery
+cannot be derived from those bounds. All startup/tail and unknown coordinates
+remain retained.
+
+The exact frozen input-selection guard succeeded once without modification.
+Routine certificate, launch and cleanup controller errors and their versioned
+corrections remain in the report. Neither failed launcher opened a native
+acquisition or published audio; only the successful controller recorded. Normal
+origin-specific certificate Continue followed a matching public fingerprint.
+No new pairing-code exposure, lifecycle restart, product change, timing change
+or acquisition retry occurred. The earlier w2 selection-timeout cause remains
+unknown.
+
+Cleanup verified native writers, controllers, observers, Main and actual Core,
+owned Linux groups, dedicated Mac browser/helpers and keepawake absent. Dedicated
+ports and UMC streams/PCM file descriptors are closed; the owned ledger is empty.
+Only after full cleanup did the unchanged evaluator and extractor each run once,
+single-thread, with exit 0. Analysis helpers also stopped. All 532 preparation/
+product pins, 20 evaluator files, six stimuli and four anchors stayed unchanged;
+220 regular-file Linux mappings were hashed and unavailable mappings disclosed.
+Mac binary/framework hashes matched after cleanup. No further activation is
+authorized.
+
+Immutable evidence under `physical-mac/cf267-s1`:
+
+- `reports/REPORT.md`: `122bce63d6947316d2905847e27529670d0d2f377365b672f7c1f067c21dc2d2`.
+- `reports/result.json`: `f64f3ba1bb430718c0595e915db07d49c82ef4c95c7dfc7a7c09e6274faa22aa`.
+- `reports/evidence-index.json` (178 files): `cf2f78a137fd62cee6ed0a866719b59bd9a5f0ade124e21c82a5646821d0b47c`.
+- `reports/final-receipt.json`: `7b819ea7e5105c5810d4733cfca350c3786c87b4b7f2592eb9f825bb1d21abbb`.
+- `runs/sustained/capture.s32le`: `872b8bd9648e77b329ae2fff0459ee919c29e41823885fc81e6d23ec17f8aef5`.
+- `activation/cleanup-complete.json`: `7504462bbb1c2be84b586481443beead722aaab26c1cb8b6d17305e3bb7a6f34`.
+
+Root independently rehashed the final receipt and all 179 unique referenced
+files, including all 178 indexed files and the raw recording, before this update.
+No evaluator rerun or hardware action was needed.
+
+### Earlier cf267-w2 diagnostic: short runs complete, sustained not started in this attempt
 
 The collector correction uses `pa_mainloop_get_retval()` after a completed loop
 instead of iterating it again. The guard preserves failure when no quit occurred.
@@ -353,7 +442,7 @@ Matched-pilot lag remains directly measured in common four-channel sample
 coordinates. Input enumeration preceded recording; this was fresh publication
 and Join, not cold application startup.
 
-The sustained stage **never started**. After normal Stop sharing and Share →
+The sustained stage **never started in w2**. After normal Stop sharing and Share →
 Live audio, the exact input-option locator timed out after 7 seconds. Its
 optional discovery-visibility result and contemporaneous option list were not
 captured, so the cause remains unknown. A hardware-free fixture using unchanged
@@ -361,7 +450,8 @@ ShareDialog/Select confirms that the exact label works when present; missing or
 unlabeled input, deliberately skipped discovery and dialog dismissal each yield
 the same timeout. It did not reproduce a product defect or visibility race.
 Its guarded selection checks explicit discovery completion, one exact option and
-selection state; it is an automation proposal, not a retrospective explanation.
+selection state; the subsequent s1 guard succeeded once, without establishing
+the historical cause.
 Proof, substitutions and cleanup are in `input-selector-diagnosis.md`.
 
 The report also discloses a setup-body snapshot that exposed a pairing code in
@@ -585,9 +675,9 @@ No 100 ms physical input-to-ear, numerical audible skew/dropout profile, 50 phys
 receivers, Wi-Fi phone load, Bluetooth route, background/locked mobile playback,
 physical macOS/Windows capture or Apple sender test has been qualified. Runtime
 readiness and latency estimates cannot establish those properties. The authorized
-Mac/Behringer protocol prospectively specifies 60 s startup, 60 s leave/rejoin and
-610 s sustained acquisitions (600 s stimulus), with the unchanged 100 ms sender
-lead and existing evaluator. These diagnostics do not themselves establish a
+Mac/Behringer protocol's 60 s startup, 60 s leave/rejoin and 610 s sustained
+acquisitions (600 s stimulus) are now recorded across w2 and s1, with the unchanged
+100 ms sender lead and existing evaluator. These diagnostics do not establish a
 supported live profile; unavailable evaluator inputs remain unknown. Existing
 future live-video/zones/private-mode scope remains out.
 
