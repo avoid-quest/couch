@@ -182,13 +182,14 @@ pairing: [Shell](shell.md#first-run-and-pairing).
 ## Advanced audio
 
 Couch → Playback offers an administrator-only **Live audio scheduling lead**:
-100 ms (default), 150 ms and 250 ms. Each new Live publication freezes this
-setting for its capture deadlines, receiver admission and positive output
-correction. A 30 ms source reserve leaves 70, 120 or 220 ms for the receiver.
-The default preserves the existing 100/70 ms behavior with 10 ms Opus packets;
-saving never retimes an active source. Relaxed capture keeps one second of lead.
-Unsupported saved experimental leads fall back to 100 ms.
-These are scheduling budgets, not measured input-to-ear latency.
+45, 50, 55, 75, 95, 100 (default), 150 and 250 ms. Each new Live publication
+freezes this setting for its capture deadlines. Receiver admission and positive
+output correction use the headroom Core measures for that publication on each
+wire: the time its audio still has before its deadline when Core sends it. A
+faster capture path therefore leaves receivers more time. Saving never retimes
+an active source. Relaxed capture keeps one second of lead. Supported saved
+leads survive restart; unsupported values fall back to 100 ms. The lead is a
+scheduling choice, not measured input-to-ear latency.
 
 This device → General offers **Live browser output buffering**: Automatic
 (browser default), 128, 256, 512 or 1024 frames, with milliseconds at 48 kHz.

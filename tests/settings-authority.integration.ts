@@ -91,10 +91,16 @@ test("advanced audio settings require administrator authority and validate befor
     assert.equal((await f.post(path, f.controller, { liveAudioLeadMs: 150 })).status, 403);
     for (const [token, status] of [["unpaired", 401], [f.controller, 403]] as const)
       assert.equal((await fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}` } })).status, status);
-    for (const value of ["55", 54, null, -1]) assert.equal((await f.post(path, f.admin, { liveAudioLeadMs: value })).status, 400);
+    for (const value of ["55", 44, 54, null, -1]) assert.equal((await f.post(path, f.admin, { liveAudioLeadMs: value })).status, 400);
     const read = () => fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${f.admin}` } }).then(r => r.json());
     assert.deepEqual(await read(), { liveAudioLeadMs: 100 });
-    assert.equal((await f.post(path, f.admin, { liveAudioLeadMs: 150 })).status, 200);
-    assert.deepEqual(await read(), { liveAudioLeadMs: 150 });
+    for (const lead of [45, 50, 55, 75, 95, 100, 150, 250]) {
+      const saved = await f.post(path, f.admin, { liveAudioLeadMs: lead });
+      assert.equal(saved.status, 200, `${lead} ms must remain available through public settings`);
+      assert.deepEqual(await saved.json(), { liveAudioLeadMs: lead });
+      assert.deepEqual(await read(), { liveAudioLeadMs: lead });
+      assert.equal((await f.post(path, f.admin, { liveAudioLeadMs: 44 })).status, 400);
+      assert.deepEqual(await read(), { liveAudioLeadMs: lead }, "A rejected lead must leave the saved setting intact");
+    }
   } finally { await f.close(); }
 });
