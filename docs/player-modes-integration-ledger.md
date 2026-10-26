@@ -1,93 +1,160 @@
 # Player modes integration ledger
 
-Execution contract: `recovery/player-modes-20261026:docs/player-modes-integration-handoff.md`, commit `3df02949cbfeb4f9f43ac73379e66b58fb6f1afd`. Read the preserved plan, code map, use cases, ADR 0002 and recovery README/history audit through `git show` before implementation. Historical validation belongs to its recorded source; fresh results are recorded here separately.
+This is the current completion tracker for the recovered refactor. It accounts for
+P0–P7, M1–M11, all 17 use cases and every retirement responsibility. **Integration
+and qualification remain open.** A named check is an obligation; only the evidence
+table records a run result. The parent owns final fresh checks and review receipts.
 
-## Baseline and ownership
+Read [historical scope and recovery](player-modes-recovery-reference.md) for the
+execution contract, unchanged original plan/code map/use cases, accepted ADR and
+selective evidence retrieval. Historical passes apply to their recorded source,
+not to the integrated product.
 
-Fetched integration base: `4a194e35cedb30f5ba3e664b4c9734b087051825` (`origin/main`, 2026-10-26). Refactor common ancestor: `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`; original tip: `27e580cc3d0b3fc7b4925100777af38324f2b5e3`; later source snapshot: `8147fc98fbeda5b415c3351a10a98c7cab816d4a`. Four intervening main commits add radio recognition, overlay fixes, fullscreen black bars and Intel Mac/QuickJS support. Preserve all four. The owner's main checkout remains on its existing commit; stack trunk is `main`, while implementation starts at the fetched remote head.
+## Baseline, layers and ownership
 
-Baseline frozen install, three-project typecheck, production build and all 78 separate unit files pass. Node is 24.21.0; use repository-local Bun 1.4.2 (the shell default is 1.4.4). Unit suites run separately because this repository's module mocks interfere across files. Scratch receipts live under `.scratch/player-modes/`; every scratch Couch uses its own data and port and owned process cleanup.
+Integration base: `4a194e35cedb30f5ba3e664b4c9734b087051825` (`origin/main`,
+2026-10-26). Common ancestor: `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`;
+original tip: `27e580cc3d0b3fc7b4925100777af38324f2b5e3`; later source:
+`8147fc98fbeda5b415c3351a10a98c7cab816d4a`. Preserve intervening main's radio
+recognition, overlay fixes, fullscreen black bars and Intel Mac/QuickJS support.
+There are 11 overlapping paths to reconcile, including Hub, PlayerPage, packaging,
+manifest/lock and built-state docs.
 
-The lead owns completion and shared interfaces. Two bounded independent assessments cover whole-scope retirement and native-host/browser recovery. All children use T3 delegation with `codex`, `gpt-6.1-sol`, `reasoningEffort=xhigh`, inherited `serviceTier=default`; returned settings are verified.
+Correction to the kickoff record: `gh-stack rebase` automatically fast-forwarded
+the owner's clean main checkout from `9240ea9` to `4a194e3`. Main did change;
+recovery refs and original investigation worktrees remain intact. Their archival
+history and blobs stay outside the implementation ancestry.
 
-## Stack sequence
-
-| Layer | Branch | Concern and completion criterion |
+| Layer / owner | Branch | Integrated input / remaining responsibility |
 | --- | --- | --- |
-| Core | `player-modes/integration-20261026` | Core-authorized delivery, source preparation and common scheduled audio; public routing/permission/clock tests and build pass. |
-| Browser | `player-modes/browser-20261026` | Browser rendering, output clock and complete Direct/relaxed/audience controls; renderer, SDK and browser journeys pass. |
-| Host | `player-modes/host-20261026` | Packaged native input lifecycle and truthful audio settings; host/bridge, frozen-install and packaging checks pass. |
-| Validation | `player-modes/validation-20261026` | Remaining integration regressions, current docs, independent reviews and PR-ready receipts; every row has evidence or a named external prerequisite. |
+| Core / parent + scheduler child | `player-modes/integration-20261026` | Foundation `1213ff8`, routed access/sound guards `60ff1cb`, AirPlay fixture `4b52c5c`, scheduler `743206a`: routing/authority, preparation, shared worker and retained adapters. Host adds per-source settings later. |
+| Browser / parent | `player-modes/browser-20261026` | `3685efc` + `9e869de`: renderer, audience/TV controls, pre-native SDK patch, clock/rate/unit fixes and radio cleanup. `85b9f85` corrects the SDK type comment; it changes the maintained patch hash, not its recovered provenance. |
+| Host / native child | `player-modes/host-20261026` | Native capture, hidden browser capture page, grants/IPC/lifecycle, settings and dual-architecture resources. Owns architecture/CI/design index and native helper README. Integrated final receipts pending. |
+| Validation / parent + R4 and documentation children | `player-modes/validation-20261026` | Real-media R4 fix/checks; this ledger/inventory/reference docs; final install/build/package/browser checks and independent fixed-head reviews. |
 
-Import source directly into its owning layer. Recovery refs, archival blobs and original investigation worktrees remain intact and outside implementation ancestry. Serialize shared protocol/Hub/renderer and stack mutations. Separate delegated implementation checkouts begin from committed parent inputs.
+This documentation snapshot starts from `9e869de`; later parent/child progress is
+explicitly attributed below. Children use GPT-6.1 Sol xhigh/default and bounded
+ownership. Serialize shared Hub/protocol/scheduler/settings edits and stack
+mutations. Browser introduces `src/shared/audio-settings.ts` for its first consumer;
+Host extends/wires that contract, rather than making Browser depend on a later layer.
 
-## Whole-scope tracker
+## Packages and module responsibilities
 
-All rows are owned by the lead until a bounded implementation brief assigns a disjoint path set. “Check” names denote repository tests, not historical passes. Implementation and fresh evidence are separate gates.
+Evidence IDs below refer to the run table. **F1–F6 remain parent-owned completion
+markers**, including fresh reruns after Host/R4 integration.
 
-| Package | Responsibilities | Owning layers | Check / remaining work |
+| Package | Disposition and implementation | Owner | Checks / remaining gate |
 | --- | --- | --- | --- |
-| P0 | Contract, drift, defaults, units, authority, source/output generations | Core | This ledger, ADR 0002, playback-policy tests; import and reconcile. |
-| P1 | Atomic routing, consent, authority, lifecycle, reconnect | Core / Browser | playback-routing, device-sharing, live-audience, revocation, Stop/Undo. |
-| P2 | Direct selection, local decode, renditions, protected relays | Core / Browser | source-preparation, renderer-hls, source/group-language, YouTube, public relay. |
-| P3 | Relaxed shared/split A/V and independent programmes | Core / Browser | live-clock/sync/latency, scheduled-language, picture mapping, real buffered capture. |
-| P4 | Native host capture, source normalization, common fixed deadlines | Core / Browser / Host | capture-clock, scheduled-capture, native-capture, SDK clock, admission, fanout. |
-| P5 | Play on/Move, TV action, audience controls, bounded participation | Core / Browser | where-it-plays, audience-ui, remote/hotkey/OS consumers, scale fixture. |
-| P6 | Audio-only and AirPlay migration, shared publication lifetime | Core / Host | AirPlay, capture-upload/continuity, source end and retained A/V fallback. |
-| P7 | Retirement, distribution, fresh review and evidence | Validation | Frozen install/typecheck/build, act Package, hosted checks, independent fixed-head reviews. |
+| P0 | Retain contract/defaults; adapt baseline/drift and runtime intent/units/generations in policy/protocol/ADR 0002. | Core + Validation | E0, exact 213-path inventory; F1/F5 final review. |
+| P1 | Combine routing/authority in policy + Hub; recheck async consent/generation; separate controller, publisher and receiver. | Core + Browser | E1/E3/E4/E5: routing, audience, revocation, remote, restart, Stop/Undo; F1. |
+| P2 | Retain receiver decoding/protected relays; combine rendition selection and cancellable renderer loads. | Core + Browser | E1/E3/E5: sound-only fetch, picture restore, language, independent Direct/Move; provider/expiry/subtitle/mpv checks under F1. |
+| P3 | Retain common relaxed timeline, independent groups and picture follower; expose mapping limitations. | Core + Browser + R4 | E1/E2/E4; actual split/picture-only/fallback/re-ingest checks F2; F1. |
+| P4 | Adapt native host + browser capture into clock normalization/shared Opus; retain fixed deadlines, prewarm/reset/queue/isolation fixes. | Core + Browser + Host | E2/E3; native authority/upload and packaged host→browser F3/F4; F1. |
+| P5 | Retain Play on isolation, exclusive Move/TV menu and source-owned Live audience; bound pairing/setup/fanout/state work. | Core + Browser | E1/E3/E5/E6: UI/legacy/REST/remote authority, actual browser Move, routed peers; synthetic fanout E2; F1/F4. |
+| P6 | Replace timestamp-capable audio-only/AirPlay HLS with scheduled PCM ingress; retain coherent captured A/V and WebRTC/TURN. | Core + Browser + Host + R4 | E1/E2/E4; R5/R6 no-HLS and cleanup; hidden capture F3; R4 continuity F2. |
+| P7 | Account for retirements and source provenance; package matched frontend/Main/Core/worker; maintain truthful built-state docs. | Validation + Host | E0–E6 are intermediate; F1–F6 gate final readiness. |
 
-| Map | Implementation disposition | Check |
+| Map | Disposition / concrete seam | Owner | Check responsibility |
+| --- | --- | --- | --- |
+| M1 | Adapt shared policy/protocol and runtime admission; preserve durable queues/history/defaults and ordinary restart; absent intent is relaxed. | Core; Host settings extension | media-shape, playback-policy, consent-restart, history/Stop-Undo; E1/E4, F1. |
+| M2 | Combine delivery/authorization in Hub; one Playback per receiver, held publisher/newest-tab rules and recipient filtering stay. | Core | routing/device-sharing/live-audience/output-admission/remote; E1/E3, F1. |
+| M3 | Combine `source-preparation` selection; retain providers/yt-dlp/signed Range/playlist/public-destination access. | Core | source-preparation/language, real fetch counters, YouTube/relay/expiry/quality; E1/E3, F1. |
+| M4 | Adapt renderer/SDK/picture mapping; retain host-only mpv, selected tracks, optional Direct/relaxed DSP and one volume stage. | Browser + Core | renderer-hls, output-clock, SDK, compressor/mpv/playback screens; E3/E5, F1/F4. |
+| M5 | Combine worker/clock/receiver/fanout; keep URL read-ahead versus fixed-capture policies. Live Opus only; relaxed Opus/PCM. | Core + scheduler child; Host policy extension | capture-clock/continuity/reset, late-join, relaxed queue, encrypted isolation and 50-client fixture; E2, F1. |
+| M6 | Adapt native host capture/upload plus selected hidden browser capture; keep local grants, ownership, explicit mute/stop and upload generations. | Host + Browser + Core | native-capture/authority, capture-format/consent/close/quit, upload/revocation; E2/E4, F3/F4. |
+| M7 | Retain WebRTC/ICE/STUN/TURN and one buffered recorded A/V ingest per publication; retain container AAC-PTS clock only inside that adapter. | Core + Browser + R4 | live stream/delivery/channels/tracks, relay allocation/revocation; E4; real fallback/third viewer/re-ingest F2. |
+| M8 | Adapt decoded AirPlay PCM at 44.1 kHz into relaxed scheduling; retain one-sender takeover/lifecycle and OS sound/Bluetooth routing. | Core | AirPlay/sound-session/device-volume/output controls; E1/E3; actual Apple sender/hardware F4. |
+| M9 | Adapt routing/player/queue/share/Remote/hotkey/Media Session consumers to Core rights; reuse existing discovery and consent UI. | Browser; Host settings/Share readback | audience-ui/Where-it-plays/Play-on/menu/TV/keyboard; E3/E5; final journey F1. |
+| M10 | Retain identity/certificates; adapt pairing budgets, setup/socket/retry bounds, state deduplication and source cleanup. | Core + Browser | identity/pairing/startup/revocation, zero-volume/permission freshness, isolation/scale; E1/E2/E4/E6, F1. |
+| M11 | Adapt pinned patches, worker/helper packaging and docs onto current-main shell/QuickJS/platform floors. | Core + Browser + Host + Validation | frozen install/three TS projects/build, package-hooks, act, signed resources/packaged smoke; F1/F3/F5. |
+
+Map-listed unchanged consumers remain retained responsibilities: provider/proxy/
+subtitle/history adapters, `MediaContext`/player-control/remote-session helpers,
+ICE/STUN/TURN/native relay, sound/Bluetooth, device identity and startup/helper-update
+activity tracking. Their shared policy integration is checked through public
+behavior; absence from the recovered changed-file union is not a retirement.
+
+## All 17 use cases
+
+| Case | Implementation / owner | Acceptance check and evidence / remaining work |
 | --- | --- | --- |
-| M1 | Adapt shared policy/protocol; runtime admission; retain durable queue defaults | media-shape, policy, restart/history |
-| M2 | Adapt Hub orchestration; Core enforces live audience authority | routing, audience, output controls, consent |
-| M3 | Retain provider/byte access; consolidate source/rendition selection | source-preparation/language, relay security, YouTube |
-| M4 | Adapt native media and browser scheduled receiver; retain mpv/DSP | renderer-hls, SDK, compressor, playback screens |
-| M5 | Combine URL and capture delivery; retain distinct sender policies | scheduled-capture/language, isolation, late join, queue bounds |
-| M6 | Adapt native host capture/upload and browser publication lifecycle | native-capture, capture consent/close, upload/revocation |
-| M7 | Retain WebRTC/TURN and one shared buffered captured-video ingest | delivery, stream, channels, ICE/STUN/relay, real R4 journey |
-| M8 | Adapt AirPlay PCM; preserve hardware/Bluetooth routes | AirPlay, sound-session, device volume, output changes |
-| M9 | Adapt every player/queue/routing/share/remote command consumer | audience-ui, menus, shortcuts, Where it plays, TV/browser journeys |
-| M10 | Retain identity; adapt pairing/fanout/admission/lifecycle bounds | identity, pairing, startup, revocation, scale fixture |
-| M11 | Package worker/helper and pinned patches; reconcile main packaging | package-hooks, act, Main/Core/worker smoke, docs review |
+| D1 | Independent local-decode Playbacks / Core + Browser | E5: two actual H264/AAC browser decoders with separate queues; E1 policy/isolation; F1 final regression. |
+| D2 | Sound-only rendition/own listening / Core + Browser | E1 sound-only request counters, muxed fallback and picture restore; E3 renderer/volume; F1 provider/quality coverage. |
+| D3 | Explicit Play on isolates destination / Core + Browser | device-sharing/routing + Play-on checks E1/E3; other listeners/queues survive; F1 final journey. |
+| D4 | Captured source reception / Core + Browser | Retain selective RTC and existing-source join semantics; E4 tracks/delivery/revocation; actual fallback F2. |
+| D5 | Permitted remote single destination / Core + Browser | E1 consent/controller routing; E3 Remote; host-only mpv and denied/stale destination coverage F1. |
+| D6 | Exclusive queue-preserving Move / Core + Browser | E5 actual second browser retains paused Playback ID, two-entry queue and 37.240293 s; E3 TV OK-menu logic, E1 async denial/generation; F1. |
+| R1 | Shared collaborative music / Core + Browser | E1/E2 joins, shared queue/transport/levels, one encode per required format; F1 final runtime. |
+| R2 | TV picture / separate phone sound / Core + Browser | Common timeline/channel-only fetch; E1/E3 mapping/delay checks; actual split buffered A/V F2; physical alignment F4. |
+| R3 | Several following pictures / Core + Browser | E4 sync/clock plus picture-only timer E2; native-HLS/MPEG-TS source-PTS mapping limits stay visible; F1/F2. |
+| R4 | Delay-tolerant screen/window A/V / Core + Browser + R4 | E4 Node suites pass; actual third viewer, failed RTC fallback, split/picture-only and single-ingest cleanup F2. PTS restart bug during live publication is being fixed; no completion claim. |
+| R5 | AirPlay input / Core | E1 corrected fixture passes one-sender/host takeover/disable/departure/recovery and scheduled no-audio-HLS; actual Apple sender F4. |
+| R6 | Relaxed audio input / Core + Browser + Host | E2/E4 timestamped ingress/relaxed PCM/retry/cleanup; native or selected hidden capture with no second mic/recorder F3; unsupported publishers retain explicit compatibility. |
+| R7 | Independent shared programmes / Core | E1 language/routing and separate queue/timeline tests; F1 simultaneous-group/Next regression on final build. |
+| L1 | Native host → normalized stereo Opus → browser / Host + Core + Browser | E2 synthetic 50-client fanout; F3 matched signed capture/upload/browser path; F4 physical latency/skew/dropout/50-device goals. |
+| L2 | Join present without retiming audience / Core + Browser | E2 ready time + required lead + positive correction, original healthy bytes/timestamps unchanged; E3 decoder/output admission; F1. |
+| L3 | Own level/mute and Leave / Core + Browser | E1 crafted/legacy programme rejection; E3 UI/Remote/hotkey/Media Session; leaving preserves source and other listeners; F1. |
+| L4 | Reconnect/output change / Core + Browser | E2/E3 generation/token/clock/output invalidation and fresh admission; failed/slow receiver isolated; actual route/background states F4. |
 
-| Use case | Implementation / owner layer | Acceptance evidence required |
+## File inventory and retirement
+
+[The CSV](player-modes-file-disposition.csv) is the exact union of 131 original
+changed paths and 112 later paths (30 overlap): **213 unique rows**. Provenance
+comes from `59ac6cd6..27e580c` and `27e580c..8147fc9`, not file naming or time cuts.
+`retain` preserves a responsibility; `adapt` requires selective integration;
+`exclude` stays on the recovery ref with its reason/replacement. Ownership can
+span sequential layers. Rows describe disposition/check ownership, not proof of
+final import or passing tests. Large historical docs/tools are explicitly excluded
+from maintained guidance, with pointers in the recovery reference.
+
+Host retains `src/client/session/native-audio.ts`, `src/client/capture-audio.html`
+and `tests/native-live-authority.test.ts`: they produce/protect host capture.
+Browser owns output-clock fixture/radio/Where-it-plays tests and its SDK patch.
+Host's settings/capture extensions follow the first Browser shared contract.
+
+| Retirement responsibility | Disposition, stage/clock/resource owner | Replacement check / remaining gate |
 | --- | --- | --- |
-| D1 | Independent queues and local decode / Core + Browser | Two concurrent Playbacks; controller adds no output. |
-| D2 | Sound-only rendition and own queue / Core + Browser | Separate audio fetch only; muxed fallback; volume. |
-| D3 | Explicit Play on isolates destination / Core | Other listeners and queues continue. |
-| D4 | Captured viewing / Core + Browser | Retained RTC tracks and buffered fallback; publication lifecycle. |
-| D5 | Permitted remote single destination / Core + Browser | Consent, controller context, mpv host restriction. |
-| D6 | Exclusive queue-preserving Move / Core + Browser | TV action; async consent recheck; queue/position/speed retained. |
-| R1 | Collaborative shared music / Core + Browser | Joins, levels, queue and transport; one encode per required format. |
-| R2 | Split TV picture / phone sound / Core + Browser | Common timeline; channel selection; separate hardware/content delay. |
-| R3 | Multiple pictures / Core + Browser | Pause/seek/rate and picture clock; mapping limitations exposed. |
-| R4 | Buffered captured A/V / Core + Browser | Actual capture→HLS→browser, fallback, late join, cleanup. |
-| R5 | AirPlay decoded PCM / Core | Host takeover, one sender, disable/departure/recovery; no audio HLS. |
-| R6 | Relaxed audio input / Core + Host | Browser/native timestamped PCM; no duplicate capture/recorder; cleanup. |
-| R7 | Independent groups / Core | Separate queues/timelines/encoders and unaffected Next. |
-| L1 | Native source→Opus→browser / Core + Browser + Host | Stereo, fixed deadlines, bounded 50-client fixture; physical target separately qualified. |
-| L2 | Join present / Core + Browser | Clock/decoder/output admission; late join never retimes healthy listeners. |
-| L3 | Own listening and Leave / Core + Browser | Core denies crafted/legacy programme commands; leave keeps source alive. |
-| L4 | Recovery and route change / Core + Browser | Fresh admission; current timeline; incompatible output isolated. |
+| Ordinary Direct decoding/providers/bytes | Retain selected encoded tracks → receiver decode/native position; Core resolves/relays, renderer owns load generation. | Source/relay/renderer/mpv checks E1/E3; F1. |
+| Hidden video for sound-only | Replace with available audio rendition; retain muxed fallback. Restore picture by re-resolution without replacing queue. | Real request counters E1; renderer/quality/Move E3/E5; F1. |
+| Scattered routing/authority/capability inference | Combine Core policy/actor controls/Hub rechecks; retain `inSync` only for relaxed captured compatibility. | REST/socket/remote/legacy/OS, consent/stale-generation E1/E3; F1. |
+| URL and capture scheduling | Shared worker/clock/fanout; URL decode once + encode once per needed format/Playback; capture normalized clock → shared Opus, with relaxed PCM. Distinct sender policies stay. | Continuity/prewarm/reset/late-join/queue/isolation E2; F1. |
+| Audio-only recorder → AAC/HLS | Replace on timestamp-capable browser/native capture and decoded AirPlay; publisher/Main owns acquisition, Core publication/worker owns ingress/encoder. Unsupported relaxed publishers keep recorder compatibility. | No-HLS/lifecycle E1/E2/E4; Host hidden-capture F3. |
+| Captured A/V HLS/delayed fallback | Retain recorder → shared rolling video/AAC HLS → group audio/muted pictures; AAC PTS clock and picture-only `anullsrc` stay localized. Core owns one encoder/temp tree per publication. | E4; actual timeline/re-ingest/third viewer/fallback and cleanup F2. |
+| WebRTC/ICE/TURN | Retain captured tracks → peer codecs/local A/V; peer generation, Core signaling consent and relay helper own resources. Removal needs replacement evidence/agreement. | Tracks/delivery/ICE/STUN E4; real TURN allocation/revocation and fallback F1/F2. |
+| mpv, hardware/Bluetooth routing, optional DSP | Retain focused host helper/output adapters; Direct/relaxed opt-in compression remains separate from Live. Output changes invalidate Live admission. | mpv/compressor/sound/output checks E1/E3; physical routing F4. |
+| Lab tuning, duplicated mono, test capture, unbounded campaigns | Exclude from product; bounded deterministic fixtures and supported public SDK corrections replace useful mechanisms. Measurement tools/licenses remain together on recovery ref. | Runtime/build dependency and maintained-source search F1/F5; Live rejects mono. |
+| New native audience output | Exclude peer/output/helper/IPC/settings/credential export, playback build and native Live PCM; browser SDK owns audience decode/output. Keep native capture and existing OS routing. | Mixed-file removal search + Opus-only rejection/healthy-peer/relaxed-PCM E2/E3; Host bridge/package search F3. |
 
-## Recovery and retirement
+Useful later fixes retained individually: ±100 ppm browser correction, independent
+200 ms Chrome clock anchor, finite 0–10 ms clock-uncertainty guard, browser latency
+preference, exact routed IPv4 peers, upload Origin, native UID/rate/buffer readback,
+late-join lead, relaxed PCM pending-versus-sent bounds, missing-pactl guard, radio
+idle unsubscribe, encoder prewarm/prompt fanout and capture-generation continuity.
+At Core+Browser, Live uses **100 ms lead / 10 ms packets**, relaxed capture one
+second. Host owns subsequent source-specific settings; low-lead/native-PCM trials
+do not qualify browser Opus or authorize silently changing the selected policy.
 
-[File disposition](player-modes-file-disposition.csv) accounts for every changed file in the original refactor and 112-file later source overlay. `retain` preserves the responsibility, `adapt` requires selective integration, and `exclude` identifies the maintained replacement or archival reason. Historical research remains evidence; current built-state claims follow this ledger and final validation.
+## Evidence and outstanding gates
 
-| Responsibility | Disposition and replacement | Gate |
+Parent scratch root: `/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/`.
+These are intermediate receipts, not fresh final-tip certification. Parent must
+retain exact commands, revisions, exit codes and skips in F1/F5.
+
+| ID | Observed result / receipt | Limit |
 | --- | --- | --- |
-| Scattered delivery/authority | Common Core policy and actor-specific controls | All REST/socket/remote/hotkey/OS consumers and stale preparation tests. |
-| Hidden video for sound-only | Select existing audio rendition; preserve muxed fallback | Real fetch counters and source/renderer tests. |
-| URL/capture scheduled delivery | Common worker/fanout; separate read-ahead and fixed policies | Both source kinds execute maintained module. |
-| Browser/AirPlay audio recorder→AAC/HLS | Timestamped PCM→scheduled audio where supported | R5/R6 lifecycle and no audio-only HLS. |
-| Captured A/V HLS | Retain shared video ingest and coherent delayed A/V | R4; no capability loss or live-video claim. |
-| WebRTC/ICE/TURN | Retain selective fast viewing/connectivity | Relay allocation/revocation and delivery tests. |
-| mpv, hardware routing, Bluetooth, optional DSP | Retain focused adapters and truthful capabilities | Existing output/compressor/route tests. |
-| Native audience receiver/output | Exclude; browser SDK owns audience output | No output helper/native peer/protocol/settings consumers. |
-| Lab tuning/measurement campaigns | Keep archival evidence on recovery ref | No lab dependencies in product; bounded fixtures only. |
+| E0 | Base `4a194e3`: frozen install, three-project typecheck, production build and **78 separate unit files** pass; `baseline-{install,typecheck,build,units}.log`. Node 24.21.0 / repo Bun 1.4.2. | Baseline only; unit files run separately because module mocks interfere. |
+| E1 | Parent `core-integrations/results.json`: policy/routing/device-sharing/audience/isolation/source-language/live-output/capture-upload pass. Initial group-language and AirPlay failures have successful `core-group-language/` and `core-airplay/` reruns. | Initial output-admission could not build before Browser; E3 supplies the later pass. Preserve initial failures and fixes. |
+| E2 | Scheduler `743206a`; child `.scratch/player-modes/checks/receipt.json` at `/home/avoid/.t3/worktrees/couch/t3-71b70af4`: **26/26 Node tests, 10/10 unit tests**, all three TS projects/focused checks and build pass; four causal negative controls fail as expected. Node patch matches pre-native hash. | Receipt base `1213ff8`; output-admission public integration then required Browser. Initial sendspin-ahead mismatch passed standalone and final rerun; initial log retained. 50 encrypted clients are synthetic, not physical receivers. |
+| E3 | Core+Browser through `9e869de`: **88 separate unit files** pass (`browser-units/results.json`); SDK/output-clock/admission logs pass. `browser-admission/results.json`: all six Node suites pass (public admission, SDK preparation, receiver lifecycle, Remote controls/queue, sound-session). | Final Host/settings/package and integrated frozen-install/build reruns F1/F3 remain. |
+| E4 | `retained-av/results.json`: **15 Node suites pass**, covering stream/clock/sync/delivery/channels/input/tracks/upload failure/reporter retry/revocation/startup/ICE/STUN/Stop-Undo/consent-restart. | Does not close actual-media R4 continuity/fallback gaps; F2. |
+| E5 | Actual T3 preview Chrome, source `9e869de`; `browser-receipts/core-browser.json`: five React radio subscription checks, eight desktop keyboard checks, two actual H264/AAC decoders with independent queues; exclusive Move keeps paused Playback ID, two-entry queue and **37.240293 s** on second browser. | Localhost/127 origins; no physical timing qualification. Final-tip/TV/Host coverage remains separate. |
+| E6 | Parent real-Hub routed test at `9e869de`: Docker peer `172.17.0.2` → `10.10.10.11:49726`, exact allowlist: connection 200, bad Host/Origin 403, tokenless settings/private host-token 401; allowlist containing only `.3` refuses `.2` with 403. Disabling sharing closes listener and refuses the same allowed peer. `routed-peer-{allowed.json,denied.log,sharing-off.json,sharing-off.log}`. | Specific routed topology/security behavior, not Wi-Fi/audio qualification. Parent reports all owned scratch Core/media PIDs stopped. |
 
-Useful later fixes are explicit obligations: browser gentle rate correction (±100 ppm); exact routed LAN peers with original security checks; Chrome's independent 200 ms output-clock anchor; browser latency preferences distinct from requested native buffers; native device/rate/buffer readback, bounded capture and Node-upload Origin; output-clock ms/µs correction; late joins including required lead and positive correction; relaxed PCM retained-queue bounds; missing `pactl` guard; radio timer cleanup; encoder prewarm/cadence and capture continuity. Shared PCM/Opus and low-lead experimental hunks require individual review; live audience delivery remains Opus. Defaults favor reliable synchronization.
-
-## Completion evidence
-
-Pending integration. Record exact revisions, commands, results, skips, independent review findings/responses, remote branch heads and PR descriptions here as work completes. Physical Mac-host→Linux-browser/Wi-Fi/background/Bluetooth and 50 physical receivers require fresh evidence; neither synthetic load nor historical native-client trials qualifies them. An unavailable prerequisite gets one preflight and one actionable retry, then independent software work continues. Leave submission, merges and releases to the owner.
+| Marker | Parent-owned remaining evidence / smallest completion condition |
+| --- | --- |
+| F1 — final integrated checks | After Host/R4 land: fresh frozen install, typecheck/build and relevant public behavior suites on exact final heads; check each layer builds; record skips/failures and resource cleanup. Inventory union/diff checks alone do not satisfy this gate. |
+| F2 — R4 software continuity | R4 child reproduces source PTS restarting at zero while publication stays alive and is implementing a minimal fix. Integrate/review it; prove real captured WebM→HLS→browser, split/picture-only, independent late third viewer, forced RTC fallback, stop/re-ingest absolute position and single-ingest cleanup. These are software checks, not missing hardware. |
+| F3 — Host/package/settings | Parent reports delegated actual Mac dual-architecture helper builds/signatures pass; attach receipt/head after integration. Verify exact hidden frame grants/navigation/close/quit, native Origin/revocation/mute/restart, C queue test, source-budget snapshot settings and actual rate/buffer readback. Run package-hooks/act using `catthehacker/ubuntu:full-latest` before any dispatch. Final hosted signed package and matched packaged Main/Core/worker/browser smoke remain pending. |
+| F4 — platform/physical qualification | Fresh Mac-host→Linux-browser Opus continuity and actual Wi-Fi browser routes; signed Main permission/device availability; 44.1 kHz hardware, Apple sender/Bluetooth/background/locked phones where available. Numerical skew/dropout/fidelity profile, ≤100 ms input-to-ear and 50 physical receivers remain unqualified. One preflight/actionable retry records any concrete prerequisite. |
+| F5 — independent review/handoff | Fresh independent spec/standards reviews at fixed base/head with findings resolved and justified reruns; current built-state doc audit (including retained AirPlay/live-input/public-media/ADR 0001 claims), final retirement/API/dependency search, parent stack/remote/PR-ready receipts. This child performs no CI, stack, push or PR actions. |
+| F6 — historical separation | Browser R4 `5ce1d68e…` and Native R4 `ee16cdca…` are different archival payloads. Keep historical validation, PCM overlays/native-client trials and sample-coherence results attached to their inputs; none qualifies final browser Opus. |

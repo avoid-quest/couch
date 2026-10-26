@@ -1,214 +1,214 @@
-path,recovery_provenance,disposition,owning_layer,acceptance
-.github/workflows/package.yml,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-app/audio-peer.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-app/capture.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-app/live-audio.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-app/live-output.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-app/main.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-app/native-audio-input.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-app/native-audio-output.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-app/native-capture.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-app/native-playback.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-app/preload.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-bun.lock,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-docs/adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/adr/0002-playback-delivery-and-authority.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/airplay.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/architecture.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-linux-defaults-research.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-native-device-controls-research.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-native-receiver-reuse-research.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-native-reuse-options.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-roundtrip-performance.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-alternatives-evidence.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-architecture-proposal.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-costs.html,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-experiment-evidence.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-independent-review-opus.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-independent-review-sol.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-moonlight-sunshine.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-refactor-code-map.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-refactor-plan.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-refactor-validation.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/audio-video-use-cases.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/ci.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/home.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/player.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/remote.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/settings.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/share.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/tv.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/design/where-it-plays.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/lan-origin.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/live-inputs.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/live-sharing-performance.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/public-media.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
-docs/sync-test-evaluation.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
-native/live-audio/README.md,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-native/live-audio/capture-queue.h,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-native/live-audio/capture-queue.test.c,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-native/live-audio/capture.c,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-native/live-audio/playback/LICENSE,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/README.md,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/adapter/sendspin/client.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/audio_sink.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/audio_sink.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/clock-servo-test.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/clock-servo.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/log.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/null_sink.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/pcm_volume.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/pcm_volume.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/playback.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/pulse_sink.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/pulse_sink.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/sink_recovery.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/sink_recovery.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-native/live-audio/playback/upstream-pins.json,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-package.json,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-patches/@sendspin%2Fsendspin-js@5.0.0.patch,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-patches/@sonn-audio%2Fnode-sendspin@0.6.2.patch,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-patches/README.md,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-scripts/LICENSE.sync-test,later,exclude,archive,Measurement tooling preserved on recovery ref; no new latency campaign
-scripts/after-pack.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-scripts/audio-roundtrip.py,later,exclude,archive,Measurement tooling preserved on recovery ref; no new latency campaign
-scripts/build-live-audio.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
-scripts/build-live-playback.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-scripts/core.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/client/api/settings.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/audio-settings.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/capture-audio.html,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/components/DurationBar.tsx,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/components/PlayOn.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/components/PlaybackSettings.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/components/PlaybackTransport.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/components/RowMenu.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/radio-clock.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/find/useLiveSourceHits.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/home/HomePage.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/home/HomeSources.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/now/PlayerPage.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/now/QueueActions.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/now/QueuePanel.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/remote/RemotePage.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/settings/AdvancedAudioSettings.tsx,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/settings/CouchPages.tsx,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/settings/ThisDevicePages.tsx,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/settings/couch/PlaybackPreferences.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/share/ShareControl.tsx,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/share/ShareDialog.tsx,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/share/share.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/shell/KeyboardShortcuts.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/shell/LiveSharingStatus.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/shell/NowPlayingBar.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/sections/shell/Outputs.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/capture-audio-worker.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/capture-audio.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/live.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/media-session.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/native-audio.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-src/client/session/picture-clock.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/picture-mapping.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/playback-controls.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/receiver-admission.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/renderer.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/sendspin.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/session.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/client/session/where-it-plays.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-src/server/airplay.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/audio-packets.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/audio-worker.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/capture-audio.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/capture-ingest.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/http.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/hub.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/lan-listener.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/live-audio-policy.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-src/server/live-input.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/live-pcm.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-src/server/live-stream.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/messages.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/mpv.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/output-admission.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/pass-through.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/scheduled-audio.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/scheduled-capture.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/sendspin.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/session.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/sound-pulse.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/sound-routing.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/source-preparation.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/store.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-src/server/validation.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/server/web-media.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/shared/app-bridge.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-src/shared/audio-settings.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-src/shared/capture.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-src/shared/live-input.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/shared/native-output.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-src/shared/playback-policy.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-src/shared/protocol.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/airplay.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/all-consent-restart.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/audio-isolation.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/audio-roundtrip.test.py,later,exclude,archive,Measurement tooling preserved on recovery ref; no new latency campaign
-tests/audio-settings.test.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-tests/capture-clock.test.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/capture-consent.native.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/capture-continuity.integration.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/capture-format.test.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-tests/capture-upload.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/capture.test.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-tests/device-sharing.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/fixtures/mac-chrome-output-timestamps.json,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/fixtures/native-capture-helper.mjs,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-tests/fixtures/native-playback-helper.mjs,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-tests/group-language.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/home-sources.test.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/iptv-routing.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/lan-peer.test.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-audience.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-close.native.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-delivery.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-input.fixture.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-input.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-join-lead.integration.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-latency.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-outputs.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/live-pcm.test.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-tests/live-sync.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/mpv-lifecycle.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/native-capture.integration.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-tests/native-live-authority.test.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-tests/native-output.integration.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-tests/native-playback.test.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
-tests/output-admission.integration.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/output-admission.test.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/output-clock.test.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/output-preparation-sdk.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/playback-audience-ui.test.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/playback-logging.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/playback-policy.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/playback-policy.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/playback-routing.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/radio-clock.browser.tsx,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/receiver-admission.test.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/receiver-error-lifecycle.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/relaxed-pcm-queue.integration.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/renderer-hls.test.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/scheduled-capture.integration.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/scheduled-language.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/sendspin-logging.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/sendspin-route.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/sendspin-sdk.test.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/settings-authority.integration.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
-tests/share.test.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/sound-session.integration.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/source-language.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/source-preparation.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/tv-navigation.browser.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/where-it-plays-rules.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-tests/where-it-plays.test.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
-tests/youtube-playback.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
-vite.config.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+path,recovery_provenance,disposition,owning_layer,responsibility,acceptance
+.github/workflows/package.yml,later,adapt,host,Capture-only resources; preserve combined Mac arm64/x64 feed and current-main floors/QuickJS; omit native-playback libpulse dependency,package-hooks; act Package full-latest before dispatch; actual dual-arch signed package (F3)
+app/audio-peer.ts,later,exclude,host,Native audience TLS probe; browser trusted connection and existing app/peer.ts replace it,No native audience imports/build consumer; preserve normal certificate trust (F3)
+app/capture.ts,later,adapt,host,Fresh local microphone grant and exact hidden-frame delegation; preserve screen/system capture consent,capture.test; capture-consent.native; grant expiry/navigation/revocation and no second acquisition (F3)
+app/live-audio.ts,later,adapt,host,Main-owned native input or selected hidden browser capture; serialized publication/upload generations,native-live-authority; capture prepare/cancel/mute/restart/owner navigation/Close/Quit (F3)
+app/live-output.ts,later,exclude,host,Native audience session/IPC replaced by browser session/sendspin.ts,No liveOutput IPC/lifecycle consumer; browser audience lifecycle (F3)
+app/main.ts,later,adapt,host,Wire capture/input discovery and awaited shutdown; remove audience output wiring; preserve main shell/platform fixes,native authority/close/quit; package-hooks; signed Main capture permission and resource smoke (F3)
+app/native-audio-input.ts,later,retain,host,Selected UID/rate/buffer native capture and serialized upload/mute generations,native-capture.integration; prepare abort/retirement/stale stop-upload (F3)
+app/native-audio-output.ts,later,exclude,host,Native PCM audience decoder/output replaced by browser Opus receiver,No native-output bridge or private-key handoff; Opus-only admission (F3)
+app/native-capture.ts,later,retain,host,Bounded native PCM parsing/clock exchange and authenticated upload with Origin; child shutdown,native-capture.integration with real Hub; revoked owner; split/coalesced frames; sequence/sample order (F3)
+app/native-playback.ts,later,exclude,host,Native audience process/sink replaced by browser Web Audio preparation/output,No playback helper launch/consumer; browser output lifecycle (F3)
+app/preload.ts,later,adapt,host,Narrow couchAudioCapture bridge plus input APIs; omit native audience IPC,Exact capture page/frame bridge; ordinary preload unchanged; close/error cleanup (F3)
+bun.lock,original,adapt,core+browser+host,Pin both maintained SDK patches/runtime dependencies onto main lock; retain FFT/QuickJS-related drift,Fresh frozen install then frontend/Core/worker/Main build at each layer (F1/F3)
+docs/adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md,original,adapt,validation,Preserve accepted retained WebRTC/buffered-video decision; reconcile timestamped audio exception with ADR 0002,Current-doc review against playback policy; do not remove video fallback (F5)
+docs/adr/0002-playback-delivery-and-authority.md,original,retain,validation,Import accepted delivery/authority/units decision with source provenance and current-ledger pointer,Historical decision body preserved; current checks/qualification tracked in ledger
+docs/airplay.md,original,adapt,validation,Current decoded PCM relaxed path; retain Linux ingress/takeover/one-sender rules,AirPlay lifecycle/no-HLS claims match integrated code and receipts (F5)
+docs/architecture.md,original+later,adapt,host,Current shared worker/source preparation plus host capture/browser output; preserve main architecture drift,Host-owned built-state review; no native audience or stale helper/relay claims (F3/F5)
+docs/audio-linux-defaults-research.md,later,exclude,validation,Historical OS tuning research stays on recovery ref; current native helper/settings docs cover product behavior,Recovery reference resolves original path; no system-wide tuning imported
+docs/audio-native-device-controls-research.md,later,exclude,validation,Historical native host API research remains recovery reference; maintained helper README owns implemented controls,Retain provenance pointer; current request/readback/platform facts reviewed by Host
+docs/audio-native-receiver-reuse-research.md,later,exclude,validation,Research for excluded native audience receiver stays historical on recovery ref,Recovery reference; no native audience capability claim or runtime dependency
+docs/audio-native-reuse-options.md,later,exclude,validation,Historical native receiver alternatives stay on recovery ref,Recovery reference; browser output remains product path
+docs/audio-roundtrip-performance.md,later,exclude,validation,1910-line experiment report remains immutable recovery evidence; ledger owns current results,No research blob import or transferred timing/qualification claim
+docs/audio-video-alternatives-evidence.md,original,exclude,validation,Historical official-source alternatives remain selectively readable on recovery ref,Recovery reference; consult when API/transport choice changes
+docs/audio-video-architecture-proposal.md,original,exclude,validation,Historical audited architecture proposal stays on recovery ref; maintained architecture/ledger replace current guidance,Recovery reference; original baseline remains historical
+docs/audio-video-costs.html,original,exclude,validation,Historical cost visualization stays on recovery ref; retained-stage costs summarized in ledger,Recovery reference; no archived visual imported as current architecture
+docs/audio-video-experiment-evidence.md,original,exclude,validation,Historical clock/scale/mechanism evidence remains recovery reference,No experimental pass becomes final browser qualification
+docs/audio-video-independent-review-opus.md,original,exclude,validation,Historical independent review stays on recovery ref; final fixed-head review is new work,Recovery reference; fresh spec/standards receipts F5
+docs/audio-video-independent-review-sol.md,original,exclude,validation,Historical independent review stays on recovery ref; final fixed-head review is new work,Recovery reference; fresh spec/standards receipts F5
+docs/audio-video-moonlight-sunshine.md,original,exclude,validation,Future low-latency video research stays on recovery ref outside integration,Recovery reference; retain relaxed screen sharing without new video engine
+docs/audio-video-refactor-code-map.md,original,retain,validation,Import historical M1-M11 and nine retirement rows verbatim with current-ledger notice,All responsibilities/retirements mapped in current ledger; historical links read on recovery ref
+docs/audio-video-refactor-plan.md,original,retain,validation,Import historical P0-P7/acceptance/simplification scope verbatim with historical notice,All packages and acceptance obligations have current owner/check; no old completion claim reused
+docs/audio-video-refactor-validation.md,original,exclude,validation,Large historical test/physical report remains on recovery ref; current ledger records new evidence separately,Recovery reference retains known R4 gaps and failed/mixed historical results
+docs/audio-video-use-cases.md,original,retain,validation,Import original 17 use cases/action meanings verbatim with historical notice,All D/R/L cases mapped in ledger; built UI reference remains current Where-it-plays doc
+docs/ci.md,original+later,adapt,host,Worker/helper/package/native check guidance reconciled with main QuickJS/Intel/signature/manual CI rules,Host-owned commands; act full-latest before dispatch; final hosted package pending F3
+docs/design.md,original+later,adapt,host,Current playback/Share/settings design index; preserve main UI drift and browser controls,Host-owned built-state index review with integrated code (F3/F5)
+docs/design/home.md,original,retain,browser,Source-intent discovery/status and source authority in existing Home UI,home-sources/audience UI; no duplicate discovery or native audience affordance
+docs/design/player.md,original,adapt,browser,Core rights/minimal Live controls/mapping limits plus current-main radio/fullscreen/overlay behavior,Audience/renderer/keyboard/browser receipts; main drift preserved (F5)
+docs/design/remote.md,original,retain,browser,Remote follows programme rights and permitted output control,remote-control/remote-queue/audience UI; Live local listening remains separate
+docs/design/settings.md,original+later,adapt,browser+host,Original chooser setting plus later browser preference/native input/host lead controls; exclude native output backend,Host settings/default/authority/readback match final UI; preference differs from actual hardware (F3/F5)
+docs/design/share.md,original+later,adapt,browser+host,Source intent and later native/selected browser input readback/lifecycle; retain screen/video journey,share/capture-format/authority/Close; no unsupported platform qualification (F3/F5)
+docs/design/tv.md,original,retain,browser,TV OK-menu exclusive Move and Core-authorized Live controls,where-it-plays TV row; tv-navigation.browser; actual TV final journey F1
+docs/design/where-it-plays.md,original,adapt,validation,Current Play on versus exclusive Move/TV menu/channel joins and source-owned Live authority,Compare actual picker/Outputs/Hub; Where-it-plays/audience checks; E5 Move receipt
+docs/lan-origin.md,later,adapt,validation,Exact routed IPv4 peer access retains Host/Origin/pairing/sharing checks,Real Hub routed allowed/denied/sharing-off E6; match source and no broad subnet grant
+docs/live-inputs.md,original,adapt,validation,Current timestamped capture/authority versus retained RTC/buffered A/V ownership,Capture/AirPlay/R4 lifecycle and accurate Play-on/Move/current-controls prose (F5)
+docs/live-sharing-performance.md,original,adapt,validation,Describe shared capture delivery/retained video costs; separate historical measurements,Current claims match source; E2 synthetic capacity does not qualify physical route (F5)
+docs/public-media.md,original,adapt,validation,Protected yt-dlp relays remain required; sound-only rendition/local decode semantics,Relay/security/rendition tests; remove stale optional-relay claim (F5)
+docs/sync-test-evaluation.md,later,exclude,validation,Historical detector limits/measurement evaluation remain recovery evidence,Recovery reference; sampled-window success is not continuous-fidelity qualification
+native/live-audio/README.md,later,adapt,host,Maintained capture-only API/build/platform/request-readback docs replace stale not-wired/native-output prose,Host source/package review and actual helper receipts; physical gaps explicit (F3/F4)
+native/live-audio/capture-queue.h,later,retain,host,Preallocated bounded SPSC capture queue; no audience output dependency,Compile/run capture-queue.test.c as C; queue/xrun bounds (F3)
+native/live-audio/capture-queue.test.c,later,retain,host,C queue correctness regression retained independently of Node helper fixture,Actual C compile/run receipt; Node capture test alone is insufficient (F3)
+native/live-audio/capture.c,later,retain,host,CoreAudio/PortAudio selected UID stereo f32/ADC clock/request-readback capture only,Dual-arch floors/dependencies/signatures; actual UID/rate/buffer/mute/shutdown (F3/F4)
+native/live-audio/playback/LICENSE,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/README.md,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/adapter/sendspin/client.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/audio_sink.cpp,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/audio_sink.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/clock-servo-test.cpp,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/clock-servo.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/log.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/null_sink.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/pcm_volume.cpp,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/pcm_volume.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/playback.cpp,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/pulse_sink.cpp,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/pulse_sink.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/sink_recovery.cpp,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/sink_recovery.h,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+native/live-audio/playback/upstream-pins.json,later,exclude,host,Audience-only receiver/sink subtree stays on recovery ref; browser Opus/Web Audio replaces it; capture PortAudio is separate,No playback source/license/build/import consumer; retain capture license and existing OS sound routing (F3)
+package.json,original,adapt,core+browser+host,Pinned SDK/runtime materialization and packaged worker/helper onto main platform/dependency configuration,Frozen install; each-layer build; package-hooks/act/signed-resource smoke (F1/F3)
+patches/@sendspin%2Fsendspin-js@5.0.0.patch,original+later,adapt,browser,Pre-native rate/200ms clock/preparation/generation patch; correct rate type comment; no key export,sendspin-sdk/output-clock/receiver-admission; clean materialization; provenance hash differs after comment correction
+patches/@sonn-audio%2Fnode-sendspin@0.6.2.patch,original+later,adapt,core,Pre-native encrypted connection isolation/public preparation; exclude native-only client APIs,audio-isolation/output-preparation-sdk; retain actual pre-native hash; no native output consumers
+patches/README.md,original+later,adapt,validation,Current pinned patches/public APIs/100ppm/200ms/browser preference/removal/license guidance,Whole-doc source/hash review; original hash is provenance; final-tip install evidence parent-owned
+scripts/LICENSE.sync-test,later,exclude,validation,Measurement detector license stays with excluded historical detector/tests on recovery ref,No detector integration without attribution/license; recovery reference preserves source
+scripts/after-pack.ts,later,adapt,host,Stage capture resource/license/receipt before signing; omit native playback; retain main QuickJS/AirPlay/relay,package-hooks under Node; act full-latest; actual target resources/signatures (F3)
+scripts/audio-roundtrip.py,later,exclude,validation,Historical measurement detector remains recovery tooling; no new campaign,Recovery reference/license/test retained together; no product runtime dependency
+scripts/build-live-audio.ts,later,adapt,host,Per-target static PortAudio/capture builds; replace host-equality refusal and honor Mac floors,Actual arm64/x64 architecture/deployment/dependency/signature checks; host-slice list (F3)
+scripts/build-live-playback.ts,later,exclude,host,No native audience helper; browser receiver replaces it,Remove after-pack import/call and audience-only libpulse-dev dependency (F3)
+scripts/core.ts,original,retain,core,Build/watch audio-worker beside Core and restart for worker-only changes,Production build and packaged worker smoke; matched assets (F1/F3)
+src/client/api/settings.ts,later,adapt,host,GET/POST audio settings client follows Host admin-only route/default validation,settings-authority/audio-settings; active source snapshot does not retime (F3)
+src/client/audio-settings.ts,later,adapt,browser+host,Browser output preference first; Host capture-rate/input-buffer preferences later; omit native output backend keys,Preference validation/storage/error and actual constraints/readback; no native audience settings (F3)
+src/client/capture-audio.html,later,retain,host,Runtime hidden HOST capture page loading session/native-audio.ts; not audience output,Build emits/packaged Core serves page and producer/worker; narrow preload grant (F3)
+src/client/components/DurationBar.tsx,later,retain,browser,Idle metadata subscription cleanup while retaining main radio recognition,radio-clock.browser actual React five-check receipt E5; normal duration/progress UI
+src/client/components/PlayOn.tsx,original,retain,browser,Live-source intent labels retain explicit destination semantics,play-on/share/home-source tests; Play-on isolation differs from Move
+src/client/components/PlaybackSettings.tsx,original,retain,browser,Core-supported timing/speed/track/settings controls and picture mapping limitation,audience-ui/renderer; unsupported delay controls hidden; retained ordinary controls
+src/client/components/PlaybackTransport.tsx,original,retain,browser,Live local Join/Leave/level/status; normal programme controls follow Core rights,audience-ui tests; preparing/starvation/errors; no audience shared Stop/queue
+src/client/components/RowMenu.tsx,original,retain,browser,Queue/menu verbs gated by Core rights,item-menu/audience-ui; ordinary menu behavior retained
+src/client/radio-clock.ts,later,retain,browser,Stop idle radio timer when last React subscriber leaves,radio-clock.browser E5; preserve main on-demand recognition updates
+src/client/sections/find/useLiveSourceHits.ts,original,retain,browser,Live publication intent in existing search discovery,share/home-sources/source-journeys; no source-ownership grant on discovery
+src/client/sections/home/HomePage.tsx,original,retain,browser,Home actions/queue follow actor programme capabilities,audience-ui/home/source journeys; independent Direct remains usable
+src/client/sections/home/HomeSources.tsx,original,retain,browser,Source intent labels in Shared sources,home-sources/share tests; discovery retains owner identity
+src/client/sections/now/PlayerPage.tsx,original,adapt,browser,Core queue rights and mapping status while preserving main radio/overlay/fullscreen additions,audience/renderer/radio/desktop checks E3/E5; current-main drift retained
+src/client/sections/now/QueueActions.tsx,original,retain,browser,Disable/remove unauthorized programme queue verbs,audience-ui/queue tests; relaxed queue collaboration retained
+src/client/sections/now/QueuePanel.tsx,original,retain,browser,Hide Live audience queue and guard edits,audience-ui/remote-queue; ordinary per-Playback queues retained
+src/client/sections/remote/RemotePage.tsx,original,retain,browser,Remote programme actions use Core capabilities; authorized device volume separate,remote-control/remote-queue/audience-ui checks E3
+src/client/sections/settings/AdvancedAudioSettings.tsx,later,adapt,host,Browser hints plus host lead/native input rate/buffer/readback UI; remove native audience backend/buffer,audio-settings/settings-authority/capture-format; current request/readback semantics (F3)
+src/client/sections/settings/CouchPages.tsx,original+later,adapt,browser+host,Browser chooser setting first; Host administrator lead settings later,settings-nav/share/audio-settings and authority route (F3)
+src/client/sections/settings/ThisDevicePages.tsx,later,adapt,host,Expose useful per-device browser/capture audio preferences,settings-nav/audio-settings; no native audience options (F3)
+src/client/sections/settings/couch/PlaybackPreferences.tsx,original,retain,browser,Shared-source chooser opt-in preference,settings-nav/Where-it-plays chooser tests
+src/client/sections/share/ShareControl.tsx,original+later,adapt,browser+host,Live intent first; Host capture format/readback/errors and owner Stop later,share/capture-format/native authority/Close; stop publisher distinct from listener leave (F3)
+src/client/sections/share/ShareDialog.tsx,original+later,adapt,browser+host,Explicit Live intent and selected native/browser input; truthful rate/buffer/format readback,share/capture-format/native grant and cancellation; preserve screen/window capture (F3)
+src/client/sections/share/share.ts,original,retain,browser,Publication intent choices/validation distinguish relaxed capture from Live audio,share tests; source audio/video/intent validity
+src/client/sections/shell/KeyboardShortcuts.tsx,original,retain,browser,Gate programme keys with Core rights; keep own-volume keys,audience-ui/couch-hotkeys plus eight actual desktop checks E5
+src/client/sections/shell/LiveSharingStatus.tsx,original,retain,browser,Source intent and publisher capture capsule status,share/audience UI; owner capture termination remains local
+src/client/sections/shell/NowPlayingBar.tsx,original,retain,browser,Live participation presentation and queue/settings affordances follow rights,audience-ui/playback transport; no redundant programme controls
+src/client/sections/shell/Outputs.tsx,original,retain,browser,Live own listening view; TV OK-menu exclusive Move including playing row,where-it-plays/audience UI; D6 real-browser receipt E5; TV journey F1
+src/client/session/capture-audio-worker.ts,original,retain,browser,Timestamped browser PCM transfer/upload with finite queues and frame closure,capture-upload/format/continuity; no duplicate capture; upload lifecycle
+src/client/session/capture-audio.ts,original+later,adapt,browser+host,Original timestamped capture; Host first-real-frame/exact-rate/stereo validation,capture-format; transferred time origin/frame closure; absent real AudioData fails explicitly (F3)
+src/client/session/live.ts,original+later,adapt,browser+host,Preserve peers/recorder publication; later native input/hidden capture forwarding and lifecycle,live-client/tracks/upload/Close; no second mic; selected alternative not arbitrary fallback (F3)
+src/client/session/media-session.ts,original,retain,browser,OS media handlers obey actor programme rights,audience-ui real handler installation; ordinary handlers restore
+src/client/session/native-audio.ts,later,retain,host,Hidden browser HOST capture producer using getUserMedia/prepare/upload; no audience decoding,Exact frame prepare/upload/mute/stop/pagehide; second upload generation; packaged page (F3)
+src/client/session/picture-clock.ts,original,retain,browser,Explicit timeline/discontinuity following without reporting correction as user speed,live-clock/sync/picture mapping/renderer; source-PTS limits truthful
+src/client/session/picture-mapping.ts,original,retain,browser,Bounded picture timeline mapping and explicit unsupported status,playback-policy/renderer HLS/native-HLS/MPEG-TS cases; actual R4 F2
+src/client/session/playback-controls.ts,original,retain,browser,Common Live detection and Core rights consumption; ordinary legacy default,audience UI/shortcuts/Media Session/queue tests
+src/client/session/receiver-admission.ts,original+later,retain,browser,Output preparation/token lifecycle; clock uncertainty finite 0-10 milliseconds,receiver-admission/output-admission; invalid negative/NaN/infinite/10.001ms and route reset
+src/client/session/renderer.ts,original,retain,browser,Selected-channel native/HLS/MPEG-TS rendering with cancellable generations and truthful timeline/capabilities,renderer-hls/source-fetch/mapping/compressor; actual Direct E5 and R4 F2
+src/client/session/sendspin.ts,original+later,adapt,browser,Single browser receiver with Live rate/preference/preparation/token lifecycle; omit native backend/key handoff,sendspin-route/SDK/output-clock/admission; preserve relaxed defaults and ordinary identity
+src/client/session/session.ts,original+later,adapt,browser+host,Core controls/preparation first; Host capture bridge/format/lifecycle extension later,audience/receiver/session tests; native/hidden capture error generations (F3)
+src/client/session/where-it-plays.ts,original,retain,browser,Consented channel/move/chooser model; scheduled audio In-sync semantics,where-it-plays-rules/where-it-plays; TV playing-row move and publisher held/private rules
+src/server/airplay.ts,original,retain,core,Decoded PCM goes to relaxed shared sender; preserve Linux one-sender and takeover/lifecycle,airplay.integration/airplay-audio; no audio-only HLS; actual Apple sender F4
+src/server/audio-packets.ts,original,retain,core,Shared bounded Ogg/Opus packet parsing and duration,scheduled-capture/continuity/ahead and malformed packet tests
+src/server/audio-worker.ts,original,retain,core,Worker-owned scheduling/encode/clock/crypto/fanout with epochs and bounded messages,scheduled-capture/isolation; worker build/smoke; Core socket-stall boundary stays explicit
+src/server/capture-audio.ts,original+later,adapt,core+host,Source normalization/resampling/stereo/sequence/reset; Host adds immutable per-source saved lead,capture-clock/continuity; live-audio-policy/settings snapshot and same budget gates (F3)
+src/server/capture-ingest.ts,original,retain,core,Token/origin/generation/format/byte bounds for timestamped capture uploads,capture-upload/revocation/native-capture real Hub; stale/reused source generation
+src/server/http.ts,original,retain,core,Audio-upload upgrade and request routing retain access guards,capture-upload/output-admission/live delivery; malformed/stale request isolation
+src/server/hub.ts,original+later,adapt,core+host,Core delivery/authority/generation/consent/pairing/state caching plus main radio; Host settings snapshots later,policy/routing/audience/remote/consent/zero-volume/security; E1/E3/E6; Host settings F3
+src/server/lan-listener.ts,later,retain,core,Exact routed IPv4 peer exception with existing subnet/Host/Origin checks,lan-peer unit plus actual real-Hub allowed/denied/sharing-off E6
+src/server/live-audio-policy.ts,later,adapt,host,Saved source lead/reserve/output budget; choose conservative browser-Opus policy explicitly,audio-settings/capture-clock/output-admission; no native-PCM low-reserve qualification transfer (F3)
+src/server/live-input.ts,original,retain,core,Runtime publication intent/timestamped audio ingress and lifecycle,live-input/upload/revocation; source end/new generation cleanup
+src/server/live-pcm.ts,later,exclude,core,Native audience Live PCM fast path removed; common capture retains stereo Opus and relaxed PCM,Opus-only incompatible join rejection/reset/continuity; healthy audience unchanged
+src/server/live-stream.ts,original,retain,core,Shared captured A/V/unsupported-publisher recorder HLS; remove replaced PCM audio-only conversion,live-stream/delivery and real R4 F2; one encoder/temp owner and localized AAC PTS clock
+src/server/messages.ts,original,retain,core,Explicit listener leave command validation,live-audience/output controls; legacy programme commands still authorized by policy
+src/server/mpv.ts,original,retain,core,Host-only selected channels/cancellable helper; retain hardware/DSP compatibility,mpv-lifecycle/compressor/output preflight tests; no group/native audience replacement
+src/server/output-admission.ts,original+later,adapt,core+host,Opus-only Live token/preparation/timing/capacity/correction admission; Host per-source budget later,output-admission unit/public Hub; PCM rejection and source-budget boundaries (F3)
+src/server/pass-through.ts,original,retain,core,Requested channel-aware relay preparation preserves protected bytes/Range/access,source preparation/YouTube/public proxy/relay security; sound-only fetch fixture
+src/server/scheduled-audio.ts,original+later,adapt,core+host,Shared policies/fanout with late-join lead/prompt tick/relaxed queue fix; remove Live PCM; Host budget later,late-join/relaxed-queue/scheduled-capture/isolation/language; fixed healthy timestamps and bounded slow receiver
+src/server/scheduled-capture.ts,original+later,adapt,core,Retain prewarm/first-generation/reset/WAV packet bounds; shared Opus encoder; exclude native Live PCM branch,continuity/reset/close/late-input; 10ms packets current; relaxed PCM retained
+src/server/sendspin.ts,original+later,adapt,core+host,Core worker lifecycle/epoch/backpressure facade; Host snapshots/validates source policy later,capture-upload/scheduled/isolation/worker close; source-budget correction validation (F3)
+src/server/session.ts,original,retain,core,Source selection/rendition/output intent and shared preparation lifecycle,source-preparation/language/history/routing; cancellation and queue/transport preservation
+src/server/sound-pulse.ts,later,retain,core,Retryable missing-pactl guard; retain Linux host sound behavior,sound-session integration without tools; do not fork repeatedly
+src/server/sound-routing.ts,later,retain,core,Missing-tool routing guard preserves optional OS sink controls,sound-session/AirPlay fixture; hardware routing unchanged and unqualified F4
+src/server/source-preparation.ts,original,retain,core,Common source/rendition/channel/delay/format selection for Direct and group,source-preparation/source-language/group-language; real request counters/muxed fallback
+src/server/store.ts,later,adapt,host,Persist validated audio setting defaults only; runtime capture/admission stays ephemeral,audio-settings/settings-authority; reopening/default rows and active-source snapshot (F3)
+src/server/validation.ts,original,retain,core,Wire intent/receiver-token/picture timeline validation,playback-policy/output-admission; reject Live video/legacy incompatible ingest
+src/server/web-media.ts,original,retain,core,Desired channels/audio-only rendition with shared prepared source metadata,web-media/source preparation/YouTube/public byte security
+src/shared/app-bridge.ts,later,adapt,host,Capture-only input/error/observed-format/command bridge; omit audience output members,preload/authority/native-close tests; no liveOutput/nativeAudioOutputAvailable (F3)
+src/shared/audio-settings.ts,later,adapt,browser+host,Shared contract first needed by Browser output hint; Host extends/wires capture/lead/input settings,Each layer builds; audio-settings/default constraints/budget/readback checks (F3)
+src/shared/capture.ts,later,adapt,host,Native input identity/request/readback and capture-only action/format types,capture-format/native authority/bridge build; no audience output types (F3)
+src/shared/live-input.ts,original,retain,core,Separate publication intent/ingress audioDelivery from programme authority/egress,playback-policy/live-input/share; PCM ingress never means Live PCM output
+src/shared/native-output.ts,later,exclude,host,Native audience backend/buffer/output contract replaced by existing browser receiver protocol,No imports/keys/IPC/settings/build consumers; ordinary OS routing retained (F3)
+src/shared/playback-policy.ts,original,retain,core,Core delivery and actor programme/queue/transport/local participation authority,playback-policy/live-audience/routing/remote; split channels and one-listener Live
+src/shared/protocol.ts,original,retain,core,Runtime intent/delivery/controls/preparation/admission/timeline tokens; later native overlay did not change it,media-shape/playback-policy/wire validation/public admission; no durable audience migration
+tests/airplay.integration.ts,original,adapt,core,Real decoded ingress scheduling/one-sender/takeover/disable/departure fixture independent of installed pactl,Run Node suite; corrected rerun E1; actual Apple sender remains F4
+tests/all-consent-restart.integration.ts,original,retain,core,Consent/default restoration across restart under runtime policy,Run Node suite; E4; final source F1
+tests/audio-isolation.integration.ts,original,retain,core,Real encrypted malformed-envelope/preparation/handler exception isolation with healthy Opus,Run Node suite; E1/E2; original healthy timestamp grid unchanged
+tests/audio-roundtrip.test.py,later,exclude,validation,Historical detector tests stay with detector/license on recovery ref,Recovery pointer; no measurement campaign or transferred qualification
+tests/audio-settings.test.ts,later,adapt,host,Persisted lead/default/preference/policy validation without native audience settings,Run separately with pinned Bun; chosen reserve/source budget and snapshots (F3)
+tests/capture-clock.test.ts,original+later,adapt,core+host,Clock drift/resampling/sequence/reset then Host per-source lead boundaries,Run separately with pinned Bun; source policy immutable during share (F3)
+tests/capture-consent.native.ts,original,adapt,host,Retain packaged local/remote capture consent and extend retained hidden Live path where required,Actual native Main grant/deny/navigation/revocation with owned processes (F3)
+tests/capture-continuity.integration.ts,original+later,adapt,core,Prewarm/first generation/encoder packet cadence/reset/cancellation/relaxed PCM without Live PCM,Run Node bundle with actual FFmpeg; E2 plus causal negative controls
+tests/capture-format.test.ts,later,retain,host,First real frame/exact capture-rate/stereo/format and processor lifecycle checks,Run separately with pinned Bun; no API-symbol-only qualification (F3)
+tests/capture-upload.integration.ts,original,retain,core,Authenticated timestamped upload/order/generation/cleanup,Run Node suite; E1/E2; native Origin case also F3
+tests/capture.test.ts,later,adapt,host,Main local grants including native consumption and exact delegated hidden frame,Run pinned Bun; stale/navigation/revocation/one-use/no extra mic checks (F3)
+tests/device-sharing.integration.ts,original,retain,core,Output consent/Play-on isolation/exclusive handoff/held publisher/asynchronous denial,Run Node suite; E1; current final source F1
+tests/fixtures/mac-chrome-output-timestamps.json,later,retain,browser,Recorded Chrome output timestamp replay input for independent 200ms anchor,output-clock.test includes .94/1.06/stale/backward controls; preserve trace
+tests/fixtures/native-capture-helper.mjs,later,retain,host,Deterministic capture-process parser/clock/upload fixture; not native output,native-capture.integration split/coalesced/mute/restart; physical adapter separate F4
+tests/fixtures/native-playback-helper.mjs,later,exclude,host,Only excluded audience playback adapter used this fixture,Browser SDK lifecycle and retained native capture fixture replace public responsibilities
+tests/group-language.integration.ts,original,retain,core,Independent shared URL audio-language selection without fallback to wrong track,Run Node suite; successful corrected helper setup E1; final F1
+tests/home-sources.test.tsx,original,retain,browser,Shared-source intent/discovery/permissions,Run pinned Bun separately; E3; no programme rights from discovery
+tests/iptv-routing.integration.ts,original,retain,core,Selected receiver/host mpv codec policy and routing,Run Node suite; host-only restriction/queue preservation; F1
+tests/lan-peer.test.ts,later,retain,core,Exact IPv4/subnet peer validation,Run pinned Bun plus real-Hub E6; unit allowlist alone is insufficient
+tests/live-audience.integration.ts,original,retain,core,Crafted/legacy/REST audience programme rejection and listener leave/source lifetime,Run Node suite; E1; own level/permitted device output distinct
+tests/live-close.native.ts,original,adapt,host,Existing capture Close regression plus retained hidden Live capture lifecycle,Exercise hidden page prepare/upload/Close/retirement not only ordinary fake mic (F3)
+tests/live-delivery.integration.ts,original,retain,core,Retained RTC versus buffered selection and publication ownership,Run Node suite E4; actual-media failed-peer fallback belongs F2
+tests/live-input.fixture.ts,original+later,adapt,core,Versioned fake FFmpeg distinguishes file HLS from encoder pipe:1; preserve stdin consumption,Retained suite E4; fixture emits no root pipe:1 file; not physical capture evidence
+tests/live-input.integration.ts,original,retain,core,Source publication/selection/owner teardown across outputs,Run Node suite E4; retained RTC/recorded compatibility
+tests/live-join-lead.integration.ts,later,adapt,core,First join cursor includes required lead and positive correction without retiming healthy output,Run real encrypted Opus Node suite E2; join-without-lead negative fails
+tests/live-latency.integration.ts,original,retain,core,Retained scheduled/buffered timing behavior with explicit measurement meaning,Run Node suite on final source F1; does not measure input-to-ear
+tests/live-outputs.integration.ts,original,retain,core,Consented selected channels and receiver reconciliation/live offline isolation,Run Node suite E1; preserve explicit disabled channel and held publisher behavior
+tests/live-pcm.test.ts,later,exclude,core,Native-audience Live PCM helper has no product consumer,scheduled-capture rejects Live PCM; relaxed-pcm-queue proves retained relaxed PCM
+tests/live-sync.integration.ts,original,retain,core,Relaxed group controls/clock/joins/cleanup,Run Node suite E4; physical/frame-locked qualification remains separate
+tests/mpv-lifecycle.test.ts,original,retain,core,Host-only channel/cancellation/process lifecycle compatibility,Run pinned Bun separately E3; compressor/mpv integrations under F1
+tests/native-capture.integration.ts,later,retain,host,Real Hub native upload Origin/authority/generation/parser and child cleanup,Run Node suite; revoked publication/cancellation/mute/restart/sample continuity (F3)
+tests/native-live-authority.test.ts,later,retain,host,HOST capture grant-before-spawn/cancellation/retirement/token boundary; not audience output,Run separately with pinned Bun; denied/expired/remote/stale owner cannot open input (F3)
+tests/native-output.integration.ts,later,exclude,host,Native audience identity/TLS/PCM/Main-output tests have no retained consumer,Keep only separately justified generic SDK cleanup regression; browser admission/isolation replace path
+tests/native-playback.test.ts,later,exclude,host,Audience child/sink adapter removed,Browser SDK/output lifecycle plus native capture tests protect retained responsibilities
+tests/output-admission.integration.ts,original+later,adapt,core+browser+host,Public Hub decoder/token/route/newest-tab/clock admission then Host per-source budgets,Node suite E3; selected-source lead and positive-correction limits after Host F3
+tests/output-admission.test.ts,original+later,adapt,core+host,Opus-only timing/capacity/preparation/correction boundaries; omit native PCM success,Run pinned Bun E2/E3; Host chosen policy/budget boundaries F3
+tests/output-clock.test.ts,later,retain,browser,Real Chrome timestamp replay and independent 200ms slope/stale/backward rejection,Run pinned Bun; E3; source trace fixture retained
+tests/output-preparation-sdk.integration.ts,original,retain,core+browser,Atomic public SDK ready/timing report and epoch/lifecycle validation,Run Node suite E2/E3; unchanged deltas and malformed session isolation
+tests/playback-audience-ui.test.tsx,original,retain,browser,Actual UI/Media Session handlers obey Core rights/own listening/status/error generations,Run pinned Bun separately E3; prepare/starvation distinct from success
+tests/playback-logging.integration.ts,original,retain,core,Bounded redacted worker/source/output errors and cleanup,Run Node suite F1; no per-packet unbounded log or credential leak
+tests/playback-policy.integration.ts,original,retain,core,Real sound-only fetch/picture restoration/timer-only timeline/host preflight,Run Node suite E1; preserves queue and local decode
+tests/playback-policy.test.ts,original,retain,core,Delivery/authority/split channels/runtime wire validation/mapping statuses,Run pinned Bun E3; one-listener Live stays fixed scheduled
+tests/playback-routing.integration.ts,original,retain,core,Async generation/transport/Next/compressor/rendition/Move transitions,Run Node suite E1; stale results preserve newer queue/pause/position/speed
+tests/radio-clock.browser.tsx,later,retain,browser,Actual React metadata subscription/idle timer regression,Five actual-browser checks E5; cleanup and main radio recognition retained
+tests/receiver-admission.test.ts,original+later,retain,browser,Finite 0-10ms clock uncertainty/output readiness/generation invalidation,Run pinned Bun E3; 10.001/negative/NaN/infinite cannot retain admission
+tests/receiver-error-lifecycle.integration.ts,original,retain,core+browser,Receiver/source failure priority and stale-token/error cleanup through public Hub,Run Node suite E3; healthy receivers and current generation unaffected
+tests/relaxed-pcm-queue.integration.ts,later,retain,core,240 paced blocks/30720 stereo frames retain original future deadlines without sent-queue overflow,Run Node suite E2; retained-count negative fails; pending queue remains finite
+tests/renderer-hls.test.ts,original,retain,browser,Selected-track loading/cancellation/timeline/capability and no unused-video fetch,Run pinned Bun E3; actual browser E5/R4 F2 separate from DOM checks
+tests/scheduled-capture.integration.ts,original+later,adapt,core+host,50 encrypted Opus clients/slow-peer isolation/reset/stalls/timer-only pictures; reject Live PCM,Run Node suite E2; source-budget extension F3; synthetic scale not 50 physical
+tests/scheduled-language.integration.ts,original,retain,core,Shared sender uses selected audio language independently,Run actual FFmpeg Node suite E2; no wrong-track fallback
+tests/sendspin-logging.integration.ts,original,retain,core,Audio worker logging/lifecycle errors remain bounded/redacted,Run Node suite F1; no native output dependency
+tests/sendspin-route.test.ts,original,retain,browser,Browser receiver/token/preparation lifecycle and route ownership,Run pinned Bun E3; reconnect/output change renews admission
+tests/sendspin-sdk.test.ts,original+later,retain,browser,Rate correction both signs/sample identity/relaxed default/decoder fallback and generation cancellation,Run pinned Bun E3; real SDK scheduler and Opus fallback exercised
+tests/settings-authority.integration.ts,later,adapt,host,Real Hub admin-only settings/default validation/revocation including audio lead,Run Node suite after Host; authority recheck after async body/source snapshot (F3)
+tests/share.test.ts,original,retain,browser,Publication intent and existing source/capture target choices,Run pinned Bun E3; Host input/format behavior F3
+tests/sound-session.integration.ts,later,retain,core,Missing-pactl retry guard/ordinary sound routing and session behavior,Run Node suite E3 without assuming tool availability; physical routes separate F4
+tests/source-language.integration.ts,original,retain,core,Direct selected language/rendition across source resolution,Run Node suite E1; preserve audio selection across route/quality changes
+tests/source-preparation.test.ts,original,retain,core,Channel/rendition/codec/delay/access preparation contract,Run pinned Bun E3; muxed fallback and protected bytes retained
+tests/tv-navigation.browser.ts,original,retain,browser,Retained TV navigation with playback rights/Move entry point,Actual browser TV navigation on final source F1; UI logic alone E3
+tests/where-it-plays-rules.test.ts,original,retain,browser,Consent/private/held publisher/channel/chooser/Move/scheduled-source rules,Run pinned Bun E3; no permission or source authority inferred from UI
+tests/where-it-plays.test.tsx,original,retain,browser,Actual mixer/chooser/audience/TV OK-menu Move including already-playing row,Run pinned Bun E3; real exclusive Move receipt E5; final TV journey F1
+tests/youtube-playback.integration.ts,original,retain,core,Real offline provider/relay/rendition/local-decode and source expiry behavior,Run Node suite F1; protected relay/security stays required
+vite.config.ts,later,adapt,host,Build main plus hidden HOST capture page/hashed producer/worker assets,Fresh build emits capture-audio.html; packaged Core serves it with exact preload boundary (F3)
