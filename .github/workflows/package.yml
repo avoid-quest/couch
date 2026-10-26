@@ -85,6 +85,7 @@ jobs:
           for app in .artifacts/app/mac/*.app .artifacts/app/mac-arm64/*.app; do
             codesign --verify --deep --strict "$app"
             codesign --verify --strict "$app/Contents/Resources/quickjs/qjs"
+            codesign --verify --strict "$app/Contents/Resources/live-audio/couch-capture"
           done
       - if: inputs.release
         shell: bash

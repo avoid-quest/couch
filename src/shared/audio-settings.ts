@@ -1,6 +1,6 @@
 // Scheduling lead is not a physical input-to-output latency measurement.
-export const liveAudioLeadOptions = [45, 50, 55, 75, 95, 150, 250] as const;
-export const defaultLiveAudioLeadMs = 95;
+export const liveAudioLeadOptions = [100, 150, 250] as const;
+export const defaultLiveAudioLeadMs = 100;
 export const isLiveAudioLead = (value: unknown): value is number => typeof value === "number" && liveAudioLeadOptions.includes(value as typeof liveAudioLeadOptions[number]);
 
 // AudioContext accepts a latency preference, not an exact hardware frame count.

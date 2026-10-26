@@ -1,3 +1,5 @@
+import type { AudioCaptureFormat } from "../../shared/capture";
+
 /** Chromium exposes audio AudioData here; other implementations may expose video only. */
 type CaptureFrame = { timestamp: number; sampleRate: number; numberOfChannels: number; numberOfFrames: number; close(): void };
 type Processor = { readable: ReadableStream<CaptureFrame> };
@@ -6,7 +8,7 @@ const processor = () => (globalThis as unknown as { MediaStreamTrackProcessor?: 
 export const canCaptureAudio = () => !!processor() && typeof Worker !== "undefined";
 
 /** Probe real audio frames before advertising PCM. Never infer audio support from the API symbol. */
-export async function prepareCaptureAudio(track: MediaStreamTrack, live: boolean) {
+export async function prepareCaptureAudio(track: MediaStreamTrack, live: boolean, expectedSampleRate?: number, observed?: (format: AudioCaptureFormat) => void) {
   const Processor = processor();
   if (!Processor) throw new Error("This browser cannot provide timestamped audio capture.");
   const source = new Processor({ track, maxBufferSize: 4 });
@@ -18,9 +20,11 @@ export async function prepareCaptureAudio(track: MediaStreamTrack, live: boolean
     const frame = first.value;
     try {
       if (![1, 2].includes(frame.numberOfChannels) || ![44_100, 48_000, 96_000].includes(frame.sampleRate)) throw new Error("This audio input's format is not supported for scheduled capture.");
+      if (expectedSampleRate !== undefined && frame.sampleRate !== expectedSampleRate) throw new Error(`The audio input delivered ${frame.sampleRate} Hz instead of ${expectedSampleRate} Hz. Choose Automatic or another input.`);
       if (live && frame.numberOfChannels !== 2) throw new Error("Live audio needs a real stereo input. Choose a stereo audio interface or use ordinary sharing.");
       const age = performance.now() * 1000 - frame.timestamp;
       if (!Number.isFinite(frame.timestamp) || age < -50_000 || age > 2_000_000) throw new Error("This browser does not expose the capture clock needed for scheduled audio.");
+      observed?.({ sampleRate: frame.sampleRate, channels: frame.numberOfChannels, firstBlockFrames: frame.numberOfFrames });
     } finally { frame.close(); }
     reader.releaseLock();
     return source.readable;
@@ -48,9 +52,9 @@ export function uploadCaptureAudio(readable: ReadableStream<CaptureFrame>, url: 
           const frame = result.value;
           if (stopped) { frame.close(); break; }
           if (++queued > 8) { frame.close(); throw new Error("The capture worker cannot keep up with this input."); }
-          // Explicit source realm: transferring the native ReadableStream changes
-          // its timestamp origin on some Chromium releases, but not on Electron44.
-          // AudioData transfers ownership; no sample copy or arrival timestamp here.
+          // AudioData keeps this source realm's timestamps when ownership transfers.
+          // Native ReadableStream transfer can change the producer's origin instead.
+          // No sample copy or arrival timestamp here.
           try { worker.postMessage({ frame, timeOrigin: performance.timeOrigin }, [frame as unknown as Transferable]); }
           catch (error) { frame.close(); throw error; }
         }

@@ -18,6 +18,10 @@ Share offers **Audio input** for ordinary collaborative listening and **Live aud
 on the Couch computer. A live audience gets **Join/Leave** and its own volume;
 programme and queue controls remain with ordinary playback. These choices use the
 same source discovery and player ([Share](design/share.md)).
+Mac Live publishers can select a native audio input; Share distinguishes its
+requested buffer from device readback. [Advanced audio](design/settings.md#advanced-audio)
+separates host scheduling lead, browser latency preference and native input
+rate/buffer requests. Audience playback stays in the browser.
 Listeners see **Preparing audio…** while their output gets ready. Preparation
 is status, and an actual failure shows its reason. Once ready, a starved source
 still shows **Waiting for audio…**; preparation does not require leaving and

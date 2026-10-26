@@ -1783,6 +1783,18 @@ export async function createHub(options: HubOptions) {
         return cors(request, json(airplay.state()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the AirPlay setting." }, error instanceof ControllerError ? error.status : 500)); }
     }
+    if (url.pathname === "/api/settings/audio") {
+      const refused = administrator();
+      if (refused) return refused;
+      if (request.method === "GET") return cors(request, json({ liveAudioLeadMs: store.liveAudioLeadMs() }));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const leadMs = await settingField(request, "liveAudioLeadMs");
+        stillAdministrator();
+        store.saveLiveAudioLeadMs(leadMs);
+        return cors(request, json({ liveAudioLeadMs: store.liveAudioLeadMs() }));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn’t save the audio setting." }, error instanceof ControllerError ? error.status : 500)); }
+    }
     if (url.pathname === "/api/settings/live-relay") {
       const refused = administrator();
       if (refused) return refused;
@@ -2142,7 +2154,7 @@ export async function createHub(options: HubOptions) {
             // Nothing is encoded yet: receivers connect to the publisher, and Core asks for an upload only when it buffers.
             if (action.intent === "live" && !socket.data.trusted) throw new ControllerError("Live audio capture starts on the Couch computer in the desktop app.", 403);
             const source = live.publish(socket, action);
-            if (source.audioDelivery === "pcm") { sendspin.registerSource(source.id, { intent: source.intent ?? "relaxed" }); live.upload(source.id, true); }
+            if (source.audioDelivery === "pcm") { sendspin.registerSource(source.id, { intent: source.intent ?? "relaxed", ...(source.intent === "live" ? { liveAudioLeadMs: store.liveAudioLeadMs() } : {}) }); live.upload(source.id, true); }
           } else if (action.type === "leave") {
             playback = playing(action.playbackId);
             if (!playback || !playback.outputs.some(output => output.deviceId === deviceId)) throw new ControllerError("This device is no longer receiving that playback.", 409);

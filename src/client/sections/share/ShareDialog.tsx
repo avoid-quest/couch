@@ -59,8 +59,9 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const [kind, setKind] = useState<ShareKind>(() => kinds.find(item => !unavailable(item, browser)) ?? kinds[0]!);
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [sourceId, setSourceId] = useState("");
-  const [inputs, setInputs] = useState<MediaDeviceInfo[] | null>(null);
+  const [inputs, setInputs] = useState<import("../../../shared/capture").AudioInput[] | null>(null);
   const [audioDeviceId, setAudioDeviceId] = useState("default");
+  useEffect(() => { setInputs(null); setAudioDeviceId("default"); }, [kind.id]);
   const [targets, setTargets] = useState<string[]>([]);
   const [sound, setSound] = useState(true);
   const [quality, setQuality] = useState<LiveVideoQuality>("1080p");
@@ -117,7 +118,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setListing(true); setError(null);
     try {
       starting.current = true;
-      const next = await liveAudioInputs().finally(() => { starting.current = false; });
+      const next = await liveAudioInputs(kind.intent === "live").finally(() => { starting.current = false; });
       setInputs(next);
       setAudioDeviceId(previous => next.some(input => input.deviceId === previous) ? previous : "default");
       if (!next.length) setError("No audio inputs are available. Connect a microphone or audio interface and try again.");

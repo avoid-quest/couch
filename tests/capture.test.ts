@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
 import type { MessageBoxOptions, Session, WebContents } from "electron";
 import type { CouchApp } from "../src/shared/app-bridge";
@@ -52,9 +53,9 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
     check(permission: Parameters<Check>[1], overrides: Partial<Parameters<Check>[3]> = {}, requester = contents, origin = url) {
       return check(requester, permission, origin, { isMainFrame: true, ...overrides });
     },
-    request(permission: Parameters<Request>[1], mediaTypes: ("audio" | "video")[], isMainFrame = true) {
+    request(permission: Parameters<Request>[1], mediaTypes: ("audio" | "video")[], isMainFrame = true, requester = contents) {
       let granted = false;
-      request(contents, permission, result => { granted = result; }, { isMainFrame, requestingUrl: url, mediaTypes });
+      request(requester, permission, result => { granted = result; }, { isMainFrame, requestingUrl: url, mediaTypes });
       return granted;
     },
     // Resolves with Main's single answer, which may wait for the owner.
@@ -470,4 +471,60 @@ test("only this app's Couch window reads or opens capture settings", async () =>
   expect(() => h.capture.access("screen")).toThrow("Start sharing from this computer's Couch window.");
   await expect(h.capture.openSettings("screen")).rejects.toThrow("Start sharing from this computer's Couch window.");
   expect(h.opened).toEqual([]);
+});
+
+test("native capture consumes only a fresh local microphone grant, once", async () => {
+  const h = harness();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  await h.capture.prepare({ kind: "microphone" });
+  h.capture.consumeMicrophone();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  expect(h.request("media", ["audio"])).toBe(false);
+  await h.capture.prepare({ kind: "microphone" }); h.expire();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  h.selectCouch("https://remote.example"); h.navigate("https://remote.example");
+  await h.capture.prepare({ kind: "microphone" });
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+});
+
+
+test("the hidden browser capture frame receives only its owner's temporary microphone grant", async () => {
+  const h = harness();
+  const helper = () => Object.assign(new EventEmitter(), { mainFrame: { url: "http://localhost:4100/capture-audio.html", detached: false }, isDestroyed: () => false });
+  const target = helper(), other = helper();
+  const contents = target as unknown as WebContents;
+  expect(() => h.capture.delegateMicrophone(contents)).toThrow("No current microphone");
+  await h.capture.prepare({ kind: "microphone" });
+  h.capture.delegateMicrophone(contents);
+  expect(h.check("media", { mediaType: "audio" }, contents)).toBe(true);
+  expect(h.request("media", ["audio"], true, contents)).toBe(true);
+  expect(h.check("media", { mediaType: "audio" }, other as unknown as WebContents)).toBe(false);
+  expect(h.check("media", { mediaType: "video" }, contents)).toBe(false);
+  expect(h.request("media", ["audio", "video"], true, contents)).toBe(false);
+  expect(h.check("media", { mediaType: "audio", isMainFrame: false }, contents)).toBe(false);
+  expect(h.check("display-capture", {}, contents)).toBe(false);
+  target.emit("did-start-navigation", {}, target.mainFrame.url, false, true);
+  expect(h.check("media", { mediaType: "audio" }, contents)).toBe(false);
+  expect(target.listenerCount("destroyed")).toBe(0);
+  h.capture.delegateMicrophone(contents);
+  h.navigate("https://elsewhere.example");
+  expect(h.check("media", { mediaType: "audio" }, contents)).toBe(false);
+  h.capture.clear();
+  expect(target.listenerCount("did-start-navigation")).toBe(0);
+});
+
+test("cancellation, expiry and a replaced helper frame revoke delegated capture", async () => {
+  for (const revoke of ["cancel", "expire", "frame", "destroy"] as const) {
+    const h = harness();
+    const target = Object.assign(new EventEmitter(), { mainFrame: { url: "http://localhost:4100/capture-audio.html", detached: false }, isDestroyed: () => false });
+    const contents = target as unknown as WebContents;
+    await h.capture.prepare({ kind: "microphone" }); h.capture.delegateMicrophone(contents);
+    if (revoke === "cancel") await h.capture.prepare(null);
+    if (revoke === "expire") h.expire();
+    if (revoke === "frame") target.mainFrame = { ...target.mainFrame };
+    if (revoke === "destroy") target.emit("destroyed");
+    expect(h.check("media", { mediaType: "audio" }, contents)).toBe(false);
+    expect(h.request("media", ["audio"], true, contents)).toBe(false);
+    h.capture.clear();
+  }
 });

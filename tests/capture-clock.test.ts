@@ -58,3 +58,15 @@ describe("timestamped capture clock", () => {
   expect(decoded.capturedAtUs).toBe(850_000);
   expect(createCaptureClock({ intent: "live" }).push(decoded, 900_000).atUs).toBe(950_000);
 });
+
+test("each live source snapshots its scheduling lead; relaxed deadlines stay unchanged", () => {
+  const policy = { intent: "live" as const, liveAudioLeadMs: 150 };
+  const clock = createCaptureClock(policy);
+  const first = clock.push(packet(), 1_030_000);
+  expect(first.atUs).toBe(1_150_000);
+  policy.liveAudioLeadMs = 250;
+  expect(clock.push(packet(480), 1_040_000).atUs).toBe(first.atUs + Math.round(first.pcm.length / 2 / 48000 * 1e6));
+  expect(createCaptureClock(policy).push(packet(), 1_030_000).atUs).toBe(1_250_000);
+  expect(createCaptureClock({ intent: "relaxed", liveAudioLeadMs: 150 }).push(packet(), 1_030_000).atUs).toBe(2_000_000);
+  expect(() => createCaptureClock({ intent: "live", liveAudioLeadMs: -1 })).toThrow();
+});

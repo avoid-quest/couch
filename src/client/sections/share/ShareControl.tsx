@@ -142,6 +142,9 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
         {/* The name already ends in a screen's kind ("Studio Mac · Screen"): say it again only to add to it. */}
         {!sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
         <p className="text-meta text-muted-foreground">Since {since}</p>
+        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz · {sharing.captureFormat.channels} channels{sharing.captureFormat.native
+          ? ` · buffer requested ${sharing.captureFormat.native.requestedFrames}, reported ${sharing.captureFormat.native.reportedFrames} frames`
+          : sharing.captureFormat.firstBlockFrames !== undefined ? ` · first block ${sharing.captureFormat.firstBlockFrames} frames` : ""}</p>}
       </div>
     </div>
     <ul aria-label="Watching" className="grid">

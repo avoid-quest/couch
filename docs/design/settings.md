@@ -13,11 +13,11 @@ hand, and the Couch everyone shares, its hardware included:
 
 | Page | Owner | Path | Holds |
 | --- | --- | --- | --- |
-| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Show Share in the header, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
+| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Show Share in the header, advanced Live audio preferences, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
 | Home | This device | `/settings/device/home` | Home's sections, one list |
 | Updates | This device | `/settings/device/updates` | this app's updates and logs, only for a non-admin in the desktop app |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
-| Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays |
+| Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays; advanced Live audio scheduling lead |
 | Sources | Couch | `/settings/couch/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under Sources), AirPlay (hidden off Linux; one muted line when this build or computer lacks the receiver), Hidden |
 | Sound | Couch | `/settings/couch/sound` | output, test and delay, Bluetooth (where Couch controls the system's sound) |
 | TV | Couch | `/settings/couch/tv` | TV mode, Start on boot, Screen, text size (where the Couch is or can be a TV) |
@@ -177,3 +177,41 @@ network is on.
 This device owns its name, which is also the name of a Couch it hosts; an
 admin renames another host from its row in Devices & network. First run and
 pairing: [Shell](shell.md#first-run-and-pairing).
+
+
+## Advanced audio
+
+Couch → Playback offers an administrator-only **Live audio scheduling lead**:
+100 ms (default), 150 ms and 250 ms. Each new Live publication freezes this
+setting for its capture deadlines, receiver admission and positive output
+correction. A 30 ms source reserve leaves 70, 120 or 220 ms for the receiver.
+The default preserves the existing 100/70 ms behavior with 10 ms Opus packets;
+saving never retimes an active source. Relaxed capture keeps one second of lead.
+Unsupported saved experimental leads fall back to 100 ms.
+These are scheduling budgets, not measured input-to-ear latency.
+
+This device → General offers **Live browser output buffering**: Automatic
+(browser default), 128, 256, 512 or 1024 frames, with milliseconds at 48 kHz.
+This requests `AudioContext.latencyHint`; the browser chooses its actual buffer.
+The preference is saved locally and applies on the next Live join. Admission
+uses reported output timing. Saving leaves active playback running, and a
+storage failure appears beside the control.
+
+On the host desktop, **Live audio capture sample rate** offers Automatic,
+44.1 kHz and 48 kHz for the next Live share. Browser capture uses an ideal
+48 kHz request for Automatic and verifies an explicit rate against the first
+real frame. Share reports delivered rate, channels and first block size.
+These observations do not establish the sound card's hardware allocation.
+
+Mac inputs marked **Native** use their CoreAudio UID. Automatic retains the
+current device rate; explicit rates request and verify the device rate, which
+can affect other apps using it. **Native input buffer** requests 128, 256
+(default), 512 or 1024 callback frames on the next share. Share shows requested
+frames and same-process HAL buffer readback separately, including the running
+readback when upload starts. Neither is labeled the raw hardware callback
+period. The capture helper changes no system default device.
+
+Linux and Windows retain the isolated browser capture option. Native capture
+is currently Mac-only, and ordinary Audio input sharing retains browser capture.
+Audience reception uses browser APIs. Hardware capture/rate behavior, browser
+output fidelity, background phones and Bluetooth still need qualification.

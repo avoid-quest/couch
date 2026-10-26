@@ -82,3 +82,19 @@ test("Share on network is admin-managed, and a demoted admin loses it", async ()
     assert.equal((await f.post("/api/settings/sharing", hostToken, { enabled: true })).status, 200);
   } finally { await f.close(); }
 });
+
+test("advanced audio settings require administrator authority and validate before saving", async () => {
+  const f = await fixture();
+  const path = "/api/settings/audio";
+  try {
+    assert.equal((await f.post(path, "unpaired", { liveAudioLeadMs: 150 })).status, 401);
+    assert.equal((await f.post(path, f.controller, { liveAudioLeadMs: 150 })).status, 403);
+    for (const [token, status] of [["unpaired", 401], [f.controller, 403]] as const)
+      assert.equal((await fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}` } })).status, status);
+    for (const value of ["55", 54, null, -1]) assert.equal((await f.post(path, f.admin, { liveAudioLeadMs: value })).status, 400);
+    const read = () => fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${f.admin}` } }).then(r => r.json());
+    assert.deepEqual(await read(), { liveAudioLeadMs: 100 });
+    assert.equal((await f.post(path, f.admin, { liveAudioLeadMs: 150 })).status, 200);
+    assert.deepEqual(await read(), { liveAudioLeadMs: 150 });
+  } finally { await f.close(); }
+});

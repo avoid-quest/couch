@@ -1,3 +1,6 @@
+import type { AudioCaptureFormat } from "../../shared/capture";
+import { readCaptureRatePreference, readNativeInputBufferPreference } from "../audio-settings";
+import { captureSampleRate, liveCaptureConstraints, nativeInputBufferFrames } from "../../shared/audio-settings";
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
 import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource, LiveUploadFailedMessage, LiveVideoQuality } from "../../shared/live-input";
 import { canCaptureAudio, prepareCaptureAudio, uploadCaptureAudio } from "./capture-audio";
@@ -6,13 +9,13 @@ import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 import { routeOf, type LiveRoute } from "./live-route";
 
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>; stopAudio?: () => void; recorder?: MediaRecorder; socket?: WebSocket };
+type Publication = { captureFormat?: AudioCaptureFormat; nativeAudioId?: string; nativeMuted?: boolean; source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>; stopAudio?: () => void; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
 /**
  * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
  * silent preview; relay: a TURN relay is offered to its connections.
  */
-export type LiveSharing = { source: LiveSource; stream: MediaStream; quality: LiveVideoQuality; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
+export type LiveSharing = { captureFormat?: AudioCaptureFormat; source: LiveSource; stream: MediaStream; quality: LiveVideoQuality; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 // Bound capture before encoding it, at most 30 fps.
@@ -34,6 +37,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   let generation = 0;
   let closed = false;
   let starting = false;
+  let preparingNativeId: string | undefined;
   let publication: Publication | undefined;
   let receiver: Receiver | undefined;
   const publishers = new Map<string, Peer>();
@@ -129,6 +133,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   };
   const closePublication = () => {
     generation++;
+    if (preparingNativeId) { void couchApp?.liveAudio?.({ op: "stop", id: preparingNativeId }).catch(() => {}); preparingNativeId = undefined; }
     const current = publication;
     publication = undefined;
     clearTimeout(negotiationTimer);
@@ -136,6 +141,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     waiting.clear();
     for (const peer of publishers.values()) peer.connection.close();
     publishers.clear();
+    if (current?.nativeAudioId) void couchApp?.liveAudio?.({ op: "stop", id: current.nativeAudioId }).catch(() => {});
     if (current) { stopUpload(current); void current.audioFrames?.cancel().catch(() => {}); stopTracks(current.capture); }
     options.published(null);
   };
@@ -165,6 +171,19 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   };
   const startUpload = (current: Publication) => {
     try {
+      if (current.nativeAudioId) {
+        if (!options.uploadUrl || !current.uploadId) throw new Error("The timestamped audio upload is unavailable.");
+        const id = current.nativeAudioId, uploadId = current.uploadId;
+        current.stopAudio = () => { void couchApp!.liveAudio!({ op: "stop-upload", id, uploadId }).catch(() => {}); };
+        void couchApp!.liveAudio!({ op: "upload", id, uploadId, url: options.uploadUrl(current.source.id, current.key, uploadId) }).then(format => {
+          if (format && publication === current && current.uploadId === uploadId) {
+            if (current.captureFormat) Object.assign(current.captureFormat, format); else current.captureFormat = format;
+          }
+        }).catch(error => {
+          if (publication === current && current.uploadId === uploadId) stopUpload(current, error instanceof Error ? error : new Error("Audio capture failed."));
+        });
+        return;
+      }
       if (current.source.audioDelivery === "pcm") {
         if (!current.audioFrames || !options.uploadUrl || !current.uploadId) throw new Error("The timestamped audio upload is unavailable. Start sharing again.");
         const frames = current.audioFrames; current.audioFrames = undefined;
@@ -207,6 +226,12 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       socket.onclose = () => { if (active()) stopUpload(current); };
     } catch (reason) { stopUpload(current, reason instanceof Error ? reason : new Error("Buffered playback of this input could not start.")); }
   };
+  const unsubscribeAudioError = couchApp?.onLiveAudioError?.(error => {
+    const current = publication;
+    if (!current || current.nativeAudioId !== error.id) return;
+    if (error.uploadId) { if (current.uploadId === error.uploadId) stopUpload(current, new Error(error.error)); }
+    else { void end().catch(() => {}); options.failed(new Error(error.error)); }
+  });
   return {
     receive(message: Extract<ServerMessage, { type: "livePeers" | "liveSignal" | "liveIceServers" }>) {
       if (closed) return;
@@ -257,7 +282,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       } catch (reason) { failReceiver(current, reason); }
       return true;
     },
-    async audioInputs(): Promise<MediaDeviceInfo[]> {
+    async audioInputs(live = false): Promise<import("../../shared/capture").AudioInput[]> {
       if (closed || starting || publication) throw new Error("Stop sharing before choosing another audio input.");
       starting = true;
       const attempt = ++generation;
@@ -268,8 +293,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         // Browsers expose input names only after microphone access is granted.
         probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(reason => { throw captureError(reason, "microphone"); });
         const inputs = await navigator.mediaDevices.enumerateDevices();
+        const native = live ? await couchApp?.nativeAudioInputs?.() ?? [] : [];
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
-        return inputs.filter(input => input.kind === "audioinput" && input.deviceId);
+        return [...native.map(input => ({ deviceId: `native:${input.uid}`, label: `${input.name} · Native` })), ...inputs.filter(input => input.kind === "audioinput" && input.deviceId)];
       } finally {
         if (probe) stopTracks(probe);
         if (!closed) await couchApp?.prepareCapture?.(null).catch(() => {});
@@ -283,37 +309,47 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (!navigator.mediaDevices) throw new Error("Live capture needs a secure Couch connection.");
       starting = true;
       const attempt = ++generation;
-      let capture: MediaStream | undefined;
+      let capture: MediaStream | undefined, captureFormat: AudioCaptureFormat | undefined;
+      const requestedRate = selection.intent === "live" ? captureSampleRate(readCaptureRatePreference()) : undefined;
+      const sourceId = crypto.randomUUID();
+      const nativeAudioId = selection.intent === "live" && selection.kind === "microphone" && couchApp?.liveAudio ? sourceId : undefined;
       try {
         const sound = selection.kind !== "screen" || selection.includeAudio !== false;
-        if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId, audio: sound });
+        if (nativeAudioId) {
+          if (!selection.audioDeviceId) throw new Error("Choose an audio input before starting Live audio.");
+          preparingNativeId = nativeAudioId;
+          captureFormat = await couchApp!.liveAudio!({ op: "prepare", id: nativeAudioId, deviceId: selection.audioDeviceId, sampleRate: requestedRate,
+            ...(selection.audioDeviceId.startsWith("native:") ? { bufferFrames: nativeInputBufferFrames(readNativeInputBufferPreference()) } : {}) });
+          if (requestedRate !== undefined && captureFormat?.sampleRate !== requestedRate) throw new Error("The desktop app did not verify the requested capture rate. Choose Automatic or update Couch.");
+        } else if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId, audio: sound });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const quality = selection.videoQuality ?? "1080p";
-        const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(selection.kind !== "screen" ? { channelCount: { ideal: 2 }, sampleRate: { ideal: 48_000 } } : {}) };
+        const audio = selection.intent === "live" ? liveCaptureConstraints(requestedRate) : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(selection.kind !== "screen" ? { channelCount: { ideal: 2 }, sampleRate: { ideal: 48_000 } } : {}) };
         // Audio-only display capture still needs a video track, but none of those pixels are transmitted.
         // A browser's own picker opens on the surface chosen in Couch (a screen or a window), and still offers the rest.
         const video: MediaTrackConstraints = selection.kind === "system-audio"
           ? { width: { max: 320 }, height: { max: 180 }, frameRate: { max: 1 } }
           : { ...pictureConstraints(quality), ...(selection.surface ? { displaySurface: selection.surface } : {}) };
-        capture = await (selection.kind === "microphone"
+        capture = nativeAudioId ? new MediaStream() : await (selection.kind === "microphone"
           ? navigator.mediaDevices.getUserMedia({ audio: { ...audio, ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}) }, video: false })
           : navigator.mediaDevices.getDisplayMedia({ video, audio: sound && audio })).catch(reason => { throw captureError(reason, selection.kind); });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
-        if (selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
+        if (!nativeAudioId && selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
         if (selection.kind === "screen" && !videoTracks.length) throw new Error("The selected capture did not provide a screen.");
         let audioFrames: Awaited<ReturnType<typeof prepareCaptureAudio>> | undefined;
         if (!videoTracks.length && audioTracks.length && canCaptureAudio() && options.uploadUrl) {
-          try { audioFrames = await prepareCaptureAudio(audioTracks[0]!, selection.intent === "live"); }
+          try { audioFrames = await prepareCaptureAudio(audioTracks[0]!, selection.intent === "live", requestedRate, value => { captureFormat = value; }); }
           catch (error) { if (selection.intent === "live") throw error; }
         }
         if (closed || attempt !== generation) { await audioFrames?.cancel().catch(() => {}); throw new Error("Capture was canceled."); }
-        if (selection.intent === "live" && !audioFrames) throw new Error("Live audio needs timestamped stereo capture on the Couch computer.");
+        if (selection.intent === "live" && !audioFrames && !nativeAudioId) throw new Error("Live audio needs timestamped stereo capture on the Couch computer.");
         const label = selection.kind === "microphone" ? "Audio input" : selection.kind === "system-audio" ? "System audio" : "Screen";
-        const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length, intent: selection.intent, ...(audioFrames ? { audioDelivery: "pcm" as const } : {}) };
+        const source: LiveSource = { id: sourceId, deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!nativeAudioId || !!audioTracks.length, video: !!videoTracks.length, intent: selection.intent, ...(audioFrames || nativeAudioId ? { audioDelivery: "pcm" as const } : {}) };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-        const current: Publication = { source, capture, audioFrames, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
+        const current: Publication = { captureFormat, nativeAudioId, nativeMuted: false, source, capture, audioFrames, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
         publication = current;
+        preparingNativeId = undefined;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
         await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: selection.kind, name: source.name, audio: source.audio, video: source.video, intent: source.intent, audioDelivery: source.audioDelivery });
@@ -324,6 +360,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       } catch (reason) {
         const sourceId = attempt === generation ? publication?.source.id : undefined;
         if (capture) stopTracks(capture);
+        if (nativeAudioId) void couchApp!.liveAudio!({ op: "stop", id: nativeAudioId }).catch(() => {});
         if (attempt === generation) closePublication();
         // Core may have accepted Publish even when its reply was lost.
         if (sourceId && !closed) void options.command({ type: "endLive", sourceId }).catch(() => {});
@@ -334,7 +371,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     sharing(): LiveSharing | null {
       const current = publication?.published ? publication : undefined;
       if (!current) return null;
-      return { source: current.source, quality: current.quality, stream: current.preview, surface: current.surface, since: current.since, relay: options.iceServers.some(server => [server.urls].flat().some(url => /^turns?:/.test(url))), muted: current.source.kind === "microphone" && current.stream.getAudioTracks().every(track => !track.enabled) };
+      return { captureFormat: current.captureFormat, source: current.source, quality: current.quality, stream: current.preview, surface: current.surface, since: current.since, relay: options.iceServers.some(server => [server.urls].flat().some(url => /^turns?:/.test(url))), muted: current.nativeAudioId ? !!current.nativeMuted : current.source.kind === "microphone" && current.stream.getAudioTracks().every(track => !track.enabled) };
     },
     /** A new picture quality for the capture going out, without restarting it. */
     async setQuality(quality: LiveVideoQuality) {
@@ -346,7 +383,14 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     },
     /** Silences a microphone for every receiver, keeping the capture and its connections. */
     setMuted(muted: boolean) {
-      if (publication?.source.kind === "microphone") for (const track of publication.stream.getAudioTracks()) track.enabled = !muted;
+      const current = publication;
+      if (current?.nativeAudioId) {
+        current.nativeMuted = muted;
+        void couchApp!.liveAudio!({ op: "mute", id: current.nativeAudioId, muted }).catch(error => {
+          if (publication !== current) return;
+          void end().catch(() => {}); options.failed(error instanceof Error ? error : new Error("The microphone mute failed."));
+        });
+      } else if (current?.source.kind === "microphone") for (const track of current.stream.getAudioTracks()) track.enabled = !muted;
     },
     /** Each receiving device's route, as its connection selected it; a device not yet connected has none. */
     async routes(): Promise<Record<string, LiveRoute>> {
@@ -365,6 +409,6 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         closePublication();
       }
     },
-    close() { closed = true; window.removeEventListener("pagehide", leaving); unsubscribeWindowClosed?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
+    close() { closed = true; window.removeEventListener("pagehide", leaving); unsubscribeWindowClosed?.(); unsubscribeAudioError?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
   };
 }

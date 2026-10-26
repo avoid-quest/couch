@@ -42,6 +42,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   stereo. Ordinary sharing keeps its relaxed controls. Live listeners find the
   source in Home or Search, **Join**, adjust their own volume, and **Leave**;
   leaving does not stop sharing or affect another listener.
+- **Live input selection** includes devices marked Native on Mac builds with the
+  capture helper. Other input IDs use an isolated hidden browser capture page.
+  This is an explicit input choice; a failed native input never switches devices.
+  Main requests microphone permission before opening the selected native input.
 - **Screens and windows** in the desktop app are small pictures with their
   names (`desktopCapturer` thumbnails, 320 × 200), for this computer's own
   Couch only: another Couch's page (Client mode) lists their names alone, as it
@@ -88,7 +92,10 @@ Sheet on phones and the TV:
   it plays' would (online, unmuted, above zero).
 - **Picture**, changed live through `applyConstraints` on the captured track,
   without restarting it; **Mute audio input** turns the input's track off
-  (`track.enabled`), keeping the capture and its connections.
+  (`track.enabled`), keeping the capture and its connections. Native input mute
+  sends zero samples while preserving the source clock.
+- Live sharing reports the delivered rate and channels. Browser input shows its
+  first block size; Native shows requested and reported buffer frames separately.
 - One line about the relay only when a device is Behind: with no relay, that a
   relay can fix it, linking Devices & network; with one, that it couldn't
   connect even through it.
@@ -111,11 +118,14 @@ Sheet on phones and the TV:
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
 
-Live audio uses a fixed scheduled deadline after runtime decoder/clock/output
-checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
+Live audio defaults to a 100 ms scheduling lead and 10 ms Opus packets, after
+runtime decoder/clock/output checks. The receiver budget is 70 ms. New shares
+snapshot the lead in [Advanced audio](settings.md#advanced-audio); saving does
+not move an existing publication’s deadlines. Runtime admission is not a measured promise of 100 ms input-to-ear or
 synchronization on every output. While those checks run, the listener sees
 **Preparing audio…**. An incompatible output reports its reason on that listener;
-changing the output requires fresh admission. Normal preparation and recovery
+changing the output requires fresh admission. The saved browser buffering
+preference applies on the next join; admission uses actual reported timing. Normal preparation and recovery
 do not require leaving and joining again.
 
 The Live browser listener declares the SDK's output latency plus the maximum
