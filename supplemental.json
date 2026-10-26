@@ -1,0 +1,14 @@
+[
+  {
+    "path": "initial-youtube-run.log",
+    "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.log",
+    "sha256": "566361327d2ce97bdc24fdc96d747cfcd344859199e3e0af2fa239e42c3cfa14",
+    "bytes": 56369
+  },
+  {
+    "path": "witness-permission-denied.log",
+    "source": "owned Mac diagnostic witness; r1 before grant",
+    "sha256": "135bf6b13677c481f049b246bceca1012d2af15f6f2dd0bc044f7e38f16772cf",
+    "bytes": 56
+  }
+]

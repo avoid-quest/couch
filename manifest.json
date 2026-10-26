@@ -1,0 +1,1328 @@
+{
+  "schema": 1,
+  "purpose": "Calibrated Mac host A/B and final integration evidence; performance/fidelity gate remains open",
+  "stackHead": "3c7dde2ba7c0a2d5d53dd7a320eac19434e37975",
+  "files": [
+    {
+      "path": "checks/native-live-events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-native/stereo/events.json",
+      "bytes": 12701,
+      "sha256": "92fcee935ada89c688826b230e5bca83d6f737c12fa4e2245bb81b2a9241e99d"
+    },
+    {
+      "path": "checks/resume-peer-list/build-green.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resume-peer-list/build-green.log",
+      "bytes": 79,
+      "sha256": "241b53084053635449f9d763957d703d5da536ab92ca6bdc333b14aa086ba9b8"
+    },
+    {
+      "path": "checks/resume-peer-list/build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resume-peer-list/build.log",
+      "bytes": 74,
+      "sha256": "0e58a1644c709d2f409c05a00fc04fc681edb5bcab1d9b6f8156a606506ccf6a"
+    },
+    {
+      "path": "checks/resume-peer-list/full.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resume-peer-list/full.log",
+      "bytes": 77084,
+      "sha256": "0f401107e1a6ab166236cbf7ccc01ea2ccec2d3d449e40732f4a1367c3bb5727"
+    },
+    {
+      "path": "checks/resume-peer-list/green.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resume-peer-list/green.log",
+      "bytes": 1377,
+      "sha256": "14db87dc0d513018ba42a48e587909c308ba4e45031cffdc88a5910be4d18d34"
+    },
+    {
+      "path": "checks/resume-peer-list/red.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resume-peer-list/red.log",
+      "bytes": 2525,
+      "sha256": "79ffd3eab44617b0a12be4e4db87deb64d441efa067ce1c2dad6a056e220042f"
+    },
+    {
+      "path": "checks/resumed-final-node/results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/results.json",
+      "bytes": 5983,
+      "sha256": "7f3221e5f3d6073f2ddd095a83e598c2d2656cf04c3dec0510c7a09568656f31"
+    },
+    {
+      "path": "checks/resumed-final-units/results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-units/results.json",
+      "bytes": 8259,
+      "sha256": "9504b3314c845ba0a1a09bc01f0f0f49411fbf1596f84a7395b22b8d7fbd8a04"
+    },
+    {
+      "path": "docs/player-modes-file-disposition.csv",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-file-disposition.csv",
+      "bytes": 47805,
+      "sha256": "942eb2e3ca67988314b72f161cfb8d78b3ab672d6a758fa1b730eaa3edd0b338"
+    },
+    {
+      "path": "docs/player-modes-host-capture-comparison.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-host-capture-comparison.md",
+      "bytes": 12324,
+      "sha256": "ba76652b0bd1766eec13e0ca5477bf586c1b8bf83f84cc53ead12277a24346b7"
+    },
+    {
+      "path": "docs/player-modes-integration-ledger.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-integration-ledger.md",
+      "bytes": 30994,
+      "sha256": "30a64ce08db5c5f2ea9330e0bb316efb7a7e116acf7a23313cbba99747a9175b"
+    },
+    {
+      "path": "docs/player-modes-integration-validation.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-integration-validation.md",
+      "bytes": 29489,
+      "sha256": "3434e01a37049e40a2144dad0377d3b27cd2862918d849dfdd052b9a8bc4fcc6"
+    },
+    {
+      "path": "docs/player-modes-live-performance.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-live-performance.md",
+      "bytes": 14306,
+      "sha256": "99f0ec4dc5a03ec8350d2effcdb6847afdd7e16a78514ae68818f3e30b7e1556"
+    },
+    {
+      "path": "docs/player-modes-pause-20261026.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-pause-20261026.md",
+      "bytes": 5616,
+      "sha256": "52762f87871b963264578d3183ffd7239b9c78c1bc4cd665d715575b347286b2"
+    },
+    {
+      "path": "docs/player-modes-pr-handoff.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-pr-handoff.md",
+      "bytes": 12973,
+      "sha256": "782dc92fdc091c20bfbaa01b2de9b61fe38679f757982237c706e438433694dc"
+    },
+    {
+      "path": "docs/player-modes-recovery-reference.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/docs/player-modes-recovery-reference.md",
+      "bytes": 7352,
+      "sha256": "e3cf7f022ccff974c06bc835e168d4f13c383d8937510071eaacb74e9ef845cc"
+    },
+    {
+      "path": "evaluator/audio-roundtrip.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/evaluator/audio-roundtrip.py",
+      "bytes": 11668,
+      "sha256": "9c6fb9f9b01656850b8961b04813f33b6856d5f397398df9627434f68b53668d"
+    },
+    {
+      "path": "evaluator/waveform.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/evaluator/waveform.py",
+      "bytes": 3829,
+      "sha256": "176354387590c80e4ccb2423840ca3a446786fbca4d66fb577ee544748a7cd11"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/events.json",
+      "bytes": 752,
+      "sha256": "f2099bf920c857a344be622441b7539b14dcdc43208b03ab63b14b5e5208d2d3"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/linux-receiver-public.jsonl",
+      "bytes": 239,
+      "sha256": "a4b51afdda08e7bcf13e530ec42982c9790ab21322778c71a11b97a220c9b0dc"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/mac-host-public.jsonl",
+      "bytes": 235,
+      "sha256": "24bdf91c775107fdcdb6d24f652a62a661a33910d8b1a3fbb8b73d3bdca3c34c"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/manifest.json",
+      "bytes": 1343,
+      "sha256": "b72175d17a1ab9bdd4172aa08fd9a351478b1a3895fd6d49e7f234fd092bcf9d"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/observe-linux-receiver.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/observe-linux-receiver.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/observe-mac-host.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/observe-mac-host.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/receiver-probe.json",
+      "bytes": 76,
+      "sha256": "8397132c2b8ba1486481359483252034357f86bccb63c3e849e95e0e82777ee9"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/run-electrical.mjs",
+      "bytes": 8323,
+      "sha256": "cc3373aeeecfed6eb305d45bd09afd464795ae51caec14ed8c5ab12b03ea8b40"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1/witness-launch.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1/witness-launch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/capture-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/capture-summary.json",
+      "bytes": 2061,
+      "sha256": "b7fcc12e1e8c1c602718a0f4e53da742feac822701979818e1f33c6a6647bab6"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "d6b128a68604b37fd9d0d5338bf47a779a4b161cd8a7926a04152737969e98f0"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/evaluation.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/evaluation.log",
+      "bytes": 1550,
+      "sha256": "643728abf4084d2a97de4683ae85c24bd82355fbd6b0f300e2eeb37b0d5e4c01"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/evaluation/controls.json",
+      "bytes": 58823,
+      "sha256": "cd83d9733319723410a47caab8f28a2c9311dbce2fbb846c66a418d5e3fedc4b"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/evaluation/electrical.json",
+      "bytes": 30788,
+      "sha256": "66d63205bf0ff38fcd34fae2355ab19735a2fc2a9d014d76ec9256a351b5581e"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/evaluation/result.json",
+      "bytes": 1550,
+      "sha256": "643728abf4084d2a97de4683ae85c24bd82355fbd6b0f300e2eeb37b0d5e4c01"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/evaluation/waveform.json",
+      "bytes": 18438733,
+      "sha256": "76a7b80462187b14f98a1c6b25de45fb006b178c0ce3551213e9f857065c1d09"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/events.json",
+      "bytes": 1712,
+      "sha256": "6316730695280050dfe81f1f630c45a5cbe8cfda624c788396e0bd87640edff7"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/existing-output-after-witness.json",
+      "bytes": 21380,
+      "sha256": "a2c9ec7ad426da7ae3c89cec9a1227601929217cab0f0ace9f8b01aff6cdf872"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/ingress-2049-1.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/ingress-2049-1.json",
+      "bytes": 1088913,
+      "sha256": "e882a84129a60374756f6c04e521990a323cceba79384e01e8f25d5588a39e72"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/ingress-2049-2.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/ingress-2049-2.json",
+      "bytes": 1106028,
+      "sha256": "d1191e9a23ea9f891c9c1c17a40efd7f0feec7cf4852adc617a8a7e28b026cca"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/ingress-map.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/ingress-map.json",
+      "bytes": 159,
+      "sha256": "33e2bcc8aa600abffa7efb427cedf1342758fd0436c3c98a1f4e27c9c4850076"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/ingress-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/ingress-summary.json",
+      "bytes": 2275,
+      "sha256": "f9681eb68fb1cd6f2ccb039a26411ebb859bb2300331eec92b5deaf0c8cbe9c1"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/linux-receiver-public.jsonl",
+      "bytes": 7978,
+      "sha256": "c6bc82ee6ecf26656e4238d8ac65907fd782691249252c0257f5429e6badf4b3"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/mac-host-public.jsonl",
+      "bytes": 5013,
+      "sha256": "b62b1009c180c4bb4d462edf5f71c5a5716d6357770adbc764de948fbce8eeb9"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/manifest.json",
+      "bytes": 1455,
+      "sha256": "98269c277bd801f9f27b872b5673326c38b76cfa750e8fe80c3646554e0a5030"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/observe-linux-receiver.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/observe-linux-receiver.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/observe-mac-host.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/observe-mac-host.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/receiver-probe.json",
+      "bytes": 909537,
+      "sha256": "f8227f246e017e1b626e49e7dbdf97115de77469692c7895c38bd91368469be0"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/run-electrical.mjs",
+      "bytes": 8330,
+      "sha256": "395c4598d4a3aa70bdfae435ee6b56c8689437adb80751a8f893a303cbdbde5a"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/witness-launch.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/witness-launch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/witness.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/witness.jsonl",
+      "bytes": 498809,
+      "sha256": "c0d6ce048d2e0708ddc1052011a45fda51a7d33dbec9b751aef6c70322cde6ef"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r1b/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r1b/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/capture-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/capture-summary.json",
+      "bytes": 2063,
+      "sha256": "d03544f57e56af6f197db9d35e4bb02962185077084b53598ded3856adbd276d"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "85038ec44602f0641836713f1b5602f6d7c84452bee8c6171c440ff75dc00711"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/collection.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/collection.log",
+      "bytes": 2063,
+      "sha256": "d03544f57e56af6f197db9d35e4bb02962185077084b53598ded3856adbd276d"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/evaluation.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/evaluation.log",
+      "bytes": 1467,
+      "sha256": "5fa1dcb34c3b70d679fb1b6201ce0a4627e42035db73d9bba68fb573802059a1"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/evaluation/controls.json",
+      "bytes": 58758,
+      "sha256": "6e00665b73a0a0b903fcd451ac6d68ed9e35b33def640ecfa328e738c4bf0a3a"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/evaluation/electrical.json",
+      "bytes": 30683,
+      "sha256": "adb207ab0fc98aa3be5749f49d9cb83216a5d6dbeac32fe23b180cd20a388da1"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/evaluation/result.json",
+      "bytes": 1467,
+      "sha256": "5fa1dcb34c3b70d679fb1b6201ce0a4627e42035db73d9bba68fb573802059a1"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/evaluation/waveform.json",
+      "bytes": 18441054,
+      "sha256": "e6e3567b27b2d643765f776a153109ad11aeba449b527f3c02de4b4c50ef13c4"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/events.json",
+      "bytes": 1712,
+      "sha256": "89d78be272972763f2124a2568cb48b0523e2d0dd71853299c833373551db34d"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/existing-output-after-witness.json",
+      "bytes": 21094,
+      "sha256": "030cc17fa269f7641344d90826de056832c7f593ce6bd38a87e28a1248f478cc"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/ingress-2049-4.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/ingress-2049-4.json",
+      "bytes": 1150978,
+      "sha256": "9ec82bc4dfa5e4143f94f2a13b3b1e9b310596c8fc43ffd800c260691f3fe2b3"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/ingress-map.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/ingress-map.json",
+      "bytes": 133,
+      "sha256": "97349e56221830e1ae8786eddcc5147991aa02d69f32f4ac28f92f63cc241a71"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/ingress-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/ingress-summary.json",
+      "bytes": 2287,
+      "sha256": "8292b5cfea7c10fea1a24a6e5e2a4d1c26aae3b12f981434593a8090b832e981"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/linux-receiver-public.jsonl",
+      "bytes": 7978,
+      "sha256": "36c3d3dac6753c109312389722b8586cc9015503c7e4ba384b11bc3237149b53"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/mac-host-public.jsonl",
+      "bytes": 5013,
+      "sha256": "a2d1fc4ae99e4e630110a3f1377e1513299d6b5ce5969c651db8b5f4d808fec3"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/manifest.json",
+      "bytes": 1343,
+      "sha256": "a7fa0595c8c7319d962ebc976a252771d807e30a76e5427ec8eea9e47f63ae9e"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/observe-linux-receiver.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/observe-linux-receiver.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/observe-mac-host.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/observe-mac-host.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/receiver-probe.json",
+      "bytes": 905498,
+      "sha256": "33a3e8b6b66151f519336ea3e17cbe4e1b1f2ba465a8308a4d761e5ad3f34a48"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/run-electrical.mjs",
+      "bytes": 8323,
+      "sha256": "31a5060156db728342284b59390c661ef1ba0057c7ba7632d94acd91172451b2"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/witness-launch.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/witness-launch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/witness.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/witness.jsonl",
+      "bytes": 498807,
+      "sha256": "a5584ba97a4932091181f10455289e8ce7e3aa5d934cb95198a5b26ca10c8fd9"
+    },
+    {
+      "path": "measurements/host-ab-cal-chromium-r2/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-chromium-r2/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/capture-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/capture-summary.json",
+      "bytes": 2063,
+      "sha256": "6387905c47ddbb488f22f33512b547588298883efec7f3da7f3d70eb77a24e54"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "9968a7b1e95008b16f3805beb955b87e605b39b330a0bbe39e6d6fa9ff4c6a95"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/collection.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/collection.log",
+      "bytes": 2063,
+      "sha256": "6387905c47ddbb488f22f33512b547588298883efec7f3da7f3d70eb77a24e54"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/evaluation.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/evaluation.log",
+      "bytes": 1557,
+      "sha256": "d2fb0be7ad12b6ace17be1aa6f233ded21d46d1c639e43a6fdb4502a5df41ec1"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/evaluation/controls.json",
+      "bytes": 58741,
+      "sha256": "aea526f4f46043ae059e4a843929beebdce8df844741adba4d3939f53b725652"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/evaluation/electrical.json",
+      "bytes": 30717,
+      "sha256": "9ba1de8af3dc154c3288eb8bdacf37c7383591ee038b9fb2192bb92fc84f4437"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/evaluation/result.json",
+      "bytes": 1557,
+      "sha256": "d2fb0be7ad12b6ace17be1aa6f233ded21d46d1c639e43a6fdb4502a5df41ec1"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/evaluation/waveform.json",
+      "bytes": 18442655,
+      "sha256": "bd959b469cf3a17d25727ed7d9b948e404025b70c60080b8c216827d85d56dbe"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/events.json",
+      "bytes": 1712,
+      "sha256": "a9e4cab2cc4f7bb537901afb8f2984e57c4a8fc97a52ef602cbae2a31610ce08"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/existing-output-after-witness.json",
+      "bytes": 21134,
+      "sha256": "b44e6f1089ef5eba1e3450902b242671331dcbf28b32ebf4303f5fd23ff780a6"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/ingress-2049-3.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/ingress-2049-3.json",
+      "bytes": 1105632,
+      "sha256": "53d90c24ad7aa6f9aa261effae0023f2ded2184feeabb301beea3360cb555796"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/ingress-map.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/ingress-map.json",
+      "bytes": 133,
+      "sha256": "13f8ef0359a925e7bbdd85e782ebd5546e46046d2e27228414b20c435295b946"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/ingress-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/ingress-summary.json",
+      "bytes": 2276,
+      "sha256": "c2e3f578a5e7d9cfeb0f9c450f45799f1952818aa723565087381d9f18085080"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/linux-receiver-public.jsonl",
+      "bytes": 7979,
+      "sha256": "63ef930870b488abb1b5fed4858d469601ca401fc0d6485ddd1f031e3a21a8cf"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/mac-host-public.jsonl",
+      "bytes": 5013,
+      "sha256": "29bbd07b79fc146585b9b39976e0916ac24726293d9cda8ce394fd2fdbc8d7d0"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/manifest.json",
+      "bytes": 1341,
+      "sha256": "22f867619ce6ff3429e11fd426ab72f01a1c842f42d30374e5807cb44eccf09e"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/observe-linux-receiver.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/observe-linux-receiver.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/observe-mac-host.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/observe-mac-host.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/receiver-probe.json",
+      "bytes": 902487,
+      "sha256": "701ada37c74cc26541420085b5a4245220c2075b67f1e2a49716e299834dfa37"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/run-electrical.mjs",
+      "bytes": 8305,
+      "sha256": "ee0274a4e72329a8d4f5d207a0953042f310982b9bc089e480cae4f3083c2eab"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/witness-launch.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/witness-launch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/witness.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/witness.jsonl",
+      "bytes": 498809,
+      "sha256": "f26d56df7b66100865140f2cbcbaf9ac2fe06dcea1f8178d5eb4a72c25a74f0c"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r1/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r1/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/capture-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/capture-summary.json",
+      "bytes": 2063,
+      "sha256": "39f9a35b19acf71cf96aebca26342e1af0f832f4a05d55b0ce2a89f750d60b65"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "5098de13675b42aae15bc4d41775ade3b8b66e4aa14f72b709e2b03c0fef5d5a"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/collection.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/collection.log",
+      "bytes": 2063,
+      "sha256": "39f9a35b19acf71cf96aebca26342e1af0f832f4a05d55b0ce2a89f750d60b65"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/evaluation.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/evaluation.log",
+      "bytes": 1557,
+      "sha256": "f29e67d3e8a8001a3204c0f913ba3d05a8a3e6594464e90c0363ffab1ebccb78"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/evaluation/controls.json",
+      "bytes": 58705,
+      "sha256": "12a0d3231a17d17ca5cd367aa3f7dd1e09f74746c4da4e2a5a2638c41e9533b2"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/evaluation/electrical.json",
+      "bytes": 30656,
+      "sha256": "2c838ad718da3b699f89fcd886ec9de0ffac720bba0fefb535254388b4bbf2e1"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/evaluation/result.json",
+      "bytes": 1557,
+      "sha256": "f29e67d3e8a8001a3204c0f913ba3d05a8a3e6594464e90c0363ffab1ebccb78"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/evaluation/waveform.json",
+      "bytes": 18440652,
+      "sha256": "5b846729552241988468dcb564f653f318c96e8621f400403308ab3120c615ef"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/events.json",
+      "bytes": 1712,
+      "sha256": "39f96f0f8aa03dfdf51c4cef19f8248cb740e851cbf4ac36367e56646c662b8c"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/existing-output-after-witness.json",
+      "bytes": 21077,
+      "sha256": "63a22cb9086971d8625cb533511aad8099319517181bb66c97b73326edabcfd3"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/ingress-2049-5.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/ingress-2049-5.json",
+      "bytes": 1150617,
+      "sha256": "4525f9d3621478d3906cf8547b7076e8e945a3d808393c15d6c52870fdb29b74"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/ingress-map.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/ingress-map.json",
+      "bytes": 133,
+      "sha256": "90c643d30498abe896b4c02ac1b2b51b6ab5e7794e461147b2fe3e6d11fc1ae5"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/ingress-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/ingress-summary.json",
+      "bytes": 2274,
+      "sha256": "7ca320c2d0bbe9596190c78f39391462c6786d92aae03fc1c0b2f8264c11c3d2"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/linux-receiver-public.jsonl",
+      "bytes": 7968,
+      "sha256": "55f81b6823905495ecdc0cfec3ba4fc1fc427b8a23e00e0491647f8e30962ff6"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/mac-host-public.jsonl",
+      "bytes": 5013,
+      "sha256": "997f69600f906997c89696fdb3e4d8ddde54075705ac18a3f2e9ef0c744ab829"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/manifest.json",
+      "bytes": 1341,
+      "sha256": "eaf56067759b5266edaf7de970843663ecdba3c7e6661edf5bada5f8e61410e1"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/observe-linux-receiver.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/observe-linux-receiver.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/observe-mac-host.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/observe-mac-host.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/receiver-probe.json",
+      "bytes": 911370,
+      "sha256": "3fe0d43d4a62c3ec8e24c3845d24c74e8933c98abb5289b7e9b14babb29fa8b5"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/run-electrical.mjs",
+      "bytes": 8305,
+      "sha256": "ef96931e9285e66fd1ea8117a8ffe2356b7efd5dd050198512e459316bd5f154"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/witness-launch.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/witness-launch.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/witness.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/witness.jsonl",
+      "bytes": 498809,
+      "sha256": "6761e24cfa11e8ab82541861a9679eacdbe01201134535b2302ea4341000b986"
+    },
+    {
+      "path": "measurements/host-ab-cal-native-r2/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-cal-native-r2/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "resume/airplay-runtime/Dockerfile",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/airplay-runtime/Dockerfile",
+      "bytes": 306,
+      "sha256": "0d49830f95740663be97092da6e4a44321602aff779c7be390d2f152cbdf98d7"
+    },
+    {
+      "path": "resume/airplay-runtime/build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/airplay-runtime/build.log",
+      "bytes": 99699,
+      "sha256": "2be6dd16a289853a0d83718eb37041894b0018547b4e4e565e0d15bf6314f292"
+    },
+    {
+      "path": "resume/airplay-runtime/build/audio-worker.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/airplay-runtime/build/audio-worker.mjs",
+      "bytes": 290388,
+      "sha256": "3830a2f3ad7ec39e5eead1cc05a11c786ec38fd8ef0deb8d40aadb8cc63d24ba"
+    },
+    {
+      "path": "resume/airplay-runtime/command.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/airplay-runtime/command.json",
+      "bytes": 947,
+      "sha256": "29fa1b4fc81994119e32e744314ab864655e69785c0d7ff239374dff344cb5fc"
+    },
+    {
+      "path": "resume/airplay-runtime/run.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/airplay-runtime/run.log",
+      "bytes": 11016,
+      "sha256": "9264c0c49f21b8ab880228fbf9121c375ae65231b20b6517e0cce19e971a177d"
+    },
+    {
+      "path": "resume/airplay-runtime/status.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/airplay-runtime/status.json",
+      "bytes": 408,
+      "sha256": "6b305286beed8b00692c84cd14d1ce130451fb02b420f13b97c7f77f8e2f0763"
+    },
+    {
+      "path": "resume/alsa-after.txt",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/alsa-after.txt",
+      "bytes": 4078,
+      "sha256": "7693150a7e4545af86e6a241c77a2acffa40ef4dbe1fcab8745c40392f2f6e06"
+    },
+    {
+      "path": "resume/analysis-progress.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/analysis-progress.json",
+      "bytes": 431,
+      "sha256": "c41fd95b2c545bace9b8958c08ce87a9d5b18151ae29cf1777b2d9a80f43a5eb"
+    },
+    {
+      "path": "resume/analyze-all.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/analyze-all.py",
+      "bytes": 772,
+      "sha256": "c91dc10badf7db59d231759157367bfe1489e1255ade4160bd0ef004c1f72d06"
+    },
+    {
+      "path": "resume/bootstrap.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/bootstrap.json",
+      "bytes": 1925,
+      "sha256": "98c44c69395ceb9e29a259ed05f83d4ecfb6f3b47085198cf205fef1da0fe631"
+    },
+    {
+      "path": "resume/bootstrap.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/bootstrap.py",
+      "bytes": 1383,
+      "sha256": "0a146cef7895dc528c441a9e56b88d0c5cfe2e21104f159e34bb4ee43162434d"
+    },
+    {
+      "path": "resume/check-layers.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/check-layers.py",
+      "bytes": 1203,
+      "sha256": "f068540612e3e5295ce0bc583b709187b67b995e6295f2820e0b4935c5cdec73"
+    },
+    {
+      "path": "resume/check-permission.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/check-permission.mjs",
+      "bytes": 575,
+      "sha256": "a23bde83035761d4bb8f06b122b6b8a06aa3e7e4e1fcbfdb67faad53738e2ca9"
+    },
+    {
+      "path": "resume/chrome-version.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/chrome-version.json",
+      "bytes": 276,
+      "sha256": "478beb665abe042c42570201d29dba1844f7c7e0b6b96a4512728b7689fd2d4f"
+    },
+    {
+      "path": "resume/ci-394f17f.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/ci-394f17f.json",
+      "bytes": 1049,
+      "sha256": "12390d2c5b181248f44099296286b76f8db7155bf431a6fac2fcdf03e1ede598"
+    },
+    {
+      "path": "resume/cleanup-final.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/cleanup-final.json",
+      "bytes": 375,
+      "sha256": "4d16df9fea693dff1907d137a242908865332ce98d03c2f59e90ccb89d3e68b5"
+    },
+    {
+      "path": "resume/collect-arm.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/collect-arm.py",
+      "bytes": 2563,
+      "sha256": "b2a2c799753b6b250ba466fa0f7207cc1c8175f1499187c5a90b0c040448e0ad"
+    },
+    {
+      "path": "resume/common55-output-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/common55-output-probe.json",
+      "bytes": 63730,
+      "sha256": "63120238563a246fc3aad85c898bc0ac52a12580c3daa484e00a58d65ed03a82"
+    },
+    {
+      "path": "resume/common55-preflight.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/common55-preflight.json",
+      "bytes": 1030,
+      "sha256": "888fbd04d236365010b9158897cb4ed6027f5a2da2460048099c37a9eb264270"
+    },
+    {
+      "path": "resume/common55-preflight.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/common55-preflight.log",
+      "bytes": 2015,
+      "sha256": "2aa7e69f82d3bf618918c2c08cc044186f818946c35c01edbcdca28183d876ae"
+    },
+    {
+      "path": "resume/common55-preflight.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/common55-preflight.mjs",
+      "bytes": 3065,
+      "sha256": "8951eeb639df81d209f15e8dc2e4b6d3edff93fed8552f03348e8c8d489c801c"
+    },
+    {
+      "path": "resume/final-doc-checks.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/final-doc-checks.json",
+      "bytes": 443,
+      "sha256": "95939a9d60ae9415642540477c3fbb067fa18f88889a31641d1fe5bf229d59d8"
+    },
+    {
+      "path": "resume/final-document-receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/final-document-receipt.json",
+      "bytes": 499,
+      "sha256": "6748440e66314f8980c11ce3d580bdb7fcb1e689cd46d7232b789a821adf502b"
+    },
+    {
+      "path": "resume/final-software-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/final-software-summary.json",
+      "bytes": 15157,
+      "sha256": "4027361cc34553e12d37d5cd5eb161ae84b514f5d8491fa5817d9dc0845b5801"
+    },
+    {
+      "path": "resume/four-arms-status.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/four-arms-status.json",
+      "bytes": 668,
+      "sha256": "b2c078ff3bc3c24b8f9fdaa4fe9cfe49b8329f0b3afef736f6134ef3ee0d988a"
+    },
+    {
+      "path": "resume/generated-helper-status.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/generated-helper-status.json",
+      "bytes": 404,
+      "sha256": "57bc1dbec8bc89709da85a37658693310a97f58222a60a7b6a229feb8e5bb1ae"
+    },
+    {
+      "path": "resume/host-preflight.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/host-preflight.mjs",
+      "bytes": 431,
+      "sha256": "471fcff680752c903a91bfcb69218d22998e166e27748dd3c254e0f950a0917d"
+    },
+    {
+      "path": "resume/ingress-seen.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/ingress-seen.json",
+      "bytes": 128,
+      "sha256": "86b7cd72a11210f131617bcfe7bda8b3e630c48f8ef2d2fe417be3a28d12f747"
+    },
+    {
+      "path": "resume/ingress-summary-all.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/ingress-summary-all.json",
+      "bytes": 9855,
+      "sha256": "05525f52fb3696a562162e4806c4ca900241e621f5f4d3295a0d6be3d46cc897"
+    },
+    {
+      "path": "resume/ingress-summary.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/ingress-summary.py",
+      "bytes": 2331,
+      "sha256": "2e4cb9982194d6e4a70e0fe8602ad5e13802f80fa6135240da76fa0c188531d5"
+    },
+    {
+      "path": "resume/inspect-share.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/inspect-share.mjs",
+      "bytes": 615,
+      "sha256": "48f5e12389f681a4dea114317c2f3bbb03d33743378a6a750478946e7cdd9461"
+    },
+    {
+      "path": "resume/layer-checks/0-build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/0-build.log",
+      "bytes": 8692,
+      "sha256": "b46100ebafb4be7c72779508a3ce66e7d788e6cbd7e818971111697604e3129b"
+    },
+    {
+      "path": "resume/layer-checks/0-install.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/0-install.log",
+      "bytes": 155,
+      "sha256": "48c6e8d193a47866a4edb0ae48cda9d326769ad67638b7c0640c23b0f04d3c4c"
+    },
+    {
+      "path": "resume/layer-checks/0-typecheck.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/0-typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    },
+    {
+      "path": "resume/layer-checks/1-build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/1-build.log",
+      "bytes": 8767,
+      "sha256": "f7a69da27e22f82bdd153e94d989d7edcb02a03f8f77e0ca52f79c939b311608"
+    },
+    {
+      "path": "resume/layer-checks/1-install.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/1-install.log",
+      "bytes": 155,
+      "sha256": "e2ed04503362259be632f67aca7b2d7bad45185ca0c7c3200aac4337c3a233a3"
+    },
+    {
+      "path": "resume/layer-checks/1-typecheck.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/1-typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    },
+    {
+      "path": "resume/layer-checks/2-build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/2-build.log",
+      "bytes": 9147,
+      "sha256": "8aa98343c399b13529432f91cc711640fc1c06c3733ea67c54831b3bed0aea49"
+    },
+    {
+      "path": "resume/layer-checks/2-install.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/2-install.log",
+      "bytes": 160,
+      "sha256": "e1fa5a72c53db549a5eb245818eaecf0b7d5bfba5bb9c5a491c2b95e8a87972c"
+    },
+    {
+      "path": "resume/layer-checks/2-typecheck.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/2-typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    },
+    {
+      "path": "resume/layer-checks/3-build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/3-build.log",
+      "bytes": 9147,
+      "sha256": "cf8dff3393e274f3bdf77ac98dc57d86eb74af525aa9657c7ac877f6215f4163"
+    },
+    {
+      "path": "resume/layer-checks/3-install.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/3-install.log",
+      "bytes": 160,
+      "sha256": "5b5dcb6c3e234e589b767e45d06f0dd925b0bd62a3ed2b1d23097a1d6caafd3e"
+    },
+    {
+      "path": "resume/layer-checks/3-typecheck.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/3-typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    },
+    {
+      "path": "resume/layer-checks/results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/layer-checks/results.json",
+      "bytes": 2222,
+      "sha256": "028b3ec15f83fa9b36fbfccee1b09fe2051ae6753667e1917ba01ae14fc62f50"
+    },
+    {
+      "path": "resume/mac-audio-path-equivalence.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/mac-audio-path-equivalence.json",
+      "bytes": 1121,
+      "sha256": "fc0b52ec01629038d10f32353774e5f755068703abb4096acf0c9db72ebe5815"
+    },
+    {
+      "path": "resume/mac-cleanup.txt",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/mac-cleanup.txt",
+      "bytes": 796,
+      "sha256": "2670b4f733a2bd695c296bcfdc0438033b74607b092d36d3fe36a30cdb0b00d6"
+    },
+    {
+      "path": "resume/matched-package.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/matched-package.json",
+      "bytes": 25588,
+      "sha256": "d067b1e16d56f33dd218aff04d5d1f1f3e373bfbe989b6c923c42c6378af3b0b"
+    },
+    {
+      "path": "resume/native-capture-events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/native-capture-events.json",
+      "bytes": 1515,
+      "sha256": "ccead0ba35c9183a306bd47b4111c0782f01c27c399dd7b68b810f389dbf274c"
+    },
+    {
+      "path": "resume/native-check.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/native-check.log",
+      "bytes": 161,
+      "sha256": "9a267559cf28ac1cdf9f9f6870c5087af1639f24fef8f6844cdd69f56fb40bde"
+    },
+    {
+      "path": "resume/node-files.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/node-files.json",
+      "bytes": 2582,
+      "sha256": "0046f60879e8589b70fbf616d0b117b3b76cc8ebd5134cf3181e55ac7b9c2245"
+    },
+    {
+      "path": "resume/node-progress.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/node-progress.log",
+      "bytes": 2558,
+      "sha256": "9ebb62d6f7955450d8f46fe8d9cbc82fa4b9321b3a92a4343871122d88d3e03b"
+    },
+    {
+      "path": "resume/overlay.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/overlay.json",
+      "bytes": 696,
+      "sha256": "a51796d9d81984d38b4fe84955039cf70ecd16d73b9a59eb76470bf67612708e"
+    },
+    {
+      "path": "resume/package-download.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-download.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "resume/package-files.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-files.json",
+      "bytes": 2664,
+      "sha256": "9717a6e9d344a02136d13b14a9e25307d5cc5db6f638420add30e62e20f1fc5d"
+    },
+    {
+      "path": "resume/package-smoke.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-smoke.py",
+      "bytes": 2609,
+      "sha256": "76fd7dd6783e091c163aa41b8ca8b5f881044df68254205670e03509ab860da3"
+    },
+    {
+      "path": "resume/package-smoke/app.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-smoke/app.log",
+      "bytes": 391,
+      "sha256": "4028c9100ac58046cb67a3a9d5aa70e27db5ccbc939dae2e2c486db11954bda7"
+    },
+    {
+      "path": "resume/package-smoke/receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-smoke/receipt.json",
+      "bytes": 497,
+      "sha256": "64c7c1239878a7e1bbb1cb0c05b20c5cf8bac42afbde1c71e71b1d35214c931f"
+    },
+    {
+      "path": "resume/package-smoke/verify.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-smoke/verify.log",
+      "bytes": 120,
+      "sha256": "4b142904da257312ae3b36101bea1e97229464ce3c840df8336c79b0968557b7"
+    },
+    {
+      "path": "resume/package-smoke/verify.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/package-smoke/verify.mjs",
+      "bytes": 800,
+      "sha256": "c4a4720981d65e1a2bf1a82adade768b58303efeb0816ddff5b0d88389a3b213"
+    },
+    {
+      "path": "resume/packaged-sw.js",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/packaged-sw.js",
+      "bytes": 7819,
+      "sha256": "2beeda894a403d29054e9c92b9bee0041b4a7d123b6feedd7ce634b3cd938423"
+    },
+    {
+      "path": "resume/pair.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/pair.mjs",
+      "bytes": 1971,
+      "sha256": "6ddcc417bd0c075b8929a59f3878473233c1bddfb535e70b9ceaf5e9e390c62b"
+    },
+    {
+      "path": "resume/permission-retry-setup2.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/permission-retry-setup2.log",
+      "bytes": 607,
+      "sha256": "90b3f06c8cf8fd6d078dd87ab9dfd8a096919475f28a38718673d5fefde18a91"
+    },
+    {
+      "path": "resume/permission-retry.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/permission-retry.log",
+      "bytes": 1184,
+      "sha256": "d0d31fbfdd205433ba1f9d1717cff9e49af6cdbcca781561768706f9196518f2"
+    },
+    {
+      "path": "resume/preflight-permission-retry.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/preflight-permission-retry.mjs",
+      "bytes": 2272,
+      "sha256": "d47ff87056e83661d9a781cbfd3228b3eb913b8485aef67e31c20f2eaa93e82c"
+    },
+    {
+      "path": "resume/preflight-receiver.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/preflight-receiver.mjs",
+      "bytes": 2036,
+      "sha256": "94e3e3cd945330a49fb7bedbd8a5aa4ecfcc6a6c80a355824a03e4ff273bfd2a"
+    },
+    {
+      "path": "resume/review-spec-r3.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/review-spec-r3.md",
+      "bytes": 2228,
+      "sha256": "3c03e582ff7071605fbcdba53f199d9a1b51dedd9c39dd268600d14683133553"
+    },
+    {
+      "path": "resume/review-standards-r3.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/review-standards-r3.md",
+      "bytes": 2429,
+      "sha256": "9bd6340158ba1d01ac149f83bd42760da3589c52c707745a68196d08576e5614"
+    },
+    {
+      "path": "resume/run-airplay.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/run-airplay.py",
+      "bytes": 1186,
+      "sha256": "d60df64fe7917499e145e5bc5ad74b83b7f314e5c913243fd8e1dbf1714344d6"
+    },
+    {
+      "path": "resume/run-final-node.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/run-final-node.py",
+      "bytes": 613,
+      "sha256": "77eef02d2b34d4cd23afcad41bda5d9589468351e7fd96b9876d838a1333d23b"
+    },
+    {
+      "path": "resume/setup.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/setup.mjs",
+      "bytes": 1319,
+      "sha256": "16c7a6a688d66b8f835a4d730a4f6f4407dca83d1d2b027d9d3aad45b7dcfe86"
+    },
+    {
+      "path": "resume/start-calibrated.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/start-calibrated.py",
+      "bytes": 6025,
+      "sha256": "17322d29ff490cf00140d01ca80fc7734fd3197892b8cce8766554de784c3ef8"
+    },
+    {
+      "path": "resume/start-retry.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/start-retry.py",
+      "bytes": 6019,
+      "sha256": "3a36456f14907f4177edf2a7c71966d54c62163725b26f04461795d3264037b3"
+    },
+    {
+      "path": "resume/start.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/start.py",
+      "bytes": 5958,
+      "sha256": "21980caa4d7d942d8c59cfacfbc199c70ed42cf6f03953a2f68074276289caf4"
+    },
+    {
+      "path": "resume/stop-before-overlay.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/stop-before-overlay.mjs",
+      "bytes": 574,
+      "sha256": "6efae2e1c7eb11b9cfbf0426d8d82e7106d14823514fd4fe3fa10140239aef58"
+    },
+    {
+      "path": "resume/units-progress.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/units-progress.log",
+      "bytes": 3021,
+      "sha256": "17e6c2d5c4af34ad74259a38a9cabc2fee3d3e01945d6316e8464759495e50e8"
+    },
+    {
+      "path": "resume/verify-package.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/verify-package.mjs",
+      "bytes": 1354,
+      "sha256": "a876d70b028271ab25b8ddf223da364029d8c09119e60ec77c6f84f6a9e4505c"
+    },
+    {
+      "path": "resume/write-host-result.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/write-host-result.py",
+      "bytes": 8835,
+      "sha256": "753040050c16f60d6ec18398d081133567fc82000d0f65ed6882e7806049249a"
+    },
+    {
+      "path": "resume/youtube-executable-retry.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/youtube-executable-retry.log",
+      "bytes": 46364,
+      "sha256": "86bc16a863325854b1a50f74a78ff5f0429a29ee73c9d6fd5a60d9b5b86ae2d8"
+    },
+    {
+      "path": "resume/youtube-retry.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/resume-20261026/youtube-retry.log",
+      "bytes": 56373,
+      "sha256": "1f5a2803caf25578cf4cf6a30a63366541c4a10099a13b1293414a1527b5d369"
+    },
+    {
+      "path": "tools/evaluate-physical.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/evaluate-physical.py",
+      "bytes": 1755,
+      "sha256": "a43ae037144e04ff408a1fbac024068250d5ab7a571654e98ebdcb5d6088de7a"
+    },
+    {
+      "path": "tools/host-ab-output-probe.js",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-output-probe.js",
+      "bytes": 1141,
+      "sha256": "fbfa17c8a9c6e9a2104cb0f6a093b9fe5fb6dd77f88c55fc29c8b8f4be1438e6"
+    },
+    {
+      "path": "tools/prepare-host-ab-arm.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-host-ab-arm.py",
+      "bytes": 2010,
+      "sha256": "f215dbce0e4af85c512c509dc1b5bc686cd147a60eaa4ec76f05ad4f146acba1"
+    }
+  ],
+  "omitted": "Credentials/profiles/personal data, installed apps, downloaded packages/browser/toolchains, original recovery archive, duplicate stimuli, generated bundled tests and broad earlier checks already retained locally; source refs and original evidence remain unchanged."
+}

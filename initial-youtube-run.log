@@ -1,0 +1,770 @@
+Couch helpers: qjs is /tmp/couch-youtube-playback-QmQX84/helpers/qjs/fixture/helper
+Couch helpers: ffmpeg is /tmp/couch-youtube-playback-QmQX84/helpers/ffmpeg/fixture/helper
+Couch helpers: yt-dlp is /tmp/couch-youtube-playback-QmQX84/helpers/yt-dlp/fixture/helper
+▶ YouTube playback selection and safe extraction errors
+  ✖ sound-only chooses audio in one extraction and picture restoration reselects video (14.15078ms)
+  ✖ sound-only retains a muxed fallback when the provider has no audio rendition (50.018879ms)
+  ✖ picture-only does not select a separate audio rendition (54.072917ms)
+  ✖ landscape 480p, vp9=false (47.409407ms)
+  ✖ landscape 720p, vp9=false (51.093049ms)
+  ✖ landscape 1080p, vp9=false (50.161824ms)
+  ✖ landscape auto, vp9=false (45.860115ms)
+  ✖ landscape best, vp9=false (46.89767ms)
+  ✖ landscape 480p, vp9=true (47.230394ms)
+  ✖ landscape 720p, vp9=true (48.777061ms)
+  ✖ landscape 1080p, vp9=true (52.82678ms)
+  ✖ landscape auto, vp9=true (48.682282ms)
+  ✖ landscape best, vp9=true (47.624941ms)
+  ✖ portrait 480p, vp9=false (52.626598ms)
+  ✖ portrait 720p, vp9=false (47.445868ms)
+  ✖ portrait 1080p, vp9=false (47.777067ms)
+  ✖ portrait auto, vp9=false (45.958745ms)
+  ✖ portrait best, vp9=false (45.265325ms)
+  ✖ portrait 480p, vp9=true (53.55143ms)
+  ✖ portrait 720p, vp9=true (56.20679ms)
+  ✖ portrait 1080p, vp9=true (45.13731ms)
+  ✖ portrait auto, vp9=true (45.795418ms)
+  ✖ portrait best, vp9=true (44.612376ms)
+  ✖ no incompatible fallback: VP9 only (41.338693ms)
+  ✖ no incompatible fallback: AV1 only (50.311104ms)
+  ✖ no incompatible fallback: Opus only (47.886798ms)
+  ✖ no incompatible fallback: incompatible combined audio (49.570961ms)
+  ✖ no incompatible fallback: unknown video codec (51.228255ms)
+  ✖ no incompatible fallback: unknown audio codec (45.135056ms)
+  ✖ no incompatible fallback: DASH only (43.822857ms)
+  ✖ compatible progressive fallback when separate AAC is absent (63.799364ms)
+  ✖ low-resolution-only video falls back below the requested cap (44.016541ms)
+  ✖ above-cap-only video stays unavailable at 480p (40.230919ms)
+  ✖ above-cap-only video stays unavailable at 720p (51.537519ms)
+  ✖ above-cap-only video stays unavailable at 1080p (48.070782ms)
+  ✖ above-cap-only video stays unavailable at auto (52.370424ms)
+  ✖ missing dimensions undefinedxundefined remain playable (44.958263ms)
+  ✖ missing dimensions 640xundefined remain playable (47.845134ms)
+  ✖ missing dimensions undefinedx360 remain playable (49.287906ms)
+  ✖ one known dimension 1920xundefined still enforces Auto's cap (51.985556ms)
+  ✖ one known dimension undefinedx1920 still enforces Auto's cap (48.687391ms)
+  ✖ known under-cap video outranks unknown dimensions (46.362451ms)
+  ✔ no formats fails with a fixed public error (52.456207ms)
+  ✖ audio-only source retains AAC and rejects Opus-only on non-VP9 Devices (56.258267ms)
+  ✖ HLS video and audio from one master still collapse to that master (57.791375ms)
+  ✖ non-YouTube selection keeps its existing height cap and codecs (51.379131ms)
+  ✖ YouTube skips a refused advertised format and rejects an entirely refused selection (46.126385ms)
+  ✔ fixed error: This live stream recording is not available. (96.831701ms)
+  ✔ fixed error: Video unavailable (45.167842ms)
+  ✔ fixed error: This live event is offline (42.647112ms)
+  ✔ fixed error: Requested format is not available (39.501152ms)
+  ✔ fixed error: Sign in to confirm your age (47.987443ms)
+  ✔ fixed error: This video is not available in your country (38.929094ms)
+  ✔ fixed error: unexpected extraction error (54.412988ms)
+✖ YouTube playback selection and safe extraction errors (2718.597649ms)
+ℹ tests 55
+ℹ suites 0
+ℹ pass 8
+ℹ fail 47
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2859.486988
+
+✖ failing tests:
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3044:11
+✖ sound-only chooses audio in one extraction and picture restoration reselects video (14.15078ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3056:11
+✖ sound-only retains a muxed fallback when the provider has no audio rendition (50.018879ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3062:11
+✖ picture-only does not select a separate audio rendition (54.072917ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape 480p, vp9=false (47.409407ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape 720p, vp9=false (51.093049ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape 1080p, vp9=false (50.161824ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape auto, vp9=false (45.860115ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape best, vp9=false (46.89767ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape 480p, vp9=true (47.230394ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape 720p, vp9=true (48.777061ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape 1080p, vp9=true (52.82678ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape auto, vp9=true (48.682282ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ landscape best, vp9=true (47.624941ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait 480p, vp9=false (52.626598ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait 720p, vp9=false (47.445868ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait 1080p, vp9=false (47.777067ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait auto, vp9=false (45.958745ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait best, vp9=false (45.265325ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait 480p, vp9=true (53.55143ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait 720p, vp9=true (56.20679ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait 1080p, vp9=true (45.13731ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait auto, vp9=true (45.795418ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3071:17
+✖ portrait best, vp9=true (44.612376ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: VP9 only (41.338693ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: AV1 only (50.311104ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: Opus only (47.886798ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: incompatible combined audio (49.570961ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: unknown video codec (51.228255ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: unknown audio codec (45.135056ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:13
+✖ no incompatible fallback: DASH only (43.822857ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3092:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3093:11
+✖ compatible progressive fallback when separate AAC is absent (63.799364ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3098:11
+✖ low-resolution-only video falls back below the requested cap (44.016541ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:13
+✖ above-cap-only video stays unavailable at 480p (40.230919ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:13
+✖ above-cap-only video stays unavailable at 720p (51.537519ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:13
+✖ above-cap-only video stays unavailable at 1080p (48.070782ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:13
+✖ above-cap-only video stays unavailable at auto (52.370424ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3102:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3104:13
+✖ missing dimensions undefinedxundefined remain playable (44.958263ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3104:13
+✖ missing dimensions 640xundefined remain playable (47.845134ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3104:13
+✖ missing dimensions undefinedx360 remain playable (49.287906ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3108:13
+✖ one known dimension 1920xundefined still enforces Auto's cap (51.985556ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3108:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3108:13
+✖ one known dimension undefinedx1920 still enforces Auto's cap (48.687391ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3108:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+        at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+        at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3109:11
+✖ known under-cap video outranks unknown dimensions (46.362451ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3115:11
+✖ audio-only source retains AAC and rejects Opus-only on non-VP9 Devices (56.258267ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3121:11
+✖ HLS video and audio from one master still collapse to that master (57.791375ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3129:11
+✖ non-YouTube selection keeps its existing height cap and codecs (51.379131ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+test at .scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:3133:11
+✖ YouTube skips a refused advertised format and rejects an entirely refused selection (46.126385ms)
+  Error: yt-dlp won't start. Couch is repairing it; try again shortly.
+      at broken (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1743:10)
+      at ChildProcess.<anonymous> (file:///home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/resumed-final-node/youtube-playback.integration.ts.mjs:1783:71)
+      at ChildProcess.wrapper (node:events:639:12)
+      at ChildProcess.emit (node:events:514:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+      at onErrorNT (node:internal/child_process:525:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)

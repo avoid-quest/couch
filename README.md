@@ -1,0 +1,15 @@
+# Calibrated Mac host capture comparison and final integration evidence
+
+This is an evidence-only recovery snapshot outside the implementation stack. It is not a merge candidate or a qualification claim.
+
+Implementation result checkpoint: `3c7dde2` on `player-modes/validation-20261026`. Checked code/package source: `394f17ff0589f5cfc92f29439d55a15bc4617b09`. See the archived `docs/player-modes-host-capture-comparison.md`, current validation and PR handoff for exact stack heads and source limits.
+
+The archive has 220 verified selected files: exactly four valid 60-second known-stimulus four-channel witnesses, every electrical/waveform row and reverse/cross control, packet-ingress timing/continuity data, browser telemetry, gain readings, diagnostic scripts, independent reports, final check/package receipts and current documentation. Supplemental files retain the initial YouTube runner-path failure and the witness microphone denial before recording; their separate hashes are in `supplemental.json`.
+
+Result: Chromium electrical medians57.833/57.455ms; native56.647/57.268ms, at common55mslead/35msbudget. All four fail the unchanged50ms/fidelity gate. No useful repeatable native advantage was established; do not prefer native automatically. No further physical trials were started after one valid pair plus one confirmation pair. Software passes707unit tests/559distinctNodechecks, nativehiddenLive, all layer builds and successful all-platform signed Package; these do not close the physical gate.
+
+`manifest.json` identifies every source/hash/size and omissions. The gzip stream is split into ordered `evidence.tar.gz.part000` onward, listed with hashes in `parts.json`. `verification.json` records complete streaming decompression and SHA-256 verification of every member. Profiles, credentials, personal data, downloaded installers/toolchains and broad generated test bundles are excluded. Original raw files and the older pause/original recovery branches remain intact. Local installers are pinned in the archived package-files receipt and associated with successful hosted Package40328823313.
+
+Restore by exporting this recovery tree into a new owned directory, verifying each part hash, concatenating parts in numeric order, and decompressing/extracting into another new directory. Verify members against the embedded manifest before use. To replay a recording offline, preserve the evaluator source bytes: copy `evaluator/*.py` into `tools/evaluator/`, install the recorded compatible NumPy/SciPy dependencies, then invoke `tools/evaluate-physical.py` with a restored `capture.s32le` and a new output directory. The measurement scripts retain their original deployment-path references and require explicit owned-environment reconstruction before any live use; do not launch their SSH/audio controllers as part of restoration.
+
+Project LICENSE is retained here with the tools; external Python/SDK dependencies remain separately licensed and are not bundled in this snapshot. No PR, merge or release was performed.
