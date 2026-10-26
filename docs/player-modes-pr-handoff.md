@@ -1,35 +1,41 @@
 # Player modes PR handoff
 
-**PR submission is pending the reopened [Live performance gate](player-modes-live-performance.md).**
-The titles/bodies below are preserved drafts and need reconciliation after that
-gate. All branches are pushed, their
-ancestry is linear on main `4a194e35cedb30f5ba3e664b4c9734b087051825`, and each
-layer independently passes frozen install, typecheck and build. Validation's
-checked code/tests head is `bd25f9a`; its later receipt commit changes documentation
-only. Remote tip SHAs and `gh stack view --json` are retained in the final parent
-scratch receipts and reported with the handoff.
+**Integration completion and PR submission remain pending.** The four proposed
+bodies below describe the maintained changes and their revision-scoped evidence.
+The parent owns the reopened [Live gate](player-modes-live-performance.md), the
+required [Mac host capture decision](player-modes-host-capture-comparison.md),
+final integrated checks, fresh fixed-base/head spec and standards reviews, and
+remote-stack verification. These drafts make no completion or PR-ready verdict.
 
-PRs have not been submitted. Merges and releases remain owner actions. The
-[validation receipt](player-modes-integration-validation.md) records the final
-533 covered Node checks, 688 unit tests, package/runtime evidence, zero actionable
-findings on both independent review axes, and external qualification limits.
+The earlier `bd25f9a` checkpoint passed 688 unit tests and 533 covered Node checks
+and had zero actionable findings on both independent review axes. Later source
+restores Live PCM/low-lead settings and bounded setup behavior; those earlier
+receipts remain useful on their tested revision. Signed `a30218d` has successful
+[Check 40309187171](https://github.com/avoid-quest/couch/actions/runs/40309187171)
+and [Package 40309189960](https://github.com/avoid-quest/couch/actions/runs/40309189960)
+for Linux, Windows and dual-architecture Mac. Final-source checks/reviews remain
+pending; [validation](player-modes-integration-validation.md) records exact limits.
 
-| Layer | Branch | Intended base | Checked code head |
+| Layer | Branch | Intended base | Local head at reconciliation, before this docs commit |
 | --- | --- | --- | --- |
-| Core | `player-modes/integration-20261026` | `main` | `1b07af30968e973c9697634c9287de8276f4d954` |
-| Browser | `player-modes/browser-20261026` | `player-modes/integration-20261026` | `2ccb2039917438b0e7536b01ba96c40cc6eed9d9` |
-| Host | `player-modes/host-20261026` | `player-modes/browser-20261026` | `bc02df38b5ddf4d90c1364bced8937f646ada05d` |
-| Validation | `player-modes/validation-20261026` | `player-modes/host-20261026` | `bd25f9ad4966271859b9ed67a0840ede3f83e925` |
+| Core | `player-modes/integration-20261026` | `main` | `7aee1baaa59da349f34e6b2ff5ddb3dd2d6f1d52` |
+| Browser | `player-modes/browser-20261026` | `player-modes/integration-20261026` | `f8dc71c75436c697eecac52e5a358859fb6b13f6` |
+| Host | `player-modes/host-20261026` | `player-modes/browser-20261026` | `3a46696960937f27e64c85b7c70c45365a66b01f` |
+| Validation | `player-modes/validation-20261026` | `player-modes/host-20261026` | `d87a3da0f0ffafde8795d81c0ddfc551a49c65fb` |
 
-The recovery archive and experimental ancestry are outside all four PR diffs.
-All 213 recovered changed paths have explicit dispositions, covering P0–P7,
-M1–M11, all 17 use cases and every retirement. Native host input and browser
-receivers remain; the newly introduced native audience/output implementation is
-excluded. Existing WebRTC/TURN, buffered captured A/V, mpv and hardware/Bluetooth
-routing are retained. Live physical qualification is explicitly pending.
+Integration base is `4a194e35cedb30f5ba3e664b4c9734b087051825`. These local SHAs
+are a source snapshot, not final checked or verified remote heads. The parent
+must refresh the branch/commit chain, remote heads and `gh stack view --json`
+after remaining work. The recovery archive and experimental ancestry stay outside
+the implementation diffs.
 
-The following titles are plain release-note sentences. Each body is self-contained
-and uses the PR skill's Summary/Evidence/Merge Danger format.
+All **213** recovered changed paths have dispositions: **103 retain / 67 adapt /
+43 exclude**, covering P0–P7, M1–M11 and all 17 use cases. Native host input,
+browser receivers and shared Live PCM/Opus remain; native audience/output helpers
+are excluded. Existing WebRTC/TURN, buffered captured A/V, mpv and hardware/
+Bluetooth routing are retained. Physical qualification and native adoption remain
+open. Runtime work on two Live-input gaps and final carryover accounting are
+parent-owned; reconcile their final results before using these bodies to submit.
 
 ## Core
 
@@ -37,31 +43,54 @@ Title: **Unify playback delivery and programme authority in Core**
 
 Head: `player-modes/integration-20261026`. Base: `main`.
 
-### Summary
+### Change
 
-Core now decides delivery and programme authority for Direct, relaxed A/V and Live audio. Play on isolates a destination; Move preserves the queue while transferring its outputs. Shared URL and timestamped capture audio use one scheduled worker, while captured video retains WebRTC/TURN and buffered HLS.
+#### Summary
+
+Core chooses delivery and programme authority for Direct, relaxed A/V and Live.
+Play on isolates a destination; Move transfers outputs while preserving the queue.
+Live capture emits immediate stereo S16 PCM in packets of at most 240 frames,
+independently of 10 ms Opus packetization and FFmpeg lookup. Healthy receivers
+keep their fixed deadlines when another receiver is slow.
 
 ```text
 Hub policy and consent
   source preparation → receiver decode (Direct)
   scheduled worker → shared sound and picture clock (Relaxed)
-  timestamped capture → fixed Opus deadlines (Live)
+  timestamped capture → independent bounded PCM/Opus fanout (Live)
 ```
 
-### Evidence
+#### Evidence
 
-- **Before:** recovered late joins could receive deadlines without enough declared lead; a buffered ingest restart reset source PTS.
-  **After:** late-join, continuity and real-media restart regressions pass; healthy receiver timestamps remain fixed.
-- Per-operation FFmpeg leases release on completion/cancellation/failure and refresh for the next encoder; real worker lifecycle regressions pass.
-- Validation receipts and retained adapter coverage: `docs/player-modes-integration-validation.md` on the top layer.
+- **Before:** late joins could receive insufficient lead, ingest restart reset
+  source PTS, and the integrated Live path had lost browser-compatible PCM.
+  **After:** checkpoint late-join/continuity/real-media regressions pass; focused
+  restoration checks exercise immediate PCM, independent fanout and strict
+  admission at PCM's 65,536-byte and Opus's 4,096-byte capacity floors.
+- Per-operation FFmpeg leases release on completion, cancellation and failure.
+  Authenticated signaling/pair retry have separate bounds; per-flush level reads
+  preserve permission checks. Final carryover/runtime checks remain pending.
+- `docs/player-modes-integration-validation.md` on the top layer records the
+  tested revisions, focused reruns and outstanding final-source reviews.
 
-### Merge Danger
+#### Merge Danger
 
 **Door:** two-way
 
 **Blast Radius:** Playback
 
-Touches routing, source preparation and scheduled delivery. Existing mpv, hardware routes, AirPlay and captured-video adapters remain. Browser and host layers complete the product integration.
+Routing, source preparation and scheduled delivery affect every mode. Browser
+and Host layers complete the consumers; existing output and video adapters remain.
+
+### Checks
+
+- Checkpoint and focused receipts are revision-scoped in the top-layer validation
+  document; final integrated checks and independent reviews are pending.
+- The restored transport alone does not qualify roughly 50 ms physical playback.
+
+### Release
+
+PR submission, merge and release publication remain pending. No release is authorized.
 
 ## Browser
 
@@ -69,32 +98,57 @@ Title: **Integrate browser playback and Live audience controls**
 
 Head: `player-modes/browser-20261026`. Base: `player-modes/integration-20261026`.
 
-### Summary
+### Change
 
-Browser receivers use the Core-selected rendition and actor controls. Live listeners can join, leave and set their own level; ordinary Direct and relaxed controls retain their permitted queue and transport actions. Clock validation and bounded rate correction support Live output readiness.
+#### Summary
+
+Browser receivers use the Core-selected rendition and actor controls. Live
+listeners Join, Leave and set their own level; permitted Direct and relaxed
+queue/transport actions remain. The maintained browser stays Opus-first and
+prepares Opus. Clock validation and bounded rate correction govern readiness.
 
 ```text
 Core instruction
   media renderer → selected picture/sound rendition
-  Sendspin browser player → output preparation and scheduled sound
+  Sendspin browser player → Opus preparation and scheduled sound
   actor controls → menus, hotkeys, Remote and Media Session
+  browser publisher → four unsettled offers, 100 ms spacing
 ```
 
-### Evidence
+#### Evidence
 
-- **Before:** Live audience surfaces exposed programme actions, and clock uncertainty used the wrong millisecond boundary.
-  **After:** audience UI/authorization and clock regressions pass, with finite 0–10 ms uncertainty required for admission.
-- Actual browser receivers decoded independent programmes; Move preserved playback identity, queue and paused media position. Radio subscriptions and desktop keyboard regressions passed.
-- Details queue actions respect audience rights, including their initial focus.
-- Final receipts: `docs/player-modes-integration-validation.md` on the top layer.
+- **Before:** audience surfaces exposed programme actions, clock uncertainty used
+  the wrong millisecond boundary, and publisher setup could accumulate offers.
+  **After:** checkpoint audience/clock regressions pass with finite 0–10 ms clock
+  uncertainty; bounded offers retain slots through cancellation until promises
+  settle. The final integrated review remains pending.
+- Actual checkpoint browsers decoded independent programmes; Move preserved
+  Playback identity, queue and paused position. Details queue actions respect
+  audience rights, including initial focus.
+- Diagnostic SDK PCM/45 ms has 55/55 accepted windows at 47.070 ms median but 32
+  waveform flags. Opus/45 ms r3 accepts 45/55 L and 44/55 R, with accepted-window
+  medians 46.424/46.439 ms and many correlation/gain flags. Both are unqualified;
+  neither changes the maintained codec policy.
 
-### Merge Danger
+#### Merge Danger
 
 **Door:** two-way
 
 **Blast Radius:** Receivers
 
-Pinned SDK patches affect browser scheduling and preparation. Physical latency, Wi-Fi/background and Bluetooth qualification are separate from these software checks.
+Pinned SDK patches affect scheduling/preparation. Diagnostic Electron results
+are separate from ordinary Chrome, Wi-Fi/background and Bluetooth qualification.
+
+### Checks
+
+- Browser checkpoint and offer-bound evidence are revision-scoped in
+  `docs/player-modes-integration-validation.md`; final checks/reviews are pending.
+- Ordinary Chromium maintained-client setup and the required Mac host A/B remain
+  parent-owned.
+
+### Release
+
+PR submission, merge and release publication remain pending. No release is authorized.
 
 ## Host
 
@@ -102,31 +156,59 @@ Title: **Add native host audio capture and input settings**
 
 Head: `player-modes/host-20261026`. Base: `player-modes/browser-20261026`.
 
-### Summary
+### Change
 
-The packaged Mac app captures a selected native stereo input through Main and uploads timestamped PCM to Core. Browsers receive Opus. Input rate/buffer controls show requests and readback; browser output buffering remains a preference. Each publication freezes its scheduling lead.
+#### Summary
+
+The packaged Mac app offers native stereo input through Main and the existing
+Chromium capture selection, uploading timestamped PCM to Core. Browser receivers
+remain Opus-first. Input rate/buffer controls show requests and readback. Each
+publication freezes its lead/reserve; native adoption requires the matched host
+comparison below.
 
 ```text
 Main permission and publication owner
-  native CoreAudio helper (Mac) or hidden browser input
-  authenticated local upload → scheduled worker → browser receivers
+  native CoreAudio helper (Mac) or hidden Chromium input
+  authenticated local upload → scheduled PCM/Opus worker → browser receiver
 ```
 
-### Evidence
+#### Evidence
 
-- **Before:** native capture depended on recovered lab wiring, and its builder rejected the second Mac architecture.
-  **After:** maintained packaging builds static PortAudio and capture for arm64/x64, preserving Intel Ventura, QuickJS and the combined Mac update feed.
-- Capture authority/upload/settings tests, both Mac helper architecture/deployment/signature checks, and the source-specific worker budget regression pass.
-- Live Start requires an explicit input. Final hosted Linux, Windows and signed arm64/x64 Mac Package jobs pass. After the owner granted Microphone, the matched signed Mac package's UMC404HD native capture→Core→Opus→Chrome passes at 250 ms lead, including Leave/rejoin and Stop/Quit cleanup. Near-noise-floor input does not qualify physical latency or fidelity.
-- Full packaging and runtime receipts, including exact unavailable qualification: `docs/player-modes-integration-validation.md` on the top layer.
+- **Before:** native capture depended on recovered lab wiring and its builder
+  rejected the second Mac architecture.
+  **After:** maintained packaging builds static PortAudio/capture for arm64/x64,
+  preserving Intel Ventura floors, QuickJS and the combined Mac update feed.
+- Signed `a30218d` Check and Linux/Windows/dual-architecture Mac Package pass.
+  Earlier `bd25f9a` signed Mac capture reached Linux Chrome as stereo Opus at
+  250 ms lead with Leave/rejoin and cleanup; this proves delivery on that source,
+  not physical qualification or useful native benefit.
+- Restored leads are 45/50/55/75/95/100/150/250 ms, default 100/70 ms. Source
+  reserves are 20 ms through 55, 25 ms below 100, 30 ms otherwise; admission stays
+  strict. Request/readback is separate from measured input-to-ear delay.
+- The owner accepted analog calibration `gain-meter-r1`. Required native versus
+  Chromium Mac-host runs through an unchanged ordinary Chromium maintained client,
+  actual Core ingress diagnostics and a separate physical witness remain pending.
 
-### Merge Danger
+#### Merge Danger
 
 **Door:** two-way
 
 **Blast Radius:** Desktop
 
-Native input is Mac-only; Linux/Windows retain browser capture. Explicit native rate requests can affect other apps using that device. The default scheduling lead is 100 ms with a 70 ms receiver budget; this is not measured input-to-ear latency.
+Native input is Mac-only; Linux/Windows retain browser capture. Native rate
+requests can affect other apps using the device. Preserve both host paths while
+the bounded comparison determines whether native capture offers a useful benefit.
+
+### Checks
+
+- Exact package hashes/signatures and earlier runtime receipts are in
+  `docs/player-modes-integration-validation.md` on the top layer.
+- Gain preflight, a fixed Linux route and at most two matched pairs are required;
+  the parent owns the adoption verdict and final affected checks.
+
+### Release
+
+PR submission, merge and release publication remain pending. No release is authorized.
 
 ## Validation
 
@@ -134,37 +216,63 @@ Title: **Validate and document the player modes integration**
 
 Head: `player-modes/validation-20261026`. Base: `player-modes/host-20261026`.
 
-### Summary
+### Change
 
-Completes the integration evidence and retirement inventory for all P0–P7 packages, M1–M11 responsibilities and 17 current use cases. Real-media regressions cover captured-video fallback, late viewers and ingest restart continuity. Documentation separates current behavior from preserved historical experiments.
+#### Summary
+
+Records scope, retirements, real-media regressions and revision-scoped integration
+evidence. Shared browser-compatible Live PCM remains in scope; native audience
+helpers remain excluded. Historical passes, corrected diagnostic runs and current
+pending gates have separate receipts.
 
 ```text
-Recovered scope → 213-path disposition inventory
-Integrated product → fresh checks and independent reviews
-Reviewable stack → intended bases, titles and validation limits
+Recovered scope → 213 paths: 103 retain / 67 adapt / 43 exclude
+bd25f9a → 688 unit tests / 533 covered Node checks / independent reviews
+a30218d → successful Check / Linux, Windows and dual-architecture Mac Package
+Current source → final checks, fresh reviews and host comparison pending
 ```
 
-### Evidence
+#### Evidence
 
-- **Before:** the recovery contained native audience experiments, stale exclusions and unfinished software verification.
-  **After:** the maintained stack retains native host capture/browser receivers, excludes native audience/Live PCM paths, and records a replacement or retained adapter for every retirement.
-- Final validation: 92 separate unit files / 688 tests; 59 Node bundles cover 533 checks after the real AirPlay rerun; zero actionable final spec/standards findings; manual Check and all Package jobs pass.
-- Follow-up after Microphone grant: actual signed Mac native stereo capture reaches Linux Chrome as Opus, with ready admission, audience restrictions and Leave/rejoin. The validation receipt records the default-profile relaunch exception and metadata audit.
-- Exact final check/review/package receipts: `docs/player-modes-integration-validation.md`.
-- Complete stack and proposed descriptions: `docs/player-modes-pr-handoff.md`.
+- **Before:** handoff text excluded Live PCM and presented old checks/reviews as
+  final after source changes.
+  **After:** scope retains immediate PCM/low leads and the documents name the
+  exact revisions and remaining parent-owned completion gates.
+- Historical r15 passes around 48.543 ms; bad r16 remains. Maintained `bd25f9a`
+  Opus/100 ms measures 102.4696 ms median and fails the corrected 50 ms gate.
+  Short-URL SDK PCM/Opus diagnostics remain unqualified with waveform/coverage
+  defects and low-level gain caveats; URL-only harness repair made no product change.
+- Real-media checkpoint regressions cover captured-video fallback, late viewers
+  and ingest restart continuity. Current inventory covers all P0–P7, M1–M11 and
+  17 use cases; final runtime/carryover accounting remains pending.
 
-### Merge Danger
+#### Merge Danger
 
 **Door:** two-way
 
 **Blast Radius:** Validation
 
-Tests and documentation do not qualify 50 physical receivers or the 100 ms physical input-to-ear target. The validation receipt names the remaining platform and physical checks precisely.
+Recorded software/packaging results do not qualify the roughly 50 ms physical
+capability, native adoption or 50 physical receivers. The reopened gates keep
+completion and PR submission pending.
+
+### Checks
+
+- `docs/player-modes-integration-validation.md` contains revision-scoped commands,
+  failures, reruns, package pins and the historical isolation exception.
+- Final integrated checks/spec and standards reviews, host A/B, final remote-head
+  verification and cleanup remain parent-owned.
+
+### Release
+
+PR submission, merge and release publication remain pending. No release is authorized.
 
 ## Submission boundary
 
-The next owner-authorized submission can use `gh stack submit --auto --remote
-origin`, then apply the titles and bodies above to each layer. That command creates
-PRs and is intentionally left for the subsequent handoff. Register every created
-PR with T3's `link_pull_request`; none exists for this assignment yet. Do not merge
-or run Release as part of submission.
+After the parent reconciles the final source/evidence and records a readiness
+verdict, a subsequent authorized submission can use
+`gh stack submit --auto --remote origin` and apply these titles/bodies to the
+intended bases. Refresh
+bodies and check results first. Register every created PR with T3's
+`link_pull_request`; no PR has been submitted for this integration. Submission
+does not authorize merge or Release.

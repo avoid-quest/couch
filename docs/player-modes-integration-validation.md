@@ -1,21 +1,122 @@
 # Player modes integration validation
 
-**Live performance has reopened as an integration completion gate; PR submission
-is pending.** Follow [the physical comparison plan](player-modes-live-performance.md).
-The following software/package checks remain useful evidence; they do not satisfy
-the corrected roughly 50 ms Live requirement. This receipt covers checked
-code/tests head `bd25f9ad4966271859b9ed67a0840ede3f83e925` over current-main base
-`4a194e35cedb30f5ba3e664b4c9734b087051825`; subsequent handoff edits are documentation
-only. [The ledger](player-modes-integration-ledger.md) maps every P0–P7 package,
-M1–M11 responsibility, all 17 use cases and each retirement to this evidence.
+**Integration completion and PR submission remain pending.** The reopened
+[Live performance gate](player-modes-live-performance.md) requires the corrected
+roughly 50 ms reference, and the [Mac host capture comparison](player-modes-host-capture-comparison.md)
+is mandatory before native adoption. The parent owns that ongoing result, final
+integrated checks, fixed-base/head spec and standards reviews, and remote-stack
+verification. This document records evidence by tested revision; it makes no
+current PR-ready verdict.
 
-## Fresh software checks
+[The ledger](player-modes-integration-ledger.md) maps P0–P7, M1–M11, all 17 use
+cases and retirements. The current recovered-file inventory is **213 unique
+paths: 103 retain / 67 adapt / 43 exclude**. Browser-compatible Live PCM is
+retained alongside Opus; native audience/output helpers remain excluded.
+
+## Reopened source and package evidence
+
+The `bd25f9ad4966271859b9ed67a0840ede3f83e925` software/package/review checkpoint
+below remains useful on base `4a194e35cedb30f5ba3e664b4c9734b087051825`.
+Later source changes restore PCM and low-lead settings and add bounded signaling;
+the earlier 688 unit tests / 533 Node checks and zero actionable review findings
+are not final-source receipts.
+
+- Core emits immediate normalized **S16 stereo PCM, at most 240 frames per
+  packet**, independently of Opus's **10 ms** packets and FFmpeg lookup. Each
+  format has independent bounded fanout; source continuity and Opus remain.
+- Host lead choices are **45/50/55/75/95/100/150/250 ms**, default **100 ms** with
+  **70 ms** receiver budget. Source reserve is **20 ms through 55 ms**, **25 ms
+  below 100 ms**, **30 ms otherwise**; 45 ms therefore allows a strict 25 ms
+  receiver budget. PCM capacity is **65,536 bytes**; Opus is **4,096 bytes**.
+  Identity, preparation, clock, timing and correction admission remain strict.
+- The maintained browser remains **Opus-first and prepares Opus**. Diagnostic PCM
+  results do not change the product's codec selection or establish qualification.
+- `.scratch/live-performance/integrated-focused-summary.json` retains initial
+  `ef7a5c2` failures and green focused reruns after obsolete Opus-only settings
+  and scheduled-capture expectations were repaired. These focused results do
+  not replace the parent's pending final integrated run.
+- Signed source **`a30218d00e8bdfb6116cf10ed61d357f08781988`** has successful manual
+  [Check 40309187171](https://github.com/avoid-quest/couch/actions/runs/40309187171)
+  and [Package 40309189960](https://github.com/avoid-quest/couch/actions/runs/40309189960):
+  Linux, Windows and dual-architecture Mac all passed. Exact logs are
+  `.scratch/live-performance/ci-{check,package}-a302.log`. These results apply to
+  `a30218d`, before the later signaling/runtime work.
+- Package pins: `.scratch/live-performance/package-a302-linux/pins.json` records
+  executable SHA-256 `ee9faf5bb9fe78a750cc5099863c85c4459e7f04c387fd1f111c83e4e8c57c97`
+  and ASAR `921cdd14bac9ee7b2560f39a8e1ac8b4103c0f0c8872ba0349af16e4f59b482f`.
+  `candidate-a302-mac.json` records signed arm64 ZIP SHA-256
+  `464f9450e01b0eaac986e0ac703d53567b98bb90dedb6130adde32aa463e79dd`
+  and ASAR `91ae354cabf1ef4ce4e3507afe63d7eef4dc46b82ec903293720060457aa206c`.
+  Exact resources/signature receipts stay beside those packages.
+
+Older-work carryovers are separately traceable: Browser `421ad77` (parent
+`bf2d797`) bounds four unsettled offer operations with 100 ms spacing, retaining
+slots until promises settle after cancellation. Core `daeea11` (parent
+`3e41052`) carries separately bounded authenticated signaling/pair retry and
+permission-safe per-flush level reuse. After the parent's stack movement their
+owning heads are Browser `f8dc71c` and Core `7aee1ba`. The runtime child has two
+Live-input gaps underway; their final implementation, checks and audit disposition
+remain parent-owned. None of these carryovers inherits the `bd25f9a` review verdict.
+
+## Physical and diagnostic evidence
+
+All rows retain their original source, route, harness and gain limits. The earlier
+Electron receiver runs do not answer the required ordinary-Chromium host A/B.
+
+| Interval | Observed result | Qualification |
+| --- | --- | --- |
+| Historical browser PCM r15, 45 ms lead | 55/55 windows both channels; median about **48.543 ms**, zero waveform flags | Passing interval; reliability unqualified |
+| Historical r16 repeat | 46/55 windows both; 4,747 / 4,727 waveform flags | Failed repeat retained beside r15 |
+| Maintained signed `bd25f9a`, Opus / 100 ms | 55/55 both; median **102.4696 ms** | Fails the **50 ms** gate |
+| Corrected short-URL SDK PCM / 45 ms | 55/55 both; median **47.070 ms**, **32 waveform flags** | Diagnostic only; unqualified |
+| Corrected short-URL SDK Opus / 45 ms, r3 | **45/55 L, 44/55 R**; accepted-window medians **46.424 / 46.439 ms**; many correlation/gain flags | Fails coverage; unqualified |
+
+Receipts are under `.scratch/live-performance/`: `replay-r15/`, `replay-r16/`,
+`maintained-r2/evaluation/`, `compare-sdk-short-pcm45-r1/evaluation/` and
+`compare-sdk-short-opus45-r3/evaluation/`. The original diagnostic embedded a
+roughly **1.75 MB data URL**, causing CDP overhead and harness failure. The URL-only
+control restored sustained output without a product change;
+`harness-diagnosis/url-control.json` and `independent-review.md` retain causal
+and review evidence. Failed harness intervals remain evidence of that setup,
+not proof of a product codec failure.
+
+Low signal levels limit interpretation of these codec runs: the retained PCM
+source/return peaks were near −33/−68 dBFS. On 26 October the owner accepted
+**gain-meter-r1**, a direct analog calibration bypassing Couch: source peaks
+−11.84/−11.83 dBFS, return −23.06/−23.13 dBFS, L/R within 0.1 dB, with no clipped
+samples or dropped callbacks over the last 100 meter intervals. The owner set
+the UMC gains; keep them fixed. This new calibration does not retroactively
+qualify earlier waveforms. The prior receiver was **80%, unmuted**; SDK and Linux
+Master contributed about −2.91 dB and −12 dB respectively. Check actual source
+and return levels through Couch before scoring a new run.
+
+## Parent-owned completion markers
+
+- **G3 — final source:** final integrated checks, affected package proof and fresh
+  independent spec/standards reviews on fixed base/head are pending. Preserve
+  the older receipts, original failures and focused reruns with their revisions.
+- **G4 — native adoption:** pending ordinary Chrome/Chromium maintained-client
+  setup, matched Mac Chromium-versus-native captures, uncertainty analysis and
+  explicit adoption verdict. Use supported public browser APIs, the fixed Linux
+  route, gain preflight, one valid matched pair and at most one confirmation
+  pair. Keep actual Core ingress age/jitter/gaps separate from the coherent
+  physical witness. Uploader send events are not Core receipt; a diagnostic
+  overlay needs its exact diff, hashes and signature limits beside both arms.
+  A common diagnostic lead does not waive the roughly 50 ms reference. The
+  [host comparison](player-modes-host-capture-comparison.md) owns the latest result.
+- **G5 — carryovers/runtime:** final older-work accounting and the two ongoing
+  Live-input gaps require parent reconciliation and checks.
+- **Handoff:** final branch/remote heads, ancestry, cleanup and readiness verdict
+  are pending parent verification. PR submission, merges and releases remain
+  pending. No physical/backend outcome is inferred from this documentation edit.
+
+## Historical software checks at bd25f9a
 
 Runtime: Bun **1.4.2**, Node **24.21.0**, Electron **44.4.5**, FFmpeg **9.0.2**,
 Go **1.27.2**; real offline yt-dlp selector **2026.10.21**, downloaded from its
 official platform ZIP and verified against GitHub's asset SHA-256.
 
-Every stack layer separately passes `bun install --frozen-lockfile`,
+At that checkpoint, every stack layer separately passed `bun install --frozen-lockfile`,
 `bun run typecheck` (all three projects) and `bun run build` on its intended
 parent. The checked heads are Core `1b07af3`, Browser `2ccb203`, Host `bc02df3`
 and Validation `bd25f9a`. Frontend, Main, Core and audio worker build together.
@@ -28,7 +129,6 @@ and Validation `bd25f9a`. Frontend, Main, Core and audio worker build together.
 | Managed helper lifecycle | **38/38 helper updates; 22/22 recovery** | Real worker HTTP requests, concurrent leases, cancellation/failure/close, next-version selection and unresolved acquisition during shutdown. No production URL-admission relaxation. |
 | Final hidden Live native check | **Pass** | Real Main/Core/preload/hidden renderer; stereo Chromium WAV input, 17 named steps, 14 destroyed helpers; `final-r2-native/stereo/events.json`. |
 | Other desktop native checks | **All four pass** | Renderer status, capture consent, ordinary live-close and app-quit; child receipt below. Ordinary minimize/Close needs a WM; scratch-only extracted Openbox supplied it. |
-| Source inventory and retirement | **213 exact unique paths; 103 retain / 65 adapt / 45 exclude** | Original 131-path set union later 112-path set, 30 overlaps. All excluded paths absent. No native audience/output or playback-helper dependency remains. |
 
 Parent scratch root, relative to the assigned checkout, is `.scratch/player-modes/`.
 `final-r2-summary.json` retains counts; `layer-builds-r2/results.json` retains
@@ -51,7 +151,7 @@ passes **7/7** with Go available. Initial native live-close under bare Xvfb
 lacked window-manager minimize behavior; its Openbox retry passes unchanged
 product source. These are resolved failures, not remaining prerequisites.
 
-## Real browser and packaged paths
+## Historical browser and packaged paths
 
 - Direct: two actual H264/AAC browser decoders had independent queues; exclusive
   Move retained the Playback ID, two-entry queue and paused **37.240293 s**
@@ -88,7 +188,7 @@ The bounded encrypted 50-client fixture proves software fanout/isolation only.
 Native HLS/MPEG-TS picture mapping limitations remain visible; no frame-lock or
 new low-latency video engine is claimed.
 
-## Packaging and manual CI
+## Historical packaging and manual CI at bd25f9a
 
 Final Linux Package passes in `act` on `catthehacker/ubuntu:full-latest`, from an
 owned clone at `bd25f9a`, before the final manual dispatch. Command:
@@ -119,9 +219,9 @@ helpers. Existing Couch Releases signing identity is retained. Cross-build and
 signature checks do not establish Intel Ventura execution or hardware capture.
 No release workflow, merge or PR submission was performed.
 
-## Independent reviews and causal controls
+## Historical independent reviews and causal controls at bd25f9a
 
-Fresh GPT-6.1 Sol xhigh/default independent reviews compare fixed
+The checkpoint's GPT-6.1 Sol xhigh/default independent reviews compared fixed
 `4a194e3...bd25f9a`. **Spec: zero actionable findings. Standards: zero actionable
 findings.** Standards independently reran two mocked UI checks. Reviews are
 source/coverage reviews, not independent full runtime qualification.
@@ -153,9 +253,9 @@ Detailed child receipts remain at these assigned child checkouts:
 
 All suffixes are below `/home/avoid/.t3/worktrees/couch/`. Tracked historical
 documents and the immutable recovery ref retain the source/evidence provenance;
-these scratch receipts add fresh integration evidence.
+these scratch receipts add checkpoint integration evidence.
 
-## Exact qualification limits
+## Historical native capture receipts and qualification limits
 
 The available Apple Silicon Mac is macOS **14.8.7**, with UMC404HD input visible
 at **48 kHz / 512 HAL frames**. The first signed-app attempts reported
@@ -204,17 +304,18 @@ receiver budget** refuses the measured Linux software route requiring **141 ms**
 (`mac-opus-default-admission.json`). Defaults remain conservative source policy,
 not a promise that every output can meet them; the available larger lead works.
 
-Unqualified: ≤100 ms physical input-to-ear, numerical physical skew/dropout/
-fidelity profile, 50 physical receivers, real Wi-Fi phone/background/locked states,
+Unqualified: the corrected roughly 50 ms physical input-to-ear capability,
+numerical physical skew/dropout/fidelity profile, 50 physical receivers, real Wi-Fi phone/background/locked states,
 Bluetooth routes, a real Apple AirPlay sender, native 44.1 kHz hardware capture
 and Intel Ventura installation/playback/capture/update. Those need the named
 devices and a bounded physical witness with a known stimulus. Software capture coherence,
 API readiness, synthetic scale, cross-compilation and historical subjective
 listening do not establish these claims. They limit Live support/release
-qualification; they do not block opening the reviewable integration PRs.
+qualification. The reopened Live and Mac host comparison gates, final checks
+and fresh reviews currently keep integration completion and PR submission pending.
 
 
-## Handoff cleanup
+## Historical handoff cleanup
 
 Owned sources are ended before quitting scratch apps; rate/lead settings used by
 software probes are restored. Packaged hidden capture's source/helper disappears
@@ -234,5 +335,6 @@ modified files** during that interval: Chromium state/cache plus `couch.sqlite`,
 `helpers/status.json`. The TLS private key and operating-mode file predate the
 incident. No prelaunch snapshot exists, so unchanged database contents cannot be
 asserted and no guessed restoration/deletion was performed. The audit is
-`microphone-grant/default-data-audit.json`. All owned app/helper processes,
-listeners, browser tabs and SSH tunnel are stopped after the follow-up.
+`microphone-grant/default-data-audit.json`. That follow-up recorded all its
+owned app/helper processes, listeners, browser tabs and SSH tunnel stopped. Cleanup of later reopened-gate
+work remains a separate parent-owned check.
