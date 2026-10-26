@@ -6,6 +6,16 @@ candidate; browser clients continue to use browser capture and output APIs.
 
 ## Bounded protocol
 
+**Gain staging is a prerequisite.** Inspect the owned stimulus and product/output
+volume chain first. Establish identifiable source and return levels with
+conservative peak headroom (about −12 dBFS for this stimulus), no clipping and
+fixed matched L/R gains. Pin any changed stimulus/analog gain as a new baseline.
+The retained PCM recording has source peaks near −33 dBFS and return peaks near
+−68 dBFS; return active/quiet RMS ratio is only about 17.6 dB. These are recorded
+levels, not formal SNR/THD or proof of a backend/codec defect. Post-capture
+normalization cannot recover SNR. If physical preamp adjustment remains necessary,
+record the exact meter/adjustment and continue independent integration work.
+
 Use the two existing input selections in the same signed maintained Mac app:
 Chromium capture and PortAudio/CoreAudio capture. The preserved experiment is
 `recovery/player-modes-20261026:docs/audio-native-device-controls-research.md`,
@@ -56,4 +66,26 @@ remain historical evidence with their original limits.
 
 ## Result
 
-Pending setup, matched captures, uncertainty analysis and adoption verdict.
+Gain baseline `gain-meter-r1` was accepted by the owner on 26 October 2026.
+Continuous 440/660 Hz calibration at −12 dBFS digital peak fed the two analog
+paths directly; it bypassed Couch. Final source peaks were −11.84/−11.83 dBFS,
+return peaks −23.06/−23.13 dBFS; the last 100 meter intervals had no clipped
+samples or dropped callback records. L/R matched within 0.1 dB. These are
+calibration readings, not performance or fidelity qualification. The owner
+adjusted the physical UMC gains; leave them fixed. Continuous tones and their
+owned meter/playback processes were stopped after acceptance. Exact levels and
+PID/provenance receipts are in `.scratch/live-performance/gain-meter-r1/`.
+
+The prior tested Couch receiver was **80%, unmuted**, not the 35% attributed to it
+in an intermediate update. Its SDK gain contributes about −2.91 dB; the unchanged
+Linux Master contributes −12 dB. Those stages explain only part of the prior
+roughly 35 dB reference-to-return difference. The known 52 s waveform stimulus
+already peaks near −12 dBFS digitally. Check actual source/return levels through
+Couch before scoring the newly identified baseline; post-capture normalization
+cannot substitute for this check.
+
+Pending ordinary-browser setup, matched captures, uncertainty analysis and
+native-adoption verdict. The unchanged signed package exposes no actual Core
+ingress telemetry. Any bounded diagnostic overlay must retain its exact diff,
+artifact hashes and signature limits beside both arms; uploader send events
+must not be reported as Core receipt.
