@@ -450,7 +450,7 @@ export async function createHub(options: HubOptions) {
   const buffer = (source: { id: string; audio: boolean; video: boolean; audioDelivery?: "pcm" }, signal?: AbortSignal) => {
     if (source.audioDelivery === "pcm") { live.upload(source.id, true); return Promise.resolve(); }
     // Demand may disappear during startup, before the pending broadcast cleans up.
-    if (!liveStreams.has(source.id)) void liveStreams.start(source.id, source).then(() => {
+    if (!liveStreams.has(source.id)) void liveStreams.start(source.id, source, () => live.position(source.id)).then(() => {
       if (!liveStreams.has(source.id)) return;
       if (!buffered(source.id)) return liveStreams.end(source.id);
       live.upload(source.id, true);

@@ -62,7 +62,7 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
   };
 
   return {
-    async start(sourceId: string, source: { audio: boolean; video: boolean }) {
+    async start(sourceId: string, source: { audio: boolean; video: boolean }, position = () => 0) {
       if (closed || streams.has(sourceId)) throw new Error("This input is already sharing or has stopped.");
       if (!source.audio && !source.video) throw new Error("Choose an input with sound or picture.");
       const pending = Promise.withResolvers<void>();
@@ -84,7 +84,10 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
         // output. Keep the encoded timestamps in every muxer so filtered picture
         // retains the audio clock (including AAC encoder delay). Relative paths
         // keep platform temp-directory syntax out of tee's parser.
-        const outputs = renditions.map(rendition => `[f=hls${rendition === "av" ? "" : `:select=${rendition === "audio" ? "a" : "v"}`}:avoid_negative_ts=disabled:hls_segment_options=avoid_negative_ts=disabled:hls_time=1:hls_list_size=8:hls_delete_threshold=2:hls_flags=delete_segments+independent_segments+temp_file:hls_segment_filename=${rendition}/segment-%09d.ts]${rendition}/stream.m3u8`).join("|");
+        // A new MediaRecorder starts at zero even when the publication continues.
+        // Offset every rendition on the same publication clock after provisioning.
+        const offset = position();
+        const outputs = renditions.map(rendition => `[f=hls${rendition === "av" ? "" : `:select=${rendition === "audio" ? "a" : "v"}`}:output_ts_offset=${offset}:avoid_negative_ts=disabled:hls_segment_options=avoid_negative_ts=disabled:hls_time=1:hls_list_size=8:hls_delete_threshold=2:hls_flags=delete_segments+independent_segments+temp_file:hls_segment_filename=${rendition}/segment-%09d.ts]${rendition}/stream.m3u8`).join("|");
         const child = stream.child = spawn(ffmpeg.path, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-protocol_whitelist", "pipe",
           "-probesize", "1000000", "-analyzeduration", "1000000", "-i", "pipe:0",
           // Adapter constraint: retained captured-video HLS provides AAC PTS to
