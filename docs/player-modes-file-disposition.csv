@@ -1,0 +1,214 @@
+path,recovery_provenance,disposition,owning_layer,acceptance
+.github/workflows/package.yml,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+app/audio-peer.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+app/capture.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+app/live-audio.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+app/live-output.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+app/main.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+app/native-audio-input.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+app/native-audio-output.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+app/native-capture.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+app/native-playback.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+app/preload.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+bun.lock,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+docs/adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/adr/0002-playback-delivery-and-authority.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/airplay.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/architecture.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-linux-defaults-research.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-native-device-controls-research.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-native-receiver-reuse-research.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-native-reuse-options.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-roundtrip-performance.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-alternatives-evidence.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-architecture-proposal.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-costs.html,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-experiment-evidence.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-independent-review-opus.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-independent-review-sol.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-moonlight-sunshine.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-refactor-code-map.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-refactor-plan.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-refactor-validation.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/audio-video-use-cases.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/ci.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/home.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/player.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/remote.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/settings.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/share.md,original+later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/tv.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/design/where-it-plays.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/lan-origin.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/live-inputs.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/live-sharing-performance.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/public-media.md,original,retain,validation,Review built-state accuracy; preserve historical evidence provenance
+docs/sync-test-evaluation.md,later,adapt,validation,Review built-state accuracy; preserve historical evidence provenance
+native/live-audio/README.md,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+native/live-audio/capture-queue.h,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+native/live-audio/capture-queue.test.c,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+native/live-audio/capture.c,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+native/live-audio/playback/LICENSE,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/README.md,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/adapter/sendspin/client.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/audio_sink.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/audio_sink.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/clock-servo-test.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/clock-servo.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/log.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/null_sink.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/pcm_volume.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/pcm_volume.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/playback.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/pulse_sink.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/pulse_sink.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/sink_recovery.cpp,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/sink_recovery.h,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+native/live-audio/playback/upstream-pins.json,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+package.json,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+patches/@sendspin%2Fsendspin-js@5.0.0.patch,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+patches/@sonn-audio%2Fnode-sendspin@0.6.2.patch,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+patches/README.md,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+scripts/LICENSE.sync-test,later,exclude,archive,Measurement tooling preserved on recovery ref; no new latency campaign
+scripts/after-pack.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+scripts/audio-roundtrip.py,later,exclude,archive,Measurement tooling preserved on recovery ref; no new latency campaign
+scripts/build-live-audio.ts,later,adapt,host,native-capture.integration; capture.test; package-hooks; act Package
+scripts/build-live-playback.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+scripts/core.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/client/api/settings.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/audio-settings.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/capture-audio.html,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/components/DurationBar.tsx,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/components/PlayOn.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/components/PlaybackSettings.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/components/PlaybackTransport.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/components/RowMenu.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/radio-clock.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/find/useLiveSourceHits.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/home/HomePage.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/home/HomeSources.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/now/PlayerPage.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/now/QueueActions.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/now/QueuePanel.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/remote/RemotePage.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/settings/AdvancedAudioSettings.tsx,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/settings/CouchPages.tsx,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/settings/ThisDevicePages.tsx,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/settings/couch/PlaybackPreferences.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/share/ShareControl.tsx,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/share/ShareDialog.tsx,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/share/share.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/shell/KeyboardShortcuts.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/shell/LiveSharingStatus.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/shell/NowPlayingBar.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/sections/shell/Outputs.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/capture-audio-worker.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/capture-audio.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/live.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/media-session.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/native-audio.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+src/client/session/picture-clock.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/picture-mapping.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/playback-controls.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/receiver-admission.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/renderer.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/sendspin.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/session.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/client/session/where-it-plays.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+src/server/airplay.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/audio-packets.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/audio-worker.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/capture-audio.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/capture-ingest.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/http.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/hub.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/lan-listener.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/live-audio-policy.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+src/server/live-input.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/live-pcm.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+src/server/live-stream.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/messages.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/mpv.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/output-admission.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/pass-through.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/scheduled-audio.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/scheduled-capture.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/sendspin.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/session.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/sound-pulse.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/sound-routing.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/source-preparation.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/store.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+src/server/validation.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/server/web-media.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/shared/app-bridge.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+src/shared/audio-settings.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+src/shared/capture.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+src/shared/live-input.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/shared/native-output.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+src/shared/playback-policy.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+src/shared/protocol.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/airplay.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/all-consent-restart.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/audio-isolation.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/audio-roundtrip.test.py,later,exclude,archive,Measurement tooling preserved on recovery ref; no new latency campaign
+tests/audio-settings.test.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+tests/capture-clock.test.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/capture-consent.native.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/capture-continuity.integration.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/capture-format.test.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+tests/capture-upload.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/capture.test.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+tests/device-sharing.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/fixtures/mac-chrome-output-timestamps.json,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/fixtures/native-capture-helper.mjs,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+tests/fixtures/native-playback-helper.mjs,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+tests/group-language.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/home-sources.test.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/iptv-routing.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/lan-peer.test.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-audience.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-close.native.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-delivery.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-input.fixture.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-input.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-join-lead.integration.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-latency.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-outputs.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/live-pcm.test.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+tests/live-sync.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/mpv-lifecycle.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/native-capture.integration.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+tests/native-live-authority.test.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+tests/native-output.integration.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+tests/native-playback.test.ts,later,exclude,archive,Browser scheduled Opus replaces native audience output; native host capture retained
+tests/output-admission.integration.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/output-admission.test.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/output-clock.test.ts,later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/output-preparation-sdk.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/playback-audience-ui.test.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/playback-logging.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/playback-policy.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/playback-policy.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/playback-routing.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/radio-clock.browser.tsx,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/receiver-admission.test.ts,original+later,adapt,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/receiver-error-lifecycle.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/relaxed-pcm-queue.integration.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/renderer-hls.test.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/scheduled-capture.integration.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/scheduled-language.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/sendspin-logging.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/sendspin-route.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/sendspin-sdk.test.ts,original+later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/settings-authority.integration.ts,later,adapt,host,audio-settings; native-capture; settings-authority; capture-format
+tests/share.test.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/sound-session.integration.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/source-language.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/source-preparation.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/tv-navigation.browser.ts,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/where-it-plays-rules.test.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+tests/where-it-plays.test.tsx,original,retain,browser,renderer-hls; audience-ui; where-it-plays; receiver-admission; browser journeys
+tests/youtube-playback.integration.ts,original,retain,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
+vite.config.ts,later,adapt,core,policy/routing/audience/admission/source/scheduled Node suites; focused unit checks
