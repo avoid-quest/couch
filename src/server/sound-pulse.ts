@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import type { SoundInventory, SoundOutput, SoundProfile } from "../shared/sound";
 
 type Card = { index: number; name: string; active_profile?: string; properties?: Record<string, string>; profiles?: Record<string, { description?: string; sinks?: number; sources?: number; available?: boolean }> };
@@ -7,8 +7,12 @@ type Sink = { card?: number; properties?: Record<string, string>; flags?: string
 export type SoundProcess = { pid: number; exited: Promise<number>; stop: () => void };
 export type SoundBackend = { inventory: () => Promise<SoundInventory>; start: (output: string) => SoundProcess; route: (pid: number) => Promise<string | null> };
 export class SoundError extends Error {}
+// Avoid repeatedly forking Core for an absent optional helper. Recheck on retry,
+// so installing it repairs sound controls without restarting Couch.
+export const hasPulseTools = () => existsSync("/usr/bin/pactl");
 export const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
 export const querySound = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
+  if (!hasPulseTools()) { reject(new SoundError("Linux sound controls need pactl. Install pulseaudio-utils, then try again.")); return; }
   execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => {
     if (!error) return resolve(stdout.trim());
     reject(new SoundError(error.code === "ENOENT"

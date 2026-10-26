@@ -1529,8 +1529,9 @@ export async function createHub(options: HubOptions) {
   const failedPairing = new Map<string, number>();
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
+  const extraLanPeers = (process.env.COUCH_LAN_PEERS ?? "").split(",").map(peer => peer.trim()).filter(Boolean);
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
-    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
+    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request), extraLanPeers))) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
