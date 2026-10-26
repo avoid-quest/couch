@@ -24,7 +24,8 @@ bottom Sheet on phones and the TV:
 Share this device                                  ×
 (✓ Screen) (Window) (Sound only) (Audio input) (Live audio)
 [picture] [picture] [picture]          screens or windows
-Input                        [System default ▾]   Audio input and Live audio
+Input                        [System default ▾]   Audio input
+Input                        [Choose an input ▾]  Live audio
                              Choose audio input
 Play on                (Living room TV) (Kitchen)
 Include this computer's sound               [on]   Screen and Window
@@ -35,6 +36,7 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 - **What to share** is one row of chips, the chosen one checked
   (`shareKinds`). Each kind says how it captures: Screen and Window are a
   `screen` capture of a screen or a window, Sound only is `system-audio`, and
+  Live audio requires an explicit input: its selector starts empty, omits System default, and keeps Start sharing disabled until a device is selected. Ordinary Audio input retains System default.
   Audio input is `microphone`, with the input choice. **Live audio** uses that
   same picker with live intent and appears only on the Couch computer in the
   desktop app. It requires an actual stereo input and timestamped capture;

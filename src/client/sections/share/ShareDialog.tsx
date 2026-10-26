@@ -61,7 +61,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const [sourceId, setSourceId] = useState("");
   const [inputs, setInputs] = useState<import("../../../shared/capture").AudioInput[] | null>(null);
   const [audioDeviceId, setAudioDeviceId] = useState("default");
-  useEffect(() => { setInputs(null); setAudioDeviceId("default"); }, [kind.id]);
+  useEffect(() => { setInputs(null); setAudioDeviceId(kind.intent === "live" ? "" : "default"); }, [kind.id]);
   const [targets, setTargets] = useState<string[]>([]);
   const [sound, setSound] = useState(true);
   const [quality, setQuality] = useState<LiveVideoQuality>("1080p");
@@ -87,7 +87,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const starting = useRef(false);
   useEffect(() => () => { if (starting.current && !liveSharing.current()) void endLive().catch(() => {}); }, []);
   // The desktop app's Sound only takes a screen's capture for its sound (selectionOf).
-  const ready = available && !reason && !elsewhere && (!lists || !!(kind.pictures ? source : sources?.some(item => item.kind === "screen")));
+  const ready = available && !reason && !elsewhere && (kind.intent !== "live" || !!audioDeviceId && audioDeviceId !== "default") && (!lists || !!(kind.pictures ? source : sources?.some(item => item.kind === "screen")));
 
   const checkAccess = async (on = kind) => {
     const text = await couchApp?.captureAccess?.(on.capture).catch(() => null);
@@ -120,7 +120,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
       starting.current = true;
       const next = await liveAudioInputs(kind.intent === "live").finally(() => { starting.current = false; });
       setInputs(next);
-      setAudioDeviceId(previous => next.some(input => input.deviceId === previous) ? previous : "default");
+      setAudioDeviceId(previous => next.some(input => input.deviceId === previous) ? previous : kind.intent === "live" ? "" : "default");
       if (!next.length) setError("No audio inputs are available. Connect a microphone or audio interface and try again.");
     } catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setListing(false); }
@@ -164,8 +164,8 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     {kind.inputs && <Row label="Input" htmlFor="live-audio-input">
       <div className="grid justify-items-end gap-1">
         <Select value={audioDeviceId} disabled={!available || !!reason} onValueChange={setAudioDeviceId}>
-          <SelectTrigger id="live-audio-input" className="w-56"><SelectValue /></SelectTrigger>
-          <SelectContent data-tv-local-only><SelectItem value="default">System default</SelectItem>{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId}>{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
+          <SelectTrigger id="live-audio-input" className="w-56"><SelectValue placeholder="Choose an input" /></SelectTrigger>
+          <SelectContent data-tv-local-only>{kind.intent !== "live" && <SelectItem value="default">System default</SelectItem>}{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId}>{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
         </Select>
         {/* Browsers name inputs only once microphone access is allowed. */}
         <Button variant="ghost" size="sm" className="-mr-3" disabled={!available || !!reason} onClick={() => void chooseInput()}>{listing ? <><Spinner />Finding inputs…</> : inputs ? "Refresh inputs" : "Choose audio input"}</Button>
@@ -199,7 +199,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
 /** The picture's quality: up to 30 fps, at most this resolution. */
 export function QualitySelect({ id, value, disabled, onValueChange }: { id?: string; value: LiveVideoQuality; disabled?: boolean; onValueChange: (value: LiveVideoQuality) => void }) {
   return <Select value={value} disabled={disabled} onValueChange={value => onValueChange(value as LiveVideoQuality)}>
-    <SelectTrigger id={id} aria-label={id ? undefined : "Picture"} className="w-56"><SelectValue /></SelectTrigger>
+    <SelectTrigger id={id} aria-label={id ? undefined : "Picture"} className="w-56"><SelectValue placeholder="Choose an input" /></SelectTrigger>
     <SelectContent data-tv-local-only>{Object.entries(qualityLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
   </Select>;
 }
