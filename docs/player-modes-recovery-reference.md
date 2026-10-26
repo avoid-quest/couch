@@ -32,6 +32,14 @@ git show recovery/player-modes-20261026:docs/playback-recovery/2026-10-26/README
 git show recovery/player-modes-20261026:docs/playback-recovery/2026-10-26/history-audit.md
 ```
 
+Browser Live PCM predates the excluded native audience implementation. The current
+integration restores the shared PCM producer/fanout and low-lead settings while
+retaining native host capture, Opus and strict admission. Native audience
+helpers/IPC/credential export remain excluded. Read the
+[Live performance gate](player-modes-live-performance.md) before treating transport
+restoration or a historical pass as preserved physical performance; browser
+preparation remains Opus-first and the codec comparison is still open.
+
 ## Provenance and selective retrieval
 
 | Input | Identity / use |
@@ -80,7 +88,9 @@ The shortened prefixes before “plus” share `audio-roundtrip-sync/`.
 
 Browser `Couch Audio Lab R4.app` (`5ce1d68e…`) and
 `Couch Audio Lab Native R4.app` (`ee16cdca…`) belong to separate sequences.
-ASAR identity, native capture sample coherence and historical PCM/native-output
-passes are reference evidence. They do not establish final packaged browser Opus,
-physical latency/skew/fidelity, Wi-Fi/background behavior or 50 physical receivers.
+ASAR identity and native capture sample coherence are reference evidence.
+Historical browser PCM r15 passes at roughly 48.543 ms; its r16 repeat fails.
+Those browser results remain separate from excluded native audience output.
+Neither establishes restored packaged browser performance, physical
+latency/skew/fidelity, Wi-Fi/background behavior or 50 physical receivers.
 Recovery refs, original investigation trees and frozen evidence remain intact.

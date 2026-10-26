@@ -84,14 +84,17 @@ SDK clock
 uncertainty is **milliseconds**: receiver admission requires finite 0–10 ms.
 Capture timestamps and scheduled deadlines use integer microseconds.
 
-These browser changes do not select sender lead or packet duration. Integrated
-Host policy retains **100 ms default Live lead / 70 ms receiver budget** with
-**10 ms Opus packets**, and offers 100/150/250 ms lead choices with a 30 ms source
-reserve. Policy is frozen per publication and carried through the worker; saving
-a setting does not retime an active source. Relaxed capture keeps one second. Live audience
-output remains stereo Opus; relaxed PCM compatibility and PCM capture ingress
-remain distinct supported paths. Timing estimates and technical admission do not
-qualify physical input-to-ear latency, skew or continuous fidelity.
+These browser changes do not select sender lead, packet duration or audience wire.
+Core restores immediate stereo PCM alongside shared Opus while Couch's browser
+remains **Opus-first and prepares Opus**. PCM transport predates the excluded native
+audience implementation. Strict capacity floors remain 65,536 bytes for PCM and
+4,096 for Opus; timing, receiver identity and correction guards still apply.
+The [integration ledger](../docs/player-modes-integration-ledger.md#file-inventory-and-retirement)
+records restored lead choices/reserves, unchanged **100/70 ms** defaults, **10 ms
+Opus** and **at most 240-frame PCM** packets. Policy is frozen per publication;
+relaxed capture keeps one second. The
+[physical codec comparison](../docs/player-modes-live-performance.md) remains open;
+technical admission does not qualify input-to-ear latency, skew or fidelity.
 
 - `SendspinPlayer.syncInfo.processingTimeMs` exposes the maximum observed local
   chunk-arrival-to-`AudioBufferSourceNode.start()` cost over the trailing second.
@@ -162,7 +165,8 @@ sees merged preparation/timing; error URLs are redacted.
 The worker matches the current control-tab receiver token and independently
 checks format, capacity, timing and correction. A ready assertion alone never
 grants admission. Legacy clients without the extension retain numeric admission.
-The extension neither retimes a source nor enables Live PCM.
+The extension reports preparation; Core's producer, negotiated format and
+admission policy determine the wire. It does not retime a source or select PCM.
 
 Removal gates: `output-preparation-sdk.integration.ts`, `receiver-admission.test.ts`,
 `sendspin-route.test.ts`, `output-admission.test.ts`, malformed-preparation cases in
