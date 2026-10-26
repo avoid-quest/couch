@@ -142,6 +142,9 @@ test("restored All follows live audio consent in Direct and Synced delivery", { 
     await b!.command({ type: "output", deviceId: b!.id, level: 40 });
     const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
     await until(() => levels[0]!.at(-1) === 14 && levels[1]!.at(-1) === 8);
+    // SDK volume commands can precede Core's worker-admission snapshot. Capture
+    // the comparison only after both receivers' delay fields are published.
+    await until(() => b!.state.outputs?.length === 2 && b!.state.outputs.every(output => output.delay === 0 && output.delayActive === true));
     const localOutputs = b!.state.outputs;
     for (const audio of [false, true, false]) {
       await b!.command({ type: "sharing", sharing: { audio, video: true } });

@@ -18,7 +18,7 @@ async function fixture() {
   const adminToken = store.pair(adminId, "Admin"), deviceToken = store.pair(deviceId, "Device");
   store.close();
   const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0 });
-  const sockets: WebSocket[] = [], speakers: SendspinClient[] = [];
+  const sockets: WebSocket[] = [], speakers: SendspinClient[] = [], chunks = new Map<string, number>();
   // A Device's Sendspin player: the levels Core sends it while its sound is synced.
   async function speaker(key: Identity) {
     const levels: number[] = [], client = new SendspinClient(key.peerId, "Test speaker", [Roles.PLAYER], {
@@ -26,6 +26,7 @@ async function fixture() {
       playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.VOLUME] },
     });
     speakers.push(client);
+    client.addAudioChunkListener(() => chunks.set(key.peerId, (chunks.get(key.peerId) ?? 0) + 1));
     client.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!); });
     await client.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
     return levels;
@@ -49,7 +50,7 @@ async function fixture() {
     }) };
   }
   const admin = await connect(adminToken, adminId), device = await connect(deviceToken, deviceId, "&updates=1");
-  return { hub, admin, device, adminId, deviceId, deviceToken, connect, speakers: () => Promise.all([speaker(adminKey), speaker(deviceKey)]),
+  return { hub, admin, device, adminId, deviceId, deviceToken, connect, heard: (id: string) => chunks.get(id) ?? 0, speakers: () => Promise.all([speaker(adminKey), speaker(deviceKey)]),
     api: (path: string, body?: unknown) => fetch(`${hub.origin}${path}`, { headers: { Authorization: `Bearer ${adminToken}`, ...body === undefined ? {} : { "Content-Type": "application/json" } }, ...body === undefined ? {} : { method: "POST", body: JSON.stringify(body) } }),
     subtitle: (playbackId: string) => fetch(`${hub.origin}/api/subtitles?playbackId=${playbackId}&name=subtitles.vtt`, { method: "POST", headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/octet-stream" }, body: "WEBVTT\n\n00:00.000 --> 00:01.000\nHello" }),
     close: async () => { await Promise.all(speakers.map(client => client.disconnect())); for (const socket of sockets) socket.terminate(); await hub.close(); rmSync(directory, { recursive: true, force: true }); },
@@ -255,8 +256,177 @@ test("revoking consent while a source resolves prevents its late load from start
     await f.device.command({ type: "sharing", sharing: defaultDeviceSharing });
     release!();
     await until(() => f.admin.state.playbacks?.some(playback => playback.status === "unavailable") === true);
+    assert.match(f.admin.state.player.error ?? "", /Device is not sharing audio/);
+    assert.deepEqual(f.admin.state.outputs, []);
+    assert.deepEqual(f.admin.state.queue.map(entry => entry.id), ["pending"]);
     assert.equal(f.device.messages.some(message => message.type === "player" && message.command.type === "load"), false);
   } finally { source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve())); await f.close(); }
+});
+
+
+// Hold the initial MIME/classification read after resolution, then use real WAV
+// bytes and the adjacent scheduled worker to prove the current route can play.
+async function heldAudio(invalid = false) {
+  const frames = 6 * 48_000, wav = Buffer.alloc(44 + frames * 4);
+  wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(2, 22);
+  wav.writeUInt32LE(48_000, 24); wav.writeUInt32LE(192_000, 28); wav.writeUInt16LE(4, 32); wav.writeUInt16LE(16, 34);
+  wav.write("data", 36); wav.writeUInt32LE(wav.length - 44, 40);
+  let release: (() => void) | undefined, reads = 0, closed = false;
+  const server = createServer((_request, response) => {
+    const answer = () => {
+      response.setHeader("Content-Type", invalid ? "application/vnd.apple.mpegurl" : "audio/wav");
+      response.setHeader("Access-Control-Allow-Origin", "*");
+      response.end(invalid ? '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="Unavailable",DEFAULT=YES,URI="file:///unavailable"\n#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="a"\n/picture.m3u8\n' : wav);
+    };
+    if (++reads === 1) { release = answer; response.once("close", () => { closed = true; }); } else answer();
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address === "object");
+  return { source: `http://127.0.0.1:${address.port}/audio.wav`, get held() { return !!release; }, get closed() { return closed; }, get reads() { return reads; }, release: () => { release?.(); release = undefined; },
+    close: async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } };
+}
+
+test("initial source preparation follows accepted output edits and retains private picture authority", { timeout: 15_000 }, async () => {
+  const f = await fixture(), audio = await heldAudio();
+  try {
+    await f.speakers();
+    assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
+    assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: audio.source } })).ok, true);
+    assert.equal((await f.admin.command({ type: "output", deviceId: f.adminId, picture: false, level: 0 })).ok, true);
+    assert.equal((await f.device.command({ type: "enqueue", entry: { id: "mix", title: "Mix", source: audio.source }, playNow: true, deviceId: f.adminId })).ok, true);
+    await until(() => audio.held);
+    const playbackId = f.device.state.player.playbackId;
+    assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, level: 25 })).ok, true);
+    assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, picture: true })).ok, true);
+    assert.equal((await f.device.command({ type: "sharing", sharing: { audio: true, video: false } })).ok, true);
+    audio.release();
+    await until(() => f.device.state.player.status === "playing" && f.heard(f.deviceId) > 0 && f.heard(f.adminId) > 0);
+    assert.equal(f.device.state.player.playbackId, playbackId);
+    assert.equal(f.device.state.player.error, null);
+    assert.ok(f.device.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.playbackId === playbackId));
+    const own = f.device.state.outputs?.find(output => output.deviceId === f.deviceId);
+    assert.equal(own?.picture, true); assert.equal(own.sound, true); assert.equal(own.local, true); assert.equal(own.error, undefined);
+    assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "taken", title: "Taken", source: audio.source }, playNow: true, deviceId: f.deviceId })).ok, false);
+    assert.deepEqual(f.device.state.outputs?.find(output => output.deviceId === f.deviceId), own);
+    assert.equal((await f.admin.command({ type: "play", entryId: "waiting" })).ok, false);
+    assert.deepEqual(f.device.state.outputs?.find(output => output.deviceId === f.deviceId), own);
+    assert.deepEqual(f.device.state.queue.map(entry => entry.id), ["mix"]);
+  } finally { await f.close(); await audio.close(); }
+});
+
+
+for (const ending of ["stop", "replace", "leave", "consent"] as const) test(`initial output preparation cannot revive an item after ${ending}`, { timeout: 15_000 }, async () => {
+  const f = await fixture(), audio = await heldAudio();
+  try {
+    assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
+    assert.equal((await f.device.command({ type: "enqueue", entry: { id: "pending", title: "Pending", source: audio.source }, playNow: true, deviceId: f.adminId })).ok, true);
+    await until(() => audio.held);
+    const playbackId = f.device.state.player.playbackId!;
+    assert.equal((await f.device.command({ type: "output", deviceId: f.adminId, picture: false })).ok, true);
+    if (ending === "stop") {
+      assert.equal((await f.device.command({ type: "stop", playbackId })).ok, true);
+      await until(() => audio.closed);
+    } else if (ending === "replace") {
+      assert.equal((await f.device.command({ type: "enqueue", entry: { id: "replacement", title: "Replacement", source: `${f.hub.origin}/api/health` }, playNow: true })).ok, true);
+      await until(() => audio.closed && f.admin.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.playbackId !== playbackId));
+    } else if (ending === "leave") {
+      assert.equal((await f.device.command({ type: "output", deviceId: f.adminId, level: 0 })).ok, true);
+    } else {
+      assert.equal((await f.admin.command({ type: "sharing", sharing: defaultDeviceSharing })).ok, true);
+    }
+    audio.release();
+    if (ending === "leave") await until(() => f.device.state.player.status === "error");
+    if (ending === "consent") await until(() => f.device.state.player.status === "unavailable");
+    assert.equal(f.admin.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.playbackId === playbackId), false);
+    assert.equal(f.device.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.playbackId === playbackId), false);
+    if (ending === "stop") assert.equal(f.device.state.currentEntryId, null);
+    if (ending === "replace") { assert.equal(f.device.state.currentEntryId, "replacement"); assert.equal(f.device.state.player.error, null); }
+    if (ending === "leave" || ending === "consent") assert.deepEqual(f.device.state.outputs, []);
+    if (ending === "consent") assert.match(f.device.state.player.error ?? "", /Admin is not sharing audio/);
+  } finally { await f.close(); await audio.close(); }
+});
+
+test("initial output preparation honors the current channel consent after a route edit", { timeout: 15_000 }, async () => {
+  const f = await fixture(), audio = await heldAudio();
+  try {
+    assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
+    assert.equal((await f.device.command({ type: "enqueue", entry: { id: "pending", title: "Pending", source: audio.source }, playNow: true, deviceId: f.adminId })).ok, true);
+    await until(() => audio.held);
+    const playbackId = f.device.state.player.playbackId;
+    assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: false } })).ok, true);
+    audio.release();
+    await until(() => f.admin.messages.some(message => message.type === "player" && message.command.type === "load"));
+    const loads = f.admin.messages.flatMap(message => message.type === "player" && message.command.type === "load" ? [message.command] : []);
+    assert.equal(loads.length, 1);
+    assert.equal(loads[0]!.playbackId, playbackId);
+    assert.deepEqual(loads[0]!.output, { picture: false, sound: true });
+    assert.equal(f.device.state.player.error, null);
+    assert.deepEqual(f.device.state.outputs, [{ deviceId: f.adminId, picture: false, sound: true, local: false }]);
+    assert.equal((await f.device.command({ type: "output", deviceId: f.adminId, picture: true })).ok, false);
+  } finally { await f.close(); await audio.close(); }
+});
+
+
+test("initial output edits do not retry or hide a genuine source preparation failure", { timeout: 15_000 }, async () => {
+  const f = await fixture(), audio = await heldAudio(true);
+  try {
+    assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
+    assert.equal((await f.device.command({ type: "enqueue", entry: { id: "broken", title: "Broken", source: audio.source }, playNow: true, deviceId: f.adminId })).ok, true);
+    await until(() => audio.held);
+    const playbackId = f.device.state.player.playbackId;
+    assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, level: 25 })).ok, true);
+    audio.release();
+    await until(() => f.device.state.player.status === "error");
+    assert.equal(f.device.state.player.playbackId, playbackId);
+    assert.match(f.device.state.player.error ?? "", /playlist contains an unsupported destination/);
+    assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.error, f.device.state.player.error);
+    assert.ok(audio.reads <= 3, "a source-selection failure must not enter the retired-output retry loop");
+    assert.equal(f.admin.messages.some(message => message.type === "player" && message.command.type === "load"), false);
+    assert.deepEqual(f.device.state.queue.map(entry => entry.id), ["broken"]);
+  } finally { await f.close(); await audio.close(); }
+});
+
+for (const duringPreparation of [false, true]) test(`initial sound-only HLS selects its audio rendition${duringPreparation ? " after picture consent changes during preparation" : " before preparation"}`, { timeout: 15_000 }, async () => {
+  const f = await fixture();
+  let release: (() => void) | undefined, masters = 0, retry = 0;
+  const requests: string[] = [];
+  const source = createServer((request, response) => {
+    requests.push(request.url!);
+    if (request.method === "GET" && request.url === "/master.m3u8" && ++masters === 2) retry = requests.length - 1;
+    const answer = () => {
+      response.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      response.setHeader("Access-Control-Allow-Origin", "*");
+      response.end(request.url === "/master.m3u8"
+        ? '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="Audio",DEFAULT=YES,URI="/audio.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="a",CODECS="avc1.42e01e,mp4a.40.2"\n/picture.m3u8\n'
+        : '#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\n/segment.ts\n#EXT-X-ENDLIST\n');
+    };
+    if (duringPreparation && requests.length === 1) release = answer; else answer();
+  });
+  await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
+  const address = source.address(); assert.ok(address && typeof address === "object");
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: duringPreparation } })).ok, true);
+    assert.equal((await f.device.command({ type: "enqueue", entry: { id: "selected", title: "Selected", source: `${origin}/master.m3u8` }, playNow: true, deviceId: f.adminId })).ok, true);
+    const playbackId = f.device.state.player.playbackId;
+    if (duringPreparation) {
+      await until(() => !!release);
+      assert.equal((await f.admin.command({ type: "sharing", sharing: { audio: true, video: false } })).ok, true);
+      release!();
+    }
+    await until(() => f.admin.messages.some(message => message.type === "player" && message.command.type === "load"));
+    const loads = f.admin.messages.flatMap(message => message.type === "player" && message.command.type === "load" ? [message.command] : []);
+    assert.equal(loads.length, 1);
+    assert.equal(loads[0]!.playbackId, playbackId);
+    assert.deepEqual(loads[0]!.output, { picture: false, sound: true });
+    assert.equal(loads[0]!.source, `${origin}/audio.m3u8`, "the current output channels must select the available audio rendition, independently of resolved coverage");
+    assert.equal(f.device.state.player.error, null);
+    if (duringPreparation) assert.ok(retry > 0, "the held full A/V attempt must have been replaced");
+    assert.equal(requests.slice(retry).includes("/picture.m3u8"), false, "the sound-only attempt must not read a picture playlist");
+    assert.deepEqual(f.device.state.outputs, [{ deviceId: f.adminId, picture: false, sound: true, local: false }]);
+    assert.deepEqual(f.device.state.queue.map(entry => entry.id), ["selected"]);
+  } finally { await f.close(); source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve())); }
 });
 
 test("Play from a controller cannot pull a device out of, or replace, its private picture", { timeout: 15_000 }, async () => {

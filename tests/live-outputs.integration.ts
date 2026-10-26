@@ -1,16 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
+import { dirname, join } from "node:path";
 import { isValidElement, type ReactNode } from "react";
 import type { PlaybackCommand } from "../src/shared/protocol";
 import { Mixer } from "../src/client/sections/shell/Outputs";
 import { chooserRequest, choosesHere, picker, reopens } from "../src/client/session/where-it-plays";
 import { deviceId } from "../src/client/session/device-id";
+import { helper, startHelpers } from "../src/server/helpers";
 import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
 
 // The existing routing suite also locks the opt-in, shared chooser behaviour.
 async function liveFixture({ askEveryDevice = true, ...options }: { local?: boolean; askEveryDevice?: boolean } = {}) {
   const fixture = await createLiveFixture(options);
+  // Helper selection is process-global. Reinitialize it while this fixture's
+  // executable exists, and finish checks before a later fixture changes PATH.
+  startHelpers(join(dirname(fixture.databasePath), "helpers"));
+  const helpers = await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
+  assert.deepEqual(helpers[0], { status: "fulfilled", value: join(dirname(fixture.databasePath), "ffmpeg") }, "only this fixture's encoder is selected");
   if (askEveryDevice) {
     const host = await fixture.connect(-1);
     assert.equal((await host.command({ type: "askEveryDevice", enabled: true })).ok, true);
@@ -822,11 +829,13 @@ test("Move here rechecks every output it removes after the item resolves, and re
     await f.publisher.command({ type: "enqueue", entry: { id: "movie", title: "Movie", source: `http://127.0.0.1:${address.port}/movie.mp4` }, playNow: true, deviceId: f.publisher.id });
     await until(() => !!f.publisher.load());
     f.publisher.report();
+    // The fixture encoder emits PCM only. Admit its PCM receiver before the
+    // first group load selects a wire, then require actual received audio.
+    await f.speaker(0);
     await f.publisher.command({ type: "output", deviceId: f.receiver.id, picture: true, level: 40 });
     // Receiver adds itself too, so its output is its own once it stops sharing.
     await f.receiver.command({ type: "output", deviceId: f.receiver.id, picture: true, level: 40 });
-    await f.speaker(0);
-    await until(() => f.publisher.state.player.status === "playing");
+    await until(() => f.heard(0) > 0 && f.publisher.state.player.status === "playing");
     const before = f.publisher.state.outputs?.map(({ deviceId, picture, sound, local }) => ({ deviceId, picture, sound, local }));
     const outputs = () => f.publisher.state.outputs?.map(({ deviceId, picture, sound, local }) => ({ deviceId, picture, sound, local }));
     block = true;

@@ -1,4 +1,4 @@
-import type { Action, Domain, PlaybackActor, ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
+import type { Action, AudioSelection, Domain, PlaybackActor, ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
 import type { HistorySelection, WatchingProfile } from "../shared/viewing";
 import type { Store } from "./store";
 import { createProgress, playbackMediaId, ViewingError } from "./progress";
@@ -10,7 +10,7 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"> & { title?: string };
-export type MediaSource = { publicNetwork?: boolean; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioManifest?: { url: string; text: string }; credentialOrigin?: string; liveSourceId?: string; publicNetwork?: boolean; audioOnly?: boolean; hasAudio?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
   prepareRecoveredSource?: (media: WebMediaSource, playbackId: string, signal: AbortSignal) => Promise<MediaSource>;
@@ -24,7 +24,7 @@ type SessionOptions = {
   entered?: () => void;
   now?: () => number;
   systemAudio?: boolean;
-  prepareAudio?: () => string;
+  prepareAudio?: (entry?: QueueEntry) => string;
   resolveContinuation?: (entry: QueueEntry, signal: AbortSignal) => PlaybackContinuation | null | Promise<PlaybackContinuation | null>;
 };
 
@@ -39,6 +39,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   let resolution: AbortController | null = null;
   let qualityResolution: AbortController | null = null;
   let audioOnly = false;
+  let audioSelection: AudioSelection | undefined;
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
@@ -207,6 +208,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   let progressContext: { profileId: string; playedBy?: PlaybackActor } | undefined;
   const send = (command: PlaybackCommand) => {
     if (command.type === "load") {
+      // Prepared sources carry Core-only access and decoder metadata. Every load,
+      // including recovery/handoff/reload, crosses the same renderer boundary.
+      const { headers: _headers, audioManifest: _audioManifest, audioSelection: _audioSelection, credentialOrigin: _credentialOrigin, publicNetwork: _publicNetwork, hasAudio: _hasAudio, ...wire } = command as typeof command & Pick<MediaSource, "audioManifest" | "credentialOrigin" | "publicNetwork" | "hasAudio"> & { headers?: Record<string, string>; audioSelection?: AudioSelection };
+      command = wire;
       const entry = state.queue.find(item => item.id === state.currentEntryId);
       if (entry?.live || isRadio(entry) || command.radio) command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
       loaded = command;
@@ -310,10 +315,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   const play = (entryId: string, fromStart = false, reason: "play" | "next" | "retry" = "play", authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue, context?: PlaybackContinuation | null, preserveContext = false) => {
     authorize();
     available();
-    options.prepareAudio?.();
     audioInterrupted = false;
     const entry = proposedQueue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
+    options.prepareAudio?.(entry);
     const index = proposedQueue.indexOf(entry);
     const cursor = proposedQueue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
     // Play now moves the chosen item or explicit album ahead of waiting entries.
@@ -340,6 +345,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     resolution = new AbortController();
     const playbackId = crypto.randomUUID();
     subtitleWarning = null;
+    audioSelection = undefined;
     addedSubtitles = [];
     const profileId = state.activeProfile.id;
     const preferences = { ...state.preferences!.profile };
@@ -375,7 +381,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progressContext = { profileId: mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy: playedBy ? { ...playedBy } : undefined };
         progress.begin(currentEntry, playbackId, progressContext.profileId, progressContext.playedBy);
-        options.prepareAudio?.();
+        options.prepareAudio?.(currentEntry);
         send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
         broadcast();
@@ -391,7 +397,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const audio = player.tracks?.filter(track => track.kind === "audio") ?? [];
     const subtitles = player.tracks?.filter(track => track.kind === "subtitle") ?? [];
     return {
-      ...(audio.length > 1 ? { audioTrack: audio.find(track => track.selected)?.index ?? 0 } : {}),
+      ...(audioSelection ? { audioTrack: audioSelection.index } : audio.length > 1 ? { audioTrack: audio.find(track => track.selected)?.index ?? 0 } : {}),
       ...(subtitles.length ? { subtitleTrack: subtitles.find(track => track.selected)?.index ?? -1 } : {}),
       ...(player.subtitleDelay ? { subtitleDelay: player.subtitleDelay } : {}),
     };
@@ -414,8 +420,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       const fresh = await options.resolveSource!(entry, playbackId, signal, false);
       if (!current()) throw new Error("Playback changed. Try again.");
       authorize();
+      options.prepareAudio?.(entry);
       switchOver(fresh);
-      options.prepareAudio?.();
       const previous = state.player;
       const paused = pendingPause ?? previous.status === "paused";
       const position = pendingSeek?.playbackId === previous.playbackId ? pendingSeek.position : previous.position;
@@ -521,6 +527,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   };
 
   return {
+    audioSelection: () => audioSelection,
     updateSystemAudio(audio: import("../shared/sound").SoundRouteState) {
       state.systemAudio = audio;
       if (audio.volume !== null) state.player.volume = audio.volume;
@@ -555,7 +562,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     },
     // The newest tab of an output Device took over, or an output came back online: the current
     // item loads there where it is (#644 Tabs, Offline).
-    reload(media?: Pick<MediaSource, "source" | "audioSource" | "hls">, retry = false) {
+    reload(media?: Pick<MediaSource, "source" | "audioSource" | "hls" | "mpegts" | "mpv">, retry = false) {
       const { playbackId, status, position, speed } = state.player;
       if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status) && !(retry && status === "error")) return;
       const entry = state.queue.find(entry => entry.id === state.currentEntryId);
@@ -779,6 +786,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
           currentPlayback(action.playbackId);
           if (!(action.kind === "subtitle" && action.index === -1) && !state.player.tracks?.some(track => track.kind === action.kind && track.index === action.index)) throw new Error("That track is not available for this item.");
           send(action);
+          if (action.kind === "audio") {
+            const track = state.player.tracks!.find(track => track.kind === "audio" && track.index === action.index)!;
+            audioSelection = { index: track.index, language: track.language, label: track.label };
+          }
           break;
         case "seek":
           currentPlayback(action.playbackId);
@@ -810,6 +821,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
         return;
       }
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
+      const audio = player.tracks?.filter(track => track.kind === "audio") ?? [], selected = audio.find(track => track.selected);
+      // A pending renderer/decoder can report generic audio0 before resolving its
+      // real identity. It must not replace explicit intent or profile preference.
+      if (selected && (audio.length > 1 || selected.index > 0 || selected.language || selected.label && selected.label !== "Audio")) audioSelection = { index: selected.index, language: selected.language, label: selected.label };
       const wasUnavailable = state.player.status === "unavailable";
       // A player can report EOF after an interrupted HTTP range response. An early
       // VOD end only starts the same private expiry confirmation, never a blind retry.

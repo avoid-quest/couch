@@ -16,7 +16,17 @@ async function until(predicate: () => boolean) {
 async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") {
   const directory = mkdtempSync(join(tmpdir(), "couch-playback-logging-")), databasePath = join(directory, "couch.sqlite");
   const lines: string[] = [];
-  t.mock.method(console, "log", (line: string) => lines.push(line));
+  // The audio worker forwards its output through Core's stdout. Observe that
+  // public log boundary, including lines split across writes, rather than only
+  // calls to the main thread's console object.
+  const write = process.stdout.write.bind(process.stdout);
+  let partial = "";
+  t.mock.method(process.stdout, "write", (chunk: string | Uint8Array, ...args: unknown[]) => {
+    const complete = (partial + (typeof chunk === "string" ? chunk : Buffer.from(chunk).toString())).split("\n");
+    partial = complete.pop()!;
+    lines.push(...complete);
+    return Reflect.apply(write, undefined, [chunk, ...args]);
+  });
   // Keep unrelated startup origin discovery at the external network boundary.
   const fetch = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (input: RequestInfo | URL, init?: RequestInit) => new URL(input instanceof Request ? input.url : String(input)).hostname === "127.0.0.1"
@@ -32,7 +42,7 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
   const store = openStore(databasePath, true), deviceId = "t".repeat(43);
   const token = store.pair(deviceId, name);
   store.close();
-  const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 42700 });
+  const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0 });
   const sockets: WebSocket[] = [];
   const connect = async (deviceId: string, token: string, sharing = "") => {
     const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&device=${deviceId}${sharing}`, { headers: { Origin: hub.origin } });
@@ -72,7 +82,7 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
       await until(() => tv.commands.some(command => command.type === "load"));
       return tv.commands.find(command => command.type === "load")!.playbackId;
     },
-    errors: () => lines.filter(line => line.includes("player error ")),
+    errors: () => lines.filter(line => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z player error /.test(line)),
   };
 }
 
@@ -201,6 +211,7 @@ test("Core logs a refused Sendspin input without any renderer report", { timeout
   const speakerId = await f.speaker();
   assert.equal((await f.command({ type: "output", deviceId: speakerId, level: 50 })).ok, true);
   await until(() => f.state.player.status === "error");
+  await until(() => f.errors().length > 0);
   assert.equal(f.errors().length, 1, "The FFmpeg failure itself must produce evidence without a reporting tab");
   const line = f.errors()[0]!;
   assert.match(line, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z player error [\da-f-]{8} Synced host=127\.0\.0\.1: .*Connection refused/);

@@ -7,3 +7,4 @@ export const VERSION_MISMATCH = "This Couch runs a different version. Update one
 export const REMOTES_OFF = (name: string) => `Sharing is off. Turn on Share on network on ${name}.`;
 export const STORAGE_ERROR = (thing: string) => `Couldn't save ${thing}. Couch may be out of space.`;
 export const PLAY_CANCELED = "Another action canceled playback.";
+export const LIVE_AUDIENCE_ONLY = "Live audio listeners can join, leave and adjust their device. Control the programme at its source.";

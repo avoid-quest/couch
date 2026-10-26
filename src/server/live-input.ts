@@ -46,8 +46,8 @@ export function createLiveInputs<Socket>(options: {
       if (sources.has(action.sourceId)) throw new Error("That live source already exists.");
       for (const [sourceId, publication] of sources) if (publication.owner === socket) end(sourceId);
       const deviceId = options.deviceOf(socket);
-      const label = action.kind === "microphone" ? "Microphone" : action.kind === "system-audio" ? "System audio" : "Screen";
-      const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video };
+      const label = action.kind === "microphone" ? "Audio input" : action.kind === "system-audio" ? "System audio" : "Screen";
+      const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video, ...(action.intent ? { intent: action.intent } : {}), ...(action.audioDelivery ? { audioDelivery: action.audioDelivery } : {}) };
       sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken, relayed: new Set() });
       options.changed();
       return source;
@@ -60,9 +60,10 @@ export function createLiveInputs<Socket>(options: {
     },
     unhost(sourceId: string) { if (sources.has(sourceId) && !sources.get(sourceId)!.owner) end(sourceId); },
     hosted: (sourceId: string) => sources.has(sourceId) && !sources.get(sourceId)!.owner,
-    acceptsUpload(sourceId: string, deviceId: string, key: string) {
+    acceptsUpload(sourceId: string, deviceId: string, key: string, uploadId?: string) {
       const publication = sources.get(sourceId);
       if (!publication?.uploadToken || publication.source.deviceId !== deviceId) return false;
+      if (publication.source.audioDelivery === "pcm" && (!uploadId || publication.uploadId !== uploadId)) return false;
       const expected = Buffer.from(publication.uploadToken), supplied = Buffer.from(key);
       return expected.length === supplied.length && timingSafeEqual(expected, supplied);
     },

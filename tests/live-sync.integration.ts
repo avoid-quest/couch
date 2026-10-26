@@ -25,7 +25,7 @@ test("a live input In sync on multiple devices uses the normal shared sound and 
       await until(() => receiver.messages.some(message => message.type === "sendspin" && message.listen && message.watch));
       const follow = receiver.messages.findLast(message => message.type === "player" && (message.command.type === "follow" || message.command.type === "load") && message.command.follow);
       assert.ok(follow?.type === "player" && "follow" in follow.command && follow.command.follow);
-      assert.deepEqual(follow.command.follow, { group: f.publisher.state.playback, pts: true });
+      assert.deepEqual(follow.command.follow, { group: f.publisher.state.playback, pts: true, timeline: { kind: "source-pts", generation: follow.command.playbackId, mapping: "hls" } });
       assert.equal(receiver.state.controlling, receiver.id, "a receiving device with no explicit selection must show its own playback");
       assert.equal(receiver.state.playback, f.publisher.state.playback);
       assert.equal(receiver.state.currentEntryId, f.publisher.state.currentEntryId);

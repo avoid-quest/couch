@@ -1,0 +1,563 @@
+diff --git a/dist/audio/clock-source.js b/dist/audio/clock-source.js
+index 22aea22b2e6c4d2a34ff2e7893801f09552f5b97..179b7570ecae4cd242204f82da092015cfd0727b 100644
+--- a/dist/audio/clock-source.js
++++ b/dist/audio/clock-source.js
+@@ -198,7 +198,11 @@ export class ClockSource {
+                 if (perfDeltaMs >= OUTPUT_TIMESTAMP_MIN_SAMPLE_INTERVAL_MS) {
+                     const perfDeltaSec = perfDeltaMs / 1000;
+                     const contextSlope = (ts.contextTime - prev.contextTimeSec) / perfDeltaSec;
+-                    const predictedSlope = (predictedAudioTimeSec - prev.predictedAudioTimeSec) / perfDeltaSec;
++                    // Both predictions are projected to their observation times, not to
++                    // the output timestamp sample times (which can repeat or arrive unevenly).
++                    const projectedDeltaSec = (Math.max(nowMs, ts.performanceTime) - Math.max(prev.nowMs, prev.performanceTimeMs)) / 1000;
++                    const predictedSlope = projectedDeltaSec > 0
++                        ? (predictedAudioTimeSec - prev.predictedAudioTimeSec) / projectedDeltaSec : 1;
+                     if (contextSlope < OUTPUT_TIMESTAMP_SLOPE_MIN ||
+                         contextSlope > OUTPUT_TIMESTAMP_SLOPE_MAX) {
+                         this.rejectSample(`context slope ${contextSlope.toFixed(3)} out of range`);
+diff --git a/dist/audio/decoder.d.ts b/dist/audio/decoder.d.ts
+index b304628dff7028d93377eae51648516d6635ab75..3f9f42c181f0b4fc17a350cf6b65e456712413e7 100644
+--- a/dist/audio/decoder.d.ts
++++ b/dist/audio/decoder.d.ts
+@@ -12,6 +12,7 @@ export declare class SendspinDecoder {
+     private webCodecsDecoderReady;
+     private webCodecsFormat;
+     private useNativeOpus;
++    private initializationEpoch;
+     private nativeDecoderQueue;
+     private opusDecoder;
+     private opusDecoderModule;
+@@ -24,6 +25,7 @@ export declare class SendspinDecoder {
+      * Handle a binary audio message from the WebSocket.
+      * Parses the message, decodes the audio, and emits a DecodedAudioChunk.
+      */
++    prepare(format: StreamFormat): Promise<void>;
+     handleBinaryMessage(data: ArrayBuffer, format: StreamFormat, generation: number): Promise<void>;
+     private decode;
+     private decodePCM;
+diff --git a/dist/audio/decoder.js b/dist/audio/decoder.js
+index 8a5d7a449beadbe2dfb1251b3e72f7fe1f35c110..be948e9ec40ab1fcd483e24e1633dd8060501b0a 100644
+--- a/dist/audio/decoder.js
++++ b/dist/audio/decoder.js
+@@ -11,6 +11,7 @@ export class SendspinDecoder {
+         this.webCodecsDecoderReady = null;
+         this.webCodecsFormat = null;
+         this.useNativeOpus = true;
++        this.initializationEpoch = 0;
+         this.nativeDecoderQueue = [];
+         // Fallback Opus decoder (opus-encdec library)
+         this.opusDecoder = null;
+@@ -27,6 +28,15 @@ export class SendspinDecoder {
+      * Handle a binary audio message from the WebSocket.
+      * Parses the message, decodes the audio, and emits a DecodedAudioChunk.
+      */
++    async prepare(format) {
++        const epoch = this.initializationEpoch;
++        if (format.codec === "opus") {
++            await this.initWebCodecsDecoder(format);
++            if (epoch !== this.initializationEpoch) throw new Error("Audio preparation was cancelled");
++            if (!this.useNativeOpus) await this.initOpusEncdecDecoder(format);
++            if (epoch !== this.initializationEpoch) throw new Error("Audio preparation was cancelled");
++        }
++    }
+     async handleBinaryMessage(data, format, generation) {
+         // First byte contains role type and message slot
+         const firstByte = new Uint8Array(data)[0];
+@@ -40,6 +50,7 @@ export class SendspinDecoder {
+             // For Opus: use native decoder (non-blocking async path)
+             if (format.codec === "opus" && this.useNativeOpus) {
+                 await this.initWebCodecsDecoder(format);
++                if (generation !== this.currentGeneration()) return;
+                 if (this.useNativeOpus && this.webCodecsDecoder) {
+                     if (this.queueToNativeOpusDecoder(audioData, serverTimeUs, generation)) {
+                         return; // Async path - callback handles output
+@@ -161,6 +172,7 @@ export class SendspinDecoder {
+     // Opus - Native WebCodecs Decoder
+     // ========================================
+     async initWebCodecsDecoder(format) {
++        const epoch = this.initializationEpoch;
+         const tryConfigureExistingDecoder = () => {
+             if (!this.webCodecsDecoder)
+                 return false;
+@@ -191,6 +203,7 @@ export class SendspinDecoder {
+         }
+         if (this.webCodecsDecoderReady) {
+             await this.webCodecsDecoderReady;
++            if (epoch !== this.initializationEpoch) return;
+             if (tryConfigureExistingDecoder()) {
+                 return;
+             }
+@@ -212,6 +225,7 @@ export class SendspinDecoder {
+         await this.webCodecsDecoderReady;
+     }
+     async createWebCodecsDecoder(format) {
++        const epoch = this.initializationEpoch;
+         if (typeof AudioDecoder === "undefined") {
+             this.useNativeOpus = false;
+             return;
+@@ -222,6 +236,7 @@ export class SendspinDecoder {
+                 sampleRate: format.sample_rate,
+                 numberOfChannels: format.channels,
+             });
++            if (epoch !== this.initializationEpoch) return;
+             if (!support.supported) {
+                 console.log("[NativeOpus] WebCodecs Opus not supported, will use fallback");
+                 this.useNativeOpus = false;
+@@ -242,6 +257,7 @@ export class SendspinDecoder {
+             console.log(`[NativeOpus] Using WebCodecs AudioDecoder: ${format.sample_rate}Hz, ${format.channels}ch`);
+         }
+         catch (error) {
++            if (epoch !== this.initializationEpoch) return;
+             console.warn("[NativeOpus] WebCodecs init failed, will use fallback:", error);
+             this.useNativeOpus = false;
+         }
+@@ -386,34 +402,48 @@ export class SendspinDecoder {
+         }
+     }
+     async initOpusEncdecDecoder(format) {
++        const epoch = this.initializationEpoch;
++        if (this.opusDecoder) return;
+         if (this.opusDecoderReady) {
+             await this.opusDecoderReady;
+             return;
+         }
+-        this.opusDecoderReady = (async () => {
++        const pending = this.opusDecoderReady = (async () => {
+             console.log("[Opus] Initializing decoder (opus-encdec)...");
+             const [DecoderModuleExport, DecoderWrapperExport] = await Promise.all([
+                 import("opus-encdec/dist/libopus-decoder.js"),
+                 import("opus-encdec/src/oggOpusDecoder.js"),
+             ]);
+-            this.opusDecoderModule =
+-                this.resolveOpusDecoderModule(DecoderModuleExport);
++            if (epoch !== this.initializationEpoch) return;
++            const module = this.resolveOpusDecoderModule(DecoderModuleExport);
+             const OggOpusDecoderClass = this.resolveOggOpusDecoderClass(DecoderWrapperExport);
+-            await this.waitForOpusReady(this.opusDecoderModule);
+-            this.opusDecoder = new OggOpusDecoderClass({
++            await this.waitForOpusReady(module);
++            if (epoch !== this.initializationEpoch) return;
++            const decoder = new OggOpusDecoderClass({
+                 rawOpus: true,
+                 decoderSampleRate: format.sample_rate,
+                 outputBufferSampleRate: format.sample_rate,
+                 numberOfChannels: format.channels,
+-            }, this.opusDecoderModule);
+-            await this.waitForOpusReady(this.opusDecoder);
++            }, module);
++            try {
++                await this.waitForOpusReady(decoder);
++                if (epoch !== this.initializationEpoch) { decoder.destroy(); return; }
++                this.opusDecoderModule = module;
++                this.opusDecoder = decoder;
++            } catch (error) { decoder.destroy(); throw error; }
+             console.log("[Opus] Decoder ready");
+         })();
+-        await this.opusDecoderReady;
++        try { await pending; }
++        finally {
++            // Do not clear a replacement generation's in-flight preparation.
++            if (this.opusDecoderReady === pending) this.opusDecoderReady = null;
++        }
+     }
+     async decodeOpusWithEncdec(audioData, format) {
++        const epoch = this.initializationEpoch;
+         try {
+             await this.initOpusEncdecDecoder(format);
++            if (epoch !== this.initializationEpoch || !this.opusDecoder) return null;
+             const uint8Array = new Uint8Array(audioData);
+             const decodedSamples = [];
+             this.opusDecoder.decodeRaw(uint8Array, (samples) => {
+@@ -446,7 +476,18 @@ export class SendspinDecoder {
+     // ========================================
+     /** Clear decoder state (on stream change/clear). Drops in-flight async decodes. */
+     clearState() {
++        this.initializationEpoch++;
++        // In-flight fallback work belongs to the old stream; a prepared decoder
++        // remains usable, but a cancelled promise must never stand in for one.
++        this.opusDecoderReady = null;
+         this.nativeDecoderQueue = [];
++        // A prepared native decoder can be reset synchronously. Retain its
++        // supported configuration so stream/start cannot undo readiness.
++        if (this.webCodecsDecoder?.state === "configured" && this.webCodecsFormat) {
++            this.webCodecsDecoder.reset();
++            this.webCodecsDecoder.configure({ codec: "opus", sampleRate: this.webCodecsFormat.sample_rate, numberOfChannels: this.webCodecsFormat.channels });
++            return;
++        }
+         try {
+             this.webCodecsDecoder?.close();
+         }
+@@ -460,11 +501,14 @@ export class SendspinDecoder {
+     /** Full cleanup (on disconnect). Releases all decoder resources. */
+     close() {
+         this.clearState();
+-        if (this.opusDecoder) {
+-            this.opusDecoder = null;
+-            this.opusDecoderModule = null;
+-            this.opusDecoderReady = null;
+-        }
++        this.webCodecsDecoder?.close();
++        this.webCodecsDecoder = null;
++        this.webCodecsDecoderReady = null;
++        this.webCodecsFormat = null;
++        this.opusDecoder?.destroy();
++        this.opusDecoder = null;
++        this.opusDecoderModule = null;
++        this.opusDecoderReady = null;
+         // Reset native Opus flag for next session
+         this.useNativeOpus = true;
+         this.flacDecodingContext = null;
+diff --git a/dist/audio/scheduler.d.ts b/dist/audio/scheduler.d.ts
+index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665028fca01 100644
+--- a/dist/audio/scheduler.d.ts
++++ b/dist/audio/scheduler.d.ts
+@@ -98,6 +98,10 @@ export declare class AudioScheduler {
+     private resetSyncErrorEma;
+     private copyBuffer;
+     private adjustBufferSamples;
++    get outputState(): AudioContextState;
++    invalidateOutput(): void;
++    get outputReady(): boolean;
++    prepareOutput(): Promise<void>;
+     initAudioContext(): void;
+     resumeAudioContext(): Promise<void>;
+     private cutScheduledSources;
+@@ -122,7 +126,7 @@ export declare class AudioScheduler {
+     private computeTargetPlaybackTime;
+     startAudioElement(): void;
+     stopAudioElement(): void;
+-    clearBuffers(): void;
++    clearBuffers(preserveClock?: boolean): void;
+     close(): void;
+     getAudioContext(): AudioContext | null;
+ }
+diff --git a/dist/audio/scheduler.js b/dist/audio/scheduler.js
+index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9fa5d010c6 100644
+--- a/dist/audio/scheduler.js
++++ b/dist/audio/scheduler.js
+@@ -416,6 +416,21 @@ export class AudioScheduler {
+             return buffer;
+         }
+     }
++    get outputState() { return this.audioContext?.state ?? "closed"; }
++    invalidateOutput() { this.clearBuffers(); }
++    get outputReady() { return this.audioContext?.state === "running" && this.clockSource.active === "timestamp" && this.outputMode === "direct"; }
++    async prepareOutput() {
++        this.initAudioContext();
++        await this.resumeAudioContext();
++        const context = this.audioContext;
++        for (let attempt = 0; attempt < 75; attempt++) {
++            if (this.audioContext !== context || context.state !== "running") throw new Error("Audio output changed during preparation.");
++            this.clockSource.getTimingSnapshot(context, this.measurePlayoutLatencySec());
++            if (this.outputReady) return;
++            await new Promise(resolve => setTimeout(resolve, 40));
++        }
++        throw new Error("This output has no stable timestamp clock for live audio: " + (this.clockSource.lastRejectReason ?? "timestamp warmup incomplete"));
++    }
+     initAudioContext() {
+         if (this.audioContext)
+             return;
+@@ -843,7 +858,7 @@ export class AudioScheduler {
+             this.audioElement.pause();
+         }
+     }
+-    clearBuffers() {
++    clearBuffers(preserveClock = false) {
+         this.recorrectionMonitor.fullReset();
+         this.cancelScheduledRefill();
+         this.scheduledSources.forEach((entry) => {
+@@ -864,8 +879,7 @@ export class AudioScheduler {
+         this.stateManager.resetStreamAnchors();
+         this.resetScheduledPlaybackState();
+         this.resyncCount = 0;
+-        this.latencyTracker.reset();
+-        this.clockSource.reset();
++        if (!preserveClock) { this.latencyTracker.reset(); this.clockSource.reset(); }
+     }
+     close() {
+         this.clearBuffers();
+diff --git a/dist/core/core.d.ts b/dist/core/core.d.ts
+index 9a9ed048d6da3eb3e8bca86d1d656b91bebf9bfe..05ea5e915ec1cb7b5a27f87dc0b89e9d209492b9 100644
+--- a/dist/core/core.d.ts
++++ b/dist/core/core.d.ts
+@@ -1,3 +1,4 @@
++import type { OutputPreparation, OutputPreparationTiming } from "../types";
+ /**
+  * SendspinCore: Protocol + decoding layer.
+  *
+@@ -36,6 +37,7 @@ export declare class SendspinCore implements StreamHandler {
+     constructor(config: SendspinCoreConfig);
+     private routeControl;
+     private onTransportClose;
++    prepareAudio(format: StreamFormat): Promise<void>;
+     handleBinaryMessage(data: ArrayBuffer): void;
+     handleStreamStart(format: StreamFormat, isFormatUpdate: boolean): void;
+     handleStreamClear(): void;
+@@ -65,6 +67,8 @@ export declare class SendspinCore implements StreamHandler {
+     setSyncDelay(delayMs: number): void;
+     setRequiredLeadTimeMs(leadTimeMs: number): void;
+     setMinBufferMs(minBufferMs: number): void;
++    /** Atomically publish Couch preparation and final timing. */
++    setOutputPreparation(report: OutputPreparation, timing?: OutputPreparationTiming): void;
+     sendCommand<T extends ControllerCommand>(command: T, params: ControllerCommands[T]): void;
+     get isPlaying(): boolean;
+     get volume(): number;
+diff --git a/dist/core/core.js b/dist/core/core.js
+index 45f85ba2227cba75cd308a01b240c3962d83008b..7b588d6c4b49ebc21e7dccad139e6e2e2caaaf88 100644
+--- a/dist/core/core.js
++++ b/dist/core/core.js
+@@ -138,6 +138,9 @@ export class SendspinCore {
+         this.handshakeInfo = null;
+         this.protocolHandler.stopTimeSync();
+         this.protocolHandler.resetActivation();
++        // Explicit deadline preparation must reacquire this connection's clock.
++        // Legacy/relaxed clients retain their existing reconnect behavior.
++        if (this.protocolHandler.clearOutputPreparation()) this.timeFilter.reset();
+         this.pairing.reset();
+         // Stop periodic state-update sends so they don't spam
+         // "WebSocket not connected" warnings after the transport is gone.
+@@ -149,6 +152,7 @@ export class SendspinCore {
+     // StreamHandler implementation
+     // (called by ProtocolHandler)
+     // ========================================
++    prepareAudio(format) { return this.decoder.prepare(format); }
+     handleBinaryMessage(data) {
+         const format = this.stateManager.currentStreamFormat;
+         if (!format) {
+@@ -293,6 +297,7 @@ export class SendspinCore {
+     setRequiredLeadTimeMs(leadTimeMs) {
+         this.protocolHandler.setRequiredLeadTimeMs(leadTimeMs);
+     }
++    setOutputPreparation(report, timing) { this.protocolHandler.setOutputPreparation(report, timing); }
+     setMinBufferMs(minBufferMs) {
+         this.protocolHandler.setMinBufferMs(minBufferMs);
+     }
+diff --git a/dist/core/protocol-handler.d.ts b/dist/core/protocol-handler.d.ts
+index a8fddccfd7774474846d68413baf8b89e3670e09..eab6928be61b833a624ffa38c270fddd03bbb7b8 100644
+--- a/dist/core/protocol-handler.d.ts
++++ b/dist/core/protocol-handler.d.ts
+@@ -1,3 +1,4 @@
++import type { OutputPreparation, OutputPreparationTiming } from "../types";
+ import type { SendspinTimeFilter } from "./time-filter";
+ import type { Codec, ControllerCommand, ControllerCommands, GoodbyeReason, PairMethodDescriptor, ServerMessage } from "../types";
+ import type { StreamHandler } from "../internal-types";
+@@ -38,6 +39,7 @@ export declare class ProtocolHandler {
+     private bufferCapacity;
+     private requiredLeadTimeMs;
+     private minBufferMs;
++    private outputPreparation?;
+     private useHardwareVolume;
+     private onVolumeCommand?;
+     private onDelayCommand?;
+@@ -59,6 +61,7 @@ export declare class ProtocolHandler {
+      * reused handler) restarts time-sync and state updates.
+      * @internal called by SendspinCore on transport close, not part of the public API.
+      */
++    clearOutputPreparation(): boolean;
+     resetActivation(preserveActiveRoles?: boolean): void;
+     private handleStreamStart;
+     private handleStreamClear;
+@@ -67,6 +70,8 @@ export declare class ProtocolHandler {
+     sendClientHello(): void;
+     setRequiredLeadTimeMs(leadTimeMs: number): void;
+     setMinBufferMs(minBufferMs: number): void;
++    /** Atomically publish Couch preparation and final timing. */
++    setOutputPreparation(report: OutputPreparation, timing?: OutputPreparationTiming): void;
+     sendStateUpdate(skipHardwareRead?: boolean): void;
+     sendGoodbye(reason: GoodbyeReason): void;
+     sendCommand<T extends ControllerCommand>(command: T, params: ControllerCommands[T]): void;
+diff --git a/dist/core/protocol-handler.js b/dist/core/protocol-handler.js
+index a77a065b09674c70e8fa581eaba19a29aeb7fef6..904b57faab9a0ab7c5ff4b62c7c06ae3f874cf9a 100644
+--- a/dist/core/protocol-handler.js
++++ b/dist/core/protocol-handler.js
+@@ -125,6 +125,7 @@ export class ProtocolHandler {
+      * reused handler) restarts time-sync and state updates.
+      * @internal called by SendspinCore on transport close, not part of the public API.
+      */
++    clearOutputPreparation() { const present = this.outputPreparation !== undefined; this.outputPreparation = undefined; return present; }
+     resetActivation(preserveActiveRoles = false) {
+         this.pairingSuspended = false;
+         this.activated = false;
+@@ -246,6 +247,28 @@ export class ProtocolHandler {
+         this.requiredLeadTimeMs = leadTimeMs;
+         this.sendStateUpdate();
+     }
++    setOutputPreparation(report, timing) {
++        if (!report || typeof report !== "object" || Array.isArray(report)
++            || typeof report.receiverId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(report.receiverId)
++            || !Number.isSafeInteger(report.epoch) || report.epoch < 0
++            || !["preparing", "ready", "failed"].includes(report.state)
++            || Object.keys(report).some(key => !["receiverId", "epoch", "state", "error"].includes(key))
++            || (report.state === "failed" ? typeof report.error !== "string" || !report.error.trim() || report.error.length > 240 || /[\x00-\x1f\x7f]/.test(report.error) : report.error !== undefined))
++            throw new TypeError("Invalid Couch output preparation");
++        if (report.state === "ready" && !timing) throw new TypeError("Ready preparation requires atomic timing");
++        if (timing) {
++            if (!Number.isFinite(timing.requiredLeadTimeMs) || !Number.isFinite(timing.minBufferMs)) throw new RangeError("Invalid preparation timing");
++            assertBufferMs(timing.requiredLeadTimeMs, "requiredLeadTimeMs");
++            assertBufferMs(timing.minBufferMs, "minBufferMs");
++        }
++        this.outputPreparation = { ...report };
++        if (timing) {
++            this.requiredLeadTimeMs = timing.requiredLeadTimeMs;
++            this.minBufferMs = timing.minBufferMs;
++        }
++        // Initial/reconnect state will include the report after activation.
++        if (this.activated) this.sendStateUpdate();
++    }
+     setMinBufferMs(minBufferMs) {
+         assertBufferMs(minBufferMs, "minBufferMs");
+         this.minBufferMs = minBufferMs;
+@@ -277,6 +300,7 @@ export class ProtocolHandler {
+                 static_delay_ms: staticDelayMs,
+                 required_lead_time_ms: this.requiredLeadTimeMs,
+                 min_buffer_ms: this.minBufferMs,
++                ...(this.outputPreparation ? { couch_preparation: this.outputPreparation } : {}),
+             };
+             const last = this.lastSentPlayer;
+             if (last === null) {
+@@ -299,6 +323,13 @@ export class ProtocolHandler {
+                     player.required_lead_time_ms = current.required_lead_time_ms;
+                 if (current.min_buffer_ms !== last.min_buffer_ms)
+                     player.min_buffer_ms = current.min_buffer_ms;
++                if (JSON.stringify(current.couch_preparation) !== JSON.stringify(last.couch_preparation)) {
++                    player.couch_preparation = current.couch_preparation;
++                    if (current.couch_preparation?.state === "ready") {
++                        player.required_lead_time_ms = current.required_lead_time_ms;
++                        player.min_buffer_ms = current.min_buffer_ms;
++                    }
++                }
+                 payload.player = player;
+             }
+             this.lastSentPlayer = current;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 862743776d68a8975f71c12a7d01e3fce8cb45b5..c7adec4fd53ba0a6fd9f9c3ef2a40cf4e3440713 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,3 +1,4 @@
++import type { OutputPreparation, OutputPreparationTiming } from "./types";
+ import type { SendspinPlayerConfig, PlayerState, StreamFormat, GoodbyeReason, ControllerCommand, ControllerCommands, CorrectionMode } from "./types";
+ declare function detectIsAndroid(): boolean;
+ declare function detectIsIOS(): boolean;
+@@ -17,6 +18,11 @@ export declare class SendspinPlayer {
+      * Initialize and resume audio playback. Call this directly from a click or
+      * tap handler, before any other await, to satisfy browser autoplay policies.
+      */
++    /** Prepare decoder and output using supported APIs; does not claim physical qualification. */
++    prepareAudio(format: StreamFormat): Promise<void>;
++    get outputState(): AudioContextState;
++    invalidateAudio(): void;
++    get outputReady(): boolean;
+     unlock(): Promise<void>;
+     connect(): Promise<void>;
+     /**
+@@ -40,6 +46,8 @@ export declare class SendspinPlayer {
+      * number.
+      */
+     setMinBufferMs(minBufferMs: number): void;
++    /** Atomically publish Couch preparation and final timing. */
++    setOutputPreparation(report: OutputPreparation, timing?: OutputPreparationTiming): void;
+     /**
+      * Set the sync correction mode at runtime.
+      */
+diff --git a/dist/index.js b/dist/index.js
+index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf67227630 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -34,7 +34,7 @@ export class SendspinPlayer {
+         const isCastRuntime = detectIsCastRuntime();
+         const isMobile = detectIsMobile();
+         // Determine output mode
+-        const outputMode = config.audioElement || isMobile ? "media-element" : "direct";
++        const outputMode = config.outputMode ?? (config.audioElement || isMobile ? "media-element" : "direct");
+         this.ownsAudioElement =
+             outputMode === "media-element" && !config.audioElement;
+         if (this.ownsAudioElement && typeof document === "undefined") {
+@@ -106,7 +106,7 @@ export class SendspinPlayer {
+                 console.warn("Sendspin: Failed to resume AudioContext:", error);
+             });
+             if (!isFormatUpdate) {
+-                this.scheduler.clearBuffers();
++                this.scheduler.clearBuffers(true);
+             }
+             this.scheduler.startAudioElement();
+         };
+@@ -125,9 +125,11 @@ export class SendspinPlayer {
+         };
+         // Wire connection lifecycle for disconnect playback deferral
+         this.core.onConnectionOpen = () => {
++            config.onConnectionChange?.(true);
+             this.cancelPendingDisconnectPlaybackReset();
+         };
+         this.core.onConnectionClose = () => {
++            config.onConnectionChange?.(false);
+             if (this.suppressDisconnectPlaybackReset) {
+                 return;
+             }
+@@ -167,6 +169,16 @@ export class SendspinPlayer {
+      * Initialize and resume audio playback. Call this directly from a click or
+      * tap handler, before any other await, to satisfy browser autoplay policies.
+      */
++    async prepareAudio(format) {
++        const preparation = this.audioPreparation = (this.audioPreparation ?? 0) + 1;
++        this.scheduler.initAudioContext();
++        await Promise.all([this.scheduler.prepareOutput(), this.core.prepareAudio(format)]);
++        if (this.audioPreparation !== preparation || !this.scheduler.outputReady)
++            throw new Error("Audio preparation was canceled or the output is suspended.");
++    }
++    get outputState() { return this.scheduler.outputState; }
++    invalidateAudio() { this.audioPreparation = (this.audioPreparation ?? 0) + 1; this.scheduler.invalidateOutput(); }
++    get outputReady() { return this.scheduler.outputReady; }
+     async unlock() {
+         this.scheduler.initAudioContext();
+         await this.scheduler.resumeAudioContext();
+@@ -181,6 +193,7 @@ export class SendspinPlayer {
+      * @param reason - Optional reason for disconnecting (default: 'restart')
+      */
+     disconnect(reason = "restart") {
++        this.audioPreparation = (this.audioPreparation ?? 0) + 1;
+         this.cancelPendingDisconnectPlaybackReset();
+         this.suppressDisconnectPlaybackReset = true;
+         this.core.disconnect(reason);
+@@ -218,6 +231,7 @@ export class SendspinPlayer {
+      * to transient fluctuations. Throws RangeError if not a non-negative finite
+      * number.
+      */
++    setOutputPreparation(report, timing) { this.core.setOutputPreparation(report, timing); }
+     setMinBufferMs(minBufferMs) {
+         this.core.setMinBufferMs(minBufferMs);
+     }
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead34887dc4 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -98,6 +98,11 @@ export interface ClientTime {
+         client_transmitted: number;
+     };
+ }
++/** Couch extension: explicit output preparation, not physical qualification. */
++export type OutputPreparation = { receiverId: string; epoch: number } & (
++    { state: "preparing" } | { state: "ready" } | { state: "failed"; error: string }
++);
++export type OutputPreparationTiming = { requiredLeadTimeMs: number; minBufferMs: number };
+ export interface ClientState {
+     type: MessageType.CLIENT_STATE;
+     payload: {
+@@ -106,6 +111,7 @@ export interface ClientState {
+             static_delay_ms?: number;
+             volume?: number;
+             muted?: boolean;
++            couch_preparation?: OutputPreparation;
+             required_lead_time_ms?: number;
+             min_buffer_ms?: number;
+             supported_commands?: string[];
+@@ -384,6 +390,10 @@ export interface SupportedFormat {
+     bit_depth: number;
+ }
+ export interface SendspinPlayerConfig extends SendspinCoreConfig {
++    /** Transport lifecycle; open fires before handshake and initial client state. */
++    onConnectionChange?: (connected: boolean) => void;
++    /** Explicit direct output for deadline-admitted playback; relaxed defaults unchanged. */
++    outputMode?: "direct" | "media-element";
+     /**
+      * HTMLAudioElement for media-element output mode.
+      * Auto-created on mobile browsers if not provided.
