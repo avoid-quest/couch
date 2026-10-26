@@ -109,7 +109,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
 // sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; receiverPreparation: boolean; receiverId?: string; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; pendingCommands?: number };
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; receiverPreparation: boolean; receiverId?: string; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; pendingCommands?: number; signaling?: { window: number; count: number; bytes: number; peers: Map<string, { descriptions: number; candidates: number }> } };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -1258,13 +1258,21 @@ export async function createHub(options: HubOptions) {
       liveSources: live.sources(),
     };
     const views = new Map<string, string>();
+    // A synchronous flush shares level reads, then discards them before the next change.
+    const levels = new Map<Playback | undefined, Map<string, number>>();
+    const levelAt = (playback: Playback | undefined, deviceId: string) => {
+      let projected = levels.get(playback);
+      if (!projected) { projected = new Map(); levels.set(playback, projected); }
+      if (!projected.has(deviceId)) projected.set(deviceId, playsAt(playback, deviceId));
+      return projected.get(deviceId)!;
+    };
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
       try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); continue; }
       const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket)), moves = controlled(playback, deviceOf(socket));
       // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
       // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
-      const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => playsAt(playback, id)))), actions = capabilities(playback, deviceOf(socket)), view = `${playback?.id}:${device}:${volume}:${JSON.stringify(actions)}`;
+      const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => levelAt(playback, id)))), actions = capabilities(playback, deviceOf(socket)), view = `${playback?.id}:${device}:${volume}:${JSON.stringify(actions)}`;
       if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, compressor: playback?.compressor, controls: actions, outputs: playback ? outputViews.get(playback) : [] } } satisfies ServerMessage)); }
       const message = views.get(view)!;
       if (sentStates.get(socket) !== message) { sentStates.set(socket, message); send(socket, message); }
@@ -1527,6 +1535,7 @@ export async function createHub(options: HubOptions) {
   const catalog = createCatalog({ radio, viewing: { store, session: viewing, refreshHistory: metadata.refreshHistory } });
   let pairWindow = Date.now(), pairSuccesses = 0, pairFailures = 0;
   const failedPairing = new Map<string, number>();
+  const pairedIdentities = new Map<string, number>();
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
   const extraLanPeers = (process.env.COUCH_LAN_PEERS ?? "").split(",").map(peer => peer.trim()).filter(Boolean);
@@ -1693,13 +1702,15 @@ export async function createHub(options: HubOptions) {
         failedPairing.set(requestPeer(request), (failedPairing.get(requestPeer(request)) ?? 0) + 1);
         return respond({ error: "The pairing code is incorrect." }, 401);
       }
-      if (pairSuccesses >= 120) return respond({ error: "Many devices just paired. Try again in a minute." }, 429);
-      const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
+      const id = typeof body.id === "string" ? body.id : "";
+      if (pairSuccesses >= 128 || (pairedIdentities.get(id) ?? 0) >= 2) return respond({ error: "Many devices just paired. Try again in a minute." }, 429);
+      const token = store.pair(id, "name" in body ? body.name : undefined);
       pairSuccesses++;
+      pairedIdentities.set(id, (pairedIdentities.get(id) ?? 0) + 1);
       invalidate("devices");
       return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
     }, request => {
-      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairSuccesses = pairFailures = 0; failedPairing.clear(); }
+      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairSuccesses = pairFailures = 0; failedPairing.clear(); pairedIdentities.clear(); }
       const peer = requestPeer(request);
       // Failed guesses have their own bounded budget; successful audience pairing
       // does not consume it. A global ceiling also bounds spoofed/distributed peers.
@@ -2017,11 +2028,24 @@ export async function createHub(options: HubOptions) {
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
       },
       async message(socket: Socket<SocketData>, message: string | null) {
+        if (socket.readyState !== 1) return;
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         if (socket.data.deviceId) store.touchDevice(socket.data.deviceId);
+        if (message === null) { socket.close(1003, "JSON text messages required."); return; }
+        const signal = parseLiveSignal(message);
+        if (signal) {
+          // live.receive still checks the exact publisher/receiver grant before forwarding.
+          if (!socket.data.signaling || Date.now() - socket.data.signaling.window >= 1000) socket.data.signaling = { window: Date.now(), count: 0, bytes: 0, peers: new Map() };
+          const budget = socket.data.signaling;
+          let peer = budget.peers.get(signal.peerId);
+          if (!peer) { peer = { descriptions: 0, candidates: 0 }; budget.peers.set(signal.peerId, peer); }
+          const excess = signal.signal.description ? ++peer.descriptions > 4 : ++peer.candidates > 64;
+          if (++budget.count > 8192 || (budget.bytes += Buffer.byteLength(message)) > 8 * 1024 * 1024 || budget.peers.size > 256 || excess) { socket.close(1008, "Too much live signaling."); return; }
+          try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
+          return;
+        }
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
-        if (message === null) { socket.close(1003, "JSON text messages required."); return; }
         if (clientUpdates.has(socket)) {
           try {
             const reply = JSON.parse(message);
@@ -2029,11 +2053,6 @@ export async function createHub(options: HubOptions) {
           } catch { /* The normal command parser rejects invalid JSON. */ }
         }
         if (remote.receive(socket, message)) return;
-        const signal = parseLiveSignal(message);
-        if (signal) {
-          try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
-          return;
-        }
         const uploadFailure = parseLiveUploadFailed(message);
         if (uploadFailure) {
           let accepted;
