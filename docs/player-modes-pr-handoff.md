@@ -1,6 +1,8 @@
 # Player modes PR handoff
 
-Ready to open the four dependent PRs below. All branches are pushed, their
+**PR submission is pending the reopened [Live performance gate](player-modes-live-performance.md).**
+The titles/bodies below are preserved drafts and need reconciliation after that
+gate. All branches are pushed, their
 ancestry is linear on main `4a194e35cedb30f5ba3e664b4c9734b087051825`, and each
 layer independently passes frozen install, typecheck and build. Validation's
 checked code/tests head is `bd25f9a`; its later receipt commit changes documentation

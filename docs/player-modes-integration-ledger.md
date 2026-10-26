@@ -1,8 +1,10 @@
 # Player modes integration ledger
 
 This is the current completion tracker for the recovered refactor. It accounts for
-P0–P7, M1–M11, all 17 use cases and every retirement responsibility. **Software
-integration and retirement are complete; physical Live qualification remains open.**
+P0–P7, M1–M11, all 17 use cases and every retirement responsibility. **Live
+performance is reopened as an integration completion gate; PR submission is
+pending.** [The scoped performance plan](player-modes-live-performance.md) records
+the owner's corrected browser PCM/roughly 50 ms reference and comparison gates.
 [Final validation](player-modes-integration-validation.md) records fresh commands,
 revisions, package/browser receipts and the precise remaining prerequisites.
 

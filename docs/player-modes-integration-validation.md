@@ -1,7 +1,9 @@
 # Player modes integration validation
 
-Software integration, retirement and review are complete and ready for PR
-submission. Physical Live qualification remains open. This receipt covers checked
+**Live performance has reopened as an integration completion gate; PR submission
+is pending.** Follow [the physical comparison plan](player-modes-live-performance.md).
+The following software/package checks remain useful evidence; they do not satisfy
+the corrected roughly 50 ms Live requirement. This receipt covers checked
 code/tests head `bd25f9ad4966271859b9ed67a0840ede3f83e925` over current-main base
 `4a194e35cedb30f5ba3e664b4c9734b087051825`; subsequent handoff edits are documentation
 only. [The ledger](player-modes-integration-ledger.md) maps every P0–P7 package,
