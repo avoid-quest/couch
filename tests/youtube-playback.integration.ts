@@ -152,8 +152,55 @@ test("YouTube playback selection and safe extraction errors", async t => {
     const media = await select([video("hls", 854, 480, "avc1.4d401e", hls), { ...aac, ...hls }], "480p");
     assert.equal(media.source, hls.manifest_url);
     assert.equal(media.audioSource, undefined);
-    assert.equal(media.subtitles, undefined);
+    assert.deepEqual(media.subtitles?.map(track => track.language), ["it", "en"]);
     assert.equal(media.publicNetwork, true);
+  });
+  await t.test("non-VP9 YouTube uses HLS picture and original audio instead of DASH MP4 files", real, async () => {
+    const hls = { protocol: "m3u8_native", manifest_url: "https://media.example/master.m3u8" };
+    const formats = [
+      video("h264-http", 1920, 1080, "avc1.64002a", { fps: 60, container: "mp4_dash" }),
+      video("vp9-http", 1920, 1080, "vp9", { fps: 60 }),
+      { ...aac, container: "m4a_dash", language: "it", language_preference: 10 }, { ...opus, language: "it", language_preference: 10 },
+      video("h264-hls", 1920, 1080, "avc1.64002a", { ...hls, fps: 60 }),
+      // Real YouTube HLS audio omits acodec; its master lists the dub first.
+      { ...aac, ...hls, format_id: "aac-hls", url: "https://media.example/it.m3u8", acodec: undefined, language: "it", language_preference: 10 },
+      { ...aac, ...hls, format_id: "dub-hls", url: "https://media.example/en.m3u8", acodec: undefined, language: "en", language_preference: 5 },
+      { ...aac, format_id: "dub", url: "https://media.example/dub.m4a", language: "en", language_preference: 5 },
+    ];
+    const native = await select(formats);
+    assert.equal(native.source, hls.manifest_url);
+    assert.equal(native.audioSource, undefined);
+    assert.deepEqual(native.hlsSelection, { video: "https://media.example/h264-hls.mp4", audio: "https://media.example/it.m3u8", bandwidth: 128000 });
+    assert.deepEqual(native.subtitles?.map(track => track.language), ["it", "en"]);
+    const chromium = await select(formats, "auto", true);
+    assert.equal(new URL(chromium.source).pathname, "/vp9-http.mp4");
+    assert.equal(new URL(chromium.audioSource!).pathname, "/opus.webm");
+  });
+  await t.test("known incompatible HLS audio stays unavailable on non-VP9 Devices", real, async () => {
+    await noFormat(select([video("hls", 1920, 1080, "avc1.64002a", { protocol: "m3u8_native" }), { ...opus, protocol: "m3u8_native" }]));
+  });
+  for (const languagePreference of [5, undefined]) await t.test(`original HTTPS audio outranks HLS without original audio, preference=${languagePreference}`, real, async () => {
+    const hls = { protocol: "m3u8_native", manifest_url: "https://media.example/master.m3u8" };
+    const picture = video("h264-hls", 1920, 1080, "avc1.64002a", hls);
+    const original = { ...aac, language: "it", language_preference: 10 };
+    const dubbed = { ...aac, ...hls, format_id: "dub-hls", url: "https://media.example/en.m3u8", acodec: undefined, language: "en", language_preference: languagePreference };
+    const media = await select([picture, original, dubbed]);
+    assert.equal(new URL(media.source).pathname, "/h264-hls.mp4");
+    assert.equal(new URL(media.audioSource!).pathname, "/aac.m4a");
+    assert.equal(media.hlsSelection, undefined);
+  });
+  await t.test("non-VP9 YouTube rejects DASH MP4 video but still plays DASH AAC audio", real, async () => {
+    await noFormat(select([video("dash-mp4", 1920, 1080, "avc1.64002a", { container: "mp4_dash" }), aac]));
+    const media = await select([{ ...aac, container: "m4a_dash" }]);
+    assert.equal(media.audioOnly, true);
+  });
+  await t.test("native YouTube keeps quality caps when HLS and progressive formats differ", real, async () => {
+    const hls = video("hls-720", 1280, 720, "avc1.64001f", { protocol: "m3u8_native" });
+    const dash = video("dash-1080", 1920, 1080, "avc1.64002a", { container: "mp4_dash" });
+    const progressive = video("progressive-480", 854, 480, "avc1.4d401e", { acodec: "mp4a.40.2" });
+    assert.equal(new URL((await select([hls, dash, aac])).source).pathname, "/hls-720.mp4");
+    assert.equal(new URL((await select([hls, dash, progressive, aac], "480p")).source).pathname, "/progressive-480.mp4");
+    assert.equal(new URL((await select([video("portrait-hls", 1080, 1920, "avc1.64002a", { protocol: "m3u8_native" }), aac])).source).pathname, "/portrait-hls.mp4");
   });
   await t.test("non-YouTube selection keeps its existing height cap and codecs", real, async () => {
     const media = await select([video("small", 240, 426, "vp9"), video("large", 480, 854, "vp9"), opus], "480p", false, "https://www.dailymotion.com/video/fixture");

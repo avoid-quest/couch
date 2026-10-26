@@ -464,7 +464,10 @@ toast and clear their saved results automatically; failures stay visible for ret
 - A refused media request shows its HTTP status. **Try again** requests a fresh
   stream; a 403 alone does not claim that the video requires age verification or sign-in.
   YouTube stays loading until its selected formats pass a downloadability check,
-  including after **Try again**.
+  including after **Try again**. On Devices using native H.264 playback, YouTube
+  prefers HLS picture and original sound when available, preserving the selected
+  quality and audio instead of taking the first dubbed track from the master
+  playlist. Original-language HTTPS audio takes priority over a dubbed HLS rendition.
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
