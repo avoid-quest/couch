@@ -178,6 +178,26 @@ type Control = Awaited<ReturnType<Awaited<ReturnType<typeof fixture>>["control"]
 const token = (client: Control) => { assert.ok(client.instruction?.receiverId); return client.instruction.receiverId; };
 const outputIn = (client: Control, id: string): Output | undefined => client.state.playbacks?.flatMap(playback => playback.outputs).find(output => output.deviceId === id);
 
+for (const codec of [AudioCodec.OPUS, AudioCodec.PCM]) test(`45 ms Live ${codec} uses the strict 25 ms budget through public Join and encrypted worker delivery`, { timeout: 15000 }, async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.api("/api/settings/audio", "POST", { liveAudioLeadMs: 45 })).status, 200);
+    const listener = await f.control(); await f.publish(); await f.join(listener);
+    const receiverId = token(listener), sink = await f.speaker(0, codec);
+    await sink.report({ receiverId, epoch: 0, state: "preparing" });
+    await until(() => listener.output?.audioAdmission?.state === "preparing");
+    assert.equal(sink.frames, 0);
+    await sink.report({ receiverId, epoch: 0, state: "ready" }, 26);
+    await until(() => listener.output?.audioAdmission?.state === "failed");
+    assert.deepEqual(listener.output?.audioAdmission?.state === "failed" && listener.output.audioAdmission.reason, "required-lead");
+    assert.equal(sink.frames, 0, "a ready report cannot expand the 25 ms budget");
+    await sink.report({ receiverId, epoch: 0, state: "ready" }, 25);
+    await until(() => listener.output?.audioAdmission?.state === "ready" && sink.frames > 10);
+    assert.equal(token(listener), receiverId, "readiness recovery keeps the current consented receiver");
+    assert.equal(listener.output?.error, undefined);
+  } finally { await f.close(); }
+});
+
 test("public Live Join stays preparing during held output setup, then receives encrypted audio without rejoining", { timeout: 15000 }, async () => {
   const f = await fixture();
   try {
