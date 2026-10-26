@@ -1,9 +1,10 @@
 # Player modes integration ledger
 
 This is the current completion tracker for the recovered refactor. It accounts for
-P0–P7, M1–M11, all 17 use cases and every retirement responsibility. **Integration
-and qualification remain open.** A named check is an obligation; only the evidence
-table records a run result. The parent owns final fresh checks and review receipts.
+P0–P7, M1–M11, all 17 use cases and every retirement responsibility. **Software
+integration and retirement are complete; physical Live qualification remains open.**
+[Final validation](player-modes-integration-validation.md) records fresh commands,
+revisions, package/browser receipts and the precise remaining prerequisites.
 
 Read [historical scope and recovery](player-modes-recovery-reference.md) for the
 execution contract, unchanged original plan/code map/use cases, accepted ADR and
@@ -27,21 +28,20 @@ history and blobs stay outside the implementation ancestry.
 
 | Layer / owner | Branch | Integrated input / remaining responsibility |
 | --- | --- | --- |
-| Core / parent + scheduler child | `player-modes/integration-20261026` | Foundation `1213ff8`, routed access/sound guards `60ff1cb`, AirPlay fixture `4b52c5c`, scheduler `743206a`: routing/authority, preparation, shared worker and retained adapters. Current Core head `e5063df` also fixes captured-video source PTS continuity; Host wires per-source settings. |
-| Browser / parent | `player-modes/browser-20261026` | `3685efc` + `9e869de`: renderer, audience/TV controls, pre-native SDK patch, clock/rate/unit fixes and radio cleanup. `85b9f85` corrects the SDK type comment; it changes the maintained patch hash, not its recovered provenance. Current rebased Browser head: `1050968`. |
-| Host / native child | `player-modes/host-20261026` | Host implementation `dd65e53` and worker budget seam `f07fe9f` are integrated/pushed. Native/hidden-browser capture, grants/IPC/settings and dual-architecture resources are retained. Owns architecture/CI/design index/helper README; final receipts remain parent-owned. |
-| Validation / parent + R4 and documentation children | `player-modes/validation-20261026` | Real-media R4 fix/checks; this ledger/inventory/reference docs; final install/build/package/browser checks and independent fixed-head reviews. |
+| Core / parent + scheduler child | `player-modes/integration-20261026` | Foundation `1213ff8`, routed access/sound guards `60ff1cb`, AirPlay fixture `4b52c5c`, scheduler `743206a`: routing/authority, preparation, shared worker and retained adapters. Current Core head `1b07af3` includes captured-video PTS continuity, scheduler fixes and per-operation FFmpeg leases; Host wires per-source settings. |
+| Browser / parent | `player-modes/browser-20261026` | `3685efc` + `9e869de`: renderer, audience/TV controls, pre-native SDK patch, clock/rate/unit fixes and radio cleanup. `85b9f85` corrects the SDK type comment; it changes the maintained patch hash, not its recovered provenance. Current Browser head: `2ccb203`, including Details queue rights. |
+| Host / native child | `player-modes/host-20261026` | Host head `bc02df3` includes capture `6c62a51`, worker budget `c848407` and explicit Live input selection. Native/hidden-browser capture, grants/IPC/settings and dual-architecture resources are retained. Owns architecture/CI/design index/helper README; final signed packaging and Linux lifecycle checks pass. |
+| Validation / parent + R4 and documentation children | `player-modes/validation-20261026` | Checked code/tests head `bd25f9a`: real-media R4, native lifecycle and helper regressions; final receipts and PR descriptions follow as documentation only. |
 
-This documentation snapshot starts from `9e869de`; later parent/child progress is
-explicitly attributed below. Children use GPT-6.1 Sol xhigh/default and bounded
+Earlier receipt revisions below remain explicit; final checks use `bd25f9a`. Children use GPT-6.1 Sol xhigh/default and bounded
 ownership. Serialize shared Hub/protocol/scheduler/settings edits and stack
 mutations. Browser introduces `src/shared/audio-settings.ts` for its first consumer;
 Host extends/wires that contract. Current maintained source keeps Browser independent of later Host implementations.
 
 ## Packages and module responsibilities
 
-Evidence IDs below refer to the run table. **F1–F6 remain parent-owned completion
-markers**, including fresh reruns after Host/R4 integration.
+Evidence IDs below refer to the run table. F1–F6 resolve the original completion
+markers below; F4 alone contains unqualified external/platform claims.
 
 | Package | Disposition and implementation | Owner | Checks / remaining gate |
 | --- | --- | --- | --- |
@@ -103,8 +103,8 @@ changed paths and 112 later paths (30 overlap): **213 unique rows**. Provenance
 comes from `59ac6cd6..27e580c` and `27e580c..8147fc9`, not file naming or time cuts.
 `retain` preserves a responsibility; `adapt` requires selective integration;
 `exclude` stays on the recovery ref with its reason/replacement. Ownership can
-span sequential layers. Rows describe disposition/check ownership, not proof of
-final import or passing tests. Large historical docs/tools are explicitly excluded
+span sequential layers. Rows describe disposition/check ownership; final import, retirement and passing
+checks are reconciled in the validation receipt. Large historical docs/tools are explicitly excluded
 from maintained guidance, with pointers in the recovery reference.
 
 Host retains `src/client/session/native-audio.ts`, `src/client/capture-audio.html`
@@ -133,14 +133,15 @@ idle unsubscribe, encoder prewarm/prompt fanout and capture-generation continuit
 Integrated Host policy retains **100 ms default lead / 70 ms receiver budget**
 and **10 ms Opus packets**. Lead choices are **100/150/250 ms**, with a 30 ms
 source reserve; each publication freezes its policy. Relaxed capture keeps one
-second. `f07fe9f` carries that source budget through the real worker. Historical
+second. `c848407` carries that source budget through the real worker. Historical
 low-lead/native-PCM trials do not qualify browser Opus.
 
 ## Evidence and outstanding gates
 
 Parent scratch root: `/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/`.
-These are intermediate receipts, not fresh final-tip certification. Parent must
-retain exact commands, revisions, exit codes and skips in F1/F5.
+These earlier receipts retain their original revisions and limits. The completed
+F1–F6 table and [final validation](player-modes-integration-validation.md) supersede
+their pending-work notes with fresh commands, revisions, results and skips.
 
 | ID | Observed result / receipt | Limit |
 | --- | --- | --- |
@@ -151,14 +152,13 @@ retain exact commands, revisions, exit codes and skips in F1/F5.
 | E4 | `retained-av/results.json`: **15 Node suites pass**, covering stream/clock/sync/delivery/channels/input/tracks/upload failure/reporter retry/revocation/startup/ICE/STUN/Stop-Undo/consent-restart. | Does not close actual-media R4 continuity/fallback gaps; F2. |
 | E5 | Actual T3 preview Chrome, source `9e869de`; `browser-receipts/core-browser.json`: five React radio subscription checks, eight desktop keyboard checks, two actual H264/AAC decoders with independent queues; exclusive Move keeps paused Playback ID, two-entry queue and **37.240293 s** on second browser. | Localhost/127 origins; no physical timing qualification. Final-tip/TV/Host coverage remains separate. |
 | E6 | Parent real-Hub routed test at `9e869de`: Docker peer `172.17.0.2` → `10.10.10.11:49726`, exact allowlist: connection 200, bad Host/Origin 403, tokenless settings/private host-token 401; allowlist containing only `.3` refuses `.2` with 403. Disabling sharing closes listener and refuses the same allowed peer. `routed-peer-{allowed.json,denied.log,sharing-off.json,sharing-off.log}`. | Specific routed topology/security behavior, not Wi-Fi/audio qualification. Parent reports all owned scratch Core/media PIDs stopped. |
-
 | E7 | Parent reports current Host `f07fe9f` over Core `e5063df` / Browser `1050968`: **92 separate unit files / 688 tests pass**, **eight Host/scheduler Node bundles pass**. Per-source budget real-worker regression passes and its red control fails. `act` Check passes at `f07fe9f`. | Full `act` Package is still building; exact final receipts/commands/skips and independent reviews remain parent-owned. New `tests/live-source-budget.integration.ts` is post-recovery coverage, outside the fixed 213-path source union. |
 
-| Marker | Parent-owned remaining evidence / smallest completion condition |
+| Marker | Final disposition and evidence |
 | --- | --- |
-| F1 — final integrated checks | On integrated Host/R4 heads: fresh frozen install, typecheck/build and relevant public behavior suites on exact final heads; check each layer builds; record skips/failures and resource cleanup. Inventory union/diff checks alone do not satisfy this gate. |
-| F2 — R4 software continuity | Source PTS restart while publication stays alive was reproduced; minimal fix is integrated in Core `e5063df`. Review it and attach final real-media receipts proving real captured WebM→HLS→browser, split/picture-only, independent late third viewer, forced RTC fallback, stop/re-ingest absolute position and single-ingest cleanup. These are software checks, not missing hardware. |
-| F3 — Host/package/settings | Host `dd65e53` / budget seam `f07fe9f` are integrated. Parent reports actual Mac dual-architecture helper builds/signatures pass; attach final receipt/head. Verify exact hidden frame grants/navigation/close/quit, native Origin/revocation/mute/restart, C queue test, source-budget snapshot settings and actual rate/buffer readback. `act` Check passes at `f07fe9f`; full `act` Package is building with `catthehacker/ubuntu:full-latest`. Preserve package-hooks/act results before relevant dispatch. Final hosted signed package and matched packaged Main/Core/worker/browser smoke remain pending. |
-| F4 — platform/physical qualification | Fresh Mac-host→Linux-browser Opus continuity and actual Wi-Fi browser routes; signed Main permission/device availability; 44.1 kHz hardware, Apple sender/Bluetooth/background/locked phones where available. Numerical skew/dropout/fidelity profile, ≤100 ms input-to-ear and 50 physical receivers remain unqualified. One preflight/actionable retry records any concrete prerequisite. |
-| F5 — independent review/handoff | Fresh independent spec/standards reviews at fixed base/head with findings resolved and justified reruns; current built-state doc audit (including retained AirPlay/live-input/public-media/ADR 0001 claims), final retirement/API/dependency search, parent stack/remote/PR-ready receipts. This child performs no CI, stack, push or PR actions. |
-| F6 — historical separation | Browser R4 `5ce1d68e…` and Native R4 `ee16cdca…` are different archival payloads. Keep historical validation, PCM overlays/native-client trials and sample-coherence results attached to their inputs; none qualifies final browser Opus. |
+| F1 — integrated checks | Closed on `bd25f9a`: every layer passes frozen install/three-project typecheck/build; 92 unit files / 688 tests pass; 59 Node bundles cover 533 checks after the real AirPlay rerun. Exact commands, original failures, reruns and counts are in [validation](player-modes-integration-validation.md). |
+| F2 — R4 continuity | Closed: Core `e5063df` and Validation `e77463a`; real WebM→HLS, forced RTC fallback, split/picture-only sound, independent late browser viewer, absolute PTS across re-ingest and owned resource cleanup pass. Successful ordinary RTC video decoding also has a separate packaged-browser receipt. Physical A/V alignment stays F4. |
+| F3 — Host/package/settings | Closed software/package gate: final Linux act and hosted Linux/Windows/signed dual-arch Mac Package pass; 94 Linux package assets match the maintained build. Real packaged hidden stereo input→Core→Opus→Chrome passes at 250 ms lead. All five native lifecycle checks pass; final hidden-Live rerun passes on `bd25f9a`. Native Mac microphone permission remains F4. |
+| F4 — physical/platform qualification | Open qualification, not unfinished software: the authorized Mac reports “Turn on Couch in Microphone”; native device capture cannot run without that existing OS grant. Default 100 ms lead gives 70 ms receiver budget; the available Linux route requires 141 ms and is refused, while 250 ms lead admits it. No 100 ms input-to-ear, physical skew/fidelity/dropout, 50 physical receivers, Intel Ventura execution, Apple sender, Bluetooth or locked/background Wi-Fi phone claim. See the exact smallest checks in validation. |
+| F5 — review/handoff | Closed: fresh independent spec and standards reviews of `4a194e3...bd25f9a` report no actionable findings after all three round-1 fixes. All layers are pushed; [PR handoff](player-modes-pr-handoff.md) records intended bases and concrete descriptions. PR submission, merges and releases remain owner actions. |
+| F6 — historical separation | Closed accounting: Browser R4 `5ce1d68e…` and Native R4 `ee16cdca…` are distinct archived payloads. Recovery archive and original investigation trees remain intact and outside implementation ancestry. Historical PCM/native-output trials do not qualify final browser Opus. |
