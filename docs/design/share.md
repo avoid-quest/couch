@@ -116,8 +116,7 @@ checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
 synchronization on every output. While those checks run, the listener sees
 **Preparing audio…**. An incompatible output reports its reason on that listener;
 changing the output requires fresh admission. Normal preparation and recovery
-do not require leaving and joining again. See the
-[validation ledger](../audio-video-refactor-validation.md).
+do not require leaving and joining again.
 
 ## Not yet
 
