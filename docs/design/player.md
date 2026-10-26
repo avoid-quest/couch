@@ -495,3 +495,5 @@ band, the now-playing bar, Home's hero and Remote (`PlaybackTransport`).
 | Next card near the end | Prime Video's "Next up"; Netflix's Next Episode |
 | Buffering as a centred spinner | YouTube; Apple's HIG |
 | Translucent panel surface | YouTube's gear menu (60%) |
+
+Details keeps Queue and Queue all disabled while Core denies queue control, including for Live listeners. Initial focus passes those disabled verbs and reaches the next available action.

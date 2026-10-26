@@ -72,10 +72,11 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
   trail?: ReactNode;
   children?: ReactNode;
 }) {
-  const { on } = usePlayOn();
+  const { on, queueAllowed } = usePlayOn();
+  const queueDisabled = queue?.disabled || queueAllowed === false;
   const rest = useItemMenu(more);
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
-  const first = [!play?.disabled && play && "play", !queue?.disabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
+  const first = [!play?.disabled && play && "play", !queueDisabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
   const started = !!position && !!duration;
   const line = metaLine(meta, duration != null && !started && formatDuration(duration));
@@ -91,7 +92,7 @@ export function DetailHeader({ title, meta, context, description, thumbnail, sha
     {verbs && <div data-nav-row className={cn("mt-1 w-full", verbRow)}>
       {play && <Button data-page-first={first === "play" || undefined} size="lg" aria-label={on(`${play.label} ${play.aria ?? title}`)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="fill-current" />{on(play.label)}</Button>}
       {fromStart && <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>{fromStart.label}</Button>}
-      {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>{queue.label}</Button>}
+      {queue && <Button data-page-first={first === "queue" || undefined} variant="ghost" size="lg" disabled={queueDisabled} onClick={queue.run}>{queue.label}</Button>}
       {/* Play on waits for another device that can play it. */}
       {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
       {save && <SaveToggle data-page-first={first === "save" || undefined} saved={save.saved} disabled={save.disabled} onClick={save.run} />}
