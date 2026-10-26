@@ -1,0 +1,2534 @@
+{
+  "schema": 1,
+  "purpose": "Owner-authorized pause preservation only; no qualification claim",
+  "stackHead": "61a73b450e23522ca29ce236eeec5c59408f724e",
+  "files": [
+    {
+      "path": "bounded-offers/README.md",
+      "source": "/tmp/couch-bounded-offers-20261026/README.md",
+      "bytes": 3837,
+      "sha256": "9bfc391a559e09027e2f5784ce7f1575ba469664a4b3033210f73eaf29d86bfc"
+    },
+    {
+      "path": "bounded-offers/build.log",
+      "source": "/tmp/couch-bounded-offers-20261026/build.log",
+      "bytes": 9147,
+      "sha256": "c6695319f19a336cc7c2a19df98d799013b2a87c0f0c8fb182911ed17a6e3d1b"
+    },
+    {
+      "path": "bounded-offers/green-live-client.log",
+      "source": "/tmp/couch-bounded-offers-20261026/green-live-client.log",
+      "bytes": 4056,
+      "sha256": "101602f4f1026c2e4b421585597efc838f4c661b05cf5c2ca007ee21a7354862"
+    },
+    {
+      "path": "bounded-offers/install.log",
+      "source": "/tmp/couch-bounded-offers-20261026/install.log",
+      "bytes": 1285,
+      "sha256": "f251ad669c3ddc1977a07241952e1175247bcf86032fc50208f2d42a07f93a16"
+    },
+    {
+      "path": "bounded-offers/live-relay-check.log",
+      "source": "/tmp/couch-bounded-offers-20261026/live-relay-check.log",
+      "bytes": 242,
+      "sha256": "fd38dfd5c0a5d122da4c7c8c75afa04965c7ecdefd9a134e5effd3533fada67d"
+    },
+    {
+      "path": "bounded-offers/native-live-authority.log",
+      "source": "/tmp/couch-bounded-offers-20261026/native-live-authority.log",
+      "bytes": 532,
+      "sha256": "e7ec89859ce34e5857312553b725dfe813cf36cedeb2f5955d36c5a94aab7933"
+    },
+    {
+      "path": "bounded-offers/red.log",
+      "source": "/tmp/couch-bounded-offers-20261026/red.log",
+      "bytes": 8660,
+      "sha256": "73e43a22710dc0e3e1d1f1257004556f48aa97e732f3e12d3e302bbb786235f6"
+    },
+    {
+      "path": "bounded-offers/renderer-hls.log",
+      "source": "/tmp/couch-bounded-offers-20261026/renderer-hls.log",
+      "bytes": 2594,
+      "sha256": "9348cdce36a2868dd9501cdcd0fc8e9cbc3f15911a99c9b0458f4bf81354ceb8"
+    },
+    {
+      "path": "bounded-offers/typecheck.log",
+      "source": "/tmp/couch-bounded-offers-20261026/typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    },
+    {
+      "path": "checks/final-g5-node/device-sharing.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/device-sharing.integration.ts.build.log",
+      "bytes": 90,
+      "sha256": "650c2879f9434cfade43579f211627cf48014bdc56c17271b14e3e72c929cacb"
+    },
+    {
+      "path": "checks/final-g5-node/device-sharing.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/device-sharing.integration.ts.log",
+      "bytes": 6274,
+      "sha256": "5e1539e102b70f09ceafe4a06633f1cd1263cc5d1838eebea4ea681797978ae6"
+    },
+    {
+      "path": "checks/final-g5-node/generated-status.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/generated-status.json",
+      "bytes": 469,
+      "sha256": "f54e37bedb0ba3f5c38555f63c568f6f4ab86b055356ccc6d96171d02a523716"
+    },
+    {
+      "path": "checks/final-g5-node/live-admission.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-admission.integration.ts.build.log",
+      "bytes": 90,
+      "sha256": "a9de41dc1eaafa08beb418918b641904fc79b09e6367dcf03c7e137f3642547c"
+    },
+    {
+      "path": "checks/final-g5-node/live-admission.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-admission.integration.ts.log",
+      "bytes": 2996,
+      "sha256": "3614377aff7878db8722fb84c2d2ddacfdbb8dc87b644bac508c73df9e4c0ba7"
+    },
+    {
+      "path": "checks/final-g5-node/live-audience.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-audience.integration.ts.build.log",
+      "bytes": 89,
+      "sha256": "448c7e0149a94b4301445fb360cf8763446ecb98bd899fce5b758e547e2f2f67"
+    },
+    {
+      "path": "checks/final-g5-node/live-audience.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-audience.integration.ts.log",
+      "bytes": 5527,
+      "sha256": "70ede5e0faf32a66533a13c2c8cc065db88f301e32b1202c5088e215890d9707"
+    },
+    {
+      "path": "checks/final-g5-node/live-input.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-input.integration.ts.build.log",
+      "bytes": 86,
+      "sha256": "798e24ba63d54f1613811ab052181dad49c7064b9082bcec92c21a5a3d7a1d6a"
+    },
+    {
+      "path": "checks/final-g5-node/live-input.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-input.integration.ts.log",
+      "bytes": 7781,
+      "sha256": "a63fe67c089bfaf586018d7dc746e6fbef41074760fcb9b2e60f2b0a0ee264aa"
+    },
+    {
+      "path": "checks/final-g5-node/live-outputs.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-outputs.integration.ts.build.log",
+      "bytes": 88,
+      "sha256": "df2bd94e0757effbb19ed5cf6b98a4df8ca8d5d8f44aae666f3c5ad4045cb595"
+    },
+    {
+      "path": "checks/final-g5-node/live-outputs.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-outputs.integration.ts.log",
+      "bytes": 78155,
+      "sha256": "43e46aaeee754ca9daf52d2a4d55e1c2d4c79a5ed2649003cce0cd0a449227d3"
+    },
+    {
+      "path": "checks/final-g5-node/live-reporter-retry.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-reporter-retry.integration.ts.build.log",
+      "bytes": 95,
+      "sha256": "04ce9a106408284dd12339140f3ef75caaa3b3010bce2c898db35a1c40151192"
+    },
+    {
+      "path": "checks/final-g5-node/live-reporter-retry.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-reporter-retry.integration.ts.log",
+      "bytes": 2956,
+      "sha256": "82e7f5d10efa78d71d65ac43530a047fb7754e28b0dac994b50454bbc1ac7e35"
+    },
+    {
+      "path": "checks/final-g5-node/live-revocation.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-revocation.integration.ts.build.log",
+      "bytes": 91,
+      "sha256": "d290a009296de1c5e4f753509319a7f4fdf182f609aa1401d22e55509c2afecf"
+    },
+    {
+      "path": "checks/final-g5-node/live-revocation.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-revocation.integration.ts.log",
+      "bytes": 379,
+      "sha256": "ea8fc3887a0aae57da914733fbcfc553f6e955e0eb8bb0ea466c1790f88c6dc7"
+    },
+    {
+      "path": "checks/final-g5-node/live-routing.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-routing.integration.ts.build.log",
+      "bytes": 88,
+      "sha256": "53cc0cba019e4fad36c474af55990346cc40ac6e2f4c78d487cf117ef82261b2"
+    },
+    {
+      "path": "checks/final-g5-node/live-routing.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-routing.integration.ts.log",
+      "bytes": 805,
+      "sha256": "b13a268ce1c6514d4a4a3cd9104ac0adcbb12304d1ea291cecc439c6c292c9da"
+    },
+    {
+      "path": "checks/final-g5-node/live-upload-failure.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-upload-failure.integration.ts.build.log",
+      "bytes": 95,
+      "sha256": "65ec405f3eda4ac6d31b7a4aa92f19ad3456ce835b8f73b3439e5fec5f0c0aa5"
+    },
+    {
+      "path": "checks/final-g5-node/live-upload-failure.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/live-upload-failure.integration.ts.log",
+      "bytes": 7320,
+      "sha256": "b073d3141509e9b3c9dd644dc143c5e6ce45616db306480670dd0b6f2758cdb8"
+    },
+    {
+      "path": "checks/final-g5-node/results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/results.json",
+      "bytes": 953,
+      "sha256": "5bb9ccbe6effd41704009672284372d3bffd15d2550d462c6cbaa2d11a13b6b5"
+    },
+    {
+      "path": "checks/final-g5-node/state-fanout.integration.ts.build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/state-fanout.integration.ts.build.log",
+      "bytes": 88,
+      "sha256": "cfb97d9b708f01ce6725d451c5f84181049c78841288519e92cf36ca6417de30"
+    },
+    {
+      "path": "checks/final-g5-node/state-fanout.integration.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-node/state-fanout.integration.ts.log",
+      "bytes": 875,
+      "sha256": "1dabc8e47542c17fec52ac2ab11e8522e189499d7524855b3e96aab284b6ee77"
+    },
+    {
+      "path": "checks/final-g5-unit/live-client.test.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-unit/live-client.test.ts.log",
+      "bytes": 4056,
+      "sha256": "651481449c6527ba980d4f8d949a4bdc4f18bc87b391764cd7d57509a4ecee7f"
+    },
+    {
+      "path": "checks/final-g5-unit/live-relay-check.test.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-unit/live-relay-check.test.ts.log",
+      "bytes": 242,
+      "sha256": "cadf2ea87cd1b0fb5eecde70467b41f4d76ec993af6567b573802f1590927d5c"
+    },
+    {
+      "path": "checks/final-g5-unit/native-live-authority.test.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-unit/native-live-authority.test.ts.log",
+      "bytes": 532,
+      "sha256": "0cf8a477abc8c5fd6ed73750a4e209a657a7eb892e9f8d04aea39606e4860cd3"
+    },
+    {
+      "path": "checks/final-g5-unit/renderer-hls.test.ts.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-unit/renderer-hls.test.ts.log",
+      "bytes": 2595,
+      "sha256": "d4768cd4d794df05f9be47f60b5a2276a3553e8bcef3f32f5ff8ffba45e75c51"
+    },
+    {
+      "path": "checks/final-g5-unit/results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/player-modes/final-g5-unit/results.json",
+      "bytes": 358,
+      "sha256": "ec2bb2b9f9669c06bc64bd7820a6348f9e8a18f7a8f33770052c9f55f0d9606a"
+    },
+    {
+      "path": "host-ab-ingress/OVERLAY-README.md",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/OVERLAY-README.md",
+      "bytes": 7811,
+      "sha256": "aaefba52855dce41bbfd248d5b187faa37edcecf27c7e6e48828642158b30d68"
+    },
+    {
+      "path": "host-ab-ingress/capture-core-recipe.md",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/capture-core-recipe.md",
+      "bytes": 19843,
+      "sha256": "bc214ed07102c7c93c685762ccd7fa9943750a0aa2e366fcc39ef3fa671e0d31"
+    },
+    {
+      "path": "host-ab-ingress/ingress-probe.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/ingress-probe.js",
+      "bytes": 5039,
+      "sha256": "2184cea699a6f3523cdf34aca2f501539c24345dd513bf154f5c56de459afd40"
+    },
+    {
+      "path": "host-ab-ingress/offline-validation.json",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/offline-validation.json",
+      "bytes": 1034,
+      "sha256": "24dd3f811f9a4ef1f10f2ef02a7d1287d143c403b8ed550b837d2893132b714e"
+    },
+    {
+      "path": "host-ab-ingress/overlay/accept-original.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/overlay/accept-original.js",
+      "bytes": 2421,
+      "sha256": "7bfd0f2edaf284618020971a98e4e6f9597622fd085aeea046419ad0195bc825"
+    },
+    {
+      "path": "host-ab-ingress/overlay/accept-patched.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/overlay/accept-patched.js",
+      "bytes": 2873,
+      "sha256": "32e61ef4b1ebf12856940049316b86ba70b7344fe28c716c9982a08b79399b5a"
+    },
+    {
+      "path": "host-ab-ingress/overlay/audio-worker.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/overlay/audio-worker.mjs",
+      "bytes": 296204,
+      "sha256": "47b516fbf4cdde4178d76c82993de816a5688f762e68c21f2fa6254a692df02d"
+    },
+    {
+      "path": "host-ab-ingress/overlay/audio-worker.original.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/overlay/audio-worker.original.mjs",
+      "bytes": 290388,
+      "sha256": "3830a2f3ad7ec39e5eead1cc05a11c786ec38fd8ef0deb8d40aadb8cc63d24ba"
+    },
+    {
+      "path": "host-ab-ingress/overlay/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/overlay/manifest.json",
+      "bytes": 1126,
+      "sha256": "e3e2cd4e4f8abc40b7e6ea3fa296240f93d794a1afaad443b080710ca3061f85"
+    },
+    {
+      "path": "host-ab-ingress/overlay/probe.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/overlay/probe.js",
+      "bytes": 5039,
+      "sha256": "2184cea699a6f3523cdf34aca2f501539c24345dd513bf154f5c56de459afd40"
+    },
+    {
+      "path": "host-ab-ingress/package-a302-overlay/accept-original.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/package-a302-overlay/accept-original.js",
+      "bytes": 2421,
+      "sha256": "7bfd0f2edaf284618020971a98e4e6f9597622fd085aeea046419ad0195bc825"
+    },
+    {
+      "path": "host-ab-ingress/package-a302-overlay/accept-patched.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/package-a302-overlay/accept-patched.js",
+      "bytes": 2873,
+      "sha256": "32e61ef4b1ebf12856940049316b86ba70b7344fe28c716c9982a08b79399b5a"
+    },
+    {
+      "path": "host-ab-ingress/package-a302-overlay/audio-worker.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/package-a302-overlay/audio-worker.mjs",
+      "bytes": 296204,
+      "sha256": "47b516fbf4cdde4178d76c82993de816a5688f762e68c21f2fa6254a692df02d"
+    },
+    {
+      "path": "host-ab-ingress/package-a302-overlay/audio-worker.original.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/package-a302-overlay/audio-worker.original.mjs",
+      "bytes": 290388,
+      "sha256": "3830a2f3ad7ec39e5eead1cc05a11c786ec38fd8ef0deb8d40aadb8cc63d24ba"
+    },
+    {
+      "path": "host-ab-ingress/package-a302-overlay/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/package-a302-overlay/manifest.json",
+      "bytes": 1172,
+      "sha256": "64426f16ae049c576df49fb342dc79a131f7c7d54bce94bf17c510801bd4ed9d"
+    },
+    {
+      "path": "host-ab-ingress/package-a302-overlay/probe.js",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/package-a302-overlay/probe.js",
+      "bytes": 5039,
+      "sha256": "2184cea699a6f3523cdf34aca2f501539c24345dd513bf154f5c56de459afd40"
+    },
+    {
+      "path": "host-ab-ingress/patch-ingress.py",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/patch-ingress.py",
+      "bytes": 5414,
+      "sha256": "301badc23aca86f9397f4d7e5ab7f26d7d85690ec96cca11127f93cc37dc4fe4"
+    },
+    {
+      "path": "host-ab-ingress/validate-overlay.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-dbefef12/.scratch/host-ab/validate-overlay.mjs",
+      "bytes": 9786,
+      "sha256": "fd7c8bfcba7f3658c8a5004521387a415907f563677d699c46e3ec8c8ffc68ee"
+    },
+    {
+      "path": "live-performance/baseline-r1/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "live-performance/baseline-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/events.json",
+      "bytes": 453,
+      "sha256": "0ede53d03a53fb38e3fc1714d5a12e713bea3aca16b5dabd2dfd7ac4ad305930"
+    },
+    {
+      "path": "live-performance/baseline-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/manifest.json",
+      "bytes": 1434,
+      "sha256": "7bb87d5cb2a76765772e059427baee989de7c81ee78f693f8d62349598c5729a"
+    },
+    {
+      "path": "live-performance/baseline-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/baseline-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/processes.json",
+      "bytes": 3709,
+      "sha256": "073ca52b5ccb8ebc77be5de717552249549df5ca3b8f582d9e747e05998af297"
+    },
+    {
+      "path": "live-performance/baseline-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/run-electrical.mjs",
+      "bytes": 9545,
+      "sha256": "d3c54d31cdc7a25245ef9c49551917dfa0386a7b954a81acb47fb80b16c3e8e8"
+    },
+    {
+      "path": "live-performance/baseline-r1/served-assets.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/baseline-r1/served-assets.json",
+      "bytes": 283,
+      "sha256": "c5402f94cd812e228fb86e922dd8505dc588ec3d9516d7213f3c449e79871f32"
+    },
+    {
+      "path": "live-performance/browser-audit/admission-replay-result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/admission-replay-result.json",
+      "bytes": 5355,
+      "sha256": "5f2513fb8681e3cff0f29faf970bfb31b324319b76cc82c0567152aeb7eb357e"
+    },
+    {
+      "path": "live-performance/browser-audit/artifact-hashes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/artifact-hashes.json",
+      "bytes": 1378,
+      "sha256": "4eaa6ce42c2866332aa341a46a281cc2584bfa1a5010ae5d9d1188f78f046f51"
+    },
+    {
+      "path": "live-performance/browser-audit/browser-output-assessment.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/browser-output-assessment.md",
+      "bytes": 26926,
+      "sha256": "54580b7a9a50533cd598380a60fc072f86c1ce083f389fc3f2c950734e5312f8"
+    },
+    {
+      "path": "live-performance/browser-audit/commands-results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/commands-results.json",
+      "bytes": 1372,
+      "sha256": "2c67837b5424c7d2d3c9f394e95cb75201ebe8f2c2a8614db11001dff8654829"
+    },
+    {
+      "path": "live-performance/browser-audit/copy-inputs.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/copy-inputs.py",
+      "bytes": 4598,
+      "sha256": "16462da3a428a7f593c92d96edfb081a557766af8137c2a8cff3c6367320dbc1"
+    },
+    {
+      "path": "live-performance/browser-audit/inputs-manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/inputs-manifest.json",
+      "bytes": 49580,
+      "sha256": "76c037d18f77ca23bdd49613abe40614b90fa2a92ca1501a26333e61a2404ab4"
+    },
+    {
+      "path": "live-performance/browser-audit/replay-admission.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/replay-admission.ts",
+      "bytes": 7170,
+      "sha256": "a5b1a8659840dbd1bc2200f7e3f5e60e71cb7a93f6fbdfbcb90a58b95c0f3748"
+    },
+    {
+      "path": "live-performance/browser-audit/snapshot-existing-output.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/snapshot-existing-output.mjs",
+      "bytes": 8127,
+      "sha256": "af5fa7aabd2de0ee98ddd99cf61fb26b5af14a4f1183d1c524de1235b0a52714"
+    },
+    {
+      "path": "live-performance/browser-audit/snapshot-offline-check.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/snapshot-offline-check.json",
+      "bytes": 875,
+      "sha256": "4092a7791696d0206679395ff90f11e6e2e285524783dce2864fb5f365036e7b"
+    },
+    {
+      "path": "live-performance/browser-audit/trace-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/browser-audit/trace-summary.json",
+      "bytes": 240861,
+      "sha256": "40d16ced8377c376ee9dc8bf837a477a373d3b2528c6d7d209cf25af2c84f7d6"
+    },
+    {
+      "path": "live-performance/check-harness-evidence.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/check-harness-evidence.py",
+      "bytes": 712,
+      "sha256": "4c70475cc87888719dcd8d7c90d5b1a6588a94873dc47edb482a1c29848e9425"
+    },
+    {
+      "path": "live-performance/check-integrated.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/check-integrated.py",
+      "bytes": 1663,
+      "sha256": "9f0cabe3f0ccb7a001225994ca0520bcd5c7dce1564df42c21fd1af025b873d2"
+    },
+    {
+      "path": "live-performance/check-live-ui.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/check-live-ui.mjs",
+      "bytes": 1906,
+      "sha256": "6f69c973603265fb84d94f32256db2cf0524a46322c419af9ec27227e870626e"
+    },
+    {
+      "path": "live-performance/check-return-tiles.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/check-return-tiles.py",
+      "bytes": 1087,
+      "sha256": "1cd8a793401af536dc85960b6f751fb7f938b466aca2164ac203febbb2339821"
+    },
+    {
+      "path": "live-performance/check-wiring-r3.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/check-wiring-r3.py",
+      "bytes": 1805,
+      "sha256": "31e4e507857799eab277792c2ff27047ddd9ecf2a20bcc1efa7eb1f28571a5d3"
+    },
+    {
+      "path": "live-performance/check-wiring.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/check-wiring.py",
+      "bytes": 1805,
+      "sha256": "dfa1e618d3e75cb77d138bbef2d23e7a98d66c5cda6570d426d4f67044707289"
+    },
+    {
+      "path": "live-performance/chrome-for-testing-versions.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/chrome-for-testing-versions.json",
+      "bytes": 10450,
+      "sha256": "2e487670eddd66260e199c02c5bcd86d009f386977a2a19841312b467ba1af48"
+    },
+    {
+      "path": "live-performance/collect-comparison.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/collect-comparison.py",
+      "bytes": 714,
+      "sha256": "a03b6e69b387deb2d9a780e7833d42f1cbb0afd319af6097ca59b083e763411a"
+    },
+    {
+      "path": "live-performance/collect-maintained.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/collect-maintained.py",
+      "bytes": 667,
+      "sha256": "e223f3fbe52370b62d818720b3e2d6554c68d7ba6e76d26d2906ddaae766a6fc"
+    },
+    {
+      "path": "live-performance/compare-output-hints.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-output-hints.py",
+      "bytes": 3619,
+      "sha256": "78c133d5461c093eaedeb8bfdfd26205bd1c6e96ca05b9bafb4c58a6a7bf1898"
+    },
+    {
+      "path": "live-performance/compare-output-profiles-r2.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-output-profiles-r2.py",
+      "bytes": 3628,
+      "sha256": "e2d75d212b3a46ec31d95bf2fa810aac15a6c166319184aedd12263901865b87"
+    },
+    {
+      "path": "live-performance/compare-output-profiles.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-output-profiles.py",
+      "bytes": 3554,
+      "sha256": "f6d0f38e5b349ef84c95c401297f0b481656e9d18ac45291a23a0e7c50886d6c"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-r1/probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-r1/probe.json",
+      "bytes": 475,
+      "sha256": "17dad993a0b919e227367c23720416e50f011ac1c6466ab9b01bfca1f79fd552"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-r1/processes.json",
+      "bytes": 4054,
+      "sha256": "10620e63d2605623b33ad954f0b1d4a164cd0fa6fef27527fa9469fdbe11ce8d"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-r1/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-r1/restore-hal512.json",
+      "bytes": 1329,
+      "sha256": "47ffa15147136297351e1888888fb849a4d50e7c975c2b9316c83b5a9c5be784"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-r1/stream-evidence.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-r1/stream-evidence.json",
+      "bytes": 137154,
+      "sha256": "8a223a8bc6902a945be6c003f0b8e1f9e12d2fbea733fb14d62e5b33ba19a62c"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "416f5664ed14d339e935394a61dcb74426431e190696d50516a25b836356bd7c"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-short-r1/probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-short-r1/probe.json",
+      "bytes": 2433610,
+      "sha256": "16dfe55187844b796a8c4b35b84dffbe1e330a1395c55852ea1cc5dd357c0585"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-short-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-short-r1/processes.json",
+      "bytes": 4090,
+      "sha256": "41f54fa39c87f7f82151091cdadb74814d653b6a9dff9757fb682a0820105b61"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-short-r1/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-short-r1/restore-hal512.json",
+      "bytes": 1336,
+      "sha256": "50b5226ecfa7415d8d2d0127c324db727b2d18deea6e1184790427371793a7b2"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-short-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-short-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-short-r1/stream-evidence.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-short-r1/stream-evidence.json",
+      "bytes": 144318,
+      "sha256": "7ab67991b9fe5fcd9ca3d95dc672afcd82cdba22d8eb42d44b8987fa9215465a"
+    },
+    {
+      "path": "live-performance/compare-probe-pcm-short-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-probe-pcm-short-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "e031d0bf6bbf8208f44f177b6e68825a17ca5b2e4b26a9e61ab54a29e3436e1b"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/events.json",
+      "bytes": 1460,
+      "sha256": "25eca3f06cf5586b50bd13f6849f9787ae1fe01fb099e14f61407984053bf718"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/linux-receiver-public.jsonl",
+      "bytes": 660,
+      "sha256": "f75370bf450757aa12f3e112ef7cc82d6152399742cf3f7684bdaa9efa12c2b5"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/mac-host-public.jsonl",
+      "bytes": 822,
+      "sha256": "0c52551336762505163ca7c8e61333cb5daec786534fc6617ccc7a67574f8f6c"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/manifest.json",
+      "bytes": 1357,
+      "sha256": "bf014a87bc0d500b60e18f3369bbd463d7ff0ee2f057eb22f7a46abe145d81d5"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/processes.json",
+      "bytes": 4084,
+      "sha256": "7e80cf4049a44a935d6b3a4e6b233b009e353885fec2efe90c001f558d5f66b2"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/receiver-probe.json",
+      "bytes": 139,
+      "sha256": "3ce58daf426ce869b6b44ab670d613e4aadfee14e30c2e24ba530f9048e03812"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/restore-hal512.json",
+      "bytes": 3308,
+      "sha256": "4becbc894fe66ff563cfaf4b1bae710d9d9bfc943ae7b4cf2cc8dbdab35e23fb"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/run-electrical.mjs",
+      "bytes": 7958,
+      "sha256": "54cecdee3a397386537fd02bc8074afd343629f66d6fb2881d249d764fc92a52"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "e6cf42498fc7eb3e05dbfd231d26cb3dfab82cb48a99fee4c6592c455d4adac3"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/compare-product-opus45-r2-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/compare-product-opus45-r2-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/compare-product-opus45-r2.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/compare-product-opus45-r2.jsonl",
+      "bytes": 510058,
+      "sha256": "b93ca8c64ac43b07ec49e76c710f2031ca2be9abd935a3ba239afcb83da9b6e4"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/compare-product-opus45-r2.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/compare-product-opus45-r2.s32le",
+      "bytes": 46080000,
+      "sha256": "509dad5333476c4eb27b814e5a0e9ba6ae2ae2847b595b6cac44defe017f4aa0"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/evaluation/controls.json",
+      "bytes": 58782,
+      "sha256": "38523fe8a6112adfa84a7792a6b94929883d2ceb8ea9cbbdfebdd99e36e2e0f7"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/evaluation/electrical.json",
+      "bytes": 30719,
+      "sha256": "eaa92ab71d331a9b8f26d982930a1e35f77c1f62a8b01d40c263752d4063b308"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/evaluation/result.json",
+      "bytes": 1569,
+      "sha256": "0256925c874a1e5cc100bbd23593c724d8cb081072c21e6e79a422dffd048e33"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/evaluation/waveform.json",
+      "bytes": 18615886,
+      "sha256": "a91ef73299152f818a562105b8a3d8c132f29b54d12b028e1ff790c2a4eaca74"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/events.json",
+      "bytes": 1719,
+      "sha256": "5edf40f396f48dca9bd73820d1d738aa2171160545d8dfa30543e51dc9c8ac30"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/existing-output-after-witness.json",
+      "bytes": 21275,
+      "sha256": "c71438d0746f4c50810cac22e77e396bd49046e51de853d8618a681618d51e9a"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/gain-events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/gain-events.json",
+      "bytes": 1427,
+      "sha256": "f4a70c0e7380bf4cf97fa8b6164e043446ec7e213c56191d95e0a2ff0838d5b3"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/linux-receiver-public.jsonl",
+      "bytes": 7989,
+      "sha256": "196b198690c9844ea6a08e62cd0a9f62757e88d8344d1ed2a5dada25a992f16a"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/mac-host-public.jsonl",
+      "bytes": 5013,
+      "sha256": "6d264042491ba804646f5b909c2cfeeb1edf784eb6c4955069f65906f8351ce2"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/manifest.json",
+      "bytes": 1465,
+      "sha256": "09605a186602d430c332816e40bdf120292fc2dd6e1c8bf9b6243addfdb009e6"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/processes.json",
+      "bytes": 4084,
+      "sha256": "a5497f76cf0b931d04919fedcd78359517a3e6158a6bc101b5fc48a62b25c686"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/receiver-probe.json",
+      "bytes": 2802165,
+      "sha256": "d48c9d3d6714ef8cbb28f8e84f207c04b05bd275d26e03e0724626b77d9db408"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/restore-hal512.json",
+      "bytes": 5026,
+      "sha256": "5f9125c535f5227c01a5cf95c59a0e111a2da2db0df623770616d0a71e3d3fda"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/run-electrical.mjs",
+      "bytes": 7958,
+      "sha256": "8ed21f31e1a780343bf9129b84603214ee511854bdc434f1ed06c3f68a1c4c36"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-product-opus45-r2/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-product-opus45-r2/tls-holder.json",
+      "bytes": 132,
+      "sha256": "8b66cff4af3ea794c6d3b7adabe7d2f3e23b819584a88fd06d5126dc8166b732"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/events.json",
+      "bytes": 270,
+      "sha256": "c7c9a8ed5a9bd3a45a2fa4018d1da28aa226f1b5d3a35d14fee76f4065e8f921"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/final-sdk.json",
+      "bytes": 572,
+      "sha256": "5597b71c71915e9f1cf6af09b741575147c9b8f80539d7b98d803dda77579fdf"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/manifest.json",
+      "bytes": 1516,
+      "sha256": "fa3dd7bc5cf11db1d879050c0e9294ef5ffef6fcee4bc92fe43ff63a9f8de284"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/processes.json",
+      "bytes": 3788,
+      "sha256": "0cc597c86fd782cb28dd677d82a36b28210fa39f6438e7076b2e9fed618e36fe"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/run-electrical.mjs",
+      "bytes": 9088,
+      "sha256": "1bc06bd0956b0f260f974e2f8ec3ce28b4f0501db2b15f4ff45985e20658b761"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "60c05eba5795d8419f9570a795ae54c268097a3bbcfb70f90775436202980dc5"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/after-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/after-sdk.json",
+      "bytes": 2894,
+      "sha256": "e9b248ba57379dddf50fbfba24a880e5120b2d2ed33a1e8db776fd50540483c5"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/compare-sdk-opus45-r2-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/compare-sdk-opus45-r2-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/compare-sdk-opus45-r2.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/compare-sdk-opus45-r2.jsonl",
+      "bytes": 510058,
+      "sha256": "ace859445df95801a083e395a9576b6aa4aeca5e7954774d89b812fc0d6bbe26"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/compare-sdk-opus45-r2.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/compare-sdk-opus45-r2.s32le",
+      "bytes": 46080000,
+      "sha256": "8bc7622ad5db32d5db53c1730f3d9eb0502a0fffecafa72b930babdc65ee7d15"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/evaluation/controls.json",
+      "bytes": 56474,
+      "sha256": "5564ac8fffb9cef61741e0c9ef5a173fa7322c04ff38a83a4ee4f029271506e4"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/evaluation/electrical.json",
+      "bytes": 29037,
+      "sha256": "6834778b08ebc98c51a241c393ebe7b8dc10c58e34e0a879eae03f6643025360"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/evaluation/result.json",
+      "bytes": 1555,
+      "sha256": "d27374790acb2f844dfad1f855a6f09b286d1759b8c651886cc5b45f47f6b028"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/evaluation/waveform.json",
+      "bytes": 19419090,
+      "sha256": "f144ca673b52f284d71eb9877442d7080ae637988a42876642c084659869e41a"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/events.json",
+      "bytes": 1966,
+      "sha256": "8152d4053ae16f6f21d2a781182ba3b0ebaf3b827bcff1acf9ba58410b4dfe6b"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/existing-output-after-witness.json",
+      "bytes": 21227,
+      "sha256": "51ea7fb27e4ad07f1b1f15ded3bcd89a84477440ef66ec109038e89e323a13e2"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/final-sdk.json",
+      "bytes": 2442,
+      "sha256": "04bcc5c7957702920dc66a1510f84e6837567e6c097551269fae509280097f83"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/linux-receiver-public.jsonl",
+      "bytes": 7323,
+      "sha256": "ebc27106eea3ae6bd4759e9ef52d8ae2deab7f381a8502e79bd8216f0222da3f"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/mac-host-public.jsonl",
+      "bytes": 5313,
+      "sha256": "e0008f6e7c2133436548a7869f5957d02987d275be5e18f99b4a2f96d762a179"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/manifest.json",
+      "bytes": 1740,
+      "sha256": "4539daca272e492f45013beea97b8e98c941f5fdef4d7efa0add3782931bb0ba"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/processes.json",
+      "bytes": 4060,
+      "sha256": "73eb2cea56fdff0e2700ba2d1e2bfb46b2e11f9a7e57bc0db7aafe5ce28db0c6"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/ready-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/ready-sdk.json",
+      "bytes": 2874,
+      "sha256": "4342ca14b0c9f1a05f5c3f69e98ec0d42297b30ef5b91c5510368f7dee294848"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/receiver-probe.json",
+      "bytes": 1894576,
+      "sha256": "d3b0682b8b4a552711e2f2099532813b6b1f56b4ce5bb31efc73bf4baf9f4c98"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/restore-hal512.json",
+      "bytes": 1302,
+      "sha256": "93cc6802f33f4feb13981abfcd0178ab3f5a749cdb4b99c786875591b43a11af"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/run-electrical.mjs",
+      "bytes": 9088,
+      "sha256": "6d058929ba742c815e60554ace53cd9d544c9a5bb51dac848f901f4625000a9a"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-opus45-r2/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-opus45-r2/tls-holder.json",
+      "bytes": 132,
+      "sha256": "2bdf2f066cecff4d4284c6545ad3ecb262317e3e1859c6349eaf7e8654c4b22e"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/compare-sdk-pcm45-r1-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/compare-sdk-pcm45-r1-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/compare-sdk-pcm45-r1.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/compare-sdk-pcm45-r1.jsonl",
+      "bytes": 510057,
+      "sha256": "5031394ea97f2393fad1df84bcd61d72ac10bf60b7b0c98250b0d3a488e4c1f6"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/compare-sdk-pcm45-r1.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/compare-sdk-pcm45-r1.s32le",
+      "bytes": 46080000,
+      "sha256": "29f7c624ad5a98304a07235ad5485bbccd6196bd29502dc262d225b42c065801"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/evaluation/controls.json",
+      "bytes": 56517,
+      "sha256": "3c6144f5064e16cfb6def1da7c057ce00703db565a73adb787b0da23e2e979b9"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/evaluation/electrical.json",
+      "bytes": 29014,
+      "sha256": "c83f5735b914755780110c096b37775f59e5c81045b9fe6be16f3dff5a8cd113"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/evaluation/result.json",
+      "bytes": 1475,
+      "sha256": "6a2196ce3c33d503dba72a81e3f6d9ce39261dddb623f2897231fdf3b24aad06"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/evaluation/waveform.json",
+      "bytes": 18910399,
+      "sha256": "86543b823db7900edd3d311e05f67a22876dd84405b7825b1d185def8760b1a8"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/events.json",
+      "bytes": 2248,
+      "sha256": "05216e22ae177318146db49eb54e7dd439f229efb7ae65b9232b1a88e069bc10"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/existing-output-after-witness.json",
+      "bytes": 4941,
+      "sha256": "9b7b7417d20a17291b75b4174fdf6cf93555f6bc5962d6fd46cb90c2dc033223"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/final-sdk.json",
+      "bytes": 2574,
+      "sha256": "2a3e9b66825ed3c5a39ae3f73f0f89d4cd833e11a0142fd42fe29c6c5ad6d3c9"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/linux-receiver-public.jsonl",
+      "bytes": 8508,
+      "sha256": "2b64020d87e139aaf8a782cfb4d74b52e477ee910564b6cfc6cb1ecabb71c9ac"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/mac-host-public.jsonl",
+      "bytes": 5313,
+      "sha256": "6f07613c39b3eea2640ad4def23ac8b5560249ac05ffd8a5cbf33ee97746af91"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/manifest.json",
+      "bytes": 1671,
+      "sha256": "d24698b19da8a682401343d57801633c7f39f55bf36ceff4faeead3c45978661"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/processes.json",
+      "bytes": 4054,
+      "sha256": "a94d0f1ce1156f596202e3a46b64e2c31e6308c27c2cc8666c861c2f3494d48c"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/ready-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/ready-sdk.json",
+      "bytes": 2866,
+      "sha256": "fa65eac0e2bdb84d252ba63a75ee86e0dd25390fe03b9967f8bb8c2be0ef1153"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/receiver-probe.json",
+      "bytes": 528,
+      "sha256": "efc774fca5de9a6272fa2133f15df89a790c7f4015aebf25c6f6ac2c3d545934"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/restore-hal512.json",
+      "bytes": 1327,
+      "sha256": "b0146940d07a08161d07a788feda10b9456f5d32ddd0f51deb646065c8acbde8"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/run-electrical.mjs",
+      "bytes": 9075,
+      "sha256": "89af84c340b5e37c57cc5278a67cf6baf159957c36d88e3b98f669662d0807d8"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-pcm45-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-pcm45-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "53798bfd392b910bab28ee69fe4f266564057901fff8d3689f17200c0c873b79"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/events.json",
+      "bytes": 995,
+      "sha256": "d95875b016051658bfd16a55f91206ba1c4568b056192ad6b971734cdc286262"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/final-sdk.json",
+      "bytes": 910,
+      "sha256": "b01b8d84fe9af02933186240394c6edd5072a19f7fc3b94eb462288b663f5f4b"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/manifest.json",
+      "bytes": 1852,
+      "sha256": "88ed298f71627e3c53ecb1db2d54b8aa55177c6004f7b2631d0cd093c6e5cf28"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/processes.json",
+      "bytes": 4096,
+      "sha256": "6268780be8a83deef2570a3f44542b3fa892e06faaa136a9935e02832c023b2a"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/receiver-probe.json",
+      "bytes": 139,
+      "sha256": "b8c3b50fe2546fae9807e9b3a07a4add8580ca7bd71cbc126b99e2232ea84619"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/run-electrical.mjs",
+      "bytes": 9176,
+      "sha256": "2b2a687680a93d7bc6177374905395364d05148c270128ccebde7aff9a82c501"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "d22664e9b4562ae146c5e286cb49bc61dd3273feafd738700b1011444405ffa9"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/compare-sdk-short-opus45-r2-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/compare-sdk-short-opus45-r2-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/compare-sdk-short-opus45-r2.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/compare-sdk-short-opus45-r2.jsonl",
+      "bytes": 510059,
+      "sha256": "2410b78b305b17787fe4a71cf36ff03bfbb940101669f765b1328c1fd5d986e7"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/compare-sdk-short-opus45-r2.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/compare-sdk-short-opus45-r2.s32le",
+      "bytes": 46080000,
+      "sha256": "6c7dfe79142038062c996af5e26d739c244b1e04b6a8e81073de73641710777a"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/evaluation/controls.json",
+      "bytes": 56521,
+      "sha256": "02efe1eb13d1345025cb71e8771ef69c8e2cfd82aafc91e85f688667e060055a"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/evaluation/electrical.json",
+      "bytes": 29024,
+      "sha256": "1fae0220358a5259d04f12e792c043c438c9e44ead15f68df77f9c172de43242"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/evaluation/result.json",
+      "bytes": 1475,
+      "sha256": "e792d8a70ffaaf4afb3efaca98b3c2d934cef32dfc02022008799752c6ae41a0"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/evaluation/waveform.json",
+      "bytes": 18907836,
+      "sha256": "023338622ce43168046b86cb664ed7c0e8aab854d352b05a16980edabd6cf08f"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/events.json",
+      "bytes": 2462,
+      "sha256": "50d5f5be7ae27d437118911e0c8694501170d008351cc1fc006df5f0051b31b0"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/existing-output-after-witness.json",
+      "bytes": 22651,
+      "sha256": "991d8c9ce227208bd1d11e8f21cf0536e1c784b20dbeeeb4858e0b6f716ea002"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/final-sdk.json",
+      "bytes": 2764,
+      "sha256": "a9e0baabb6523f4234bbd075444a8218b45cdfbb63bae78d32cc29143aa6c4c2"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/linux-receiver-public.jsonl",
+      "bytes": 10594,
+      "sha256": "76980dd6f8c96d6e6236a2696b633a1d6e1be93fdc43ceb352c308a0eb3cbe54"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/mac-host-public.jsonl",
+      "bytes": 6729,
+      "sha256": "55ae8874d1b9e092d710f70bde2ebe001921e0ce1de1a2e70290508e676caf54"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/manifest.json",
+      "bytes": 1852,
+      "sha256": "30d288cd3af52751a71ab5d7cee1485a3b3299536977f7392646f1955d1129ad"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/processes.json",
+      "bytes": 4096,
+      "sha256": "8c2c3c2d123d3a7491e554beaa7ab02015e85affd228b100d7c28a3bf921dc2d"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/ready-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/ready-sdk.json",
+      "bytes": 2893,
+      "sha256": "ec74df00e6900e2b61781a92d664b07bbb44948949bc77dda6868372683562a6"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/receiver-probe.json",
+      "bytes": 100517,
+      "sha256": "e36279fabed665fbcae3d435cb197e74665f84f2140b373615d82afe5371c46d"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/restore-hal512.json",
+      "bytes": 1332,
+      "sha256": "f5cd60d83705260cab4a4e8744414444e9568641730142a04028f9bb0e9e23db"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/run-electrical.mjs",
+      "bytes": 9176,
+      "sha256": "6fef67705459d35b2bc84bc06e726c75a1c3305a9fa562ca1d951312fd10b202"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r2/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r2/tls-holder.json",
+      "bytes": 132,
+      "sha256": "06eca106ba6f4a454f8bc285769c12b8721dfcfbc39afc74f7d06014b3ecc5fa"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/after-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/after-sdk.json",
+      "bytes": 2883,
+      "sha256": "fd244ad4ad76cfac11846af48239b5577278ff884e5a705e7c93958159fe6915"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/compare-sdk-short-opus45-r3-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/compare-sdk-short-opus45-r3-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/compare-sdk-short-opus45-r3.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/compare-sdk-short-opus45-r3.jsonl",
+      "bytes": 510058,
+      "sha256": "7dd9c1c5ec94acab474b0afdcc62520e09f41246ecfaf2b2af3e47cf42954532"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/compare-sdk-short-opus45-r3.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/compare-sdk-short-opus45-r3.s32le",
+      "bytes": 46080000,
+      "sha256": "817a8ad300c39cab053e9d9f7bf28ccb9981c7dc67ea56204d612db24f9ab26f"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/evaluation/controls.json",
+      "bytes": 58388,
+      "sha256": "07ab4a74b5b8830c075574fb2634190f61fcd50b39d8e76d5748e6aaa9dfc5c1"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/evaluation/electrical.json",
+      "bytes": 30457,
+      "sha256": "c0a6a63e237c93d4e161dd771d2a7c390b33db723e15ab8f7f329475a893c932"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/evaluation/result.json",
+      "bytes": 1579,
+      "sha256": "f2c8ff57efe2206e375be96df76288e3e19407dd5053698454035029f02e0546"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/evaluation/waveform.json",
+      "bytes": 18799053,
+      "sha256": "06ec252dd9a86fff30ebad08ffda94e904994707989dad27a7d31d56126a1394"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/events.json",
+      "bytes": 2070,
+      "sha256": "9023709a991a4cb13ff19fef21fe8393ac9f3b306d5dab0aaf09d362bc506f22"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/existing-output-after-witness.json",
+      "bytes": 21215,
+      "sha256": "ba56c2f1cde301db7ee92796789c91631b6cfed483065adabded271e4844f8bb"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/final-sdk.json",
+      "bytes": 2311,
+      "sha256": "f45dd362ebe0db8d6399d710a99a3a0cc5443133d0b21181c76926faa741f67e"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/linux-receiver-public.jsonl",
+      "bytes": 7310,
+      "sha256": "ecf3ffbb18b71faca346ab43591af2de98262c13a432adcc3eb549e0d9e95738"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/mac-host-public.jsonl",
+      "bytes": 5313,
+      "sha256": "a7ae504eff64545ba3a2def5eab2b2c40e1e2a07e11a3fdaf7176c9b749a04af"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/manifest.json",
+      "bytes": 1961,
+      "sha256": "693d4b73ca7b00bca10447078b2b4524bc30d3158a911f7703ef8f425c0c3ea7"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/processes.json",
+      "bytes": 4096,
+      "sha256": "704ca7b73bfd257eb14c71c1627b866b5a425ffc15f3827b94fa84499e1bfb52"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/ready-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/ready-sdk.json",
+      "bytes": 2880,
+      "sha256": "9bbea76297b0aff7569a49dba8d1ce0ab725e7e476a76e260534265774a625fb"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/receiver-probe.json",
+      "bytes": 2635603,
+      "sha256": "94f6b821c25b3e68b096820cb6b272408587320831839340c23b90b6226a8d83"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/restore-hal512.json",
+      "bytes": 1347,
+      "sha256": "ec665759bcf4ae8450e6b9ab350e8616e96a765463a1aa76465b51f56ca26b22"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/run-electrical.mjs",
+      "bytes": 9176,
+      "sha256": "287623fba3a4337209115524b58bd2eda4d724743268daf03d06b805551ec8a4"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-opus45-r3/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-opus45-r3/tls-holder.json",
+      "bytes": 132,
+      "sha256": "0c4df7303a5d58ec6c8003cc93b28a3e304c6ed7af2e468d9264f481da5c53b0"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/after-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/after-sdk.json",
+      "bytes": 2894,
+      "sha256": "9da7f4cf3f81d0953e2443afc6b8607ffdafb939e86b8b3c54acaad0a457ee2a"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/compare-sdk-short-pcm45-r1-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/compare-sdk-short-pcm45-r1-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/compare-sdk-short-pcm45-r1.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/compare-sdk-short-pcm45-r1.jsonl",
+      "bytes": 510058,
+      "sha256": "d32d63a1e7eaf3c6650f726c3a209c1da21fe9402fdd6ffe9142d9fb27f3194a"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/compare-sdk-short-pcm45-r1.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/compare-sdk-short-pcm45-r1.s32le",
+      "bytes": 46080000,
+      "sha256": "ce66901a3a23173ac7bf4408ff886dc9441c25c99048a700b3356d2321effb6d"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/evaluation/controls.json",
+      "bytes": 58754,
+      "sha256": "ae52cb52c7113835c5e255182c0fb2762257e4f32684183b37009780e9737826"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/evaluation/electrical.json",
+      "bytes": 30660,
+      "sha256": "5da5a1dbb255fa956cd66adce4e58c2606ebc4da46d93b939a70ed6adbf81dd7"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/evaluation/result.json",
+      "bytes": 1446,
+      "sha256": "18e63be0a1f0be61cc0c5e70fbe186ef5d54a951bb861990bee97a1ec354dd47"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/evaluation/waveform.json",
+      "bytes": 16433959,
+      "sha256": "c3dc626321313e3ac00b041f4d1c39c39722c9b314deae2df233a1cbc8c30a35"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/events.json",
+      "bytes": 2069,
+      "sha256": "dd7775bb276aa391efec3ba769f6f0e56a83c547abaf2323c02cbf62eb27f0d4"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/existing-output-after-witness.json",
+      "bytes": 21264,
+      "sha256": "630192c175a11ebbfdddc6553d9315061616c1568af42f96ee462926eb47fb39"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/final-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/final-sdk.json",
+      "bytes": 2307,
+      "sha256": "be0b59fc400da596677f3439bdbeecded021b3cc0fc8d4a0bc6777a434dce4b9"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/linux-receiver-public.jsonl",
+      "bytes": 7297,
+      "sha256": "99c0a3b692c31ab86dbd2594de6c7c1e9514eaad05d9c2eb0436d18e8cf3387d"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/mac-host-public.jsonl",
+      "bytes": 5313,
+      "sha256": "65377f01e7ca77381974c6c2e9983b5a2c77fff9dc4b17b1af177dedef8758ea"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/manifest.json",
+      "bytes": 1851,
+      "sha256": "13bd0215ee83ee016d2a0e0640c7419d19f46029f5971e80d7b5e2c1a7d1fb09"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/processes.json",
+      "bytes": 4090,
+      "sha256": "8e5306a01d9584336287c4626bfafc581e2292ec4e390c9f6903881507d69170"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/ready-sdk.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/ready-sdk.json",
+      "bytes": 2876,
+      "sha256": "5343e92f3dd1bc5801efb9f5c1547025e70bb0e2b980e858a0624343366d28f1"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/receiver-probe.json",
+      "bytes": 4412097,
+      "sha256": "7a5217155dd4a6cefecfa960e5cef685076c927bc20f36fe661b19e0c92107fb"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/restore-hal512.json",
+      "bytes": 1314,
+      "sha256": "81be2f95955e5d4df71f28e21dc1aa85ba0fa1b8e19ee115c97e8f09d6e64ae6"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/run-electrical.mjs",
+      "bytes": 9167,
+      "sha256": "f9a248ce7d4e200d5b2b43530fe43f40e3dbdd508708bed0b94f799d47ae43f7"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/schedule-gaps.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/schedule-gaps.json",
+      "bytes": 291,
+      "sha256": "8ed258ea2c432c38b079e5ddc7ee41fa474b5f7c71620e4e39baaa972eee2c08"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/settings.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/settings.json",
+      "bytes": 3151,
+      "sha256": "74462995eb037cb31305b60ec60e1774d4e74fc151dc1165c2bd576388d0bf77"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r1/tls-holder.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r1/tls-holder.json",
+      "bytes": 132,
+      "sha256": "7796ccd965db96bab3f7b9b27b23264ac39d90eb96ecf561699dd7b7a2abd6bb"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r2/manifest.json",
+      "bytes": 1713,
+      "sha256": "d2f2ad41162d74b7ea0b65b63325407c0eb729c3d2200adf62dba6ea60db1b7b"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/compare-sdk-short-pcm45-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/compare-sdk-short-pcm45-r2/run-electrical.mjs",
+      "bytes": 9167,
+      "sha256": "a0f6b02d2883ff7a7ae877da3a3e45064e1e3b0e8c8756c40603795ed696a0e7"
+    },
+    {
+      "path": "live-performance/configure-maintained.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/configure-maintained.mjs",
+      "bytes": 1165,
+      "sha256": "6feb20134339f47ab2f54bed339733e53c315550a4f252a3aa7c95b926a3b94c"
+    },
+    {
+      "path": "live-performance/enable-owned-network.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/enable-owned-network.mjs",
+      "bytes": 641,
+      "sha256": "2f9540e1ccd014eccaf500f25b7190d1de80749e2e5cf27cd3158a9e49329480"
+    },
+    {
+      "path": "live-performance/evaluate-physical.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/evaluate-physical.py",
+      "bytes": 1755,
+      "sha256": "a43ae037144e04ff408a1fbac024068250d5ab7a571654e98ebdcb5d6088de7a"
+    },
+    {
+      "path": "live-performance/final-g5-build/results.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/final-g5-build/results.json",
+      "bytes": 246,
+      "sha256": "90b7e986be68e4b490d5528241584f8d9c0a77076a964ee9840f0fc38748283d"
+    },
+    {
+      "path": "live-performance/freeze-evidence.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/freeze-evidence.py",
+      "bytes": 807,
+      "sha256": "5066e732bf8a047d6e6b0aa6867c449ab6b94d42536373774bbe37029627085f"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/accepted-levels.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/accepted-levels.json",
+      "bytes": 1298,
+      "sha256": "19b70a9c15ab9f5d4af22591a28ac25c6dab9d237c9aa040441c9fe614628118"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/index.html",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/index.html",
+      "bytes": 3187,
+      "sha256": "b17a39fe2a9a5719a60a984fd19d4b573d88082782160c94b67d86cef8f92e41"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/levels.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/levels.jsonl",
+      "bytes": 440426,
+      "sha256": "2ab1842150fd568f1df647c48f292e389289aab7d10e71884c9f7eff10c5b140"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/meter.c",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/meter.c",
+      "bytes": 3628,
+      "sha256": "b8a1f9a61e89bc4142c7013abc1656a39b1c32b0cc9a20839127334e9c54d2b9"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/processes.json",
+      "bytes": 361,
+      "sha256": "a8b07b696f2cb36f0afa45a20af497b0e5cd172a64eeef431c19d61bcc9875d4"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/server.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/server.py",
+      "bytes": 2821,
+      "sha256": "2a4d530a15604ae34722258008c9fd67e9d48ad5b87f1d937558b992a8416026"
+    },
+    {
+      "path": "live-performance/gain-meter-r1/session.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-meter-r1/session.json",
+      "bytes": 764,
+      "sha256": "4f8ae036a93fac61511a0ba58059e39d9c36d88336b28be4ee70fdc546258977"
+    },
+    {
+      "path": "live-performance/gain-staging/alsa-readonly-now.txt",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-staging/alsa-readonly-now.txt",
+      "bytes": 4078,
+      "sha256": "7693150a7e4545af86e6a241c77a2acffa40ef4dbe1fcab8745c40392f2f6e06"
+    },
+    {
+      "path": "live-performance/gain-staging/owner-pcm-level-check.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-staging/owner-pcm-level-check.json",
+      "bytes": 1148,
+      "sha256": "3d524ea5d690bfb7e7ce6850f180ffae1ba917b54b42033365f351030a5f0080"
+    },
+    {
+      "path": "live-performance/gain-staging/package-a302-audio-worker.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-staging/package-a302-audio-worker.mjs",
+      "bytes": 290388,
+      "sha256": "3830a2f3ad7ec39e5eead1cc05a11c786ec38fd8ef0deb8d40aadb8cc63d24ba"
+    },
+    {
+      "path": "live-performance/gain-staging/stimulus-levels.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/gain-staging/stimulus-levels.json",
+      "bytes": 616,
+      "sha256": "052c6c9d8151807e09ec32212761d24eb783592b9266bfb76950a768e5c2e307"
+    },
+    {
+      "path": "live-performance/harness-diagnosis/independent-review.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/harness-diagnosis/independent-review.md",
+      "bytes": 8668,
+      "sha256": "bb5220da8a88eb5cb493831d66b579caa71cc2f9de9494f5ec200a5409f81915"
+    },
+    {
+      "path": "live-performance/harness-diagnosis/url-control.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/harness-diagnosis/url-control.json",
+      "bytes": 1083,
+      "sha256": "3044fed4046b6d39c228ee0731aafcd8d4dbaeae2cb583bc0d1a876cd568be78"
+    },
+    {
+      "path": "live-performance/hold-lab-tls.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/hold-lab-tls.mjs",
+      "bytes": 824,
+      "sha256": "b1b429809db0672faf2c6b4ff5db0368642a9676aac026549f620c679b9a6d78"
+    },
+    {
+      "path": "live-performance/host-ab-chromium-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-chromium-r1/manifest.json",
+      "bytes": 997,
+      "sha256": "0afa55dda3ce4195fbfa89e7ca7309da8e67a2d460d561e759cc1914ae322255"
+    },
+    {
+      "path": "live-performance/host-ab-chromium-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-chromium-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/host-ab-chromium-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-chromium-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/host-ab-chromium-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-chromium-r1/run-electrical.mjs",
+      "bytes": 7922,
+      "sha256": "916b95762867cbefc27b9f6baf06d0ca8a6fa5381ace2f544c99d77b7f2a4928"
+    },
+    {
+      "path": "live-performance/host-ab-native-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-native-r1/manifest.json",
+      "bytes": 995,
+      "sha256": "a4642409d93dbf0ef2d012ea343023d2e57b5a763ac918adbf18c5c2b5615aa7"
+    },
+    {
+      "path": "live-performance/host-ab-native-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-native-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/host-ab-native-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-native-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/host-ab-native-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/host-ab-native-r1/run-electrical.mjs",
+      "bytes": 7904,
+      "sha256": "b00eef88a7ab59b5e887460737a296e103e64692416cce13a001f2d654a7fe9e"
+    },
+    {
+      "path": "live-performance/inspect-capture.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/inspect-capture.mjs",
+      "bytes": 663,
+      "sha256": "e3a27c96f05fc50c4192babe37612ec41bdd9e5f9b0f5e07fd8143de9506f59f"
+    },
+    {
+      "path": "live-performance/inspect-pages.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/inspect-pages.mjs",
+      "bytes": 187,
+      "sha256": "780e396db1902235b93bca46d0590bd5f98a7c348c8575ace7f6f0415fc30845"
+    },
+    {
+      "path": "live-performance/integrated-focused-summary.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/integrated-focused-summary.json",
+      "bytes": 9908,
+      "sha256": "10ab82377da71dd62a4062cb5cb06379fdb23f4c6bf949ed1a57e8cc447900a1"
+    },
+    {
+      "path": "live-performance/known-stimulus.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/stimulus.s32le",
+      "bytes": 39936000,
+      "sha256": "064322da4b01317f61802f3a63405fab1a45c5107a9b0379b3fc10ff621ae29d"
+    },
+    {
+      "path": "live-performance/maintained-r1/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "live-performance/maintained-r1/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/events.json",
+      "bytes": 1459,
+      "sha256": "041729f0f4be85478f0b76f1f661e73b721de1576835f778129043049e470bb1"
+    },
+    {
+      "path": "live-performance/maintained-r1/live-ui-check.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/live-ui-check.json",
+      "bytes": 4924,
+      "sha256": "8a9e585f529adb6c6d4de25dc66ec1b9e435b47014a4b5e179c22152dd4a8eeb"
+    },
+    {
+      "path": "live-performance/maintained-r1/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/manifest.json",
+      "bytes": 1742,
+      "sha256": "f4b7a529ca27ac0dde7203598732d2e140beb8b0b12eb247f129d49039635b31"
+    },
+    {
+      "path": "live-performance/maintained-r1/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/maintained-r1/processes.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/processes.json",
+      "bytes": 3919,
+      "sha256": "47dc23a9e2374ce3d3889d7796ae44aa6d171267c7f829611fbdd6e991898a46"
+    },
+    {
+      "path": "live-performance/maintained-r1/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/maintained-r1/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/receiver-probe.json",
+      "bytes": 139,
+      "sha256": "95cb206ba3a468d9aa9845761c4d26cb2eaa0bba6d111224058c18f5bf5d5e9d"
+    },
+    {
+      "path": "live-performance/maintained-r1/restore-hal512.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/restore-hal512.json",
+      "bytes": 4657,
+      "sha256": "f3cde2d2db53d5d4ea202e6dbbc9025f780bc1f4d24ee8384ba4481725f3f356"
+    },
+    {
+      "path": "live-performance/maintained-r1/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r1/run-electrical.mjs",
+      "bytes": 7306,
+      "sha256": "09f57914a1363580f2b948cd1660b91f3fffcd750bc48ee1eb7c3caf6239c3eb"
+    },
+    {
+      "path": "live-performance/maintained-r2/controller.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "live-performance/maintained-r2/evaluation/controls.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/evaluation/controls.json",
+      "bytes": 58866,
+      "sha256": "6e6c8b201e7858d25d34024dcecdb0f7322923a8a5507ccae4ba8d73c2d2893a"
+    },
+    {
+      "path": "live-performance/maintained-r2/evaluation/electrical.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/evaluation/electrical.json",
+      "bytes": 30794,
+      "sha256": "3a0a58e800b293e3557807e371d82d21289043edd2e6cbdd6b2e14e03fd04e7f"
+    },
+    {
+      "path": "live-performance/maintained-r2/evaluation/result.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/evaluation/result.json",
+      "bytes": 1546,
+      "sha256": "742f1b2a8b2332affb3f4ce2cc6fd91902d62b88e74f7b94cfc6738af8972df2"
+    },
+    {
+      "path": "live-performance/maintained-r2/evaluation/waveform.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/evaluation/waveform.json",
+      "bytes": 18800839,
+      "sha256": "972aab60ecf37756b0570a41749d0f154693e48b9d955446abe0b4455d6ff873"
+    },
+    {
+      "path": "live-performance/maintained-r2/events.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/events.json",
+      "bytes": 1730,
+      "sha256": "5894faf21788d103252c646b6e8bf10f8f28ba3511fa660f6f9fa92ff9d85a1b"
+    },
+    {
+      "path": "live-performance/maintained-r2/existing-output-after-witness.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/existing-output-after-witness.json",
+      "bytes": 21255,
+      "sha256": "3386ae8ac92639dd088c60bfce4c310c881862eee9daaa55e21ba662062da7a7"
+    },
+    {
+      "path": "live-performance/maintained-r2/linux-output-geometry.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/linux-output-geometry.json",
+      "bytes": 150,
+      "sha256": "65d39a541e6c1f52980291aee41a93effb732596f452197503ef2fb88282ef9c"
+    },
+    {
+      "path": "live-performance/maintained-r2/linux-receiver-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/linux-receiver-public.jsonl",
+      "bytes": 7978,
+      "sha256": "43d81ad29baa4c539b58adb4762d3df9f52d3d4c7755c2059f3f4e2325fcff69"
+    },
+    {
+      "path": "live-performance/maintained-r2/mac-host-public.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/mac-host-public.jsonl",
+      "bytes": 5013,
+      "sha256": "d7a1848fb2905fde5f86a5f3b737826db38008f31f60b2ca16714976911302b9"
+    },
+    {
+      "path": "live-performance/maintained-r2/maintained-r2-witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/maintained-r2-witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/maintained-r2/maintained-r2.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/maintained-r2.jsonl",
+      "bytes": 510059,
+      "sha256": "cf6857a304c4646b2f9ba7e86c6746c68cbf99224e29675db9e26f0fa3d63b9b"
+    },
+    {
+      "path": "live-performance/maintained-r2/maintained-r2.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/maintained-r2.s32le",
+      "bytes": 46080000,
+      "sha256": "93d122eac210183d8ecaec3c1fc467307311171d9cf45e1e1c40758777f5452e"
+    },
+    {
+      "path": "live-performance/maintained-r2/manifest.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/manifest.json",
+      "bytes": 1911,
+      "sha256": "82156614fa48c6199b2c55600be1f639bc36b2823c4a88e3d9810ada2f275d8b"
+    },
+    {
+      "path": "live-performance/maintained-r2/observe-product.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/observe-product.mjs",
+      "bytes": 8265,
+      "sha256": "fd46d4f69e9e4ef0e8a0a4a89c61fa9ee7d36fb469469b8f1d638545bfa4e137"
+    },
+    {
+      "path": "live-performance/maintained-r2/public-fields.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/public-fields.json",
+      "bytes": 705,
+      "sha256": "5f106ef0d90bc816cf41580208bf7ff209f917dc8fe2384d84b8cd0b28b815ed"
+    },
+    {
+      "path": "live-performance/maintained-r2/receiver-probe.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/receiver-probe.json",
+      "bytes": 2864946,
+      "sha256": "a7ac96c1b8824a823f30adcc09065374453b6e9092ac99524b828fe058174724"
+    },
+    {
+      "path": "live-performance/maintained-r2/run-electrical.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/maintained-r2/run-electrical.mjs",
+      "bytes": 7885,
+      "sha256": "e4c064f1c2e5d495cec408a0f8df9a36c13b630027dc1dd600b1f375c0310106"
+    },
+    {
+      "path": "live-performance/measure-context-hint.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/measure-context-hint.mjs",
+      "bytes": 933,
+      "sha256": "db6f507ab7e1273213fb281956df7f3253f2905ed71222140d04720c2b1acaca"
+    },
+    {
+      "path": "live-performance/measure-context.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/measure-context.mjs",
+      "bytes": 893,
+      "sha256": "adb2617583f96e3128f8b4869772665aec8ea6b64334511e9b85ea8654caff7e"
+    },
+    {
+      "path": "live-performance/navigate-owned.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/navigate-owned.mjs",
+      "bytes": 673,
+      "sha256": "3e730715b9c0ce0fb08bfb8789d94fa39ad0dbfee31706096eaa95cfa1be45ff"
+    },
+    {
+      "path": "live-performance/ordinary-browser/selection.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/ordinary-browser/selection.json",
+      "bytes": 222,
+      "sha256": "fa1952aef2cae245047c89abb393f399612d7b96349ebd9dec879bc20da65541"
+    },
+    {
+      "path": "live-performance/pair-baseline.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/pair-baseline.mjs",
+      "bytes": 1116,
+      "sha256": "0d6b2b0117f342b27aa74c7560f9c1baaf84abbd271e56eb18d2182c9bac81b8"
+    },
+    {
+      "path": "live-performance/prepare-baseline.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-baseline.py",
+      "bytes": 2331,
+      "sha256": "9cbe123cffc33eb7060c4031ae34542bc75b42e46a71fcd9319dfa04f35b86fb"
+    },
+    {
+      "path": "live-performance/prepare-candidate-a302.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-candidate-a302.py",
+      "bytes": 1741,
+      "sha256": "afc6443c724c6953b2b30a9795e6cfc799022ccc73d87ff761e44b13d0c8da99"
+    },
+    {
+      "path": "live-performance/prepare-comparison-ui.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-comparison-ui.mjs",
+      "bytes": 2061,
+      "sha256": "3476cc5de8696550fbdd271df31aaad9ee44e18a38320746ce1487578239f395"
+    },
+    {
+      "path": "live-performance/prepare-controller.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-controller.py",
+      "bytes": 2496,
+      "sha256": "7da5868175341eba420269eee89fe62b6217d8d7208d333d058d78272b9a4633"
+    },
+    {
+      "path": "live-performance/prepare-host-ab-arm.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-host-ab-arm.py",
+      "bytes": 2010,
+      "sha256": "f215dbce0e4af85c512c509dc1b5bc686cd147a60eaa4ec76f05ad4f146acba1"
+    },
+    {
+      "path": "live-performance/prepare-maintained-ui.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-maintained-ui.mjs",
+      "bytes": 1075,
+      "sha256": "fb31d77d6e2b530b227b8c7be680eff20dbbf12b3ed18fce266eed1130c8d8fa"
+    },
+    {
+      "path": "live-performance/prepare-maintained.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-maintained.py",
+      "bytes": 1314,
+      "sha256": "d92fc4e0b605068c3077082a843953896a69ed36b052f364fcb5be885787ab54"
+    },
+    {
+      "path": "live-performance/prepare-physical.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/prepare-physical.py",
+      "bytes": 1545,
+      "sha256": "afebcce59b1c3151a12b4dd3d1853c70d127b8524e5d0e4830ec68a637a26266"
+    },
+    {
+      "path": "live-performance/probe-harness.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/probe-harness.mjs",
+      "bytes": 5879,
+      "sha256": "98c92a0e76954e20e4d7ab813b1a202f506a0645791c25a0007ea7f57af7cc21"
+    },
+    {
+      "path": "live-performance/restore-comparison-hal512.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/restore-comparison-hal512.mjs",
+      "bytes": 2100,
+      "sha256": "fa08680c6ef591cd80b9c1a40403a48a88d1ecc350d27e30b63b48e6038a7142"
+    },
+    {
+      "path": "live-performance/restore-hal512.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/restore-hal512.mjs",
+      "bytes": 2097,
+      "sha256": "d6ea9efe95edf08827a23b5e3026aac7781dff2def53ce547000df921f3d9913"
+    },
+    {
+      "path": "live-performance/sdk-comparison/REPORT.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/REPORT.md",
+      "bytes": 8901,
+      "sha256": "4ab6e16acf526b50313b22280f72bd6a6de606de2b6ac4f33b2415b35ad90805"
+    },
+    {
+      "path": "live-performance/sdk-comparison/attach-short-script.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/attach-short-script.mjs",
+      "bytes": 2910,
+      "sha256": "51731649b6e9df475fad8616713a1c2f4095afaef6e111bb40077dad778bbd19"
+    },
+    {
+      "path": "live-performance/sdk-comparison/attach.mjs",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/attach.mjs",
+      "bytes": 2309,
+      "sha256": "7fd433240d75bfb2e6a2904152a533feff13bac2b10efa0f1af93cb65bf7b1f4"
+    },
+    {
+      "path": "live-performance/sdk-comparison/build.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/build.ts",
+      "bytes": 3569,
+      "sha256": "9a07ba7ec307dcfb2e591a216ef02f01ab4660bb1c74d8181716a40263e2e005"
+    },
+    {
+      "path": "live-performance/sdk-comparison/copied-pins.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/copied-pins.json",
+      "bytes": 1186,
+      "sha256": "2dc875504d8c55ab1fbf767e6e5bd54bfb74a9e3e58809389e86afe6895bc724"
+    },
+    {
+      "path": "live-performance/sdk-comparison/document-received.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/document-received.ts",
+      "bytes": 14995,
+      "sha256": "55eda62a8de3f76de37b8d187dc4f9e002a0c8ed1983e2ae34bd138f02e26888"
+    },
+    {
+      "path": "live-performance/sdk-comparison/document.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/document.ts",
+      "bytes": 15040,
+      "sha256": "6dbba74120a572c6e0b02417aaf65a8e56cce352f4f7f7b70a84a971c1c7a155"
+    },
+    {
+      "path": "live-performance/sdk-comparison/policy.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/policy.ts",
+      "bytes": 2260,
+      "sha256": "6b415e94b05d3dd0935be636a04a8fca9d799c728f7c5789e52f6bd988e82246"
+    },
+    {
+      "path": "live-performance/sdk-comparison/tsconfig.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/tsconfig.json",
+      "bytes": 329,
+      "sha256": "64fa54ac9eeaca5cd3afa59e7247e94151353b30b93372ba6018f99c3894e66d"
+    },
+    {
+      "path": "live-performance/sdk-comparison/verify.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/sdk-comparison/verify.ts",
+      "bytes": 3205,
+      "sha256": "8326762d40e4cc876a2d26af7ccdd7b2ed2bd296f631094111d7dc30e54a7964"
+    },
+    {
+      "path": "live-performance/start-baseline.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/start-baseline.py",
+      "bytes": 4696,
+      "sha256": "94462690832728e8e3168276eae72aa2e89765ee5084ac119fda13e0a87bb94e"
+    },
+    {
+      "path": "live-performance/start-comparison.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/start-comparison.py",
+      "bytes": 5715,
+      "sha256": "b560b97deeb2b4462940d6d24585ec63830ad576805c962f7a644a8b007ba73a"
+    },
+    {
+      "path": "live-performance/start-host-ab.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/start-host-ab.py",
+      "bytes": 5978,
+      "sha256": "e1aa68416e201b2fc118ed5d72316607b20aa4e13531cb5ee79dcafb15c01cfb"
+    },
+    {
+      "path": "live-performance/start-maintained.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/start-maintained.py",
+      "bytes": 4701,
+      "sha256": "a0c7a4c294a1f6c4d0310fb493d47a56433e40d4fa7d0e2fbe836f99de0b96ec"
+    },
+    {
+      "path": "live-performance/stop-baseline.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/stop-baseline.py",
+      "bytes": 108,
+      "sha256": "022eec2d4e52e3f17780f3bc40c59d031f12a5faf0fa3906820c53e1c1f6f123"
+    },
+    {
+      "path": "live-performance/transport-audit/capture-wire-red.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/capture-wire-red.ts",
+      "bytes": 1901,
+      "sha256": "78703411e56283d7ad1988029361e71e0b2b61f400341a87eacc3ef1ba092010"
+    },
+    {
+      "path": "live-performance/transport-audit/contract-handoff.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/contract-handoff.md",
+      "bytes": 12105,
+      "sha256": "07e05cf5be909831a43eb3fbd121e87abea7fdeafb0698f280a927831eeee101"
+    },
+    {
+      "path": "live-performance/transport-audit/differential-receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/differential-receipt.json",
+      "bytes": 3249,
+      "sha256": "2f9231d7ae7ff2e8e3243de7c9101df2c669e47b0e6a8d3098749ff49f6d860b"
+    },
+    {
+      "path": "live-performance/transport-audit/evidence-receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/evidence-receipt.json",
+      "bytes": 10118,
+      "sha256": "5d3eaf3048da79630ead236676a09edae477bf5c54e95bc05c194aad5a0b1594"
+    },
+    {
+      "path": "live-performance/transport-audit/freeze-evidence.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/freeze-evidence.py",
+      "bytes": 4166,
+      "sha256": "aace3e488187b422ef0b4352218fb3e1c635fbb30d7d7cfc142a0ebe53fb5b00"
+    },
+    {
+      "path": "live-performance/transport-audit/freeze-source.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/freeze-source.py",
+      "bytes": 1364,
+      "sha256": "b67097373ecce3732e07a33e7bbe567248411e528611c04bf45dba684981c99e"
+    },
+    {
+      "path": "live-performance/transport-audit/history-audit.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/history-audit.md",
+      "bytes": 12725,
+      "sha256": "50520414f4e9a035591f23c10d91796ebadb3b32d5c11a5f2b8b300cc72bbdda"
+    },
+    {
+      "path": "live-performance/transport-audit/run-differential.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/run-differential.py",
+      "bytes": 993,
+      "sha256": "b77b070d7e2a9c363fcd8588e4e08701eab3f7f9731fe47ba7f136dd2a274469"
+    },
+    {
+      "path": "live-performance/transport-audit/source-receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/source-receipt.json",
+      "bytes": 2192,
+      "sha256": "651dc91e534410611a014f3e278af031632397e2154b39f10067e1acaa3a681e"
+    },
+    {
+      "path": "live-performance/transport-audit/stack-heads.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/stack-heads.json",
+      "bytes": 323,
+      "sha256": "7660b2f4f86bcbf3cd467bd17f58f6a38baeb41c89367bd6da393413c003b051"
+    },
+    {
+      "path": "live-performance/transport-audit/transport-settings-assessment.md",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/transport-settings-assessment.md",
+      "bytes": 19246,
+      "sha256": "6daf60ffce297709cb0df0a1fe610b357542bc69534894b166d2ef64383354ad"
+    },
+    {
+      "path": "live-performance/transport-audit/transport-settings-red.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/transport-audit/transport-settings-red.ts",
+      "bytes": 4803,
+      "sha256": "e9df092c9ff3ff36d44eb9768aa1131a42f338fa9984421b8338520acd260cd6"
+    },
+    {
+      "path": "live-performance/wiring-analysis.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-analysis.py",
+      "bytes": 913,
+      "sha256": "cf37c6207c98e2fb92059c955816cd7a146bf2ac8251afbb63bd359765637dfc"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r1/capture.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r1/capture.jsonl",
+      "bytes": 510058,
+      "sha256": "bc24933515d1f81d0773331bc0b9ca6997793b887db9971488d9732c635d445e"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r1/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r1/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "2606ac136ae8735ff3a4ac343b12a7ad857dfb36f54e0ab20d95a6e8b706fc95"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r1/levels.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r1/levels.json",
+      "bytes": 2722,
+      "sha256": "525c7d5c6e4317ca0c3a2d7bc5bf2253d6e10280b6c1e4c2b5c460d625fcc6dd"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r1/receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r1/receipt.json",
+      "bytes": 1497,
+      "sha256": "4e76fda914d05dd4ff60bad7e0b1c1ac69bc295c7833a79486e63c91b2584415"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r1/stimulus-correlation.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r1/stimulus-correlation.json",
+      "bytes": 5911,
+      "sha256": "6297a98fc33232286a12660e0b794fe59f8dab6f7c909dbc65eb6aad8b5f77d2"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r1/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r1/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r2/capture.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r2/capture.jsonl",
+      "bytes": 510058,
+      "sha256": "8fa8a4c5617f57355e5abe9a744edfe587be5f81715a4fd014612e7700c3831d"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r2/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r2/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "88ebccb0e97c3b63af911a3ab20ac5440cd64a9486710c7c55b17b2a26a3bcdf"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r2/receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r2/receipt.json",
+      "bytes": 1500,
+      "sha256": "866e5d2abf595638a05be61db7c4aed300ad029484cc1ef26c5372c2650cb2a0"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r2/wiring-verdict.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r2/wiring-verdict.json",
+      "bytes": 1511,
+      "sha256": "b67f8f0ff56cd37164763aed08423d59c2273e748bf9883484557182a82878e0"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r2/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r2/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r3/capture.jsonl",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/capture.jsonl",
+      "bytes": 510058,
+      "sha256": "68c59f308813cf0bc936ebf6f02c728634e48a05964acd062b1dbe666ee50fe2"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r3/capture.s32le",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/capture.s32le",
+      "bytes": 46080000,
+      "sha256": "c3eb5a707fb9750f3336066563076fddf6ea7e5e7e1e24d7e2bafee44ad9fc43"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r3/receipt.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/receipt.json",
+      "bytes": 1500,
+      "sha256": "fb2fb3589c5a449b334783d3a3e61c1042a291424e0a93d2fdb429c1bf5f6e3a"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r3/return-tiles.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/return-tiles.json",
+      "bytes": 1821,
+      "sha256": "0a535c605443d8cabfcf6c6c8c4f95995bab886000eb46bd6651a89f4762ac3e"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r3/wiring-verdict.json",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/wiring-verdict.json",
+      "bytes": 1516,
+      "sha256": "8844ae13273621ac07d45b1822f7d3e428bf9c773c8d691a6ef10c065cbbf332"
+    },
+    {
+      "path": "live-performance/wiring-preflight-r3/witness.log",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight-r3/witness.log",
+      "bytes": 52,
+      "sha256": "81ab748717fac1d9ed0f790545cc85fc7805f814b2e3a4f6c484c4b5817e509c"
+    },
+    {
+      "path": "live-performance/wiring-preflight.py",
+      "source": "/home/avoid/.t3/worktrees/couch/player-modes-integration-20261026/.scratch/live-performance/wiring-preflight.py",
+      "bytes": 3759,
+      "sha256": "8f8b3f90480dfebda6b315a76688b2fc6efaecfd1f9485e6f437541d26277112"
+    },
+    {
+      "path": "older-runtime/README.md",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/README.md",
+      "bytes": 12813,
+      "sha256": "2cbb42af73a9f891eb76ebb2e19eec93d9ee0c0d71f8ace6dab05cc2a1da0ed4"
+    },
+    {
+      "path": "older-runtime/admission-bounds-red.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/admission-bounds-red.log",
+      "bytes": 1368,
+      "sha256": "09740c8e739fb6e4c7138eea2ee745e0c56c5f00c5c0edc3086bdbd6a1870315"
+    },
+    {
+      "path": "older-runtime/admission-green.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/admission-green.log",
+      "bytes": 2995,
+      "sha256": "1b8971b21951ed6f920737c735a8784cc9381adfbb011f424d8bf7a4f4cccff5"
+    },
+    {
+      "path": "older-runtime/admission-red.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/admission-red.log",
+      "bytes": 7735,
+      "sha256": "3a432bdf233975c836245aa6bccee8cf7d345d5806018b7f85a8f36f956a3aed"
+    },
+    {
+      "path": "older-runtime/build-routing-overlay.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/build-routing-overlay.ts",
+      "bytes": 649,
+      "sha256": "9c2d5f06af6c3b1d963d2148b9a4b2c872b13b30702a2fc0fe9bea9b91872be1"
+    },
+    {
+      "path": "older-runtime/build.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/build.log",
+      "bytes": 9147,
+      "sha256": "1d6b0f07f7badc37c5ccf93bc2e7a5a1f2354af93bb43836691ec6011c8a8c6a"
+    },
+    {
+      "path": "older-runtime/device-sharing.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/device-sharing.log",
+      "bytes": 6290,
+      "sha256": "598dc7f147165aca96f542dcf7eaa2f3bacbf0cb26b241214f2a5be41dc01cc2"
+    },
+    {
+      "path": "older-runtime/extension-live-input.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/extension-live-input.log",
+      "bytes": 7781,
+      "sha256": "6ceae595ee215dd924e2c1df361fa06a403e34f05993f229cf1b32b0a71e9622"
+    },
+    {
+      "path": "older-runtime/extension-live-reporter-retry.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/extension-live-reporter-retry.log",
+      "bytes": 2955,
+      "sha256": "59de0bc0643bc20a8fb1e95fa27e542b0fae4ede6a73e08a77797913e56423ee"
+    },
+    {
+      "path": "older-runtime/extension-live-revocation.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/extension-live-revocation.log",
+      "bytes": 378,
+      "sha256": "659c4249c426c10661ee613b7a87a63a74b4ca789b3aef42ff770853c20c799b"
+    },
+    {
+      "path": "older-runtime/extension-live-upload-failure.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/extension-live-upload-failure.log",
+      "bytes": 7319,
+      "sha256": "0a845a4b7832762d8ad67e9a8e091d26f18a287c6a42225aa6413fc3234b3ae3"
+    },
+    {
+      "path": "older-runtime/extension-test-artifact-status.json",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/extension-test-artifact-status.json",
+      "bytes": 330,
+      "sha256": "3a3ee4999d455dbb76360d2e5a3b82ae4a639f848ea2d4fe34c69c2f40e813e0"
+    },
+    {
+      "path": "older-runtime/install.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/install.log",
+      "bytes": 205,
+      "sha256": "2797e513c29cbc2bc10a30ff68626a72fa9601aa1d269837c7d942b9521fcd7a"
+    },
+    {
+      "path": "older-runtime/live-audience.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/live-audience.log",
+      "bytes": 5525,
+      "sha256": "c271225334dde093008f929385befb0a202ebb4bf45ceb9b5014c8e492e23fb7"
+    },
+    {
+      "path": "older-runtime/live-input.adapted.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/live-input.adapted.ts",
+      "bytes": 11269,
+      "sha256": "bc468766d7b9e94381cc9099a8830569ec6ff4d4ebc27785243c0ac8d8ca361b"
+    },
+    {
+      "path": "older-runtime/live-outputs.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/live-outputs.log",
+      "bytes": 76760,
+      "sha256": "2214a5e60ffe440328da9363c91b1e9c7c9f970c77ffd7c091fe018816a89338"
+    },
+    {
+      "path": "older-runtime/live-revocation.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/live-revocation.log",
+      "bytes": 378,
+      "sha256": "3571a932bebaa634f42e64b736804a9525228432673845fb2c878cd50d100488"
+    },
+    {
+      "path": "older-runtime/live-routing-adapted.patch",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/live-routing-adapted.patch",
+      "bytes": 4726,
+      "sha256": "da6a99406882dee2929a3ce9d2bcd4219f1c0c07edb2ab09c06a7143fe6bccf6"
+    },
+    {
+      "path": "older-runtime/live-routing-reference.patch",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/live-routing-reference.patch",
+      "bytes": 5091,
+      "sha256": "f1457e3913b459be1c4bc8276fc06558d7b6468cac4cda51fbd590918e1efb99"
+    },
+    {
+      "path": "older-runtime/routing-extension-green.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/routing-extension-green.log",
+      "bytes": 804,
+      "sha256": "62c25acb95e9973ddc02c5ca83c5ee2d6a8a5134daca26b5e2078128fb8f0c7e"
+    },
+    {
+      "path": "older-runtime/routing-extension-red.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/routing-extension-red.log",
+      "bytes": 5968,
+      "sha256": "3bed74181fa0d6630916f55e4bbb1a6ef79827c3b79079edd381f1fe046f83af"
+    },
+    {
+      "path": "older-runtime/routing-extension-typecheck.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/routing-extension-typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    },
+    {
+      "path": "older-runtime/routing-overlay-green.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/routing-overlay-green.log",
+      "bytes": 558,
+      "sha256": "a1a995ae132ad1b8638ab7885f6bf495b8ab17604b63cd3665070bbb13c8a60b"
+    },
+    {
+      "path": "older-runtime/routing-red.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/routing-red.log",
+      "bytes": 2123,
+      "sha256": "9e9765bc663c8313f17b1cc48a1852402f399841391af4bd3987c665106ac283"
+    },
+    {
+      "path": "older-runtime/runtime-probe.ts",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/runtime-probe.ts",
+      "bytes": 3268,
+      "sha256": "4cfb26d41074f7cece192bb1b295816d812a18ef98743f1ae8c486537fb68dd5"
+    },
+    {
+      "path": "older-runtime/state-green.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/state-green.log",
+      "bytes": 874,
+      "sha256": "cebeb08d894c476def7c6da46d6e0e482cc296593a88df443bf115ac3cb138c5"
+    },
+    {
+      "path": "older-runtime/state-red.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/state-red.log",
+      "bytes": 1589,
+      "sha256": "a4c6f23aa4c3e6778aeec6662f7aeffab8e170fa896e1e1dba78be749f5a6de0"
+    },
+    {
+      "path": "older-runtime/test-artifact-status.json",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/test-artifact-status.json",
+      "bytes": 553,
+      "sha256": "e4b569c3a03b3f9e076caa5b0d90397afcf7e6123ff24814a56e30447c0b8f9b"
+    },
+    {
+      "path": "older-runtime/typecheck.log",
+      "source": "/home/avoid/.t3/worktrees/couch/t3-e08860b6/.scratch/older-runtime-carryovers/typecheck.log",
+      "bytes": 65,
+      "sha256": "5e1cbe27901adf5f5a0f2351b316ad20055ce9ae6126f1e6fa54c32a340772cc"
+    }
+  ],
+  "omitted": "Credentials/profiles/personal data, installed apps, downloaded packages/browser/toolchains, original recovery archive, duplicate stimuli, generated bundled tests and broad earlier checks already retained locally; source refs and original evidence remain unchanged."
+}

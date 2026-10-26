@@ -1,0 +1,42 @@
+[
+  {
+    "path": "evidence.tar.gz.part000",
+    "bytes": 41943040,
+    "sha256": "fc81f4eb95a7d26ec4f4c89e5b4b35bb1e6f57c7c21546e24ed9d63f3a093baa"
+  },
+  {
+    "path": "evidence.tar.gz.part001",
+    "bytes": 41943040,
+    "sha256": "e46f5d1bd050a98a34b659e70296aefd6aab257a08a79bdb698e093d277f6dd9"
+  },
+  {
+    "path": "evidence.tar.gz.part002",
+    "bytes": 41943040,
+    "sha256": "c74712a469b659550a8e699977c37bd49909d7cbc019ac42233bad4af2a79eb0"
+  },
+  {
+    "path": "evidence.tar.gz.part003",
+    "bytes": 41943040,
+    "sha256": "22ba6215fb01bbe2cedc9085465482563f099e270848f601af98301345ef184c"
+  },
+  {
+    "path": "evidence.tar.gz.part004",
+    "bytes": 41943040,
+    "sha256": "f12e89a970a01898aee61e9273aed5900d29915529f593b2540da9bf982149fc"
+  },
+  {
+    "path": "evidence.tar.gz.part005",
+    "bytes": 41943040,
+    "sha256": "49b19a1f92362992dd02095b25fd9e3adb632cd882ee0835e4e4fe1bbc083416"
+  },
+  {
+    "path": "evidence.tar.gz.part006",
+    "bytes": 41943040,
+    "sha256": "cfffcbbb34874e47736c665d53eea61798614fa8e5d74349e6a4bfe4ca346249"
+  },
+  {
+    "path": "evidence.tar.gz.part007",
+    "bytes": 11545152,
+    "sha256": "8b946b853e5d3604dae5c3617dd8eec6bfbc833eea404b19bf1a1a33946a0353"
+  }
+]
