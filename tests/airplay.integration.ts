@@ -4,7 +4,7 @@ import childProcess, { spawn, spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
 import { PassThrough } from "node:stream";
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Socket as NetSocket } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
@@ -334,6 +334,8 @@ test("native AirPlay survives unavailable audio without taking outputs, and a la
   let unavailable = false;
   const subscription = Object.assign(new EventEmitter(), { stdout: new PassThrough(), kill() { this.stdout.end(); } });
   const { execFile, spawn } = childProcess;
+  const existsSync = fs.existsSync;
+  t.mock.method(fs, "existsSync", path => path === "/usr/bin/pactl" || existsSync(path));
   t.mock.method(childProcess, "execFile", (file, args, options, callback) => {
     if (file !== "/usr/bin/pactl") return execFile(file, args, options, callback);
     queueMicrotask(() => {

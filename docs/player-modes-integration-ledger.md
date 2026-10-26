@@ -6,7 +6,7 @@ Execution contract: `recovery/player-modes-20261026:docs/player-modes-integratio
 
 Fetched integration base: `4a194e35cedb30f5ba3e664b4c9734b087051825` (`origin/main`, 2026-10-26). Refactor common ancestor: `59ac6cd6a510ca96bf60dfc9a3628cc635be22e1`; original tip: `27e580cc3d0b3fc7b4925100777af38324f2b5e3`; later source snapshot: `8147fc98fbeda5b415c3351a10a98c7cab816d4a`. Four intervening main commits add radio recognition, overlay fixes, fullscreen black bars and Intel Mac/QuickJS support. Preserve all four. The owner's main checkout remains on its existing commit; stack trunk is `main`, while implementation starts at the fetched remote head.
 
-Baseline frozen install, three-project typecheck and production build pass. Node is 24.21.0; use repository-local Bun 1.4.2 (the shell default is 1.4.4). Unit suites run separately because this repository's module mocks interfere across files. Scratch receipts live under `.scratch/player-modes/`; every scratch Couch uses its own data and port and owned process cleanup.
+Baseline frozen install, three-project typecheck, production build and all 78 separate unit files pass. Node is 24.21.0; use repository-local Bun 1.4.2 (the shell default is 1.4.4). Unit suites run separately because this repository's module mocks interfere across files. Scratch receipts live under `.scratch/player-modes/`; every scratch Couch uses its own data and port and owned process cleanup.
 
 The lead owns completion and shared interfaces. Two bounded independent assessments cover whole-scope retirement and native-host/browser recovery. All children use T3 delegation with `codex`, `gpt-6.1-sol`, `reasoningEffort=xhigh`, inherited `serviceTier=default`; returned settings are verified.
 
