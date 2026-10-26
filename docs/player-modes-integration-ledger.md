@@ -27,16 +27,16 @@ history and blobs stay outside the implementation ancestry.
 
 | Layer / owner | Branch | Integrated input / remaining responsibility |
 | --- | --- | --- |
-| Core / parent + scheduler child | `player-modes/integration-20261026` | Foundation `1213ff8`, routed access/sound guards `60ff1cb`, AirPlay fixture `4b52c5c`, scheduler `743206a`: routing/authority, preparation, shared worker and retained adapters. Host adds per-source settings later. |
-| Browser / parent | `player-modes/browser-20261026` | `3685efc` + `9e869de`: renderer, audience/TV controls, pre-native SDK patch, clock/rate/unit fixes and radio cleanup. `85b9f85` corrects the SDK type comment; it changes the maintained patch hash, not its recovered provenance. |
-| Host / native child | `player-modes/host-20261026` | Native capture, hidden browser capture page, grants/IPC/lifecycle, settings and dual-architecture resources. Owns architecture/CI/design index and native helper README. Integrated final receipts pending. |
+| Core / parent + scheduler child | `player-modes/integration-20261026` | Foundation `1213ff8`, routed access/sound guards `60ff1cb`, AirPlay fixture `4b52c5c`, scheduler `743206a`: routing/authority, preparation, shared worker and retained adapters. Current Core head `e5063df` also fixes captured-video source PTS continuity; Host wires per-source settings. |
+| Browser / parent | `player-modes/browser-20261026` | `3685efc` + `9e869de`: renderer, audience/TV controls, pre-native SDK patch, clock/rate/unit fixes and radio cleanup. `85b9f85` corrects the SDK type comment; it changes the maintained patch hash, not its recovered provenance. Current rebased Browser head: `1050968`. |
+| Host / native child | `player-modes/host-20261026` | Host implementation `dd65e53` and worker budget seam `f07fe9f` are integrated/pushed. Native/hidden-browser capture, grants/IPC/settings and dual-architecture resources are retained. Owns architecture/CI/design index/helper README; final receipts remain parent-owned. |
 | Validation / parent + R4 and documentation children | `player-modes/validation-20261026` | Real-media R4 fix/checks; this ledger/inventory/reference docs; final install/build/package/browser checks and independent fixed-head reviews. |
 
 This documentation snapshot starts from `9e869de`; later parent/child progress is
 explicitly attributed below. Children use GPT-6.1 Sol xhigh/default and bounded
 ownership. Serialize shared Hub/protocol/scheduler/settings edits and stack
 mutations. Browser introduces `src/shared/audio-settings.ts` for its first consumer;
-Host extends/wires that contract, rather than making Browser depend on a later layer.
+Host extends/wires that contract. Current maintained source keeps Browser independent of later Host implementations.
 
 ## Packages and module responsibilities
 
@@ -87,7 +87,7 @@ behavior; absence from the recovered changed-file union is not a retirement.
 | R1 | Shared collaborative music / Core + Browser | E1/E2 joins, shared queue/transport/levels, one encode per required format; F1 final runtime. |
 | R2 | TV picture / separate phone sound / Core + Browser | Common timeline/channel-only fetch; E1/E3 mapping/delay checks; actual split buffered A/V F2; physical alignment F4. |
 | R3 | Several following pictures / Core + Browser | E4 sync/clock plus picture-only timer E2; native-HLS/MPEG-TS source-PTS mapping limits stay visible; F1/F2. |
-| R4 | Delay-tolerant screen/window A/V / Core + Browser + R4 | E4 Node suites pass; actual third viewer, failed RTC fallback, split/picture-only and single-ingest cleanup F2. PTS restart bug during live publication is being fixed; no completion claim. |
+| R4 | Delay-tolerant screen/window A/V / Core + Browser + R4 | E4 Node suites pass; actual third viewer, failed RTC fallback, split/picture-only and single-ingest cleanup F2. Source PTS continuity fix is integrated at `e5063df`; final actual-media evidence remains F2. |
 | R5 | AirPlay input / Core | E1 corrected fixture passes one-sender/host takeover/disable/departure/recovery and scheduled no-audio-HLS; actual Apple sender F4. |
 | R6 | Relaxed audio input / Core + Browser + Host | E2/E4 timestamped ingress/relaxed PCM/retry/cleanup; native or selected hidden capture with no second mic/recorder F3; unsupported publishers retain explicit compatibility. |
 | R7 | Independent shared programmes / Core | E1 language/routing and separate queue/timeline tests; F1 simultaneous-group/Next regression on final build. |
@@ -130,9 +130,11 @@ Useful later fixes retained individually: ±100 ppm browser correction, independ
 preference, exact routed IPv4 peers, upload Origin, native UID/rate/buffer readback,
 late-join lead, relaxed PCM pending-versus-sent bounds, missing-pactl guard, radio
 idle unsubscribe, encoder prewarm/prompt fanout and capture-generation continuity.
-At Core+Browser, Live uses **100 ms lead / 10 ms packets**, relaxed capture one
-second. Host owns subsequent source-specific settings; low-lead/native-PCM trials
-do not qualify browser Opus or authorize silently changing the selected policy.
+Integrated Host policy retains **100 ms default lead / 70 ms receiver budget**
+and **10 ms Opus packets**. Lead choices are **100/150/250 ms**, with a 30 ms
+source reserve; each publication freezes its policy. Relaxed capture keeps one
+second. `f07fe9f` carries that source budget through the real worker. Historical
+low-lead/native-PCM trials do not qualify browser Opus.
 
 ## Evidence and outstanding gates
 
@@ -150,11 +152,13 @@ retain exact commands, revisions, exit codes and skips in F1/F5.
 | E5 | Actual T3 preview Chrome, source `9e869de`; `browser-receipts/core-browser.json`: five React radio subscription checks, eight desktop keyboard checks, two actual H264/AAC decoders with independent queues; exclusive Move keeps paused Playback ID, two-entry queue and **37.240293 s** on second browser. | Localhost/127 origins; no physical timing qualification. Final-tip/TV/Host coverage remains separate. |
 | E6 | Parent real-Hub routed test at `9e869de`: Docker peer `172.17.0.2` → `10.10.10.11:49726`, exact allowlist: connection 200, bad Host/Origin 403, tokenless settings/private host-token 401; allowlist containing only `.3` refuses `.2` with 403. Disabling sharing closes listener and refuses the same allowed peer. `routed-peer-{allowed.json,denied.log,sharing-off.json,sharing-off.log}`. | Specific routed topology/security behavior, not Wi-Fi/audio qualification. Parent reports all owned scratch Core/media PIDs stopped. |
 
+| E7 | Parent reports current Host `f07fe9f` over Core `e5063df` / Browser `1050968`: **92 separate unit files / 688 tests pass**, **eight Host/scheduler Node bundles pass**. Per-source budget real-worker regression passes and its red control fails. `act` Check passes at `f07fe9f`. | Full `act` Package is still building; exact final receipts/commands/skips and independent reviews remain parent-owned. New `tests/live-source-budget.integration.ts` is post-recovery coverage, outside the fixed 213-path source union. |
+
 | Marker | Parent-owned remaining evidence / smallest completion condition |
 | --- | --- |
-| F1 — final integrated checks | After Host/R4 land: fresh frozen install, typecheck/build and relevant public behavior suites on exact final heads; check each layer builds; record skips/failures and resource cleanup. Inventory union/diff checks alone do not satisfy this gate. |
-| F2 — R4 software continuity | R4 child reproduces source PTS restarting at zero while publication stays alive and is implementing a minimal fix. Integrate/review it; prove real captured WebM→HLS→browser, split/picture-only, independent late third viewer, forced RTC fallback, stop/re-ingest absolute position and single-ingest cleanup. These are software checks, not missing hardware. |
-| F3 — Host/package/settings | Parent reports delegated actual Mac dual-architecture helper builds/signatures pass; attach receipt/head after integration. Verify exact hidden frame grants/navigation/close/quit, native Origin/revocation/mute/restart, C queue test, source-budget snapshot settings and actual rate/buffer readback. Run package-hooks/act using `catthehacker/ubuntu:full-latest` before any dispatch. Final hosted signed package and matched packaged Main/Core/worker/browser smoke remain pending. |
+| F1 — final integrated checks | On integrated Host/R4 heads: fresh frozen install, typecheck/build and relevant public behavior suites on exact final heads; check each layer builds; record skips/failures and resource cleanup. Inventory union/diff checks alone do not satisfy this gate. |
+| F2 — R4 software continuity | Source PTS restart while publication stays alive was reproduced; minimal fix is integrated in Core `e5063df`. Review it and attach final real-media receipts proving real captured WebM→HLS→browser, split/picture-only, independent late third viewer, forced RTC fallback, stop/re-ingest absolute position and single-ingest cleanup. These are software checks, not missing hardware. |
+| F3 — Host/package/settings | Host `dd65e53` / budget seam `f07fe9f` are integrated. Parent reports actual Mac dual-architecture helper builds/signatures pass; attach final receipt/head. Verify exact hidden frame grants/navigation/close/quit, native Origin/revocation/mute/restart, C queue test, source-budget snapshot settings and actual rate/buffer readback. `act` Check passes at `f07fe9f`; full `act` Package is building with `catthehacker/ubuntu:full-latest`. Preserve package-hooks/act results before relevant dispatch. Final hosted signed package and matched packaged Main/Core/worker/browser smoke remain pending. |
 | F4 — platform/physical qualification | Fresh Mac-host→Linux-browser Opus continuity and actual Wi-Fi browser routes; signed Main permission/device availability; 44.1 kHz hardware, Apple sender/Bluetooth/background/locked phones where available. Numerical skew/dropout/fidelity profile, ≤100 ms input-to-ear and 50 physical receivers remain unqualified. One preflight/actionable retry records any concrete prerequisite. |
 | F5 — independent review/handoff | Fresh independent spec/standards reviews at fixed base/head with findings resolved and justified reruns; current built-state doc audit (including retained AirPlay/live-input/public-media/ADR 0001 claims), final retirement/API/dependency search, parent stack/remote/PR-ready receipts. This child performs no CI, stack, push or PR actions. |
 | F6 — historical separation | Browser R4 `5ce1d68e…` and Native R4 `ee16cdca…` are different archival payloads. Keep historical validation, PCM overlays/native-client trials and sample-coherence results attached to their inputs; none qualifies final browser Opus. |

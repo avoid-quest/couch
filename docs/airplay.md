@@ -86,11 +86,12 @@ it with `src/server/airplay-audio.ts`: it checks every packet, places each
 sample by its RTP timestamp a quarter second behind the first one, fills loss
 and pauses with silence, and emits exactly the elapsed samples on Core's own
 clock. It holds at most two seconds ahead; a sender whose clock jumps (pause,
-seek) or falls behind starts again from where it is. FFmpeg reads that PCM from
-its standard input, as it reads a browser's upload, into the same rolling HLS
-the buffered and In sync paths of live inputs use (`src/server/live-stream.ts`).
-If FFmpeg falls behind by more than 4 MB, the stream ends with an error rather
-than buffering.
+seek) or falls behind starts again from where it is. Core sends timestamped PCM
+through the common capture normalizer and relaxed scheduled-audio worker
+(`src/server/scheduled-capture.ts`). Receivers get scheduled sound even when
+there is only one listener. AirPlay no longer creates an audio-only HLS stream;
+captured-video HLS remains a separate compatibility adapter. Pending audio and
+receiver queues are bounded, and source retirement stops the worker.
 
 A sender becomes a source only when its decoded sound arrives, which UxPlay
 produces only after the sender answered its password challenge, never from a TCP
@@ -212,7 +213,7 @@ exits, as it would on such a network.
 
 ## Validation
 
-Checked: the pinned, patched UxPlay built on Ubuntu 24.04 (Package's runner) starts on
+Historical pre-integration checks: the pinned, patched UxPlay built on Ubuntu 24.04 (Package's runner) starts on
 Debian 13 with Couch's arguments, answers an unpaired sender's request without
 Couch publishing anything, challenges a sender's key SETUP without the code or
 with a wrong one and gives it no stream (the all-zero-key attack that plays
@@ -221,11 +222,13 @@ up the same stream, whose ALAC sound becomes a source (the test client uses a ze
 key, not FairPlay) while another address's short cleartext ALAC packets reach
 nothing (without the patch, each plays one sample), refuses a second connection's request while that one
 is open, logs each sender connection as Couch reads it, and stops on Couch's signal; GStreamer's own framing
-arrives as a continuous tone at the right pitch through Couch's HLS; admission,
+arrived as a continuous tone at the right pitch through the former HLS path; admission,
 ending, one source per sender (also with an unpaired connection open, a next
 sender straight after, a last packet read after the next connection's log, and a
 frame split across the moment UxPlay authenticates the sender), Where it plays when a device stops sharing its speakers,
 restarts and update busy-ness against UxPlay's interface.
+
+Current scheduled-audio regression receipts and exact skips are recorded in [integration validation](player-modes-integration-validation.md). Historical HLS receipts do not qualify this replacement.
 
 Not yet checked with real devices: an iPhone, iPad or Mac asking for the code as
 an AirPlay password, accepting the dashes, and remembering it,
@@ -233,5 +236,5 @@ AirPlay audio and Screen Mirroring sound from iOS and macOS, a second sender's
 refusal, the sender's volume, reconnecting, including how quickly a device finds
 the Couch again after AirPlay restarts between senders, long sessions (a sender clock that
 drifts from Core's is corrected by starting again, an audible skip),
-end-to-end delay, and In sync between devices. Test those on a scratch Couch
+end-to-end delay, and scheduled alignment between devices. Test those on a scratch Couch
 with its own `COUCH_DATA_DIR` and `COUCH_PORT` before relying on them.

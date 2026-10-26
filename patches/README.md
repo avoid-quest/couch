@@ -84,10 +84,11 @@ SDK clock
 uncertainty is **milliseconds**: receiver admission requires finite 0–10 ms.
 Capture timestamps and scheduled deadlines use integer microseconds.
 
-These browser changes do not select sender lead or packet duration. At the
-Core+Browser checkpoint the scheduler uses **100 ms Live lead, 10 ms Opus
-packets**, and a one-second relaxed capture lead. Host settings integration owns
-any subsequent per-source policy and its current documentation. Live audience
+These browser changes do not select sender lead or packet duration. Integrated
+Host policy retains **100 ms default Live lead / 70 ms receiver budget** with
+**10 ms Opus packets**, and offers 100/150/250 ms lead choices with a 30 ms source
+reserve. Policy is frozen per publication and carried through the worker; saving
+a setting does not retime an active source. Relaxed capture keeps one second. Live audience
 output remains stereo Opus; relaxed PCM compatibility and PCM capture ingress
 remain distinct supported paths. Timing estimates and technical admission do not
 qualify physical input-to-ear latency, skew or continuous fidelity.
