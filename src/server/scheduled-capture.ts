@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { createCaptureClock, type CaptureAudioPacket, type CapturePolicy } from "./capture-audio";
 import { oggPackets, opusDuration } from "./audio-packets";
+import { createLivePcm } from "./live-pcm";
 
 export type Ffmpeg = () => Promise<string | { path: string; release: () => void }>;
 
@@ -18,16 +19,17 @@ function captureWaveHeader() {
   header.write("data", 50); header.writeUInt32LE(0xffffffff, 54);
   return header;
 }
-/** One normalized capture and Opus encoder, shared by all of this publication's consumers. */
+/** One normalized capture feeds immediate Live PCM and a shared Opus encoder. */
 export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, failed: (error: string) => void) {
   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
   let child: ChildProcessWithoutNullStreams | undefined, starting = false, closed = false, generation = 0;
   let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0, captured = false;
   let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
+  let livePcm: ReturnType<typeof createLivePcm> | undefined;
   const emit = (event: Event) => { for (const listener of listeners) listener(event); };
   const fail = (message: string) => {
     if (closed || error) return;
-    error = message; child?.kill("SIGKILL"); child = undefined; pending = []; queuedFrames = 0;
+    error = message; child?.kill("SIGKILL"); child = undefined; pending = []; queuedFrames = 0; livePcm?.close();
     emit({ type: "error", error }); failed(error);
   };
   const write = (block: { at: number; pcm: Float32Array }) => {
@@ -84,7 +86,7 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, fa
     } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
     finally { executable?.release(); if (attempt === generation) starting = false; }
   };
-  if (policy.intent === "live") void start();
+  if (policy.intent === "live") { livePcm = createLivePcm(emit, fail); void start(); }
   return {
     write(packet: CaptureAudioPacket) {
       if (closed || error) return false;
@@ -98,18 +100,20 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, fa
             pending = []; queuedFrames = 0; starting = false; baseUs = undefined;
           }
           captured = true;
-          emit({ type: "reset" });
+          if (!livePcm) emit({ type: "reset" });
         }
         const block = { at: normalized.atUs, pcm: normalized.pcm };
-        if (!block.pcm.length) return true;
-        if (child) write(block);
-        else {
+        if (block.pcm.length && child) write(block);
+        else if (block.pcm.length) {
           queuedFrames += block.pcm.length / 2;
           if (queuedFrames > 48_000 * 2) throw new Error("The capture encoder did not start within two seconds.");
           pending.push(block);
           if (!starting) void start();
         }
-        return !error;
+        // Queue encoder input before notifying subscribers, which may write/reset
+        // reentrantly. PCM never waits for the asynchronous encoder lookup.
+        livePcm?.write(normalized);
+        return !closed && !error;
       } catch (reason) { fail(reason instanceof Error ? reason.message : "Invalid capture audio."); return false; }
     },
     subscribe(listener: (event: Event) => void) {
@@ -118,6 +122,6 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, fa
       return () => { listeners.delete(listener); };
     },
     error: () => error,
-    close() { closed = true; generation++; const old = child; child = undefined; old?.kill("SIGKILL"); pending = []; listeners.clear(); },
+    close() { closed = true; generation++; const old = child; child = undefined; old?.kill("SIGKILL"); livePcm?.close(); pending = []; listeners.clear(); },
   };
 }

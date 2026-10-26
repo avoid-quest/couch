@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { WebSocket, WebSocketServer } from "ws";
 import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
@@ -71,14 +73,30 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
   t.diagnostic(`100 ms Hub stall: ${first.filter(frame => frame.received > frame.at).length} late network deliveries; no audience retiming. Software packets, no physical timing claim.`);
 });
 
-test("an encoder that cannot catch up fails after a bounded run of overdue Opus", { timeout: 8000 }, async t => {
+test("an encoder that cannot catch up fails after a bounded run of overdue Opus while PCM stays timely", { timeout: 8000 }, async t => {
+  const timers = new Set<ReturnType<typeof setTimeout>>(), closed: Promise<void>[] = [];
+  const spawn = childProcess.spawn;
+  const observer = t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
+    const child = spawn(...args);
+    closed.push(new Promise(resolve => child.once("close", () => resolve())));
+    // Delay only actual encoder output. Capture and immediate PCM keep their
+    // real clock, so PCM's separate lateness guard cannot satisfy this check.
+    const emit = child.stdout!.emit.bind(child.stdout!);
+    t.mock.method(child.stdout!, "emit", (event: string | symbol, ...values: any[]) => {
+      if (event !== "data") return emit(event, ...values);
+      const timer = setTimeout(() => { timers.delete(timer); emit(event, ...values); }, 650);
+      timers.add(timer); return true;
+    });
+    return child;
+  });
+  syncBuiltinESMExports();
   const errors: string[] = [];
   const source = createScheduledCapture({ intent: "live" }, async () => ffmpeg, error => errors.push(error));
-  t.after(() => source.close());
-  const origin = serverNowUs() - 1_000_000;
+  t.after(async () => { source.close(); timers.forEach(clearTimeout); await Promise.all(closed); observer.mock.restore(); syncBuiltinESMExports(); });
+  const origin = serverNowUs();
   for (let i = 0; i < 80 && !errors.length; i++) { source.write({ generation: "late", sequence: i, samplePosition: i * 480, capturedAtUs: origin + i * 10_000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) }); await sleep(10); }
   await until(() => errors.length === 1, "overdue encoder did not fail");
-  assert.match(errors[0]!, /deadlines/);
+  assert.match(errors[0]!, /^The audio encoder missed half a second of capture deadlines/);
 });
 
 test("picture-only media has a controllable timeline without opening an audio decoder", { timeout: 5000 }, async t => {

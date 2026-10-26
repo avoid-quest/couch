@@ -168,7 +168,7 @@ for (const ageMs of [20, 40]) test(`10 ms capture aged ${ageMs} ms retains every
   const core = createScheduledAudio({ identity: Identity.generate().privateB64u, name: "Continuity fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
   const group = core.group("continuity", state => states.push({ at: serverNowUs(), status: state.status, buffering: state.buffering }));
   t.after(() => { source.close(); group.close(); core.close(); });
-  source.subscribe(event => { if (event.type === "chunk") chunks.push({ at: event.at, received: serverNowUs(), duration: opusDuration(event.data) }); });
+  source.subscribe(event => { if (event.type === "chunk" && event.wire === "opus") chunks.push({ at: event.at, received: serverNowUs(), duration: opusDuration(event.data) }); });
   core.registerSource("capture", { intent: "live" });
   group.send({ type: "load", playbackId: "continuity", source: "", liveSourceId: "capture", live: true, intent: "live" });
   const started = serverNowUs(), captured = started - ageMs * 1000, count = 150;

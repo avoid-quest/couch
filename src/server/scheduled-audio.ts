@@ -218,7 +218,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const source = sources.get(current.liveSourceId)!;
-          const next: Run = { fixed: true, start: 0, live: true, anchored: true, speed: 1, wires: new Set(current.intent === "live" ? ["opus"] : ["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
+          const next: Run = { fixed: true, start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
           run = next;
           next.dispose = source.subscribe(event => {
             if (run !== next) return;
