@@ -9,7 +9,7 @@ type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; so
 // uploadId: Core asks for encoded capture only while something plays it buffered. Each request has its own identity.
 // A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
 type Publication<Socket> = { source: LiveSource; startedAt: number; owner?: Socket; uploadToken?: string; relayed: Set<string>; uploadId?: string };
-type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; relay?: string };
+type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; volume: number; relay?: string };
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
 export function createLiveInputs<Socket>(options: {
@@ -21,9 +21,19 @@ export function createLiveInputs<Socket>(options: {
 }) {
   const sources = new Map<string, Publication<Socket>>();
   const peers = new Map<string, Peer<Socket>>();
+  const announcements = new Set<string>();
+  let announcing: ReturnType<typeof setImmediate> | undefined;
   const announce = (sourceId: string) => {
-    const publication = sources.get(sourceId);
-    if (publication?.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
+    announcements.add(sourceId);
+    // A burst of socket closes or joins needs one current list, not every intermediate routing.
+    announcing ??= setImmediate(() => {
+      announcing = undefined;
+      const changed = [...announcements]; announcements.clear();
+      for (const sourceId of changed) {
+        const publication = sources.get(sourceId);
+        if (publication?.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
+      }
+    });
   };
   const removePeer = (peer: Peer<Socket>) => {
     peers.delete(peer.peerId);
@@ -33,6 +43,7 @@ export function createLiveInputs<Socket>(options: {
     const publication = sources.get(sourceId);
     if (!publication) return;
     sources.delete(sourceId);
+    announcements.delete(sourceId);
     // Publish the ending notice before any peer's Stop can close its player.
     options.ended(publication.source, publisherName);
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
@@ -97,8 +108,15 @@ export function createLiveInputs<Socket>(options: {
       }
       if (publication && load) for (const receiver of wanted) {
         const existing = [...peers.values()].find(peer => peer.playbackId === playbackId && peer.receiver === receiver.socket);
-        if (existing) { options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } }); continue; }
-        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, relay: receiver.relay };
+        if (existing) {
+          // Routing another output must not make this renderer echo its unchanged level.
+          if (existing.volume !== receiver.volume) {
+            existing.volume = receiver.volume;
+            options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } });
+          }
+          continue;
+        }
+        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, volume: receiver.volume, relay: receiver.relay };
         peers.set(peer.peerId, peer);
         if (peer.relay) {
           // Core's channel-filtered stream in the ordinary player: the publisher sends it nothing.
@@ -144,6 +162,6 @@ export function createLiveInputs<Socket>(options: {
       for (const peer of [...peers.values()]) if (peer.receiver === socket) { peers.delete(peer.peerId); changed.add(peer.sourceId); }
       for (const sourceId of changed) announce(sourceId);
     },
-    close() { for (const sourceId of [...sources.keys()]) end(sourceId); },
+    close() { clearImmediate(announcing); announcing = undefined; announcements.clear(); for (const sourceId of [...sources.keys()]) end(sourceId); },
   };
 }
