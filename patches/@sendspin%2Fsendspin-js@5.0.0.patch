@@ -741,7 +741,7 @@ index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..2d9182e9f21118764c4cf45a932c5bdf
 +     * This request does not replace the measured output latency estimate.
 +     */
 +    outputLatencyHint?: number;
-+    /** Small drift: default sample insertion/deletion, or bounded ±0.1% native rate correction preserving decoded buffers. Larger errors retain the selected correction mode's policy. */
++    /** Small drift: default sample insertion/deletion, or bounded ±100 ppm (±0.01%) playback-rate correction preserving decoded buffers. Larger errors retain the selected correction mode's policy. */
 +    sampleCorrectionMode?: "samples" | "rate";
      /**
       * HTMLAudioElement for media-element output mode.
