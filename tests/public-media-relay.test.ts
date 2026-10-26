@@ -107,6 +107,48 @@ test("public media playlists protect keys, maps, low-latency parts and every seg
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
+test("a selected YouTube HLS pair keeps its quality and original audio through the master", async () => {
+  const f = fixture();
+  const video = "https://media.example/1080.m3u8", audio = "https://media.example/it.m3u8";
+  f.manifest(source, ['#EXTM3U',
+    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="en",NAME="English dub",DEFAULT=NO,URI="en.m3u8"',
+    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="it",NAME="Italian original",DEFAULT=NO,URI="it.m3u8"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=2000,AUDIO="audio",RESOLUTION=1920x1080', '1080.m3u8',
+    '#EXT-X-STREAM-INF:BANDWIDTH=4000,AUDIO="audio",RESOLUTION=3840x2160', '2160.m3u8', ''].join('\n'));
+  f.manifest(video, '#EXTM3U\n#EXTINF:6,\nvideo.ts\n');
+  f.manifest(audio, '#EXTM3U\n#EXTINF:6,\naudio.ts\n');
+  const media = await f.relay.prepare("playing", { source, publicNetwork: true, hlsSelection: { video, audio, bandwidth: 2000 } }, {}, target, signal());
+  const result = await f.serve(media.source);
+  expect(result.status).toBe(200);
+  const text = await result.text();
+  expect(text).not.toContain('English dub');
+  expect(text).not.toContain('3840x2160');
+  expect(text).toContain('BANDWIDTH=2000');
+  expect(text).toContain('DEFAULT=YES');
+  const rendition = /URI="([^"]+)"/.exec(text)![1]!;
+  const picture = text.split('\n').find(line => line && !line.startsWith('#'))!;
+  destination(rendition, "playlist", audio);
+  destination(picture, "playlist", video);
+  for (const child of [rendition, picture]) {
+    const playlist = await f.serve(child);
+    expect(playlist.status).toBe(200);
+    destination((await playlist.text()).split('\n').find(line => line && !line.startsWith('#'))!, "bytes", child === rendition ? "https://media.example/audio.ts" : "https://media.example/video.ts");
+  }
+});
+
+test("a refreshed master cannot replace the selected signed HLS destinations", async () => {
+  const f = fixture();
+  f.manifest(source, '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nother.m3u8\n');
+  const media = await f.relay.prepare("playing", { source, publicNetwork: true, hlsSelection: { video: "https://media.example/selected.m3u8", audio: "https://media.example/it.m3u8", bandwidth: 1000 } }, {}, target, signal());
+  const result = await f.serve(media.source);
+  expect(result.status).toBe(200);
+  const text = await result.text();
+  expect(text).not.toContain("other.m3u8");
+  const rendition = /URI="([^"]+)"/.exec(text)![1]!;
+  destination(rendition, "playlist", "https://media.example/it.m3u8");
+  destination(text.split("\n").find(line => line && !line.startsWith("#"))!, "playlist", "https://media.example/selected.m3u8");
+});
+
 for (const childOrigin of ["https://cdn.example", "http://media.example", "https://media.example:444"]) {
   test(`HLS credentials remain on the source origin when children use ${childOrigin}`, async () => {
     const f = fixture();

@@ -3,6 +3,7 @@ import { publicFetch, publicResponseContext, stripCrossOriginHeaders } from "./p
 import { boundedBytes } from "./iptv-feeds";
 import { serve, type Listener } from "./http";
 import { logMediaDiagnostic, mediaAddress, mediaHeaders } from "./media-diagnostics";
+import type { WebMediaSource } from "./web-media";
 
 // Pass-through (#644 Delivery): a Device that can't fetch a source itself because of its
 // Origin, CORS or headers gets the bytes through Core. Core asks each source the way the
@@ -10,9 +11,9 @@ import { logMediaDiagnostic, mediaAddress, mediaHeaders } from "./media-diagnost
 // User-Agent sent with a LAN Origin, while its segments allow every Origin (#644 ticket 7).
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
-type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
+type Media = { source: string; audioSource?: string; hlsSelection?: WebMediaSource["hlsSelection"]; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
 // refused: the last error status the source answered, which a browser reports as an unsupported format.
-type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; audioCors?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; logged: Set<string> };
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; audioCors?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; hlsSelection?: Media["hlsSelection"]; logged: Set<string> };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -153,7 +154,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // headers. One capability per preparation keeps every child on its route.
       // The single source-header map authorizes only the main source's origin;
       // a separate audio URL or redirected playlist cannot expand that trust.
-      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, audioCors, createdAt: Date.now(), source: media.source, audioSource: media.audioSource, logged: new Set() };
+      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, audioCors, createdAt: Date.now(), source: media.source, audioSource: media.audioSource, hlsSelection: media.hlsSelection, logged: new Set() };
       const route = async (url: string) => {
         const answer = await probe(url, relay, !!media.mpegts || audioCors, signal, relay.publicNetwork ? publicRequest : fetch);
         // Web Audio needs readable audio, including every HLS child; a native media element alone does not.
@@ -166,7 +167,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // Quality changes prepare a new transport before it becomes current.
       for (const [id, saved] of relays) if (!current(saved.playbackId) && Date.now() - saved.createdAt > 60_000) relays.delete(id);
       if (source !== media.source || audioSource !== media.audioSource) relays.set(relay.id, relay);
-      return { ...media, publicNetwork: undefined, source, ...(audioSource ? { audioSource } : {}), ...(main.playlist ? { hls: true } : {}) };
+      return { ...media, publicNetwork: undefined, hlsSelection: undefined, source, ...(audioSource ? { audioSource } : {}), ...(main.playlist ? { hls: true } : {}) };
     },
     // GET /api/relay/<playbackId>/<kind>/<signature>?url=<source>
     async serve(request: Request): Promise<Response> {
@@ -207,7 +208,15 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
           upstream = sniffed.response; playlist = sniffed.playlist;
         }
         if (upstream.ok && playlist) {
-          const text = new TextDecoder().decode(await boundedBytes(upstream, 2 * 1024 * 1024, request.signal));
+          // YouTube refreshes child signatures on each master request. Build one
+          // standard HLS variant from the exact pair yt-dlp checked, retaining
+          // its quality and language without comparing fresh signed URLs.
+          const selection = url === relay.source ? relay.hlsSelection : undefined;
+          let text: string;
+          if (selection) {
+            await upstream.body?.cancel();
+            text = `#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="${selection.audio}"\n#EXT-X-STREAM-INF:BANDWIDTH=${selection.bandwidth},AUDIO="audio"\n${selection.video}\n`;
+          } else text = new TextDecoder().decode(await boundedBytes(upstream, 2 * 1024 * 1024, request.signal));
           if (relay.publicNetwork && !/^\uFEFF?#EXTM3U\r?\n/.test(text)) throw new Error("Invalid HLS playlist.");
           return new Response(await rewrite(text, upstream.url || url, destination), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
         }

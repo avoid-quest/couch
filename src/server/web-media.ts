@@ -19,7 +19,7 @@ import { logMediaResolution } from "./media-diagnostics";
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -95,6 +95,7 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
   if (!Array.isArray(selected) || !selected.length || selected.length > 2 || !selected.every(object)) throw new Error("The website returned an unsupported combination of media streams.");
   let source: string;
   let audioSource: string | undefined;
+  let hlsSelection: WebMediaSource["hlsSelection"];
   let subtitles = sourceSubtitles(info, subtitleLanguage);
   if (selected.length === 1) source = selectedSource(selected[0]!);
   else {
@@ -105,13 +106,18 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     audioSource = selectedSource(audio);
     // hls.js plays an HLS master's picture, sound and subtitles together; an <audio> can't play its sound rendition (StreamingCommunity).
     if ([video, audio].every(stream => String(stream.protocol).startsWith("m3u8")) && typeof video.manifest_url === "string" && video.manifest_url === audio.manifest_url) {
+      // Preserve YouTube's selected quality and original audio in its master,
+      // which also offers other qualities and dubbed languages.
+      if (info.extractor === "youtube") {
+        const bandwidth = Math.ceil((Number(video.tbr ?? 0) + Number(audio.tbr ?? audio.abr ?? 0)) * 1000);
+        hlsSelection = { video: source, audio: audioSource, bandwidth: Number.isSafeInteger(bandwidth) && bandwidth > 0 ? bandwidth : 1 };
+      } else subtitles = [];
       source = mediaUrl(video.manifest_url);
       audioSource = undefined;
-      subtitles = [];
     }
   }
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  return { source, ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
@@ -137,10 +143,18 @@ const playable = "[protocol!*=dash]";
 function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): string {
   if (!["best", "1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
   const filter = youtube || quality === "best" ? "" : `[height<=?${quality.slice(0, -1)}]`;
-  const selector = `bv*${filter}${playable}+ba${playable}/b${filter}${playable}`;
+  // YouTube labels its DASH MP4 files as HTTPS. WebKit cannot play those video
+  // files natively, even with H.264; HLS and progressive MP4 remain eligible.
+  const transport = youtube && !vp9 ? `${playable}[container!=?mp4_dash]` : playable;
+  const selector = `bv*${filter}${transport}+ba${transport}/b${filter}${transport}`;
   // Filter every branch, including muxed fallback and separate audio. A codec preference
   // can still select an incompatible stream when no H.264/AAC format exists.
-  return youtube && !vp9 ? `(${selector})[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']` : selector;
+  if (!youtube || vp9) return selector;
+  const codecs = "[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']";
+  // YouTube omits acodec on HLS audio renditions. Prefer those to DASH AAC,
+  // which also takes a long time to open on iPad; retain the original-language ranking.
+  const sound = `(ba[protocol^=m3u8][acodec~=?'^(mp4a|aac|none$)']/ba${playable}${codecs})`;
+  return `bv*${filter}${transport}${codecs}+${sound}/b${filter}${transport}${codecs}`;
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
