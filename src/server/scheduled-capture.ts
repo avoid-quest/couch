@@ -19,6 +19,8 @@ function captureWaveHeader() {
   header.write("data", 50); header.writeUInt32LE(0xffffffff, 54);
   return header;
 }
+// How long Core observes headroom before trusting it, and how long a playing receiver may stay late.
+export const headroomWindowUs = 1_000_000;
 /** One normalized capture feeds immediate Live PCM and a shared Opus encoder. */
 export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, failed: (error: string) => void) {
   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
@@ -27,13 +29,13 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, fa
   let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
   let livePcm: ReturnType<typeof createLivePcm> | undefined;
   // What a receiver actually has: each chunk's deadline minus when Core can send
-  // it, per wire. A trailing second's minimum follows capture, encoder and upload
+  // it, per wire. The trailing window's minimum follows capture, encoder and upload
   // timing without keeping a startup transient forever.
   const headroom = { opus: [] as { now: number; us: number }[], pcm: [] as { now: number; us: number }[] };
   const emit = (event: Event) => {
     if (event.type === "chunk") {
       const now = serverNowUs(), us = event.at - now, window = headroom[event.wire];
-      while (window[0] && window[0].now < now - 1_000_000) window.shift();
+      while (window[0] && window[0].now < now - headroomWindowUs) window.shift();
       while (window.length && window.at(-1)!.us >= us) window.pop();
       window.push({ now, us });
     } else if (event.type === "reset") { headroom.opus = []; headroom.pcm = []; }

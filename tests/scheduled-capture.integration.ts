@@ -201,3 +201,35 @@ test("an uploaded Live source reports its measured headroom for output correctio
   await until(() => { try { core.validateDelay(key.peerId, 10, "live"); return true; } catch { return false; } }, "uploaded source never reported measured headroom");
   assert.throws(() => core.validateDelay(key.peerId, 1000, "live"), /exceeds the remaining live audio deadline/);
 });
+
+test("a playing receiver leaves when its wire's measured headroom falls below its need and returns when it recovers", { timeout: 10_000 }, async t => {
+  const key = Identity.generate();
+  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Falling headroom fixture", admit: id => id === key.peerId, changed() {}, ffmpeg: async () => ffmpeg });
+  const server = createServer();
+  server.on("upgrade", (request, socket, head) => core.upgrade(request, socket as import("node:net").Socket, head));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const receiver = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER], { encryption: { identity: key }, playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 128 * 1024, supported_commands: [] } });
+  const group = core.group("falling", () => {});
+  let timer: ReturnType<typeof setInterval> | undefined;
+  t.after(async () => { clearInterval(timer); group.close(); core.endSource("falling"); core.close(); await receiver.disconnect(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  let received = 0; receiver.addAudioChunkListener(() => received++);
+  await receiver.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}/sendspin`, { timeoutMs: 3000 });
+  await receiver.sendPlayerState({ required_lead_time_ms: 60, min_buffer_ms: 1, static_delay_ms: 0 });
+  core.registerSource("falling", { intent: "live" });
+  group.members([{ deviceId: key.peerId, level: 100 }]);
+  group.send({ type: "load", playbackId: "falling", source: "", live: true, liveSourceId: "falling", intent: "live" });
+  // Real-time capture, except that uploads can arrive `lateMs` after their capture time.
+  let sequence = 0, lateMs = 0; const origin = serverNowUs();
+  timer = setInterval(() => {
+    for (; origin + sequence * 10_000 + lateMs * 1000 <= serverNowUs(); sequence++)
+      core.writeSource("falling", { generation: "falling", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10_000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
+  }, 2);
+  await until(() => core.receiverAdmission(key.peerId)?.state === "ready" && received > 10, "receiver did not start within its measured headroom");
+  lateMs = 60;
+  await until(() => core.receiverAdmission(key.peerId)?.state === "failed", "receiver kept playing after its headroom fell below its need");
+  assert.match(core.receiverError(key.peerId) ?? "", /requires 60 ms/);
+  const stopped = received; await sleep(200);
+  assert.ok(received - stopped <= 2, "a withdrawn receiver stops receiving chunks it cannot render on time");
+  lateMs = 0;
+  await until(() => core.receiverAdmission(key.peerId)?.state === "ready" && received > stopped + 10, "receiver did not return when headroom recovered");
+});

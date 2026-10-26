@@ -12,7 +12,7 @@ import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { audioInput } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
-import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
+import { createScheduledCapture, headroomWindowUs, type Ffmpeg } from "./scheduled-capture";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import { compressorFilter } from "../shared/compressor";
 
@@ -41,6 +41,7 @@ const pcmBytes = 19_200; // 100 ms of 48 kHz 16-bit stereo.
 const wireFormat = (wire: Wire) => ({ codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM, sampleRate: 48_000, channels: 2, bitDepth: 16 });
 // Outputs ask for Opus first (#644 Fan-out). Firefox's player offers only FLAC and PCM, so PCM is the second wire.
 const chosen = new WeakMap<SendspinSession, Wire | undefined>();
+const lateSince = new WeakMap<SendspinSession, number>();
 const wireOf = (session: SendspinSession): Wire | undefined => {
   if (chosen.has(session)) return chosen.get(session);
   chosen.set(session, undefined);
@@ -236,17 +237,18 @@ export function createScheduledAudio(options: { identity: string; name: string; 
               next.base = event.at;
               for (const member of members) begin(member.deviceId);
             }
+            const budget = source.outputBudgetMs(event.wire);
+            if (budget !== budgets[event.wire]) {
+              budgets[event.wire] = budget;
+              // A receiver waiting for measured headroom is reconsidered when its wire's changes.
+              for (const member of members) if (![...next.cursors.keys()].some(session => session.getClientId() === member.deviceId)) begin(member.deviceId);
+              if (run !== next) return;
+            }
             if (event.at <= serverNowUs()) return; // Missed input is silence, never a new audience deadline.
             next.queues[event.wire].push({ offset: event.at - next.base, duration: event.duration, data: event.data });
             // Relaxed's one-second lead can retain >200 small PCM blocks already sent.
             if (next.queues[event.wire].length + (current.intent === "live" ? next.sent[event.wire].length : 0) > 200) fail("Captured audio exceeded its bounded queue.");
             else if (current.intent === "live") tick(next);
-            const budget = source.outputBudgetMs(event.wire);
-            if (run === next && budget !== budgets[event.wire]) {
-              budgets[event.wire] = budget;
-              // A receiver waiting for measured headroom is reconsidered when its wire's changes.
-              for (const member of members) if (![...next.cursors.keys()].some(session => session.getClientId() === member.deviceId)) begin(member.deviceId);
-            }
           });
           report(); return;
         }
@@ -388,14 +390,20 @@ export function createScheduledAudio(options: { identity: string; name: string; 
             current.cursors.delete(session); socket.close(1013, "Audio output is too slow"); options.changed(); return;
           }
           const capacity = session.getPlayerBufferCapacity() || 1024 * 1024;
+          const timing = session.getPlayerTiming(), needUs = ((timing.requiredLeadTimeMs ?? 0) + Math.max(0, timing.staticDelayMs ?? 0)) * 1000;
           let held = 0;
           for (const chunk of sent) {
             if (chunk.at <= from) { held += chunk.data.length + 13; continue; }
+            // Live skips a chunk this receiver can no longer render in time instead of sending it late.
+            if (current.fixed && chunk.at - now < needUs) { current.cursors.set(session, chunk.at); if (!lateSince.has(session)) lateSince.set(session, now); continue; }
             if (held + chunk.data.length + 13 > capacity) break;
             session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
             held += chunk.data.length + 13;
             current.cursors.set(session, chunk.at);
+            lateSince.delete(session);
           }
+          // Late for a whole headroom window: it no longer fits, so admission withdraws it with its reason.
+          if (now - (lateSince.get(session) ?? now) >= headroomWindowUs) { lateSince.delete(session); begin(session.getClientId()!); }
         });
         if (current.pipes[wire]?.isPaused() && (!list.length || list.at(-1)!.offset - list[0]!.offset < aheadUs / 2)) current.pipes[wire]!.resume();
       }
