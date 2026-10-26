@@ -172,6 +172,7 @@ test("Play on the publisher waits in Where it plays, opens it on each request, a
     await until(() => direct(f.receiver.load()));
     assert.equal(f.receiver.state.playback, waiting);
     assert.equal(sharedPlaybacks(other).length, 1);
+    await until(() => receivers(other)?.length === 2);
     assert.deepEqual(receivers(other)?.sort(), [f.receiver.id, other.id].sort());
     assert.equal(loads(f.publisher).some(load => "livePeerId" in load || load.source.includes("/api/live/")), false);
     assert.deepEqual(titles(f.publisher), ["movie", "Publisher · Screen"], "joining adds nothing to the queue");
