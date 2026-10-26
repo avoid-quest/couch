@@ -1,3 +1,5 @@
+import { readOutputBufferPreference } from "../audio-settings";
+import { outputLatencyHint } from "../../shared/audio-settings";
 import type { SendspinPlayer } from "@sendspin/sendspin-js";
 import { createReceiverAdmission } from "./receiver-admission";
 import { waitForTap } from "./renderer";
@@ -53,7 +55,7 @@ export function listen(on: boolean, watch: boolean, name: string, nextIntent: "r
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = player ??= import("@sendspin/sendspin-js").then(({ SendspinPlayer }) => {
     // AES-GCM: Core runs on Electron's Node, whose BoringSSL has no ChaCha20-Poly1305.
-    const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", ...(intent === "live" ? { outputMode: "direct" as const, requiredLeadTimeMs: 1000 } : {}), suite: "aesgcm", storage,
+    const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", ...(intent === "live" ? { outputMode: "direct" as const, outputLatencyHint: outputLatencyHint(readOutputBufferPreference()), sampleCorrectionMode: "rate" as const, requiredLeadTimeMs: 1000 } : {}), suite: "aesgcm", storage,
       onConnectionChange: () => { if (connected === created && hearing && intent === "live") readiness?.outputChanged(); },
       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });
     if (player !== current) return created;

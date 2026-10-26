@@ -15,7 +15,9 @@ function subscribe(listener: () => void) {
   return () => { listeners.delete(listener); if (!listeners.size) { clearInterval(timer); timer = undefined; } };
 }
 const snapshot = () => now;
-export function useDurationClock() { return useSyncExternalStore(subscribe, snapshot, snapshot); }
+const inactive = () => () => {};
+const inactiveSnapshot = () => 0;
+export function useDurationClock(enabled = true) { return useSyncExternalStore(enabled ? subscribe : inactive, enabled ? snapshot : inactiveSnapshot, enabled ? snapshot : inactiveSnapshot); }
 
 /** Runtime is metadata, and live media has none. Only an item already started needs a progress bar. */
 export function DurationBar({ duration, position = 0, live = false }: { duration?: number | null; position?: number; live?: boolean }) {

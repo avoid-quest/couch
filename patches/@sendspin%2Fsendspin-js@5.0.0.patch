@@ -1,20 +1,87 @@
+diff --git a/dist/audio/clock-source.d.ts b/dist/audio/clock-source.d.ts
+--- a/dist/audio/clock-source.d.ts
++++ b/dist/audio/clock-source.d.ts
+@@ -29,6 +29,7 @@
+     private _timestampPromotionDisabled;
+     private _onPromotion?;
+     private lastSample;
++    private slopeSample;
+     private goodSamples;
+     private badSamples;
+     private goodSinceMs;
 diff --git a/dist/audio/clock-source.js b/dist/audio/clock-source.js
-index 22aea22b2e6c4d2a34ff2e7893801f09552f5b97..179b7570ecae4cd242204f82da092015cfd0727b 100644
 --- a/dist/audio/clock-source.js
 +++ b/dist/audio/clock-source.js
-@@ -198,7 +198,11 @@ export class ClockSource {
-                 if (perfDeltaMs >= OUTPUT_TIMESTAMP_MIN_SAMPLE_INTERVAL_MS) {
-                     const perfDeltaSec = perfDeltaMs / 1000;
-                     const contextSlope = (ts.contextTime - prev.contextTimeSec) / perfDeltaSec;
+@@ -16,7 +16,7 @@
+  * playback would audibly step whenever the source is promoted or demoted.
+  */
+ const OUTPUT_TIMESTAMP_MAX_FRESHNESS_MS = 250;
+-const OUTPUT_TIMESTAMP_MIN_SAMPLE_INTERVAL_MS = 40;
++const OUTPUT_TIMESTAMP_MIN_SAMPLE_INTERVAL_MS = 200;
+ const OUTPUT_TIMESTAMP_SLOPE_MIN = 0.95;
+ const OUTPUT_TIMESTAMP_SLOPE_MAX = 1.05;
+ const OUTPUT_TIMESTAMP_MAX_DIVERGENCE_SEC = 0.25;
+@@ -38,6 +38,7 @@
+         this._timestampPromotionDisabled = false;
+         // Output timestamp validation state
+         this.lastSample = null;
++        this.slopeSample = null;
+         this.goodSamples = 0;
+         this.badSamples = 0;
+         this.goodSinceMs = null;
+@@ -84,6 +85,7 @@
+         this.activeSource = "estimated";
+         this._pendingCutover = false;
+         this.lastSample = null;
++        this.slopeSample = null;
+         this.goodSamples = 0;
+         this._lastRejectReason = null;
+         this.badSamples = 0;
+@@ -97,6 +99,7 @@
+     }
+     rejectSample(reason, catastrophic = false) {
+         this.lastSample = null;
++        this.slopeSample = null;
+         this.goodSamples = 0;
+         this.goodSinceMs = null;
+         this._lastRejectReason = reason;
+@@ -195,10 +198,19 @@
+                     this.rejectSample(`timestamp/raw divergence drift ${Math.abs((divergenceSec - prevDivergenceSec) * 1000).toFixed(1)}ms`);
+                     return null;
+                 }
+-                if (perfDeltaMs >= OUTPUT_TIMESTAMP_MIN_SAMPLE_INTERVAL_MS) {
+-                    const perfDeltaSec = perfDeltaMs / 1000;
+-                    const contextSlope = (ts.contextTime - prev.contextTimeSec) / perfDeltaSec;
 -                    const predictedSlope = (predictedAudioTimeSec - prev.predictedAudioTimeSec) / perfDeltaSec;
++                // Estimate rate over a separate window: output timestamps describe sample
++                // positions, and a few milliseconds of short-window variation is not drift.
++                // Keep adjacent-sample discontinuity checks above unchanged.
++                const anchor = this.slopeSample ?? prev;
++                const slopeDeltaMs = ts.performanceTime - anchor.performanceTimeMs;
++                if (slopeDeltaMs >= OUTPUT_TIMESTAMP_MIN_SAMPLE_INTERVAL_MS) {
++                    const perfDeltaSec = slopeDeltaMs / 1000;
++                    const contextSlope = (ts.contextTime - anchor.contextTimeSec) / perfDeltaSec;
 +                    // Both predictions are projected to their observation times, not to
 +                    // the output timestamp sample times (which can repeat or arrive unevenly).
-+                    const projectedDeltaSec = (Math.max(nowMs, ts.performanceTime) - Math.max(prev.nowMs, prev.performanceTimeMs)) / 1000;
++                    const projectedDeltaSec = (Math.max(nowMs, ts.performanceTime) - Math.max(anchor.nowMs, anchor.performanceTimeMs)) / 1000;
 +                    const predictedSlope = projectedDeltaSec > 0
-+                        ? (predictedAudioTimeSec - prev.predictedAudioTimeSec) / projectedDeltaSec : 1;
++                        ? (predictedAudioTimeSec - anchor.predictedAudioTimeSec) / projectedDeltaSec : 1;
                      if (contextSlope < OUTPUT_TIMESTAMP_SLOPE_MIN ||
                          contextSlope > OUTPUT_TIMESTAMP_SLOPE_MAX) {
                          this.rejectSample(`context slope ${contextSlope.toFixed(3)} out of range`);
+@@ -209,8 +221,10 @@
+                         this.rejectSample(`predicted slope ${predictedSlope.toFixed(3)} out of range`);
+                         return null;
+                     }
+-                }
+-            }
++                    this.slopeSample = sample;
++                }
++            }
++            this.slopeSample ??= sample;
+             this.lastSample = sample;
+             this.badSamples = 0;
+             if (this.goodSinceMs === null) {
 diff --git a/dist/audio/decoder.d.ts b/dist/audio/decoder.d.ts
 index b304628dff7028d93377eae51648516d6635ab75..3f9f42c181f0b4fc17a350cf6b65e456712413e7 100644
 --- a/dist/audio/decoder.d.ts
@@ -208,10 +275,35 @@ index 8a5d7a449beadbe2dfb1251b3e72f7fe1f35c110..be948e9ec40ab1fcd483e24e1633dd80
          this.useNativeOpus = true;
          this.flacDecodingContext = null;
 diff --git a/dist/audio/scheduler.d.ts b/dist/audio/scheduler.d.ts
-index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665028fca01 100644
+index 872beb035e861ab6f81ba0a98b711c5336d1a97a..643232d26d5f80dc4898529c611df1853419ad3a 100644
 --- a/dist/audio/scheduler.d.ts
 +++ b/dist/audio/scheduler.d.ts
-@@ -98,6 +98,10 @@ export declare class AudioScheduler {
+@@ -14,6 +14,8 @@ export interface AudioSchedulerOptions {
+     stateManager: StateManager;
+     timeFilter: SendspinTimeFilter;
+     outputMode?: AudioOutputMode;
++    outputLatencyHint?: number;
++    sampleCorrectionMode?: "samples" | "rate";
+     audioElement?: HTMLAudioElement;
+     isAndroid?: boolean;
+     isCastRuntime?: boolean;
+@@ -50,12 +52,15 @@ export declare class AudioScheduler {
+     private scheduleTimeout;
+     private refillTimeout;
+     private queueProcessScheduled;
++    private promptQueueProcessing;
+     private clockSource;
+     private recorrectionMonitor;
+     private latencyTracker;
+     private stateManager;
+     private timeFilter;
+     private outputMode;
++    private outputLatencyHint;
++    private sampleCorrectionMode;
+     private audioElement?;
+     private isAndroid;
+     private isCastRuntime;
+@@ -98,6 +103,10 @@ export declare class AudioScheduler {
      private resetSyncErrorEma;
      private copyBuffer;
      private adjustBufferSamples;
@@ -222,7 +314,7 @@ index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665
      initAudioContext(): void;
      resumeAudioContext(): Promise<void>;
      private cutScheduledSources;
-@@ -122,7 +126,7 @@ export declare class AudioScheduler {
+@@ -122,7 +131,7 @@ export declare class AudioScheduler {
      private computeTargetPlaybackTime;
      startAudioElement(): void;
      stopAudioElement(): void;
@@ -232,10 +324,34 @@ index 872beb035e861ab6f81ba0a98b711c5336d1a97a..1cb47a9121403b7b879b6e46914c2665
      getAudioContext(): AudioContext | null;
  }
 diff --git a/dist/audio/scheduler.js b/dist/audio/scheduler.js
-index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9fa5d010c6 100644
+index b06314d3dcf68511af39f63168709d53d7752ed6..41eee12ec6f4eff2fbaf10c815641af19530051a 100644
 --- a/dist/audio/scheduler.js
 +++ b/dist/audio/scheduler.js
-@@ -416,6 +416,21 @@ export class AudioScheduler {
+@@ -69,6 +69,15 @@ const DEFAULT_CORRECTION_THRESHOLDS = {
+ };
+ export class AudioScheduler {
+     constructor(options) {
++        const outputLatencyHint = options.outputLatencyHint;
++        if (outputLatencyHint !== undefined && (!Number.isFinite(outputLatencyHint) || outputLatencyHint < 0)) {
++            throw new RangeError("outputLatencyHint must be finite non-negative seconds");
++        }
++        this.outputLatencyHint = outputLatencyHint;
++        this.sampleCorrectionMode = options.sampleCorrectionMode ?? "samples";
++        if (!["samples", "rate"].includes(this.sampleCorrectionMode)) {
++            throw new RangeError("sampleCorrectionMode must be samples or rate");
++        }
+         this.audioContext = null;
+         this.gainNode = null;
+         this.streamDestination = null;
+@@ -89,6 +98,7 @@ export class AudioScheduler {
+         this.scheduleTimeout = null;
+         this.refillTimeout = null;
+         this.queueProcessScheduled = false;
++        this.promptQueueProcessing = false;
+         // Sub-modules
+         this.clockSource = new ClockSource();
+         this.stateManager = options.stateManager;
+@@ -416,6 +426,22 @@ export class AudioScheduler {
              return buffer;
          }
      }
@@ -244,12 +360,13 @@ index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9f
 +    get outputReady() { return this.audioContext?.state === "running" && this.clockSource.active === "timestamp" && this.outputMode === "direct"; }
 +    async prepareOutput() {
 +        this.initAudioContext();
++        const generation = this.stateManager.streamGeneration;
 +        await this.resumeAudioContext();
 +        const context = this.audioContext;
 +        for (let attempt = 0; attempt < 75; attempt++) {
-+            if (this.audioContext !== context || context.state !== "running") throw new Error("Audio output changed during preparation.");
++            if (generation !== this.stateManager.streamGeneration || this.audioContext !== context || context.state !== "running") throw new Error("Audio output changed during preparation.");
 +            this.clockSource.getTimingSnapshot(context, this.measurePlayoutLatencySec());
-+            if (this.outputReady) return;
++            if (this.outputReady) { this.promptQueueProcessing = true; return; }
 +            await new Promise(resolve => setTimeout(resolve, 40));
 +        }
 +        throw new Error("This output has no stable timestamp clock for live audio: " + (this.clockSource.lastRejectReason ?? "timestamp warmup incomplete"));
@@ -257,7 +374,58 @@ index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9f
      initAudioContext() {
          if (this.audioContext)
              return;
-@@ -843,7 +858,7 @@ export class AudioScheduler {
+@@ -428,7 +454,7 @@ export class AudioScheduler {
+             navigator.audioSession.type = "playback";
+         }
+         const streamSampleRate = this.stateManager.currentStreamFormat?.sample_rate || 48000;
+-        this.audioContext = new AudioContext({ sampleRate: streamSampleRate });
++        this.audioContext = new AudioContext({ sampleRate: streamSampleRate, ...(this.outputLatencyHint === undefined ? {} : { latencyHint: this.outputLatencyHint }) });
+         this.gainNode = this.audioContext.createGain();
+         const audioElement = this.audioElement;
+         if (this.outputMode === "direct") {
+@@ -582,7 +608,7 @@ export class AudioScheduler {
+         if (this.queueProcessScheduled)
+             return;
+         this.queueProcessScheduled = true;
+-        if (typeof globalThis.setTimeout === "function") {
++        if (!(this.promptQueueProcessing && this.outputMode === "direct") && typeof globalThis.setTimeout === "function") {
+             this.scheduleTimeout = globalThis.setTimeout(() => {
+                 this.scheduleTimeout = null;
+                 this.queueProcessScheduled = false;
+@@ -590,7 +616,9 @@ export class AudioScheduler {
+             }, 15);
+             return;
+         }
++        const generation = this.stateManager.streamGeneration;
+         const run = () => {
++            if (generation !== this.stateManager.streamGeneration) return;
+             this.queueProcessScheduled = false;
+             this.processAudioQueue();
+         };
+@@ -727,10 +755,18 @@ export class AudioScheduler {
+                         playbackTime = this.nextPlaybackTime;
+                         scheduleTime = this.nextScheduleTime;
+                         playbackRate = 1.0;
+-                        const samplesToAdjust = correctionErrorMs > 0 ? -1 : 1;
+-                        chunk.buffer = this.adjustBufferSamples(chunk.buffer, samplesToAdjust);
+-                        this.currentCorrectionMethod = "samples";
+-                        this.lastSamplesAdjusted = samplesToAdjust;
++                        if (this.sampleCorrectionMode === "rate") {
++                            // Settle small drift over two seconds, capped at ±100 ppm.
++                            // Preserve each decoded buffer; Web Audio resamples its playout.
++                            playbackRate = 1 + Math.max(-0.0001, Math.min(0.0001, correctionErrorMs / 2000));
++                            this.currentCorrectionMethod = "rate";
++                            this.lastSamplesAdjusted = 0;
++                        } else {
++                            const samplesToAdjust = correctionErrorMs > 0 ? -1 : 1;
++                            chunk.buffer = this.adjustBufferSamples(chunk.buffer, samplesToAdjust);
++                            this.currentCorrectionMethod = "samples";
++                            this.lastSamplesAdjusted = samplesToAdjust;
++                        }
+                     }
+                     else {
+                         playbackTime = this.nextPlaybackTime;
+@@ -843,7 +879,7 @@ export class AudioScheduler {
              this.audioElement.pause();
          }
      }
@@ -266,13 +434,13 @@ index b06314d3dcf68511af39f63168709d53d7752ed6..debc5543775f0daaee66826b114d4b9f
          this.recorrectionMonitor.fullReset();
          this.cancelScheduledRefill();
          this.scheduledSources.forEach((entry) => {
-@@ -864,8 +879,7 @@ export class AudioScheduler {
+@@ -864,8 +900,7 @@ export class AudioScheduler {
          this.stateManager.resetStreamAnchors();
          this.resetScheduledPlaybackState();
          this.resyncCount = 0;
 -        this.latencyTracker.reset();
 -        this.clockSource.reset();
-+        if (!preserveClock) { this.latencyTracker.reset(); this.clockSource.reset(); }
++        if (!preserveClock) { this.promptQueueProcessing = false; this.latencyTracker.reset(); this.clockSource.reset(); }
      }
      close() {
          this.clearBuffers();
@@ -460,7 +628,7 @@ index 862743776d68a8975f71c12a7d01e3fce8cb45b5..c7adec4fd53ba0a6fd9f9c3ef2a40cf4
       * Set the sync correction mode at runtime.
       */
 diff --git a/dist/index.js b/dist/index.js
-index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf67227630 100644
+index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..c633cc69a19eb0507989e471806684f9964dfd34 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -34,7 +34,7 @@ export class SendspinPlayer {
@@ -472,7 +640,16 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
          this.ownsAudioElement =
              outputMode === "media-element" && !config.audioElement;
          if (this.ownsAudioElement && typeof document === "undefined") {
-@@ -106,7 +106,7 @@ export class SendspinPlayer {
+@@ -84,6 +84,8 @@ export class SendspinPlayer {
+             stateManager: this.core._stateManager,
+             timeFilter: this.core._timeFilter,
+             outputMode,
++            outputLatencyHint: config.outputLatencyHint,
++            sampleCorrectionMode: config.sampleCorrectionMode,
+             audioElement: config.audioElement,
+             isAndroid,
+             isCastRuntime,
+@@ -106,7 +108,7 @@ export class SendspinPlayer {
                  console.warn("Sendspin: Failed to resume AudioContext:", error);
              });
              if (!isFormatUpdate) {
@@ -481,7 +658,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
              }
              this.scheduler.startAudioElement();
          };
-@@ -125,9 +125,11 @@ export class SendspinPlayer {
+@@ -125,9 +127,11 @@ export class SendspinPlayer {
          };
          // Wire connection lifecycle for disconnect playback deferral
          this.core.onConnectionOpen = () => {
@@ -493,7 +670,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
              if (this.suppressDisconnectPlaybackReset) {
                  return;
              }
-@@ -167,6 +169,16 @@ export class SendspinPlayer {
+@@ -167,6 +171,16 @@ export class SendspinPlayer {
       * Initialize and resume audio playback. Call this directly from a click or
       * tap handler, before any other await, to satisfy browser autoplay policies.
       */
@@ -510,7 +687,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
      async unlock() {
          this.scheduler.initAudioContext();
          await this.scheduler.resumeAudioContext();
-@@ -181,6 +193,7 @@ export class SendspinPlayer {
+@@ -181,6 +195,7 @@ export class SendspinPlayer {
       * @param reason - Optional reason for disconnecting (default: 'restart')
       */
      disconnect(reason = "restart") {
@@ -518,7 +695,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
          this.cancelPendingDisconnectPlaybackReset();
          this.suppressDisconnectPlaybackReset = true;
          this.core.disconnect(reason);
-@@ -218,6 +231,7 @@ export class SendspinPlayer {
+@@ -218,6 +233,7 @@ export class SendspinPlayer {
       * to transient fluctuations. Throws RangeError if not a non-negative finite
       * number.
       */
@@ -527,7 +704,7 @@ index 1e4ff4cc5dab7c11d266b8af1344b8dca3a1841c..815b841560221b9e05be50908db687bf
          this.core.setMinBufferMs(minBufferMs);
      }
 diff --git a/dist/types.d.ts b/dist/types.d.ts
-index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead34887dc4 100644
+index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..2d9182e9f21118764c4cf45a932c5bdfc21361c3 100644
 --- a/dist/types.d.ts
 +++ b/dist/types.d.ts
 @@ -98,6 +98,11 @@ export interface ClientTime {
@@ -550,7 +727,7 @@ index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead
              required_lead_time_ms?: number;
              min_buffer_ms?: number;
              supported_commands?: string[];
-@@ -384,6 +390,10 @@ export interface SupportedFormat {
+@@ -384,6 +390,18 @@ export interface SupportedFormat {
      bit_depth: number;
  }
  export interface SendspinPlayerConfig extends SendspinCoreConfig {
@@ -558,6 +735,14 @@ index a8091286bdb0e5a1e8b19d31eab3ce888f18136b..94540189e17a850b449e9e5c492c2ead
 +    onConnectionChange?: (connected: boolean) => void;
 +    /** Explicit direct output for deadline-admitted playback; relaxed defaults unchanged. */
 +    outputMode?: "direct" | "media-element";
++    /**
++     * Preferred AudioContext output latency in seconds; finite and nonnegative.
++     * The browser may choose another latency. Omitted keeps its default.
++     * This request does not replace the measured output latency estimate.
++     */
++    outputLatencyHint?: number;
++    /** Small drift: default sample insertion/deletion, or bounded ±0.1% native rate correction preserving decoded buffers. Larger errors retain the selected correction mode's policy. */
++    sampleCorrectionMode?: "samples" | "rate";
      /**
       * HTMLAudioElement for media-element output mode.
       * Auto-created on mobile browsers if not provided.
