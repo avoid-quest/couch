@@ -3,6 +3,8 @@ import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { createCaptureClock, type CaptureAudioPacket, type CapturePolicy } from "./capture-audio";
 import { oggPackets, opusDuration } from "./audio-packets";
 
+export type Ffmpeg = () => Promise<string | { path: string; release: () => void }>;
+
 type Event = { type: "chunk"; wire: "opus" | "pcm"; at: number; duration: number; data: Buffer } | { type: "reset" } | { type: "error"; error: string };
 // Streaming IEEE-float WAV: normalized 48 kHz stereo, unknown RIFF/data/sample
 // lengths. Non-PCM has WAVEFORMATEX's empty extension and a fact sample count.
@@ -17,7 +19,7 @@ function captureWaveHeader() {
   return header;
 }
 /** One normalized capture and Opus encoder, shared by all of this publication's consumers. */
-export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Promise<string>, failed: (error: string) => void) {
+export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, failed: (error: string) => void) {
   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
   let child: ChildProcessWithoutNullStreams | undefined, starting = false, closed = false, generation = 0;
   let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0, captured = false;
@@ -42,13 +44,17 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
   const start = async () => {
     starting = true;
     const attempt = generation;
+    let executable: { path: string; release: () => void } | undefined;
     try {
-      const executable = await ffmpeg();
+      const selected = await ffmpeg();
+      executable = typeof selected === "string" ? { path: selected, release() {} } : selected;
       if (closed || error || attempt !== generation) return;
       // Raw PCM's demuxer batches 4096 frames (85 ms). WAV's documented max_size
       // bounds input packets to the existing 480-frame/10 ms Opus cadence.
       // https://ffmpeg.org/ffmpeg-formats.html#wav
-      const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
+      const process = child = spawn(executable.path, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
+      process.once("close", executable.release);
+      executable = undefined; // The child owns the lease until its process and pipes close.
       offsetUs = lateUs = 0;
       process.stdout.on("data", oggPackets(packet => {
         if (child !== process) return;
@@ -76,7 +82,7 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
       for (const block of pending) write(block);
       pending = []; queuedFrames = 0;
     } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
-    finally { if (attempt === generation) starting = false; }
+    finally { executable?.release(); if (attempt === generation) starting = false; }
   };
   if (policy.intent === "live") void start();
   return {

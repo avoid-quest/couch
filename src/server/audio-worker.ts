@@ -14,7 +14,11 @@ const request = (type: string, data: Record<string, unknown> = {}) => new Promis
 const registrations = new Map<string, string>();
 const notify = () => port.postMessage({ type: "status", value: engine.status() });
 const engine = createScheduledAudio({ identity: workerData.identity, name: workerData.name, admit: () => true, changed: notify,
-  ffmpeg: async () => { const result = await request("ffmpeg") as { path?: string; error?: string }; if (!result.path) throw new Error(result.error); return result.path; },
+  ffmpeg: async () => {
+    const result = await request("ffmpeg") as { path?: string; leaseId: number; error?: string };
+    if (!result.path) throw new Error(result.error);
+    return { path: result.path, release: () => port.postMessage({ type: "ffmpegRelease", id: result.leaseId }) };
+  },
   logError: (id, source, error) => port.postMessage({ type: "logError", group: id, source, error }),
   saveDelay: (id, delay) => port.postMessage({ type: "delay", clientId: id, delay }),
   sourceFailed: (id, error) => port.postMessage({ type: "sourceFailed", sourceId: id, epoch: registrations.get(id), error }),

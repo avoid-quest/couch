@@ -27,7 +27,11 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const uploads = new Map<string, WebSocket>();
   let clients = new Set<string>(), delays = new Map<string, number>(), receivers = new Map<string, string>();
   let closed = false, failed = false;
-  let helper: ReturnType<typeof useHelper> | undefined;
+  const helpers = new Map<number, ReturnType<typeof useHelper>>();
+  const releaseHelper = (id: number) => {
+    const helper = helpers.get(id); helpers.delete(id);
+    void helper?.then(lease => lease.release(), () => {});
+  };
   let readyResolve: (port: number) => void, readyReject: (error: Error) => void;
   const ready = new Promise<number>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   void ready.catch(() => {});
@@ -40,14 +44,20 @@ export function createSendspin(options: { identity: string; name: string; admit:
     options.changed();
   };
   worker.on("error", fail);
-  worker.on("exit", code => { if (!closed) fail(new Error(`The audio worker stopped (${code}).`)); void helper?.then(lease => lease.release(), () => {}); });
+  worker.on("exit", code => { if (!closed) fail(new Error(`The audio worker stopped (${code}).`)); for (const id of helpers.keys()) releaseHelper(id); });
   worker.on("message", async message => {
+    if (message.type === "ffmpegRelease") { releaseHelper(message.id); return; }
     if (closed) return;
     if (message.type === "ready") readyResolve(message.port);
     else if (message.type === "admit") post({ type: "reply", id: message.id, value: options.admit(message.clientId, message.loopback) });
     else if (message.type === "ffmpeg") {
-      try { const path = options.ffmpeg ? await options.ffmpeg() : (await (helper ??= useHelper("ffmpeg"))).path; post({ type: "reply", id: message.id, value: { path } }); }
-      catch (error) { post({ type: "reply", id: message.id, value: { error: error instanceof Error ? error.message : "FFmpeg unavailable" } }); }
+      try {
+        const helper = options.ffmpeg ? options.ffmpeg().then(path => ({ path, release() {} })) : useHelper("ffmpeg");
+        helpers.set(message.id, helper);
+        const { path } = await helper;
+        if (closed || failed) releaseHelper(message.id);
+        else post({ type: "reply", id: message.id, value: { path, leaseId: message.id } });
+      } catch (error) { releaseHelper(message.id); post({ type: "reply", id: message.id, value: { error: error instanceof Error ? error.message : "FFmpeg unavailable" } }); }
     } else if (message.type === "logError") logPlaybackError(message.group, "Synced", message.source, message.error);
     else if (message.type === "state") groups.get(message.group)?.(message.state);
     else if (message.type === "delay") options.saveDelay?.(message.clientId, message.delay);

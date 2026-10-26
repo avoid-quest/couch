@@ -12,7 +12,7 @@ import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { audioInput } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
-import { createScheduledCapture } from "./scheduled-capture";
+import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import { compressorFilter } from "../shared/compressor";
 
@@ -52,7 +52,7 @@ const wireOf = (session: SendspinSession): Wire | undefined => {
 };
 const tempo = (speed: number) => speed < 0.5 ? `atempo=0.5,atempo=${speed / 0.5}` : speed > 2 ? `atempo=2,atempo=${speed / 2}` : `atempo=${speed}`;
 
-export function createScheduledAudio(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: () => Promise<string>; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
+export function createScheduledAudio(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
   const core = new SendspinCore();
   core.configureServer({ name: options.name });
   const sockets = new Set<WebSocket>();
@@ -243,7 +243,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         }
         input ??= audioInput(inputUrl, Object.fromEntries(headers), signal, !!current.publicNetwork, true, undefined,
           { audioSelection: current.audioSelection, audioTrack: current.audioTrack, audioLanguage: current.preferences?.audioLanguage });
-        ffmpeg = options.ffmpeg ? options.ffmpeg().then(path => ({ path, release() {} })) : useHelper("ffmpeg");
+        ffmpeg = options.ffmpeg ? options.ffmpeg().then(selected => typeof selected === "string" ? { path: selected, release() {} } : selected) : useHelper("ffmpeg");
         const [{ source, hls, audioStream = 0, audioSelection }, executable] = await Promise.all([input, ffmpeg]).catch(error => { input = undefined; throw error; });
         if (current.publicNetwork) proxy = await createPublicMediaProxy(new AbortController().signal, current.source);
         if (attempt !== generation) { await proxy?.close(); return; }
@@ -504,7 +504,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
     status: () => ({ clients: [...sessions.keys()], timings: [...sessions].map(([id, session]) => [id, session.getPlayerTiming().requiredLeadTimeMs]), delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]), admissions: [...admissions], sources: [...sources].map(([id, source]) => [id, source.error()]) }),
     registerSource(id: string, policy: CapturePolicy) {
       if (sources.has(id)) return;
-      sources.set(id, createScheduledCapture(policy, options.ffmpeg ?? (async () => (await useHelper("ffmpeg")).path), error => { options.sourceFailed?.(id, error); options.changed(); }));
+      sources.set(id, createScheduledCapture(policy, options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }));
     },
     writeSource(id: string, packet: CaptureAudioPacket) { return sources.get(id)?.write(packet) ?? false; },
     endSource(id: string) { sources.get(id)?.close(); sources.delete(id); },
