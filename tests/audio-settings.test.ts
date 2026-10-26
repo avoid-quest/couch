@@ -88,6 +88,11 @@ test("every selectable lead is saved and accepted for a new publication", () => 
 });
 
 test("a receiver's measured budget follows the host's chosen lead", async () => {
+  const session = (lead: number, correction = 0) => ({
+    getOutputPreparation: () => undefined,
+    getPlayerBufferCapacity: () => 65536,
+    getPlayerTiming: () => ({ requiredLeadTimeMs: lead, minBufferMs: lead, staticDelayMs: correction }),
+  }) as unknown as SendspinSession;
   while (serverNowUs() < 100_000) await Bun.sleep(10);
   for (const lead of liveAudioLeadOptions) {
     const capture = createScheduledCapture({ intent: "live", liveAudioLeadMs: lead }, () => new Promise(() => {}), () => {});
@@ -96,6 +101,12 @@ test("a receiver's measured budget follows the host's chosen lead", async () => 
     const budget = capture.outputBudgetMs("pcm")!, sentUs = serverNowUs();
     expect(budget).toBeLessThanOrEqual(lead - 5);
     expect(budget).toBeGreaterThanOrEqual(Math.floor((capturedAtUs + lead * 1000 - sentUs) / 1000));
+    // Both supported wires are held to that measured boundary.
+    for (const wire of ["opus", "pcm"]) {
+      expect(liveOutputAdmission(session(budget), wire, undefined, budget)).toEqual({ state: "ready" });
+      expect(liveOutputAdmission(session(budget + .001), wire, undefined, budget)).toMatchObject({ state: "failed", reason: "required-lead" });
+      expect(liveOutputAdmission(session(budget, .001), wire, undefined, budget)).toMatchObject({ state: "failed", reason: "output-correction" });
+    }
     capture.close();
   }
 });
