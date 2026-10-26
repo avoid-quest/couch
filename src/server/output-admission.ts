@@ -7,9 +7,10 @@ export function liveOutputAdmission(session: SendspinSession | undefined, wire: 
   const preparation = session.getOutputPreparation();
   if (receiverId && preparation?.receiverId !== receiverId) return { state: "preparing" };
   const failed = (reason: AudioAdmissionFailure, error: string): OutputAdmission => ({ state: "failed", reason, error });
-  if (wire !== "opus") return failed("format", "This output cannot meet live audio's Opus deadline: stereo 48 kHz Opus is required. Use relaxed sharing.");
+  if (wire !== "opus" && wire !== "pcm") return failed("format", "Live audio needs stereo 48 kHz Opus or PCM16. Use relaxed sharing.");
   const capacity = session.getPlayerBufferCapacity();
-  if (capacity < 4096) return failed("capacity", `This output has ${capacity} bytes of audio buffer; live audio requires 4096. Use relaxed sharing.`);
+  const minimumCapacity = wire === "pcm" ? 65536 : 4096;
+  if (capacity < minimumCapacity) return failed("capacity", `This output has ${capacity} bytes of audio buffer; live audio requires ${minimumCapacity}. Use relaxed sharing.`);
   if (receiverId) {
     if (preparation!.state === "preparing") return { state: "preparing" };
     if (preparation!.state === "failed") return failed("preparation", `Audio output preparation failed: ${preparation!.error} Check this device's audio output or use relaxed sharing.`);
