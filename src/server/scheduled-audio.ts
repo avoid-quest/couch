@@ -135,7 +135,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         diagnostic.pending = { deviceId: member.deviceId, group: id, sourceId: load?.liveSourceId, run: generation, state: admission.state,
           reason: admission.state === "failed" ? admission.reason : undefined, epoch: session?.getOutputPreparation()?.epoch,
           wire, capacity: session?.getPlayerBufferCapacity(), ...session?.getPlayerTiming() };
-        const flush = () => { diagnostic.timer = undefined; if (diagnostic.pending) console.info("[audio-admission]", { ...diagnostic.pending, receiptUs: serverNowUs(), coalesced: diagnostic.coalesced }); diagnostic.pending = undefined; diagnostic.coalesced = 0; diagnostic.at = Date.now(); };
+        const flush = () => { diagnostic.timer = undefined; if (diagnostic.pending) console.info(`${new Date().toISOString()} audio-admission ${JSON.stringify({ ...diagnostic.pending, receiptUs: serverNowUs(), coalesced: diagnostic.coalesced })}`); diagnostic.pending = undefined; diagnostic.coalesced = 0; diagnostic.at = Date.now(); };
         if (Date.now() - diagnostic.at >= 1000) { clearTimeout(diagnostic.timer); flush(); }
         else diagnostic.timer ??= setTimeout(flush, 1000 - (Date.now() - diagnostic.at));
       }

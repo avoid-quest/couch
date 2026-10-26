@@ -12,7 +12,6 @@ import type { OutputAdmission, PlaybackCommand, PlayerState } from "../shared/pr
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
 export type { Member, SyncedLoad } from "./scheduled-audio";
-export { audioRendition, liveHls } from "./source-preparation";
 
 /** Core owns authority/lifetimes. The worker owns clocks, encoding, encryption and fanout. */
 export function createSendspin(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: () => Promise<string>; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void; sourceFailed?: (sourceId: string, error: string) => void }) {
@@ -62,7 +61,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
     else if (message.type === "state") groups.get(message.group)?.(message.state);
     else if (message.type === "delay") options.saveDelay?.(message.clientId, message.delay);
     else if (message.type === "sourceFailed") { const source = sources.get(message.sourceId); if (!source || source.epoch !== message.epoch) return; source.error = message.error; options.sourceFailed?.(message.sourceId, message.error); options.changed(); }
-    else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) { source.queued = Math.max(0, source.queued - message.bytes); source.budgets = message.budgets; } }
+    else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.queued = Math.max(0, source.queued - message.bytes); }
+    else if (message.type === "budgets") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.budgets = message.budgets; }
     else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); wires = new Map(message.value.wires); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
   });
   const bridge = (socket: WebSocket, query: string) => {

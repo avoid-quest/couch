@@ -165,3 +165,39 @@ test("an upload frame rejected by an earlier auth handler never reaches the work
   const closed = once(client, "close"); client.send(Buffer.alloc(44)); await closed; await sleep(50);
   assert.equal(core.sourceError("auth"), undefined, "rejected malformed frame did not fail the source");
 });
+
+test("an uploaded Live source reports its measured headroom for output corrections", { timeout: 8000 }, async t => {
+  const key = Identity.generate();
+  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Upload budget fixture", admit: id => id === key.peerId, changed() {}, ffmpeg: async () => ffmpeg });
+  const server = createServer(), ws = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (request, socket, head) => {
+    if (request.url === "/upload") ws.handleUpgrade(request, socket, head, upload => assert.equal(core.acceptSource(upload, "upload"), true));
+    else core.upgrade(request, socket as import("node:net").Socket, head);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  const receiver = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER], { encryption: { identity: key }, playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 128 * 1024, supported_commands: [] } });
+  const group = core.group("upload", () => {});
+  let timer: ReturnType<typeof setInterval> | undefined, upload: WebSocket | undefined;
+  t.after(async () => { clearInterval(timer); upload?.terminate(); group.close(); core.endSource("upload"); core.close(); await receiver.disconnect(); ws.close(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  let received = 0; receiver.addAudioChunkListener(() => received++);
+  await receiver.connect(`ws://127.0.0.1:${port}/sendspin`, { timeoutMs: 3000 });
+  await receiver.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
+  core.registerSource("upload", { intent: "live" });
+  group.members([{ deviceId: key.peerId, level: 100 }]);
+  group.send({ type: "load", playbackId: "upload", source: "", live: true, liveSourceId: "upload", intent: "live" });
+  upload = new WebSocket(`ws://127.0.0.1:${port}/upload`);
+  await once(upload, "open");
+  upload.send(JSON.stringify({ type: "start", generation: "upload", offsetUs: 0, rttUs: 0 }));
+  // Binary upload v1 (capture-audio.ts): 40-byte header, then f32 stereo frames.
+  let sequence = 0; const origin = serverNowUs();
+  timer = setInterval(() => {
+    const frame = Buffer.alloc(40 + 480 * 8);
+    frame.writeUInt32LE(0x31414343, 0); frame.writeUInt8(2, 4); frame.writeUInt8(1, 5); frame.writeUInt16LE(40, 6); frame.writeUInt32LE(48000, 8);
+    frame.writeUInt32LE(sequence, 12); frame.writeBigUInt64LE(BigInt(sequence * 480), 16); frame.writeBigInt64LE(BigInt(origin + sequence * 10000), 24); frame.writeUInt32LE(480, 32);
+    upload!.send(frame); sequence++;
+  }, 10);
+  await until(() => received >= 10, "receiver did not play the uploaded source");
+  await until(() => { try { core.validateDelay(key.peerId, 10, "live"); return true; } catch { return false; } }, "uploaded source never reported measured headroom");
+  assert.throws(() => core.validateDelay(key.peerId, 1000, "live"), /exceeds the remaining live audio deadline/);
+});

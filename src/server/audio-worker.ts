@@ -13,6 +13,13 @@ let requestId = 0;
 const request = (type: string, data: Record<string, unknown> = {}) => new Promise<unknown>(resolve => { const id = ++requestId; pending.set(id, resolve); port.postMessage({ type, id, ...data }); });
 const registrations = new Map<string, string>();
 const notify = () => port.postMessage({ type: "status", value: engine.status() });
+// Core checks output corrections against each source's measured headroom, whichever path its audio took.
+const budgets = new Map<string, string>();
+const writeSource = (sourceId: string, epoch: string, packet: CaptureAudioPacket) => {
+  const written = engine.writeSource(sourceId, packet), value = engine.sourceBudgets(sourceId), key = JSON.stringify(value);
+  if (budgets.get(sourceId) !== key) { budgets.set(sourceId, key); port.postMessage({ type: "budgets", sourceId, epoch, budgets: value }); }
+  return written;
+};
 const engine = createScheduledAudio({ identity: workerData.identity, name: workerData.name, admit: () => true, changed: notify,
   ffmpeg: async () => {
     const result = await request("ffmpeg") as { path?: string; leaseId: number; error?: string };
@@ -41,7 +48,7 @@ server.on("upgrade", (req, socket, head) => {
       if (!engine.hasSource(sourceId) || epoch !== registrations.get(sourceId) || uploads.has(sourceId)) return ws.close(1008, "Source upload is already owned or unavailable");
       uploads.set(sourceId, ws);
       ws.once("close", () => { if (uploads.get(sourceId) === ws) uploads.delete(sourceId); });
-      acceptCaptureUpload(ws, packet => uploads.get(sourceId) === ws && engine.writeSource(sourceId, packet), error => {
+      acceptCaptureUpload(ws, packet => uploads.get(sourceId) === ws && writeSource(sourceId, epoch!, packet), error => {
         if (uploads.get(sourceId) === ws && epoch === registrations.get(sourceId) && engine.hasSource(sourceId)) port.postMessage({ type: "sourceFailed", sourceId, epoch, error });
       });
       return;
@@ -68,8 +75,8 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
     if (message.method === "send") group.send(message.args![0] as SyncedLoad | PlaybackCommand);
     if (message.method === "close") { group.close(); groups.delete(message.group!); }
   } else if (message.type === "register") { registrations.set(message.sourceId!, message.epoch!); engine.registerSource(message.sourceId!, message.policy!); }
-  else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { engine.writeSource(message.sourceId!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength, budgets: engine.sourceBudgets(message.sourceId!) }); }
-  else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); engine.endSource(message.sourceId!); }
+  else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { writeSource(message.sourceId!, message.epoch!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
+  else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); budgets.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); engine.endSource(message.sourceId!); }
   else if (message.type === "drop") engine.drop(message.clientId!);
   else if (message.type === "setDelay") engine.setDelay(message.clientId!, message.delay!);
   else if (message.type === "close") { for (const group of groups.values()) group.close(); engine.close(); for (const socket of websocket.clients) socket.terminate(); server.close(() => { port.close(); }); }

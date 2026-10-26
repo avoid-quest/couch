@@ -113,12 +113,8 @@ export async function audioInput(url: string, headers: Record<string, string>, s
       audioSelection: audio ? { index: choices.indexOf(audio), label: attribute(audio, "NAME") ?? "Audio", language: attribute(audio, "LANGUAGE") ?? "" } : selected } : {}) };
 }
 
-export async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
-  return (await audioInput(url, headers, signal)).source;
-}
-
 type ClassificationContext = Pick<Media, "headers" | "publicNetwork" | "credentialOrigin" | "audioManifest">;
-export async function liveHls(url: string, signal: AbortSignal, reads?: ManifestReads, context: ClassificationContext = {}) {
+async function liveHls(url: string, signal: AbortSignal, reads?: ManifestReads, context: ClassificationContext = {}) {
   signal.throwIfAborted();
   const read = (source: string) => {
     const headers = new Headers(context.headers);
