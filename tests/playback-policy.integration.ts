@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import fs, { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import childProcess from "node:child_process";
@@ -107,6 +107,8 @@ test("native receiving-host preflight preserves queues while a capture-only host
   let unavailable = false;
   const subscription = Object.assign(new EventEmitter(), { stdout: new PassThrough(), kill() { this.stdout.end(); } });
   const { execFile, spawn } = childProcess;
+  const exists = fs.existsSync;
+  t.mock.method(fs, "existsSync", path => path === "/usr/bin/pactl" || exists(path));
   t.mock.method(childProcess, "execFile", (file, args, options, callback) => {
     if (file !== "/usr/bin/pactl") return execFile(file, args, options, callback);
     queueMicrotask(() => {
