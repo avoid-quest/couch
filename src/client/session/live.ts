@@ -37,6 +37,11 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   let publication: Publication | undefined;
   let receiver: Receiver | undefined;
   const publishers = new Map<string, Peer>();
+  const waiting = new Map<string, LivePeer>();
+  // Closing a peer need not settle its browser work. Retain its slot across
+  // removal and publication restart until the entire offer operation settles.
+  let negotiating = 0;
+  let negotiationTimer: ReturnType<typeof setTimeout> | undefined;
   const closeReceiver = () => {
     const current = receiver;
     receiver = undefined;
@@ -108,10 +113,27 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (active()) failPublisher(target.peerId, peer, reason);
     }
   };
+  const negotiate = () => {
+    negotiationTimer = undefined;
+    let started = 0;
+    for (const [id, target] of waiting) {
+      if (negotiating >= 4) break;
+      waiting.delete(id);
+      negotiating++;
+      started++;
+      void startPublisher(target).finally(() => { negotiating--; });
+    }
+    // Keep the pacing interval even if this batch settles before another
+    // announcement, but stop polling once there is no queued work.
+    if (waiting.size || started) negotiationTimer = setTimeout(negotiate, 100);
+  };
   const closePublication = () => {
     generation++;
     const current = publication;
     publication = undefined;
+    clearTimeout(negotiationTimer);
+    negotiationTimer = undefined;
+    waiting.clear();
     for (const peer of publishers.values()) peer.connection.close();
     publishers.clear();
     if (current) { stopUpload(current); void current.audioFrames?.cancel().catch(() => {}); stopTracks(current.capture); }
@@ -200,7 +222,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       }
       const wanted = new Set(message.peers.map(peer => peer.peerId));
       for (const [id, peer] of publishers) if (!wanted.has(id)) { publishers.delete(id); peer.connection.close(); }
-      for (const target of message.peers) void startPublisher(target);
+      for (const id of waiting.keys()) if (!wanted.has(id)) waiting.delete(id);
+      for (const target of message.peers) if (!publishers.has(target.peerId)) waiting.set(target.peerId, target);
+      if (negotiationTimer === undefined && waiting.size) negotiate();
     },
     play(command: PlaybackCommand): boolean {
       if (closed) return false;
