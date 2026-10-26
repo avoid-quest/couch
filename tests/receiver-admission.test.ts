@@ -6,20 +6,20 @@ function fixture() {
   let now = 0, calls = 0, active = true;
   const reports: { report: Parameters<PreparationPublisher>[0]; timing: Parameters<PreparationPublisher>[1] }[] = [];
   const receiver = {
-    outputReady: false, outputState: "running", timeSyncInfo: { synced: true, error: 0 }, syncInfo: { outputLatencyMs: 10 },
+    outputReady: false, outputState: "running", timeSyncInfo: { synced: true, error: 0 }, syncInfo: { outputLatencyMs: 10, processingTimeMs: 2 },
     async prepareAudio() { calls++; receiver.outputReady = true; }, invalidateAudio() { receiver.outputReady = false; },
   } satisfies PreparedReceiver;
   const guard = createReceiverAdmission(receiver, () => active, (report, timing) => reports.push({ report, timing }), () => now);
   guards.push(guard);
   return { receiver, guard, reports, last: () => reports.at(-1)!, advance: () => { now += 2500; }, deactivate: () => { active = false; }, calls: () => calls };
 }
-test("held preparation stays preparing; ready publishes timing atomically only once", async () => {
+test("held preparation stays preparing; measured 12 ms lead publishes atomically only once", async () => {
   const f = fixture(); let finish!: () => void;
   f.receiver.prepareAudio = () => new Promise(resolve => { finish = () => { f.receiver.outputReady = true; resolve(); }; });
   const attempt = f.guard.tick(); await f.guard.tick();
   expect(f.reports).toEqual([{ report: { state: "preparing", epoch: 0 }, timing: undefined }]);
   finish(); await attempt;
-  expect(f.last()).toEqual({ report: { state: "ready", epoch: 0 }, timing: { requiredLeadTimeMs: 25, minBufferMs: 25 } });
+  expect(f.last()).toEqual({ report: { state: "ready", epoch: 0 }, timing: { requiredLeadTimeMs: 12, minBufferMs: 0 } });
   for (let i = 0; i < 5; i++) { f.advance(); await f.guard.tick(); }
   expect(f.reports.length).toBe(2);
 });
@@ -72,8 +72,38 @@ test("three spaced failures retain bounded sanitized reason; route recovery retr
 });
 test("latency changes are reprobed and never relax the server budget", async () => {
   const f = fixture(); await f.guard.tick(); f.receiver.syncInfo.outputLatencyMs = 60.1;
-  await f.guard.tick(); expect(f.last().timing?.requiredLeadTimeMs).toBe(71);
+  await f.guard.tick(); expect(f.last().timing?.requiredLeadTimeMs).toBe(63);
   expect(f.calls()).toBe(2); expect(f.last().report.epoch).toBe(1);
+});
+
+test("processing observations update ongoing admission without preparing the codec again", async () => {
+  const f = fixture(); await f.guard.tick();
+  f.receiver.syncInfo.processingTimeMs = 9.1;
+  await f.guard.tick();
+  expect(f.last()).toEqual({ report: { state: "ready", epoch: 0 }, timing: { requiredLeadTimeMs: 20, minBufferMs: 0 } });
+  f.receiver.syncInfo.processingTimeMs = .2;
+  await f.guard.tick();
+  expect(f.last().timing?.requiredLeadTimeMs).toBe(11);
+  expect(f.calls()).toBe(1);
+});
+
+test("output without a current processing observation remains preparing", async () => {
+  const f = fixture();
+  (f.receiver.syncInfo as PreparedReceiver["syncInfo"]).processingTimeMs = undefined;
+  await f.guard.tick();
+  expect(f.last().report.state).toBe("preparing"); expect(f.last().timing).toBeUndefined();
+  f.receiver.syncInfo.processingTimeMs = 2;
+  f.advance(); await f.guard.tick();
+  expect(f.last().timing?.requiredLeadTimeMs).toBe(12);
+  (f.receiver.syncInfo as PreparedReceiver["syncInfo"]).processingTimeMs = undefined;
+  await f.guard.tick();
+  expect(f.last().report.state).toBe("preparing"); expect(f.last().timing).toBeUndefined();
+});
+
+for (const [output, processing, expected] of [[10.1, 1.1, 12], [0, 0, 0]] as const) test(`output ${output} ms and processing ${processing} ms declare ${expected} ms without a floor`, async () => {
+  const f = fixture(); f.receiver.syncInfo.outputLatencyMs = output; f.receiver.syncInfo.processingTimeMs = processing;
+  await f.guard.tick();
+  expect(f.last().timing).toEqual({ requiredLeadTimeMs: expected, minBufferMs: 0 });
 });
 
 test("a ready route that loses its latency estimate withdraws readiness", async () => {

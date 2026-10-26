@@ -19,10 +19,51 @@ from application code or a build-time search/replace.
   stream generation is rechecked after async initialization before decoding.
 - Full disconnect still closes the decoder; the patch does not remove relaxed
   codec fallback, the SDK correction loop, or per-output positive advance.
+- `SendspinPlayer.syncInfo.processingTimeMs` exposes the maximum observed local
+  chunk-arrival-to-`AudioBufferSourceNode.start()` cost over the trailing second.
+  Receive time is captured before transport decryption (at the completing frame
+  for a fragmented chunk), retained through native Opus, fallback Opus and PCM
+  decoding, and measured after buffer copying and queue processing. It is
+  `undefined` without a current observation; explicit output invalidation and
+  close discard observations. Stream clears retain still-current measurements.
+- `prepareAudio(format)` also schedules one disconnected, silent local codec
+  probe if processing is unmeasured. Core withholds stream audio until admission,
+  so waiting for a real arrival would deadlock. The probe uses the prepared
+  decoder and the same buffer-copying, queue and source-scheduling path as real
+  audio, starts/stops an unconnected source and changes no playback anchors.
+  Opus uses a valid 10 ms silence packet; PCM uses 10 ms of zero samples, matching
+  Couch's normalized Live cadence. Cancellation retires the probe on a new
+  preparation, output invalidation or disconnect. Real arrivals replace probe
+  observations in the same window. Probes measure local processing, not network,
+  loaded-stream worst cases or hardware latency. Relaxed playback never prepares
+  or probes, and its scheduling policy and platform latency estimates are intact.
 
 References: https://github.com/Sendspin/sendspin-js and
 https://www.w3.org/TR/webaudio-1.1/#dom-audiocontext-getoutputtimestamp .
 API readiness and browser latency estimates are not measured hardware latency.
+
+Couch declares `ceil(outputLatencyMs + processingTimeMs)` as its Live lead, with
+no margin or floor, and updates it as measurements change. `minBufferMs: 0` is an
+explicit request for no extra ongoing jitter buffering by the server: prepared
+direct output has no decode-batching wait. Processing and output costs are in the
+lead already. The pinned 5.0.0 wire lacks per-chunk send times, so this does not
+claim to measure network jitter. The initial 1000 ms declaration is a legacy
+hold, ignored by modern Core's preparing gate and replaced atomically on ready.
+See the upstream [player timing field definitions](https://github.com/Sendspin/spec/blob/main/roles/player/v1.md#client--server-clientstate-player-object).
+
+Regenerate with the pinned Bun, following its [patch workflow](https://bun.com/docs/pm/cli/patch):
+
+```sh
+bun patch @sendspin/sendspin-js@5.0.0
+# Edit the distributed JS and matching declarations in node_modules/@sendspin/sendspin-js.
+bun patch --commit @sendspin/sendspin-js@5.0.0
+bun install --frozen-lockfile
+```
+
+Commit the generated patch and lockfile together. `tests/sendspin-sdk.test.ts`
+covers measured PCM/native Opus scheduling, trailing-window expiry and silent
+Opus/PCM bootstrap without audio devices; `tests/receiver-admission.test.ts`
+locks the 10 ms output + 2 ms processing = 12 ms declaration.
 
 The root manifest pins the SDK's four upstream runtime dependencies (`@noble/ciphers`,
 `@noble/curves`, `@noble/hashes`, `opus-encdec`) as development/build dependencies.

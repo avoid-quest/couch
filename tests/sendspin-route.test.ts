@@ -23,7 +23,7 @@ class FixturePlayer {
   state = new StateManager();
   scheduler = new AudioScheduler({ stateManager: this.state, timeFilter: new SendspinTimeFilter(), outputMode: "direct", useOutputLatencyCompensation: false });
   outputReady = true; outputState = "running";
-  timeSyncInfo = { synced: true, error: 0 }; syncInfo = { outputLatencyMs: 10 };
+  timeSyncInfo = { synced: true, error: 0 }; syncInfo = { outputLatencyMs: 10, processingTimeMs: 2 };
   constructor(readonly options: Record<string, unknown>) { players.push(this); this.scheduler.initAudioContext(); }
   reports: { report: any; timing?: unknown }[] = [];
   async connect() { (this.options.onConnectionChange as (on: boolean) => void)?.(true); }

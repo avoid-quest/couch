@@ -55,6 +55,8 @@ export function listen(on: boolean, watch: boolean, name: string, nextIntent: "r
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = player ??= import("@sendspin/sendspin-js").then(({ SendspinPlayer }) => {
     // AES-GCM: Core runs on Electron's Node, whose BoringSSL has no ChaCha20-Poly1305.
+    // 1000 is a pre-preparation hold for legacy Cores, not a timing estimate.
+    // Modern Core gates on "preparing"; readiness atomically replaces the hold with measurements.
     const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", ...(intent === "live" ? { outputMode: "direct" as const, outputLatencyHint: outputLatencyHint(readOutputBufferPreference()), sampleCorrectionMode: "rate" as const, requiredLeadTimeMs: 1000 } : {}), suite: "aesgcm", storage,
       onConnectionChange: () => { if (connected === created && hearing && intent === "live") readiness?.outputChanged(); },
       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });

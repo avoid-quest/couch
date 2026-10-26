@@ -12,8 +12,9 @@ import { SendspinTimeFilter } from "../node_modules/@sendspin/sendspin-js/dist/c
 function schedulerFixture(outputMode: "direct" | "media-element" = "direct", correctionMode: "quality" | "sync" = "quality", sampleCorrectionMode?: "rate") {
   const originals = new Map(["AudioContext", "navigator", "performance", "setTimeout", "clearTimeout", "queueMicrotask"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   let nowMs = 1000, nextTimer = 0, timestampReads = 0;
+  const platformTimeout = globalThis.setTimeout;
   const timers = new Map<number, { at: number; run: () => void }>(), microtasks: (() => void)[] = [];
-  const starts: { calledAtMs: number; when: number; duration: number; stopped: boolean; rate: number; samples: Float32Array[] }[] = [];
+  const starts: { calledAtMs: number; when: number; duration: number; stopped: boolean; connected: boolean; rate: number; samples: Float32Array[] }[] = [];
   const contextOptions: AudioContextOptions[] = [];
   let baseLatencySec = .002, outputLatencySec = .004;
   const install = (key: string, value: unknown) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -36,9 +37,9 @@ function schedulerFixture(outputMode: "direct" | "media-element" = "direct", cor
       return { duration: frames / rate, length: frames, numberOfChannels: channels, sampleRate: rate, getChannelData: (channel: number) => samples[channel] };
     }
     createBufferSource() {
-      let started: (typeof starts)[number] | undefined;
-      return { buffer: null as AudioBuffer | null, playbackRate: { value: 1 }, onended: null, connect() {},
-        start(when: number) { starts.push(started = { when, duration: this.buffer!.duration, calledAtMs: nowMs, stopped: false, rate: this.playbackRate.value, samples: Array.from({ length: this.buffer!.numberOfChannels }, (_, channel) => this.buffer!.getChannelData(channel).slice()) }); },
+      let started: (typeof starts)[number] | undefined, connected = false;
+      return { buffer: null as AudioBuffer | null, playbackRate: { value: 1 }, onended: null, connect() { connected = true; },
+        start(when: number) { starts.push(started = { when, duration: this.buffer!.duration, calledAtMs: nowMs, stopped: false, connected, rate: this.playbackRate.value, samples: Array.from({ length: this.buffer!.numberOfChannels }, (_, channel) => this.buffer!.getChannelData(channel).slice()) }); },
         stop() { if (started) started.stopped = true; },
       };
     }
@@ -72,6 +73,8 @@ function schedulerFixture(outputMode: "direct" | "media-element" = "direct", cor
   };
   return {
     scheduler, state, starts, settle, advance, contextOptions,
+    yieldToPlatform: () => new Promise(resolve => platformTimeout(resolve, 1)),
+    elapse(milliseconds: number) { nowMs += milliseconds; },
     setOutputLatency(baseSec: number, outputSec: number) { baseLatencySec = baseSec; outputLatencySec = outputSec; },
     get nowMs() { return nowMs; },
     get timestampReads() { return timestampReads; },
@@ -83,6 +86,109 @@ function schedulerFixture(outputMode: "direct" | "media-element" = "direct", cor
     restore() { try { scheduler.close(); } finally { for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); } } },
   };
 }
+
+test("processing time spans binary arrival through scheduling and retains a trailing second's maximum", async () => {
+  const fixture = schedulerFixture();
+  const decoder = new SendspinDecoder(chunk => fixture.scheduler.handleDecodedChunk(chunk), () => fixture.state.streamGeneration);
+  const format = { codec: "pcm" as const, sample_rate: 48_000, channels: 2, bit_depth: 16 };
+  const packet = () => {
+    const bytes = new Uint8Array(9 + 240 * 4); bytes[0] = 4;
+    new DataView(bytes.buffer).setBigInt64(1, BigInt(fixture.nowMs * 1000 + 50_000));
+    return bytes.buffer;
+  };
+  const receive = async (elapsedMs: number) => {
+    const pending = decoder.handleBinaryMessage(packet(), format, fixture.state.streamGeneration);
+    fixture.elapse(elapsedMs); await pending; await fixture.settle();
+  };
+  try {
+    await fixture.prepare();
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBeUndefined();
+    await receive(2);
+    expect(fixture.starts).toHaveLength(1);
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBe(2);
+    await receive(7); await receive(1);
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBe(7);
+    await fixture.advance(1001);
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBeUndefined();
+    await receive(1);
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBe(1);
+    fixture.scheduler.invalidateOutput();
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBeUndefined();
+  } finally { decoder.close(); fixture.restore(); }
+});
+
+for (const codec of ["pcm", "opus"] as const) test(`public ${codec} preparation measures a disconnected codec probe before any stream arrives`, async () => {
+  const fixture = schedulerFixture();
+  const player = new SendspinPlayer({ storage: null, outputMode: "direct" });
+  try {
+    let finished = false;
+    const pending = player.prepareAudio({ codec, sample_rate: 48_000, channels: 2, bit_depth: 16 }).finally(() => { finished = true; });
+    for (let turn = 0; turn < 200 && !finished; turn++) { await fixture.advance(40); await fixture.yieldToPlatform(); }
+    expect(finished).toBe(true); await pending;
+    expect(player.outputReady).toBe(true);
+    expect(player.syncInfo.processingTimeMs).toBeGreaterThanOrEqual(0);
+    expect(fixture.starts).toHaveLength(1);
+    expect(fixture.starts[0]).toMatchObject({ connected: false, stopped: true, duration: .01 });
+    expect(player.isPlaying).toBe(false);
+    player.invalidateAudio();
+    expect(player.syncInfo.processingTimeMs).toBeUndefined();
+  } finally { player.disconnect(); fixture.restore(); }
+});
+
+test("native Opus processing includes asynchronous decoder wait and scheduling queue time", async () => {
+  const fixture = schedulerFixture(), originalDecoder = (globalThis as any).AudioDecoder, originalChunk = (globalThis as any).EncodedAudioChunk;
+  let output!: (data: unknown) => void, timestamp = 0;
+  (globalThis as any).AudioDecoder = class {
+    state = "unconfigured";
+    static async isConfigSupported() { return { supported: true }; }
+    constructor(options: { output: typeof output }) { output = options.output; }
+    configure() { this.state = "configured"; }
+    decode(chunk: { timestamp: number }) { timestamp = chunk.timestamp; }
+    reset() { this.state = "unconfigured"; }
+    close() { this.state = "closed"; }
+  };
+  (globalThis as any).EncodedAudioChunk = class { constructor(options: object) { Object.assign(this, options); } };
+  const decoder = new SendspinDecoder(chunk => fixture.scheduler.handleDecodedChunk(chunk), () => fixture.state.streamGeneration);
+  const format = { codec: "opus" as const, sample_rate: 48_000, channels: 2, bit_depth: 16 };
+  try {
+    await fixture.prepare(); await decoder.prepare(format);
+    const bytes = new Uint8Array(12); bytes[0] = 4; bytes.set([0xf0, 0xff, 0xfe], 9);
+    new DataView(bytes.buffer).setBigInt64(1, BigInt(fixture.nowMs * 1000 + 50_000));
+    const pending = decoder.handleBinaryMessage(bytes.buffer, format, fixture.state.streamGeneration);
+    fixture.elapse(3); await pending; fixture.elapse(4);
+    output({ timestamp, numberOfChannels: 2, numberOfFrames: 480, format: "f32-planar", copyTo() {}, close() {} });
+    fixture.elapse(2); await fixture.settle();
+    expect(fixture.starts).toHaveLength(1);
+    expect(fixture.scheduler.syncInfo.processingTimeMs).toBe(9);
+  } finally { decoder.close(); (globalThis as any).AudioDecoder = originalDecoder; (globalThis as any).EncodedAudioChunk = originalChunk; fixture.restore(); }
+});
+
+for (const action of ["invalidateAudio", "disconnect"] as const) test(`${action} cancels a held native processing probe without scheduling its late completion`, async () => {
+  const fixture = schedulerFixture(), originalDecoder = (globalThis as any).AudioDecoder, originalChunk = (globalThis as any).EncodedAudioChunk;
+  let output!: (data: unknown) => void, decoded = 0;
+  (globalThis as any).AudioDecoder = class {
+    state = "unconfigured";
+    static async isConfigSupported() { return { supported: true }; }
+    constructor(options: { output: typeof output }) { output = options.output; }
+    configure() { this.state = "configured"; }
+    decode() { decoded++; }
+    reset() { this.state = "unconfigured"; }
+    close() { this.state = "closed"; }
+  };
+  (globalThis as any).EncodedAudioChunk = class { constructor(options: object) { Object.assign(this, options); } };
+  const player = new SendspinPlayer({ storage: null, outputMode: "direct" });
+  try {
+    const pending = player.prepareAudio({ codec: "opus", sample_rate: 48_000, channels: 2, bit_depth: 16 }).catch(error => error);
+    await fixture.advance(800);
+    expect(decoded).toBe(1);
+    player[action]();
+    expect(await pending).toBeInstanceOf(Error);
+    output({ timestamp: 0, numberOfChannels: 2, numberOfFrames: 480, format: "f32-planar", copyTo() {}, close() {} });
+    await fixture.settle();
+    expect(fixture.starts).toHaveLength(0);
+    expect(player.syncInfo.processingTimeMs).toBeUndefined();
+  } finally { player.disconnect(); (globalThis as any).AudioDecoder = originalDecoder; (globalThis as any).EncodedAudioChunk = originalChunk; fixture.restore(); }
+});
 
 for (const shiftUs of [-2000, 2000]) {
   test(`rate drift correction preserves stereo PCM and contiguous playout for ${shiftUs} us clock adjustment`, async () => {

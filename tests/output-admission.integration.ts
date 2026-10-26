@@ -142,7 +142,7 @@ setInterval(() => {
     let finish!: () => void, fail!: (error: Error) => void, calls = 0, active = true, epoch = 0;
     const writes: Promise<void>[] = [];
     const receiver = {
-      outputReady: false, outputState: "running", timeSyncInfo: { synced: true, error: 0 }, syncInfo: { outputLatencyMs: 10 },
+      outputReady: false, outputState: "running", timeSyncInfo: { synced: true, error: 0 }, syncInfo: { outputLatencyMs: 10, processingTimeMs: 2 },
       prepareAudio: () => { calls++; return new Promise<void>((resolve, reject) => { finish = () => { receiver.outputReady = true; resolve(); }; fail = reject; }); },
       invalidateAudio() { receiver.outputReady = false; },
     };
