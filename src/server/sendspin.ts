@@ -19,9 +19,9 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const secret = randomUUID();
   const beside = new URL("./audio-worker.mjs", import.meta.url);
   const worker = new Worker(existsSync(beside) ? beside : resolve("build/audio-worker.mjs"), { workerData: { identity: options.identity, name: options.name, secret } });
-  const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { policy: CapturePolicy; epoch: string; queued: number; error?: string }>();
-  const groupMembers = new Map<string, Member[]>(), groupIntents = new Map<string, string>();
-  let timing = new Map<string, number | undefined>();
+  const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { policy: CapturePolicy; epoch: string; queued: number; error?: string; budgets?: Partial<Record<string, number>> }>();
+  const groupMembers = new Map<string, Member[]>(), groupLoads = new Map<string, SyncedLoad>();
+  let timing = new Map<string, number | undefined>(), wires = new Map<string, string | undefined>();
   let admissions = new Map<string, { group: string; receiverId?: string; admission: OutputAdmission }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();
@@ -62,8 +62,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
     else if (message.type === "state") groups.get(message.group)?.(message.state);
     else if (message.type === "delay") options.saveDelay?.(message.clientId, message.delay);
     else if (message.type === "sourceFailed") { const source = sources.get(message.sourceId); if (!source || source.epoch !== message.epoch) return; source.error = message.error; options.sourceFailed?.(message.sourceId, message.error); options.changed(); }
-    else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.queued = Math.max(0, source.queued - message.bytes); }
-    else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
+    else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) { source.queued = Math.max(0, source.queued - message.bytes); source.budgets = message.budgets; } }
+    else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); wires = new Map(message.value.wires); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
   });
   const bridge = (socket: WebSocket, query: string) => {
     connections.add(socket); socket.pause();
@@ -104,10 +104,16 @@ export function createSendspin(options: { identity: string; name: string; admit:
     }).catch(() => socket.destroy());
   };
   const accept = Object.assign((socket: WebSocket, request: IncomingMessage) => bridge(socket, `loopback=${loopbackPeer(request.socket.remoteAddress ?? "")}`), { upgrade });
+  // A correction must fit the headroom each Live source measures on this output's wire.
   const validateDelay = (id: string, delay: number, intent?: string) => {
     if (intent !== "live" || delay === 0) return;
-    const required = timing.get(id);
-    if (required === undefined || required + Math.max(0, delay) > 70) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
+    const required = timing.get(id), wire = wires.get(id);
+    for (const [group, members] of groupMembers) {
+      const load = groupLoads.get(group);
+      if (load?.intent !== "live" || !members.some(member => member.deviceId === id)) continue;
+      const budget = wire && load.liveSourceId ? sources.get(load.liveSourceId)?.budgets?.[wire] : undefined;
+      if (required === undefined || budget === undefined || required + Math.max(0, delay) > budget) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
+    }
   };
   return {
     accept, upgrade, validateDelay,
@@ -117,8 +123,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
       return {
         members(next: Member[]) { groupMembers.set(id, next); call("members", next); },
         screens: (next: string[]) => call("screens", next),
-        send(command: SyncedLoad | PlaybackCommand) { if (command.type === "load") groupIntents.set(id, (command as SyncedLoad).intent ?? "relaxed"); call("send", command); },
-        close() { groups.delete(id); groupMembers.delete(id); groupIntents.delete(id); call("close"); },
+        send(command: SyncedLoad | PlaybackCommand) { if (command.type === "load") groupLoads.set(id, { ...command } as SyncedLoad); call("send", command); },
+        close() { groups.delete(id); groupMembers.delete(id); groupLoads.delete(id); call("close"); },
       };
     },
     registerSource(id: string, policy: CapturePolicy) { if (!sources.has(id)) { const epoch = randomUUID(); sources.set(id, { policy, epoch, queued: 0 }); post({ type: "register", sourceId: id, policy, epoch }); } },
@@ -139,7 +145,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     sourceError: (id: string) => sources.get(id)?.error,
     receiverError: (id: string, _intent?: string) => receivers.get(id),
     receiverAdmission(id: string, receiverId?: string): OutputAdmission | undefined {
-      const member = [...groupMembers].find(([group, members]) => (receiverId !== undefined || groupIntents.get(group) === "live") && members.some(member => member.deviceId === id && member.receiverId === receiverId));
+      const member = [...groupMembers].find(([group, members]) => (receiverId !== undefined || groupLoads.get(group)?.intent === "live") && members.some(member => member.deviceId === id && member.receiverId === receiverId));
       if (!member) return undefined;
       const current = admissions.get(id);
       return current && current.group === member[0] && current.receiverId === receiverId ? current.admission : receiverId ? { state: "preparing" } : undefined;
@@ -147,8 +153,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     connected: (id: string) => clients.has(id),
     delay: (id: string) => delays.get(id) ?? options.savedDelay?.(id) ?? (clients.has(id) ? 0 : undefined),
     setDelay(id: string, delay: number) {
-      const live = [...groupMembers].some(([group, members]) => groupIntents.get(group) === "live" && members.some(member => member.deviceId === id));
-      validateDelay(id, delay, live ? "live" : undefined);
+      validateDelay(id, delay, "live");
       post({ type: "setDelay", clientId: id, delay });
     },
     drop: (id: string) => post({ type: "drop", clientId: id }),

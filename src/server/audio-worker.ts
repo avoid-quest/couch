@@ -68,7 +68,7 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
     if (message.method === "send") group.send(message.args![0] as SyncedLoad | PlaybackCommand);
     if (message.method === "close") { group.close(); groups.delete(message.group!); }
   } else if (message.type === "register") { registrations.set(message.sourceId!, message.epoch!); engine.registerSource(message.sourceId!, message.policy!); }
-  else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { engine.writeSource(message.sourceId!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
+  else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { engine.writeSource(message.sourceId!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength, budgets: engine.sourceBudgets(message.sourceId!) }); }
   else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); engine.endSource(message.sourceId!); }
   else if (message.type === "drop") engine.drop(message.clientId!);
   else if (message.type === "setDelay") engine.setDelay(message.clientId!, message.delay!);

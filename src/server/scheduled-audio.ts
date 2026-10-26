@@ -121,7 +121,9 @@ export function createScheduledAudio(options: { identity: string; name: string; 
     const admit = (member: Member, session: SendspinSession | undefined, wire: Wire | undefined) => {
       if (load?.intent !== "live" && !member.receiverId) { clearAdmission(member.deviceId); return true; }
       if (expected.get(member.deviceId)?.group !== id) return false;
-      const admission = liveOutputAdmission(session, wire, member.receiverId), previous = admissions.get(member.deviceId);
+      const source = load?.liveSourceId ? sources.get(load.liveSourceId) : undefined;
+      const budget = source ? wire && source.outputBudgetMs(wire) : leadUs / 1000;
+      const admission = liveOutputAdmission(session, wire, member.receiverId, budget), previous = admissions.get(member.deviceId);
       if (previous?.group !== id || previous?.receiverId !== member.receiverId || JSON.stringify(previous?.admission) !== JSON.stringify(admission)) {
         admissions.set(member.deviceId, { group: id, receiverId: member.receiverId, admission });
         if (admission.state === "failed") receiverErrors.set(member.deviceId, { group: id, error: admission.error }); else clearReceiverError(member.deviceId);
@@ -220,6 +222,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
           const source = sources.get(current.liveSourceId)!;
           const next: Run = { fixed: true, start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
           run = next;
+          const budgets: Partial<Record<Wire, number>> = {};
           next.dispose = source.subscribe(event => {
             if (run !== next) return;
             if (event.type === "error") { fail(event.error); return; }
@@ -238,6 +241,12 @@ export function createScheduledAudio(options: { identity: string; name: string; 
             // Relaxed's one-second lead can retain >200 small PCM blocks already sent.
             if (next.queues[event.wire].length + (current.intent === "live" ? next.sent[event.wire].length : 0) > 200) fail("Captured audio exceeded its bounded queue.");
             else if (current.intent === "live") tick(next);
+            const budget = source.outputBudgetMs(event.wire);
+            if (run === next && budget !== budgets[event.wire]) {
+              budgets[event.wire] = budget;
+              // A receiver waiting for measured headroom is reconsidered when its wire's changes.
+              for (const member of members) if (![...next.cursors.keys()].some(session => session.getClientId() === member.deviceId)) begin(member.deviceId);
+            }
           });
           report(); return;
         }
@@ -501,7 +510,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
     connected: (clientId: string) => sessions.has(clientId),
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
     drop(clientId: string) { for (const socket of sockets) if (core.getSessionBySocket(socket)?.getClientId() === clientId) socket.terminate(); },
-    status: () => ({ clients: [...sessions.keys()], timings: [...sessions].map(([id, session]) => [id, session.getPlayerTiming().requiredLeadTimeMs]), delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]), admissions: [...admissions], sources: [...sources].map(([id, source]) => [id, source.error()]) }),
+    status: () => ({ clients: [...sessions.keys()], timings: [...sessions].map(([id, session]) => [id, session.getPlayerTiming().requiredLeadTimeMs]), wires: [...sessions].map(([id, session]) => [id, wireOf(session)]), delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]), admissions: [...admissions], sources: [...sources].map(([id, source]) => [id, source.error()]) }),
     registerSource(id: string, policy: CapturePolicy) {
       if (sources.has(id)) return;
       sources.set(id, createScheduledCapture(policy, options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }));
@@ -510,6 +519,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
     endSource(id: string) { sources.get(id)?.close(); sources.delete(id); },
     hasSource: (id: string) => sources.has(id),
     sourceError: (id: string) => sources.get(id)?.error(),
+    sourceBudgets: (id: string) => ({ opus: sources.get(id)?.outputBudgetMs("opus"), pcm: sources.get(id)?.outputBudgetMs("pcm") }),
     receiverError: (id: string, _intent?: string) => receiverErrors.get(id)?.error,
     close() { for (const source of sources.values()) source.close(); sources.clear(); for (const socket of sockets) socket.terminate(); },
   };

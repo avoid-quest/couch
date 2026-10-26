@@ -154,7 +154,6 @@ test("live correction validation follows increased and decreased required lead w
   await client.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}`, { timeoutMs: 3000 });
   await client.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
   const permits40 = () => { try { core.validateDelay(identity.peerId, 40, "live"); return true; } catch { return false; } };
-  await until(permits40, "initial timing not reported");
   core.registerSource("timing", { intent: "live" }); group.members([{ deviceId: identity.peerId, level: 100 }]);
   group.send({ type: "load", playbackId: "timing", source: "", live: true, liveSourceId: "timing", intent: "live" });
   let received = 0, sequence = 0; const origin = serverNowUs();
@@ -163,6 +162,7 @@ test("live correction validation follows increased and decreased required lead w
     core.writeSource("timing", { generation: "timing", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) }); sequence++;
   }, 10);
   await until(() => received >= 10, "receiver was not playing before timing update");
+  await until(permits40, "measured headroom did not permit the initial correction");
   const saved = saves, previous = changes;
   await client.sendPlayerState({ required_lead_time_ms: 60, min_buffer_ms: 25, static_delay_ms: 0 });
   await until(() => !permits40(), "increased lead did not withdraw invalid correction");

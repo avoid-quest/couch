@@ -26,7 +26,19 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, fa
   let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0, captured = false;
   let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
   let livePcm: ReturnType<typeof createLivePcm> | undefined;
-  const emit = (event: Event) => { for (const listener of listeners) listener(event); };
+  // What a receiver actually has: each chunk's deadline minus when Core can send
+  // it, per wire. A trailing second's minimum follows capture, encoder and upload
+  // timing without keeping a startup transient forever.
+  const headroom = { opus: [] as { now: number; us: number }[], pcm: [] as { now: number; us: number }[] };
+  const emit = (event: Event) => {
+    if (event.type === "chunk") {
+      const now = serverNowUs(), us = event.at - now, window = headroom[event.wire];
+      while (window[0] && window[0].now < now - 1_000_000) window.shift();
+      while (window.length && window.at(-1)!.us >= us) window.pop();
+      window.push({ now, us });
+    } else if (event.type === "reset") { headroom.opus = []; headroom.pcm = []; }
+    for (const listener of listeners) listener(event);
+  };
   const fail = (message: string) => {
     if (closed || error) return;
     error = message; child?.kill("SIGKILL"); child = undefined; pending = []; queuedFrames = 0; livePcm?.close();
@@ -88,6 +100,7 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: Ffmpeg, fa
   };
   if (policy.intent === "live") { livePcm = createLivePcm(emit, fail); void start(); }
   return {
+    outputBudgetMs: (wire: "opus" | "pcm") => headroom[wire][0] && Math.floor(headroom[wire][0].us / 1000),
     write(packet: CaptureAudioPacket) {
       if (closed || error) return false;
       try {
