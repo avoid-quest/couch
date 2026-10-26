@@ -94,3 +94,22 @@ Those browser results remain separate from excluded native audience output.
 Neither establishes restored packaged browser performance, physical
 latency/skew/fidelity, Wi-Fi/background behavior or 50 physical receivers.
 Recovery refs, original investigation trees and frozen evidence remain intact.
+
+## Integration pause and calibrated host evidence
+
+The immutable original recovery ref remains unchanged. Additional selected
+integration evidence is preserved outside the implementation stack:
+
+- `recovery/player-modes-pause-20261026` at
+  `7731f562166c5578755e9f720d01051e765f9f0d`: 421 selected files, including earlier
+  known-stimulus recordings, failed repeats, diagnostics, gain staging and checks.
+- `recovery/player-modes-host-ab-20261026`: the four calibrated Mac-host witnesses,
+  exact unchanged evaluators/results, authenticated Core-ingress observations,
+  browser telemetry, final software/package/review receipts and current reports.
+
+Each recovery tree has a README, source/hash manifest and ordered compressed
+archive parts with SHA-256 verification. These are evidence snapshots, not
+qualification or merge candidates. Downloaded installers remain in owned scratch
+and the exact successful hosted Package run; profiles and credentials are excluded
+from recovery archives. See the current [host decision](player-modes-host-capture-comparison.md)
+and [validation](player-modes-integration-validation.md) before reusing results.

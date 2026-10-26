@@ -3,15 +3,67 @@
 **Integration completion and PR submission remain pending.** The reopened
 [Live performance gate](player-modes-live-performance.md) requires the corrected
 roughly 50 ms reference, and the [Mac host capture comparison](player-modes-host-capture-comparison.md)
-is mandatory before native adoption. The parent owns that ongoing result, final
-integrated checks, fixed-base/head spec and standards reviews, and remote-stack
-verification. This document records evidence by tested revision; it makes no
-current PR-ready verdict.
+is complete with no useful repeatable native advantage established. Available
+software/package checks and independent reviews pass; the remaining readiness
+blocker is measured Live performance/fidelity, not an unfinished implementation
+or concealed test failure. This document records evidence by tested revision.
+It makes no current PR-ready verdict.
 
 [The ledger](player-modes-integration-ledger.md) maps P0–P7, M1–M11, all 17 use
 cases and retirements. The current recovered-file inventory is **213 unique
 paths: 103 retain / 67 adapt / 43 exclude**. Browser-compatible Live PCM is
 retained alongside Opus; native audience/output helpers remain excluded.
+
+## Final available checks after resume
+
+Checked source: `394f17ff0589f5cfc92f29439d55a15bc4617b09`, over
+`4a194e35cedb30f5ba3e664b4c9734b087051825`. Later result/handoff changes are
+only documentation. Core `0ff37ef`, Browser `01f8996`, Host `c42383a` and this
+Validation source each independently pass frozen Bun 1.4.2 install, all three
+TypeScript projects and production build on their intended parent.
+
+| Available check | Result | Evidence and limit |
+| --- | --- | --- |
+| Separate Bun unit files | **94 files / 707 tests pass** | `resumed-final-units/results.json`; no module-mock cross-file interference. |
+| Node integrations | **63 bundles / 559 distinct checks covered, zero failures or uncovered skips** | `resume-20261026/final-software-summary.json` maps every log and exact rerun. |
+| AirPlay real prerequisites | **16/16 pass, zero skips** | Newly restored owned Debiantrixie container with real GStreamer and packaged UxPlay; covers all three bare-host skips. No Apple-device sender qualification. |
+| Hidden Live Main/Core lifecycle | **Pass** | Current build, official stereo WAV, 17 named steps/14 destroyed helpers; `resumed-final-native/stereo/events.json`. |
+| Hosted Check | **Success** | [40328818886](https://github.com/avoid-quest/couch/actions/runs/40328818886), exact source394f17f. |
+| Hosted Package | **Linux, Windows and Mac success** | [40328823313](https://github.com/avoid-quest/couch/actions/runs/40328823313); signed arm64/x64 Mac apps/helpers and resource/floor checks. Build/signature checks do not prove Intel Ventura execution. |
+| Independent reviews | **No unresolved actionable findings** | Fixed4a194e3...182d132: spec none; standards one P3 stale-ledger finding, corrected in394f17f. Static review only. |
+| Disposition/source union | **213 unique rows:103 retain/67 adapt/43 exclude** | Scope/retirement map retained; native audience output stays excluded. |
+
+Parent roots are `.scratch/player-modes/` for resumed unit/Node/native receipts,
+and `.scratch/live-performance/resume-20261026/` for layer checks, exact commands,
+software summary, physical analysis, package receipt and review reports. Tests
+used Node 24.21.0, Bun 1.4.2, FFmpeg9.0.2, Go 1.27.2 and the verified platform
+executable yt-dlp2026.10.21. The first broad pass incorrectly pointed
+`COUCH_TEST_YT_DLP` at its package directory; one intermediate retry used an
+absent basename. The corrected canonical `yt-dlp_linux` path passes all 55
+cases, with unchanged source/assertions. Both errors remain in the evidence.
+The old AirPlay image was absent after environment changes; rebuilding the
+owned runtime restored real coverage without installing host packages.
+
+The downloaded current Linux installer also launches real packaged Main/Core,
+serves HTTP 200 and reports clean revision 394f17f through the authenticated Main
+bridge. Of 94 maintained build/dist files, 93 match byte for byte; `dist/sw.js`
+differs only in precache entry ordering, with identical entry/revision multiset
+and identical surrounding code. Current signed Mac main/preload/audio-worker and
+capture HTML are byte-identical to the a30218d base used in the calibrated test.
+Package hashes, exact comparison and startup receipts are retained locally.
+
+Workflow/package/resource code is unchanged from the paths already proven by
+`act` on `catthehacker/ubuntu:full-latest` at bd25f9a; the exact diff is empty.
+Manual Check/Package dispatches produced no PR, merge or release.
+
+The calibrated host comparison is complete, with all four 60 s witnesses valid,
+zero witness overloads and gapless ingress. Its higher55 ms diagnostic policy
+produces Chromium medians57.833/57.455 ms and native56.647/57.268 ms. All fail the
+unchanged50 ms/fidelity gate; native has no useful repeatable advantage established.
+The [host result](player-modes-host-capture-comparison.md) records raw identities,
+clock/observer/signature limits, source/return levels, bad windows and cleanup.
+**These software/package passes do not close Live performance or authorize PR
+submission.** Native remains an explicit candidate without automatic preference.
 
 ## Reopened source and package evidence
 
@@ -34,7 +86,7 @@ are not final-source receipts.
 - `.scratch/live-performance/integrated-focused-summary.json` retains initial
   `ef7a5c2` failures and green focused reruns after obsolete Opus-only settings
   and scheduled-capture expectations were repaired. These focused results do
-  not replace the parent's pending final integrated run.
+  retain their original revision limits; final resumed coverage is reported above.
 - Signed source **`a30218d00e8bdfb6116cf10ed61d357f08781988`** has successful manual
   [Check 40309187171](https://github.com/avoid-quest/couch/actions/runs/40309187171)
   and [Package 40309189960](https://github.com/avoid-quest/couch/actions/runs/40309189960):
@@ -112,12 +164,12 @@ and return levels through Couch before scoring a new run.
 
 ## Parent-owned completion markers
 
-- **G3 — final source:** final integrated checks, affected package proof and fresh
-  independent spec/standards reviews on fixed base/head are pending. Preserve
-  the older receipts, original failures and focused reruns with their revisions.
-- **G4 — native adoption:** pending ordinary Chrome/Chromium maintained-client
-  setup, matched Mac Chromium-versus-native captures, uncertainty analysis and
-  explicit adoption verdict. Use supported public browser APIs, the fixed Linux
+- **G3 — final source:** all available final checks, package proof and fresh
+  independent reviews pass at the revisions above. Preserve original failures
+  and corrected reruns. The roughly 50 ms/fidelity result remains the readiness blocker.
+- **G4 — native adoption:** bounded ordinary-Chrome comparison and confirmation
+  pair are complete. Native has not earned a preferred/default role; physical
+  performance remains unqualified. Use supported public browser APIs, the fixed Linux
   route, gain preflight, one valid matched pair and at most one confirmation
   pair. Keep actual Core ingress age/jitter/gaps separate from the coherent
   physical witness. Uploader send events are not Core receipt; a diagnostic
@@ -125,10 +177,10 @@ and return levels through Couch before scoring a new run.
   A common diagnostic lead does not waive the roughly 50 ms reference. The
   [host comparison](player-modes-host-capture-comparison.md) owns the latest result.
 - **G5 — carryovers/runtime:** all identified source guarantees are integrated,
-  with focused red/green evidence. Final accounting and check/review reconciliation
-  remain parent-owned; there are no known unimplemented Live-input carryovers.
-- **Handoff:** final branch/remote heads, ancestry, cleanup and readiness verdict
-  are pending parent verification. PR submission, merges and releases remain
+  with focused red/green evidence. Final accounting and current checks/reviews are reconciled in the ledger;
+  there are no known unimplemented Live-input carryovers.
+- **Handoff:** final branch/remote heads, ancestry, cleanup and exact remaining
+  readiness blockers are recorded in the PR handoff and final push receipt. PR submission, merges and releases remain
   pending. No physical/backend outcome is inferred from this documentation edit.
 
 ## Historical software checks at bd25f9a
@@ -333,7 +385,8 @@ devices and a bounded physical witness with a known stimulus. Software capture c
 API readiness, synthetic scale, cross-compilation and historical subjective
 listening do not establish these claims. They limit Live support/release
 qualification. The reopened Live and Mac host comparison gates, final checks
-and fresh reviews currently keep integration completion and PR submission pending.
+keeps integration completion and PR submission pending; current software/package
+checks and fresh reviews are separately complete.
 
 
 ## Historical handoff cleanup
@@ -357,5 +410,7 @@ modified files** during that interval: Chromium state/cache plus `couch.sqlite`,
 incident. No prelaunch snapshot exists, so unchanged database contents cannot be
 asserted and no guessed restoration/deletion was performed. The audit is
 `microphone-grant/default-data-audit.json`. That follow-up recorded all its
-owned app/helper processes, listeners, browser tabs and SSH tunnel stopped. Cleanup of later reopened-gate
-work remains a separate parent-owned check.
+owned app/helper processes, listeners, browser tabs and SSH tunnel stopped. The later
+calibrated campaign has a separate current cleanup receipt under
+`resume-20261026/`: test resources/signatures restored, device 48 kHz / 512 frames,
+all owned Mac/Chrome/Pulse/Xvfb/witness processes stopped.

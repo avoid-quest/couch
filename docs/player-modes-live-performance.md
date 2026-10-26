@@ -145,12 +145,62 @@ emitted reset without the prior immediate PCM. Repairs are in their owning layer
   choice preserves r15's 20 ms source reserve and strict 25 ms output budget;
   the later recovered 8 ms reserve is not substituted.
 
-The browser still prefers and prepares Opus. A same-source signed candidate and
-public-SDK diagnostic receiver are being prepared to compare Opus and PCM at
-45 ms, then repeat fresh starts with all pass/fail intervals retained. Ranked
-predictions: reducing lead should remove about 55 ms if scheduling explains the
-fresh delay; codec packetization may affect deadline margin/fidelity at the same
-lead; browser/Pulse output-profile changes may explain failed repeats.
+The browser still prefers and prepares Opus. The earlier same-source Electron
+codec diagnostic is finished, with every interval retained:
+
+| Interval | Electrical result | Diagnostic limit |
+| --- | --- | --- |
+| Product Opus 45 r2 | 54/55 per channel; median 46.758 ms, p95 47.172 ms | 27,990 waveform flags per channel; no qualification |
+| Original SDK Opus/PCM data-URL attempts | Playback failed | Confounded observer failure: 1.75 MB script URL serialized through CDP; retained, not codec evidence |
+| Corrected short-URL Opus 45 r2 | 0/55 in the scoring interval | Output latency/admission rose and strict budget withdrew output |
+| Corrected short-URL PCM45 r1 | 55/55 both; median 47.070 ms, p95 47.541 ms, max 47.564 ms | 32 waveform flags per channel; low-level return limited interpretation |
+| Corrected short-URL Opus 45 r3 | 45/55 left, 44/55 right; accepted medians 46.424/46.439 ms | Broad correlation/gain flags; no qualification |
+
+The URL-only control keeps identical JavaScript and two initial contexts: the
+original yields zero starts and socket1013, while a normal exact-origin script
+URL yields12,472 starts, ready admission and no close. No product SDK logic
+changed. These receivers were packaged Electron 44.4.5 with its256-frame switch,
+not the later ordinary Chrome host comparison.
+
+## Calibrated Mac host comparison
+
+The owner then limited the next physical pass to Chromium versus native HOST
+capture. That pass is complete: one valid matched pair and one confirmation
+pair through the maintained client in ordinary Chrome 156.0.8078.47. Analog gains
+were accepted by the owner and fixed. Known waveform source peaks were near
+−12 dBFS, return peaks near−23 dBFS, no clipping; return active/quiet RMS ratio
+was about50 dB, versus the earlier17.6 dB. This is not formal SNR/THD.
+
+| Host capture | Pair1 median, ms | Confirmation median, ms | Accepted windows L/R |
+| --- | --- | --- | --- |
+| Chromium | 57.833 | 57.455 | 54/55 both; then 55/55 both |
+| Native | 56.647 | 57.268 | 53/55 both; then 54/55 both |
+
+All four used the same Opus 10 ms wire, 48 kHz/stereo,55 ms lead/20msreserve/strict35 ms
+budget, one browser/profile, fixed Linux route and coherent four-channel witness.
+The 45/25 ms preflight refused the ordinary receiver's29 ms requirement. Public
+128-frame preference gives base latency2.6667 ms and mostly16 ms running output
+latency, with brief8 ms samples. No Electron buffer flag or Linux tuning was used.
+The unchanged50 ms/fidelity gate fails in every trial; all retain broad waveform
+flags (median correlation≈0.967), with reverse/cross controls accepting zero.
+Better gain staging did not remove those mismatches or isolate their cause.
+
+Both producers delivered128-frame packets without sequence/sample gaps. Native
+had higher timestamp-relative ingress jitter in both repetitions. Clock mapping
+half-RTTs were100–214.5 µs; in-run drift and capture timestamp bias remain separate
+unmeasured uncertainty. Timing metadata records first60s, with omitted late
+cleanup-tail timestamp rows but complete continuity counters. Native owner HAL
+readback128 and its128-frame callbacks are distinct from the witness's512-frame
+callbacks. File offsets/readback are not latency measurements.
+
+**No useful repeatable native advantage was established; do not prefer it or claim
+native performance qualification.** Chromium remains the reference host path;
+both implementations/evidence stay preserved. The higher common diagnostic lead
+does not waive the roughly 50 ms reference. See the [host comparison](player-modes-host-capture-comparison.md)
+for exact results, instrumentation/signature limits, failed setup and cleanup.
+The comparison stopped at the agreed two pairs. Live readiness remains open:
+this maintained ordinary-browser route has not reproduced the clean archived
+roughly 48.5 ms interval reliably or passed the original fidelity diagnostic.
 
 The old `mac-opus-default-admission.json` records required 141 ms versus allowed
 70, with zero decoded buffers. It has no constructor, raw latency, output-clock,

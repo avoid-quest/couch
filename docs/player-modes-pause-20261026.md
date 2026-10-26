@@ -1,5 +1,10 @@
 # Player modes pause checkpoint
 
+> Historical checkpoint at `61a73b4`. The owner subsequently resumed execution
+> after environment updates. The [host comparison](player-modes-host-capture-comparison.md)
+> and [current validation](player-modes-integration-validation.md) supersede the
+> pending-work state below; the original pause snapshot stays preserved.
+
 The owner paused execution because of issues on the working computer. The later
 request authorizes preservation and pushing, not resuming tests or acquisition.
 PR submission, merges and releases remain pending.

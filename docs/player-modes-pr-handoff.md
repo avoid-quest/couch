@@ -2,40 +2,45 @@
 
 **Integration completion and PR submission remain pending.** The four proposed
 bodies below describe the maintained changes and their revision-scoped evidence.
-The parent owns the reopened [Live gate](player-modes-live-performance.md), the
-required [Mac host capture decision](player-modes-host-capture-comparison.md),
-final integrated checks, fresh fixed-base/head spec and standards reviews, and
-remote-stack verification. These drafts make no completion or PR-ready verdict.
+The [Live gate](player-modes-live-performance.md) remains open after the bounded
+[Mac host comparison](player-modes-host-capture-comparison.md). All available
+software/check/package/review work is complete: **707 unit tests**, **559 distinct
+Node checks** including real AirPlay prerequisites, current hidden-Live native
+lifecycle, and per-layer frozen install/typecheck/build pass. Fresh static spec
+review has no actionable findings; the one P3 standards stale-ledger finding is
+corrected. Exact checked source is `394f17f`; later reconciliation is docs only.
 
-The earlier `bd25f9a` checkpoint passed 688 unit tests and 533 covered Node checks
-and had zero actionable findings on both independent review axes. Later source
-restores Live PCM/low-lead settings and bounded setup behavior; those earlier
-receipts remain useful on their tested revision. Signed `a30218d` has successful
-[Check 40309187171](https://github.com/avoid-quest/couch/actions/runs/40309187171)
-and [Package 40309189960](https://github.com/avoid-quest/couch/actions/runs/40309189960)
-for Linux, Windows and dual-architecture Mac. Final-source checks/reviews remain
-pending; [validation](player-modes-integration-validation.md) records exact limits.
+[Check 40328818886](https://github.com/avoid-quest/couch/actions/runs/40328818886)
+and [Package 40328823313](https://github.com/avoid-quest/couch/actions/runs/40328823313)
+pass on394f17f for Linux, Windows and signed dual-architecture Mac. Earlier
+bd25f9a/a30218d receipts stay revision-scoped in
+[validation](player-modes-integration-validation.md).
 
-| Layer | Branch | Intended base | Local head at reconciliation, before this docs commit |
+| Layer | Branch | Intended base | Validated source head |
 | --- | --- | --- | --- |
-| Core | `player-modes/integration-20261026` | `main` | `7aee1baaa59da349f34e6b2ff5ddb3dd2d6f1d52` |
-| Browser | `player-modes/browser-20261026` | `player-modes/integration-20261026` | `f8dc71c75436c697eecac52e5a358859fb6b13f6` |
-| Host | `player-modes/host-20261026` | `player-modes/browser-20261026` | `3a46696960937f27e64c85b7c70c45365a66b01f` |
-| Validation | `player-modes/validation-20261026` | `player-modes/host-20261026` | `d87a3da0f0ffafde8795d81c0ddfc551a49c65fb` |
+| Core | `player-modes/integration-20261026` | `main` | `0ff37ef84fd4422cc4cd3d6d927af2a249b3d7fc` |
+| Browser | `player-modes/browser-20261026` | `player-modes/integration-20261026` | `01f899627bd4a8385259fcb85bed6eb74ba55be2` |
+| Host | `player-modes/host-20261026` | `player-modes/browser-20261026` | `c42383a4e7bebd7ba29ba60e1964baf1af2aeec4` |
+| Validation | `player-modes/validation-20261026` | `player-modes/host-20261026` | `394f17ff0589f5cfc92f29439d55a15bc4617b09`, plus later docs-only results |
 
-Integration base is `4a194e35cedb30f5ba3e664b4c9734b087051825`. These local SHAs
-are a source snapshot, not final checked or verified remote heads. The parent
-must refresh the branch/commit chain, remote heads and `gh stack view --json`
-after remaining work. The recovery archive and experimental ancestry stay outside
-the implementation diffs.
+Base is `4a194e35cedb30f5ba3e664b4c9734b087051825`. Final tip/remote equality and
+linear ancestry are verified after the last documentation commit and push; exact
+receipts stay in parent scratch. Recovery branches/archive remain outside all
+implementation diffs. All 213 paths have dispositions:103 retain/67 adapt/43 exclude,
+covering P0–P7, M1–M11, all 17usecases and every retirement. Existing WebRTC/TURN,
+buffered captured A/V, mpv and OS routing remain. Native audience/output is excluded.
+All identified older runtime guarantees are integrated and their source/evidence
+dispositions are explicit in the ledger.
 
-All **213** recovered changed paths have dispositions: **103 retain / 67 adapt /
-43 exclude**, covering P0–P7, M1–M11 and all 17 use cases. Native host input,
-browser receivers and shared Live PCM/Opus remain; native audience/output helpers
-are excluded. Existing WebRTC/TURN, buffered captured A/V, mpv and hardware/
-Bluetooth routing are retained. Physical qualification and native adoption remain
-open. Runtime work on two Live-input gaps and final carryover accounting are
-parent-owned; reconcile their final results before using these bodies to submit.
+**Readiness: hold PR submission.** The calibrated ordinary-browser comparison used
+55 mslead/35msbudget and measured Chromium57.833/57.455 ms versus native56.647/57.268 ms,
+with persistent waveform flags. The strict45/25 ms preflight refused the29 ms
+receiver requirement. No roughly 50 ms/fidelity qualification or useful repeatable
+native advantage was established. Chromium stays the reference host path; the
+explicit native option is preserved without automatic preference. No further
+physical campaign was started beyond the agreed two pairs. The exact remaining
+performance check and broader platform limits are in the host result/validation.
+Merges and releases remain owner actions.
 
 ## Core
 
@@ -69,9 +74,9 @@ Hub policy and consent
   admission at PCM's 65,536-byte and Opus's 4,096-byte capacity floors.
 - Per-operation FFmpeg leases release on completion, cancellation and failure.
   Authenticated signaling/pair retry have separate bounds; per-flush level reads
-  preserve permission checks. Final carryover/runtime checks remain pending.
+  preserve permission checks. All identified carryovers and their focused red/green checks are integrated; final whole-stack coverage is559 Node checks/707 units.
 - `docs/player-modes-integration-validation.md` on the top layer records the
-  tested revisions, focused reruns and outstanding final-source reviews.
+  tested revisions, focused reruns, resolved reviews and remaining physical gates.
 
 #### Merge Danger
 
@@ -85,7 +90,7 @@ and Host layers complete the consumers; existing output and video adapters remai
 ### Checks
 
 - Checkpoint and focused receipts are revision-scoped in the top-layer validation
-  document; final integrated checks and independent reviews are pending.
+  document; whole-stack checks and independent reviews pass at the revisions above.
 - The restored transport alone does not qualify roughly 50 ms physical playback.
 
 ### Release
@@ -142,9 +147,9 @@ are separate from ordinary Chrome, Wi-Fi/background and Bluetooth qualification.
 ### Checks
 
 - Browser checkpoint and offer-bound evidence are revision-scoped in
-  `docs/player-modes-integration-validation.md`; final checks/reviews are pending.
-- Ordinary Chromium maintained-client setup and the required Mac host A/B remain
-  parent-owned.
+  `docs/player-modes-integration-validation.md`; current checks/reviews pass at394f17f.
+- Ordinary Chrome maintained-client setup and exactly two Mac host pairs are
+  complete; their physical/fidelity limitations remain explicit.
 
 ### Release
 
@@ -187,7 +192,7 @@ Main permission and publication owner
   strict. Request/readback is separate from measured input-to-ear delay.
 - The owner accepted analog calibration `gain-meter-r1`. Required native versus
   Chromium Mac-host runs through an unchanged ordinary Chromium maintained client,
-  actual Core ingress diagnostics and a separate physical witness remain pending.
+  actual Core ingress diagnostics and a separate physical witness completed one matched pair and one confirmation pair. No useful repeatable native advantage was established; the50 ms/fidelity gate remains open.
 
 #### Merge Danger
 
@@ -197,14 +202,14 @@ Main permission and publication owner
 
 Native input is Mac-only; Linux/Windows retain browser capture. Native rate
 requests can affect other apps using the device. Preserve both host paths while
-the bounded comparison determines whether native capture offers a useful benefit.
+the measured result provides no basis for an automatic native preference.
 
 ### Checks
 
 - Exact package hashes/signatures and earlier runtime receipts are in
   `docs/player-modes-integration-validation.md` on the top layer.
 - Gain preflight, a fixed Linux route and at most two matched pairs are required;
-  the parent owns the adoption verdict and final affected checks.
+  the two pairs are complete; the recorded verdict does not prefer native, and affected software checks pass.
 
 ### Release
 
@@ -229,7 +234,8 @@ pending gates have separate receipts.
 Recovered scope → 213 paths: 103 retain / 67 adapt / 43 exclude
 bd25f9a → 688 unit tests / 533 covered Node checks / independent reviews
 a30218d → successful Check / Linux, Windows and dual-architecture Mac Package
-Current source → final checks, fresh reviews and host comparison pending
+394f17f → 707 units / 559 Node checks / signed all-platform Package / resolved reviews
+Host A/B → complete; no native preference; 50 ms/fidelity gate open
 ```
 
 #### Evidence
@@ -244,7 +250,7 @@ Current source → final checks, fresh reviews and host comparison pending
   defects and low-level gain caveats; URL-only harness repair made no product change.
 - Real-media checkpoint regressions cover captured-video fallback, late viewers
   and ingest restart continuity. Current inventory covers all P0–P7, M1–M11 and
-  17 use cases; final runtime/carryover accounting remains pending.
+  17 use cases; older runtime/carryover accounting and final available checks are complete.
 
 #### Merge Danger
 
