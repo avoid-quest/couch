@@ -73,7 +73,7 @@ export function SharedSources({ hits }: { hits: SearchHit[] }) {
   return <section aria-label="Shared sources" className="grid min-w-0 gap-stack">
     <ShelfHeading title="Shared sources" />
     <ul data-nav-row aria-label="Shared sources" className="flex flex-wrap gap-2">
-      {hits.map((hit, index) => <SourceChip key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={on(`Play ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== "Play")} />)}
+      {hits.map((hit, index) => <SourceChip key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={hit.primary.label === "Join" ? `Join ${hit.title}` : on(`${hit.primary.label} ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== hit.primary.label)} />)}
     </ul>
   </section>;
 }

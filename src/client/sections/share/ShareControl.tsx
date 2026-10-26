@@ -71,7 +71,7 @@ function useStop() {
 
 /** A silent picture of what goes out, from the capture the page already holds; a sound's kind where there is none. */
 function Preview({ sharing, className }: { sharing: LiveSharing; className?: string }) {
-  const kind = shareKindOf(sharing.source.kind === "airplay" ? "screen" : sharing.source.kind, sharing.surface);
+  const kind = shareKindOf(sharing.source.kind === "airplay" ? "screen" : sharing.source.kind, sharing.surface, sharing.source.intent);
   if (!sharing.stream.getVideoTracks().length) return <span className={cn("grid aspect-square place-items-center rounded-full bg-foreground text-background", className)}><kind.icon aria-hidden="true" className="size-1/2" /></span>;
   return <video muted autoPlay playsInline aria-hidden="true" ref={video => { if (video && video.srcObject !== sharing.stream) video.srcObject = sharing.stream; }}
     className={cn("aspect-video rounded-sm bg-muted object-contain", className)} />;
@@ -114,7 +114,7 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
 /**
  * Who watches, how each gets it, the picture's quality or the microphone's mute, then Where it plays; Stop sharing stays
  * on the capsule.
- * Every row names its route here, on the sharer's own panel, read from its connection's selected candidate pair.
+ * Core's scheduled delivery names sync status; WebRTC names its selected candidate route.
  */
 function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveSharing; viewers: Viewer[]; onClose: () => void }) {
   const { state, liveSharing, openWhereItPlays, setError } = useSessionGate();
@@ -129,11 +129,11 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
     const timer = setInterval(read, 2_000);
     return () => { live = false; clearInterval(timer); };
   }, [liveSharing]);
-  const kind = shareKindOf(sharing.source.kind === "airplay" ? "screen" : sharing.source.kind, sharing.surface);
+  const kind = shareKindOf(sharing.source.kind === "airplay" ? "screen" : sharing.source.kind, sharing.surface, sharing.source.intent);
   const what = kind.pictures && sharing.source.audio ? `${kind.label}, with this computer's sound` : kind.label;
   const since = new Date(sharing.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const viewing = state?.playbacks?.find(playback => playback.id === state.playback)?.liveSourceId === sharing.source.id;
-  const behind = viewers.some(viewer => viewer.behind);
+  const behind = viewers.some(viewer => viewer.behind && viewer.delivery !== "scheduled");
   return <div className="grid gap-4">
     <div className="flex items-center gap-3">
       <Preview sharing={sharing} className={sharing.stream.getVideoTracks().length ? "w-36 shrink-0" : "size-12 shrink-0"} />
@@ -159,7 +159,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
       <QualitySelect value={sharing.quality} onValueChange={quality => void liveSharing.setQuality(quality).then(() => refresh(count => count + 1), reason => setError(errorText(reason)))} />
     </div>}
     {sharing.source.kind === "microphone" && <div className="flex items-center justify-between gap-4 border-t pt-3">
-      <label htmlFor="live-mute" className="text-body">Mute microphone</label>
+      <label htmlFor="live-mute" className="text-body">Mute audio input</label>
       <Switch id="live-mute" checked={sharing.muted} onCheckedChange={muted => { liveSharing.setMuted(muted); refresh(count => count + 1); }} />
     </div>}
     {behind && <p className="text-meta text-muted-foreground">{sharing.relay

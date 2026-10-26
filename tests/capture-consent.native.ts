@@ -180,6 +180,9 @@ async function run(w, url) {
   };
   const screen = { kind: 'screen', sourceId: 'screen:-3:0', audio: true };
   const picture = { id: 'screen:-3:0', name: 'Couch test display', kind: 'screen' };
+  const [major = 0, minor = 0] = process.getSystemVersion().split('.').map(Number);
+  const systemAudio = process.platform === 'win32' || process.platform === 'darwin' && (major > 14 || major === 14 && minor >= 2);
+  step('system audio capability', { supported: systemAudio });
   app.emit('second-instance');
   answer = null;
 
@@ -196,7 +199,7 @@ async function run(w, url) {
   answer = async () => ({ response: 0 });
   const refused = await share({ ...screen, name: 'Harmless preview' }, 'display denied');
   assert.equal(refused.prompt?.parent, true, 'the display prompt belongs to the Couch window');
-  assert.equal(refused.prompt.message, "Allow ${remote} to see the screen \u201cCouch test display\u201d and hear this computer's audio?");
+  assert.equal(refused.prompt.message, "Allow ${remote} to see the screen \u201cCouch test display\u201d" + (systemAudio ? " and hear this computer's audio" : "") + "?");
   assert.deepEqual(refused.prompt.buttons, ["Don't Allow", "Allow"]);
   assert.equal(refused.granted, null);
   assert.notEqual(typeof refused.result, 'object', 'a denied display reaches no page');
@@ -208,7 +211,7 @@ async function run(w, url) {
   step('activation when the owner answered', { active });
   assert.equal(slow.gesture, true);
   assert.equal(active, false, "the click's activation had ended");
-  assert.deepEqual(slow.granted, { video: picture, audio: 'loopback' });
+  assert.deepEqual(slow.granted, { video: picture, ...(systemAudio ? { audio: 'loopback' } : {}) });
   assert.deepEqual(slow.result, { display: 'screen:-3:0', audio: 0 }, 'the allowed display opened');
 
   answer = async () => ({ response: 1 });
@@ -216,9 +219,15 @@ async function run(w, url) {
   assert.equal(silent.prompt.message, "Allow ${remote} to see the screen \u201cCouch test display\u201d?");
   assert.deepEqual(silent.granted, { video: picture }, "the page's audio request adds no sound");
   const audio = await share({ kind: 'system-audio', sourceId: 'screen:-3:0' }, 'system audio');
-  assert.equal(audio.prompt.message, "Allow ${remote} to hear this computer's audio?");
-  assert.match(audio.prompt.detail, /also gets the picture of the screen \u201cCouch test display\u201d/);
-  assert.deepEqual(audio.granted, { video: picture, audio: 'loopback' });
+  if (systemAudio) {
+    assert.equal(audio.prompt.message, "Allow ${remote} to hear this computer's audio?");
+    assert.match(audio.prompt.detail, /also gets the picture of the screen \u201cCouch test display\u201d/);
+    assert.deepEqual(audio.granted, { video: picture, audio: 'loopback' });
+  } else {
+    assert.equal(audio.prompt, undefined, 'unsupported system audio must not ask for permission');
+    assert.equal(audio.granted, undefined, 'unsupported system audio must not reach Chromium');
+    assert.notEqual(typeof audio.result, 'object');
+  }
 
   // An answer that arrives after Couch stopped asking grants nothing.
   const staleDisplay = async (name, revoke) => {

@@ -22,9 +22,9 @@ bottom Sheet on phones and the TV:
 
 ```
 Share this device                                  ×
-(✓ Screen) (Window) (Sound only) (Microphone)
+(✓ Screen) (Window) (Sound only) (Audio input) (Live audio)
 [picture] [picture] [picture]          screens or windows
-Input                        [System default ▾]   Microphone only
+Input                        [System default ▾]   Audio input and Live audio
                              Choose audio input
 Play on                (Living room TV) (Kitchen)
 Include this computer's sound               [on]   Screen and Window
@@ -35,8 +35,13 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 - **What to share** is one row of chips, the chosen one checked
   (`shareKinds`). Each kind says how it captures: Screen and Window are a
   `screen` capture of a screen or a window, Sound only is `system-audio`, and
-  Microphone is `microphone`, with today's input choice. Another kind (a
-  specific sound card, say) is one more entry there.
+  Audio input is `microphone`, with the input choice. **Live audio** uses that
+  same picker with live intent and appears only on the Couch computer in the
+  desktop app. It requires an actual stereo input and timestamped capture;
+  unsupported capture fails with a reason. No duplicate mono is advertised as
+  stereo. Ordinary sharing keeps its relaxed controls. Live listeners find the
+  source in Home or Search, **Join**, adjust their own volume, and **Leave**;
+  leaving does not stop sharing or affect another listener.
 - **Screens and windows** in the desktop app are small pictures with their
   names (`desktopCapturer` thumbnails, 320 × 200), for this computer's own
   Couch only: another Couch's page (Client mode) lists their names alone, as it
@@ -74,7 +79,7 @@ Sheet on phones and the TV:
   with this computer's sound") and since when.
 - **Who's watching**, one divided row per device the share plays on, from the
   playbacks that play it: its channels and its route, "Picture and sound,
-  direct" or "Sound, through the relay", read every two seconds from the
+  direct" or "Sound, through the relay" for WebRTC, read every two seconds from the
   publisher's own connection (the selected candidate pair in
   `RTCPeerConnection.getStats()`). Where it plays names only exceptions; this
   panel is the sharer's own, so every row names its route. Behind and "Can't
@@ -82,7 +87,7 @@ Sheet on phones and the TV:
   sound plays shows the [level](../design.md#motion), moving only where Where
   it plays' would (online, unmuted, above zero).
 - **Picture**, changed live through `applyConstraints` on the captured track,
-  without restarting it; **Mute microphone** turns the microphone's track off
+  without restarting it; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections.
 - One line about the relay only when a device is Behind: with no relay, that a
   relay can fix it, linking Devices & network; with one, that it couldn't
@@ -105,6 +110,14 @@ Sheet on phones and the TV:
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
+
+Live audio uses a fixed scheduled deadline after runtime decoder/clock/output
+checks. Runtime admission is not a measured promise of 100 ms input-to-ear or
+synchronization on every output. While those checks run, the listener sees
+**Preparing audio…**. An incompatible output reports its reason on that listener;
+changing the output requires fresh admission. Normal preparation and recovery
+do not require leaving and joining again. See the
+[validation ledger](../audio-video-refactor-validation.md).
 
 ## Not yet
 

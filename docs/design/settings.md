@@ -1,5 +1,11 @@
 # Settings
 
+Playback settings show only actions Core and the current adapter support.
+Live audio has no programme speed, content delay or queue settings. Audio delay
+is available only for Direct separate-audio playback; output synchronization
+correction remains distinct. Share's input choice is **Audio input**, with
+**Live audio** additionally available on the Couch computer.
+
 ## Pages
 
 Two owners (`src/shared/settings-pages.ts`): what changes only the device in

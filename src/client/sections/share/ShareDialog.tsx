@@ -51,11 +51,12 @@ export function ShareDialog({ open, onOpenChange, tv }: { open: boolean; onOpenC
 }
 
 function ShareForm({ onDone }: { onDone: () => void }) {
-  const { state, connected, startLive, endLive, liveAudioInputs, liveSharing, run, command, setError: report } = useSessionGate();
+  const { state, connected, localHost, startLive, endLive, liveAudioInputs, liveSharing, run, command, setError: report } = useSessionGate();
   const navigate = useNavigate();
   const here = deviceId();
+  const kinds = shareKinds.filter(kind => !kind.intent || localHost);
   const browser = { media: !!navigator.mediaDevices?.getUserMedia, display: !!navigator.mediaDevices?.getDisplayMedia };
-  const [kind, setKind] = useState<ShareKind>(() => shareKinds.find(item => !unavailable(item, browser)) ?? shareKinds[0]!);
+  const [kind, setKind] = useState<ShareKind>(() => kinds.find(item => !unavailable(item, browser)) ?? kinds[0]!);
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [sourceId, setSourceId] = useState("");
   const [inputs, setInputs] = useState<MediaDeviceInfo[] | null>(null);
@@ -151,12 +152,12 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   return <div className="grid gap-4">
     <div className="grid gap-2">
       <ToggleGroup type="single" aria-label="What to share" spacing={2} className="w-full flex-wrap" value={kind.id} disabled={pending}
-        onValueChange={value => { const next = shareKinds.find(item => item.id === value); if (next) { setKind(next); setError(null); setSourceId(""); } }}>
-        {shareKinds.map(item => <ToggleGroupItem key={item.id} value={item.id} className={chip} disabled={!!unavailable(item, browser)} title={unavailable(item, browser)}>
+        onValueChange={value => { const next = kinds.find(item => item.id === value); if (next) { setKind(next); setError(null); setSourceId(""); } }}>
+        {kinds.map(item => <ToggleGroupItem key={item.id} value={item.id} className={chip} disabled={!!unavailable(item, browser)} title={unavailable(item, browser)}>
           {item.id === kind.id ? <Check aria-hidden="true" /> : <item.icon aria-hidden="true" />}{item.label}
         </ToggleGroupItem>)}
       </ToggleGroup>
-      {shareKinds.some(item => unavailable(item, browser)) && <p className="text-meta text-muted-foreground">{reason ?? shareKinds.map(item => unavailable(item, browser)).find(Boolean)}</p>}
+      {kinds.some(item => unavailable(item, browser)) && <p className="text-meta text-muted-foreground">{reason ?? kinds.map(item => unavailable(item, browser)).find(Boolean)}</p>}
     </div>
     {access || lists && kind.pictures && <Pictures sources={pictures} listing={listing} value={sourceId} onValueChange={setSourceId} disabled={pending} kind={kind} />}
     {kind.inputs && <Row label="Input" htmlFor="live-audio-input">

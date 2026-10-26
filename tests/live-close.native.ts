@@ -64,9 +64,9 @@ const step = (name, value) => { evidence.steps.push({ name, ...value }); record(
 async function run(w, url) {
   await loadURL.call(w, new URL('/settings/device', url).href);
   const js = (code, gesture = false) => w.webContents.executeJavaScript(code, gesture);
-  // Observes this page's recordings and the commands it sends Core, without changing them.
+  // Observes capture lifetimes and the commands this page sends Core.
   await js(\`(() => {
-    const probe = window.__close = { recorders: [], ends: 0 };
+    const probe = window.__close = { recorders: [], captures: [], workers: [], ends: 0 };
     probe.wait = (test, label, timeout = 10000) => new Promise((resolve, reject) => {
       const deadline = Date.now() + timeout;
       const tick = () => { let value; try { value = test(); } catch {} if (value) resolve(value); else if (Date.now() > deadline) reject(new Error('Timed out: ' + label + ' ' + JSON.stringify({ ...probe.state(), trace: probe.trace, adding: document.body.textContent.includes('Adding'), alert: document.querySelector('[role=alert]')?.textContent }))); else setTimeout(tick, 50); };
@@ -85,21 +85,25 @@ async function run(w, url) {
     };
     probe.state = () => {
       const session = probe.session(), recorder = probe.recorders.at(-1);
-      if (!session) return { mounted: false };
+      if (!session?.state) return { mounted: false, page: document.body.innerText.slice(0, 600) };
       return { visibility: document.visibilityState, connected: session.connected, sources: session.state.liveSources.filter(source => source.deviceId === session.identity?.device?.id).length,
-        local: !!session.localLiveSourceId, recorder: recorder?.state ?? null, tracks: recorder?.stream.getTracks().map(track => track.readyState) ?? [], ends: probe.ends };
+        local: !!session.localLiveSourceId, recorder: recorder?.state ?? null, tracks: probe.captures.flatMap(stream => stream.getTracks().map(track => track.readyState)), activeWorkers: probe.workers.filter(worker => !worker.stopped).length, captureCount: probe.captures.length, ends: probe.ends };
     };
-    probe.ended = () => { const state = probe.state(); return !state.sources && !state.local && state.recorder !== 'recording' && state.tracks.every(track => track === 'ended') && state; };
-    probe.connectedPage = () => probe.session()?.connected && probe.button('Microphone or audio input') && !probe.button('Microphone or audio input').disabled;
-    probe.microphoneChosen = () => probe.button('Microphone or audio input').dataset.state === 'on' && !probe.button('Start sharing')?.disabled;
-    probe.sharing = () => { const state = probe.state(); return state.sources === 1 && state.local && state.recorder === 'recording' && state; };
+    probe.ended = () => { const state = probe.state(); return !state.sources && !state.local && state.recorder !== 'recording' && state.activeWorkers === 0 && state.tracks.length > 0 && state.tracks.every(track => track === 'ended') && state; };
+    probe.connectedPage = () => probe.session()?.connected && document.querySelector('button[aria-label="Share screen or sound"]');
+    probe.sharing = () => { const state = probe.state(); return state.sources === 1 && state.local && state.tracks.some(track => track === 'live') && (state.activeWorkers > 0 || state.recorder === 'recording') && state; };
+    const NativeWorker = Worker;
+    window.Worker = class extends NativeWorker {
+      constructor(url, ...args) { super(url, ...args); if (String(url).includes('capture-audio-worker')) { this.stopped = false; probe.workers.push(this); } }
+      terminate() { this.stopped = true; return super.terminate(); }
+    };
     const Recorder = MediaRecorder;
     window.MediaRecorder = class extends Recorder { constructor(...args) { super(...args); probe.recorders.push(this); } };
     const send = WebSocket.prototype.send;
     probe.trace = [];
     WebSocket.prototype.send = function (data) { if (typeof data === 'string' && data.includes('"endLive"')) probe.ends++; if (typeof data === 'string' && /publishLive|endLive/.test(data)) probe.trace.push(JSON.parse(data).action?.type); return send.call(this, data); };
     const media = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia = constraints => { probe.trace.push('getUserMedia'); return media(constraints).then(stream => (probe.trace.push('captured'), stream), error => { probe.trace.push(error.name); throw error; }); };
+    navigator.mediaDevices.getUserMedia = constraints => { probe.trace.push('getUserMedia'); return media(constraints).then(stream => (probe.trace.push('captured'), probe.captures.push(stream), stream), error => { probe.trace.push(error.name); throw error; }); };
     return true;
   })()\`);
   const state = () => js('__close.state()');
@@ -108,18 +112,14 @@ async function run(w, url) {
   const reopen = () => app.emit('second-instance');
   const share = () => js("__close.session().startLive({ kind: 'microphone' }).then(() => 'started', error => error.message)", true);
 
-  // Share the microphone through the settings page, as its owner would, once connected.
-  // The page may still re-render while it settles, so a click that starts nothing is repeated.
-  for (let attempt = 1; ; attempt++) {
-    await until('connectedPage', 'the page connecting to Couch', 30000);
-    await js("__close.button('Microphone or audio input').click()", true);
-    await until('microphoneChosen', 'choosing the microphone');
-    await js("__close.button('Start sharing').click()", true);
-    await sleep(2000);
-    if ((await js('__close.trace.length')) || attempt === 5) break;
-  }
+  // Exercise the real capture lifecycle with a user gesture. Share's visual
+  // journey is covered separately; this probe needs no screen enumeration.
+  await until('connectedPage', 'the page connecting to Couch', 30000);
+  assert.equal(await share(), 'started');
   // Core's first Publish may wait for its FFmpeg lookup.
-  step('shared', await until('sharing', 'sharing the synthetic microphone', 60000));
+  const shared = step('shared', await until('sharing', 'sharing the synthetic microphone', 60000));
+  assert(shared.captureCount > 0 && shared.tracks.length > 0, 'the probe observed actual capture, not an empty recorder fallback');
+  assert(shared.activeWorkers > 0, 'the supported Electron audio input uploads through its PCM worker');
 
   // Minimizing keeps sharing, as does the window never having focus.
   const visible = w.isVisible();
@@ -130,7 +130,8 @@ async function run(w, url) {
   const minimized = step('minimized', { visible, event, window: w.isMinimized(), ...await state() });
   assert(minimized.window, 'the window minimized');
   assert.equal(minimized.sources, 1, 'Minimize keeps the source');
-  assert.equal(minimized.recorder, 'recording', 'Minimize keeps capturing');
+  assert(minimized.tracks.some(track => track === 'live'), 'Minimize keeps the actual input track');
+  assert(minimized.activeWorkers > 0 || minimized.recorder === 'recording', 'Minimize keeps its actual upload engine');
   w.restore();
 
   // Close hides the window, ends its capture and source, and keeps Couch hosting.
