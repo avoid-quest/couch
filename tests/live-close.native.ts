@@ -1,6 +1,7 @@
 // Run after bun run build: bun tests/live-close.native.ts [evidence directory].
 // Real Main, preload, renderer and Core in an isolated Electron app, sharing
 // Chromium's synthetic microphone: closing the window ends sharing, and nothing else.
+// Hidden desktop Live capture is covered by tests/live-host.native.ts.
 import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
