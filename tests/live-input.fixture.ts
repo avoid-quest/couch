@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import WebSocket from "ws";
-import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
+import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { deviceId } from "../src/client/session/device-id";
@@ -104,7 +104,30 @@ setInterval(() => {}, 1000);
     return { terminate: () => { for (const upload of mine) upload.terminate(); } };
   };
   answerUploads(publisher);
-  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl, uploads, answerUploads,
+  // A timestamped PCM producer like the desktop's: clock start, then real-time
+  // 10 ms stereo frames in binary upload v1, so Core measures real headroom.
+  const streamCapture = async (client: { messages: ServerMessage[] }, sourceId: string, device = 0) => {
+    await until(() => client.messages.some(message => message.type === "livePeers" && message.sourceId === sourceId && message.upload));
+    const demand = client.messages.findLast(message => message.type === "livePeers" && message.sourceId === sourceId);
+    const url = new URL(uploadUrl(sourceId, uploadToken, device));
+    if (demand?.type === "livePeers" && demand.uploadId) url.searchParams.set("uploadId", demand.uploadId);
+    const upload = new WebSocket(url, { headers: { Origin: hub.origin } });
+    sockets.push(upload); upload.on("error", () => {});
+    await new Promise(resolve => upload.once("open", resolve));
+    upload.send(JSON.stringify({ type: "start", generation: "fixture", offsetUs: 0, rttUs: 0 }));
+    let sequence = 0; const origin = serverNowUs();
+    const timer = setInterval(() => {
+      for (; origin + (sequence + 1) * 10_000 <= serverNowUs(); sequence++) {
+        const frame = Buffer.alloc(40 + 480 * 8);
+        frame.writeUInt32LE(0x31414343, 0); frame.writeUInt8(2, 4); frame.writeUInt8(1, 5); frame.writeUInt16LE(40, 6); frame.writeUInt32LE(48000, 8);
+        frame.writeUInt32LE(sequence, 12); frame.writeBigUInt64LE(BigInt(sequence * 480), 16); frame.writeBigInt64LE(BigInt(origin + sequence * 10_000), 24); frame.writeUInt32LE(480, 32);
+        upload.send(frame);
+      }
+    }, 5);
+    timer.unref();
+    return { stop: () => { clearInterval(timer); upload.close(); } };
+  };
+  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl, uploads, answerUploads, streamCapture,
     // Core restarts on the same database; every socket and speaker reconnects itself.
     restart: async () => {
       await Promise.all(speakers.splice(0).map(speaker => speaker.disconnect()));

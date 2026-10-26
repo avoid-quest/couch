@@ -11,9 +11,11 @@ test("live output correction rejects before changing device levels and zero clea
   const f = await liveFixture();
   try {
     const host = await f.connect(-1);
-    const corrections = await f.speaker(1, AudioCodec.OPUS, { required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 100 });
+    // PCM is measured without an encoder; the fixture's FFmpeg produces no Opus.
+    const corrections = await f.speaker(1, AudioCodec.PCM, { required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 100 });
     assert.equal((await host.command(publication)).ok, true);
     assert.equal((await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id, picture: false, sound: true })).ok, true);
+    const capture = await f.streamCapture(host, "concert", -1);
     await until(() => f.receiver.state.outputs?.[0]?.delay === 100);
     const volume = f.receiver.state.devices!.find(device => device.id === f.receiver.id)!.volume;
     const denied = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 100, level: volume === 20 ? 30 : 20 });
@@ -26,10 +28,13 @@ test("live output correction rejects before changing device levels and zero clea
     assert.equal(reset.ok, true, reset.error);
     await until(() => f.receiver.state.outputs?.[0]?.delay === 0 && !f.receiver.state.outputs[0].error);
     assert.deepEqual(corrections, [0], "zero can recover a receiver outside the current deadline");
-    const accepted = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 10 });
+    // A supported correction is accepted once Core has measured the uploaded source's headroom.
+    let accepted = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 10 });
+    for (const deadline = Date.now() + 3000; !accepted.ok && Date.now() < deadline; accepted = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 10 })) await new Promise(resolve => setTimeout(resolve, 50));
     assert.equal(accepted.ok, true, accepted.error);
     await until(() => f.receiver.state.outputs?.[0]?.delay === 10);
     assert.deepEqual(corrections, [0, 10], "supported correction remains usable");
+    capture.stop();
   } finally { await f.close(); }
 });
 

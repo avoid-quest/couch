@@ -82,14 +82,15 @@ for (const replacementIntent of ['live', 'relaxed'] as const) test(`old group re
   f.facade.registerSource('review-source', { intent: 'relaxed' });
   f.group.members([member]);
   f.group.send({ type: 'load', playbackId: 'review-group', source: '', liveSourceId: 'review-source', intent: 'live', live: true });
-  await receiver.client.sendPlayerState({ required_lead_time_ms: 80, min_buffer_ms: 25, couch_preparation: { receiverId: token, epoch: 2, state: 'ready' } });
+  // Measured headroom never reaches the whole one-second relaxed lead.
+  f.feed();
+  await receiver.client.sendPlayerState({ required_lead_time_ms: 2000, min_buffer_ms: 25, couch_preparation: { receiverId: token, epoch: 2, state: 'ready' } });
   await until(() => !!f.facade.receiverError(f.key.peerId), 'old group has a real refusal');
   const replacement = f.facade.group('replacement', () => {}); t.after(() => replacement.close());
   replacement.members([{ deviceId: f.key.peerId, level: 100, ...(replacementIntent === 'live' ? { receiverId: token } : {}) }]);
   replacement.send({ type: 'load', playbackId: 'replacement', source: '', liveSourceId: 'review-source', intent: replacementIntent, live: true });
-  if (replacementIntent === 'relaxed') f.feed();
-  else await receiver.client.sendPlayerState({ required_lead_time_ms: 81, min_buffer_ms: 25, couch_preparation: { receiverId: token, epoch: 3, state: 'ready' } });
-  await until(() => replacementIntent === 'live' ? /81 ms/.test(f.facade.receiverError(f.key.peerId) ?? '') : f.facade.receiverError(f.key.peerId) === "This output cannot meet live audio's Opus deadline. Use relaxed sharing.", 'replacement owns a distinct failure');
+  if (replacementIntent === 'live') await receiver.client.sendPlayerState({ required_lead_time_ms: 2001, min_buffer_ms: 25, couch_preparation: { receiverId: token, epoch: 3, state: 'ready' } });
+  await until(() => replacementIntent === 'live' ? /2001 ms/.test(f.facade.receiverError(f.key.peerId) ?? '') : f.facade.receiverError(f.key.peerId) === "This output cannot meet live audio's Opus deadline. Use relaxed sharing.", 'replacement owns a distinct failure');
   const failure = f.facade.receiverError(f.key.peerId);
   const observerIdentity = Identity.generate(), observer = await f.receiver(undefined, true, observerIdentity);
   f.group.close();
