@@ -14,8 +14,8 @@ const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean, message: string, ms = 5000) => { const deadline = Date.now() + ms; while (!check()) { if (Date.now() > deadline) throw new Error(message); await sleep(10); } };
 
-test("live worker sends stereo Opus with fixed deadlines, rejects incompatible joins and survives bounded Hub stalls", { timeout: 15_000 }, async t => {
-  const keys = Array.from({ length: 52 }, () => Identity.generate());
+test("live worker sends Opus and PCM with fixed deadlines, rejects incompatible joins and survives bounded Hub stalls", { timeout: 15_000 }, async t => {
+  const keys = Array.from({ length: 53 }, () => Identity.generate());
   const errors: string[] = [], states: PlayerState[] = [];
   const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture fixture", admit: id => keys.some(key => key.peerId === id), changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
   const group = core.group("concert", state => states.push(state));
@@ -48,10 +48,14 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
   }, 5);
   await until(() => first.length > 30, `no live Opus: ${errors.join(", ")}`);
   assert.equal(opusDuration(first[0]!.data), 10_000);
-  const second = await receive(1, AudioCodec.OPUS), incompatible = await receive(2, AudioCodec.PCM);
-  group.members(keys.slice(0, 3).map(key => ({ deviceId: key.peerId, level: 100 })));
-  await until(() => second.length > 20 && !!core.receiverError(keys[2]!.peerId), "join not admitted/refused independently");
+  const second = await receive(1, AudioCodec.OPUS), pcm = await receive(2, AudioCodec.PCM), incompatible = await receive(52, AudioCodec.FLAC);
+  group.members([0, 1, 2, 52].map(index => ({ deviceId: keys[index]!.peerId, level: 100 })));
+  await until(() => second.length > 20 && pcm.length > 40 && !!core.receiverError(keys[52]!.peerId), "joins not admitted/refused independently");
   assert.equal(incompatible.length, 0); assert.equal(errors.length, 0);
+  for (const frame of pcm) {
+    assert.ok(frame.data.length > 0 && frame.data.length <= 240 * 4);
+    assert.equal(frame.data.length % 4, 0, "PCM packets contain whole stereo S16 frames");
+  }
   const original = new Map(first.map(frame => [frame.at, frame.data]));
   for (const frame of second) if (original.has(frame.at)) assert.deepEqual(original.get(frame.at), frame.data);
   const before = first.length;
@@ -69,7 +73,7 @@ test("live worker sends stereo Opus with fixed deadlines, rejects incompatible j
   assert.equal(tiny.length, 0, "an undersized receiver cannot hold up healthy fanout");
   assert.equal(audience.length, 50); assert.equal(errors.length, 0);
   for (const frames of audience) for (const frame of frames) assert.equal((frame.at - anchor) % 10_000, 0);
-  t.diagnostic("50 encrypted software clients received shared Opus timestamps; one PCM and one one-byte-capacity client refused independently. Not 50 browser decoders or physical receivers.");
+  t.diagnostic("50 encrypted software clients received shared Opus timestamps and one received PCM; FLAC and one-byte-capacity clients refused independently. Not physical receivers.");
   t.diagnostic(`100 ms Hub stall: ${first.filter(frame => frame.received > frame.at).length} late network deliveries; no audience retiming. Software packets, no physical timing claim.`);
 });
 
