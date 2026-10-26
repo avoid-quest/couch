@@ -115,7 +115,7 @@ Main permission and publication owner
 - **Before:** native capture depended on recovered lab wiring, and its builder rejected the second Mac architecture.
   **After:** maintained packaging builds static PortAudio and capture for arm64/x64, preserving Intel Ventura, QuickJS and the combined Mac update feed.
 - Capture authority/upload/settings tests, both Mac helper architecture/deployment/signature checks, and the source-specific worker budget regression pass.
-- Live Start requires an explicit input. Final hosted Linux, Windows and signed arm64/x64 Mac Package jobs pass. Packaged hidden stereo input→Core→Opus→Chrome passes at 250 ms lead; native Mac input is blocked by its existing microphone grant.
+- Live Start requires an explicit input. Final hosted Linux, Windows and signed arm64/x64 Mac Package jobs pass. After the owner granted Microphone, the matched signed Mac package's UMC404HD native capture→Core→Opus→Chrome passes at 250 ms lead, including Leave/rejoin and Stop/Quit cleanup. Near-noise-floor input does not qualify physical latency or fidelity.
 - Full packaging and runtime receipts, including exact unavailable qualification: `docs/player-modes-integration-validation.md` on the top layer.
 
 ### Merge Danger
@@ -147,6 +147,7 @@ Reviewable stack → intended bases, titles and validation limits
 - **Before:** the recovery contained native audience experiments, stale exclusions and unfinished software verification.
   **After:** the maintained stack retains native host capture/browser receivers, excludes native audience/Live PCM paths, and records a replacement or retained adapter for every retirement.
 - Final validation: 92 separate unit files / 688 tests; 59 Node bundles cover 533 checks after the real AirPlay rerun; zero actionable final spec/standards findings; manual Check and all Package jobs pass.
+- Follow-up after Microphone grant: actual signed Mac native stereo capture reaches Linux Chrome as Opus, with ready admission, audience restrictions and Leave/rejoin. The validation receipt records the default-profile relaunch exception and metadata audit.
 - Exact final check/review/package receipts: `docs/player-modes-integration-validation.md`.
 - Complete stack and proposed descriptions: `docs/player-modes-pr-handoff.md`.
 

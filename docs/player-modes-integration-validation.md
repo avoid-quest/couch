@@ -156,13 +156,35 @@ these scratch receipts add fresh integration evidence.
 ## Exact qualification limits
 
 The available Apple Silicon Mac is macOS **14.8.7**, with UMC404HD input visible
-at **48 kHz / 512 HAL frames**. The signed app's native input attempt reports
-**“Turn on Couch in Microphone.”** Preflight and actionable retry are recorded;
-capture never opens, and settings are restored. Native PortAudio capture through
-the packaged app therefore cannot be qualified without that OS microphone grant.
-The smallest remaining check is granting this same signed app access, selecting
-the existing interface and verifying actual stereo capture, rate/buffer readback,
-upload/Stop/Close/Quit and browser Opus on the matched package.
+at **48 kHz / 512 HAL frames**. The first signed-app attempts reported
+**“Turn on Couch in Microphone.”** After the owner granted access on 26 October,
+restarting the same signed app made its permission check pass. Native capture
+then opened at **48 kHz / 2 channels**, with **512 requested / 512 reported HAL
+frames**, through the maintained Main/preload publication path.
+
+The matched `bd25f9a` signed package delivered this actual native input through
+Core's **Opus** stream to independent Linux Chrome over the owned SSH tunnel at
+**250 ms lead**. The browser witness recorded **14,436 scheduled buffers /
+6,929,280 frames**, 2 channels / 48 kHz, ready admission, playing state and no
+reported player error. Core refused audience Pause and accepted the listener's
+own volume change. Leave retained the publication; rejoin produced **703 more
+buffers**. The input was uncontrolled and near its noise floor (channel peaks
+about **0.000032 / 0.000031**); this establishes capture and delivery, not stereo
+identity, audibility, fidelity or physical latency.
+
+Stop ended the native helper with exit **0**, `captureError: 0`, **28,820 callbacks /
+14,755,840 frames**, 512-frame callbacks and zero observed callback flags. Four
+ADC timestamp-deviation events reached **14.726 frames**; these counters are not
+a calibrated physical drift/dropout measurement. Owner-page closure also stopped
+capture and terminated Main; this CDP action does not establish the normal Mac
+title-bar Close/background behavior. Explicit Quit during a fresh prepared native
+capture stopped its helper, Main and Core. Final discovery still reported
+**48 kHz / 512 HAL frames**. Scratch lead and network sharing returned to their
+observed **100 ms / off** values; scratch input preferences returned to defaults.
+Receipts are under `.scratch/player-modes/microphone-grant/`: `start.json`,
+`browser.json`, `stop.json`, `capture-session.log`, `explicit-quit.json` and
+`final-cleanup.log`. Ordinary Close/background behavior retains the separate
+five-check desktop lifecycle evidence above.
 
 Final signed Mac Main/Core at **`bd25f9a`** also delivers generated stereo PCM
 as decoded stereo Opus to Linux Chrome through an owned SSH tunnel at **250 ms
@@ -174,8 +196,8 @@ on both machines; local Mac strict signatures and device discovery pass. Final L
 survival witnessed at Leave; the generated source then ends at its 90-second
 bound. `mac-r2-rejoin.json` and `mac-r2-source-cleanup.json` record that result,
 **8,999 uploaded packets / zero source errors**, restored settings and shutdown.
-Earlier `f07fe9f` receipts also cover Leave/rejoin. Generated ingress does not substitute
-for the denied native input. The default **100 ms lead / 70 ms
+Earlier `f07fe9f` receipts also cover Leave/rejoin. This generated-ingress receipt
+is separate from the later successful native-input check. The default **100 ms lead / 70 ms
 receiver budget** refuses the measured Linux software route requiring **141 ms**
 (`mac-opus-default-admission.json`). Defaults remain conservative source policy,
 not a promise that every output can meet them; the available larger lead works.
@@ -184,7 +206,7 @@ Unqualified: ≤100 ms physical input-to-ear, numerical physical skew/dropout/
 fidelity profile, 50 physical receivers, real Wi-Fi phone/background/locked states,
 Bluetooth routes, a real Apple AirPlay sender, native 44.1 kHz hardware capture
 and Intel Ventura installation/playback/capture/update. Those need the named
-device/permission and a bounded physical witness. Software capture coherence,
+devices and a bounded physical witness with a known stimulus. Software capture coherence,
 API readiness, synthetic scale, cross-compilation and historical subjective
 listening do not establish these claims. They limit Live support/release
 qualification; they do not block opening the reviewable integration PRs.
@@ -197,5 +219,18 @@ software probes are restored. Packaged hidden capture's source/helper disappears
 before app shutdown. Native lifecycle receipts assert capture stops before Core
 and all recorded PIDs/listeners disappear. Final parent cleanup audits exact owned
 scratch process environments, stops the owned Mac Main and SSH tunnel, and closes
-owned incognito preview tabs. The installed Couch, its data, personal browser
-profiles, original investigation worktrees and recovery archive are preserved.
+owned incognito preview tabs. Original investigation worktrees, recovery archive,
+installed app bundle and personal browser profiles are preserved.
+
+The microphone-grant follow-up has one isolation exception. After CDP `Page.close`
+terminated the owned app, a plain LaunchServices reopen omitted `COUCH_DATA_DIR`
+and `COUCH_PORT`, briefly starting the signed scratch bundle against the default
+Couch profile. The verified owned PID **44722** was stopped, and subsequent tests
+used the recorded scratch environment. A read-only metadata audit found **85
+modified files** during that interval: Chromium state/cache plus `couch.sqlite`,
+`renderer-status.json`, `window-state.json`, `logs/couch.log`, `tls/cert.pem` and
+`helpers/status.json`. The TLS private key and operating-mode file predate the
+incident. No prelaunch snapshot exists, so unchanged database contents cannot be
+asserted and no guessed restoration/deletion was performed. The audit is
+`microphone-grant/default-data-audit.json`. All owned app/helper processes,
+listeners, browser tabs and SSH tunnel are stopped after the follow-up.
