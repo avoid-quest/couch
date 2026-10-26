@@ -54,9 +54,29 @@ Older-work carryovers are separately traceable: Browser `421ad77` (parent
 slots until promises settle after cancellation. Core `daeea11` (parent
 `3e41052`) carries separately bounded authenticated signaling/pair retry and
 permission-safe per-flush level reuse. After the parent's stack movement their
-owning heads are Browser `f8dc71c` and Core `7aee1ba`. The runtime child has two
-Live-input gaps underway; their final implementation, checks and audit disposition
-remain parent-owned. None of these carryovers inherits the `bd25f9a` review verdict.
+owning heads are Browser `f8dc71c` and Core `7aee1ba`. Core `1420ebe` (integrated at `7aee1ba`) also fixes both Live-input gaps:
+unchanged-volume suppression and coalesced publisher peer lists. Their 33 focused
+checks pass; the final 56-case Live-output suite passes after `0ff37ef` waits for
+the other receiver's asynchronous state before its unchanged exact-membership
+assertion. Older-work dispositions are recorded in the child runtime audit. None of these carryovers inherits the `bd25f9a` review verdict.
+
+## Resumed software checkpoint
+
+Owner resumed execution after environment updates. Fixed comparison
+`4a194e35cedb30f5ba3e664b4c9734b087051825...182d1329012b49db1e3d75e6da9d27ede4588e0b`
+has a fresh static spec review with no actionable findings and a fresh standards
+review with one P3 documentation finding: the ledger and this receipt called
+landed carryovers absent or underway. These entries now describe the integrated
+source and keep pending verification separate. No additional actionable standards
+or code-smell finding was established. Reports are retained under parent
+`.scratch/live-performance/resume-20261026/review-{spec,standards}-r3.md`.
+
+The retained Live-output regression reproduced in 0.6 s on the resumed checkout.
+It read another socket's prior output state immediately after the joining
+receiver's load. Core `0ff37ef` adds a bounded wait for that other receiver's
+two-output state while preserving the exact membership assertion. No production
+behavior changed. The complete 56-case suite passes, zero skips; red and green
+receipts remain in `.scratch/player-modes/resume-peer-list/`.
 
 ## Physical and diagnostic evidence
 
@@ -104,8 +124,9 @@ and return levels through Couch before scoring a new run.
   overlay needs its exact diff, hashes and signature limits beside both arms.
   A common diagnostic lead does not waive the roughly 50 ms reference. The
   [host comparison](player-modes-host-capture-comparison.md) owns the latest result.
-- **G5 — carryovers/runtime:** final older-work accounting and the two ongoing
-  Live-input gaps require parent reconciliation and checks.
+- **G5 — carryovers/runtime:** all identified source guarantees are integrated,
+  with focused red/green evidence. Final accounting and check/review reconciliation
+  remain parent-owned; there are no known unimplemented Live-input carryovers.
 - **Handoff:** final branch/remote heads, ancestry, cleanup and readiness verdict
   are pending parent verification. PR submission, merges and releases remain
   pending. No physical/backend outcome is inferred from this documentation edit.
