@@ -20,7 +20,7 @@ function captureWaveHeader() {
 export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Promise<string>, failed: (error: string) => void) {
   const clock = createCaptureClock(policy), listeners = new Set<(event: Event) => void>();
   let child: ChildProcessWithoutNullStreams | undefined, starting = false, closed = false, generation = 0;
-  let error: string | undefined, baseUs = 0, offsetUs = 0, lateUs = 0;
+  let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0, captured = false;
   let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
   const emit = (event: Event) => { for (const listener of listeners) listener(event); };
   const fail = (message: string) => {
@@ -31,6 +31,7 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
   const write = (block: { at: number; pcm: Float32Array }) => {
     if (!child || error) return;
     if (child.stdin.writableLength > 48_000 * 8 * .2) return fail("The audio encoder cannot keep up with capture.");
+    baseUs ??= block.at;
     child.stdin.write(Buffer.from(block.pcm.buffer, block.pcm.byteOffset, block.pcm.byteLength));
     if (policy.intent !== "live") {
       const pcm = Buffer.alloc(block.pcm.length * 2);
@@ -48,12 +49,13 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
       // bounds input packets to the existing 480-frame/10 ms Opus cadence.
       // https://ffmpeg.org/ffmpeg-formats.html#wav
       const process = child = spawn(executable, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
-      baseUs = pending[0]!.at; offsetUs = lateUs = 0;
+      offsetUs = lateUs = 0;
       process.stdout.on("data", oggPackets(packet => {
         if (child !== process) return;
         const magic = packet.toString("latin1", 0, 8);
         if (magic === "OpusHead") { offsetUs = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
         if (magic === "OpusTags") return;
+        if (baseUs === undefined) return fail("The capture encoder emitted audio before capture started.");
         const duration = opusDuration(packet), at = Math.round(baseUs + offsetUs);
         offsetUs += duration;
         // Startup/probe delays and late data are not repaired by moving healthy listeners.
@@ -76,14 +78,21 @@ export function createScheduledCapture(policy: CapturePolicy, ffmpeg: () => Prom
     } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
     finally { if (attempt === generation) starting = false; }
   };
+  if (policy.intent === "live") void start();
   return {
     write(packet: CaptureAudioPacket) {
       if (closed || error) return false;
       try {
         const normalized = clock.push(packet, serverNowUs());
         if (normalized.reset) {
-          generation++; const old = child; child = undefined; old?.kill("SIGKILL");
-          pending = []; queuedFrames = 0; starting = false; emit({ type: "reset" });
+          // The first Live generation adopts the header-only encoder, including
+          // an in-flight helper lookup. Later generations get a fresh stream.
+          if (captured || policy.intent !== "live") {
+            generation++; const old = child; child = undefined; old?.kill("SIGKILL");
+            pending = []; queuedFrames = 0; starting = false; baseUs = undefined;
+          }
+          captured = true;
+          emit({ type: "reset" });
         }
         const block = { at: normalized.atUs, pcm: normalized.pcm };
         if (!block.pcm.length) return true;

@@ -178,7 +178,10 @@ export function createScheduledAudio(options: { identity: string; name: string; 
       if (!run.wires.has(wire)) { void restart(); return; }
       session.sendStreamStart(wireFormat(wire));
       session.sendGroupUpdate(PlaybackStateType.PLAYING, id, options.name);
-      run.cursors.set(session, serverNowUs());
+      const timing = session.getPlayerTiming();
+      // Join at a deadline this output can still meet; keep the audience timeline fixed.
+      const joinLeadMs = load?.intent === "live" ? (timing.requiredLeadTimeMs ?? 0) + Math.max(0, timing.staticDelayMs ?? 0) : 0;
+      run.cursors.set(session, serverNowUs() + joinLeadMs * 1000);
     };
     const each = (action: (session: SendspinSession) => void) => { for (const member of members) { const session = listening(member.deviceId); if (session) action(session); } };
     // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
@@ -232,7 +235,9 @@ export function createScheduledAudio(options: { identity: string; name: string; 
             }
             if (event.at <= serverNowUs()) return; // Missed input is silence, never a new audience deadline.
             next.queues[event.wire].push({ offset: event.at - next.base, duration: event.duration, data: event.data });
-            if (next.queues[event.wire].length > 200) fail("Captured audio exceeded its bounded queue.");
+            // Relaxed's one-second lead can retain >200 small PCM blocks already sent.
+            if (next.queues[event.wire].length + (current.intent === "live" ? next.sent[event.wire].length : 0) > 200) fail("Captured audio exceeded its bounded queue.");
+            else if (current.intent === "live") tick(next);
           });
           report(); return;
         }
