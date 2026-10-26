@@ -134,7 +134,7 @@ setInterval(() => {
     client.addAudioChunkListener(() => frames++); client.addStreamStartListener(() => starts++); client.addStreamClearListener(() => clears++);
     await client.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3000 });
     const report = (preparation?: ReceiverPreparation, lead = 25) => client.sendPlayerState({
-      required_lead_time_ms: lead, min_buffer_ms: 25, static_delay_ms: 0, ...preparation ? { couch_preparation: preparation } : {},
+      required_lead_time_ms: lead, min_buffer_ms: Math.min(lead, 25), static_delay_ms: 0, ...preparation ? { couch_preparation: preparation } : {},
     });
     return { client, report, get frames() { return frames; }, get starts() { return starts; }, get clears() { return clears; } };
   }
@@ -178,7 +178,7 @@ type Control = Awaited<ReturnType<Awaited<ReturnType<typeof fixture>>["control"]
 const token = (client: Control) => { assert.ok(client.instruction?.receiverId); return client.instruction.receiverId; };
 const outputIn = (client: Control, id: string): Output | undefined => client.state.playbacks?.flatMap(playback => playback.outputs).find(output => output.deviceId === id);
 
-for (const codec of [AudioCodec.OPUS, AudioCodec.PCM]) test(`45 ms Live ${codec} uses the strict 25 ms budget through public Join and encrypted worker delivery`, { timeout: 15000 }, async () => {
+for (const codec of [AudioCodec.OPUS, AudioCodec.PCM]) test(`45 ms Live ${codec} admits only within its measured headroom through public Join and encrypted worker delivery`, { timeout: 15000 }, async () => {
   const f = await fixture();
   try {
     assert.equal((await f.api("/api/settings/audio", "POST", { liveAudioLeadMs: 45 })).status, 200);
@@ -187,11 +187,14 @@ for (const codec of [AudioCodec.OPUS, AudioCodec.PCM]) test(`45 ms Live ${codec}
     await sink.report({ receiverId, epoch: 0, state: "preparing" });
     await until(() => listener.output?.audioAdmission?.state === "preparing");
     assert.equal(sink.frames, 0);
-    await sink.report({ receiverId, epoch: 0, state: "ready" }, 26);
+    // No measured headroom can reach the whole 45 ms lead.
+    await sink.report({ receiverId, epoch: 0, state: "ready" }, 45);
     await until(() => listener.output?.audioAdmission?.state === "failed");
     assert.deepEqual(listener.output?.audioAdmission?.state === "failed" && listener.output.audioAdmission.reason, "required-lead");
-    assert.equal(sink.frames, 0, "a ready report cannot expand the 25 ms budget");
-    await sink.report({ receiverId, epoch: 0, state: "ready" }, 25);
+    const allowed = Number(/allows (\d+) ms/.exec(listener.output?.error ?? "")?.[1]);
+    assert.ok(allowed >= 0 && allowed < 45, `measured ${allowed} ms of the 45 ms lead`);
+    assert.equal(sink.frames, 0, "a ready report cannot expand the measured budget");
+    await sink.report({ receiverId, epoch: 0, state: "ready" }, 1);
     await until(() => listener.output?.audioAdmission?.state === "ready" && sink.frames > 10);
     assert.equal(token(listener), receiverId, "readiness recovery keeps the current consented receiver");
     assert.equal(listener.output?.error, undefined);
