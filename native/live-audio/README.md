@@ -29,9 +29,10 @@ and sample position, and maps the helper clock to Core using the minimum of five
 bracketed clock exchanges. Each replacement upload starts a fresh generation at
 sample zero. Explicit mute writes zero samples without changing the clock.
 Core normalizes capture to 48 kHz and shares stereo Opus with browser receivers.
-Live defaults to 100 ms scheduling lead, a 30 ms source reserve/70 ms receiver
-budget and 10 ms Opus packets. New publications can select 150/250 ms lead;
-active deadlines are fixed. These are scheduling parameters, not physical latency.
+Live defaults to a 100 ms scheduling lead and 10 ms Opus packets; new
+publications can select 45–250 ms and keep their deadlines fixed. A receiver
+joins when its output fits the headroom Core measures for the publication.
+The lead is a scheduling parameter, not physical latency.
 
 Other desktop inputs use the retained hidden browser capture producer:
 `src/client/capture-audio.html` → `session/native-audio.ts`. Its preload exposes

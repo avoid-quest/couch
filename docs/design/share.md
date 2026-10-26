@@ -121,7 +121,8 @@ Sheet on phones and the TV:
   page's error, and the share keeps playing where it can.
 
 Live audio defaults to a 100 ms scheduling lead and 10 ms Opus packets, after
-runtime decoder/clock/output checks. The receiver budget is 70 ms. New shares
+runtime decoder/clock/output checks. A listener joins when its output fits the
+headroom Core measures for that share. New shares
 snapshot the lead in [Advanced audio](settings.md#advanced-audio); saving does
 not move an existing publication’s deadlines. Runtime admission is not a measured promise of 100 ms input-to-ear or
 synchronization on every output. While those checks run, the listener sees

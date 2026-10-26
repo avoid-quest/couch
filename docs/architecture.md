@@ -264,11 +264,14 @@ packet. Bounded native/pipe/socket queues, sequence/sample validation and source
 clock normalization preserve timing or fail explicitly. Relaxed audio-only
 capture shares the scheduled path without MediaRecorder/AAC/HLS.
 
-Live publication defaults are a 100 ms source-to-schedule lead and 10 ms Opus
-packets. A 30 ms source reserve leaves a 70 ms receiver admission/correction
-budget. Admin settings offer 150 and 250 ms lead (120/220 ms receiver budget);
-each publication freezes its selected lead. Saving a setting never moves an
-active timeline. Live accepts stereo 48 kHz Opus receivers only, and an
+Live schedules each captured sample at its capture time plus the host's lead:
+100 ms by default, or 45, 50, 55, 75, 95, 150 or 250 ms. Each publication freezes
+its lead; saving a setting never moves an active timeline. Core measures, per
+publication and wire, how much of that lead remains when it sends each packet
+(the trailing second's minimum), and admits a receiver or a positive correction
+only when the receiver's declared lead fits that headroom. A faster capture path
+therefore leaves receivers more time; no fixed source reserve is assumed. Live
+sends stereo 48 kHz Opus in 10 ms packets and immediate PCM16, and an
 incompatible join leaves healthy listeners untouched. Relaxed capture keeps
 one second of lead and its PCM compatibility. Browser latency preferences remain
 separate from actual reported timing. These budgets do not qualify physical
