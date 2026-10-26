@@ -179,6 +179,16 @@ test("YouTube playback selection and safe extraction errors", async t => {
   await t.test("known incompatible HLS audio stays unavailable on non-VP9 Devices", real, async () => {
     await noFormat(select([video("hls", 1920, 1080, "avc1.64002a", { protocol: "m3u8_native" }), { ...opus, protocol: "m3u8_native" }]));
   });
+  for (const languagePreference of [5, undefined]) await t.test(`original HTTPS audio outranks HLS without original audio, preference=${languagePreference}`, real, async () => {
+    const hls = { protocol: "m3u8_native", manifest_url: "https://media.example/master.m3u8" };
+    const picture = video("h264-hls", 1920, 1080, "avc1.64002a", hls);
+    const original = { ...aac, language: "it", language_preference: 10 };
+    const dubbed = { ...aac, ...hls, format_id: "dub-hls", url: "https://media.example/en.m3u8", acodec: undefined, language: "en", language_preference: languagePreference };
+    const media = await select([picture, original, dubbed]);
+    assert.equal(new URL(media.source).pathname, "/h264-hls.mp4");
+    assert.equal(new URL(media.audioSource!).pathname, "/aac.m4a");
+    assert.equal(media.hlsSelection, undefined);
+  });
   await t.test("non-VP9 YouTube rejects DASH MP4 video but still plays DASH AAC audio", real, async () => {
     await noFormat(select([video("dash-mp4", 1920, 1080, "avc1.64002a", { container: "mp4_dash" }), aac]));
     const media = await select([{ ...aac, container: "m4a_dash" }]);

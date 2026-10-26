@@ -151,9 +151,11 @@ function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean): 
   // can still select an incompatible stream when no H.264/AAC format exists.
   if (!youtube || vp9) return selector;
   const codecs = "[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']";
-  // YouTube omits acodec on HLS audio renditions. Prefer those to DASH AAC,
-  // which also takes a long time to open on iPad; retain the original-language ranking.
-  const sound = `(ba[protocol^=m3u8][acodec~=?'^(mp4a|aac|none$)']/ba${playable}${codecs})`;
+  // YouTube omits acodec on HLS audio and ranks original audio at 10. Keep
+  // original audio ahead of transport, then prefer HLS to slow-opening DASH AAC.
+  const hls = "ba[protocol^=m3u8][acodec~=?'^(mp4a|aac|none$)']";
+  const aac = `ba${playable}${codecs}`;
+  const sound = `(${hls}[language_preference>=10]/${aac}[language_preference>=10]/${hls}/${aac})`;
   return `bv*${filter}${transport}${codecs}+${sound}/b${filter}${transport}${codecs}`;
 }
 
