@@ -4,7 +4,7 @@ import type { AudioSelection } from "../shared/protocol";
 
 export type SelectedChannels = { picture: boolean; sound: boolean };
 export type AudioManifest = { url: string; text: string };
-type Media = { source: string; audioSource?: string; audioManifest?: AudioManifest; hlsSelection?: { audio: string }; credentialOrigin?: string; publicNetwork?: boolean; headers?: Record<string, string>; hls?: boolean; audioOnly?: boolean; mpegts?: boolean };
+type Media = { source: string; audioSource?: string; audioManifest?: AudioManifest; hlsSelection?: { video: string; audio: string }; credentialOrigin?: string; publicNetwork?: boolean; headers?: Record<string, string>; hls?: boolean; audioOnly?: boolean; mpegts?: boolean };
 export type AudioSelectionContext = { audioSelection?: AudioSelection; audioTrack?: number; audioLanguage?: string };
 type AudioInput = { source: string; hls: boolean; audioManifest?: AudioManifest; audioSelection?: NonNullable<AudioSelectionContext["audioSelection"]>; audioStream?: number };
 type Playlist = { url: string; lines: string[] };
@@ -131,7 +131,9 @@ async function liveHls(url: string, signal: AbortSignal, reads?: ManifestReads, 
 
 export async function prepareSource<T extends Media>(media: T, output: SelectedChannels, signal: AbortSignal, reads?: ManifestReads): Promise<T & Media> {
   signal.throwIfAborted();
-  if (output.picture || !output.sound) return output.sound ? media : { ...media, audioSource: undefined };
+  if (output.picture || !output.sound) return output.sound ? media
+    : media.hlsSelection ? { ...media, source: media.hlsSelection.video, audioSource: undefined, hlsSelection: undefined }
+    : { ...media, audioSource: undefined };
   // YouTube's checked original-audio rendition, not the master's first (possibly dubbed) one.
   const separate = media.audioSource ?? media.hlsSelection?.audio;
   if (separate) return { ...media, credentialOrigin: media.credentialOrigin ?? media.source, source: separate, audioSource: undefined, hlsSelection: undefined, mpegts: undefined, hls: /\.m3u8(?:[?#]|$)/i.test(separate) || undefined };

@@ -47,6 +47,14 @@ test("YouTube sound-only keeps its checked original audio instead of reopening t
   expect(request).not.toHaveBeenCalled();
 });
 
+test("YouTube picture-only plays its checked video rendition without fetching the sound", async () => {
+  const hlsSelection = { video: "https://manifest.example/video/index.m3u8", audio: "https://manifest.example/original/index.m3u8", bandwidth: 900000 };
+  const media = { source: "https://manifest.example/master.m3u8", hls: true, hlsSelection };
+  expect(await prepareSource(media, { picture: true, sound: false }, signal())).toMatchObject({ source: hlsSelection.video, hls: true, hlsSelection: undefined });
+  expect(media.hlsSelection).toBe(hlsSelection);
+  expect(request).not.toHaveBeenCalled();
+});
+
 test("HLS sound-only selects its single audio rendition with one manifest read and no video read", async () => {
   request.mockResolvedValue(new Response('#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Main",DEFAULT=YES,URI="main.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="audio",CODECS="avc1.640028,mp4a.40.2"\nvideo.m3u8\n', { headers: { "Content-Type": "application/vnd.apple.mpegurl" } }));
   const media = { source: "https://media.example/master.m3u8", hls: true };
