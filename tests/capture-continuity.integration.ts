@@ -59,7 +59,7 @@ test("FFmpeg converts native mono/stereo rates to PCM and Opus and retires old c
     assert.equal(pcm[0]!.at, origin);
     assert.ok(opus[0]!.at < origin, "Opus pre-skip maps before the first captured sample");
     const last = pcm.at(-1)!;
-    const position = (pcm.length - 1) * 20_000;
+    const position = (pcm.length - 1) * 10_000;
     assert.equal(last.at, origin + Math.round(position * 1.001), "capture time mapping survives source clock drift");
     const bytes = Buffer.concat(pcm.map(chunk => chunk.data));
     // Skip converter startup and inspect native channel order/mono upmix.

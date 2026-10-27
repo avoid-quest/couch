@@ -53,9 +53,9 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
       if (closed || error || generation !== attempt) return;
       const process = child = spawn(lease.path, ["-hide_banner", "-loglevel", "error", "-nostdin",
         "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1",
-        "-max_size", String(input.sampleRate * input.channels * 4 / 50), "-i", "pipe:0",
+        "-max_size", String(input.sampleRate * input.channels * 4 / 200), "-i", "pipe:0",
         "-filter_complex", "[0:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[opus][pcm]",
-        "-map", "[opus]", "-c:a", "libopus", "-f", "ogg", "-page_duration", "20000", "-flush_packets", "1", "pipe:1",
+        "-map", "[opus]", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1",
         "-map", "[pcm]", "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"], { stdio: ["pipe", "pipe", "pipe", "pipe"] });
       process.once("close", lease.release); lease = undefined;
       let opusOffset = 0, pcmOffset = 0, diagnostic = "", pcm: Buffer = Buffer.alloc(0);
@@ -78,10 +78,10 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
       (process.stdio[3] as Readable).on("data", (bytes: Buffer) => {
         if (child !== process) return;
         pcm = Buffer.concat([pcm, bytes]);
-        const size = 3840; // 20 ms, within Sendspin's documented chunk bounds.
+        const size = 1920; // 10 ms: a chunk is sent only once it is full.
         while (pcm.length >= size) {
-          output("pcm", pcmOffset, 20_000, pcm.subarray(0, size));
-          pcmOffset += 20_000; pcm = pcm.subarray(size);
+          output("pcm", pcmOffset, 10_000, pcm.subarray(0, size));
+          pcmOffset += 10_000; pcm = pcm.subarray(size);
         }
       });
       process.stderr!.on("data", data => { diagnostic = (diagnostic + String(data)).slice(-1024); });
