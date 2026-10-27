@@ -181,22 +181,16 @@ pairing: [Shell](shell.md#first-run-and-pairing).
 
 ## Advanced audio
 
-Couch → Playback offers an administrator-only **Live audio scheduling lead**:
-45, 50, 55, 75, 95, 100 (default), 150 and 250 ms. Each new Live publication
-freezes this setting for its capture deadlines. Receiver admission and positive
-output correction use the headroom Core measures for that publication on each
-wire: the time its audio still has before its deadline when Core sends it. A
-faster capture path therefore leaves receivers more time. Saving never retimes
-an active source. Relaxed capture keeps one second of lead. Supported saved
-leads survive restart; unsupported values fall back to 100 ms. The lead is a
-scheduling choice, not measured input-to-ear latency.
+Live audio's lead, codec and buffers are its host's, set in the share panel
+while it runs ([Share](share.md#live-audio)); the last values used are the next
+share's. Settings keeps no copy.
 
 This device → General offers **Live browser output buffering**: Automatic
-(browser default), 128, 256, 512 or 1024 frames, with milliseconds at 48 kHz.
-This requests `AudioContext.latencyHint`; the browser chooses its actual buffer.
-The preference is saved locally and applies on the next Live join. Admission
-uses reported output timing. Saving leaves active playback running, and a
-storage failure appears beside the control.
+(the host's listener buffer), 128, 256, 512 or 1024 frames, with milliseconds
+at 48 kHz. This requests `AudioContext.latencyHint`; the browser chooses its
+actual buffer. The preference is saved locally and applies on the next Live
+join. Saving leaves active playback running, and a storage failure appears
+beside the control.
 
 On the host desktop, **Live audio capture sample rate** offers Automatic,
 44.1 kHz and 48 kHz for the next Live share. Browser capture uses an ideal
@@ -206,10 +200,10 @@ These observations do not establish the sound card's hardware allocation.
 
 Mac inputs marked **Native** use their CoreAudio UID. Automatic retains the
 current device rate; explicit rates request and verify the device rate, which
-can affect other apps using it. **Native input buffer** requests 128, 256
-(default), 512 or 1024 callback frames on the next share. Share shows requested
-frames and same-process HAL buffer readback separately, including the running
-readback when upload starts. Neither is labeled the raw hardware callback
+can affect other apps using it. The share panel's **Capture buffer** requests
+128 (default), 256, 512 or 1024 callback frames, restarting the input when it
+changes. Share shows requested frames and same-process HAL buffer readback
+separately, including the running readback when upload starts. Neither is labeled the raw hardware callback
 period. The capture helper changes no system default device.
 
 Linux and Windows retain the isolated browser capture option. Native capture

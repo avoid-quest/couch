@@ -1,4 +1,3 @@
-import { HostAudioSettings } from "./AdvancedAudioSettings";
 import { useMutation } from "@tanstack/react-query";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Switch } from "@/components/ui/switch";
@@ -54,7 +53,6 @@ export function PlaybackPage() {
         <Switch id="ask-every-device" checked={chooser.isPending ? chooser.variables : state?.askEveryDevice ?? false} disabled={!administrator || !connected || chooser.isPending} onCheckedChange={enabled => chooser.mutate(enabled)} />
       </SettingsRow>
     </SettingsSection>
-    {credentials && <HostAudioSettings credentials={credentials} connected={connected} administrator={administrator} />}
   </SettingsLayout>;
 }
 
