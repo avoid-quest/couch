@@ -5,6 +5,7 @@ import { liveAudioSettingsQuery } from "@/api/settings";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { errorText, useSessionGate } from "@/session/session-context";
 import type { LiveAudioSettings } from "../../../shared/audio-settings";
@@ -38,10 +39,10 @@ export function useLiveAudioSettings(enabled = true) {
 }
 
 /** Sendspin's minimum buffer: how far behind the input listeners play. Saved on blur. */
-export function PlaybackBufferInput({ id, live }: { id: string; live: ReturnType<typeof useLiveAudioSettings> }) {
+export function PlaybackBufferInput({ id, live, className }: { id: string; live: ReturnType<typeof useLiveAudioSettings>; className?: string }) {
   const { settings, save } = live;
   if (!settings) return null;
-  return <Input key={settings.minBufferMs} id={id} className="w-44" type="number" min={0} max={5000} step={1} defaultValue={settings.minBufferMs} disabled={save.isPending}
+  return <Input key={settings.minBufferMs} id={id} className={cn("w-44", className)} type="number" min={0} max={5000} step={1} defaultValue={settings.minBufferMs} disabled={save.isPending}
     onBlur={event => { const minBufferMs = event.currentTarget.valueAsNumber; if (event.currentTarget.validity.valid && Number.isInteger(minBufferMs) && minBufferMs !== settings.minBufferMs) save.mutate({ ...settings, minBufferMs }); }} />;
 }
 

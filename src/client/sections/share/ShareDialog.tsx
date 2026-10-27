@@ -181,8 +181,8 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         <Button variant="ghost" size="sm" className="-mr-3" disabled={!available || !!reason} onClick={() => void chooseInput()}>{listing ? <><Spinner />Finding inputs…</> : inputs ? "Refresh inputs" : "Find audio inputs"}</Button>
       </div>
     </Row>}
-    {kind.intent === "live" && <Row label="Playback buffer (ms)" htmlFor="share-live-buffer" description="How far behind the input listeners hear it. More rides out Wi-Fi and phone hiccups.">
-      <PlaybackBufferInput id="share-live-buffer" live={live} />
+    {kind.intent === "live" && <Row label="Playback buffer (ms)" htmlFor="share-live-buffer" description="More rides out Wi-Fi and phone hiccups.">
+      <PlaybackBufferInput id="share-live-buffer" live={live} className="ml-auto" />
     </Row>}
     {devices.length > 0 && <Row label="Play on">
       <ToggleGroup type="multiple" aria-label="Play on" spacing={2} className="flex-wrap justify-end" value={chosen.map(device => device.id)} disabled={pending} onValueChange={setTargets}>
