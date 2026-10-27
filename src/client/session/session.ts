@@ -292,7 +292,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
               url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
               url.searchParams.set("token", credentials.token); url.searchParams.set("sourceId", sourceId);
               const https = new URL(origin); https.protocol = "https:";
-              const current = listener = createLiveListener({ url: url.href, latencyHint: outputLatencyHint(readOutputBufferPreference()), waitForTap,
+              const current = listener = createLiveListener({ url: url.href, latencyHint: outputLatencyHint(readOutputBufferPreference(), observation.current?.playbacks?.find(playback => playback.liveSourceId === sourceId)?.liveListenerBufferFrames), waitForTap,
                 onState: status => { if (listener === current) setLiveReception({ sourceId, status, httpsAddress: https.origin }); },
                 onStats: () => {}, // The network Worker reports directly over its authorized Live socket.
               });
