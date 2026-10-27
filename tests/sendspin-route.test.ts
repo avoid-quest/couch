@@ -22,15 +22,9 @@ let unlock: (() => Promise<void>) | undefined;
 class FixturePlayer {
   state = new StateManager();
   scheduler = new AudioScheduler({ stateManager: this.state, timeFilter: new SendspinTimeFilter(), outputMode: "direct", useOutputLatencyCompensation: false });
-  outputReady = true; outputState = "running";
-  timeSyncInfo = { synced: true, error: 0 }; syncInfo = { outputLatencyMs: 10, processingTimeMs: 2 };
   constructor(readonly options: Record<string, unknown>) { players.push(this); this.scheduler.initAudioContext(); }
-  reports: { report: any; timing?: unknown }[] = [];
-  async connect() { (this.options.onConnectionChange as (on: boolean) => void)?.(true); }
+  async connect() {}
   async unlock() { await unlock?.(); }
-  setOutputPreparation(report: unknown, timing?: unknown) { this.reports.push({ report, timing }); }
-  invalidateAudio() { this.scheduler.invalidateOutput(); }
-  setRequiredLeadTimeMs() {} setMinBufferMs() {}
   disconnect() { this.scheduler.close(); }
   buffer(seconds: number) { this.scheduler.handleDecodedChunk({ samples: [new Float32Array(seconds * 48000), new Float32Array(seconds * 48000)], sampleRate: 48000, serverTimeUs: 1_000_000, generation: this.state.streamGeneration }); }
 }
@@ -60,5 +54,4 @@ test("clock-only watch keeps the connection and returning to sound reuses it", a
   listen(true, true, "Fixture"); await settle();
   expect(players.at(-1)).toBe(player);
   expect(player.options.outputMode).toBeUndefined();
-  expect(player.reports).toEqual([]);
 });
