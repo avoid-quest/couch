@@ -5,7 +5,7 @@ Source, acquisition environment and playback behavior are separate decisions.
 
 ## Live versus relaxed playback
 
-Live audio starts at a configurable playback buffer (initially 250 ms); that
+Live audio starts at a configurable playback buffer (initially 200 ms); that
 setting is separate from measured input-to-ear delay. The goal is low useful
 delay together with quality, continuity and efficiency.
 

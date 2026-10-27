@@ -53,7 +53,7 @@ input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction.
 
-**Playback buffer (ms)** is one Couch-wide setting, 250 ms initially, set in the
+**Playback buffer (ms)** is one Couch-wide setting, 200 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
 to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`.
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
@@ -87,13 +87,16 @@ receiver's floor, measured alone with level-matched music:
 
 With both receivers plus a MacBook and a Pixel on Wi-Fi in one group, five-minute
 runs at 150 and 120 ms had no gaps of 20 ms or more on either recorded receiver.
+Turning the Pixel's screen off during the 120 ms run caused heavy artifacts. The
+200 ms default sits between that and 250 ms, where a Redmi with its screen off
+had only short gaps (below); 200 ms with a screen off is not yet measured.
 Before the smaller steps, two 260 s runs at 150 ms had 10 and 47 Android gaps,
 and 250–300 ms runs had none. PCM uses about 1.5 Mbit/s per listener; over this
 Wi-Fi at 250 ms it starved a Pixel that played Opus without trouble.
 
 Median Android-minus-Linux skew was 0–0.9 ms, p95 at most 2.3 ms. Capture mute, Leave/Join,
 host Remove, each listener's own volume and mute, and recovery 13 s after a
-10 s Android Wi-Fi outage were confirmed on the electrical returns. The Redmi kept
+10 s Android Wi-Fi outage were confirmed on the electrical returns. At 250 ms the Redmi kept
 playing with its screen off, with short gaps (≤ 90 ms) as the screen switched off
 and on. These short runs are not a long-stability or audience-size qualification.
 A Linux receiver whose PulseAudio stream died under host load kept reporting
