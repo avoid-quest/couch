@@ -3,6 +3,8 @@ import { afterEach, expect, mock, test } from "bun:test";
 const players: FixturePlayer[] = [];
 const authenticated: unknown[][] = [];
 const taps: unknown[] = [];
+const failures: unknown[][] = [];
+let authenticationFailure: Error | undefined;
 class FixturePlayer {
   buffers: number[] = [];
   disconnected = false;
@@ -13,7 +15,11 @@ class FixturePlayer {
   setMinBufferMs(value: number) { this.buffers.push(value); }
 }
 mock.module("@sendspin/sendspin-js", () => ({ SendspinPlayer: FixturePlayer }));
-mock.module("../src/client/api/client", () => ({ apiFetch: async (...args: unknown[]) => { authenticated.push(args); } }));
+mock.module("../src/client/api/client", () => ({ apiFetch: async (...args: unknown[]) => {
+  authenticated.push(args);
+  if (authenticationFailure) { const error = authenticationFailure; authenticationFailure = undefined; throw error; }
+} }));
+mock.module("../src/client/toasts", () => ({ failed: (...args: unknown[]) => failures.push(args) }));
 mock.module("../src/client/session/renderer", () => ({ waitForTap: (callback: unknown) => taps.push(callback) }));
 mock.module("../src/client/session/device-id", () => ({ storage: null, deviceId: () => "opaque-device" }));
 const { listen } = await import("../src/client/session/sendspin");
@@ -39,4 +45,26 @@ test("clock-only watch reuses the player; public buffer changes keep the connect
   listen(true, true, credentials, "Fixture", { codec: "opus", minBufferMs: 400 }); await settle();
   expect(player.disconnected).toBe(true);
   expect(players.at(-1)!.options.codecs).toEqual(["opus", "pcm"]);
+});
+
+test("a failed audio bootstrap is visible and its retry creates a fresh player", async () => {
+  const count = players.length, error = new Error("Temporary connection failure");
+  authenticationFailure = error;
+  listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 }); await settle();
+  expect(players.length).toBe(count);
+  expect(failures.at(-1)?.[1]).toBe(error);
+  const retry = taps.at(-1);
+  expect(typeof retry).toBe("function");
+  (retry as () => void)(); await settle();
+  expect(players.length).toBe(count + 1);
+  expect(players.at(-1)!.options.codecs).toEqual(["pcm"]);
+});
+
+test("leaving cancels an offered bootstrap retry", async () => {
+  authenticationFailure = new Error("Temporary connection failure");
+  listen(true, false, credentials, "Fixture"); await settle();
+  const retry = taps.at(-1) as () => void, count = players.length;
+  listen(false, false, credentials, "Fixture");
+  retry(); await settle();
+  expect(players.length).toBe(count);
 });

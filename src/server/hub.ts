@@ -1,7 +1,7 @@
 import { createLocalRelay } from "./live-relay";
 import { parseLiveRelay } from "./live-ice";
 import { ADMIN_ONLY, LIVE_AUDIENCE_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
-import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
+import { createLanListener, httpOrigin, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
 import { systemLanNames } from "./lan-name";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
@@ -132,7 +132,11 @@ export async function createHub(options: HubOptions) {
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
   const sendspin = createSendspin({ serverId: store.installationId(), name: store.installationName(),
     savedDelay: id => store.deviceSyncDelay(id), saveDelay: (id, delay) => store.saveDeviceSyncDelay(id, delay),
-    admit: (id, loopback) => id === store.hostDevice()?.id ? loopback && (!systemAudio || !servedBy(id)?.outputs.some(output => output.deviceId === id && output.sound) || !common.systemAudio?.error) : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast(), sourceFailed: (sourceId, error) => { for (const playback of all()) if (sourceOf(playback) === sourceId) unavailable(playback, error); broadcast(); } });
+    admit: (id, loopback) => id === store.hostDevice()?.id ? loopback && (!systemAudio || !servedBy(id)?.outputs.some(output => output.deviceId === id && output.sound) || !common.systemAudio?.error) : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast(), sourceFailed: (sourceId, error) => {
+      logPlaybackError(sourceId, "Capture", undefined, error);
+      for (const playback of all()) if (sourceOf(playback) === sourceId) unavailable(playback, error);
+      broadcast();
+    } });
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Listener & { stun?: boolean }>> | undefined;
   let lanError: string | null = null;
@@ -563,7 +567,7 @@ export async function createHub(options: HubOptions) {
       }
     }
     if (playback.synced) {
-      playback.synced.send(command.type === "load" ? { ...command, ...playback.media?.playbackId === command.playbackId ? playback.media : {}, ...groupSelection(playback) } : command);
+      playback.synced.send(command.type === "load" ? { ...command, ...playback.media?.playbackId === command.playbackId ? playback.media : {}, ...groupSelection(playback), captureIntent: intentOf(playback) ?? "relaxed" } : command);
       // Screens follow the clock; only what they show reaches them.
       if (command.type === "load") { syncMembers(playback); show(playback); }
       else if (command.type === "stop") hide(playback);
@@ -1514,9 +1518,8 @@ export async function createHub(options: HubOptions) {
   const pairedIdentities = new Map<string, number>();
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
-  const extraLanPeers = (process.env.COUCH_LAN_PEERS ?? "").split(",").map(peer => peer.trim()).filter(Boolean);
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
-    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request), extraLanPeers))) return false;
+    if (options.managedLan && !loopbackPeer(requestPeer(request)) && !store.remoteControlEnabled()) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");

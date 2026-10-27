@@ -182,7 +182,7 @@ pairing: [Shell](shell.md#first-run-and-pairing).
 ## Advanced audio
 
 Live audio's codec and Sendspin buffer are set in the share panel while it runs
-([Share](share.md#live-audio)); saved values apply to the next share. Automatic
+([Share](share.md#live-audio)); values apply to the running share and future shares. Automatic
 leaves codec selection upstream and the initial buffer is the SDK default,
 250 ms. There is no browser output-buffer override, custom lead controller or
 parallel copy in Settings.

@@ -7,7 +7,7 @@ import { liveFixture, until } from "./live-input.fixture";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 
-test("unmodified browser SDK 3.2.1 receives plaintext capture through the authorized Couch device", { timeout: 15_000 }, async t => {
+for (const intent of ["live", "relaxed"] as const) test(`unmodified browser SDK receives plaintext ${intent} capture with its own buffering policy`, { timeout: 15_000 }, async t => {
   const f = await liveFixture({ media: { ffmpeg, recording: new Uint8Array() } });
   const host = await f.connect(-1), identity = f.identities[1]!;
   const authorization = await fetch(`${f.hub.origin}/api/audio/session`, { method: "POST", headers: { Authorization: `Bearer ${identity.token}` } });
@@ -22,18 +22,21 @@ test("unmodified browser SDK 3.2.1 receives plaintext capture through the author
   player.onAudioData = chunk => chunks.push(chunk);
   let capture: { stop(): void } | undefined;
   t.after(async () => { capture?.stop(); player.disconnect("user_request"); await f.close(); });
-  assert.equal((await host.command({ type: "publishLive", sourceId: "host-input", uploadToken: f.uploadToken, kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" })).ok, true);
+  assert.equal((await host.command({ type: "publishLive", sourceId: "host-input", uploadToken: f.uploadToken, kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent })).ok, true);
   assert.equal((await f.receiver.command({ type: "playLive", sourceId: "host-input", deviceId: identity.id })).ok, true);
   await player.connect();
-  capture = await f.streamCapture(host, "host-input", -1);
+  const input = await f.streamCapture(host, "host-input", -1); capture = input;
   await until(() => chunks.length > 5);
   assert.equal(player.currentFormat?.codec, "pcm");
   assert.equal(chunks[0]!.sampleRate, 48000);
   assert.equal(chunks[0]!.samples.length, 2);
   assert.equal(chunks[0]!.samples[0]!.length, 960);
   assert.ok(chunks.every(chunk => Number.isSafeInteger(chunk.serverTimeUs)));
+  assert.equal(chunks[0]!.serverTimeUs - input.origin, intent === "live" ? 250_000 : 1_000_000,
+    "Live uses the declared buffer; relaxed capture retains its one-second lead");
+  if (intent === "relaxed") return;
   await until(() => f.receiver.state.outputs?.some(output => output.deviceId === identity.id && output.delayActive) === true);
-  assert.ok(f.receiver.messages.some(message => message.type === "sendspin" && message.listen && message.live?.minBufferMs === 250));
+  if (intent === "live") assert.ok(f.receiver.messages.some(message => message.type === "sendspin" && message.listen && message.live?.minBufferMs === 250));
   assert.equal(f.receiver.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.livePeerId), false);
   // The SDK's public option is applied without a custom output preparation protocol.
   player.setMinBufferMs(400);

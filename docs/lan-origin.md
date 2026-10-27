@@ -31,8 +31,9 @@ COUCH_LAN_ADDRESS=192.168.1.20
 ```
 
 The selected address must already belong to that interface. These variables do
-not assign an IP address. Couch binds only that address and admits peers from its
-subnet. If a pinned address disappears, Couch reports the missing selection and
+not assign an IP address. Couch binds only that address. Clients on routed VLANs
+can connect too; sharing, Host/Origin checks and pairing apply to them normally.
+There is no same-subnet restriction or per-client IP allowlist. If a pinned address disappears, Couch reports the missing selection and
 closes LAN access until it returns. Update the selection if the administrator
 changes the assigned address.
 
@@ -53,7 +54,7 @@ If the browser cached an old HTTPS redirect, clear its data for that address.
 
 HTTP is unencrypted: other people on that network can read or change pairing
 and control traffic. Enable it only on a trusted private network. It retains
-the selected interface/subnet, Host and Origin checks, pairing, and the sharing
+the selected listening interface, Host and Origin checks, pairing, and the sharing
 switch. Turning sharing off closes both LAN transports. Turn off **Allow HTTP
 connections** to return to HTTPS only: existing HTTP connections close while
 HTTPS connections keep working. Couch never downgrades automatically.

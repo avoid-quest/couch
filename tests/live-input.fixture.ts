@@ -144,7 +144,7 @@ setInterval(() => {}, 1000);
       }
     }, 5);
     timer.unref();
-    return { stop: () => { clearInterval(timer); upload.close(); } };
+    return { origin, stop: () => { clearInterval(timer); upload.close(); } };
   };
   return { get hub() { return hub; }, publisher, receiver, connect, identities, databasePath, uploadToken, uploadUrl, uploads, uploadStarts, answerUploads, streamCapture,
     capturePids: () => captures.map(capture => capture.pid!),

@@ -1,6 +1,6 @@
 import { createSocket } from "node:dgram";
 import { crc32 } from "node:zlib";
-import { lanPeer, type LanNetwork } from "./lan-listener";
+import type { LanNetwork } from "./lan-listener";
 
 // IPv4 Binding discovery on Couch's selected LAN supplies address candidates
 // without a microphone prompt or an Internet service. Browser candidate policies
@@ -8,7 +8,7 @@ import { lanPeer, type LanNetwork } from "./lan-listener";
 export async function serveLiveStun(network: LanNetwork, port: number) {
   const socket = createSocket("udp4");
   socket.on("message", (request, peer) => {
-    if (!lanPeer(network, peer.address) || request.length < 20 || request.length > 1024
+    if (request.length < 20 || request.length > 1024
       || request.readUInt16BE(0) !== 1 || request.readUInt32BE(4) !== 0x2112a442
       || request.readUInt16BE(2) !== request.length - 20 || request.length % 4) return;
     // This endpoint accepts only unauthenticated Binding discovery, not ICE

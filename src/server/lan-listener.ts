@@ -2,15 +2,7 @@ import { lookup } from "node:dns/promises";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 
 export type LanNetwork = { name: string; address: string; netmask: string };
-const ipv4 = (value: string) => {
-  const parts = value.replace(/^::ffff:/, "").split(".");
-  return parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255) ? parts.reduce((value, part) => (value * 256 + Number(part)) >>> 0, 0) : null;
-};
 export const loopbackPeer = (value: string) => value === "::1" || /^127\./.test(value.replace(/^::ffff:/, ""));
-export function lanPeer(network: LanNetwork, peer: string, extraPeers: readonly string[] = []) {
-  const address = ipv4(network.address), mask = ipv4(network.netmask), value = ipv4(peer);
-  return address !== null && mask !== null && value !== null && ((address & mask) === (value & mask) || extraPeers.some(peer => ipv4(peer) === value));
-}
 export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string): LanNetwork {
   const networks = Object.entries(interfaces).flatMap(([name, entries]) => (entries ?? []).filter(entry => entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address) && (!address || entry.address === address) && (selected ? name === selected : !/^(docker|br-|veth|virbr|tun|tap|utun)/.test(name))).map(entry => ({ name, address: entry.address, netmask: entry.netmask })));
   if (networks.length === 0) throw new Error(selected || address ? "No eligible LAN address matches COUCH_LAN_INTERFACE/COUCH_LAN_ADDRESS. Check that the selected private IPv4 address is assigned locally." : "No eligible LAN address. Connect to a private IPv4 LAN before sharing on your network.");

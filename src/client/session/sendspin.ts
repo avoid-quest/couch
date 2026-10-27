@@ -4,6 +4,7 @@ import { apiFetch } from "../api/client";
 import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { deviceId, storage } from "./device-id";
+import { failed } from "../toasts";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID.
@@ -20,6 +21,7 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
     player = connected = null;
     group = undefined;
     hearing = false;
+    configuration = undefined;
     waitForTap(null);
     void current?.then(stopped => stopped.disconnect("user_request")).catch(() => {});
     if (!on && !watch) return;
@@ -39,6 +41,13 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
     connected = created;
     void created.connect().catch(() => {});
     return created;
+  }).catch(reason => {
+    if (player === current) {
+      player = connected = null; group = undefined; hearing = false;
+      failed("Couldn't start sound.", reason);
+      waitForTap(() => { if (configuration === next) listen(on, watch, credentials, name, live); });
+    }
+    throw reason;
   });
   void current.then(created => { if (player === current && live) created.setMinBufferMs(live.minBufferMs); }).catch(() => {});
   if (!hear) return;

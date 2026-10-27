@@ -64,7 +64,11 @@ the selected Couch origin.
   requires. This cleanup keeps the existing authorized capture upload rather
   than hand-writing another partial Sendspin source client.
 - `scheduled-capture.ts` feeds float PCM to FFmpeg, which converts the input rate
-  and channels and emits standard 48 kHz stereo PCM and Opus. There is no JavaScript
+  and channels and emits standard 48 kHz stereo PCM and Opus. A streaming float WAV
+  header declares the acquired format and bounds demux packets to 20 ms; raw
+  float input otherwise waits for a 4096-frame read. Browser-reported gaps up to
+  40 ms are filled with silence, preserving sample positions instead of ending
+  the source. There is no JavaScript
   resampler, oscillator controller, calibration or custom decoder. Both wire
   formats share one process and a common rate/channel conversion before the
   encoder outputs split. PCM converts float samples to signed little-endian
@@ -75,8 +79,9 @@ the selected Couch origin.
   inventing a second nominal clock. Source generations retire the prior encoder.
 - `scheduled-audio.ts` maps product Playbacks, members, levels, metadata and picture
   clocks to SDK sessions. The SDK is a transport/session library, so Couch still
-  supplies encoded chunks and presentation timestamps. Captures use the largest
-  declared `min_buffer_ms` plus static output delay in their group. The common
+  supplies encoded chunks and presentation timestamps. Live captures use the largest
+  declared `min_buffer_ms` plus static output delay in their group; relaxed capture
+  retains at least one second of buffering before output-delay compensation. The common
   lead can increase for new declarations and is retained when a listener leaves.
   There is no fixed latency admission limit or slow-receiver eviction policy.
   Per-player buffer capacity bounds sends; the SDK owns receiver scheduling,
@@ -98,6 +103,9 @@ is preferred with PCM fallback using upstream browser capability filtering. A
 codec change recreates that player; buffer updates reuse its connection. Startup
 lead, output mode, correction, decoder and browser hardware buffering use SDK
 defaults. No preparation probe or readiness extension gates playback.
+An initial audio-session failure is shown through existing error feedback and
+offers Tap to hear to retry. Leaving cancels that retry; a rejected bootstrap is
+not retained as the active player.
 
 ## Adapter boundaries and coverage
 
@@ -136,7 +144,7 @@ Opus browser support uses upstream capability filtering, with PCM fallback.
 | `src/client/session/live-listener/` (14 modules) | Unmodified `SendspinPlayer`: decoder, clock, buffering, correction and recovery |
 | `/api/live/listen`, `/api/live/listeners`, the `live` instruction and listener telemetry | Authenticated `/sendspin` plus ordinary output/error state |
 | Fixed/automatic lead controller, bitrate policy, browser/listener hardware-buffer overrides | Public SDK codec preference and minimum buffer only |
-| `createCaptureClock`, its oscillator estimator/interpolating resampler and synthetic WAV framing | FFmpeg format conversion and capture-block timestamp mapping |
+| `createCaptureClock` and its oscillator estimator/interpolating resampler | FFmpeg format conversion and capture-block timestamp mapping; standard WAV framing keeps source reads bounded |
 | Node SDK patch and `patchedDependencies` | Public session dispatch exception boundary; zero SDK patches |
 | Noise setup, PSKs, AES suite option, server key persistence and key-derived device IDs | Plaintext SDK 3.2.1 and token-bound opaque IDs |
 | Direct `opusscript`/`opus-decoder` dependencies, worker WASM staging and related type declarations | Standard FFmpeg Opus and the SDK's own decoder dependency |

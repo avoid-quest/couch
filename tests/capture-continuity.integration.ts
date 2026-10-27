@@ -4,6 +4,38 @@ import { createScheduledCapture } from "../src/server/scheduled-capture";
 
 const until = async (check: () => boolean) => { const end = Date.now() + 5000; while (!check()) { if (Date.now() > end) throw new Error("Capture output did not arrive"); await new Promise(resolve => setTimeout(resolve, 10)); } };
 
+test("a streaming encoder makes progress with 50 ms of input without waiting for a large raw-demux packet", async t => {
+  const errors: string[] = [], wires = new Set<string>();
+  const source = createScheduledCapture(async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", error => errors.push(error));
+  t.after(() => source.close());
+  source.subscribe(event => { if (event.type === "chunk") wires.add(event.wire); });
+  for (let sequence = 0; sequence < 5; sequence++) assert.equal(source.write({ generation: "short", sequence,
+    samplePosition: sequence * 480, capturedAtUs: 1_000_000 + sequence * 10_000,
+    sampleRate: 48000, channels: 2, pcm: new Float32Array(960).fill(.25) }), true);
+  await until(() => errors.length > 0 || wires.size === 2);
+  assert.deepEqual(errors, []);
+  assert.deepEqual([...wires].sort(), ["opus", "pcm"]);
+});
+
+test("a bounded browser capture gap becomes silence without ending the source", async t => {
+  const errors: string[] = [], pcm: Buffer[] = [];
+  const source = createScheduledCapture(async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", error => errors.push(error));
+  t.after(() => source.close());
+  source.subscribe(event => { if (event.type === "chunk" && event.wire === "pcm") pcm.push(event.data); });
+  for (let sequence = 0; sequence < 120; sequence++) {
+    if (sequence === 2) continue; // The browser worker reports the skipped sample position.
+    assert.equal(source.write({ generation: "gap", sequence, samplePosition: sequence * 480,
+      capturedAtUs: 1_000_000 + sequence * 10_000, sampleRate: 48000, channels: 2,
+      pcm: new Float32Array(960).fill(.25) }), true);
+  }
+  await until(() => errors.length > 0 || pcm.length >= 2);
+  assert.deepEqual(errors, []);
+  const bytes = Buffer.concat(pcm);
+  assert.equal(bytes.readInt16LE(960 * 4), 0);
+  assert.equal(bytes.readInt16LE(1439 * 4), 0);
+  assert.equal(bytes.readInt16LE(1440 * 4), 8192);
+});
+
 test("FFmpeg converts native mono/stereo rates to PCM and Opus and retires old capture generations", { timeout: 15_000 }, async t => {
   const errors: string[] = [], output: { wire: string; at: number; duration: number; data: Buffer; generation: number }[] = [];
   let generation = 0;

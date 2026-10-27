@@ -7,7 +7,7 @@ import type { WebSocket } from "ws";
 import { AudioCodec, PlaybackStateType, PlayerCommand, serverNowUs, SendspinSession, type SendspinSessionHooks } from "@sonn-audio/node-sendspin";
 import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
-import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
+import { ffmpegErrorLog, logPlaybackError, safePlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { audioInput } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
@@ -21,7 +21,7 @@ import { compressorFilter } from "../shared/compressor";
 // player applies its own level and delay. Muted pictures follow the same clock (ticket 11).
 // live: the clock is the source's own timestamps, so a picture that joins the stream anywhere
 // lines up with the sound (the RaiPlay stall of #643).
-export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & { headers?: Record<string, string>; live?: boolean; publicNetwork?: boolean; hasAudio?: boolean; duration?: number; audioSelection?: AudioSelection; credentialOrigin?: string };
+export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & { headers?: Record<string, string>; live?: boolean; captureIntent?: "relaxed" | "live"; publicNetwork?: boolean; hasAudio?: boolean; duration?: number; audioSelection?: AudioSelection; credentialOrigin?: string };
 export type Member = { deviceId: string; level: number };
 type Wire = "opus" | "pcm";
 // offset and duration are microseconds of audio from where this FFmpeg started.
@@ -31,7 +31,7 @@ type Chunk = { offset: number; duration: number; data: Buffer };
 // cursors: the play time of the last chunk each speaker got.
 type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; captureLead?: number; timelineOnly?: boolean; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
 
-const leadUs = 1_000_000; // Buffered media lead; captures use the players' declared buffers.
+const leadUs = 1_000_000; // Buffered media and relaxed capture; Live uses player declarations.
 // Chunks go out this far ahead of their play time. Players schedule what they hold, so a page whose
 // timers stall or a radio that dozes (a locked Android phone) keeps playing instead of dropping late chunks.
 const sendUs = 8_000_000;
@@ -88,10 +88,13 @@ export function createScheduledAudio(options: { serverId?: string; name: string;
     let screens: string[] = [];
     // Sendspin servers supply timestamps. For capture use the group's largest
     // declared buffer plus output delay, as the protocol specifies; no admission gate.
-    const captureLead = () => Math.max(0, ...members.map(member => {
-      const timing = sessions.get(member.deviceId)?.getPlayerTiming();
-      return ((timing?.minBufferMs ?? 0) + (timing?.staticDelayMs ?? 0)) * 1000;
-    }));
+    const captureLead = () => {
+      const minimum = load?.captureIntent === "live" ? 0 : leadUs;
+      return Math.max(minimum, ...members.map(member => {
+        const timing = sessions.get(member.deviceId)?.getPlayerTiming();
+        return Math.max(minimum, (timing?.minBufferMs ?? 0) * 1000) + (timing?.staticDelayMs ?? 0) * 1000;
+      }));
+    };
     let load: SyncedLoad | undefined;
     let input: ReturnType<typeof audioInput> | undefined;
     let run: Run | undefined;
@@ -452,7 +455,10 @@ export function createScheduledAudio(options: { serverId?: string; name: string;
           // parser/handler failure must retire this connection, never the worker.
           if (binary) session.handleBinary(data as Buffer);
           else session.handleText(String(data));
-        } catch { socket.terminate(); }
+        } catch (error) {
+          console.warn("Couch: Sendspin session handler failed:", safePlaybackError(error instanceof Error ? error.message : String(error)));
+          socket.terminate();
+        }
       });
     },
     group,

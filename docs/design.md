@@ -33,6 +33,10 @@ correction and recovery. The existing **Tap to hear** prompt unlocks sound.
 The player shows **Waiting for audio…**, **Listening**, reconnect status or the
 actual source/output error. No custom latency or gap measurements are displayed.
 
+**Share on network** admits clients through routed VLANs using the same pairing
+and permissions. The selected address controls where Couch listens; clients do
+not have to share its subnet ([LAN access](lan-origin.md)).
+
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset
 to default; see [Where it plays](design/where-it-plays.md#compressor).
