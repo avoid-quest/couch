@@ -57,9 +57,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 - **Live input selection** opens the chosen input in an isolated hidden browser
   capture page. This is an explicit input choice; a failed input never switches
   devices.
-- **Playback buffer (ms)**, for Live, is how far behind the input listeners hear
-  it; more rides out Wi-Fi and phone hiccups. It is the same Couch-wide setting
-  as in the running share's panel.
+- **Playback buffer (ms)**, for Live, is each listener's Sendspin buffer; more
+  rides out Wi-Fi and phone hiccups. Measured delay follows it closely but is a
+  separate observation ([Live audio](../live-audio.md#measured-behavior)). It is
+  the same Couch-wide setting as in the running share's panel.
 - **Screens and windows** in the desktop app are small pictures with their
   names (`desktopCapturer` thumbnails, 320 × 200), for this computer's own
   Couch only: another Couch's page (Client mode) lists their names alone, as it
@@ -112,7 +113,7 @@ Sheet on phones and the TV:
 - **Picture**, changed live through `applyConstraints` on the captured track,
   without restarting it; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections.
-- Live sharing reports the delivered rate, channels and first block size.
+- Live sharing reports the delivered rate and channels.
 - One line about the relay only when a device is Behind: with no relay, that a
   relay can fix it, linking Devices & network; with one, that it couldn't
   connect even through it.

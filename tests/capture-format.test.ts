@@ -20,7 +20,7 @@ test("probe reports delivered format and releases its frame without substituting
   await fixture(44100, async observed => {
     let format;
     const stream = await prepareCaptureAudio({} as MediaStreamTrack, true, 44100, value => { format = value; });
-    expect(format).toEqual({ sampleRate: 44100, channels: 2, firstBlockFrames: 128 });
+    expect(format).toEqual({ sampleRate: 44100, channels: 2 });
     expect(observed.closed).toBe(1);
     await stream.cancel(); expect(observed.canceled).toBe(1);
   });

@@ -38,7 +38,7 @@ export function useLiveAudioSettings(enabled = true) {
   return { settings: query.data, save };
 }
 
-/** Sendspin's minimum buffer: how far behind the input listeners play. Saved on blur. */
+/** Each listener's Sendspin minimum buffer, saved on blur. */
 export function PlaybackBufferInput({ id, live, className }: { id: string; live: ReturnType<typeof useLiveAudioSettings>; className?: string }) {
   const { settings, save } = live;
   if (!settings) return null;

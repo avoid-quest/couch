@@ -24,7 +24,7 @@ export async function prepareCaptureAudio(track: MediaStreamTrack, live: boolean
       if (live && frame.numberOfChannels !== 2) throw new Error("Live audio needs a real stereo input. Choose a stereo audio interface or use ordinary sharing.");
       const age = performance.now() * 1000 - frame.timestamp;
       if (!Number.isFinite(frame.timestamp) || age < -50_000 || age > 2_000_000) throw new Error("This browser does not expose the capture clock needed for scheduled audio.");
-      observed?.({ sampleRate: frame.sampleRate, channels: frame.numberOfChannels, firstBlockFrames: frame.numberOfFrames });
+      observed?.({ sampleRate: frame.sampleRate, channels: frame.numberOfChannels });
     } finally { frame.close(); }
     reader.releaseLock();
     return source.readable;

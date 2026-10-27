@@ -143,7 +143,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
         {/* The name already ends in a screen's kind ("Studio Mac · Screen"): say it again only to add to it. */}
         {!sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
         <p className="text-meta text-muted-foreground">Since {since}</p>
-        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz · {sharing.captureFormat.channels} channels{sharing.captureFormat.firstBlockFrames !== undefined ? ` · first block ${sharing.captureFormat.firstBlockFrames} frames` : ""}</p>}
+        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz · {sharing.captureFormat.channels} channels</p>}
       </div>
     </div>
     {/* Live audio's host sees each listener as Core measures it, and sets the stream below. */}
