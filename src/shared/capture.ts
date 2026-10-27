@@ -15,5 +15,5 @@ export type LiveAudioAction = { id: string } & (
 export type LiveAudioError = { id: string; uploadId?: string; error: string };
 
 /** Delivered capture format, not the sound card’s hardware allocation. */
-export type AudioCaptureFormat = { sampleRate: number; channels: number; firstBlockFrames?: number };
+export type AudioCaptureFormat = { sampleRate: number; channels: number };
 export type AudioInput = { deviceId: string; label: string };
