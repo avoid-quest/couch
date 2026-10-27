@@ -28,7 +28,7 @@ test("a bounded browser capture gap becomes silence without ending the source", 
       capturedAtUs: 1_000_000 + sequence * 10_000, sampleRate: 48000, channels: 2,
       pcm: new Float32Array(960).fill(.25) }), true);
   }
-  await until(() => errors.length > 0 || pcm.length >= 2);
+  await until(() => errors.length > 0 || Buffer.concat(pcm).length > 1440 * 4 + 1);
   assert.deepEqual(errors, []);
   const bytes = Buffer.concat(pcm);
   assert.equal(bytes.readInt16LE(960 * 4), 0);
@@ -59,8 +59,9 @@ test("FFmpeg converts native mono/stereo rates to PCM and Opus and retires old c
     assert.equal(pcm[0]!.at, origin);
     assert.ok(opus[0]!.at < origin, "Opus pre-skip maps before the first captured sample");
     const last = pcm.at(-1)!;
-    const position = (pcm.length - 1) * 5_000;
-    assert.equal(last.at, origin + Math.round(position * 1.001), "capture time mapping survives source clock drift");
+    // Times follow each 10 ms block's measured capture time; a 5 ms chunk may start mid-block.
+    const position = (pcm.length - 1) * 5_000, block = Math.floor(position / 10_000);
+    assert.equal(last.at, origin + block * 10_010 + position - block * 10_000, "capture time mapping survives source clock drift");
     const bytes = Buffer.concat(pcm.map(chunk => chunk.data));
     // Skip converter startup and inspect native channel order/mono upmix.
     assert.equal(bytes.readInt16LE(4096), channels === 1 ? Math.round(8192 / Math.SQRT2) : 8192);
