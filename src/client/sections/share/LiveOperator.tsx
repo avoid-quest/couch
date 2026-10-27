@@ -44,14 +44,16 @@ export function LiveListeners({ sharing, viewers }: { sharing: LiveSharing; view
   const { run } = useSessionGate();
   const { status, settings, leadMs } = useLiveAudio(sharing.source.id);
   const inputLatencyMs = sharing.captureFormat?.native?.inputLatencyMs;
-  const atMaximum = settings?.lead === "automatic" && leadMs !== undefined && leadMs >= settings.maxLeadMs;
+  const listenerOf = (viewer: Viewer) => status?.listeners.find(item => item.deviceId === viewer.device.id) ?? viewer.liveListener;
+  // The maximum matters once it leaves someone behind.
+  const atMaximum = settings?.lead === "automatic" && leadMs !== undefined && leadMs >= settings.maxLeadMs && viewers.some(viewer => listenerOf(viewer)?.status === "behind");
   const summary = [viewers.length > 0 && `${viewers.length} listening`, leadMs !== undefined && `Lead ${leadMs} ms${atMaximum ? ", at its maximum" : ""}`,
     leadMs !== undefined && inputLatencyMs !== undefined && `Full loop ≈ ${Math.round(leadMs + inputLatencyMs)} ms`].filter(Boolean).join(" · ");
   return <div className="grid gap-1">
     {summary && <p className="text-meta text-muted-foreground tabular-nums" title="Full loop is an estimate: the lead plus the input latency the audio interface reports.">{summary}</p>}
     <ul aria-label="Listening" className="grid">
       {viewers.map(viewer => {
-        const listener = status?.listeners.find(item => item.deviceId === viewer.device.id) ?? viewer.liveListener;
+        const listener = listenerOf(viewer);
         return <li key={viewer.device.id} className="flex items-center gap-3 border-t py-2">
           <div className="grid min-w-0 flex-1 gap-0.5">
             <span className="text-body break-words">{viewer.device.name}</span>
@@ -124,7 +126,7 @@ export function LiveSettings({ sharing }: { sharing: LiveSharing }) {
 }
 
 function Row({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
-  return <div className="flex min-h-10 items-center justify-between gap-4"><label htmlFor={htmlFor} className="text-body">{label}</label>{children}</div>;
+  return <div className="flex min-h-10 items-center justify-between gap-4 touch:min-h-12"><label htmlFor={htmlFor} className="text-body">{label}</label>{children}</div>;
 }
 
 function FramesSelect({ id, value, disabled, onValueChange }: { id: string; value: Frames; disabled?: boolean; onValueChange: (frames: Frames) => void }) {
@@ -138,7 +140,7 @@ function FramesSelect({ id, value, disabled, onValueChange }: { id: string; valu
 function LeadSlider({ label, value, onCommit }: { label: string; value: number; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState<number | null>(null);
   const shown = draft ?? value;
-  return <div className="grid min-h-10 grid-cols-[minmax(0,9rem)_minmax(0,1fr)_3.5rem] items-center gap-3">
+  return <div className="grid min-h-10 grid-cols-[minmax(0,9rem)_minmax(0,1fr)_3.5rem] items-center gap-3 touch:min-h-12">
     <span className="text-body">{label}</span>
     <Slider aria-label={label} aria-valuetext={`${shown} ms`} min={0} max={maxLeadMs} step={1} value={[Math.min(maxLeadMs, shown)]}
       onValueChange={values => setDraft(values[0]!)} onValueCommit={values => { setDraft(null); onCommit(values[0]!); }} />

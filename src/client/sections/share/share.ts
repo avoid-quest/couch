@@ -97,5 +97,7 @@ export function listenerLine(viewer: Viewer, listener = viewer.liveListener) {
   if (listener.status === "removed") return "Removed";
   const standing = listener.behindMs ? `Behind by ${Math.ceil(listener.behindMs)} ms` : listener.status === "limiting" ? "Sets the lead" : null;
   return [standing, listener.codec === "opus" ? "Opus" : "PCM", listener.latencyMs !== null && `latency ${listener.latencyMs} ms`, listener.marginMs !== null && `margin ${listener.marginMs} ms`,
-    `${listener.gaps} ${listener.gaps === 1 ? "gap" : "gaps"}`, listener.concealments > 0 && `${listener.concealments} concealed`].filter(Boolean).join(" · ");
+    `${listener.gaps} ${listener.gaps === 1 ? "gap" : "gaps"}`, listener.concealments > 0 && `${listener.concealments} concealed`]
+    // A line wraps between its parts, never inside one.
+    .filter(Boolean).map(part => (part as string).replaceAll(" ", "\u00a0")).join(" · ");
 }

@@ -36,7 +36,7 @@ function fixture(listeners: Record<string, LiveListenerStatus | undefined>, lead
     playbacks: [{ id: "playback", title: "Studio Mac · Audio input", status: "playing", liveSourceId: "source", intent: "live", outputs, liveLeadMs: leadMs }],
     liveSources: [{ id: "source", name: "Studio Mac · Audio input", deviceId: "host", kind: "microphone", audio: true, video: false, intent: "live" }] } as unknown as ClientSessionState;
 }
-const html = (node: ReactNode) => renderToStaticMarkup(<>{node}</>).replaceAll("&gt;", ">");
+const html = (node: ReactNode) => renderToStaticMarkup(<>{node}</>).replaceAll("&gt;", ">").replaceAll("\u00a0", " ");
 type Props = { children?: ReactNode; onSelect?: () => unknown; [key: string]: unknown };
 const elements = (node: ReactNode): { props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 // A component's own element tree, from inside a render so its hooks run.
