@@ -35,7 +35,7 @@ session. A peer whose messages throw closes alone; the shared worker continues.
 |---|---|---|
 | Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture in an isolated hidden capture page. |
 | Upload | f32 frames → validated `CaptureAudioPacket` in its source epoch | Node 0.6.2 has `sendSourceAudioChunk` but no public source stream start/end to declare a format. Publication tokens, epochs and helper leases retire stale work. |
-| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample`, stereo layout, `pcm_s16le` and `libopus` with the Ogg wrapper removed. Gaps up to 40 ms are filled with silence so sample positions hold. |
+| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample`, stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 10 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 10 ms chunks, because each step holds audio until it is full. Gaps up to 40 ms are filled with silence so sample positions hold. |
 | Capture-time mapping | Encoded offset + generation + measured capture blocks → source time in Core microseconds | The Node SDK's default timestamp is send time; it cannot recover capture time. A short block lookup, including Opus pre-skip, keeps long shares on the input's clock. |
 | Group scheduling | Source time + members + player timing → presentation timestamps per session | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, group, metadata and volume APIs. The SDK session does not choose an application timeline. |
 
@@ -59,8 +59,7 @@ to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
 recreates that listener's player. Startup lead, correction and output buffering
 keep SDK defaults. The buffer is a receiver request, not a measured
-input-to-ear latency. 250 ms is the default because 150 ms had audible gaps on a
-Wi-Fi phone in both measured runs, while 250 and 300 ms had none (below).
+input-to-ear latency. See the measurements below for each receiver's floor.
 
 The sender produces 48 kHz stereo PCM16 and Opus only. A receiver supporting
 only other formats gets an error on its row.
@@ -69,19 +68,34 @@ only other formats gets an error on its row.
 
 Electrical measurements, 27 October 2026: a Mac desktop host capturing a UMC404HD
 native input (48 kHz, 128 frames), a Linux Chrome receiver on wired LAN and a
-Redmi Note 8T Chrome receiver on Wi-Fi, both recorded on the UMC's own clock.
-Content was 260 s of music, speech and piano with stereo-identity sections.
+Redmi Note 8T Chrome receiver on Wi-Fi, recorded on the UMC's own clock. Measured
+delay was within about 1 ms of the playback buffer in every run, so the buffer is
+the delay; what limits it is the time audio needs to reach each player in time.
 
-| Playback buffer | Runs | Reference-to-output delay | Gaps of 20 ms or more |
-|---|---|---|---|
-| 150 ms | 2 | 150.2 ms Linux, 150.6–151.1 ms Android | Android 10 and 47; Linux 0 and 5 |
-| 250 ms | 1 | 250.2 ms both | none |
-| 300 ms | 2 | 300.1–300.3 ms both | Android none; Linux 0 and 2 |
+That time has two parts. Core holds a captured sample until its encoded chunk is
+ready: about 29 ms for Opus and 16 ms for PCM (p50, timed in Core). The receiver
+side (network, SDK decoding and scheduling, and the browser's output path, which
+the SDK reports as about 43 ms on the Linux receiver) needs roughly another 65 ms.
+Smaller encoding steps halved Core's part (from 54 and 27 ms), lowering each
+receiver's floor, measured alone with level-matched music:
+
+| Receiver | Codec | Clean | Fails | Before smaller steps |
+|---|---|---|---|---|
+| Linux, wired | Opus | 80 ms | 70 ms | 120–140 ms |
+| Linux, wired | PCM | 70 ms (5 gaps) | 60 ms | 100 ms |
+| Redmi, Wi-Fi | Opus | 120 ms (90 s, no gaps) | 100–110 ms (intermittent) | 130 ms |
+
+With both receivers plus a MacBook and a Pixel on Wi-Fi in one group, five-minute
+runs at 150 and 120 ms had no gaps of 20 ms or more on either recorded receiver.
+Before the smaller steps, two 260 s runs at 150 ms had 10 and 47 Android gaps,
+and 250–300 ms runs had none. PCM uses about 1.5 Mbit/s per listener; over this
+Wi-Fi at 250 ms it starved a Pixel that played Opus without trouble.
 
 Median Android-minus-Linux skew was 0–0.9 ms, p95 at most 2.3 ms. Capture mute, Leave/Join,
 host Remove, each listener's own volume and mute, and recovery 13 s after a
-10 s Android Wi-Fi outage were confirmed on the electrical returns. These short
-runs are not a long-stability, background-phone or audience-size qualification.
+10 s Android Wi-Fi outage were confirmed on the electrical returns. The Redmi kept
+playing with its screen off, with short gaps (≤ 90 ms) as the screen switched off
+and on. These short runs are not a long-stability or audience-size qualification.
 A Linux receiver whose PulseAudio stream died under host load kept reporting
 playing in the SDK while silent; reloading the page recovered it.
 
