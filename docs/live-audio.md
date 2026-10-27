@@ -33,6 +33,11 @@ without that inspection reproduced the latency and recovery, with no uncommanded
 attenuation of at least 20 ms. A smaller Android timing excursion remains recorded;
 lower-buffer latency estimates are documented separately from measured results.
 
+The later [150/100 ms measurements](sendspin-buffer-comparison-20261027.md)
+confirmed approximately 100/150 ms latency savings, respectively, but found one
+and three uncommanded Android attenuations. Linux had none. Neither lower setting
+is qualified as a new default; 250 ms was restored.
+
 ## Upstream APIs and the plaintext version choice
 
 [Browser 3.2.1 README](https://github.com/Sendspin/sendspin-js/blob/830e8f1062b44746606b368e7e8823fe565f8b3c/README.md)
@@ -40,7 +45,9 @@ documents `SendspinPlayer` with an explicit `playerId`. Its published protocol
 handler sends plaintext `client/hello`. Browser releases 4.0.0 and 5.0.0 always
 use Noise and expose only cipher-suite selection, not a plaintext switch.
 3.2.1 is pinned to meet the owner's plaintext requirement; continued maintenance
-of this older release is not assumed.
+of this older release is not assumed. The [SDK source comparison](sendspin-sdk-comparison.md)
+identifies an official timing-fix commit before Noise that could be measured in a
+separate bounded comparison. It is not integrated or measured here.
 
 The [Node SDK](https://github.com/sonn-audio/node-sendspin/tree/bb435a032e8a55aba0ef95a5945f961b5b3a6082)
 supports plaintext sessions without `enableEncryption`. Couch uses the public
@@ -110,8 +117,9 @@ playback. Native input selection, capture rate/buffer and mute remain available.
 
 The share panel offers Automatic/PCM/Opus through the SDK's public `codecs`
 option, and Buffer (ms) through `minBufferMs`/`setMinBufferMs`. Automatic leaves
-codec preference upstream; the initial buffer is the SDK default, 250 ms. Opus
-is preferred with PCM fallback using upstream browser capability filtering. A
+codec preference upstream; Couch explicitly mirrors the SDK's 250 ms minimum-buffer
+default. The SDK separately defaults startup lead to 250 ms; those are different
+requests, not two buffers to add. Opus is preferred with PCM fallback using upstream browser capability filtering. A
 codec change recreates that player; buffer updates reuse its connection. Startup
 lead, output mode, correction, decoder and browser hardware buffering use SDK
 defaults. No preparation probe or readiness extension gates playback.
