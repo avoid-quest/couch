@@ -4,6 +4,7 @@ import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMAT
 import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
 import { systemLanNames } from "./lan-name";
+import { lanInterfacePriorities } from "./lan-interfaces";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { healStreamingCommunityOrigin } from "./streamingcommunity";
 import { createStartup } from "./startup";
@@ -2089,6 +2090,7 @@ export async function createHub(options: HubOptions) {
   if (options.managedLan) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
+      priorities: await lanInterfacePriorities(),
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
       start: async (network, listenPort) => {

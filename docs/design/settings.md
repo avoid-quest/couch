@@ -159,6 +159,10 @@ focuses its first enabled control; Back from the content returns to the rail
 (a source page first returns to Sources), then Home. Entering Devices &
 network focuses Pair a device when available.
 
+Share on network chooses Ethernet before Wi-Fi automatically; several adapters
+or IP addresses never require a user to set flags. The selected address stays
+in use until Couch restarts so an adapter appearing does not interrupt sharing.
+
 ## Who can change what
 
 Every paired device opens the shared settings pages; Updates is the exception,

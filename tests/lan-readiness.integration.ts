@@ -77,13 +77,14 @@ test("an additional interface preserves the active automatically selected LAN li
   await f.ready();
 });
 
-test("automatic selection still refuses an ambiguous initial network", { skip: !candidate }, async t => {
+test("automatic selection starts sharing with several initial networks", { skip: !candidate }, async t => {
   const f = await fixture(t, { automatic: true });
   await assert.rejects(f.lan.refresh(), /No eligible LAN address/);
   f.arrive();
   f.addNetwork();
-  await assert.rejects(f.lan.refresh(), /Several LAN addresses/);
-  assert.equal(f.lan.server, null);
+  await f.lan.refresh();
+  assert.equal(f.lan.network?.address, f.network.address);
+  await f.ready();
 });
 
 test("LAN HTTPS becomes ready promptly when IPv4 arrives after Core starts", { skip: !candidate }, async t => {

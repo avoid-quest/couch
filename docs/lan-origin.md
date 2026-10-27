@@ -1,6 +1,6 @@
 # Named LAN address
 
-This guide covers the Debian 13 app's direct LAN listener. Locally, open
+This guide covers Couch's direct LAN listener. Locally, open
 **Settings → Devices & network → Share on network** and enable sharing, then verify the IP
 address shown when pairing before adding a name. Couch uses HTTPS with its own
 self-signed certificate on port 4100 by default; plain HTTP on the LAN redirects
@@ -11,7 +11,13 @@ The machine/network administrator owns IP assignment, LAN DNS and any narrowly
 scoped firewall rule. Couch setup does not install a proxy or DNS daemon,
 configure router forwarding or expose Couch to the internet.
 
-## Select the local address
+## Automatic local address
+
+Couch chooses Ethernet first, then Wi-Fi, then other eligible adapters with a
+private IPv4 address. Multiple adapters or addresses do not require any setup:
+ties use the interface name, then the lowest IPv4 address. Windows and macOS
+hardware information and Linux sysfs identify adapter types; conventional names
+are the fallback if that information is unavailable.
 
 Couch checks its private IPv4 selection every second, so sharing can start after
 DHCP assigns an address and recover when an address or occupied port returns.
@@ -20,10 +26,12 @@ automatically, Couch keeps that interface and address until restart, even if
 another interface appears. If it disappears, LAN access closes and pairing URLs
 are withdrawn until it returns. Turning sharing off and on keeps this selection;
 restart Couch to select a different network automatically.
-When initially selecting among several eligible interfaces,
-set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
-has multiple private IPv4 addresses, also set `COUCH_LAN_ADDRESS` to the specific
-local address to use. For example, if `eth0` owns `192.168.1.20`:
+
+### Optional administrator override
+
+Existing deployments can still pin an interface with `COUCH_LAN_INTERFACE` or a
+specific local address with `COUCH_LAN_ADDRESS`. These are optional overrides,
+not required for ordinary sharing. For example, if `eth0` owns `192.168.1.20`:
 
 ```sh
 COUCH_LAN_INTERFACE=eth0

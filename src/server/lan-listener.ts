@@ -11,10 +11,11 @@ export function lanPeer(network: LanNetwork, peer: string) {
   const address = ipv4(network.address), mask = ipv4(network.netmask), value = ipv4(peer);
   return address !== null && mask !== null && value !== null && (address & mask) === (value & mask);
 }
-export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string): LanNetwork {
+export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string, priorities: ReadonlyMap<string, number> = new Map()): LanNetwork {
+  const priority = (name: string) => priorities.get(name) ?? (/^(vEthernet|vmnet|vbox|bridge|vpn|tailscale|wg)/i.test(name) ? 3 : /^(Ethernet\b|eth\d|en\w)/i.test(name) ? 0 : /^(Wi-?Fi\b|Wireless\b|wl)/i.test(name) ? 1 : 2);
   const networks = Object.entries(interfaces).flatMap(([name, entries]) => (entries ?? []).filter(entry => entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address) && (!address || entry.address === address) && (selected ? name === selected : !/^(docker|br-|veth|virbr|tun|tap|utun)/.test(name))).map(entry => ({ name, address: entry.address, netmask: entry.netmask })));
-  if (networks.length === 0) throw new Error(selected || address ? "No eligible LAN address matches COUCH_LAN_INTERFACE/COUCH_LAN_ADDRESS. Check that the selected private IPv4 address is assigned locally." : "No eligible LAN address. Connect to a private IPv4 LAN before sharing on your network.");
-  if (networks.length !== 1) throw new Error("Several LAN addresses are available. Select a network with COUCH_LAN_INTERFACE; if it has multiple addresses, also set COUCH_LAN_ADDRESS to one of its private IPv4 addresses and restart Couch.");
+  if (networks.length === 0) throw new Error(selected || address ? "No eligible LAN address on the selected network. Reconnect to that network." : "No eligible LAN address. Connect to a private IPv4 LAN before sharing on your network.");
+  networks.sort((a, b) => priority(a.name) - priority(b.name) || a.name.localeCompare(b.name, "en") || ipv4(a.address)! - ipv4(b.address)!);
   return networks[0]!;
 }
 // The LAN reaches Couch over HTTPS on its port (#644 ticket 8). A saved http:// name keeps
@@ -61,6 +62,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
   start: (network: LanNetwork, port: number) => Promise<T>;
   changed: (urls: string[], error: string | null, suggested: string) => void;
   interfaces?: typeof networkInterfaces;
+  priorities?: ReadonlyMap<string, number>;
   resolve?: typeof lookup;
 }) {
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
@@ -71,7 +73,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
     const interfaces = (options.interfaces ?? networkInterfaces)();
     // Keep the automatic choice through outages; never migrate sharing to another LAN.
     if (automaticNetwork) return selectLan(interfaces, automaticNetwork.name, automaticNetwork.address);
-    return selectLan(interfaces, options.selected, options.address);
+    return selectLan(interfaces, options.selected, options.address, options.priorities);
   };
   const stopAll = async () => { await Promise.all([active?.stop(), port80?.stop()]); active = port80 = null; };
   const changed = (urls: string[], error: string | null, suggested = "") => {
