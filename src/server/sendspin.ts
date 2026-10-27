@@ -12,6 +12,7 @@ import type { LiveAudioSettings, LiveListenerStatus, PlaybackCommand, PlayerStat
 import type { LiveTransportStatus } from "./live-transport";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
+import { createListenerFanout } from "./live-fanout";
 export type { Member, SyncedLoad } from "./scheduled-audio";
 
 /** Core owns authority/lifetimes. The worker owns clocks, encoding, encryption and fanout. */
@@ -38,9 +39,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const ready = new Promise<number>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   void ready.catch(() => {});
   const post = (message: Record<string, unknown>) => { if (!closed && !failed) worker.postMessage(message); };
+  const fanout = createListenerFanout(post);
   const fail = (error: Error) => {
     if (closed || failed) return;
-    failed = true; readyReject(error); clients.clear();
+    failed = true; readyReject(error); clients.clear(); fanout.close();
     for (const [id, source] of sources) { source.error = error.message; options.sourceFailed?.(id, error.message); }
     for (const observe of groups.values()) observe({ playbackId: null, status: "error", error: error.message, position: 0, duration: null, volume: 100, seekable: false });
     options.changed();
@@ -48,6 +50,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   worker.on("error", fail);
   worker.on("exit", code => { if (!closed) fail(new Error(`The audio worker stopped (${code}).`)); for (const id of helpers.keys()) releaseHelper(id); });
   worker.on("message", async message => {
+    if (message.type.startsWith("listener")) return fanout.receive(message);
     if (message.type === "ffmpegRelease") { releaseHelper(message.id); return; }
     if (closed) return;
     if (message.type === "ready") readyResolve(message.port);
@@ -73,24 +76,16 @@ export function createSendspin(options: { identity: string; name: string; admit:
     }
     else if (message.type === "status") { clients = new Set(message.value.clients); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); options.changed(); }
   });
-  // A Live listener's audio never queues behind a stalled connection. Pings wait behind everything sent,
-  // kernel buffers included: one unanswered for half a second stops its audio, for two seconds closes it
-  // so that it reconnects (live-transport.ts).
-  const bridge = (socket: WebSocket, query: string, listener = false) => {
+  const bridge = (socket: WebSocket, query: string) => {
     connections.add(socket); socket.pause();
     socket.on("error", () => socket.terminate());
     let upstream: WebSocket | undefined;
-    const pings: number[] = [], stalledMs = () => pings.length ? performance.now() - pings[0]! : 0;
-    const behind = () => { socket.close(4002, "This connection fell behind the live audio."); upstream?.terminate(); };
-    const pinging = listener ? setInterval(() => { if (stalledMs() > 2000) behind(); else if (socket.readyState === WebSocket.OPEN) { pings.push(performance.now()); socket.ping(); } }, 100) : undefined;
-    socket.on("pong", () => pings.shift());
-    socket.once("close", () => { clearInterval(pinging); connections.delete(socket); upstream?.terminate(); });
+    socket.once("close", () => { connections.delete(socket); upstream?.terminate(); });
     void ready.then(port => {
       if (closed || socket.readyState !== WebSocket.OPEN) return;
       upstream = new WebSocket(`ws://127.0.0.1:${port}/?secret=${secret}&${query}`, { perMessageDeflate: false, maxPayload: 1024 * 1024 });
       const other = upstream;
       const forward = (from: WebSocket, to: WebSocket, data: WebSocket.RawData, binary: boolean) => {
-        if (listener && binary && to === socket && stalledMs() > 500) return;
         if (from.readyState !== WebSocket.OPEN || to.readyState !== WebSocket.OPEN || to.bufferedAmount > 256 * 1024) { socket.terminate(); other.terminate(); return; }
         to.send(data, { binary });
       };
@@ -98,7 +93,6 @@ export function createSendspin(options: { identity: string; name: string; admit:
       other.on("message", (data, binary) => forward(other, socket, data, binary));
       other.once("open", () => socket.resume());
       other.on("error", () => socket.terminate());
-      // Keep the worker's reason, such as a listener removed by the host.
       other.once("close", (code, reason) => { try { socket.close(code, reason); } catch { socket.close(); } });
     }).catch(() => socket.terminate());
   };
@@ -149,7 +143,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     endSource(id: string) { const epoch = sources.get(id)?.epoch; sources.delete(id); listening.delete(id); standing.delete(id); const upload = uploads.get(id); uploads.delete(id); upload?.close(); post({ type: "end", sourceId: id, epoch }); },
     hasSource: (id: string) => sources.has(id),
     // Live audio listeners, after Hub authorizes them.
-    listen: (socket: WebSocket, sourceId: string, deviceId: string) => bridge(socket, `listen=${encodeURIComponent(sourceId)}&device=${encodeURIComponent(deviceId)}`, true),
+    listen: fanout.listen,
     liveLead: (sourceId: string) => listening.get(sourceId)?.leadMs,
     liveStatus: (sourceId: string) => listening.get(sourceId),
     // The operator's changes apply to every running Live stream at once.
@@ -170,7 +164,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     },
     drop: (id: string) => post({ type: "drop", clientId: id }),
     close() {
-      post({ type: "close" }); closed = true;
+      post({ type: "close" }); closed = true; fanout.close();
       for (const connection of connections) { if (connection instanceof WebSocket) connection.terminate(); else connection.destroy(); }
       const timeout = setTimeout(() => void worker.terminate(), 3000); timeout.unref(); worker.once("exit", () => clearTimeout(timeout));
     },

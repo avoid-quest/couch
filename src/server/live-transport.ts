@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { WebSocket, RawData } from "ws";
+import type { RawData } from "ws";
 import { serverNowUs } from "@sonn-audio/node-sendspin";
 import opusFactory from "opusscript/build/opusscript_native_wasm.js";
 import opusWasm from "opusscript/build/opusscript_native_wasm.wasm" with { type: "file" };
@@ -13,8 +13,8 @@ import type { LiveAudioSettings, LiveListenerStatus } from "../shared/protocol";
  * ("host clock"), positions are 48 kHz sample frames of the current capture generation.
  *
  * Endpoint: wss://<Couch>/api/live/listen?token=<paired token>&sourceId=<live source>. Hub accepts a
- * paired device (or the host token from this computer) whose Playback of that Live source plays its sound,
- * then proxies the socket into the audio worker. Unpaired: HTTP 401; not playing it: 403. Close codes:
+ * paired device (or the host token from this computer) whose Playback of that Live source plays its sound;
+ * its socket stays on Core's main thread, which writes the audio worker's packets to it (live-fanout.ts). Unpaired: HTTP 401; not playing it: 403. Close codes:
  * 4001 removed by the host or unpaired (do not reconnect), 4002 fell behind (reconnect), 4003 replaced by
  * another window of the device, 1008 no longer playing that source, 1001 the share ended.
  *
@@ -70,15 +70,18 @@ const finite = (value: unknown): value is number => Number.isFinite(value);
 const reported = ["needMs", "leadMs", "deadlineMarginMinMs", "marginMinMs", "debtMs", "arrivalGapMaxMs", "headroomMinMs", "resyncs"] as const;
 const count = (value: unknown) => finite(value) && value > 0 ? Math.floor(value) : 0;
 const rounded = (value: number | null | undefined) => finite(value) ? Math.round(value) : null;
-type Listener = { socket: WebSocket; lead?: LeadListener; signature?: string; gaps: number; concealments: number; marginMs: number | null; statsUs: number; windowUs: number; messages: number };
+/** A listener's WebSocket, or the audio worker's stand-in for one on Core's main thread. */
+export type ListenerSocket = { readonly readyState: number; send(data: string | Buffer): void; close(code: number, reason: string): void;
+  on(event: "message", listener: (data: RawData | string, binary: boolean) => void): unknown; once(event: "close", listener: () => void): unknown };
+type Listener = { socket: ListenerSocket; lead?: LeadListener; signature?: string; gaps: number; concealments: number; marginMs: number | null; statsUs: number; windowUs: number; messages: number };
 export type LiveTransportStatus = { leadMs: number; listeners: (LiveListenerStatus & { deviceId: string })[] };
 // Fixed holds its lead exactly; the operator's bounds are Automatic's.
 const leadPolicy = (settings: LiveAudioSettings) => settings.lead === "fixed" ? { fixed: true, minLeadMs: 0, maxLeadMs: Infinity }
   : { fixed: false, minLeadMs: settings.minLeadMs, maxLeadMs: settings.maxLeadMs, raiseForSlowest: settings.raiseForSlowest };
 
 /** One Live source's stream: timestamped packets for each listener and the lead they share. */
-export function createLiveTransport({ sourceId, epoch, settings, changed, log }: { sourceId: string; epoch: string; settings: LiveAudioSettings;
-  changed: (status: LiveTransportStatus) => void; log: (line: string) => void }) {
+export function createLiveTransport({ sourceId, epoch, settings, changed, log, fanout = (packet, to) => { for (const socket of to) socket.send(packet); } }: { sourceId: string; epoch: string; settings: LiveAudioSettings;
+  changed: (status: LiveTransportStatus) => void; log: (line: string) => void; fanout?: (packet: Buffer, to: ListenerSocket[]) => void }) {
   const lead = createLeadController({ initialLeadMs: settings.leadMs, ...leadPolicy(settings) });
   let name = settings.codec, codec = name === "opus" ? opusCodec : pcmCodec;
   let encoder = codec === opusCodec ? createOpusEncoder(settings.opusBitrate) : undefined;
@@ -88,8 +91,8 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
   let pendingFrames = 0, pendingPosition = 0, pendingUs = 0;
   // Capture → send age, logged per ten seconds as the evidence for the Main → Core hop.
   let ageMax = 0, ageTotal = 0, ages = 0, late = 0, windowUs = serverNowUs();
-  const text = (socket: WebSocket, message: unknown) => { if (socket.readyState === 1) socket.send(JSON.stringify(message)); };
-  const hello = (socket: WebSocket, us: number) => text(socket, { type: "hello", leadMs: lead.effectiveLeadMs(us), codec, opusFrames, session });
+  const text = (socket: ListenerSocket, message: unknown) => { if (socket.readyState === 1) socket.send(JSON.stringify(message)); };
+  const hello = (socket: ListenerSocket, us: number) => text(socket, { type: "hello", leadMs: lead.effectiveLeadMs(us), codec, opusFrames, session });
 
   const publish = () => {
     const snapshot = lead.current(serverNowUs());
@@ -121,7 +124,9 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
     }
     if (age >= lead.effectiveLeadMs(now) * 1000) { late++; return; }
     ageMax = Math.max(ageMax, age); ageTotal += age; ages++;
-    for (const l of listeners.values()) if (l.socket.readyState === 1 && l.lead?.status !== "removed") l.socket.send(packet);
+    const to: ListenerSocket[] = [];
+    for (const l of listeners.values()) if (l.socket.readyState === 1 && l.lead?.status !== "removed") to.push(l.socket);
+    if (to.length) fanout(packet, to);
   };
   // A new position timeline: listeners start over from the next packet.
   const restart = () => {
@@ -168,16 +173,15 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
         pendingFrames = 0;
       }
     },
-    accept(socket: WebSocket, deviceId: string) {
+    accept(socket: ListenerSocket, deviceId: string) {
       listeners.get(deviceId)?.socket.close(4003, "This device is listening in another window.");
       const now = serverNowUs(), l: Listener = { socket, gaps: 0, concealments: 0, marginMs: null, statsUs: 0, windowUs: now, messages: 0 };
       listeners.set(deviceId, l);
-      (socket as WebSocket & { _socket?: { setNoDelay(on: boolean): void } })._socket?.setNoDelay(true);
       socket.once("close", () => {
         if (listeners.get(deviceId) !== l) return;
         listeners.delete(deviceId); apply(lead.remove(deviceId, serverNowUs())); publish();
       });
-      socket.on("message", (data: RawData, binary: boolean) => {
+      socket.on("message", (data, binary) => {
         const now = serverNowUs(), message = String(data);
         if (now - l.windowUs >= 1e6) { l.windowUs = now; l.messages = 0; }
         if (++l.messages > 64 || message.length > 16_384) return socket.close(1008, "This listener sent too much.");

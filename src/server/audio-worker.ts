@@ -4,6 +4,7 @@ import { WebSocketServer } from "ws";
 import { createScheduledAudio } from "./scheduled-audio";
 import { acceptCaptureUpload } from "./capture-ingest";
 import { createLiveTransport } from "./live-transport";
+import { createRemoteListeners, type ListenerEvent } from "./live-fanout";
 import type { CaptureAudioPacket } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
 import type { LiveAudioSettings, PlaybackCommand } from "../shared/protocol";
@@ -16,6 +17,10 @@ const registrations = new Map<string, string>();
 const notify = () => port.postMessage({ type: "status", value: engine.status() });
 // Live sources stream their own timestamped packets to their listeners (live-transport.ts).
 const transports = new Map<string, ReturnType<typeof createLiveTransport>>();
+const listeners = createRemoteListeners((command, transfer) => port.postMessage(command, transfer), (socket, sourceId, deviceId) => {
+  const transport = transports.get(sourceId);
+  if (transport) transport.accept(socket, deviceId); else socket.close(1008, "This live audio is not available.");
+});
 const writeSource = (sourceId: string, epoch: string, packet: CaptureAudioPacket) => {
   const transport = transports.get(sourceId);
   if (transport) {
@@ -57,10 +62,6 @@ server.on("upgrade", (req, socket, head) => {
       });
       return;
     }
-    if (url.searchParams.get("listen")) {
-      const transport = transports.get(url.searchParams.get("listen")!);
-      return transport ? transport.accept(ws, url.searchParams.get("device")!) : ws.close(1008, "This live audio is not available.");
-    }
     timeout = setTimeout(() => ws.terminate(), 10_000);
     ws.once("message", async (data, binary) => {
       clearTimeout(timeout); ws.pause();
@@ -74,6 +75,7 @@ server.on("upgrade", (req, socket, head) => {
   });
 });
 port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; live?: LiveAudioSettings; packet?: CaptureAudioPacket; clientId?: string; delay?: number; reason?: string }) => {
+  if (message.type.startsWith("listener")) return listeners.receive(message as unknown as ListenerEvent);
   if (message.type === "reply") { pending.get(message.id!)?.(message.value); pending.delete(message.id!); return; }
   if (message.type === "group") {
     let group = groups.get(message.group!);
@@ -87,7 +89,7 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
     registrations.set(sourceId, epoch);
     if (!message.live) engine.registerSource(sourceId);
     if (message.live) transports.set(sourceId, createLiveTransport({ sourceId, epoch, settings: message.live,
-      changed: status => port.postMessage({ type: "liveListeners", sourceId, epoch, status }), log: line => console.log(`${new Date().toISOString()} ${line}`) }));
+      changed: status => port.postMessage({ type: "liveListeners", sourceId, epoch, status }), log: line => console.log(`${new Date().toISOString()} ${line}`), fanout: listeners.fanout }));
   }
   else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { writeSource(message.sourceId!, message.epoch!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
   else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); transports.get(message.sourceId!)?.close(); transports.delete(message.sourceId!); engine.endSource(message.sourceId!); }
