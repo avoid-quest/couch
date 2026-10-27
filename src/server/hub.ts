@@ -2152,6 +2152,10 @@ export async function createHub(options: HubOptions) {
             playback = playbacks.get(action.playbackId);
             const sourceId = playback && intentOf(playback) === "live" ? sourceOf(playback) : undefined;
             if (!playback || !sourceId || !playback.outputs.some(output => output.deviceId === action.deviceId)) throw new ControllerError("That device no longer listens to this live audio.", 409);
+            // Sent before it leaves, while the listener still views this Playback, as Stop sharing's notice is.
+            const remover = socket.data.deviceId ?? hostId();
+            playback.session.notice({ deviceId: remover, name: nameOf(remover) }, `${nameOf(remover)} removed this device from ${live.source(sourceId)?.name ?? "the live audio"}`, "listener-removed", action.deviceId);
+            flush();
             leave(playback, action.deviceId);
             reconcile(playback);
             broadcast();

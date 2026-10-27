@@ -85,7 +85,8 @@ export type SessionState = {
   playbacks?: PlaybackSummary[];
   devices?: DeviceSummary[];
   liveSources?: LiveSource[];
-  activity?: { id: string; actor: PlaybackActor; text: string; kind?: "sharing-stopped" };
+  // target: the one Device a listener-removed notice is for.
+  activity?: { id: string; actor: PlaybackActor; text: string; kind?: "sharing-stopped" | "listener-removed"; target?: string };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;

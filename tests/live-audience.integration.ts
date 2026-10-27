@@ -190,3 +190,22 @@ test("an audio-only legacy join never requests permission for a disabled private
     assert.equal(other.load()?.liveOutput?.picture, false);
   } finally { await f.close(); }
 });
+
+test("the host removes one Live listener, which is told why, while the others keep listening", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    const host = await f.connect(-1), other = await f.connect(2);
+    assert.equal((await host.command(publication)).ok, true);
+    for (const listener of [f.receiver, other]) assert.equal((await listener.command({ type: "playLive", sourceId: "concert", deviceId: listener.id })).ok, true);
+    await until(() => host.state.playbacks?.some(playback => playback.liveSourceId === "concert" && playback.outputs.length === 2) === true);
+    const playbackId = host.state.playbacks!.find(playback => playback.liveSourceId === "concert")!.id;
+    assert.equal((await other.command({ type: "removeLiveListener", playbackId, deviceId: f.receiver.id })).ok, false, "a listener cannot remove another");
+    assert.equal((await host.command({ type: "removeLiveListener", playbackId, deviceId: f.receiver.id })).ok, true);
+    await until(() => f.receiver.state.controls?.leave === false);
+    const notices = (client: typeof host) => client.messages.flatMap(message => message.type === "state" && message.state.activity?.kind === "listener-removed" ? [message.state.activity] : []);
+    assert.ok(notices(f.receiver).some(activity => activity.target === f.receiver.id && /removed this device/.test(activity.text)));
+    assert.ok(notices(other).every(activity => activity.target !== other.id), "the notice names only the removed listener");
+    assert.deepEqual(host.state.playbacks!.find(playback => playback.id === playbackId)!.outputs.map(output => output.deviceId), [other.id]);
+    assert.equal((await host.command({ type: "removeLiveListener", playbackId, deviceId: f.receiver.id })).ok, false, "a removed device is no longer listening");
+  } finally { await f.close(); }
+});
