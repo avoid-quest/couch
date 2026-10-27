@@ -69,6 +69,7 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
     if (message.method === "members") group.members(message.args![0] as Member[]);
     if (message.method === "screens") group.screens(message.args![0] as string[]);
     if (message.method === "send") group.send(message.args![0] as SyncedLoad | PlaybackCommand);
+    if (message.method === "duration") group.duration(message.args![0] as string, message.args![1] as number);
     if (message.method === "close") { group.close(); groups.delete(message.group!); }
   } else if (message.type === "register") {
     const { sourceId, epoch } = message as { sourceId: string; epoch: string };

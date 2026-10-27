@@ -364,6 +364,11 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     };
 
     const synced = {
+      // A picture-only timeline has no decoder to learn an unlisted VOD's length; its screens report it.
+      duration(playbackId: string, seconds: number) {
+        if (load?.playbackId !== playbackId || state.duration !== null || !(seconds > 0) || !Number.isFinite(seconds)) return;
+        state = { ...state, duration: seconds }; report();
+      },
       // The screens: Devices whose picture follows this group's clock.
       screens(next: string[]) {
         const added = next.filter(clientId => !screens.includes(clientId));

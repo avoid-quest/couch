@@ -18,7 +18,8 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
   const secret = randomUUID();
   const beside = new URL("./audio-worker.mjs", import.meta.url);
   const worker = new Worker(existsSync(beside) ? beside : resolve("build/audio-worker.mjs"), { workerData: { serverId: options.serverId, privateKey: options.privateKey, name: options.name, secret } });
-  const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { epoch: string; queued: number; error?: string }>();
+  // loads: each group's current playback, so a worker failure reaches the item that was playing.
+  const groups = new Map<string, (state: PlayerState) => void>(), loads = new Map<string, string>(), sources = new Map<string, { epoch: string; queued: number; error?: string }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();
   let clients = new Set<string>(), delays = new Map<string, number>(), receivers = new Map<string, string>();
@@ -36,7 +37,7 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
     if (closed || failed) return;
     failed = true; readyReject(error); clients.clear();
     for (const [id, source] of sources) { source.error = error.message; options.sourceFailed?.(id, error.message); }
-    for (const observe of groups.values()) observe({ playbackId: null, status: "error", error: error.message, position: 0, duration: null, volume: 100, seekable: false });
+    for (const [id, observe] of groups) observe({ playbackId: loads.get(id) ?? null, status: "error", error: error.message, position: 0, duration: null, volume: 100, seekable: false });
     options.changed();
   };
   worker.on("error", fail);
@@ -109,8 +110,12 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
       return {
         members(next: Member[]) { call("members", next); },
         screens: (next: string[]) => call("screens", next),
-        send(command: SyncedLoad | PlaybackCommand) { call("send", command); },
-        close() { groups.delete(id); call("close"); },
+        send(command: SyncedLoad | PlaybackCommand) {
+          if (command.type === "load") loads.set(id, command.playbackId); else if (command.type === "stop") loads.delete(id);
+          call("send", command);
+        },
+        duration: (playbackId: string, seconds: number) => call("duration", playbackId, seconds),
+        close() { groups.delete(id); loads.delete(id); call("close"); },
       };
     },
     registerSource(id: string) { if (!sources.has(id)) { const epoch = randomUUID(); sources.set(id, { epoch, queued: 0 }); post({ type: "register", sourceId: id, epoch }); } },

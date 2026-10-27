@@ -2083,7 +2083,10 @@ export async function createHub(options: HubOptions) {
             failures.get(socket)!.add(failure);
           }
           // Only a report with a picture is a screen's: one still loading, or just reconnected, has no tracks yet.
-          if (playback?.synced) { if (player.tracks?.some(track => track.kind === "video")) { playback.seen = player; observeSynced(playback); } }
+          if (playback?.synced) {
+            if (player.tracks?.some(track => track.kind === "video")) { playback.seen = player; observeSynced(playback); }
+            if (player.playbackId && player.duration !== null && playback.heard?.duration == null) playback.synced.duration(player.playbackId, player.duration);
+          }
           else if (playback && mpvPlayback !== playback) playback.session.observe(player);
           return;
         }

@@ -32,6 +32,21 @@ test("picture-only media has a controllable timeline without opening an audio de
 });
 
 
+test("a picture-only VOD without a listed duration ends at the length its screen reports", { timeout: 5000 }, async t => {
+  const states: PlayerState[] = [];
+  const core = createSendspin({ name: "Picture fixture", admit: () => false, changed() {}, ffmpeg: async () => { throw new Error("No audio decoder expected"); } });
+  const group = core.group("pictures", state => states.push(state));
+  t.after(() => { group.close(); core.close(); });
+  group.members([]);
+  group.send({ type: "load", playbackId: "pictures", source: "http://127.0.0.1:1/video-only.mp4" });
+  await until(() => states.at(-1)?.status === "playing", "picture timeline never started");
+  assert.equal(states.at(-1)!.duration, null);
+  group.duration("other", 0.2);
+  group.duration("pictures", 0.2);
+  await until(() => states.at(-1)?.status === "ended", "the timeline never ended");
+  assert.equal(states.at(-1)!.duration, 0.2);
+});
+
 test("queued failures and acknowledgments cannot cross a reused public source ID", { timeout: 5000 }, async t => {
   const errors: string[] = [];
   const core = createSendspin({ name: "Lifetime fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
