@@ -220,7 +220,8 @@ const setFollow = (follow: Follow | null) => {
   followGeneration++;
   unfollow?.();
   unfollow = null;
-  if (follow?.timeline?.generation !== following?.timeline?.generation) ptsOffset = undefined;
+  // The measured offset belongs to the loaded stream: keep it when a Direct picture starts following its own group.
+  if (follow?.timeline && follow.timeline.generation !== playbackId) ptsOffset = undefined;
   following = follow;
   if (follow) suspendCompression();
   else if (loading?.compressor) prepareCompression(loading.compressor);

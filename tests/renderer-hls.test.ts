@@ -407,6 +407,21 @@ test("HLS reports measured source PTS mapping and destroyed callbacks cannot alt
   assert.equal(video.src, "https://couch.example/movie.mp4");
 `, true));
 
+test("a playing HLS picture that starts following its own group keeps its measured source PTS", () => check(`
+  video.readyState = HTMLMediaElement.HAVE_METADATA;
+  clockSample = { position: 112, speed: 1 };
+  load();
+  await flush();
+  decoders.at(-1).emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 9000000, timescale: 90000 });
+  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "playback" } } });
+  await flush();
+  tickPicture();
+  assert.deepEqual(pictureRead(), { position: 12, speed: 1 }, "no reload: the decoder will not measure again");
+  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "other" } } });
+  await flush();
+  assert.equal(pictureRead(), null, "a follow for another load has no mapping");
+`, true));
+
 test("native HLS and MPEG-TS expose missing source mapping without fabricating a join offset", () => check(`
   mse = false;
   delete window.MediaSource;
