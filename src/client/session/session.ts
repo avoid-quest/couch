@@ -192,7 +192,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
-      url.searchParams.set("receiverPreparation", "1");
       advertised = localDeviceSharing();
       for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");

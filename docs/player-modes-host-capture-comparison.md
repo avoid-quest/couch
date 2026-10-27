@@ -1,5 +1,9 @@
 # Mac host capture decision
 
+This is a historical record of the Sendspin Live implementation. Its Live
+performance gate and SDK work are superseded by [Live audio](live-audio.md);
+the evidence below applies only to the revisions it names.
+
 Status: the bounded host comparison is complete. This pass does not justify
 preferring native capture. The roughly 50 ms reliability/fidelity gate remains
 open for P4/P5/P7, M5/M6/M10 and L1–L4; PR submission remains pending. Native
@@ -56,7 +60,7 @@ native adoption. Preserve both implementations and evidence while deciding.
 ## Prior evidence and accounting
 
 The earlier Electron codec comparison remains separately identified in
-[Live performance](player-modes-live-performance.md). Its passing intervals and
+[Live performance](live-audio.md). Its passing intervals and
 bad repeats do not answer this host-backend decision.
 
 The read-only older-work audit is

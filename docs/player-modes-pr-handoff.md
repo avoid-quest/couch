@@ -1,8 +1,12 @@
 # Player modes PR handoff
 
+This is a historical record of the Sendspin Live implementation. Its Live
+performance gate and SDK work are superseded by [Live audio](live-audio.md);
+the evidence below applies only to the revisions it names.
+
 **Integration completion and PR submission remain pending.** The four proposed
 bodies below describe the maintained changes and their revision-scoped evidence.
-The [Live gate](player-modes-live-performance.md) remains open after the bounded
+The [Live gate](live-audio.md) remains open after the bounded
 [Mac host comparison](player-modes-host-capture-comparison.md). All available
 software/check/package/review work is complete: **707 unit tests**, **559 distinct
 Node checks** including real AirPlay prerequisites, current hidden-Live native

@@ -1,9 +1,13 @@
 # Player modes integration ledger
 
-This is the current completion tracker for the recovered refactor. It accounts for
+This is a historical record of the Sendspin Live implementation. Its Live
+performance gate and SDK work are superseded by [Live audio](live-audio.md);
+the evidence below applies only to the revisions it names.
+
+This was the completion tracker for the recovered refactor. It accounts for
 P0–P7, M1–M11, all 17 use cases and every retirement responsibility. **Live
 performance is reopened as an integration completion gate; PR submission is
-pending.** [The scoped performance plan](player-modes-live-performance.md) records
+pending.** [The scoped performance plan](live-audio.md) records
 the owner's corrected browser PCM/roughly 50 ms reference and comparison gates.
 [Final validation](player-modes-integration-validation.md) records fresh commands,
 revisions, package/browser receipts and the precise remaining prerequisites.
@@ -61,7 +65,7 @@ checkpoint; G1–G3 track reopened Live work across P4/P7, M5 and L1–L4.
 | Map | Disposition / concrete seam | Owner | Check responsibility |
 | --- | --- | --- | --- |
 | M1 | Adapt shared policy/protocol and runtime admission; preserve durable queues/history/defaults and ordinary restart; absent intent is relaxed. | Core; Host settings extension | media-shape, playback-policy, consent-restart, history/Stop-Undo; E1/E4, F1. |
-| M2 | Combine delivery/authorization in Hub; one Playback per receiver, held publisher/newest-tab rules and recipient filtering stay. | Core | routing/device-sharing/live-audience/output-admission/remote; E1/E3, F1. |
+| M2 | Combine delivery/authorization in Hub; one Playback per receiver, held publisher/newest-tab rules and recipient filtering stay. | Core | routing/device-sharing/live-audience/live-transport/remote; E1/E3, F1. |
 | M3 | Combine `source-preparation` selection; retain providers/yt-dlp/signed Range/playlist/public-destination access. | Core | source-preparation/language, real fetch counters, YouTube/relay/expiry/quality; E1/E3, F1. |
 | M4 | Adapt renderer/SDK/picture mapping; retain host-only mpv, selected tracks, optional Direct/relaxed DSP and one volume stage. | Browser + Core | renderer-hls, output-clock, SDK, compressor/mpv/playback screens; E3/E5, F1/F4. |
 | M5 | Combine worker/clock/receiver/fanout; keep URL read-ahead versus fixed-capture policies. Shared Live PCM/Opus with independent bounded fanout; browser remains Opus-first. | Core + scheduler child; Host policy extension | capture-clock/continuity/reset, late-join, relaxed queue, encrypted isolation and synthetic 50-client fixture; E2/F1 are earlier receipts; restoration/comparison G1–G3. |
@@ -102,11 +106,12 @@ behavior; absence from the recovered changed-file union is not a retirement.
 
 ## File inventory and retirement
 
-[The CSV](player-modes-file-disposition.csv) is the exact union of 131 original
-changed paths and 112 later paths (30 overlap): **213 unique rows**. Provenance
+[The CSV](player-modes-file-disposition.csv) began as the union of 131 original
+changed paths and 112 later paths (30 overlap): **213 unique rows**. L5 removes
+rows for retired files; those rows remain in Git history. Provenance
 comes from `59ac6cd6..27e580c` and `27e580c..8147fc9`, not file naming or time cuts.
-Dispositions are **103 retain / 67 adapt / 43 exclude**. Restoring
-`src/server/live-pcm.ts` and `tests/live-pcm.test.ts` changes two exclusions to
+The original dispositions were **103 retain / 67 adapt / 43 exclude**. Restoring
+the retired Sendspin Live PCM sender and its tests changes two exclusions to
 adaptations; the path inventory and provenance stay fixed. Browser Live PCM
 predates the excluded native audience implementation.
 `retain` preserves a responsibility; `adapt` requires selective integration;
@@ -160,13 +165,13 @@ reopened gate; earlier passes remain scoped to their checked source.
 | ID | Observed result / receipt | Limit |
 | --- | --- | --- |
 | E0 | Base `4a194e3`: frozen install, three-project typecheck, production build and **78 separate unit files** pass; `baseline-{install,typecheck,build,units}.log`. Node 24.21.0 / repo Bun 1.4.2. | Baseline only; unit files run separately because module mocks interfere. |
-| E1 | Parent `core-integrations/results.json`: policy/routing/device-sharing/audience/isolation/source-language/live-output/capture-upload pass. Initial group-language and AirPlay failures have successful `core-group-language/` and `core-airplay/` reruns. | Initial output-admission could not build before Browser; E3 supplies the later pass. Preserve initial failures and fixes. |
-| E2 | Scheduler `743206a`; child `.scratch/player-modes/checks/receipt.json` at `/home/avoid/.t3/worktrees/couch/t3-71b70af4`: **26/26 Node tests, 10/10 unit tests**, all three TS projects/focused checks and build pass; four causal negative controls fail as expected. Node patch matches pre-native hash. | Receipt base `1213ff8`; output-admission public integration then required Browser. Initial sendspin-ahead mismatch passed standalone and final rerun; initial log retained. 50 encrypted clients are synthetic, not physical receivers. |
+| E1 | Parent `core-integrations/results.json`: policy/routing/device-sharing/audience/isolation/source-language/live-output/capture-upload pass. Initial group-language and AirPlay failures have successful `core-group-language/` and `core-airplay/` reruns. | Initial former admission could not build before Browser; E3 supplies the later pass. Preserve initial failures and fixes. |
+| E2 | Scheduler `743206a`; child `.scratch/player-modes/checks/receipt.json` at `/home/avoid/.t3/worktrees/couch/t3-71b70af4`: **26/26 Node tests, 10/10 unit tests**, all three TS projects/focused checks and build pass; four causal negative controls fail as expected. Node patch matches pre-native hash. | Receipt base `1213ff8`; former admission public integration then required Browser. Initial sendspin-ahead mismatch passed standalone and final rerun; initial log retained. 50 encrypted clients are synthetic, not physical receivers. |
 | E3 | Core+Browser through `9e869de`: **88 separate unit files** pass (`browser-units/results.json`); SDK/output-clock/admission logs pass. `browser-admission/results.json`: all six Node suites pass (public admission, SDK preparation, receiver lifecycle, Remote controls/queue, sound-session). | Final Host/settings/package and integrated frozen-install/build reruns F1/F3 remain. |
 | E4 | `retained-av/results.json`: **15 Node suites pass**, covering stream/clock/sync/delivery/channels/input/tracks/upload failure/reporter retry/revocation/startup/ICE/STUN/Stop-Undo/consent-restart. | Does not close actual-media R4 continuity/fallback gaps; F2. |
 | E5 | Actual T3 preview Chrome, source `9e869de`; `browser-receipts/core-browser.json`: five React radio subscription checks, eight desktop keyboard checks, two actual H264/AAC decoders with independent queues; exclusive Move keeps paused Playback ID, two-entry queue and **37.240293 s** on second browser. | Localhost/127 origins; no physical timing qualification. Final-tip/TV/Host coverage remains separate. |
 | E6 | Parent real-Hub routed test at `9e869de`: Docker peer `172.17.0.2` → `10.10.10.11:49726`, exact allowlist: connection 200, bad Host/Origin 403, tokenless settings/private host-token 401; allowlist containing only `.3` refuses `.2` with 403. Disabling sharing closes listener and refuses the same allowed peer. `routed-peer-{allowed.json,denied.log,sharing-off.json,sharing-off.log}`. | Specific routed topology/security behavior, not Wi-Fi/audio qualification. Parent reports all owned scratch Core/media PIDs stopped. |
-| E7 | Parent reports current Host `f07fe9f` over Core `e5063df` / Browser `1050968`: **92 separate unit files / 688 tests pass**, **eight Host/scheduler Node bundles pass**. Per-source budget real-worker regression passes and its red control fails. `act` Check passes at `f07fe9f`. | Full `act` Package is still building; exact final receipts/commands/skips and independent reviews remain parent-owned. New `tests/live-source-budget.integration.ts` is post-recovery coverage, outside the fixed 213-path source union. |
+| E7 | Parent reports current Host `f07fe9f` over Core `e5063df` / Browser `1050968`: **92 separate unit files / 688 tests pass**, **eight Host/scheduler Node bundles pass**. Per-source budget real-worker regression passes and its red control fails. `act` Check passes at `f07fe9f`. | Full `act` Package is still building; exact final receipts/commands/skips and independent reviews remain parent-owned. The former per-source budget regression was post-recovery coverage, outside the fixed 213-path source union. |
 
 | Marker | Final disposition and evidence |
 | --- | --- |
@@ -179,12 +184,12 @@ reopened gate; earlier passes remain scoped to their checked source.
 
 The following receipts live under the parent's `.scratch/live-performance/`, beside
 the earlier `.scratch/player-modes/` evidence. See the
-[performance gate](player-modes-live-performance.md) and validation for exact
+[performance gate](live-audio.md) and validation for exact
 source/package identities, commands and current results.
 
 | Gate / owner | Current disposition and evidence |
 | --- | --- |
-| G1 — transport restoration / Core + Host | `transport-audit/` demonstrates the earlier loss of browser-compatible PCM and five public lead choices; `browser-audit/` identifies r15's executed PCM override versus maintained Opus preparation. Core restores `live-pcm.ts`, immediate PCM alongside Opus and independent bounded fanout; Host restores choices/reserves above. Shared source, authority, admission, Opus and relaxed behavior remain required checks. |
+| G1 — transport restoration / Core + Host | `transport-audit/` demonstrates the earlier loss of browser-compatible PCM and five public lead choices; `browser-audit/` identifies r15's executed PCM override versus maintained Opus preparation. Core restores the former Live PCM sender, immediate PCM alongside Opus and independent bounded fanout; Host restores choices/reserves above. Shared source, authority, admission, Opus and relaxed behavior remain required checks. |
 | G2 — physical witness / parent | `maintained-r2/evaluation/result.json`: 100 ms Opus lead, both channels 55/55 accepted windows, **102.4696 ms median**, failing the **50 ms gate**. Restored-codec comparison remains G3. Historical r15 passes at about 48.543 ms; r16 fails and stays alongside it. The exact old ad-hoc Mac package's fresh repeat is TCC-blocked by its different signing identity; current signed capture and physical wiring work. |
 | G3 — completion / parent + Browser + Host + Validation | Software/check/package/review work passes at `394f17f`: 707 units, 559 distinct Node checks, current hidden-Live native check, Check 40328818886 and Package 40328823313 (Linux/Windows/signed dual-Mac). Fresh spec review has no actionable findings; one P3 standards stale-ledger finding is corrected. **Performance and PR readiness stay open:** the calibrated ordinary-browser host A/B at 55/35 ms yields Chromium 57.833/57.455 ms versus native 56.647/57.268 ms, with persistent waveform flags. No 50 ms/fidelity qualification or native preference follows. |
 | G4 — Mac host capture decision / parent + Host | Bounded comparison complete: exactly one Chromium/native pair and one confirmation pair, after owner-calibrated gains and actual four-channel known-stimulus witness. One ordinary Chrome 156 maintained client, same Opus wire / 55 ms lead/35 ms strict budget/network/profile/Linux settings. Both 128-frame producers have gapless ingress; native shows higher timestamp-relative jitter and no useful repeatable advantage. Keep Chromium as reference; native stays an explicit candidate without automatic preference or physical qualification. All failures and exact clock/observer/signature limits are in the [host result](player-modes-host-capture-comparison.md). G3 remains open. |

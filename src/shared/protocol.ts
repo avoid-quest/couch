@@ -50,16 +50,6 @@ export type PlayerState = {
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
 // buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
 // error: that buffered stream failed, so the live input doesn't reach it this item.
-export type AudioPreparation =
-  | { state: "preparing" }
-  | { state: "ready" }
-  | { state: "failed"; error: string };
-export type ReceiverPreparation = AudioPreparation & { receiverId: string; epoch: number };
-export type AudioAdmissionFailure = "preparation" | "format" | "capacity" | "timing-missing" | "required-lead" | "minimum-buffer" | "output-correction";
-export type OutputAdmission =
-  | { state: "preparing" }
-  | { state: "ready" }
-  | { state: "failed"; reason: AudioAdmissionFailure; error: string };
 // A Live audio listener as Core's stream measures it (docs/live-audio.md): latencyMs is the lead it needs,
 // marginMs its last worst deadline margin, gaps and concealments its reported counts since it connected.
 // behindMs is null while its reports are stale. State carries it as of the listener's last change of standing
@@ -68,7 +58,7 @@ export type LiveListenerStatus = { codec: "pcm" | "opus"; status: "warming" | "o
 // The operator's Live audio stream: one codec per share, and the shared lead, automatic within its bounds or fixed at
 // leadMs. listenerBufferFrames: the AudioContext latency listeners ask for unless their own device overrides it.
 export type LiveAudioSettings = { codec: "pcm" | "opus"; opusBitrate: 128000 | 192000 | 320000; lead: "automatic" | "fixed"; leadMs: number; minLeadMs: number; maxLeadMs: number; raiseForSlowest: boolean; listenerBufferFrames: 128 | 256 | 512 | 1024 };
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string; audioAdmission?: OutputAdmission; liveListener?: LiveListenerStatus };
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string; liveListener?: LiveListenerStatus };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.

@@ -24,7 +24,7 @@ Use the same volume, mute and supported playback preferences as for other media.
 
 For **Live audio**, the hosting desktop owns the input and publication. On Mac it uses the packaged native capture helper; Linux and Windows use a separate hidden browser capture window. The controller does not open a second microphone. A real stereo input is required. Sharing controls report the actual input rate and native buffer readback. Input rate/buffer and browser buffering preferences remain in
 **Settings → Advanced audio**. Live listeners **Join** Couch's timestamped
-PCM/Opus stream, unlock it with **Tap to hear** if asked, and **Leave** without stopping
+PCM/Opus stream served by Core itself, unlock it with **Tap to hear** if asked, and **Leave** without stopping
 capture or another listener. Their own volume and mute apply in the browser.
 The player and Where it plays show **Preparing audio…**, **Behind by N ms**,
 **Reconnecting…**, and **Removed by the host**. An insecure LAN page shows the
@@ -33,7 +33,7 @@ its maximum; a slower listener keeps playing behind instead of being refused.
 See [Live audio](live-audio.md) for the wire, recovery and measured limits.
 These checks do not qualify physical input-to-ear timing or 50 physical receivers.
 
-Timestamped **Audio input** and AirPlay use the common relaxed audio scheduler, including a single listener, without an audio-only HLS recording. Browsers that cannot provide timestamped capture retain the WebRTC/buffered compatibility path below. Captured screen/window fallback retains actual recorded picture and sound.
+Timestamped **Audio input** and AirPlay use the Sendspin relaxed audio scheduler, including a single listener, without an audio-only HLS recording. Browsers that cannot provide timestamped capture retain the WebRTC/buffered compatibility path below. Captured screen/window fallback retains actual recorded picture and sound.
 
 System audio on macOS requires **14.2 or later**. Screen capture on older supported macOS versions can provide picture without audio; Couch displays the actual captured capability. Including system audio sends the computer's audio mix, including when the picture is one window. It does not isolate that window's application audio. If permission was just changed in **System Settings → Privacy & Security → Screen & System Audio Recording** or **Microphone**, reopen the test app when macOS asks.
 

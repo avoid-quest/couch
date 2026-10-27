@@ -28,11 +28,10 @@ PCM header plus samples; stderr carries bounded JSON status. stdin accepts
 and sample position, and maps the helper clock to Core using the minimum of five
 bracketed clock exchanges. Each replacement upload starts a fresh generation at
 sample zero. Explicit mute writes zero samples without changing the clock.
-Core normalizes capture to 48 kHz and shares stereo Opus with browser receivers.
-Live defaults to a 100 ms scheduling lead and 10 ms Opus packets; new
-publications can select 45–250 ms and keep their deadlines fixed. A receiver
-joins when its output fits the headroom Core measures for the publication.
-The lead is a scheduling parameter, not physical latency.
+Core streams Live itself as timestamped 128-frame PCM or 2.5 ms Opus.
+Browser Workers and AudioWorklets follow the shared, measured lead; a slow
+listener keeps playing behind. Sendspin serves relaxed Audio input, AirPlay and
+In sync. See [Live audio](../../docs/live-audio.md) for timing and measured limits.
 
 Other desktop inputs use the retained hidden browser capture producer:
 `src/client/capture-audio.html` → `session/native-audio.ts`. Its preload exposes

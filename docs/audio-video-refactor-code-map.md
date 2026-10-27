@@ -1,6 +1,6 @@
 > **Historical scope, 24–25 October 2026.** The original document below is
-> preserved verbatim from `recovery/player-modes-20261026` (source `8147fc9`).
-> Its “current”, baseline, workspace-transfer instructions and completion claims
+> preserved from `recovery/player-modes-20261026` (source `8147fc9`).
+> Retired module links now point to their replacements. Its “current”, baseline, workspace-transfer instructions and completion claims
 > describe that historical input. For today’s disposition and pending checks, read
 > the [integration ledger](player-modes-integration-ledger.md). Historical links
 > to omitted research/validation resolve on the recovery ref; the
@@ -23,10 +23,10 @@ Implementation accounting and validation are recorded in the
 The original change map below remains the audited plan. Added implementation
 modules are `src/shared/playback-policy.ts`; server `source-preparation.ts`,
 `scheduled-audio.ts`, `scheduled-capture.ts`, `audio-worker.ts`, `audio-packets.ts`,
-`capture-audio.ts`, `capture-ingest.ts` and `output-admission.ts`; client `capture-audio.ts`,
-`capture-audio-worker.ts`, `receiver-admission.ts`, `picture-mapping.ts` and
-`playback-controls.ts`. The maintained SDK patches and removal gates are in
-[`patches/README.md`](../patches/README.md); `scripts/core.ts`, `package.json` and
+`capture-audio.ts`, `capture-ingest.ts` and `live-transport.ts`; client `capture-audio.ts`,
+`capture-audio-worker.ts`, `live-listener/listener.ts`, `picture-mapping.ts` and
+`playback-controls.ts`. The current Live transport and its Sendspin retirement are in
+[Live audio](live-audio.md); `scripts/core.ts`, `package.json` and
 `bun.lock` own their build/distribution integration.
 
 ## M1. Shared contract, Playback state and persistence — P0/P1

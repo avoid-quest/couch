@@ -1,5 +1,9 @@
 # Playback scope and recovery references
 
+This is a historical record of the Sendspin Live implementation. Its Live
+performance gate and SDK work are superseded by [Live audio](live-audio.md);
+the evidence below applies only to the revisions it names.
+
 Use the [integration ledger](player-modes-integration-ledger.md) for current owners,
 implementation dispositions, fresh results and pending checks. The
 [file inventory](player-modes-file-disposition.csv) accounts for all 213 recovered
@@ -36,7 +40,7 @@ Browser Live PCM predates the excluded native audience implementation. The curre
 integration restores the shared PCM producer/fanout and low-lead settings while
 retaining native host capture, Opus and strict admission. Native audience
 helpers/IPC/credential export remain excluded. Read the
-[Live performance gate](player-modes-live-performance.md) before treating transport
+[Live performance gate](live-audio.md) before treating transport
 restoration or a historical pass as preserved physical performance; browser
 preparation remains Opus-first and the codec comparison is still open.
 
@@ -79,7 +83,7 @@ pre-native patches are under `audio-native-desktop-output-r1/`:
 
 These are **recovery source hashes**. The maintained browser patch's corrected
 rate-bound type comment changes its final file hash. Consult
-[patch guidance](../patches/README.md) for current semantics/removal gates.
+[Live audio](live-audio.md) for current semantics/removal gates.
 Other useful indexed prefixes are `audio-roundtrip-sync/live-rate-correction-cap100-r1/`,
 `wifi-clock-replay-r1/`, `routed-peer-r1/`, `advanced-audio-settings-r1/`,
 `relaxed-pcm-queue-fix-r1/`, `latency-probes-prewarm/`, plus

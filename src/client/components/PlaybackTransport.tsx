@@ -145,9 +145,7 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
   const receiving = controls.leave;
   const publisher = source?.deviceId === deviceId();
   const output = state.outputs?.find(output => output.deviceId === deviceId());
-  // Core projects native/source failures before admission; preparation must not hide them.
-  const error = output?.error || state.player.error || (output?.audioAdmission?.state === "failed" ? output.audioAdmission.error : undefined);
-  const preparing = output?.sound && output.audioAdmission?.state === "preparing";
+  const error = output?.error || state.player.error;
   const local = state.liveReception?.sourceId === source?.id ? state.liveReception : undefined;
   const listenerStatus = liveListenerStatus(output?.liveListener, local);
   if (!source || publisher) return null;
@@ -160,7 +158,7 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
       catch { setFailed(true); }
       finally { busy.current = false; setPending(false); }
     }}>{pending ? receiving ? "Leaving…" : "Joining…" : label}</Button>
-    {(receiving || local?.status.state === "removed") && !error && <span role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{!connected ? "Reconnecting…" : listenerStatus || (preparing ? "Preparing audio…" : state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…")}</span>}
+    {(receiving || local?.status.state === "removed") && !error && <span role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{!connected ? "Reconnecting…" : listenerStatus || (state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…")}</span>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {failed && <p role="alert" className="text-sm text-destructive">Couldn't {receiving ? "leave" : "join"}. Check this device's connection and audio output, then try again.</p>}
   </div>;

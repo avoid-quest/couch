@@ -164,3 +164,22 @@ capture helper fixture. It checks HTTPS audio and stats, HTTP guidance, volume,
 removal, and reconnect after restarting Core without reloading the page.
 Core restarts end in-memory publications; the fixture republishes capture and
 rejoins the browser. Physical timing and phone behaviour remain rig work.
+
+## Sendspin retirement
+
+Core streams Live itself. The old Sendspin admission gate, receiver preparation,
+measured headroom and per-source fixed Live deadlines are removed. Capture
+normalization returns source timestamps; relaxed scheduling adds its one-second
+lead. The timestamped Live transport applies its shared lead independently.
+Sendspin retains Audio input without Live, AirPlay and In sync, including
+per-output delay, PCM compatibility, capture generations and encoder lifetimes.
+
+The browser SDK runs upstream 5.0.0. Node SDK 0.6.2 retains only
+[message isolation](../patches/README.md): the relaxed isolation regression
+crashes its audio worker on an encrypted malformed message without those hunks.
+No timing or preparation patch remains, and the four direct dependencies used
+only for patched-package materialization are removed.
+
+The earlier performance investigation is superseded by the decision and measured
+comparison above. Historical player-mode reports keep their revision-specific
+results; they do not describe the current transport.

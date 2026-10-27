@@ -28,8 +28,8 @@ test("malformed frames before and after admission isolate the socket while healt
   const healthy = await receiver(identity), frames: number[] = [];
   healthy.addAudioChunkListener(timestamp => frames.push(timestamp));
   const group = core.group("healthy", () => {});
-  core.registerSource("source", { intent: "live" }); group.members([{ deviceId: identity.peerId, level: 100 }]);
-  group.send({ type: "load", playbackId: "healthy", source: "", liveSourceId: "source", live: true, intent: "live" });
+  core.registerSource("source", { intent: "relaxed" }); group.members([{ deviceId: identity.peerId, level: 100 }]);
+  group.send({ type: "load", playbackId: "healthy", source: "", liveSourceId: "source", live: true });
   let sequence = 0; const origin = serverNowUs();
   const timer = setInterval(() => {
     while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
@@ -80,8 +80,6 @@ test("malformed frames before and after admission isolate the socket while healt
   }
   // Valid WebSocket frames and valid Noise encryption do not imply valid JSON
   // protocol messages. Exercise the exported handshake, never private SDK fields.
-  const receiverId = "91cf4d2b-e08a-45c8-8f81-b010259e30bf";
-  const preparation = { receiverId, epoch: 1, state: "preparing" };
   const hello = { type: "client/hello", payload: { name: "Protocol fixture", supported_roles: ["player@v1"], "player@v1_support": { supported_formats: [{ codec: "opus", sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 131072, supported_commands: [] } } };
   const state = { type: "client/state", payload: { player: { required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 } } };
   const applicationCases: { name: string; text: string; beforeHello?: boolean; valid?: boolean }[] = [
@@ -97,15 +95,6 @@ test("malformed frames before and after admission isolate the socket while healt
     ...["client/state", "client/time", "client/command", "client/goodbye", "client_stream/start", "stream/request-format"].map(type => ({ name: `${type} missing payload`, text: JSON.stringify({ type }) })),
     ...[null, [], 42, "invalid"].map(payload => ({ name: `state payload ${JSON.stringify(payload)}`, text: JSON.stringify({ type: "client/state", payload }) })),
     { name: "nested state shape", text: '{"type":"client/state","payload":{"player":[]}}' },
-    ...[null, [], 42, "ready", {},
-      { ...preparation, receiverId: "invalid" }, { ...preparation, receiverId: "x".repeat(5000) },
-      { ...preparation, epoch: -1 }, { ...preparation, epoch: 1.5 }, { ...preparation, epoch: Number.MAX_SAFE_INTEGER + 1 },
-      { ...preparation, state: "invalid" }, { ...preparation, error: "unexpected" }, { ...preparation, extra: true },
-      { ...preparation, state: "failed" }, { ...preparation, state: "failed", error: "" },
-      { ...preparation, state: "failed", error: "x".repeat(241) }, { ...preparation, state: "failed", error: "bad\nreason" },
-    ].map(couch_preparation => ({ name: `invalid preparation ${JSON.stringify(couch_preparation).slice(0, 120)}`, text: JSON.stringify({ type: "client/state", payload: { player: { couch_preparation } } }) })),
-    ...[{}, { required_lead_time_ms: 25 }, { required_lead_time_ms: -1, min_buffer_ms: 25 }, { required_lead_time_ms: "25", min_buffer_ms: 25 }].map(timing => ({ name: `non-atomic ready ${JSON.stringify(timing)}`, text: JSON.stringify({ type: "client/state", payload: { player: { ...timing, couch_preparation: { ...preparation, state: "ready" } } } }) })),
-    ...[preparation, { ...preparation, state: "ready" }, { ...preparation, state: "failed", error: "No output clock" }].map(couch_preparation => ({ name: `valid preparation ${couch_preparation.state}`, text: JSON.stringify({ type: "client/state", payload: { player: { required_lead_time_ms: 25, min_buffer_ms: 25, couch_preparation } } }), valid: true })),
     { name: "valid extension and clock", text: '{"type":"future/extension","payload":{}}', valid: true },
   ];
   for (const sample of applicationCases) {
@@ -140,34 +129,4 @@ test("malformed frames before and after admission isolate the socket while healt
     } finally { socket.terminate(); }
   }
   for (const at of frames) assert.equal((at - frames[0]!) % 10000, 0, "unhealthy receiver must not retime the audience");
-});
-
-test("live correction validation follows increased and decreased required lead while admitted", { timeout: 8000 }, async t => {
-  const identity = Identity.generate(); let changes = 0, saves = 0;
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Timing fixture", admit: id => id === identity.peerId, changed() { changes++; }, saveDelay() { saves++; }, ffmpeg: async () => ffmpeg });
-  const server = createServer(); server.on("upgrade", (request, socket, head) => core.upgrade(request, socket as Socket, head));
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
-  const client = new SendspinClient(identity.peerId, "Receiver", [Roles.PLAYER], { encryption: { identity }, playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 128 * 1024, supported_commands: [] } });
-  const group = core.group("timing", () => {});
-  let timer: ReturnType<typeof setInterval> | undefined;
-  t.after(async () => { clearInterval(timer); group.close(); core.close(); await client.disconnect(); await new Promise<void>(resolve => server.close(() => resolve())); });
-  await client.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}`, { timeoutMs: 3000 });
-  await client.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
-  const permits40 = () => { try { core.validateDelay(identity.peerId, 40, "live"); return true; } catch { return false; } };
-  core.registerSource("timing", { intent: "live" }); group.members([{ deviceId: identity.peerId, level: 100 }]);
-  group.send({ type: "load", playbackId: "timing", source: "", live: true, liveSourceId: "timing", intent: "live" });
-  let received = 0, sequence = 0; const origin = serverNowUs();
-  client.addAudioChunkListener(() => received++);
-  timer = setInterval(() => {
-    core.writeSource("timing", { generation: "timing", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) }); sequence++;
-  }, 10);
-  await until(() => received >= 10, "receiver was not playing before timing update");
-  await until(permits40, "measured headroom did not permit the initial correction");
-  const saved = saves, previous = changes;
-  await client.sendPlayerState({ required_lead_time_ms: 60, min_buffer_ms: 25, static_delay_ms: 0 });
-  await until(() => !permits40(), "increased lead did not withdraw invalid correction");
-  assert.ok(changes > previous); assert.equal(saves, saved, "timing-only updates must not persist unchanged delay");
-  assert.doesNotThrow(() => core.validateDelay(identity.peerId, 10, "live"));
-  await client.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
-  await until(permits40, "decreased lead did not restore valid correction");
 });

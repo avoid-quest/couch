@@ -8,11 +8,10 @@ import { WebSocket } from "ws";
 import { logPlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { loopbackPeer } from "./lan-listener";
-import type { LiveAudioSettings, LiveListenerStatus, OutputAdmission, PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { LiveAudioSettings, LiveListenerStatus, PlaybackCommand, PlayerState } from "../shared/protocol";
 import type { LiveTransportStatus } from "./live-transport";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
-import { requireLiveAudioLead } from "./live-audio-policy";
 export type { Member, SyncedLoad } from "./scheduled-audio";
 
 /** Core owns authority/lifetimes. The worker owns clocks, encoding, encryption and fanout. */
@@ -20,10 +19,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const secret = randomUUID();
   const beside = new URL("./audio-worker.mjs", import.meta.url);
   const worker = new Worker(existsSync(beside) ? beside : resolve("build/audio-worker.mjs"), { workerData: { identity: options.identity, name: options.name, secret } });
-  const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { policy: CapturePolicy; epoch: string; queued: number; error?: string; budgets?: Partial<Record<string, number>> }>();
-  const groupMembers = new Map<string, Member[]>(), groupLoads = new Map<string, SyncedLoad>();
-  let timing = new Map<string, number | undefined>(), wires = new Map<string, string | undefined>();
-  let admissions = new Map<string, { group: string; receiverId?: string; admission: OutputAdmission }>();
+  const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { epoch: string; queued: number; error?: string }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();
   const listening = new Map<string, LiveTransportStatus>(), standing = new Map<string, string>();
@@ -44,7 +40,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   const post = (message: Record<string, unknown>) => { if (!closed && !failed) worker.postMessage(message); };
   const fail = (error: Error) => {
     if (closed || failed) return;
-    failed = true; readyReject(error); clients.clear(); admissions.clear();
+    failed = true; readyReject(error); clients.clear();
     for (const [id, source] of sources) { source.error = error.message; options.sourceFailed?.(id, error.message); }
     for (const observe of groups.values()) observe({ playbackId: null, status: "error", error: error.message, position: 0, duration: null, volume: 100, seekable: false });
     options.changed();
@@ -75,8 +71,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
       const signature = standingOf(message.status);
       if (standing.get(message.sourceId) !== signature) { standing.set(message.sourceId, signature); options.changed(); }
     }
-    else if (message.type === "budgets") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.budgets = message.budgets; }
-    else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); wires = new Map(message.value.wires); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
+    else if (message.type === "status") { clients = new Set(message.value.clients); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); options.changed(); }
   });
   // A Live listener's audio never queues behind a stalled connection. Pings wait behind everything sent,
   // kernel buffers included: one unanswered for half a second stops its audio, for two seconds closes it
@@ -126,30 +121,19 @@ export function createSendspin(options: { identity: string; name: string; admit:
     }).catch(() => socket.destroy());
   };
   const accept = Object.assign((socket: WebSocket, request: IncomingMessage) => bridge(socket, `loopback=${loopbackPeer(request.socket.remoteAddress ?? "")}`), { upgrade });
-  // A correction must fit the headroom each Live source measures on this output's wire.
-  const validateDelay = (id: string, delay: number, intent?: string) => {
-    if (intent !== "live" || delay === 0) return;
-    const required = timing.get(id), wire = wires.get(id);
-    for (const [group, members] of groupMembers) {
-      const load = groupLoads.get(group);
-      if (load?.intent !== "live" || !members.some(member => member.deviceId === id)) continue;
-      const budget = wire && load.liveSourceId ? sources.get(load.liveSourceId)?.budgets?.[wire] : undefined;
-      if (required === undefined || budget === undefined || required + Math.max(0, delay) > budget) throw new Error("That output correction exceeds the remaining live audio deadline. Reduce the correction or use relaxed sharing.");
-    }
-  };
   return {
-    accept, upgrade, validateDelay,
+    accept, upgrade,
     group(id: string, observe: (state: PlayerState) => void) {
       groups.set(id, observe);
       const call = (method: string, ...args: unknown[]) => post({ type: "group", group: id, method, args });
       return {
-        members(next: Member[]) { groupMembers.set(id, next); call("members", next); },
+        members(next: Member[]) { call("members", next); },
         screens: (next: string[]) => call("screens", next),
-        send(command: SyncedLoad | PlaybackCommand) { if (command.type === "load") groupLoads.set(id, { ...command } as SyncedLoad); call("send", command); },
-        close() { groups.delete(id); groupMembers.delete(id); groupLoads.delete(id); call("close"); },
+        send(command: SyncedLoad | PlaybackCommand) { call("send", command); },
+        close() { groups.delete(id); call("close"); },
       };
     },
-    registerSource(id: string, policy: CapturePolicy, live?: LiveAudioSettings) { if (!sources.has(id)) { if (policy.intent === "live") requireLiveAudioLead(policy.liveAudioLeadMs); policy = { ...policy }; const epoch = randomUUID(); sources.set(id, { policy, epoch, queued: 0 }); post({ type: "register", sourceId: id, policy, epoch, ...policy.intent === "live" && live ? { live } : {} }); } },
+    registerSource(id: string, policy: CapturePolicy, live?: LiveAudioSettings) { if (!sources.has(id)) { const epoch = randomUUID(); sources.set(id, { epoch, queued: 0 }); post({ type: "register", sourceId: id, epoch, ...policy.intent === "live" && live ? { live } : {} }); } },
     writeSource(id: string, packet: CaptureAudioPacket) {
       const source = sources.get(id);
       if (!source || source.error || closed || failed) return false;
@@ -178,17 +162,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
     },
     dropListener: (sourceId: string, deviceId: string, reason?: string) => post({ type: "dropListener", sourceId, clientId: deviceId, reason }),
     sourceError: (id: string) => sources.get(id)?.error,
-    receiverError: (id: string, _intent?: string) => receivers.get(id),
-    receiverAdmission(id: string, receiverId?: string): OutputAdmission | undefined {
-      const member = [...groupMembers].find(([group, members]) => (receiverId !== undefined || groupLoads.get(group)?.intent === "live") && members.some(member => member.deviceId === id && member.receiverId === receiverId));
-      if (!member) return undefined;
-      const current = admissions.get(id);
-      return current && current.group === member[0] && current.receiverId === receiverId ? current.admission : receiverId ? { state: "preparing" } : undefined;
-    },
+    receiverError: (id: string) => receivers.get(id),
     connected: (id: string) => clients.has(id),
     delay: (id: string) => delays.get(id) ?? options.savedDelay?.(id) ?? (clients.has(id) ? 0 : undefined),
     setDelay(id: string, delay: number) {
-      validateDelay(id, delay, "live");
       post({ type: "setDelay", clientId: id, delay });
     },
     drop: (id: string) => post({ type: "drop", clientId: id }),

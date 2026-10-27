@@ -44,9 +44,9 @@ test("relaxed PCM retains more than 200 small capture blocks until their origina
   const identifiedBy = performance.now() + 1000;
   while (!core.connected(key.peerId) && performance.now() < identifiedBy) await sleep(1);
   assert.equal(core.connected(key.peerId), true);
-  core.registerSource("capture", { intent: "relaxed" });
+  core.registerSource("capture");
   group.members([{ deviceId: key.peerId, level: 100 }]);
-  group.send({ type: "load", playbackId: "relaxed", source: "", liveSourceId: "capture", live: true, intent: "relaxed" });
+  group.send({ type: "load", playbackId: "relaxed", source: "", liveSourceId: "capture", live: true });
   const origin = serverNowUs(), count = 240;
   const pcm = Float32Array.from({ length: 256 }, (_, index) => index % 2 ? -.5 : .25);
   for (let sequence = 0; sequence < count; sequence++) {

@@ -3,7 +3,7 @@ import type { WebSocket, RawData } from "ws";
 import { serverNowUs } from "@sonn-audio/node-sendspin";
 import opusFactory from "opusscript/build/opusscript_native_wasm.js";
 import opusWasm from "opusscript/build/opusscript_native_wasm.wasm" with { type: "file" };
-import { captureLeadUs, createCaptureClock, type CaptureAudioPacket } from "./capture-audio";
+import { createCaptureClock, type CaptureAudioPacket } from "./capture-audio";
 import { livePacket, opusCodec, pcmCodec } from "./live-packet";
 import { createLeadController, type LeadListener, type LeadSnapshot, type LeadStats } from "./live-lead";
 import type { LiveAudioSettings, LiveListenerStatus } from "../shared/protocol";
@@ -136,16 +136,17 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
 
   return {
     write(packet: CaptureAudioPacket) {
+      if (packet.channels !== 2) throw new Error("Live audio needs a real stereo capture input.");
       // 48 kHz stereo keeps its own sample clock; listeners fit it. Other rates arrive resampled to 48 kHz.
       const raw = packet.sampleRate === 48_000 && packet.channels === 2, reset = packet.generation !== generation;
       if (reset) {
         generation = packet.generation; restart();
-        converter = raw ? undefined : createCaptureClock({ intent: "live" }); converted = 0;
+        converter = raw ? undefined : createCaptureClock(); converted = 0;
       }
       let position = packet.samplePosition, captureUs = packet.capturedAtUs, pcm = packet.pcm;
       if (converter) {
         const normalized = converter.push(packet, serverNowUs());
-        position = converted; captureUs = normalized.atUs - captureLeadUs({ intent: "live" }); pcm = normalized.pcm; converted += pcm.length / 2;
+        position = converted; captureUs = normalized.atUs; pcm = normalized.pcm; converted += pcm.length / 2;
       }
       const frames = pcm.length / 2;
       if (!encoder) {

@@ -4,11 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openStore } from "../src/server/store";
 import { Database } from "../src/server/sqlite";
-import { liveOutputAdmission } from "../src/server/output-admission";
-import type { SendspinSession } from "@sonn-audio/node-sendspin";
-import { requireLiveAudioLead } from "../src/server/live-audio-policy";
-import { createScheduledCapture } from "../src/server/scheduled-capture";
-import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { defaultLiveAudioSettings, isLiveAudioLead, isLiveAudioSettings, liveAudioLeadOptions, outputLatencyHint, outputBufferOptions } from "../src/shared/audio-settings";
 import { readNativeInputBufferPreference, readOutputBufferPreference } from "../src/client/audio-settings";
 
@@ -46,7 +41,6 @@ test("an unsupported saved lead falls back to the current default without blocki
   const store = openStore(path);
   try {
     expect(store.liveAudioLeadMs()).toBe(100);
-    expect(requireLiveAudioLead(store.liveAudioLeadMs())).toBe(100);
     store.saveLiveAudioLeadMs(150);
     expect(store.liveAudioLeadMs()).toBe(150);
   } finally { store.close(); rmSync(directory, { recursive: true }); }
@@ -76,39 +70,12 @@ test("every selectable lead is saved and accepted for a new publication", () => 
     for (const lead of liveAudioLeadOptions) {
       store.saveLiveAudioLeadMs(lead);
       expect(store.liveAudioLeadMs()).toBe(lead);
-      expect(requireLiveAudioLead(lead)).toBe(lead);
     }
     expect(liveAudioLeadOptions).toEqual([45, 50, 55, 75, 95, 100, 150, 250]);
-    expect(requireLiveAudioLead()).toBe(100);
     for (const lead of [44, 54, 96, -1, Infinity, NaN]) {
       expect(isLiveAudioLead(lead)).toBe(false);
-      expect(() => requireLiveAudioLead(lead)).toThrow("Choose a supported live audio scheduling lead.");
     }
   } finally { store.close(); }
-});
-
-test("a receiver's measured budget follows the host's chosen lead", async () => {
-  const session = (lead: number, correction = 0) => ({
-    getOutputPreparation: () => undefined,
-    getPlayerBufferCapacity: () => 65536,
-    getPlayerTiming: () => ({ requiredLeadTimeMs: lead, minBufferMs: lead, staticDelayMs: correction }),
-  }) as unknown as SendspinSession;
-  while (serverNowUs() < 100_000) await Bun.sleep(10);
-  for (const lead of liveAudioLeadOptions) {
-    const capture = createScheduledCapture({ intent: "live", liveAudioLeadMs: lead }, () => new Promise(() => {}), () => {});
-    const capturedAtUs = Math.round(serverNowUs() - 5000);
-    capture.write({ generation: "g", sequence: 0, samplePosition: 0, capturedAtUs, sampleRate: 48_000, channels: 2, pcm: new Float32Array(960) });
-    const budget = capture.outputBudgetMs("pcm")!, sentUs = serverNowUs();
-    expect(budget).toBeLessThanOrEqual(lead - 5);
-    expect(budget).toBeGreaterThanOrEqual(Math.floor((capturedAtUs + lead * 1000 - sentUs) / 1000));
-    // Both supported wires are held to that measured boundary.
-    for (const wire of ["opus", "pcm"]) {
-      expect(liveOutputAdmission(session(budget), wire, undefined, budget)).toEqual({ state: "ready" });
-      expect(liveOutputAdmission(session(budget + .001), wire, undefined, budget)).toMatchObject({ state: "failed", reason: "required-lead" });
-      expect(liveOutputAdmission(session(budget, .001), wire, undefined, budget)).toMatchObject({ state: "failed", reason: "output-correction" });
-    }
-    capture.close();
-  }
 });
 
 test("Live audio starts from a 128-frame native capture, a 100 ms maximum and a 256-frame listener buffer", () => {

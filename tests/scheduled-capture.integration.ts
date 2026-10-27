@@ -2,106 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import childProcess from "node:child_process";
-import { syncBuiltinESMExports } from "node:module";
 import { WebSocket, WebSocketServer } from "ws";
-import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
+import { Identity, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
-import { createScheduledCapture } from "../src/server/scheduled-capture";
-import { opusDuration } from "../src/server/audio-packets";
 import type { PlayerState } from "../src/shared/protocol";
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean, message: string, ms = 5000) => { const deadline = Date.now() + ms; while (!check()) { if (Date.now() > deadline) throw new Error(message); await sleep(10); } };
-
-test("live worker sends Opus and PCM with fixed deadlines, rejects incompatible joins and survives bounded Hub stalls", { timeout: 15_000 }, async t => {
-  const keys = Array.from({ length: 53 }, () => Identity.generate());
-  const errors: string[] = [], states: PlayerState[] = [];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture fixture", admit: id => keys.some(key => key.peerId === id), changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
-  const group = core.group("concert", state => states.push(state));
-  const server = createServer();
-  server.on("upgrade", (request, socket, head) => core.upgrade(request, socket as import("node:net").Socket, head));
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address() as { port: number };
-  const clients: SendspinClient[] = [];
-  let timer: ReturnType<typeof setInterval> | undefined;
-  t.after(async () => { clearInterval(timer); group.close(); core.endSource("stage"); core.close(); await Promise.all(clients.map(client => client.disconnect())); await new Promise<void>(resolve => server.close(() => resolve())); });
-  const receive = async (index: number, codec: AudioCodec, capacity = 128 * 1024) => {
-    const frames: { at: number; data: Buffer; received: number }[] = [];
-    const client = new SendspinClient(keys[index]!.peerId, `Receiver ${index}`, [Roles.PLAYER], { encryption: { identity: keys[index]! }, playerSupport: { supported_formats: [{ codec, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: capacity, supported_commands: [] } });
-    clients.push(client); client.addAudioChunkListener((at, data) => frames.push({ at, data: Buffer.from(data), received: serverNowUs() }));
-    await client.connect(`ws://127.0.0.1:${address.port}/sendspin`, { timeoutMs: 3000 });
-    await client.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
-    return frames;
-  };
-  const first = await receive(0, AudioCodec.OPUS);
-  core.registerSource("stage", { intent: "live" }); group.members([{ deviceId: keys[0]!.peerId, level: 100 }]);
-  group.send({ type: "load", playbackId: "concert", source: "", liveSourceId: "stage", live: true, intent: "live" });
-  let sequence = 0;
-  const origin = serverNowUs();
-  timer = setInterval(() => {
-    const due = Math.floor((serverNowUs() - origin) / 10_000);
-    while (sequence < due) {
-      const samplePosition = sequence * 480, pcm = Float32Array.from({ length: 960 }, (_, i) => Math.sin((samplePosition + Math.floor(i / 2)) * 2 * Math.PI * (i % 2 ? 660 : 440) / 48000) * .3);
-      core.writeSource("stage", { generation: "source-1", sequence, samplePosition, capturedAtUs: origin + sequence * 10_000, channels: 2, sampleRate: 48000, pcm }); sequence++;
-    }
-  }, 5);
-  await until(() => first.length > 30, `no live Opus: ${errors.join(", ")}`);
-  assert.equal(opusDuration(first[0]!.data), 10_000);
-  const second = await receive(1, AudioCodec.OPUS), pcm = await receive(2, AudioCodec.PCM), incompatible = await receive(52, AudioCodec.FLAC);
-  group.members([0, 1, 2, 52].map(index => ({ deviceId: keys[index]!.peerId, level: 100 })));
-  await until(() => second.length > 20 && pcm.length > 40 && !!core.receiverError(keys[52]!.peerId), "joins not admitted/refused independently");
-  assert.equal(incompatible.length, 0); assert.equal(errors.length, 0);
-  for (const frame of pcm) {
-    assert.ok(frame.data.length > 0 && frame.data.length <= 240 * 4);
-    assert.equal(frame.data.length % 4, 0, "PCM packets contain whole stereo S16 frames");
-  }
-  const original = new Map(first.map(frame => [frame.at, frame.data]));
-  for (const frame of second) if (original.has(frame.at)) assert.deepEqual(original.get(frame.at), frame.data);
-  const before = first.length;
-  const stall = performance.now(); while (performance.now() - stall < 100) { /* Deliberate Hub main-loop stall. */ }
-  await until(() => first.length > before + 25, "audience did not recover after a bounded Hub stall");
-  const anchor = first[0]!.at;
-  for (const frame of first) assert.equal((frame.at - anchor) % 10_000, 0, "stall/join must not retime the audience");
-  assert.equal(errors.length, 0);
-  assert.ok(!states.some(state => state.status === "error"));
-  const audience: Awaited<ReturnType<typeof receive>>[] = [first, second];
-  for (let at = 3; at < 51; at += 6) audience.push(...await Promise.all(Array.from({ length: Math.min(6, 51 - at) }, (_, index) => receive(at + index, AudioCodec.OPUS))));
-  const tiny = await receive(51, AudioCodec.OPUS, 1);
-  group.members(keys.map(key => ({ deviceId: key.peerId, level: 100 })));
-  await until(() => audience.every(frames => frames.length >= 8) && !!core.receiverError(keys[51]!.peerId), "50-client fanout or bounded-buffer refusal failed");
-  assert.equal(tiny.length, 0, "an undersized receiver cannot hold up healthy fanout");
-  assert.equal(audience.length, 50); assert.equal(errors.length, 0);
-  for (const frames of audience) for (const frame of frames) assert.equal((frame.at - anchor) % 10_000, 0);
-  t.diagnostic("50 encrypted software clients received shared Opus timestamps and one received PCM; FLAC and one-byte-capacity clients refused independently. Not physical receivers.");
-  t.diagnostic(`100 ms Hub stall: ${first.filter(frame => frame.received > frame.at).length} late network deliveries; no audience retiming. Software packets, no physical timing claim.`);
-});
-
-test("an encoder that cannot catch up fails after a bounded run of overdue Opus while PCM stays timely", { timeout: 8000 }, async t => {
-  const timers = new Set<ReturnType<typeof setTimeout>>(), closed: Promise<void>[] = [];
-  const spawn = childProcess.spawn;
-  const observer = t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
-    const child = spawn(...args);
-    closed.push(new Promise(resolve => child.once("close", () => resolve())));
-    // Delay only actual encoder output. Capture and immediate PCM keep their
-    // real clock, so PCM's separate lateness guard cannot satisfy this check.
-    const emit = child.stdout!.emit.bind(child.stdout!);
-    t.mock.method(child.stdout!, "emit", (event: string | symbol, ...values: any[]) => {
-      if (event !== "data") return emit(event, ...values);
-      const timer = setTimeout(() => { timers.delete(timer); emit(event, ...values); }, 650);
-      timers.add(timer); return true;
-    });
-    return child;
-  });
-  syncBuiltinESMExports();
-  const errors: string[] = [];
-  const source = createScheduledCapture({ intent: "live" }, async () => ffmpeg, error => errors.push(error));
-  t.after(async () => { source.close(); timers.forEach(clearTimeout); await Promise.all(closed); observer.mock.restore(); syncBuiltinESMExports(); });
-  const origin = serverNowUs();
-  for (let i = 0; i < 80 && !errors.length; i++) { source.write({ generation: "late", sequence: i, samplePosition: i * 480, capturedAtUs: origin + i * 10_000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) }); await sleep(10); }
-  await until(() => errors.length === 1, "overdue encoder did not fail");
-  assert.match(errors[0]!, /^The audio encoder missed half a second of capture deadlines/);
-});
 
 test("picture-only media has a controllable timeline without opening an audio decoder", { timeout: 5000 }, async t => {
   let lookups = 0; const states: PlayerState[] = [];
@@ -135,10 +42,10 @@ test("queued failures and acknowledgments cannot cross a reused public source ID
   group.send({ type: "load", playbackId: "barrier", source: "", duration: 60 });
   await until(() => ready, "worker did not start");
   const packet = { generation: "first", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2 as const, pcm: new Float32Array(960) };
-  core.registerSource("reused", { intent: "live" });
-  core.writeSource("reused", { ...packet, channels: 1 }); // Worker emits failure + ACK.
+  core.registerSource("reused", { intent: "relaxed" });
+  core.writeSource("reused", { ...packet, sampleRate: 1 }); // Worker emits failure + ACK.
   const stall = performance.now(); while (performance.now() - stall < 100) { /* Queue worker notifications on parent. */ }
-  core.endSource("reused"); core.registerSource("reused", { intent: "live" });
+  core.endSource("reused"); core.registerSource("reused", { intent: "relaxed" });
   await sleep(50); // Deliver the previous registration's queued notifications.
   assert.equal(core.sourceError("reused"), undefined); assert.deepEqual(errors, []);
   // Hold the parent so current ACKs cannot run. Exactly 200 stereo frames fit the
@@ -151,7 +58,7 @@ test("queued failures and acknowledgments cannot cross a reused public source ID
 
 test("an upload frame rejected by an earlier auth handler never reaches the worker", { timeout: 5000 }, async t => {
   const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Auth bridge fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg });
-  core.registerSource("auth", { intent: "live" });
+  core.registerSource("auth", { intent: "relaxed" });
   const server = createServer(), ws = new WebSocketServer({ server });
   ws.on("connection", socket => {
     socket.on("message", (_data, binary) => { if (binary) socket.close(1008, "Authorization revoked"); });
@@ -164,72 +71,4 @@ test("an upload frame rejected by an earlier auth handler never reaches the work
   const clock = once(client, "message"); client.send(JSON.stringify({ type: "clock", clientUs: 0 })); await clock;
   const closed = once(client, "close"); client.send(Buffer.alloc(44)); await closed; await sleep(50);
   assert.equal(core.sourceError("auth"), undefined, "rejected malformed frame did not fail the source");
-});
-
-test("an uploaded Live source reports its measured headroom for output corrections", { timeout: 8000 }, async t => {
-  const key = Identity.generate();
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Upload budget fixture", admit: id => id === key.peerId, changed() {}, ffmpeg: async () => ffmpeg });
-  const server = createServer(), ws = new WebSocketServer({ noServer: true });
-  server.on("upgrade", (request, socket, head) => {
-    if (request.url === "/upload") ws.handleUpgrade(request, socket, head, upload => assert.equal(core.acceptSource(upload, "upload"), true));
-    else core.upgrade(request, socket as import("node:net").Socket, head);
-  });
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
-  const port = (server.address() as { port: number }).port;
-  const receiver = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER], { encryption: { identity: key }, playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 128 * 1024, supported_commands: [] } });
-  const group = core.group("upload", () => {});
-  let timer: ReturnType<typeof setInterval> | undefined, upload: WebSocket | undefined;
-  t.after(async () => { clearInterval(timer); upload?.terminate(); group.close(); core.endSource("upload"); core.close(); await receiver.disconnect(); ws.close(); await new Promise<void>(resolve => server.close(() => resolve())); });
-  let received = 0; receiver.addAudioChunkListener(() => received++);
-  await receiver.connect(`ws://127.0.0.1:${port}/sendspin`, { timeoutMs: 3000 });
-  await receiver.sendPlayerState({ required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 0 });
-  core.registerSource("upload", { intent: "live" });
-  group.members([{ deviceId: key.peerId, level: 100 }]);
-  group.send({ type: "load", playbackId: "upload", source: "", live: true, liveSourceId: "upload", intent: "live" });
-  upload = new WebSocket(`ws://127.0.0.1:${port}/upload`);
-  await once(upload, "open");
-  upload.send(JSON.stringify({ type: "start", generation: "upload", offsetUs: 0, rttUs: 0 }));
-  // Binary upload v1 (capture-audio.ts): 40-byte header, then f32 stereo frames.
-  let sequence = 0; const origin = serverNowUs();
-  timer = setInterval(() => {
-    const frame = Buffer.alloc(40 + 480 * 8);
-    frame.writeUInt32LE(0x31414343, 0); frame.writeUInt8(2, 4); frame.writeUInt8(1, 5); frame.writeUInt16LE(40, 6); frame.writeUInt32LE(48000, 8);
-    frame.writeUInt32LE(sequence, 12); frame.writeBigUInt64LE(BigInt(sequence * 480), 16); frame.writeBigInt64LE(BigInt(origin + sequence * 10000), 24); frame.writeUInt32LE(480, 32);
-    upload!.send(frame); sequence++;
-  }, 10);
-  await until(() => received >= 10, "receiver did not play the uploaded source");
-  await until(() => { try { core.validateDelay(key.peerId, 10, "live"); return true; } catch { return false; } }, "uploaded source never reported measured headroom");
-  assert.throws(() => core.validateDelay(key.peerId, 1000, "live"), /exceeds the remaining live audio deadline/);
-});
-
-test("a playing receiver leaves when its wire's measured headroom falls below its need and returns when it recovers", { timeout: 10_000 }, async t => {
-  const key = Identity.generate();
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Falling headroom fixture", admit: id => id === key.peerId, changed() {}, ffmpeg: async () => ffmpeg });
-  const server = createServer();
-  server.on("upgrade", (request, socket, head) => core.upgrade(request, socket as import("node:net").Socket, head));
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
-  const receiver = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER], { encryption: { identity: key }, playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 128 * 1024, supported_commands: [] } });
-  const group = core.group("falling", () => {});
-  let timer: ReturnType<typeof setInterval> | undefined;
-  t.after(async () => { clearInterval(timer); group.close(); core.endSource("falling"); core.close(); await receiver.disconnect(); await new Promise<void>(resolve => server.close(() => resolve())); });
-  let received = 0; receiver.addAudioChunkListener(() => received++);
-  await receiver.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}/sendspin`, { timeoutMs: 3000 });
-  await receiver.sendPlayerState({ required_lead_time_ms: 60, min_buffer_ms: 1, static_delay_ms: 0 });
-  core.registerSource("falling", { intent: "live" });
-  group.members([{ deviceId: key.peerId, level: 100 }]);
-  group.send({ type: "load", playbackId: "falling", source: "", live: true, liveSourceId: "falling", intent: "live" });
-  // Real-time capture, except that uploads can arrive `lateMs` after their capture time.
-  let sequence = 0, lateMs = 0; const origin = serverNowUs();
-  timer = setInterval(() => {
-    for (; origin + sequence * 10_000 + lateMs * 1000 <= serverNowUs(); sequence++)
-      core.writeSource("falling", { generation: "falling", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10_000, sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
-  }, 2);
-  await until(() => core.receiverAdmission(key.peerId)?.state === "ready" && received > 10, "receiver did not start within its measured headroom");
-  lateMs = 60;
-  await until(() => core.receiverAdmission(key.peerId)?.state === "failed", "receiver kept playing after its headroom fell below its need");
-  assert.match(core.receiverError(key.peerId) ?? "", /requires 60 ms/);
-  const stopped = received; await sleep(200);
-  assert.ok(received - stopped <= 2, "a withdrawn receiver stops receiving chunks it cannot render on time");
-  lateMs = 0;
-  await until(() => core.receiverAdmission(key.peerId)?.state === "ready" && received > stopped + 10, "receiver did not return when headroom recovered");
 });

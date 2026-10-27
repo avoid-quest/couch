@@ -8,7 +8,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { strToU8, zipSync } from "fflate";
-import { Identity } from "@sonn-audio/node-sendspin";
+import { Identity, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createHelperUpdates } from "../src/server/helper-updates";
 import { readHelperStatus, writeJson } from "../src/server/helper-status";
 import { checkHelper, helper, startHelpers, useHelper, type Helper } from "../src/server/helpers";
@@ -417,11 +417,12 @@ for (const outcome of ["end", "failure", "close", "cancel", "spawn failure", "cl
   syncBuiltinESMExports();
   const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture lease fixture", admit: () => false, changed() {} });
   try {
-    server.registerSource("capture", { intent: "live" });
+    server.registerSource("capture", { intent: "relaxed" });
+    server.writeSource("capture", { generation: "capture", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
     await until(() => helperPending);
     if (outcome !== "cancel" && outcome !== "spawn failure" && outcome !== "close before helper resolution") await until(() => existsSync(f.started));
     await f.check();
-    assert.ok(existsSync(f.older), "prewarming and running capture retain their selected helper");
+    assert.ok(existsSync(f.older), "pending and running capture retain their selected helper");
     if (outcome === "spawn failure") writeFileSync(f.older, "#!/missing/fixture-interpreter\n");
     if (outcome === "end" || outcome === "cancel") server.endSource("capture");
     if (outcome === "close" || outcome === "close before helper resolution") server.close();
@@ -441,11 +442,13 @@ test("a replacement capture selects upgraded FFmpeg in the same worker", options
   const f = await managedFfmpeg(t);
   const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture lease fixture", admit: () => false, changed() {} });
   try {
-    server.registerSource("capture", { intent: "live" });
+    server.registerSource("capture", { intent: "relaxed" });
+    server.writeSource("capture", { generation: "capture", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
     await until(() => existsSync(f.started));
     await f.check();
     assert.ok(existsSync(f.older));
-    server.endSource("capture"); server.registerSource("capture", { intent: "live" });
+    server.endSource("capture"); server.registerSource("capture", { intent: "relaxed" });
+    server.writeSource("capture", { generation: "capture", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
     await until(() => existsSync(f.upgradedStarted));
     await until(async () => { await f.check(); return !existsSync(f.older); });
   } finally {

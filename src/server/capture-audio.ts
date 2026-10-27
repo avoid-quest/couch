@@ -1,5 +1,3 @@
-import { liveAudioLeadMs, requireLiveAudioLead } from "./live-audio-policy";
-
 /** Source-clock timestamps are integer microseconds; PCM is interleaved, never invented stereo. */
 export type CaptureAudioPacket = {
   generation: string;
@@ -10,8 +8,7 @@ export type CaptureAudioPacket = {
   channels: 1 | 2;
   pcm: Float32Array;
 };
-export type CapturePolicy = { intent: "relaxed" | "live"; liveAudioLeadMs?: number };
-export const captureLeadUs = (policy: CapturePolicy) => policy.intent === "live" ? (policy.liveAudioLeadMs ?? liveAudioLeadMs) * 1000 : 1_000_000;
+export type CapturePolicy = { intent: "relaxed" | "live" };
 const maxFrames = 4096;
 
 export function validateCapturePacket(packet: CaptureAudioPacket) {
@@ -23,11 +20,8 @@ export function validateCapturePacket(packet: CaptureAudioPacket) {
   for (const sample of packet.pcm) if (!Number.isFinite(sample) || Math.abs(sample) > 8) throw new Error("Invalid captured sample.");
 }
 
-/** Bounded continuous source-rate conversion. The first deadline never moves to hide late input. */
-export function createCaptureClock(policy: CapturePolicy) {
-  if (policy.intent === "live") requireLiveAudioLead(policy.liveAudioLeadMs);
-  // A setting saved mid-share must not retime this source's existing timeline.
-  const leadUs = captureLeadUs(policy);
+/** Bounded source-rate conversion; normalized timestamps retain the capture clock. */
+export function createCaptureClock() {
   let generation: string | undefined, sequence = -1, nextSample = 0, rate = 0, channels = 0;
   let originUs = 0, measuredAt = 0, measuredSample = 0, ppm = 0;
   let inputAt = 0, outputAt = 0;
@@ -37,7 +31,6 @@ export function createCaptureClock(policy: CapturePolicy) {
     stats,
     push(packet: CaptureAudioPacket, nowUs: number) {
       validateCapturePacket(packet);
-      if (policy.intent === "live" && packet.channels !== 2) throw new Error("Live audio needs a real stereo capture input.");
       const reset = generation !== packet.generation;
       if (reset) {
         if (packet.sequence !== 0 || packet.samplePosition !== 0) throw new Error("A capture generation must start at sample zero.");
@@ -83,7 +76,7 @@ export function createCaptureClock(policy: CapturePolicy) {
       }
       inputAt -= count;
       previous = Array.from({ length: channels }, (_, ch) => packet.pcm[(frames - 1) * channels + ch]!);
-      const atUs = Math.round(originUs + outputAt / 48_000 * 1e6 + leadUs);
+      const atUs = Math.round(originUs + outputAt / 48_000 * 1e6);
       outputAt += values.length / 2;
       if (atUs < nowUs) stats.late++;
       return { reset, atUs, pcm: new Float32Array(values) };

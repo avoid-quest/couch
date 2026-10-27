@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import { createScheduledAudio } from "./scheduled-audio";
 import { acceptCaptureUpload } from "./capture-ingest";
 import { createLiveTransport } from "./live-transport";
-import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
+import type { CaptureAudioPacket } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
 import type { LiveAudioSettings, PlaybackCommand } from "../shared/protocol";
 
@@ -14,9 +14,7 @@ let requestId = 0;
 const request = (type: string, data: Record<string, unknown> = {}) => new Promise<unknown>(resolve => { const id = ++requestId; pending.set(id, resolve); port.postMessage({ type, id, ...data }); });
 const registrations = new Map<string, string>();
 const notify = () => port.postMessage({ type: "status", value: engine.status() });
-// Core checks output corrections against each source's measured headroom, whichever path its audio took.
-const budgets = new Map<string, string>();
-// Live sources also stream their own timestamped packets to their listeners (live-transport.ts).
+// Live sources stream their own timestamped packets to their listeners (live-transport.ts).
 const transports = new Map<string, ReturnType<typeof createLiveTransport>>();
 const writeSource = (sourceId: string, epoch: string, packet: CaptureAudioPacket) => {
   const transport = transports.get(sourceId);
@@ -24,9 +22,7 @@ const writeSource = (sourceId: string, epoch: string, packet: CaptureAudioPacket
     try { transport.write(packet); return true; }
     catch (error) { port.postMessage({ type: "sourceFailed", sourceId, epoch, error: error instanceof Error ? error.message : "Live audio failed." }); return false; }
   }
-  const written = engine.writeSource(sourceId, packet), value = engine.sourceBudgets(sourceId), key = JSON.stringify(value);
-  if (budgets.get(sourceId) !== key) { budgets.set(sourceId, key); port.postMessage({ type: "budgets", sourceId, epoch, budgets: value }); }
-  return written;
+  return engine.writeSource(sourceId, packet);
 };
 const engine = createScheduledAudio({ identity: workerData.identity, name: workerData.name, admit: () => true, changed: notify,
   ffmpeg: async () => {
@@ -77,7 +73,7 @@ server.on("upgrade", (req, socket, head) => {
     });
   });
 });
-port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; policy?: CapturePolicy; live?: LiveAudioSettings; packet?: CaptureAudioPacket; clientId?: string; delay?: number; reason?: string }) => {
+port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; live?: LiveAudioSettings; packet?: CaptureAudioPacket; clientId?: string; delay?: number; reason?: string }) => {
   if (message.type === "reply") { pending.get(message.id!)?.(message.value); pending.delete(message.id!); return; }
   if (message.type === "group") {
     let group = groups.get(message.group!);
@@ -89,12 +85,12 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
   } else if (message.type === "register") {
     const { sourceId, epoch } = message as { sourceId: string; epoch: string };
     registrations.set(sourceId, epoch);
-    if (!message.live) engine.registerSource(sourceId, message.policy!);
+    if (!message.live) engine.registerSource(sourceId);
     if (message.live) transports.set(sourceId, createLiveTransport({ sourceId, epoch, settings: message.live,
       changed: status => port.postMessage({ type: "liveListeners", sourceId, epoch, status }), log: line => console.log(`${new Date().toISOString()} ${line}`) }));
   }
   else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { writeSource(message.sourceId!, message.epoch!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
-  else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); budgets.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); transports.get(message.sourceId!)?.close(); transports.delete(message.sourceId!); engine.endSource(message.sourceId!); }
+  else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); transports.get(message.sourceId!)?.close(); transports.delete(message.sourceId!); engine.endSource(message.sourceId!); }
   else if (message.type === "dropListener") transports.get(message.sourceId!)?.drop(message.clientId!, message.reason);
   else if (message.type === "liveSettings") for (const transport of transports.values()) transport.configure(message.live!);
   else if (message.type === "drop") engine.drop(message.clientId!);

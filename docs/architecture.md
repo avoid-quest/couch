@@ -238,8 +238,8 @@ pipe. Core owns that publication (`airplay`, never a Device): every receiver pla
 through relaxed scheduled PCM after rate normalization, without audio-only HLS. It ends when the
 sender leaves, and an admitted sender counts as playing for unattended updates.
 
-Core chooses scheduled sound for related outputs across Devices and for Live audio
-even with one listener. Its shared implementation lives in `scheduled-audio.ts`,
+Core chooses Sendspin scheduled sound for related relaxed outputs across Devices,
+and timestamped Audio input and AirPlay even with one listener. Its shared implementation lives in `scheduled-audio.ts`,
 with read-ahead URL decoding and fixed-deadline capture as separate sender policies.
 When a Playback has outputs on several Devices, its sound is Synced
 (`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
@@ -262,21 +262,8 @@ The native helper receives no credentials: Main brackets Core clock exchanges
 with the helper's clock, and keeps the PortAudio ADC-time estimate in each PCM
 packet. Bounded native/pipe/socket queues, sequence/sample validation and source
 clock normalization preserve timing or fail explicitly. Relaxed audio-only
-capture shares the scheduled path without MediaRecorder/AAC/HLS.
-
-Live schedules each captured sample at its capture time plus the host's lead:
-100 ms by default, or 45, 50, 55, 75, 95, 150 or 250 ms. Each publication freezes
-its lead; saving a setting never moves an active timeline. Core measures, per
-publication and wire, how much of that lead remains when it sends each packet
-(the trailing second's minimum), and admits a receiver or a positive correction
-only when the receiver's declared lead fits that headroom. A faster capture path
-therefore leaves receivers more time; no fixed source reserve is assumed. Live
-sends stereo 48 kHz Opus in 10 ms packets and immediate PCM16, and an
-incompatible join leaves healthy listeners untouched. Relaxed capture keeps
-one second of lead and its PCM compatibility. Browser latency preferences remain
-separate from actual reported timing. These budgets do not qualify physical
-input-to-ear latency or synchronization; native capture/rate behavior, Wi-Fi,
-Bluetooth and background phones require their own measurements.
+capture shares the scheduled path without MediaRecorder/AAC/HLS: a fixed one-second
+lead, 10 ms Opus and PCM compatibility. Core streams Live itself as described below.
 
 Every Device showing the picture of a synced Playback fetches the video itself,
 resolved for its own engine and origin, and plays it muted. It connects to Sendspin

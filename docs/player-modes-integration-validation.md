@@ -1,7 +1,11 @@
 # Player modes integration validation
 
+This is a historical record of the Sendspin Live implementation. Its Live
+performance gate and SDK work are superseded by [Live audio](live-audio.md);
+the evidence below applies only to the revisions it names.
+
 **Integration completion and PR submission remain pending.** The reopened
-[Live performance gate](player-modes-live-performance.md) requires the corrected
+[Live performance gate](live-audio.md) requires the corrected
 roughly 50 ms reference, and the [Mac host capture comparison](player-modes-host-capture-comparison.md)
 is complete with no useful repeatable native advantage established. Available
 software/package checks and independent reviews pass; the remaining readiness
