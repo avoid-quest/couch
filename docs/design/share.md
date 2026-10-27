@@ -29,7 +29,7 @@ Playback                     (✓ Relaxed) (Live)    local desktop Audio input
 Device                       [System default ▾]   relaxed Audio input
 Device                       [Choose an input ▾]  Live Audio input
                              Find audio inputs
-Playback buffer (ms)                     [150]    Live Audio input
+Playback buffer (ms)                     [250]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
@@ -125,7 +125,7 @@ Sheet on phones and the TV:
 A [Live audio](../live-audio.md) share lists listeners, each with a ⋯ **Remove**
 action. Input mute remains. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer (ms)** is
-the SDK's `minBufferMs`, initially 150 ms. A larger buffer applies to the running
+the SDK's `minBufferMs`, initially 250 ms. A larger buffer applies to the running
 share at once; a smaller one applies when sharing restarts, which the panel says.
 There are no latency estimates, gap counters or listener polling.
 
