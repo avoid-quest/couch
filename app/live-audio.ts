@@ -36,6 +36,8 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
             || !/^[a-f0-9]{64}$/.test(url.searchParams.get("key") ?? "")) throw new Error("Use this publication's local audio upload.");
         } else if (action.op === "mute") {
           if (typeof action.muted !== "boolean") throw new Error("Invalid microphone mute.");
+        } else if (action.op === "buffer") {
+          if (![128, 256, 512, 1024].includes(action.bufferFrames)) throw new Error("Choose a supported native input buffer.");
         } else if (action.op !== "stop-upload" || typeof action.uploadId !== "string") throw new Error("Invalid audio command.");
         return active.command(action);
       }
@@ -98,6 +100,7 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
         async command(command) {
           ensure();
           if (native) { const result = await native.command(command); ensure(); return result; }
+          if (command.op === "buffer") throw new Error("Only native inputs have a capture buffer.");
           if (!helper || helper.isDestroyed() || !helperFrame || helper.webContents.mainFrame !== helperFrame || helperFrame.detached || helperFrame.url !== helperUrl) throw new Error("The audio capture window changed.");
           const request = ++nextRequest, response = wait(request);
           helper.webContents.send("couch:audio-capture-command", { ...command, request });

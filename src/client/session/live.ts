@@ -381,6 +381,19 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       await track.applyConstraints(pictureConstraints(quality));
       current.quality = quality;
     },
+    /** Restarts a native input with a new callback buffer; its listeners start a new session. */
+    async setCaptureBuffer(bufferFrames: 128 | 256 | 512 | 1024) {
+      const current = publication;
+      if (!current?.nativeAudioId) return;
+      try {
+        const format = await couchApp!.liveAudio!({ op: "buffer", id: current.nativeAudioId, bufferFrames });
+        if (format && publication === current) current.captureFormat = format;
+      } catch (error) {
+        // A half-restarted input has no audio to send: end the share and say why.
+        if (publication !== current) return;
+        void end().catch(() => {}); options.failed(error instanceof Error ? error : new Error("The native input couldn't restart."));
+      }
+    },
     /** Silences a microphone for every receiver, keeping the capture and its connections. */
     setMuted(muted: boolean) {
       const current = publication;

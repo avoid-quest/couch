@@ -22,8 +22,10 @@ export function nativeAudioInput(executable: string, input: NativeAudioInput,
   type Producer = Awaited<ReturnType<typeof prepareNativeCapture>>;
   const lifetime = new AbortController();
   const canceled = AbortSignal.any([signal, lifetime.signal]);
-  let producer: Producer | undefined, opening: Promise<Producer> | undefined, uploadId: string | undefined;
+  let producer: Producer | undefined, opening: Promise<Producer> | undefined, uploadId: string | undefined, uploadUrl: string | undefined;
   let muted = false, stopped = false, serial: Promise<unknown> = Promise.resolve();
+  const formatOf = (next: Producer): AudioCaptureFormat => ({ sampleRate: next.format.sampleRate, channels: 2,
+    native: { requestedFrames: bufferFrames, reportedFrames: next.format.ownerHalBufferFrames, inputLatencyMs: next.format.reportedInputLatencyMs } });
   const prepare = async (): Promise<AudioCaptureFormat> => {
     if (stopped || signal.aborted) throw new Error("Audio capture was canceled.");
     const child = spawn(executable, [input.name, input.uid, String(sampleRate), String(bufferFrames), "0", ...(setDeviceRate ? ["--set-rate"] : [])], { stdio: ["pipe", "pipe", "pipe"] });
@@ -34,11 +36,11 @@ export function nativeAudioInput(executable: string, input: NativeAudioInput,
       const next = await pending;
       if (stopped || signal.aborted) { await next.stop(); throw new Error("Audio capture was canceled."); }
       producer = next; next.setMuted(muted);
-      return { sampleRate: next.format.sampleRate, channels: 2, native: { requestedFrames: bufferFrames, reportedFrames: next.format.ownerHalBufferFrames } };
+      return formatOf(next);
     } finally { if (opening === pending) opening = undefined; }
   };
   const stopUpload = async () => {
-    uploadId = undefined;
+    uploadId = uploadUrl = undefined;
     const old = producer; producer = undefined;
     await old?.stop();
   };
@@ -57,10 +59,22 @@ export function nativeAudioInput(executable: string, input: NativeAudioInput,
         if (action.op === "upload") {
           if (uploadId) throw new Error("This native input already has an upload.");
           if (!producer) await prepare();
-          uploadId = action.uploadId;
+          uploadId = action.uploadId; uploadUrl = action.url;
           try { await producer!.upload(action.url); }
           catch (error) { await stopUpload(); throw error; }
-          return { sampleRate, channels: 2, native: { requestedFrames: bufferFrames, reportedFrames: producer!.format.ownerHalBufferFrames } };
+          return formatOf(producer!);
+        } else if (action.op === "buffer") {
+          // The helper opens its stream with one buffer size: a new size is a new helper, and a new generation for listeners.
+          const resume = uploadId, url = uploadUrl, old = producer;
+          producer = undefined; bufferFrames = action.bufferFrames;
+          await old?.stop();
+          const format = await prepare();
+          if (resume && url && uploadId === resume) {
+            try { await producer!.upload(url); }
+            catch (error) { await stopUpload(); throw error; }
+            return formatOf(producer!);
+          }
+          return format;
         } else if (action.op === "stop-upload" && uploadId === action.uploadId) await stopUpload();
         else if (action.op === "mute") { muted = action.muted; producer?.setMuted(muted); }
         return undefined;

@@ -10,11 +10,14 @@ export type LiveAudioAction = { id: string } & (
   | { op: "upload"; uploadId: string; url: string }
   | { op: "stop-upload"; uploadId: string }
   | { op: "mute"; muted: boolean }
+  // Restarts a native input with a new callback buffer; its upload continues with a new sample generation.
+  | { op: "buffer"; bufferFrames: 128 | 256 | 512 | 1024 }
   | { op: "stop" }
 );
 export type LiveAudioError = { id: string; uploadId?: string; error: string };
 
 /** Delivered capture format, not the sound card’s hardware allocation. */
-export type AudioCaptureFormat = { sampleRate: number; channels: number; firstBlockFrames?: number; native?: { requestedFrames: number; reportedFrames: number } };
+// inputLatencyMs: the input latency the native helper's audio API reports.
+export type AudioCaptureFormat = { sampleRate: number; channels: number; firstBlockFrames?: number; native?: { requestedFrames: number; reportedFrames: number; inputLatencyMs?: number } };
 export type NativeAudioInput = { uid: string; name: string; channels: number; nominalRate: 44100 | 48000; ownerHalBufferFrames: number };
 export type AudioInput = { deviceId: string; label: string };
