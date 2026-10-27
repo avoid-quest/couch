@@ -4,47 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openStore } from "../src/server/store";
 import { Database } from "../src/server/sqlite";
-import { defaultLiveAudioSettings, isLiveAudioLead, isLiveAudioSettings, liveAudioLeadOptions, outputLatencyHint, outputBufferOptions } from "../src/shared/audio-settings";
+import { defaultLiveAudioSettings, isLiveAudioSettings, outputLatencyHint, outputBufferOptions } from "../src/shared/audio-settings";
 import { readNativeInputBufferPreference, readOutputBufferPreference } from "../src/client/audio-settings";
-
-test("host lead survives reopening and refuses unsupported values without changing saved state", () => {
-  const directory = mkdtempSync(join(tmpdir(), "audio-settings-"));
-  let store = openStore(join(directory, "test.sqlite"));
-  try {
-    expect(store.liveAudioLeadMs()).toBe(100);
-    for (const lead of [45, 50, 55, 75, 95, 100, 150, 250]) {
-      expect(isLiveAudioLead(lead)).toBe(true);
-      store.saveLiveAudioLeadMs(lead);
-      for (const value of [null, "45", 0, -1, 44, 54, 96, 10000, Infinity, NaN]) expect(() => store.saveLiveAudioLeadMs(value)).toThrow();
-      expect(store.liveAudioLeadMs()).toBe(lead);
-      store.close(); store = openStore(join(directory, "test.sqlite"));
-      expect(store.liveAudioLeadMs()).toBe(lead);
-    }
-  } finally { store.close(); rmSync(directory, { recursive: true }); }
-});
-
-test.each([45, 50, 55, 75, 95])("an existing saved %i ms lead is preserved", lead => {
-  const directory = mkdtempSync(join(tmpdir(), "audio-settings-saved-")), path = join(directory, "test.sqlite");
-  openStore(path).close();
-  const database = new Database(path);
-  database.query("INSERT INTO installation_audio VALUES (1, ?)").run(lead); database.close();
-  const store = openStore(path);
-  try { expect(store.liveAudioLeadMs()).toBe(lead); }
-  finally { store.close(); rmSync(directory, { recursive: true }); }
-});
-
-test("an unsupported saved lead falls back to the current default without blocking a new publication", () => {
-  const directory = mkdtempSync(join(tmpdir(), "audio-settings-legacy-")), path = join(directory, "test.sqlite");
-  openStore(path).close();
-  const database = new Database(path);
-  database.exec("INSERT INTO installation_audio VALUES (1, 44)"); database.close();
-  const store = openStore(path);
-  try {
-    expect(store.liveAudioLeadMs()).toBe(100);
-    store.saveLiveAudioLeadMs(150);
-    expect(store.liveAudioLeadMs()).toBe(150);
-  } finally { store.close(); rmSync(directory, { recursive: true }); }
-});
 
 test("client latency requests use seconds; missing, invalid or inaccessible storage uses browser defaults", () => {
   const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -61,21 +22,6 @@ test("client latency requests use seconds; missing, invalid or inaccessible stor
     Object.defineProperty(globalThis, "localStorage", { configurable: true, get: () => { throw new Error("Denied"); } });
     expect(readOutputBufferPreference()).toBe("auto");
   } finally { if (original) Object.defineProperty(globalThis, "localStorage", original); else Reflect.deleteProperty(globalThis, "localStorage"); }
-});
-
-
-test("every selectable lead is saved and accepted for a new publication", () => {
-  const store = openStore(":memory:");
-  try {
-    for (const lead of liveAudioLeadOptions) {
-      store.saveLiveAudioLeadMs(lead);
-      expect(store.liveAudioLeadMs()).toBe(lead);
-    }
-    expect(liveAudioLeadOptions).toEqual([45, 50, 55, 75, 95, 100, 150, 250]);
-    for (const lead of [44, 54, 96, -1, Infinity, NaN]) {
-      expect(isLiveAudioLead(lead)).toBe(false);
-    }
-  } finally { store.close(); }
 });
 
 test("Live audio starts from a 128-frame native capture, a 100 ms maximum and a 256-frame listener buffer", () => {

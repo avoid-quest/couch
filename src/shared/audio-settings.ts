@@ -1,10 +1,5 @@
 import type { LiveAudioSettings } from "./protocol";
 
-// Scheduling lead is not a physical input-to-output latency measurement.
-export const liveAudioLeadOptions = [45, 50, 55, 75, 95, 100, 150, 250] as const;
-export const defaultLiveAudioLeadMs = 100;
-export const isLiveAudioLead = (value: unknown): value is number => typeof value === "number" && liveAudioLeadOptions.includes(value as typeof liveAudioLeadOptions[number]);
-
 // Live audio's own stream (docs/live-audio.md). Leads are whole milliseconds up to a second.
 // Listeners ask for 256 frames, looser than the prototype's 128 (.scratch PRODUCT.md); the browser picks the real buffer.
 export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "pcm", opusBitrate: 192000, lead: "automatic", leadMs: 100, minLeadMs: 0, maxLeadMs: 100, raiseForSlowest: true, listenerBufferFrames: 256 };

@@ -1,4 +1,4 @@
-import { defaultLiveAudioLeadMs, defaultLiveAudioSettings, isLiveAudioLead, isLiveAudioSettings } from "../shared/audio-settings";
+import { defaultLiveAudioSettings, isLiveAudioSettings } from "../shared/audio-settings";
 import type { LiveRelay } from "../shared/live-relay";
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
@@ -95,7 +95,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_chooser (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
-    CREATE TABLE IF NOT EXISTS installation_audio (id INTEGER PRIMARY KEY CHECK (id = 1), leadMs INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_audio (id INTEGER PRIMARY KEY CHECK (id = 1), settings TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
     CREATE TABLE IF NOT EXISTS installation_airplay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)), code TEXT NOT NULL, deviceId TEXT NOT NULL);
@@ -187,14 +186,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
     sendspinKey(fresh: () => string) {
       if (!db.query("SELECT 1 FROM sendspin_identity").get()) db.query("INSERT INTO sendspin_identity VALUES (1, ?)").run(fresh());
       return db.query<{ key: string }, []>("SELECT key FROM sendspin_identity WHERE id = 1").get()!.key;
-    },
-    liveAudioLeadMs() {
-      const saved = db.query<{ leadMs: number }, []>("SELECT leadMs FROM installation_audio WHERE id = 1").get()?.leadMs;
-      return isLiveAudioLead(saved) ? saved : defaultLiveAudioLeadMs;
-    },
-    saveLiveAudioLeadMs(leadMs: unknown) {
-      if (!isLiveAudioLead(leadMs)) throw new ControllerError("Choose a supported live audio scheduling lead.");
-      db.query("INSERT INTO installation_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET leadMs = excluded.leadMs").run(leadMs);
     },
     // The next share's Live audio stream; a saved value that no longer validates falls back to the defaults.
     liveAudioSettings(): LiveAudioSettings {

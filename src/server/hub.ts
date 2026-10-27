@@ -1785,18 +1785,6 @@ export async function createHub(options: HubOptions) {
         return cors(request, json(airplay.state()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the AirPlay setting." }, error instanceof ControllerError ? error.status : 500)); }
     }
-    if (url.pathname === "/api/settings/audio") {
-      const refused = administrator();
-      if (refused) return refused;
-      if (request.method === "GET") return cors(request, json({ liveAudioLeadMs: store.liveAudioLeadMs() }));
-      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
-      try {
-        const leadMs = await settingField(request, "liveAudioLeadMs");
-        stillAdministrator();
-        store.saveLiveAudioLeadMs(leadMs);
-        return cors(request, json({ liveAudioLeadMs: store.liveAudioLeadMs() }));
-      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn’t save the audio setting." }, error instanceof ControllerError ? error.status : 500)); }
-    }
     if (url.pathname === "/api/settings/live-relay") {
       const refused = administrator();
       if (refused) return refused;
