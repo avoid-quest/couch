@@ -120,35 +120,14 @@ Sheet on phones and the TV:
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
 
-Live audio defaults to a 100 ms scheduling lead and 10 ms Opus packets, after
-runtime decoder/clock/output checks. A listener joins when its output fits the
-headroom Core measures for that share. New shares
-snapshot the lead in [Advanced audio](settings.md#advanced-audio); saving does
-not move an existing publication’s deadlines. Runtime admission is not a measured promise of 100 ms input-to-ear or
-synchronization on every output. While those checks run, the listener sees
-**Preparing audio…**. An incompatible output reports its reason on that listener;
-changing the output requires fresh admission. The saved browser buffering
-preference applies on the next join; admission uses actual reported timing. Normal preparation and recovery
-do not require leaving and joining again.
-
-The Live browser listener declares the SDK's output latency plus the maximum
-observed chunk-arrival-to-output-scheduling time over the trailing second,
-rounded up to protocol milliseconds. This includes asynchronous decoding, PCM
-copying and the scheduling queue. A disconnected, silent local codec probe
-bootstraps the processing measurement during preparation, because Core withholds
-stream audio until admission; real arrivals then populate the same window.
-Expired observations cannot admit an output. Output changes discard the window,
-and changed measurements update the declared requirement. The SDK's Apple/WebKit
-output compensation and missing-output-latency fallback remain intact; those
-Apple/WebKit listeners use relaxed playback.
-
-`minBufferMs: 0` requests no additional ongoing jitter buffer: prepared direct
-output schedules each arrival promptly against Live's fixed deadline. Processing
-and output latency are already in the declared lead. This is a buffering policy,
-not a claim of zero network jitter; the pinned wire does not expose per-chunk send
-times from which to measure that jitter. The initial 1000 ms numeric declaration
-is only a hold for older Cores. Current Core keeps the listener **Preparing audio…**
-regardless of that number until measured timing arrives atomically with readiness.
+Live audio uses [Couch's timestamped stream](../live-audio.md): 128-frame PCM
+or 2.5 ms Opus, with one shared lead and a default maximum of 100 ms. Listener
+buffering is a browser preference, applied on the next join. The listener's
+player and Where it plays show **Preparing audio…**, **Behind by N ms**,
+**Reconnecting…**, and **Removed by the host**. An insecure page shows the HTTPS
+address Live needs. Starting sound uses the existing **Tap to hear** prompt. Leaving releases this
+listener's audio, socket and wake lock; it never ends capture. Operator controls
+and detailed listener rows in this share panel are a later layer.
 
 ## Not yet
 

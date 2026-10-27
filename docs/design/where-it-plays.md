@@ -131,10 +131,12 @@ entry points. The publisher owns capture and **Stop sharing**; selecting or
 joining its source grants reception only. Local device controls and a permitted
 remote output remain separate from programme authority. Relaxed sources keep
 collaborative controls.
-While the listener's output gets ready, **Preparing audio…** appears as status.
-Once ready, **Listening** follows actual playback and **Waiting for audio…**
-remains visible when the source is buffering. Source and output failures keep
-their reasons; no blanket leave-and-rejoin instruction is appended.
+Each Live output row shows **Preparing audio…** while warming, **Behind by N ms**
+when late, and **Reconnecting…** when its reports go stale. The local row also
+reflects its connection immediately, **Removed by the host**, and **Live needs
+the HTTPS address:** with that address on an insecure page. The player uses the
+same status copy. Source and output failures retain their reasons. Live's shared
+lead replaces Sendspin's per-output Sync correction; relaxed outputs keep Sync.
 
 ## Fader and Sync
 
@@ -211,7 +213,7 @@ receivers.
 For a captured source already playing in an accessible Playback, Play/Play on
 joins that Playback; it does not make an independent capture. Choosing its
 publisher opens the chooser because the publisher never monitors its own capture.
-Joining Live audio retains its source authority and fixed scheduled delivery even
+Joining Live audio retains its source authority and timestamped scheduled delivery even
 with one listener. Core chooses delivery from intent and channel assignments;
 a TV picture and a separate speaker share a timeline even with only one speaker.
 

@@ -22,14 +22,11 @@ Mac Live publishers can select a native audio input; Share distinguishes its
 requested buffer from device readback. [Advanced audio](design/settings.md#advanced-audio)
 separates host scheduling lead, browser latency preference and native input
 rate/buffer requests. Audience playback stays in the browser.
-Listeners see **Preparing audio…** while their output gets ready. Preparation
-is status, and an actual failure shows its reason. Once ready, a starved source
-still shows **Waiting for audio…**; preparation does not require leaving and
-joining again.
-
-The [new timestamped Live listener](live-listener.md) is implemented as standalone
-modules only. Its states have no screen wiring yet; the existing audience UI
-and Start-tap presentation stay in use.
+Live listeners play [Couch's timestamped stream](live-audio.md) in the browser.
+The existing **Tap to hear** prompt unlocks sound. The player and Where it plays show
+**Preparing audio…**, **Behind by N ms**, **Reconnecting…**, and **Removed by the
+host**. Insecure pages show that Live needs the HTTPS address, with that address.
+Actual failures keep their reason; normal warming and reconnect need no rejoin.
 
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset

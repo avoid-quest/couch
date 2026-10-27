@@ -297,15 +297,16 @@ where their hardware introduces extra delay. Direct capture bypasses that buffer
 pipeline; each receiver's MediaStream keeps its own audio/video synchronization, but
 Direct receivers are not aligned with each other.
 
-Live audio sources also have Core's own timestamped stream, beside Sendspin
+Live audio sources use Core's own timestamped stream
 (`src/server/live-transport.ts`, which states its wire contract). The audio worker
 sends each listener 128-frame PCM or 2.5 ms Opus packets stamped with their capture
 time, and keeps one lead for all of them (`src/server/live-lead.ts`): it rises after
 two reports that need more, up to the operator's maximum, and lowers by measured
 cost; a listener beyond the maximum plays behind until the host removes it. A paired
 device connects to `/api/live/listen` while its sound plays that source; Hub proxies
-it into the worker and publishes each listener's status on its output. Live
-playback still plays through Sendspin until the browser listener lands. Core logs
+it into the worker and publishes each listener's status on its output. Hub sends a `live` instruction, and the browser session runs a Worker and
+AudioWorklet for that source, reporting stats over the same authorized socket.
+Live creates no Sendspin group; relaxed sources retain Sendspin. Core logs
 `live <source> send age pcm|opus max … mean …` every ten seconds and `live <source>
 lead <from> → <to> ms: <reason>` at each change.
 
@@ -500,9 +501,8 @@ entry points with their dependencies. electron-builder packages only those files
 `dist` and two icons (see `build` in `package.json`); the app ships no
 `node_modules`. Core reads `dist` beside its bundle, inside `app.asar`.
 
-The [timestamped Live listener modules](live-listener.md) are also emitted as a
-standalone Vite entry with network/calibration Workers and an AudioWorklet. They
-are not connected to the session or Hub yet; existing playback remains unchanged.
+The [timestamped Live listener](live-audio.md) is imported by the session. Vite
+emits its network/calibration Workers and AudioWorklet with the app.
 
 Only browser remotes in a supported secure context register `/sw.js`; the app
 window never does.
