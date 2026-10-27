@@ -37,6 +37,9 @@ const leadUs = 1_000_000; // Buffered media and relaxed capture; Live uses playe
 const sendUs = 8_000_000;
 const aheadUs = 8_000_000; // Decoded audio that may wait in Core before FFmpeg is held back.
 const pcmBytes = 19_200; // 100 ms of 48 kHz 16-bit stereo.
+// A speaker whose socket holds more than this unsent has stopped reading (a frozen tab, a dozing radio).
+// It gets nothing more until it drains; what it missed expires from sent, so it resumes at audio that can still play.
+const backlogBytes = 64 * 1024;
 const wireFormat = (wire: Wire) => ({ codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM, sampleRate: 48_000, channels: 2, bitDepth: 16 });
 // Outputs ask for Opus first (#644 Fan-out). Firefox's player offers only FLAC and PCM, so PCM is the second wire.
 const wireOf = (session: SendspinSession): Wire | undefined => {
@@ -333,11 +336,11 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         each(session => {
           const from = current.cursors.get(session);
           if (wireOf(session) !== wire || from === undefined) return;
-          const capacity = session.getPlayerBufferCapacity() || 1024 * 1024;
+          const capacity = session.getPlayerBufferCapacity() || 1024 * 1024, socket = socketOf.get(session);
           let held = 0;
           for (const chunk of sent) {
             if (chunk.at <= from) { held += chunk.data.length + 13; continue; }
-            if (held + chunk.data.length + 13 > capacity) break;
+            if (held + chunk.data.length + 13 > capacity || (socket?.bufferedAmount ?? 0) > backlogBytes) break;
             session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
             held += chunk.data.length + 13;
             current.cursors.set(session, chunk.at);

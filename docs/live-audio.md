@@ -51,7 +51,8 @@ the difference. It never shrinks while the input keeps running, so listeners nev
 jump backwards or lose queued audio; a smaller buffer applies when sharing or the
 input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
-eviction.
+eviction: a listener whose connection stops draining (a frozen tab, a dozing
+radio) gets nothing more until it drains, then resumes at audio that can still play.
 
 **Playback buffer (ms)** is one Couch-wide setting, 200 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
@@ -116,7 +117,7 @@ COUCH_TEST_FFMPEG=/path/to/ffmpeg node --test <that directory>/*.js
 ```
 
 They use temporary databases, loopback ports and synthetic stereo signals with
-opposite channel polarities. `sendspin-sdk.integration.ts` drives the stock
+opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `sendspin-sdk.integration.ts` drives the stock
 browser SDK core through Noise/AES-GCM, token binding, decoding, buffer changes,
 reconnect, a concurrent Opus receiver and Leave. Capture checks cover input
 formats, source generations, timestamp mapping and Opus pre-skip.
