@@ -1268,7 +1268,7 @@ export async function createHub(options: HubOptions) {
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: outputViews.get(playback)!, delivery: deliveryOf(playback), intent: intentOf(playback) ?? "relaxed",
-          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video, ...sendspin.liveLead(sourceOf(playback)!) === undefined ? {} : { liveLeadMs: sendspin.liveLead(sourceOf(playback)!) } } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
+          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video, ...sendspin.liveLead(sourceOf(playback)!) === undefined ? {} : { liveLeadMs: sendspin.liveLead(sourceOf(playback)!), liveListenerBufferFrames: store.liveAudioSettings().listenerBufferFrames } } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: store.deviceTv(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
       liveSources: live.sources(),
@@ -1852,6 +1852,13 @@ export async function createHub(options: HubOptions) {
         sendspin.listen(socket, sourceId, deviceId);
       }) ? undefined : json({ error: "WebSocket upgrade required." }, 426);
     }
+    // The operator's view of a Live audio stream: its lead and each listener's measurements, read while it's open.
+    if (url.pathname === "/api/live/listeners") {
+      const refused = administrator();
+      if (refused) return refused;
+      const status = sendspin.liveStatus(url.searchParams.get("sourceId") ?? "");
+      return cors(request, status ? json(status) : json({ error: "This live audio isn't streaming." }, 404));
+    }
     if (url.pathname === "/api/settings/live-audio") {
       const refused = administrator();
       if (refused) return refused;
@@ -1863,6 +1870,9 @@ export async function createHub(options: HubOptions) {
         if (typeof settings !== "object" || settings === null) throw new ControllerError("Send the Live audio settings to change.");
         stillAdministrator();
         store.saveLiveAudioSettings({ ...store.liveAudioSettings(), ...settings });
+        // The share running now takes them too; they are the next share's defaults.
+        sendspin.configureLive(store.liveAudioSettings());
+        broadcast();
         return cors(request, json(store.liveAudioSettings()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the Live audio settings." }, error instanceof ControllerError ? error.status : 500)); }
     }
@@ -2203,7 +2213,7 @@ export async function createHub(options: HubOptions) {
             // The host or an administrator removes a Live audio listener: its stream closes with the reason, and it leaves.
             authorize();
             if (socket.data.deviceId && store.device(socket.data.deviceId)?.role !== "administrator") throw new ControllerError(ADMIN_ONLY, 403);
-            playback = playing(action.playbackId);
+            playback = playbacks.get(action.playbackId);
             const sourceId = playback && intentOf(playback) === "live" ? sourceOf(playback) : undefined;
             if (!playback || !sourceId || !playback.outputs.some(output => output.deviceId === action.deviceId)) throw new ControllerError("That device no longer listens to this live audio.", 409);
             for (const entry of liveListeners) if (entry.sourceId === sourceId && entry.deviceId === action.deviceId) { liveListeners.delete(entry); entry.socket.close(4001, "Removed by the host."); }

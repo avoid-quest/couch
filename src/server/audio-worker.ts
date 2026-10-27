@@ -96,6 +96,7 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
   else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { writeSource(message.sourceId!, message.epoch!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
   else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); budgets.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); transports.get(message.sourceId!)?.close(); transports.delete(message.sourceId!); engine.endSource(message.sourceId!); }
   else if (message.type === "dropListener") transports.get(message.sourceId!)?.drop(message.clientId!, message.reason);
+  else if (message.type === "liveSettings") for (const transport of transports.values()) transport.configure(message.live!);
   else if (message.type === "drop") engine.drop(message.clientId!);
   else if (message.type === "setDelay") engine.setDelay(message.clientId!, message.delay!);
   else if (message.type === "close") { for (const group of groups.values()) group.close(); for (const transport of transports.values()) transport.close(); engine.close(); for (const socket of websocket.clients) socket.terminate(); server.close(() => { port.close(); }); }

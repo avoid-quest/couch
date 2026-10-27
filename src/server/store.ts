@@ -203,9 +203,9 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return isLiveAudioSettings(value) ? value : defaultLiveAudioSettings;
     },
     saveLiveAudioSettings(settings: unknown) {
-      if (!isLiveAudioSettings(settings)) throw new ControllerError("Choose a supported codec, bitrate and lead between 0 and 1000 ms, with the minimum at most the maximum.");
-      const { codec, opusBitrate, lead, leadMs, minLeadMs, maxLeadMs, raiseForSlowest } = settings;
-      db.query("INSERT INTO installation_live_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET settings = excluded.settings").run(JSON.stringify({ codec, opusBitrate, lead, leadMs, minLeadMs, maxLeadMs, raiseForSlowest }));
+      if (!isLiveAudioSettings(settings)) throw new ControllerError("Choose a supported codec, bitrate, listener buffer and lead between 0 and 1000 ms, with the minimum at most the maximum.");
+      const { codec, opusBitrate, lead, leadMs, minLeadMs, maxLeadMs, raiseForSlowest, listenerBufferFrames } = settings;
+      db.query("INSERT INTO installation_live_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET settings = excluded.settings").run(JSON.stringify({ codec, opusBitrate, lead, leadMs, minLeadMs, maxLeadMs, raiseForSlowest, listenerBufferFrames }));
     },
     askEveryDevice() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_live_chooser WHERE id = 1").get()?.enabled; },
     saveAskEveryDevice(enabled: boolean) { db.query("INSERT INTO installation_live_chooser VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },

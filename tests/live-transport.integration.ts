@@ -143,7 +143,7 @@ test("Core streams timestamped Live PCM to an authorized listener and keeps its 
   // The host removes a listener: 4001 with a reason, and the device no longer plays it.
   const c = listen();
   await waitFor(() => c.packets.length > 10);
-  const playbackId = f.receiver.state.player.playbackId!;
+  const playbackId = f.receiver.state.playback!;
   assert.equal((await f.receiver.command({ type: "removeLiveListener", playbackId, deviceId: f.receiver.id })).ok, false, "a listener cannot remove others");
   const removal = await host.command({ type: "removeLiveListener", playbackId, deviceId: f.receiver.id });
   assert.equal(removal.ok, true, removal.error);
@@ -168,5 +168,27 @@ test("Opus listeners get 2.5 ms packets from the bundled encoder, moved back by 
     const age = hostNow(packet.at) - packet.captureUs;
     assert.ok(age > -2000 && age < 60_000, `capture → arrival ${(age / 1000).toFixed(2)} ms`);
   }
+  await source.stop();
+});
+
+test("The operator's changes reach the running stream: a fixed lead ramps, a new codec starts a new session", { timeout: 30_000 }, async t => {
+  const { f, capture, listen } = await setup(t, { codec: "pcm", lead: "automatic", leadMs: 80 });
+  const a = listen();
+  await waitFor(() => a.messages.some(message => message.type === "hello"));
+  const source = await capture();
+  await waitFor(() => a.packets.length > 50);
+  const change = (settings: Record<string, unknown>) => fetch(`${f.hub.origin}/api/settings/live-audio`, { method: "POST", headers: { Authorization: `Bearer ${"h".repeat(64)}`, "Content-Type": "application/json" }, body: JSON.stringify({ settings }) });
+  assert.equal((await change({ lead: "fixed", leadMs: 50 })).status, 200);
+  await waitFor(() => a.messages.some(message => message.type === "lead" && message.leadMs === 50));
+  const hellos = () => a.messages.filter(message => message.type === "hello"), before = hellos().length, session = hellos().at(-1)!.session;
+  assert.equal((await change({ codec: "opus", opusBitrate: 128000 })).status, 200);
+  await waitFor(() => hellos().length === before + 1);
+  const restarted = a.messages.findLast(message => message.type === "hello")!;
+  assert.equal(restarted.codec, 2); assert.notEqual(restarted.session, session);
+  await waitFor(() => a.packets.some(packet => packet.codec === 2 && packet.seq === 0));
+  // The operator reads each listener's measurements on demand.
+  const status = await fetch(`${f.hub.origin}/api/live/listeners?sourceId=concert`, { headers: { Authorization: `Bearer ${"h".repeat(64)}` } }).then(response => response.json());
+  assert.deepEqual({ leadMs: status.leadMs, codecs: status.listeners.map((listener: { codec: string }) => listener.codec) }, { leadMs: 50, codecs: ["opus"] });
+  assert.equal((await fetch(`${f.hub.origin}/api/live/listeners?sourceId=concert`, { headers: { Authorization: `Bearer ${f.identities[1]!.token}` } })).status, 403);
   await source.stop();
 });

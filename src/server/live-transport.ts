@@ -54,6 +54,7 @@ export function createOpusEncoder(bitrate: number) {
   control(4027, lookahead); // OPUS_GET_LOOKAHEAD
   return {
     lookahead: native.HEAP32[lookahead >> 2]!,
+    bitrate: (value: number) => control(4002, value),
     reset: () => control(4028, 0), // OPUS_RESET_STATE
     encode(frame: Buffer) {
       pcm.set(frame);
@@ -71,14 +72,16 @@ const count = (value: unknown) => finite(value) && value > 0 ? Math.floor(value)
 const rounded = (value: number | null | undefined) => finite(value) ? Math.round(value) : null;
 type Listener = { socket: WebSocket; lead?: LeadListener; signature?: string; gaps: number; concealments: number; marginMs: number | null; statsUs: number; windowUs: number; messages: number };
 export type LiveTransportStatus = { leadMs: number; listeners: (LiveListenerStatus & { deviceId: string })[] };
+// Fixed holds its lead exactly; the operator's bounds are Automatic's.
+const leadPolicy = (settings: LiveAudioSettings) => settings.lead === "fixed" ? { fixed: true, minLeadMs: 0, maxLeadMs: Infinity }
+  : { fixed: false, minLeadMs: settings.minLeadMs, maxLeadMs: settings.maxLeadMs, raiseForSlowest: settings.raiseForSlowest };
 
 /** One Live source's stream: timestamped packets for each listener and the lead they share. */
 export function createLiveTransport({ sourceId, epoch, settings, changed, log }: { sourceId: string; epoch: string; settings: LiveAudioSettings;
   changed: (status: LiveTransportStatus) => void; log: (line: string) => void }) {
-  const codec = settings.codec === "opus" ? opusCodec : pcmCodec, name = settings.codec;
-  const lead = createLeadController({ initialLeadMs: settings.leadMs, minLeadMs: settings.minLeadMs, maxLeadMs: settings.maxLeadMs,
-    raiseForSlowest: settings.raiseForSlowest, fixed: settings.lead === "fixed" });
-  const encoder = codec === opusCodec ? createOpusEncoder(settings.opusBitrate) : undefined;
+  const lead = createLeadController({ initialLeadMs: settings.leadMs, ...leadPolicy(settings) });
+  let name = settings.codec, codec = name === "opus" ? opusCodec : pcmCodec;
+  let encoder = codec === opusCodec ? createOpusEncoder(settings.opusBitrate) : undefined;
   const listeners = new Map<string, Listener>(), opus = Buffer.alloc(opusFrames * 4);
   let generation: string | undefined, sessions = 0, session = `${epoch}:0`, seq = 0, published = "";
   let converter: ReturnType<typeof createCaptureClock> | undefined, converted = 0;
@@ -120,6 +123,12 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
     ageMax = Math.max(ageMax, age); ageTotal += age; ages++;
     for (const l of listeners.values()) if (l.socket.readyState === 1 && l.lead?.status !== "removed") l.socket.send(packet);
   };
+  // A new position timeline: listeners start over from the next packet.
+  const restart = () => {
+    session = `${epoch}:${++sessions}`; seq = 0; pendingFrames = 0; encoder?.reset();
+    const now = serverNowUs();
+    for (const l of listeners.values()) hello(l.socket, now);
+  };
   const s16 = (pcm: Float32Array, from: number, frames: number, into: Buffer, at = 0) => {
     for (let i = 0; i < frames * 2; i++) into.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(pcm[from * 2 + i]! * 32768))), (at * 2 + i) * 2);
     return into;
@@ -130,10 +139,8 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
       // 48 kHz stereo keeps its own sample clock; listeners fit it. Other rates arrive resampled to 48 kHz.
       const raw = packet.sampleRate === 48_000 && packet.channels === 2, reset = packet.generation !== generation;
       if (reset) {
-        generation = packet.generation; session = `${epoch}:${++sessions}`; seq = 0; pendingFrames = 0; encoder?.reset();
+        generation = packet.generation; restart();
         converter = raw ? undefined : createCaptureClock({ intent: "live" }); converted = 0;
-        const now = serverNowUs();
-        for (const l of listeners.values()) hello(l.socket, now);
       }
       let position = packet.samplePosition, captureUs = packet.capturedAtUs, pcm = packet.pcm;
       if (converter) {
@@ -190,6 +197,17 @@ export function createLiveTransport({ sourceId, epoch, settings, changed, log }:
       hello(socket, now);
       if (snapshot.leadMs !== snapshot.effectiveLeadMs) text(socket, { type: "lead", leadMs: snapshot.leadMs, atServerUs: snapshot.atServerUs });
       apply(snapshot); publish();
+    },
+    // The operator's changes, live: the lead ramps, a bitrate applies to the next packet, and a codec starts a new session.
+    configure(next: LiveAudioSettings) {
+      apply(lead.configure({ ...leadPolicy(next), leadMs: next.leadMs }, serverNowUs()));
+      if (next.codec !== name) {
+        encoder?.free(); encoder = next.codec === "opus" ? createOpusEncoder(next.opusBitrate) : undefined;
+        name = next.codec; codec = encoder ? opusCodec : pcmCodec;
+        restart();
+      } else if (next.opusBitrate !== settings.opusBitrate) encoder?.bitrate(next.opusBitrate);
+      settings = next;
+      publish();
     },
     // An operator's removal: only this removes a listener.
     drop(deviceId: string, reason = "Removed by the host.") {

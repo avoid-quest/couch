@@ -46,17 +46,21 @@ export function leadAt(trajectory: Trajectory, us: number, rate: number) {
   return trajectory.fromMs + Math.sign(change) * Math.min(Math.abs(change), Math.max(0, us - trajectory.atServerUs) / 1e6 * rate);
 }
 
-/** Automatic raises after two reports above the lead and lowers by cost; fixed only reports. Only drop() removes a listener. */
-export function createLeadController(options: Partial<LeadPolicy> & { initialLeadMs: number }) {
-  const policy: LeadPolicy = { ...leadDefaults, ...options }, initial = options.initialLeadMs;
-  if (!finite(initial) || initial < 0) throw new RangeError("initialLeadMs must be finite and nonnegative");
+function check(policy: LeadPolicy) {
   if (typeof policy.raiseForSlowest !== "boolean" || typeof policy.fixed !== "boolean") throw new RangeError("raiseForSlowest and fixed are booleans");
   if (!finite(policy.minLeadMs) || policy.minLeadMs < 0 || policy.minLeadMs > policy.maxLeadMs) throw new RangeError("minLeadMs");
   for (const key of ["hysteresisMs", "historySec", "staleSec", "rampMsPerSec", "commandAheadMs", "maxLeadMs", "loweringStepMs", "lowerEverySec", "debtMsPerHour", "debtAreaFraction"] as const)
     if ((key !== "maxLeadMs" || policy[key] !== Infinity) && (!finite(policy[key]) || policy[key] <= 0)) throw new RangeError(`${key} must be positive`);
   if (!finite(policy.warmupSec) || policy.warmupSec < 0) throw new RangeError("warmupSec");
+}
+
+/** Automatic raises after two reports above the lead and lowers by cost; fixed holds its lead. Only drop() removes a listener. */
+export function createLeadController(options: Partial<LeadPolicy> & { initialLeadMs: number }) {
+  const policy: LeadPolicy = { ...leadDefaults, ...options }, initial = options.initialLeadMs;
+  if (!finite(initial) || initial < 0) throw new RangeError("initialLeadMs must be finite and nonnegative");
+  check(policy);
   const listeners = new Map<string, State>();
-  let target = Math.max(policy.minLeadMs, Math.min(initial, policy.maxLeadMs)), clock: number | null = null, changedUs: number | null = null, pending: Trajectory | null = null;
+  let target = Math.max(policy.minLeadMs, Math.min(initial, policy.maxLeadMs)), fixedMs = initial, clock: number | null = null, changedUs: number | null = null, pending: Trajectory | null = null;
   let trajectory: Trajectory = { fromMs: target, leadMs: target, atServerUs: 0 };
   const effective = (us: number) => leadAt(trajectory, us, policy.rampMsPerSec);
   const endUs = () => trajectory.atServerUs + Math.abs(trajectory.leadMs - trajectory.fromMs) / policy.rampMsPerSec * 1e6;
@@ -97,9 +101,8 @@ export function createLeadController(options: Partial<LeadPolicy> & { initialLea
     return snapshot(us);
   }
   function decide(us: number, decisions: LeadDecision[] = []) {
-    if (policy.fixed) return snapshot(us, decisions);
-    const group = deciding();
-    let desired = target, why: string | null = null;
+    const group = policy.fixed ? [] : deciding();
+    let desired = policy.fixed ? fixedMs : target, why: string | null = policy.fixed ? "fixed by the operator" : null;
     for (const s of group) {
       // Each report is an interval maximum. Two consecutive reports confirm persistence or burst recurrence.
       const high = s.rows.slice(-2).filter(r => r.needMs + policy.hysteresisMs > target);
@@ -108,7 +111,7 @@ export function createLeadController(options: Partial<LeadPolicy> & { initialLea
         if (candidate > desired) { desired = candidate; why = "confirmed ongoing need"; }
       }
     }
-    if (!why && group.length && !pending && us >= endUs() && us - changedUs! >= policy.lowerEverySec * 1e6 &&
+    if (!policy.fixed && !why && group.length && !pending && us >= endUs() && us - changedUs! >= policy.lowerEverySec * 1e6 &&
         group.every(s => us - s.lastUs < policy.staleSec * 1e6 && us - s.firstUs! >= policy.historySec * 1e6 && s.rows.length >= Math.ceil(policy.historySec))) {
       // Spend at most one step of new debt; do not pile steps onto an unfinished recovery.
       for (let candidate = Math.ceil(Math.max(policy.minLeadMs, target - policy.loweringStepMs)); candidate <= target - policy.hysteresisMs; candidate++) {
@@ -121,6 +124,7 @@ export function createLeadController(options: Partial<LeadPolicy> & { initialLea
       }
     }
     desired = Math.max(policy.minLeadMs, Math.min(desired, policy.maxLeadMs));
+    if (desired !== target && !why) why = "the operator's bounds";
     let command: LeadCommand | null = null;
     // Never replace an epoch that some listeners may already have received.
     if (desired !== target && !pending) {
@@ -166,6 +170,16 @@ export function createLeadController(options: Partial<LeadPolicy> & { initialLea
     // The deadline every packet is held to now, without building a snapshot.
     effectiveLeadMs(us: number) { advance(us); return effective(us); },
     tick(us: number) { advance(us); return decide(us); },
+    // The operator's changes apply live: the lead ramps to a new fixed value or into new bounds.
+    configure(changes: Partial<Pick<LeadPolicy, "minLeadMs" | "maxLeadMs" | "raiseForSlowest" | "fixed">> & { leadMs?: number }, us: number) {
+      advance(us);
+      const { leadMs, ...rest } = changes;
+      if (leadMs !== undefined && (!finite(leadMs) || leadMs < 0)) throw new RangeError("leadMs must be finite and nonnegative");
+      check({ ...policy, ...rest });
+      Object.assign(policy, rest);
+      if (leadMs !== undefined) fixedMs = leadMs;
+      return decide(us);
+    },
     current(us: number) { advance(us); return snapshot(us); },
     remove(id: string, us: number) { advance(us); listeners.delete(id); return decide(us, [{ type: "leave", id, atServerUs: us }]); },
     drop(id: string, us: number, reason = "Removed by the host") {

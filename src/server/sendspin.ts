@@ -26,7 +26,11 @@ export function createSendspin(options: { identity: string; name: string; admit:
   let admissions = new Map<string, { group: string; receiverId?: string; admission: OutputAdmission }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();
-  const listening = new Map<string, LiveTransportStatus>();
+  const listening = new Map<string, LiveTransportStatus>(), standing = new Map<string, string>();
+  // Every window gets state again when a listener's standing changes, not for each of its once-a-second
+  // measurements: with 50 listeners that would resend each window's whole state every second. The
+  // operator reads the measurements themselves from liveStatus.
+  const standingOf = (status: LiveTransportStatus) => JSON.stringify([status.leadMs, status.listeners.map(l => [l.deviceId, l.codec, l.status, l.behindMs && Math.ceil(l.behindMs / 10)])]);
   let clients = new Set<string>(), delays = new Map<string, number>(), receivers = new Map<string, string>();
   let closed = false, failed = false;
   const helpers = new Map<number, ReturnType<typeof useHelper>>();
@@ -65,7 +69,12 @@ export function createSendspin(options: { identity: string; name: string; admit:
     else if (message.type === "delay") options.saveDelay?.(message.clientId, message.delay);
     else if (message.type === "sourceFailed") { const source = sources.get(message.sourceId); if (!source || source.epoch !== message.epoch) return; source.error = message.error; options.sourceFailed?.(message.sourceId, message.error); options.changed(); }
     else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.queued = Math.max(0, source.queued - message.bytes); }
-    else if (message.type === "liveListeners") { if (sources.get(message.sourceId)?.epoch === message.epoch) { listening.set(message.sourceId, message.status); options.changed(); } }
+    else if (message.type === "liveListeners") {
+      if (sources.get(message.sourceId)?.epoch !== message.epoch) return;
+      listening.set(message.sourceId, message.status);
+      const signature = standingOf(message.status);
+      if (standing.get(message.sourceId) !== signature) { standing.set(message.sourceId, signature); options.changed(); }
+    }
     else if (message.type === "budgets") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.budgets = message.budgets; }
     else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); wires = new Map(message.value.wires); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
   });
@@ -153,11 +162,14 @@ export function createSendspin(options: { identity: string; name: string; admit:
       socket.once("close", () => { if (uploads.get(id) === socket) uploads.delete(id); });
       bridge(socket, `source=${encodeURIComponent(id)}&epoch=${sources.get(id)!.epoch}`); return true;
     },
-    endSource(id: string) { const epoch = sources.get(id)?.epoch; sources.delete(id); listening.delete(id); const upload = uploads.get(id); uploads.delete(id); upload?.close(); post({ type: "end", sourceId: id, epoch }); },
+    endSource(id: string) { const epoch = sources.get(id)?.epoch; sources.delete(id); listening.delete(id); standing.delete(id); const upload = uploads.get(id); uploads.delete(id); upload?.close(); post({ type: "end", sourceId: id, epoch }); },
     hasSource: (id: string) => sources.has(id),
     // Live audio listeners, after Hub authorizes them.
     listen: (socket: WebSocket, sourceId: string, deviceId: string) => bridge(socket, `listen=${encodeURIComponent(sourceId)}&device=${encodeURIComponent(deviceId)}`, true),
     liveLead: (sourceId: string) => listening.get(sourceId)?.leadMs,
+    liveStatus: (sourceId: string) => listening.get(sourceId),
+    // The operator's changes apply to every running Live stream at once.
+    configureLive: (settings: LiveAudioSettings) => post({ type: "liveSettings", live: settings }),
     liveListener(sourceId: string, deviceId: string): LiveListenerStatus | undefined {
       const found = listening.get(sourceId)?.listeners.find(listener => listener.deviceId === deviceId);
       if (!found) return undefined;

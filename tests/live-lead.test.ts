@@ -146,3 +146,16 @@ test("unpaid debt and the minimum gate lowering", () => {
     expect(c.tick(at(60)).command).toBeNull();
   }
 });
+
+test("the operator's changes ramp the lead live: a fixed value, then bounds", () => {
+  const c = createLeadController({ initialLeadMs: 60, warmupSec: 0 });
+  const fixed = c.configure({ fixed: true, leadMs: 40, minLeadMs: 0, maxLeadMs: Infinity }, at(1));
+  expect(fixed.command).toEqual({ type: "lead", leadMs: 40, atServerUs: at(1) + leadDefaults.commandAheadMs * 1000 });
+  expect(c.current(fixed.rampEndUs).effectiveLeadMs).toBe(40);
+  for (let s = 3; s < 6; s++) expect(c.observe("a", { needMs: 90 }, at(s)).leadMs).toBe(40);
+  // Back to Automatic, the need measured meanwhile raises it at once.
+  expect(c.configure({ fixed: false, minLeadMs: 0, maxLeadMs: 100 }, at(6)).command?.leadMs).toBe(93);
+  const lowered = c.configure({ maxLeadMs: 70 }, at(20));
+  expect(lowered.command?.leadMs).toBe(70);
+  expect(() => c.configure({ minLeadMs: 80 }, at(21))).toThrow(/minLeadMs/);
+});
