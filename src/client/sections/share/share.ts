@@ -1,15 +1,16 @@
-import { AppWindow, AudioLines, Mic, Monitor, type LucideIcon } from "lucide-react";
+import { AppWindow, Cable, Monitor, Volume2, type LucideIcon } from "lucide-react";
 import type { ClientSessionState } from "@/session/session";
 import type { LiveRoute } from "@/session/live-route";
 import type { CaptureKind, CaptureSource } from "../../../shared/capture";
 import type { LiveSelection, LiveVideoQuality } from "../../../shared/live-input";
 import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
-// What this device can share, in the order the Share dialog offers it (docs/design/share.md). Each kind says how it
-// captures; the dialog and the capsule read only these fields, so a new kind (a specific sound card, say) is one more entry.
+// Sources and their capture variants (docs/design/share.md). The dialog offers source choices first; Live is an
+// audio input's playback mode. The capsule also uses the variant to describe a running share.
 export type ShareKind = {
   id: string;
   label: string;
+  description: string;
   icon: LucideIcon;
   capture: CaptureKind;
   /** It shares a picture, chosen from the desktop app's screens or windows; a browser's own picker opens on that surface. */
@@ -20,11 +21,11 @@ export type ShareKind = {
 };
 
 export const shareKinds: ShareKind[] = [
-  { id: "screen", label: "Screen", icon: Monitor, capture: "screen", pictures: "screen" },
-  { id: "window", label: "Window", icon: AppWindow, capture: "screen", pictures: "window" },
-  { id: "sound", label: "Sound only", icon: AudioLines, capture: "system-audio" },
-  { id: "microphone", label: "Audio input", icon: Mic, capture: "microphone", inputs: true },
-  { id: "live-audio", label: "Live audio", icon: AudioLines, capture: "microphone", inputs: true, intent: "live" },
+  { id: "screen", label: "Screen", description: "Share an entire display.", icon: Monitor, capture: "screen", pictures: "screen" },
+  { id: "window", label: "Window", description: "Share one app window.", icon: AppWindow, capture: "screen", pictures: "window" },
+  { id: "sound", label: "System audio", description: "Share this computer's sound without video.", icon: Volume2, capture: "system-audio" },
+  { id: "microphone", label: "Audio input", description: "Share a microphone, line input or audio interface.", icon: Cable, capture: "microphone", inputs: true },
+  { id: "live-audio", label: "Live audio", description: "Share a microphone, line input or audio interface.", icon: Cable, capture: "microphone", inputs: true, intent: "live" },
 ];
 
 /** The kind a running share was started as, by how it captures. */
@@ -40,7 +41,7 @@ export function unavailable(kind: ShareKind, browser: { media: boolean; display:
 }
 
 /**
- * The capture a choice asks for. In the desktop app a picture is the chosen screen or window, and Sound only takes
+ * The capture a choice asks for. In the desktop app a picture is the chosen screen or window, and System audio takes
  * the first screen's capture for its sound, keeping the picture private; a browser opens its own picker.
  */
 export function selectionOf(kind: ShareKind, choice: { source?: CaptureSource; sources?: CaptureSource[]; audioDeviceId?: string; quality: LiveVideoQuality; sound: boolean }): LiveSelection {

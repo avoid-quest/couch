@@ -22,26 +22,35 @@ bottom Sheet on phones and the TV:
 
 ```
 Share this device                                  ×
-(✓ Screen) (Window) (Sound only) (Audio input) (Live audio)
+(✓ Screen) (Window) (System audio) (Audio input)
+Share an entire display.
 [picture] [picture] [picture]          screens or windows
-Input                        [System default ▾]   Audio input
-Input                        [Choose an input ▾]  Live audio
-                             Choose audio input
+Playback                     (✓ Relaxed) (Live)    local desktop Audio input
+Device                       [System default ▾]   relaxed Audio input
+Device                       [Choose an input ▾]  Live Audio input
+                             Find audio inputs
 Play on                (Living room TV) (Kitchen)
-Include this computer's sound               [on]   Screen and Window
+Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
                               Cancel  [Start sharing]
 ```
 
-- **What to share** is one row of chips, the chosen one checked
-  (`shareKinds`). Each kind says how it captures: Screen and Window are a
-  `screen` capture of a screen or a window, Sound only is `system-audio`, and
-  Live audio requires an explicit input: its selector starts empty, omits System default, and keeps Start sharing disabled until a device is selected. Ordinary Audio input retains System default.
-  Audio input is `microphone`, with the input choice. **Live audio** uses that
-  same picker with live intent and appears only on the Couch computer in the
-  desktop app. It requires an actual stereo input and timestamped capture;
+- **What to share** is one row of four source choices, the chosen one checked
+  (`shareKinds`): **Screen**, **Window**, **System audio** and **Audio input**.
+  A short description explains the selected source. Screen shares an entire
+  display; Window shares one app window. System audio shares sound without
+  video; in a browser it asks for a tab or screen with audio enabled in the
+  browser's picker. Audio input includes microphones, line inputs and audio
+  interfaces, with a neutral cable icon. The internal `microphone` capture kind
+  retains its protocol and permission meaning.
+- **Playback** is a separate **Relaxed / Live** choice for Audio input on the
+  Couch computer in the desktop app. Relaxed keeps collaborative playback
+  controls and System default as an input choice. Live listeners control their
+  own listening; it requires an explicit input, so its selector starts empty,
+  omits System default and keeps Start sharing disabled until a device is selected.
+  Live requires an actual stereo input and timestamped capture;
   unsupported capture fails with a reason. No duplicate mono is advertised as
-  stereo. Ordinary sharing keeps its relaxed controls. Live listeners find the
+  stereo. Live listeners find the
   source in Home or Search, **Join**, adjust their own volume, and **Leave**;
   leaving does not stop sharing or affect another listener.
 - **Live input selection** includes devices marked Native on Mac builds with the
@@ -54,8 +63,11 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   would otherwise see a window's content before the owner allows it. A screen
   is chosen for you; a window waits for your choice. In a browser Screen and
   Window hand off to the browser's own picker, which opens on that surface and
-  still offers the rest. Sound only takes the first screen's capture for its
+  still offers the rest. System audio takes the first screen's capture for its
   sound in the desktop app, so Start sharing waits there until it lists one.
+  Screen and Window offer **Include system audio** on desktop, explaining that
+  it includes everything the computer plays. Browsers say **Include audio** and
+  ask the person to enable it in the browser's picker when offered.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
   place, disabled, and leaves the choice. Without a choice the share waits in
@@ -64,7 +76,7 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   order: the first that takes it plays it, then each other joins the same
   playback. Closing the dialog while it starts cancels it, as Cancel does.
 - **Disabled keeps its place:** a browser that can't capture a display (a
-  phone's) keeps Screen, Window and Sound only, disabled, with today's reason
+  phone's) keeps Screen, Window and System audio disabled, with today's reason
   under the chips.
 
 ## While it runs
@@ -77,6 +89,8 @@ Screen"). It floats on the toasts' surface and shadow,
 without the bar's filter, which stays the page's one backdrop filter
 ([Glass](../design.md#glass)). Below `xl` the name leaves, below 960px the
 count too (thumbnail and Stop); on a phone Stop keeps only its icon.
+Home and Search also omit a source's type caption when its name already ends
+with that type, so Audio input is shown once.
 
 Pressing it opens its panel, a Popover hanging from it on desktop and a bottom
 Sheet on phones and the TV:

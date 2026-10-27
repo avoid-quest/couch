@@ -19,8 +19,9 @@ acquisition environment and playback behavior. Native capture is currently
 Mac-only and wired to local desktop Live publication; that coupling is an
 implementation limit, not a product rule.
 
-Share offers **Audio input** for ordinary collaborative listening and **Live audio**
-on the Couch computer. A live audience gets **Join/Leave** and its own volume;
+Share separates **Screen**, **Window**, **System audio** and **Audio input** from
+playback behavior. Audio input offers **Relaxed / Live** on the Couch computer;
+browser input sharing keeps relaxed playback. A live audience gets **Join/Leave** and its own volume;
 programme and queue controls remain with ordinary playback. These choices use the
 same source discovery and player ([Share](design/share.md)).
 Mac Live publishers can select a native audio input; Share distinguishes its

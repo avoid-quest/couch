@@ -15,8 +15,9 @@ export function useLiveSourceHits(query: string): SearchHit[] {
       const primary = live ? "Join" : "Play";
       const play = () => { void run({ type: "playLive", sourceId: source.id, ...live ? { deviceId: deviceId() } : {} }); };
       const label = source.video ? source.audio ? "Screen and audio" : "Screen without audio" : source.kind === "system-audio" ? "System audio" : source.kind === "airplay" ? "AirPlay" : "Audio input";
+      const meta = live ? "Live audio" : label;
       return {
-        id: `live:${source.id}`, source: "Shared sources", title: source.name, meta: live ? "Live audio" : label, kind: "Live", live: true, video: source.video,
+        id: `live:${source.id}`, source: "Shared sources", title: source.name, meta: source.name.endsWith(` · ${meta}`) ? "" : meta, kind: "Live", live: true, video: source.video,
         primary: { label: primary, disabled, run: play },
         actions: [
           { label: primary, disabled, run: play },

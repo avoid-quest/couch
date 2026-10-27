@@ -24,7 +24,7 @@ const pictureConstraints = (quality: LiveVideoQuality): MediaTrackConstraints =>
 // closed); say what happened and what to do next. Anything else keeps its message.
 const captureError = (reason: unknown, kind: LiveSelection["kind"]) => {
   const name = reason instanceof DOMException ? reason.name : "";
-  const what = kind === "microphone" ? "Microphone access" : kind === "system-audio" ? "System audio capture" : "Screen capture";
+  const what = kind === "microphone" ? "Audio input access" : kind === "system-audio" ? "System audio capture" : "Screen capture";
   if (name === "NotAllowedError") return new Error(kind === "microphone" ? `${what} wasn't allowed. Allow it, then try again.` : `${what} wasn't allowed. Choose a screen or window and allow it, then try again.`);
   if (name === "NotFoundError") return new Error(kind === "microphone" ? "No audio input was found. Connect a microphone or audio interface, then try again." : "No screen or window was found to share.");
   if (name === "NotReadableError" || name === "AbortError") return new Error(`${what} couldn't start. Another app may be using it.`);
@@ -401,7 +401,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         current.nativeMuted = muted;
         void couchApp!.liveAudio!({ op: "mute", id: current.nativeAudioId, muted }).catch(error => {
           if (publication !== current) return;
-          void end().catch(() => {}); options.failed(error instanceof Error ? error : new Error("The microphone mute failed."));
+          void end().catch(() => {}); options.failed(error instanceof Error ? error : new Error("The audio input could not be muted."));
         });
       } else if (current?.source.kind === "microphone") for (const track of current.stream.getAudioTracks()) track.enabled = !muted;
     },

@@ -54,7 +54,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const { state, connected, localHost, startLive, endLive, liveAudioInputs, liveSharing, run, command, setError: report } = useSessionGate();
   const navigate = useNavigate();
   const here = deviceId();
-  const kinds = shareKinds.filter(kind => !kind.intent || localHost);
+  const kinds = shareKinds.filter(kind => !kind.intent);
   const browser = { media: !!navigator.mediaDevices?.getUserMedia, display: !!navigator.mediaDevices?.getDisplayMedia };
   const [kind, setKind] = useState<ShareKind>(() => kinds.find(item => !unavailable(item, browser)) ?? kinds[0]!);
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
@@ -86,7 +86,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   // header's capsule takes Share's place and unmounts the dialog itself, which ends nothing.
   const starting = useRef(false);
   useEffect(() => () => { if (starting.current && !liveSharing.current()) void endLive().catch(() => {}); }, []);
-  // The desktop app's Sound only takes a screen's capture for its sound (selectionOf).
+  // The desktop app's System audio takes a screen's capture for its sound (selectionOf).
   const ready = available && !reason && !elsewhere && (kind.intent !== "live" || !!audioDeviceId && audioDeviceId !== "default") && (!lists || !!(kind.pictures ? source : sources?.some(item => item.kind === "screen")));
 
   const checkAccess = async (on = kind) => {
@@ -152,23 +152,31 @@ function ShareForm({ onDone }: { onDone: () => void }) {
 
   return <div className="grid gap-4">
     <div className="grid gap-2">
-      <ToggleGroup type="single" aria-label="What to share" spacing={2} className="w-full flex-wrap" value={kind.id} disabled={pending}
+      <ToggleGroup type="single" aria-label="What to share" spacing={2} className="w-full flex-wrap" value={kind.inputs ? "microphone" : kind.id} disabled={pending || listing}
         onValueChange={value => { const next = kinds.find(item => item.id === value); if (next) { setKind(next); setError(null); setSourceId(""); } }}>
         {kinds.map(item => <ToggleGroupItem key={item.id} value={item.id} className={chip} disabled={!!unavailable(item, browser)} title={unavailable(item, browser)}>
-          {item.id === kind.id ? <Check aria-hidden="true" /> : <item.icon aria-hidden="true" />}{item.label}
+          {item.capture === kind.capture && item.pictures === kind.pictures ? <Check aria-hidden="true" /> : <item.icon aria-hidden="true" />}{item.label}
         </ToggleGroupItem>)}
       </ToggleGroup>
+      <p className="text-meta text-muted-foreground">{kind.capture === "system-audio" && !couchApp?.captureSources
+        ? "Choose a tab or screen and enable audio in your browser's picker. Only sound is shared."
+        : kind.description}</p>
       {kinds.some(item => unavailable(item, browser)) && <p className="text-meta text-muted-foreground">{reason ?? kinds.map(item => unavailable(item, browser)).find(Boolean)}</p>}
     </div>
     {access || lists && kind.pictures && <Pictures sources={pictures} listing={listing} value={sourceId} onValueChange={setSourceId} disabled={pending} kind={kind} />}
-    {kind.inputs && <Row label="Input" htmlFor="live-audio-input">
+    {kind.inputs && localHost && <Row label="Playback" description={kind.intent === "live" ? "Listeners join and control their own volume." : "Shared listening with playback controls."}>
+      <ChoiceGroup label="Audio input playback" value={kind.intent ?? "relaxed"} disabled={!available || !!reason}
+        options={[{ value: "relaxed", label: "Relaxed" }, { value: "live", label: "Live" }]}
+        onValueChange={value => { setKind(shareKinds.find(item => item.inputs && (item.intent ?? "relaxed") === value)!); setError(null); }} />
+    </Row>}
+    {kind.inputs && <Row label="Device" htmlFor="live-audio-input">
       <div className="grid justify-items-end gap-1">
         <Select value={audioDeviceId} disabled={!available || !!reason} onValueChange={setAudioDeviceId}>
           <SelectTrigger id="live-audio-input" className="w-56"><SelectValue placeholder="Choose an input" /></SelectTrigger>
           <SelectContent data-tv-local-only>{kind.intent !== "live" && <SelectItem value="default">System default</SelectItem>}{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId}>{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
         </Select>
         {/* Browsers name inputs only once microphone access is allowed. */}
-        <Button variant="ghost" size="sm" className="-mr-3" disabled={!available || !!reason} onClick={() => void chooseInput()}>{listing ? <><Spinner />Finding inputs…</> : inputs ? "Refresh inputs" : "Choose audio input"}</Button>
+        <Button variant="ghost" size="sm" className="-mr-3" disabled={!available || !!reason} onClick={() => void chooseInput()}>{listing ? <><Spinner />Finding inputs…</> : inputs ? "Refresh inputs" : "Find audio inputs"}</Button>
       </div>
     </Row>}
     {devices.length > 0 && <Row label="Play on">
@@ -179,7 +187,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
       </ToggleGroup>
     </Row>}
     {kind.pictures && <>
-      <Row label="Include this computer's sound" htmlFor="live-include-audio" description="Everything it plays, even when sharing one window.">
+      <Row label={couchApp?.captureSources ? "Include system audio" : "Include audio"} htmlFor="live-include-audio" description={couchApp?.captureSources ? "Everything this computer plays, even when sharing one window." : "Enable audio in the browser's picker when offered."}>
         <Switch id="live-include-audio" checked={sound} disabled={pending} onCheckedChange={setSound} />
       </Row>
       <Row label="Picture" htmlFor="live-video-quality">
@@ -199,7 +207,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
 /** The picture's quality: up to 30 fps, at most this resolution. */
 export function QualitySelect({ id, value, disabled, onValueChange }: { id?: string; value: LiveVideoQuality; disabled?: boolean; onValueChange: (value: LiveVideoQuality) => void }) {
   return <Select value={value} disabled={disabled} onValueChange={value => onValueChange(value as LiveVideoQuality)}>
-    <SelectTrigger id={id} aria-label={id ? undefined : "Picture"} className="w-56"><SelectValue placeholder="Choose an input" /></SelectTrigger>
+    <SelectTrigger id={id} aria-label={id ? undefined : "Picture"} className="w-56"><SelectValue placeholder="Choose picture quality" /></SelectTrigger>
     <SelectContent data-tv-local-only>{Object.entries(qualityLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
   </Select>;
 }

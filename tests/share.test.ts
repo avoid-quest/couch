@@ -17,7 +17,7 @@ describe("what to share", () => {
     expect(selectionOf(kind("microphone"), { audioDeviceId: "default", quality: "1080p", sound: true })).toEqual({ kind: "microphone" });
   });
 
-  test("Sound only takes the desktop app's first screen for its sound, and the browser's picker otherwise", () => {
+  test("System audio takes the desktop app's first screen for its sound, and the browser's picker otherwise", () => {
     expect(selectionOf(kind("sound"), { sources: screens, quality: "1080p", sound: true })).toEqual({ kind: "system-audio", sourceId: "screen:1" });
     expect(selectionOf(kind("sound"), { quality: "1080p", sound: true })).toEqual({ kind: "system-audio" });
   });
@@ -33,7 +33,7 @@ describe("what to share", () => {
     expect(shareKindOf("screen", "window").label).toBe("Window");
     expect(shareKindOf("screen", "monitor").label).toBe("Screen");
     expect(shareKindOf("screen").label).toBe("Screen");
-    expect(shareKindOf("system-audio").label).toBe("Sound only");
+    expect(shareKindOf("system-audio").label).toBe("System audio");
   });
 });
 
