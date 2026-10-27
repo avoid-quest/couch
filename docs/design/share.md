@@ -136,6 +136,9 @@ There are no latency estimates, gap counters or listener polling.
 - Another window of this device already shares: the dialog says so and Start
   sharing waits.
 - A receiver that can't play: its row says "Can't play: {reason}" in red.
+- A timestamped input (Live audio, or relaxed Audio input) that stops
+  delivering ends the share, with a toast saying why; listeners see the
+  ordinary "{name} stopped sharing".
 - The last viewer leaves or goes offline while the capture still runs: one
   toast, "Still sharing {name}, on no screens", with Stop sharing, this
   device's own like the rest. It leaves once a viewer returns or the share

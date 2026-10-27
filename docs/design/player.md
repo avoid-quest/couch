@@ -32,7 +32,8 @@ it is looking at another device's playback. The publisher ends capture with
 Sendspin playback. Status is **Waiting for audio…**, **Listening**, or
 **Reconnecting…** while the Couch control connection returns. Volume and mute
 use SDK commands without restarting the stream. Actual errors retain their
-reason. Ordinary sharing retains its existing controls.
+reason. A listener the host removes returns to where it was, with a toast
+naming who removed it. Ordinary sharing retains its existing controls.
 Keyboard shortcuts and Media Session actions follow the same Core-provided rights.
 
 Audio delay appears only for the separate-audio Direct adapter that applies it.
