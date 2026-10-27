@@ -179,7 +179,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const source = sources.get(current.liveSourceId)!;
-          const next: Run = { fixed: true, captureLead: captureLead(), start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
+          const next: Run = { fixed: true, captureLead: captureLead(), start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 50) };
           run = next;
           next.dispose = source.subscribe(event => {
             if (run !== next) return;
@@ -198,6 +198,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
             }
             next.queues[event.wire].push({ offset: at - next.base, duration: event.duration, data: event.data });
             if (next.queues[event.wire].length > 200) fail("Captured audio exceeded its bounded queue.");
+            tick(next); // Live audio goes out as it arrives; the timer only keeps status.
           });
           report(); return;
         }

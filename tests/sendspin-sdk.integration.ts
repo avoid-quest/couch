@@ -36,15 +36,15 @@ for (const intent of ["live", "relaxed"] as const) test(`unmodified browser SDK 
   assert.equal(player.currentFormat?.codec, "pcm");
   assert.equal(chunks[0]!.sampleRate, 48000);
   assert.equal(chunks[0]!.samples.length, 2);
-  assert.equal(chunks[0]!.samples[0]!.length, 480);
+  assert.equal(chunks[0]!.samples[0]!.length, 240);
   assert.ok(chunks.every(chunk => Number.isSafeInteger(chunk.serverTimeUs)));
   assert.ok(chunks.some(chunk => chunk.samples[0]!.some(value => value > .15)), "the intended nonzero signal survives encryption, capture conversion and SDK decoding");
   assert.ok(chunks.every(chunk => chunk.samples[0]!.every((value, i) => Math.abs(value + chunk.samples[1]![i]!) < .001)), "the two input channels retain their opposite polarities");
   const lead = intent === "live" ? 150_000 : 1_000_000;
-  // The decoder can skip early packets during startup; surviving 10 ms chunks
+  // The decoder can skip early packets during startup; surviving 5 ms chunks
   // still belong to the source timeline plus the configured presentation lead.
   assert.ok(chunks[0]!.serverTimeUs - input.origin >= lead);
-  assert.ok(chunks.every(chunk => (chunk.serverTimeUs - input.origin - lead) % 10_000 === 0));
+  assert.ok(chunks.every(chunk => (chunk.serverTimeUs - input.origin - lead) % 5_000 === 0));
   if (intent === "relaxed") return;
   await until(() => receiver.state.outputs?.some(output => output.deviceId === identity.id && output.delayActive) === true);
   if (intent === "live") assert.ok(receiver.messages.some(message => message.type === "sendspin" && message.listen && message.live?.minBufferMs === 200));
@@ -57,7 +57,7 @@ for (const intent of ["live", "relaxed"] as const) test(`unmodified browser SDK 
   player.setMinBufferMs(150);
   const lowered = chunks.length;
   await until(() => chunks.length > lowered + 20);
-  assert.ok(chunks.slice(lowered).every((chunk, i, list) => i === 0 || chunk.serverTimeUs - list[i - 1]!.serverTimeUs === 10_000), "a smaller buffer keeps the running lead");
+  assert.ok(chunks.slice(lowered).every((chunk, i, list) => i === 0 || chunk.serverTimeUs - list[i - 1]!.serverTimeUs === 5_000), "a smaller buffer keeps the running lead");
   player.setMinBufferMs(400);
   await until(() => receiver.state.player.status === "playing");
   const other = await f.connect(2);

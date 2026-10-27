@@ -35,7 +35,7 @@ session. A peer whose messages throw closes alone; the shared worker continues.
 |---|---|---|
 | Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture in an isolated hidden capture page. |
 | Upload | f32 frames → validated `CaptureAudioPacket` in its source epoch | Node 0.6.2 has `sendSourceAudioChunk` but no public source stream start/end to declare a format. Publication tokens, epochs and helper leases retire stale work. |
-| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample`, stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 10 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 10 ms chunks, because each step holds audio until it is full. Gaps up to 40 ms are filled with silence so sample positions hold. |
+| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample`, stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 5 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 5 ms chunks, because each step holds audio until it is full. Core sends each chunk to listeners as it arrives. Gaps up to 40 ms are filled with silence so sample positions hold. |
 | Capture-time mapping | Encoded offset + generation + measured capture blocks → source time in Core microseconds | The Node SDK's default timestamp is send time; it cannot recover capture time. A short block lookup, including Opus pre-skip, keeps long shares on the input's clock. |
 | Group scheduling | Source time + members + player timing → presentation timestamps per session | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, group, metadata and volume APIs. The SDK session does not choose an application timeline. |
 
@@ -57,8 +57,10 @@ eviction.
 Share dialog when Live is chosen and in the running share's panel. Core sends it
 to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`.
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
-recreates that listener's player. Startup lead, correction and output buffering
-keep SDK defaults. The buffer is a receiver request, not a measured
+recreates that listener's player. Correction and output buffering keep SDK
+defaults. Live ignores the SDK's declared startup lead (`requiredLeadTimeMs`): a
+joining listener takes the group's running lead, and its SDK may skip the first
+chunks while it starts. The buffer is a receiver request, not a measured
 input-to-ear latency. See the measurements below for each receiver's floor.
 
 The sender produces 48 kHz stereo PCM16 and Opus only. A receiver supporting
