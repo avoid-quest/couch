@@ -120,7 +120,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setListing(true); setError(null);
     try {
       starting.current = true;
-      const next = await liveAudioInputs().finally(() => { starting.current = false; });
+      const next = await liveAudioInputs(kind.intent === "live").finally(() => { starting.current = false; });
       setInputs(next);
       setAudioDeviceId(previous => next.some(input => input.deviceId === previous) ? previous : kind.intent === "live" ? "" : "default");
       if (!next.length) setError("No audio inputs are available. Connect a microphone or audio interface and try again.");

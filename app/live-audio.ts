@@ -2,9 +2,10 @@ import { BrowserWindow, ipcMain, type IpcMainEvent, type WebContents } from "ele
 import { join } from "node:path";
 import type { AudioCaptureFormat, LiveAudioAction } from "../src/shared/capture";
 import type { createCapture } from "./capture";
+import { nativeAudioInput, nativeAudioInputs } from "./native-audio-input";
 
 /** Owns the microphone independently of renderer progress, including during preparation. */
-export function createLiveAudio(ownerOf: () => WebContents | null, capture: ReturnType<typeof createCapture>, localOrigin: string, token: () => string | undefined) {
+export function createLiveAudio(ownerOf: () => WebContents | null, capture: ReturnType<typeof createCapture>, localOrigin: string, token: () => string | undefined, nativeHelper?: string) {
   type Active = { id: string; stop(): Promise<void>; command(action: LiveAudioAction): Promise<AudioCaptureFormat | undefined> };
   let active: Active | undefined;
   let retiring = Promise.resolve();
@@ -12,6 +13,13 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
   const stop = () => { generation++; return active?.stop() ?? retiring; };
   return {
     stop,
+    async inputs() {
+      const owner = ownerOf(), frame = owner?.mainFrame;
+      if (!owner || !frame || owner.isDestroyed() || new URL(frame.url).origin !== localOrigin) throw new Error("Choose native inputs on this computer's Couch.");
+      const inputs = await nativeAudioInputs(nativeHelper);
+      if (ownerOf() !== owner || owner.isDestroyed() || owner.mainFrame !== frame || frame.detached || new URL(frame.url).origin !== localOrigin) throw new Error("Input selection was canceled.");
+      return inputs;
+    },
     async action(value: unknown) {
       if (!value || typeof value !== "object") throw new Error("Choose an audio input.");
       const action = value as LiveAudioAction;
@@ -28,6 +36,8 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
             || !/^[a-f0-9]{64}$/.test(url.searchParams.get("key") ?? "")) throw new Error("Use this publication's local audio upload.");
         } else if (action.op === "mute") {
           if (typeof action.muted !== "boolean") throw new Error("Invalid microphone mute.");
+        } else if (action.op === "buffer") {
+          if (![128, 256, 512, 1024].includes(action.bufferFrames)) throw new Error("Choose a supported native input buffer.");
         } else if (action.op !== "stop-upload" || typeof action.uploadId !== "string") throw new Error("Invalid audio command.");
         return active.command(action);
       }
@@ -39,8 +49,11 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
       if (active) throw new Error("Stop sharing before choosing another audio input.");
       if (typeof action.deviceId !== "string" || !action.deviceId || action.deviceId.length > 512) throw new Error("Choose an audio input.");
       if (action.sampleRate !== undefined && ![44100, 48000].includes(action.sampleRate)) throw new Error("Choose a supported Live audio capture rate.");
+      if (action.bufferFrames !== undefined && ![128, 256, 512, 1024].includes(action.bufferFrames)) throw new Error("Choose a supported native input buffer.");
       const helperUrl = localOrigin + "/capture-audio.html";
       let helper: BrowserWindow | undefined, helperFrame: typeof frame | undefined, closed = false, nextRequest = 0;
+      let native: ReturnType<typeof nativeAudioInput> | undefined, closing = Promise.resolve();
+      const lifetime = new AbortController();
       const waiting = new Map<number, { resolve(value?: AudioCaptureFormat): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
       const ensure = () => {
         if (closed || active !== state || ownerOf() !== owner || owner.isDestroyed() || owner.mainFrame !== frame || frame.detached || frame.url !== ownerUrl) throw new Error("Audio capture was canceled.");
@@ -70,8 +83,9 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
       const state: Active = {
         id: action.id,
         stop() {
-          if (closed) return retiring;
+          if (closed) return closing;
           closed = true;
+          lifetime.abort();
           if (active === state) active = undefined;
           capture.clear();
           for (const pending of waiting.values()) { clearTimeout(pending.timer); pending.reject(new Error("Audio capture was canceled.")); }
@@ -79,10 +93,14 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
           ipcMain.removeListener("couch:audio-capture-event", onEvent);
           owner.removeListener("did-start-navigation", ownerNavigation); owner.removeListener("destroyed", ownerGone); owner.removeListener("render-process-gone", ownerGone);
           if (helper && !helper.isDestroyed()) helper.destroy();
-          return retiring;
+          closing = native?.stop() ?? Promise.resolve();
+          retiring = closing;
+          return closing;
         },
         async command(command) {
           ensure();
+          if (native) { const result = await native.command(command); ensure(); return result; }
+          if (command.op === "buffer") throw new Error("Only native inputs have a capture buffer.");
           if (!helper || helper.isDestroyed() || !helperFrame || helper.webContents.mainFrame !== helperFrame || helperFrame.detached || helperFrame.url !== helperUrl) throw new Error("The audio capture window changed.");
           const request = ++nextRequest, response = wait(request);
           helper.webContents.send("couch:audio-capture-command", { ...command, request });
@@ -93,6 +111,17 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
       owner.on("did-start-navigation", ownerNavigation); owner.on("destroyed", ownerGone); owner.on("render-process-gone", ownerGone);
       ipcMain.on("couch:audio-capture-event", onEvent);
       try {
+        if (action.deviceId.startsWith("native:")) {
+          if (!nativeHelper) throw new Error("Native audio capture is not available in this app.");
+          const inputs = await nativeAudioInputs(nativeHelper); ensure();
+          const input = inputs.find(input => input.uid === action.deviceId.slice(7));
+          if (!input) throw new Error("The selected native input is no longer available.");
+          await capture.prepare({ kind: "microphone" }); ensure();
+          capture.consumeMicrophone();
+          native = nativeAudioInput(nativeHelper, input, action.sampleRate ?? input.nominalRate, action.bufferFrames ?? 256, fail, lifetime.signal, action.sampleRate !== undefined);
+          const result = await native.prepare(); ensure();
+          return result;
+        }
         helper = new BrowserWindow({ show: false, webPreferences: { session: owner.session, sandbox: true, contextIsolation: true, nodeIntegration: false,
           backgroundThrottling: false, preload: join(import.meta.dirname, "preload.cjs"), additionalArguments: [`--couch-audio-capture=${action.id}`] } });
         helper.webContents.setWindowOpenHandler(() => ({ action: "deny" }));

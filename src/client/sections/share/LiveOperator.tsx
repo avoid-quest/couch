@@ -1,14 +1,17 @@
+import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { liveAudioSettingsQuery } from "@/api/settings";
+import { useNativeInputBufferPreference } from "@/audio-settings";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { LiveSharing } from "@/session/live";
 import { errorText, useSessionGate } from "@/session/session-context";
-import type { LiveAudioSettings } from "../../../shared/audio-settings";
+import { nativeInputBufferOptions, type LiveAudioSettings } from "../../../shared/audio-settings";
 import { viewerLine, type Viewer } from "./share";
 
 export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
@@ -47,11 +50,24 @@ export function PlaybackBufferInput({ id, live, className }: { id: string; live:
 }
 
 /** Public Sendspin options for the running share; playback timing/recovery stays upstream. */
-export function LiveSettings() {
+export function LiveSettings({ sharing }: { sharing: LiveSharing }) {
+  const { liveSharing, setError } = useSessionGate();
   const live = useLiveAudioSettings();
   const { settings, save } = live;
+  const nativeBuffer = useNativeInputBufferPreference();
+  const [restarting, setRestarting] = useState(false);
+  const native = sharing.captureFormat?.native;
   if (!settings) return null;
   return <div className="grid gap-2 border-t pt-2">
+    {native && <div className="flex items-center justify-between gap-4">
+      <label htmlFor="live-capture-buffer">Capture buffer</label>
+      <Select value={String(native.requestedFrames)} disabled={restarting} onValueChange={value => {
+        nativeBuffer.save(value); setRestarting(true);
+        void liveSharing.setCaptureBuffer(Number(value) as 128 | 256 | 512 | 1024).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
+      }}><SelectTrigger id="live-capture-buffer" className="w-44"><SelectValue /></SelectTrigger>
+        <SelectContent data-tv-local-only>{nativeInputBufferOptions.map(value => <SelectItem key={value} value={value}>{value} frames</SelectItem>)}</SelectContent>
+      </Select>
+    </div>}
     <div className="flex items-center justify-between gap-4">
       <label htmlFor="live-codec">Codec</label>
       <Select value={settings.codec} disabled={save.isPending} onValueChange={codec => save.mutate({ ...settings, codec: codec as LiveAudioSettings["codec"] })}>

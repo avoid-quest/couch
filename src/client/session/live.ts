@@ -1,6 +1,6 @@
 import type { AudioCaptureFormat } from "../../shared/capture";
-import { readCaptureRatePreference } from "../audio-settings";
-import { captureSampleRate, liveCaptureConstraints } from "../../shared/audio-settings";
+import { readCaptureRatePreference, readNativeInputBufferPreference } from "../audio-settings";
+import { captureSampleRate, liveCaptureConstraints, nativeInputBufferFrames } from "../../shared/audio-settings";
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
 import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource, LiveUploadFailedMessage, LiveVideoQuality } from "../../shared/live-input";
 import { canCaptureAudio, prepareCaptureAudio, uploadCaptureAudio } from "./capture-audio";
@@ -284,7 +284,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       } catch (reason) { failReceiver(current, reason); }
       return true;
     },
-    async audioInputs(): Promise<import("../../shared/capture").AudioInput[]> {
+    async audioInputs(live = false): Promise<import("../../shared/capture").AudioInput[]> {
       if (closed || starting || publication) throw new Error("Stop sharing before choosing another audio input.");
       starting = true;
       const attempt = ++generation;
@@ -295,8 +295,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         // Browsers expose input names only after microphone access is granted.
         probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(reason => { throw captureError(reason, "microphone"); });
         const inputs = await navigator.mediaDevices.enumerateDevices();
+        const native = live ? await couchApp?.nativeAudioInputs?.() ?? [] : [];
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
-        return inputs.filter(input => input.kind === "audioinput" && input.deviceId);
+        return [...native.map(input => ({ deviceId: `native:${input.uid}`, label: `${input.name} · Native` })), ...inputs.filter(input => input.kind === "audioinput" && input.deviceId)];
       } finally {
         if (probe) stopTracks(probe);
         if (!closed) await couchApp?.prepareCapture?.(null).catch(() => {});
@@ -319,7 +320,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         if (nativeAudioId) {
           if (!selection.audioDeviceId) throw new Error("Choose an audio input before starting Live audio.");
           preparingNativeId = nativeAudioId;
-          captureFormat = await couchApp!.liveAudio!({ op: "prepare", id: nativeAudioId, deviceId: selection.audioDeviceId, sampleRate: requestedRate });
+          captureFormat = await couchApp!.liveAudio!({ op: "prepare", id: nativeAudioId, deviceId: selection.audioDeviceId, sampleRate: requestedRate,
+            ...(selection.audioDeviceId.startsWith("native:") ? { bufferFrames: nativeInputBufferFrames(readNativeInputBufferPreference()) } : {}) });
           if (requestedRate !== undefined && captureFormat?.sampleRate !== requestedRate) throw new Error("The desktop app did not verify the requested capture rate. Choose Automatic or update Couch.");
         } else if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId, audio: sound });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
@@ -380,6 +382,19 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (!current || !track) return;
       await track.applyConstraints(pictureConstraints(quality));
       current.quality = quality;
+    },
+    /** Restarts a native input with a new callback buffer; its listeners start a new session. */
+    async setCaptureBuffer(bufferFrames: 128 | 256 | 512 | 1024) {
+      const current = publication;
+      if (!current?.nativeAudioId) return;
+      try {
+        const format = await couchApp!.liveAudio!({ op: "buffer", id: current.nativeAudioId, bufferFrames });
+        if (format && publication === current) current.captureFormat = format;
+      } catch (error) {
+        // A half-restarted input has no audio to send: end the share and say why.
+        if (publication !== current) return;
+        void end().catch(() => {}); options.failed(error instanceof Error ? error : new Error("The native input couldn't restart."));
+      }
     },
     /** Silences a microphone for every receiver, keeping the capture and its connections. */
     setMuted(muted: boolean) {

@@ -378,9 +378,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before sharing a live input."));
     return live.current.start(selection);
   }, []);
-  const liveAudioInputs = useCallback(() => {
+  const liveAudioInputs = useCallback((native = false) => {
     if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before choosing an audio input."));
-    return live.current.audioInputs();
+    return live.current.audioInputs(native);
   }, []);
   const endLive = useCallback(() => live.current?.end() ?? Promise.resolve(), []);
   // What this device shares, and what changes while it does (sections/share).
@@ -388,6 +388,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     current: () => live.current?.sharing() ?? null,
     setQuality: (quality: LiveVideoQuality) => live.current?.setQuality(quality) ?? Promise.resolve(),
     setMuted: (muted: boolean) => live.current?.setMuted(muted),
+    setCaptureBuffer: (frames: 128 | 256 | 512 | 1024) => live.current?.setCaptureBuffer(frames) ?? Promise.resolve(),
     routes: () => live.current?.routes() ?? Promise.resolve({}),
   }), []);
 

@@ -473,6 +473,21 @@ test("only this app's Couch window reads or opens capture settings", async () =>
   expect(h.opened).toEqual([]);
 });
 
+test("native capture consumes only a fresh local microphone grant, once", async () => {
+  const h = harness();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  await h.capture.prepare({ kind: "microphone" });
+  h.capture.consumeMicrophone();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  expect(h.request("media", ["audio"])).toBe(false);
+  await h.capture.prepare({ kind: "microphone" }); h.expire();
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+  h.selectCouch("https://remote.example"); h.navigate("https://remote.example");
+  await h.capture.prepare({ kind: "microphone" });
+  expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
+});
+
+
 test("the hidden browser capture frame receives only its owner's temporary microphone grant", async () => {
   const h = harness();
   const helper = () => Object.assign(new EventEmitter(), { mainFrame: { url: "http://localhost:4100/capture-audio.html", detached: false }, isDestroyed: () => false });

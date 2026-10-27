@@ -144,7 +144,9 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
         {/* The name already ends in a screen's kind ("Studio Mac · Screen"): say it again only to add to it. */}
         {!sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
         <p className="text-meta text-muted-foreground">Since {since}</p>
-        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz · {sharing.captureFormat.channels} channels</p>}
+        {/* The Capture buffer control shows the request; the device's own size appears only when it differs. */}
+        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz · {sharing.captureFormat.channels} channels{sharing.captureFormat.native && sharing.captureFormat.native.reportedFrames !== sharing.captureFormat.native.requestedFrames
+          ? ` · device buffer ${sharing.captureFormat.native.reportedFrames} frames` : ""}</p>}
       </div>
     </div>
     {/* Live audio's host sees each listener as Core measures it, and sets the stream below. */}
@@ -166,7 +168,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
       <label htmlFor="live-mute" className="text-body">Mute audio input</label>
       <Switch id="live-mute" checked={sharing.muted} onCheckedChange={muted => { liveSharing.setMuted(muted); refresh(count => count + 1); }} />
     </div>}
-    {sharing.source.intent === "live" && <LiveSettings />}
+    {sharing.source.intent === "live" && <LiveSettings sharing={sharing} />}
     {behind && <p className="text-meta text-muted-foreground">{sharing.relay
       ? "A device marked behind couldn't connect directly, even through the relay."
       : <>A device marked behind couldn't connect directly. A relay can fix that, in <Link to="/settings/couch/devices" className="text-foreground underline underline-offset-4" onClick={onClose}>Devices &amp; network</Link>.</>}</p>}

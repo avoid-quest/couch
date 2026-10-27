@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld("couchApp", {
   captureSources: () => call("capture-sources"),
   prepareCapture: selection => call("prepare-capture", selection),
   liveAudio: action => call("live-audio", action),
+  nativeAudioInputs: () => call("native-audio-inputs"),
   onLiveAudioError: listener => {
     const handler = (_event: unknown, error: LiveAudioError) => listener(error);
     ipcRenderer.on("couch:live-audio-error", handler);
