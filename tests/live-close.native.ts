@@ -18,6 +18,15 @@ const address = server.address();
 assert(address && typeof address === "object");
 const port = address.port;
 await new Promise<void>(resolve => server.close(() => resolve()));
+// A stereo fake microphone also exercises Main-owned Live capture and its listener instruction.
+mkdirSync(directory, { recursive: true });
+const wave = join(directory, "stereo.wav"), frames = 48000 * 2, pcm = Buffer.alloc(44 + frames * 4);
+pcm.write("RIFF"); pcm.writeUInt32LE(pcm.length - 8, 4); pcm.write("WAVEfmt ", 8);
+pcm.writeUInt32LE(16, 16); pcm.writeUInt16LE(1, 20); pcm.writeUInt16LE(2, 22);
+pcm.writeUInt32LE(48000, 24); pcm.writeUInt32LE(192000, 28); pcm.writeUInt16LE(4, 32); pcm.writeUInt16LE(16, 34);
+pcm.write("data", 36); pcm.writeUInt32LE(frames * 4, 40);
+for (let i = 0; i < frames; i++) for (let channel = 0; channel < 2; channel++) pcm.writeInt16LE(Math.round(6000 * Math.sin(2 * Math.PI * (channel ? 659 : 431) * i / 48000)), 44 + i * 4 + channel * 2);
+writeFileSync(wave, pcm);
 const scratch = join(directory, "probe"), data = join(directory, "data"), evidencePath = join(directory, "events.json");
 mkdirSync(scratch, { recursive: true });
 mkdirSync(data, { recursive: true });
@@ -29,10 +38,13 @@ import assert from 'node:assert/strict';
 import { app, BrowserWindow, ipcMain, session, systemPreferences } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
+import WebSocket from ${JSON.stringify(pathToFileURL(join(root, 'node_modules/ws/wrapper.mjs')).href)};
 const evidence = { platform: process.platform, steps: [] };
 const record = () => writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringify(evidence, null, 2));
 // Synthetic media only: Chromium's fake microphone, and no macOS privacy prompt.
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+app.commandLine.appendSwitch('use-file-for-fake-audio-capture', ${JSON.stringify(wave)});
+app.commandLine.appendSwitch('mute-audio');
 systemPreferences.askForMediaAccess = async () => true;
 // The test window never takes focus from the owner.
 BrowserWindow.prototype.show = function () { this.showInactive(); };
@@ -171,6 +183,40 @@ async function run(w, url) {
     await sleep(1000);
     step(\`canceled at \${point}\`, { result, ...await until('ended', \`no sharing after Close at \${point}\`) });
   }
+  // Live is a Core timestamped listener, never a Sendspin listen intent. Closing
+  // the owner ends Main's hidden capture and closes the authorized audio socket.
+  reopen();
+  const info = await js('__close.session().host');
+  const enabled = await fetch(info.origin + '/api/settings/sharing', { method: 'POST', headers: { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+  assert.equal(enabled.status, 200);
+  const id = 'r'.repeat(43);
+  const paired = await fetch(info.origin + '/api/pair', { method: 'POST', headers: { Origin: info.origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ code: info.pairingCode, id, name: 'Live close listener' }) });
+  assert.equal(paired.status, 200);
+  const { token } = await paired.json();
+  const messages = [];
+  const receiver = new WebSocket(info.origin.replace('http:', 'ws:') + '/api/ws?token=' + token + '&audio=1', { headers: { Origin: info.origin } });
+  receiver.on('message', data => messages.push(JSON.parse(String(data))));
+  const wait = async (test, label) => { const end = Date.now() + 15000; while (!test()) { assert(Date.now() < end, label); await sleep(25); } };
+  await wait(() => messages.some(message => message.type === 'state'), 'listener connected');
+  const input = await js("__close.session().liveAudioInputs(true).then(inputs => inputs.find(input => !['default', 'communications'].includes(input.deviceId) && !input.deviceId.startsWith('native:'))?.deviceId)");
+  assert(input, 'an explicit synthetic stereo input');
+  assert.equal(await js("__close.session().startLive({ kind: 'microphone', intent: 'live', audioDeviceId: " + JSON.stringify(input) + " }).then(() => 'started', error => error.message)", true), 'started');
+  const sourceId = await js('__close.session().localLiveSourceId');
+  receiver.send(JSON.stringify({ type: 'command', requestId: 'join', action: { type: 'playLive', sourceId, deviceId: id } }));
+  await wait(() => messages.some(message => message.type === 'live' && message.sourceId === sourceId), 'Live instruction');
+  assert(!messages.some(message => message.type === 'sendspin' && message.listen), 'Live does not start Sendspin');
+  const audio = new WebSocket(info.origin.replace('http:', 'ws:') + '/api/live/listen?' + new URLSearchParams({ token, sourceId }), { headers: { Origin: info.origin } });
+  let packets = 0, closedCode;
+  audio.on('message', (_data, binary) => { if (binary) packets++; });
+  audio.on('close', code => { closedCode = code; });
+  await wait(() => packets > 10, 'timestamped audio packets');
+  w.close();
+  await until('ended', 'Close ending Main-owned Live capture');
+  await wait(() => closedCode !== undefined, 'share ends the listener socket');
+  assert.equal(closedCode, 1001);
+  await wait(() => messages.findLast(message => message.type === 'live')?.sourceId === null, 'stop Live instruction');
+  step('live listener stopped', { packets, closedCode, instruction: messages.findLast(message => message.type === 'live') });
+  receiver.close();
   assert(await hosting(), 'Couch keeps hosting at the end');
   assert(!w.isDestroyed());
 }

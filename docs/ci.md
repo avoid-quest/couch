@@ -25,7 +25,7 @@ stale caches.
 Add a test only where a behaviour must stay locked, and run it with
 `bun test <path>`.
 
-The standalone timestamped Live listener checks run separately:
+The timestamped Live listener checks run separately:
 
 ```sh
 bun test tests/live-worklet.test.ts
@@ -38,7 +38,25 @@ bun test tests/live-listener-bundle.test.ts
 ```
 
 The bundle check requires the preceding build. These are offline/module checks;
-Core wiring and browser/hardware validation are separate ([listener](live-listener.md)).
+the Core/browser check runs the built app with synthetic capture ([Live audio](live-audio.md)):
+
+```sh
+bun build tests/live-listener.browser.ts --target=node --outfile=build/live-listener.browser.mjs
+COUCH_PLAYWRIGHT=/path/to/playwright/index.mjs COUCH_CHROME=/path/to/chrome \
+  node build/live-listener.browser.mjs
+```
+
+Use a headless Chrome and an external Playwright installation; no X display is
+used. It starts its own fixture Core process with a temporary `COUCH_DATA_DIR`
+and reserved `COUCH_PORT`, and stops only its own PIDs. A private LAN interface is
+required for the genuine insecure HTTP origin; set `COUCH_LAN_INTERFACE` if
+needed. The default run measures 125 seconds with a fixed 200 ms lead and Chrome's
+128-frame test output buffer, muted. `COUCH_LIVE_SECONDS` can shorten a smoke
+check, `COUCH_EVIDENCE` retains stats and results, and `COUCH_SCREENSHOTS` saves the
+seven states on phone/desktop in light/dark. Behind is induced with synthetic
+receiver reports after the measurement. A Core restart loses publications, so
+the fixture republishes and rejoins; the browser reconnects without reloading.
+This checks continuity and routing, not physical latency or device qualification.
 
 The update regressions run with `bun test tests/updates.test.ts` and
 `bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
@@ -66,6 +84,12 @@ The diagnosis integration (`tests/tv-diagnose.integration.ts`) runs
 `packaging/tv/diagnose.js` the same way, with a hung sound server and seeded
 secrets. Set `COUCH_EVIDENCE=<directory>` on the latency integrations to keep
 their measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
+
+The capture Close regression runs after the build with
+`bun tests/live-close.native.ts <evidence directory>`. It checks ordinary capture
+and Main-owned Live capture, the new listener instruction, packet delivery and
+share-ended close code. Use a display with a window manager: bare Xvfb cannot
+verify minimization. Keep its display, data directory and processes isolated.
 
 Main's window lifecycle has a native check, after `bun run build`, on a display
 (`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence
