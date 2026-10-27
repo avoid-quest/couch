@@ -54,7 +54,7 @@ become another physical device.
 | Source | Desktop app / host service | Browser | Boundary to preserve |
 | --- | --- | --- | --- |
 | File, URL, radio, IPTV or provider media | Resolve/read the existing media source. | Use the selected media rendition and existing access path. | No microphone or system-output capture. Direct playback keeps its existing decoder; scheduled playback uses the source's audio/timeline. |
-| Microphone or line input | Use the selected supported adapter: the browser-based input adapter, owned by Main for Live publication. | Use microphone/input capture where the browser exposes it and permission is granted. | Report actual channels/rate and preserve input identity, mute, ownership and shutdown. Native's performance superiority is not established. |
+| Microphone or line input | Use the selected supported adapter. The existing native helper is Mac-only; Linux/Windows retain their existing browser-based adapter. Native remains available with device/rate/buffer controls. | Use microphone/input capture where the browser exposes it and permission is granted. | Report actual channels/rate and preserve input identity, mute, ownership and shutdown. Native's performance superiority is not established. |
 | System, application or tab sound | Use the OS/Electron capability actually exposed for that source. | Use browser-exposed display/tab audio only where available. | The existence of a microphone API does not imply system-audio capture. Unsupported combinations stay explicit. |
 | Screen or window, optionally with sound | Use the desktop source picker and capture bridge. | Use the browser's display picker where available. | Keep captured picture and sound together on the selected Direct/relaxed route; an absent audio track remains absent. |
 | AirPlay input | Use the existing host receiver service; current support is Linux-host input. | Receive or control the resulting shared source. | Browser playback is not an AirPlay receiver implementation. Keep existing takeover and source-lifetime behavior. |
@@ -65,6 +65,9 @@ Couch desktop app, with an explicitly selected input; browser clients remain
 receivers and keep their existing ordinary sharing capabilities. Extending Live
 publication to another environment is a separate feature, not a consequence of
 removing performance gates. Receiving audio never grants capture permission.
+The native helper is currently wired through that Live publication path. Record
+remaining mode-coupled acquisition as an implementation limitation; it is not a
+product rule that ordinary input must always be browser-based.
 
 ### Playback and control matrix
 
@@ -153,7 +156,9 @@ microphone or screen capture; that requires Share and local capture permission.
 The existing local desktop publication feeds the upstream Sendspin browser player.
 It is Live's source-following UX and the path for eventual lower delay, with
 no latency or capacity guarantee. Relaxed playback keeps
-its own UX and buffering policies even where implementation is shared.
+its own UX and buffering policies even where implementation is shared. Native
+capture remains available; its device controls do not establish a performance
+advantage over browser capture.
 
 Listeners join, leave and set their own volume/mute. The publisher owns capture
 and its programme. Ordinary buffering and the SDK's timing/recovery behavior are

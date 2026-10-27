@@ -15,7 +15,9 @@ sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
 The [use-case and capability contract](audio-video-use-cases.md) separates source,
-acquisition environment and playback behavior.
+acquisition environment and playback behavior. Native capture is currently
+Mac-only and wired to local desktop Live publication; that coupling is an
+implementation limit, not a product rule.
 
 Share separates **Screen**, **Window**, **System audio** and **Audio input** from
 playback behavior. Audio input offers **Relaxed / Live** on the Couch computer;

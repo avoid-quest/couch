@@ -54,9 +54,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   stereo. Live listeners find the
   source in Home or Search, **Join**, adjust their own volume, and **Leave**;
   leaving does not stop sharing or affect another listener.
-- **Live input selection** opens the chosen input in an isolated hidden browser
-  capture page. This is an explicit input choice; a failed input never switches
-  devices.
+- **Live input selection** includes devices marked Native on Mac builds with the
+  capture helper. Other input IDs use an isolated hidden browser capture page.
+  This is an explicit input choice; a failed native input never switches devices.
+  Main requests microphone permission before opening the selected native input.
 - **Playback buffer (ms)**, for Live, is each listener's Sendspin buffer; more
   rides out Wi-Fi and phone hiccups. Measured delay follows it closely but is a
   separate observation ([Live audio](../live-audio.md#measured-behavior)). It is
@@ -113,8 +114,10 @@ Sheet on phones and the TV:
   it plays' would (online, unmuted, above zero).
 - **Picture**, changed live through `applyConstraints` on the captured track,
   without restarting it; **Mute audio input** turns the input's track off
-  (`track.enabled`), keeping the capture and its connections.
-- Live sharing reports the delivered rate and channels.
+  (`track.enabled`), keeping the capture and its connections. Native input mute
+  sends zero samples while preserving the source clock.
+- Live sharing reports the delivered rate and channels, and a native input's
+  device buffer when it differs from the requested **Capture buffer**.
 - One line about the relay only when a device is Behind: with no relay, that a
   relay can fix it, linking Devices & network; with one, that it couldn't
   connect even through it.
@@ -124,7 +127,9 @@ Sheet on phones and the TV:
 ### Live audio
 
 A [Live audio](../live-audio.md) share lists listeners, each with a ⋯ **Remove**
-action. Input mute remains. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
+action. Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512
+or 1024 frames), the input's callback size, which restarts the input when
+changed. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer (ms)** is
 the SDK's `minBufferMs`, initially 200 ms. A larger buffer applies to the running
 share at once; a smaller one applies when sharing restarts, which the panel says.
