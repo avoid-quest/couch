@@ -530,7 +530,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
   capsule while it runs.
 - [TV](design/tv.md): what the TV adds for its remote.
 - [Remote](design/remote.md): the Remote section and Type on TV.
-- [Settings](design/settings.md): its pages and section nav.
+- [Settings](design/settings.md): its pages and section nav. Network sharing
+  chooses Ethernet before Wi-Fi automatically, without requiring network flags.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).

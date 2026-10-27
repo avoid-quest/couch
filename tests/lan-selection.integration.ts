@@ -3,10 +3,30 @@ import assert from "node:assert/strict";
 import type { NetworkInterfaceInfo } from "node:os";
 import type { lookup } from "node:dns/promises";
 import { setImmediate } from "node:timers/promises";
-import { createLanListener } from "../src/server/lan-listener";
+import { createLanListener, selectLan } from "../src/server/lan-listener";
 
 const a: NetworkInterfaceInfo = { address: "192.168.1.20", family: "IPv4", internal: false, netmask: "255.255.255.0", cidr: "192.168.1.20/24", mac: "00:11:22:33:44:55" };
 const b = { ...a, address: "192.168.2.20", cidr: "192.168.2.20/24" };
+
+test("Windows automatically prefers Ethernet, then Wi-Fi, over virtual adapters", () => {
+  const virtual = { ...a, address: "172.28.16.1" };
+  assert.equal(selectLan({ "vEthernet (WSL)": [virtual], "Wi-Fi": [b], Ethernet: [a] }).name, "Ethernet");
+  assert.equal(selectLan({ "vEthernet (WSL)": [virtual], "Wi-Fi": [b] }).name, "Wi-Fi");
+});
+
+test("Linux automatically prefers Ethernet over Wi-Fi regardless of inventory order", () => {
+  assert.equal(selectLan({ wlan0: [b], eth0: [a] }).name, "eth0");
+  assert.equal(selectLan({ wlp2s0: [b], enp3s0: [a] }).name, "enp3s0");
+});
+
+test("multiple adapters and addresses resolve consistently without configuration", () => {
+  const inventory = { "Ethernet 2": [b], Ethernet: [{ ...a, address: "192.168.1.100" }, a] };
+  assert.equal(selectLan(inventory).address, a.address);
+  assert.equal(selectLan(Object.fromEntries(Object.entries(inventory).reverse())).address, a.address);
+  assert.equal(selectLan(inventory, "Ethernet 2").address, b.address);
+  assert.equal(selectLan(inventory, "Ethernet").address, a.address);
+  assert.equal(selectLan(inventory, undefined, b.address).name, "Ethernet 2");
+});
 
 function fixture(t: TestContext, options: { enabled?: boolean; selected?: string; address?: string } = {}) {
   let inventory: NodeJS.Dict<NetworkInterfaceInfo[]> = { eth0: [a] };
