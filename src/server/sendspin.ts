@@ -8,7 +8,8 @@ import { WebSocket } from "ws";
 import { logPlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { loopbackPeer } from "./lan-listener";
-import type { OutputAdmission, PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { LiveAudioSettings, LiveListenerStatus, OutputAdmission, PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { LiveTransportStatus } from "./live-transport";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
 import { requireLiveAudioLead } from "./live-audio-policy";
@@ -25,6 +26,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   let admissions = new Map<string, { group: string; receiverId?: string; admission: OutputAdmission }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();
+  const listening = new Map<string, LiveTransportStatus>();
   let clients = new Set<string>(), delays = new Map<string, number>(), receivers = new Map<string, string>();
   let closed = false, failed = false;
   const helpers = new Map<number, ReturnType<typeof useHelper>>();
@@ -63,19 +65,28 @@ export function createSendspin(options: { identity: string; name: string; admit:
     else if (message.type === "delay") options.saveDelay?.(message.clientId, message.delay);
     else if (message.type === "sourceFailed") { const source = sources.get(message.sourceId); if (!source || source.epoch !== message.epoch) return; source.error = message.error; options.sourceFailed?.(message.sourceId, message.error); options.changed(); }
     else if (message.type === "written") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.queued = Math.max(0, source.queued - message.bytes); }
+    else if (message.type === "liveListeners") { if (sources.get(message.sourceId)?.epoch === message.epoch) { listening.set(message.sourceId, message.status); options.changed(); } }
     else if (message.type === "budgets") { const source = sources.get(message.sourceId); if (source && source.epoch === message.epoch) source.budgets = message.budgets; }
     else if (message.type === "status") { clients = new Set(message.value.clients); timing = new Map(message.value.timings); wires = new Map(message.value.wires); delays = new Map(message.value.delays); receivers = new Map(message.value.receivers); admissions = new Map(message.value.admissions); options.changed(); }
   });
-  const bridge = (socket: WebSocket, query: string) => {
+  // A Live listener's audio never queues behind a stalled connection. Pings wait behind everything sent,
+  // kernel buffers included: one unanswered for half a second stops its audio, for two seconds closes it
+  // so that it reconnects (live-transport.ts).
+  const bridge = (socket: WebSocket, query: string, listener = false) => {
     connections.add(socket); socket.pause();
     socket.on("error", () => socket.terminate());
     let upstream: WebSocket | undefined;
-    socket.once("close", () => { connections.delete(socket); upstream?.terminate(); });
+    const pings: number[] = [], stalledMs = () => pings.length ? performance.now() - pings[0]! : 0;
+    const behind = () => { socket.close(4002, "This connection fell behind the live audio."); upstream?.terminate(); };
+    const pinging = listener ? setInterval(() => { if (stalledMs() > 2000) behind(); else if (socket.readyState === WebSocket.OPEN) { pings.push(performance.now()); socket.ping(); } }, 100) : undefined;
+    socket.on("pong", () => pings.shift());
+    socket.once("close", () => { clearInterval(pinging); connections.delete(socket); upstream?.terminate(); });
     void ready.then(port => {
       if (closed || socket.readyState !== WebSocket.OPEN) return;
       upstream = new WebSocket(`ws://127.0.0.1:${port}/?secret=${secret}&${query}`, { perMessageDeflate: false, maxPayload: 1024 * 1024 });
       const other = upstream;
       const forward = (from: WebSocket, to: WebSocket, data: WebSocket.RawData, binary: boolean) => {
+        if (listener && binary && to === socket && stalledMs() > 500) return;
         if (from.readyState !== WebSocket.OPEN || to.readyState !== WebSocket.OPEN || to.bufferedAmount > 256 * 1024) { socket.terminate(); other.terminate(); return; }
         to.send(data, { binary });
       };
@@ -83,7 +94,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
       other.on("message", (data, binary) => forward(other, socket, data, binary));
       other.once("open", () => socket.resume());
       other.on("error", () => socket.terminate());
-      other.once("close", () => socket.close());
+      // Keep the worker's reason, such as a listener removed by the host.
+      other.once("close", (code, reason) => { try { socket.close(code, reason); } catch { socket.close(); } });
     }).catch(() => socket.terminate());
   };
   const upgrade = (request: IncomingMessage, socket: Socket, head: Buffer) => {
@@ -128,7 +140,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
         close() { groups.delete(id); groupMembers.delete(id); groupLoads.delete(id); call("close"); },
       };
     },
-    registerSource(id: string, policy: CapturePolicy) { if (!sources.has(id)) { if (policy.intent === "live") requireLiveAudioLead(policy.liveAudioLeadMs); policy = { ...policy }; const epoch = randomUUID(); sources.set(id, { policy, epoch, queued: 0 }); post({ type: "register", sourceId: id, policy, epoch }); } },
+    registerSource(id: string, policy: CapturePolicy, live?: LiveAudioSettings) { if (!sources.has(id)) { if (policy.intent === "live") requireLiveAudioLead(policy.liveAudioLeadMs); policy = { ...policy }; const epoch = randomUUID(); sources.set(id, { policy, epoch, queued: 0 }); post({ type: "register", sourceId: id, policy, epoch, ...policy.intent === "live" && live ? { live } : {} }); } },
     writeSource(id: string, packet: CaptureAudioPacket) {
       const source = sources.get(id);
       if (!source || source.error || closed || failed) return false;
@@ -141,8 +153,18 @@ export function createSendspin(options: { identity: string; name: string; admit:
       socket.once("close", () => { if (uploads.get(id) === socket) uploads.delete(id); });
       bridge(socket, `source=${encodeURIComponent(id)}&epoch=${sources.get(id)!.epoch}`); return true;
     },
-    endSource(id: string) { const epoch = sources.get(id)?.epoch; sources.delete(id); const upload = uploads.get(id); uploads.delete(id); upload?.close(); post({ type: "end", sourceId: id, epoch }); },
+    endSource(id: string) { const epoch = sources.get(id)?.epoch; sources.delete(id); listening.delete(id); const upload = uploads.get(id); uploads.delete(id); upload?.close(); post({ type: "end", sourceId: id, epoch }); },
     hasSource: (id: string) => sources.has(id),
+    // Live audio listeners, after Hub authorizes them.
+    listen: (socket: WebSocket, sourceId: string, deviceId: string) => bridge(socket, `listen=${encodeURIComponent(sourceId)}&device=${encodeURIComponent(deviceId)}`, true),
+    liveLead: (sourceId: string) => listening.get(sourceId)?.leadMs,
+    liveListener(sourceId: string, deviceId: string): LiveListenerStatus | undefined {
+      const found = listening.get(sourceId)?.listeners.find(listener => listener.deviceId === deviceId);
+      if (!found) return undefined;
+      const { deviceId: _, ...status } = found;
+      return status;
+    },
+    dropListener: (sourceId: string, deviceId: string, reason?: string) => post({ type: "dropListener", sourceId, clientId: deviceId, reason }),
     sourceError: (id: string) => sources.get(id)?.error,
     receiverError: (id: string, _intent?: string) => receivers.get(id),
     receiverAdmission(id: string, receiverId?: string): OutputAdmission | undefined {

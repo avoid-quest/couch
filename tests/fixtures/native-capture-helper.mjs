@@ -9,6 +9,22 @@ function end() { event({ event: "end", reason: "stopped", captureError: 0 }); in
 input.on("line", line => {
   if (line.startsWith("clock ")) event({ event: "clock", nonce: Number(line.slice(6)), nativeUs: now() });
   else if (line === "stop") end();
+  else if (line === "start" && mode === "stream") {
+    // Real-time 128-frame stereo blocks until stopped, timestamped like the hardware's.
+    event({ event: "started", ownerHalBufferFrames: 128 });
+    const base = now();
+    let i = 0;
+    setInterval(() => {
+      for (; base + Math.round((i + 1) * 128 / 48000 * 1e6) <= now(); i++) {
+        const packet = Buffer.alloc(40 + 128 * 8);
+        packet.writeUInt32LE(0x31414343); packet[4] = 2; packet[5] = 1; packet.writeUInt16LE(40, 6);
+        packet.writeUInt32LE(48000, 8); packet.writeUInt32LE(i, 12); packet.writeBigUInt64LE(BigInt(i * 128), 16);
+        packet.writeBigInt64LE(BigInt(base + Math.round(i * 128 / 48000 * 1e6)), 24); packet.writeUInt32LE(128, 32);
+        for (let f = 0; f < 128; f++) { packet.writeFloatLE(Math.sin((i * 128 + f) / 20) / 4, 40 + f * 8); packet.writeFloatLE(-Math.sin((i * 128 + f) / 20) / 4, 44 + f * 8); }
+        process.stdout.write(packet);
+      }
+    }, 1);
+  }
   else if (line === "start") {
     event({ event: "started", ownerHalBufferFrames: 256 });
     const base = now() - 16_000, packets = [];

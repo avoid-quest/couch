@@ -1,4 +1,4 @@
-import { defaultLiveAudioLeadMs, isLiveAudioLead } from "../shared/audio-settings";
+import { defaultLiveAudioLeadMs, defaultLiveAudioSettings, isLiveAudioLead, isLiveAudioSettings } from "../shared/audio-settings";
 import type { LiveRelay } from "../shared/live-relay";
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
@@ -6,7 +6,7 @@ import { Database } from "./sqlite";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
+import type { LiveAudioSettings, PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
 import type { HistoryItem, WatchingProfile } from "../shared/viewing";
 import { defaultDeviceName, isDeviceId, UNNAMED_COUCH, type Device } from "../shared/devices";
 import { ControllerError, deviceName } from "./devices";
@@ -96,6 +96,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_live_chooser (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_audio (id INTEGER PRIMARY KEY CHECK (id = 1), leadMs INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_live_audio (id INTEGER PRIMARY KEY CHECK (id = 1), settings TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
     CREATE TABLE IF NOT EXISTS installation_airplay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)), code TEXT NOT NULL, deviceId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_http (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
@@ -194,6 +195,17 @@ export function openStore(path: string, remoteControlEnabled = false) {
     saveLiveAudioLeadMs(leadMs: unknown) {
       if (!isLiveAudioLead(leadMs)) throw new ControllerError("Choose a supported live audio scheduling lead.");
       db.query("INSERT INTO installation_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET leadMs = excluded.leadMs").run(leadMs);
+    },
+    // The next share's Live audio stream; a saved value that no longer validates falls back to the defaults.
+    liveAudioSettings(): LiveAudioSettings {
+      const saved = db.query<{ settings: string }, []>("SELECT settings FROM installation_live_audio WHERE id = 1").get()?.settings;
+      const value = saved ? { ...defaultLiveAudioSettings, ...JSON.parse(saved) } : defaultLiveAudioSettings;
+      return isLiveAudioSettings(value) ? value : defaultLiveAudioSettings;
+    },
+    saveLiveAudioSettings(settings: unknown) {
+      if (!isLiveAudioSettings(settings)) throw new ControllerError("Choose a supported codec, bitrate and lead between 0 and 1000 ms, with the minimum at most the maximum.");
+      const { codec, opusBitrate, lead, leadMs, minLeadMs, maxLeadMs, raiseForSlowest } = settings;
+      db.query("INSERT INTO installation_live_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET settings = excluded.settings").run(JSON.stringify({ codec, opusBitrate, lead, leadMs, minLeadMs, maxLeadMs, raiseForSlowest }));
     },
     askEveryDevice() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_live_chooser WHERE id = 1").get()?.enabled; },
     saveAskEveryDevice(enabled: boolean) { db.query("INSERT INTO installation_live_chooser VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },

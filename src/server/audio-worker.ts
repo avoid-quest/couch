@@ -3,9 +3,10 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { createScheduledAudio } from "./scheduled-audio";
 import { acceptCaptureUpload } from "./capture-ingest";
+import { createLiveTransport } from "./live-transport";
 import type { CaptureAudioPacket, CapturePolicy } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
-import type { PlaybackCommand } from "../shared/protocol";
+import type { LiveAudioSettings, PlaybackCommand } from "../shared/protocol";
 
 const port = parentPort!;
 const pending = new Map<number, (value: unknown) => void>();
@@ -15,9 +16,13 @@ const registrations = new Map<string, string>();
 const notify = () => port.postMessage({ type: "status", value: engine.status() });
 // Core checks output corrections against each source's measured headroom, whichever path its audio took.
 const budgets = new Map<string, string>();
+// Live sources also stream their own timestamped packets to their listeners (live-transport.ts).
+const transports = new Map<string, ReturnType<typeof createLiveTransport>>();
 const writeSource = (sourceId: string, epoch: string, packet: CaptureAudioPacket) => {
   const written = engine.writeSource(sourceId, packet), value = engine.sourceBudgets(sourceId), key = JSON.stringify(value);
   if (budgets.get(sourceId) !== key) { budgets.set(sourceId, key); port.postMessage({ type: "budgets", sourceId, epoch, budgets: value }); }
+  try { if (written) transports.get(sourceId)?.write(packet); }
+  catch (error) { port.postMessage({ type: "sourceFailed", sourceId, epoch, error: error instanceof Error ? error.message : "Live audio failed." }); return false; }
   return written;
 };
 const engine = createScheduledAudio({ identity: workerData.identity, name: workerData.name, admit: () => true, changed: notify,
@@ -53,6 +58,10 @@ server.on("upgrade", (req, socket, head) => {
       });
       return;
     }
+    if (url.searchParams.get("listen")) {
+      const transport = transports.get(url.searchParams.get("listen")!);
+      return transport ? transport.accept(ws, url.searchParams.get("device")!) : ws.close(1008, "This live audio is not available.");
+    }
     timeout = setTimeout(() => ws.terminate(), 10_000);
     ws.once("message", async (data, binary) => {
       clearTimeout(timeout); ws.pause();
@@ -65,7 +74,7 @@ server.on("upgrade", (req, socket, head) => {
     });
   });
 });
-port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; policy?: CapturePolicy; packet?: CaptureAudioPacket; clientId?: string; delay?: number }) => {
+port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; policy?: CapturePolicy; live?: LiveAudioSettings; packet?: CaptureAudioPacket; clientId?: string; delay?: number; reason?: string }) => {
   if (message.type === "reply") { pending.get(message.id!)?.(message.value); pending.delete(message.id!); return; }
   if (message.type === "group") {
     let group = groups.get(message.group!);
@@ -74,11 +83,17 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
     if (message.method === "screens") group.screens(message.args![0] as string[]);
     if (message.method === "send") group.send(message.args![0] as SyncedLoad | PlaybackCommand);
     if (message.method === "close") { group.close(); groups.delete(message.group!); }
-  } else if (message.type === "register") { registrations.set(message.sourceId!, message.epoch!); engine.registerSource(message.sourceId!, message.policy!); }
+  } else if (message.type === "register") {
+    const { sourceId, epoch } = message as { sourceId: string; epoch: string };
+    registrations.set(sourceId, epoch); engine.registerSource(sourceId, message.policy!);
+    if (message.live) transports.set(sourceId, createLiveTransport({ sourceId, epoch, settings: message.live,
+      changed: status => port.postMessage({ type: "liveListeners", sourceId, epoch, status }), log: line => console.log(`${new Date().toISOString()} ${line}`) }));
+  }
   else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { writeSource(message.sourceId!, message.epoch!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
-  else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); budgets.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); engine.endSource(message.sourceId!); }
+  else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); budgets.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); transports.get(message.sourceId!)?.close(); transports.delete(message.sourceId!); engine.endSource(message.sourceId!); }
+  else if (message.type === "dropListener") transports.get(message.sourceId!)?.drop(message.clientId!, message.reason);
   else if (message.type === "drop") engine.drop(message.clientId!);
   else if (message.type === "setDelay") engine.setDelay(message.clientId!, message.delay!);
-  else if (message.type === "close") { for (const group of groups.values()) group.close(); engine.close(); for (const socket of websocket.clients) socket.terminate(); server.close(() => { port.close(); }); }
+  else if (message.type === "close") { for (const group of groups.values()) group.close(); for (const transport of transports.values()) transport.close(); engine.close(); for (const socket of websocket.clients) socket.terminate(); server.close(() => { port.close(); }); }
 });
 server.listen(0, "127.0.0.1", () => port.postMessage({ type: "ready", port: (server.address() as { port: number }).port }));

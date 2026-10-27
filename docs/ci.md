@@ -117,6 +117,9 @@ Development on Mac: `bun scripts/build-live-audio.ts`; logs remain under
 hook loader, non-Mac no-op and combined update-feed checks. Capture lifecycle
 and authorization use `tests/native-live-authority.test.ts`,
 `tests/capture.test.ts` and Node `tests/native-capture.integration.ts`.
+Live audio's own stream runs with `bun test tests/live-lead.test.ts`,
+`bun test tests/live-lead-replay.test.ts` (recorded listener reports),
+`bun test tests/live-packet.test.ts` and Node `tests/live-transport.integration.ts`.
 
 For the C queue test, use the verified extracted PortAudio source's `include`
 and `src/common` directories, compile `native/live-audio/capture-queue.test.c`

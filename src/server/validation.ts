@@ -49,6 +49,7 @@ function validAction(value: unknown): value is Action {
       && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
     case "endLive": return id(value.sourceId);
     case "leave": return id(value.playbackId);
+    case "removeLiveListener": return id(value.playbackId) && id(value.deviceId);
     case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow })
       && (value.picture === undefined || typeof value.picture === "boolean") && (value.sound === undefined || typeof value.sound === "boolean");
     case "askEveryDevice": return typeof value.enabled === "boolean";

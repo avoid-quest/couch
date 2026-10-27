@@ -297,6 +297,18 @@ where their hardware introduces extra delay. Direct capture bypasses that buffer
 pipeline; each receiver's MediaStream keeps its own audio/video synchronization, but
 Direct receivers are not aligned with each other.
 
+Live audio sources also have Core's own timestamped stream, beside Sendspin
+(`src/server/live-transport.ts`, which states its wire contract). The audio worker
+sends each listener 128-frame PCM or 2.5 ms Opus packets stamped with their capture
+time, and keeps one lead for all of them (`src/server/live-lead.ts`): it rises after
+two reports that need more, up to the operator's maximum, and lowers by measured
+cost; a listener beyond the maximum plays behind until the host removes it. A paired
+device connects to `/api/live/listen` while its sound plays that source; Hub proxies
+it into the worker and publishes each listener's status on its output. Live
+playback still plays through Sendspin until the browser listener lands. Core logs
+`live <source> send age pcm|opus max … mean …` every ten seconds and `live <source>
+lead <from> → <to> ms: <reason>` at each change.
+
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline
 <name>` for each tab, `playback <id> Direct|Synced on <names>` when a Playback's
