@@ -18,9 +18,9 @@ export type ListenerCommand =
   | { type: "listenerSend"; id: number; text: string }
   | { type: "listenerClose"; id: number; code: number; reason: string };
 
-// Each write to a listener, with its TLS record, costs Core's main thread far more than the bytes in it. From
-// this many listeners on, each one's audio leaves two packets per write: the first waits one packet longer
-// (2.67 ms PCM, 2.5 ms Opus). A message to the listener takes its waiting packet along, never waits itself.
+// From this many listeners on, each one's audio leaves two packets per write: half the socket writes and TLS
+// records on Core's main thread, and half the packets on the listeners' Wi-Fi. The first waits one packet
+// longer (2.67 ms PCM, 2.5 ms Opus). A message to the listener takes its waiting packet along, never waits itself.
 export const pairedFrom = 20;
 
 type Listener = { socket: WebSocket; stream: Writable; stalledMs: () => number; waiting: Buffer[] };

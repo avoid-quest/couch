@@ -6,7 +6,7 @@ Live plays an audio input on every listening device as it happens: the input rea
 couch-capture (native, 128 frames)
   → Main: clock mapping, upload
     → Core audio worker: timestamped PCM / Opus packets, shared lead
-      → /api/live/listen (one WebSocket per listener)
+      → Core main thread: each packet written to every listener's /api/live/listen WebSocket
         → listener Worker: clock fits, decoding
           → AudioWorklet: plays each sample at capture time + lead
 ```
@@ -38,6 +38,29 @@ Rig: a MacBook Air host with a UMC404HD. Out 3/4 is looped into in 1/2 as the in
 At lead 45, Sendspin Live admitted PCM listeners but had gaps and withdrew them. It refused Opus listeners: Linux needs 17 ms, and the deadline allowed 11–12.
 
 On phones, output timing is reported 10–30 ms off what's measured, with nothing a page can observe. Phones are in sync with each other and with desktops to within that error, not to the sub-millisecond of wired desktops.
+
+## Fan-out
+
+Node can't hand a socket to a worker thread, so each listener's WebSocket stays on Core's main thread, where Hub accepted it. The audio worker posts each packet there once, with the listeners it goes to, and Core writes it to each of them ([live-fanout.ts](../src/server/live-fanout.ts)). Listener messages cross the same port both ways, so they stay in order with the audio. Core pings each listener every 100 ms: one unanswered for 0.5 s stops its audio, for 2 s closes it with 4002. A stalled listener never delays the others.
+
+From 20 listeners on, each listener's audio leaves two packets per write: half the socket writes and TLS records, and half the packets on the Wi-Fi. The first packet of each pair waits one packet longer, 2.67 ms for PCM and 2.5 ms for Opus. A message to the listener, such as a pong, takes its waiting packet along and never waits itself.
+
+At 50 listeners the Wi-Fi carries about 87 Mbit/s and 9,400 packets/s of PCM, or about 20 Mbit/s and 10,000 packets/s of Opus 192k.
+
+Measured on a 24-core Xeon E5-2690 v3 (2.6 GHz), Linux, Node 24, with `tests/live-fanout.performance.ts`: a scratch Core on its LAN HTTPS address, the capture fixture, and fixture listeners in their own process that ping every 50 ms and report once a second. Each step was measured for 30 s once every listener was `ok`. CPU is one core's share; send age is capture to send in the worker, mean and maximum over the window. On loopback the kernel charges the listeners' receive work to Core's sends as well, so `sys` overstates what a real network costs.
+
+| Listeners | Codec | Main thread, before → after | Audio worker, before → after | Send age at 50, before → after |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | PCM | 13% → 14% | 6% → 6% | |
+| 10 | PCM | 51% → 35% | 13% → 7% | |
+| 25 | PCM | 68% → 48% | 26% → 9% | |
+| 50 | PCM | 74% → 62% | 41% → 11% | 3.6 / 14.3 → 3.6 / 6.3 ms |
+| 1 | Opus | 13% → 15% | 15% → 14% | |
+| 10 | Opus | 50% → 35% | 23% → 17% | |
+| 25 | Opus | 68% → 47% | 34% → 18% | |
+| 50 | Opus | 79% → 64% | 49% → 22% | 7.6 / 16.1 → 7.5 / 11.1 ms |
+
+Each change of a listener's standing still resends every window's state, which holds Core's main thread for about 80 ms at 50 windows and delays the audio behind it.
 
 ## Browser session
 

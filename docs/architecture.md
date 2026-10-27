@@ -290,8 +290,9 @@ sends each listener 128-frame PCM or 2.5 ms Opus packets stamped with their capt
 time, and keeps one lead for all of them (`src/server/live-lead.ts`): it rises after
 two reports that need more, up to the operator's maximum, and lowers by measured
 cost; a listener beyond the maximum plays behind until the host removes it. A paired
-device connects to `/api/live/listen` while its sound plays that source; Hub proxies
-it into the worker and publishes each listener's status on its output. Hub sends a `live` instruction, and the browser session runs a Worker and
+device connects to `/api/live/listen` while its sound plays that source; its socket
+stays on Core's main thread, which writes each packet the worker posts to every
+listener (`src/server/live-fanout.ts`), and Hub publishes each listener's status on its output. Hub sends a `live` instruction, and the browser session runs a Worker and
 AudioWorklet for that source, reporting stats over the same authorized socket.
 Live creates no Sendspin group; relaxed sources retain Sendspin. Core logs
 `live <source> send age pcm|opus max … mean …` every ten seconds and `live <source>
