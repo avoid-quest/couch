@@ -38,7 +38,7 @@
     "@fontsource-variable/inter-tight": "^5.3.0",
     "@fontsource-variable/mona-sans": "^5.3.0",
     "@iptv/playlist": "1.2.1",
-    "@sendspin/sendspin-js": "3.2.1",
+    "@sendspin/sendspin-js": "5.0.0",
     "@sonn-audio/node-sendspin": "0.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-hotkeys": "^0.12.0",

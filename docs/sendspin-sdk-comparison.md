@@ -1,5 +1,10 @@
 # Sendspin SDK timing comparison
 
+**Subsequent owner decision:** Noise and the current upstream release are now
+authorized. This review describes the earlier 3.2.1 baseline; its plaintext-only
+constraint and recommendation to build a pre-Noise revision are superseded. See
+[current integration](live-audio.md) and the [5.0.0 field run](sendspin-upstream5-20261027.md).
+
 Research date: 2026-10-27. This is a source review, not a native-versus-browser
 latency measurement. The sequential 150 ms then 100 ms field checks keep Couch's
 existing implementation unchanged, with both receivers measured together at

@@ -1,3 +1,4 @@
+import { Identity } from "@sonn-audio/node-sendspin";
 import { defaultLiveAudioSettings, isLiveAudioSettings, type LiveAudioSettings } from "../shared/audio-settings";
 import type { LiveRelay } from "../shared/live-relay";
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
@@ -93,6 +94,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation (id, name) VALUES (1, '${UNNAMED_COUCH}');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS sendspin_identity (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_audio (id INTEGER PRIMARY KEY CHECK (id = 1), settings TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_chooser (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
@@ -181,6 +183,13 @@ export function openStore(path: string, remoteControlEnabled = false) {
   };
   return {
     installationId() { return db.query<{ installationId: string }, []>("SELECT installationId FROM installation_identity WHERE id = 1").get()!.installationId; },
+    sendspinPrivateKey() {
+      const saved = db.query<{ key: string }, []>("SELECT key FROM sendspin_identity WHERE id = 1").get();
+      if (saved) return saved.key;
+      const value = Identity.generate().privateB64u;
+      db.query("INSERT INTO sendspin_identity VALUES (1, ?)").run(value);
+      return value;
+    },
     liveAudioSettings(): LiveAudioSettings {
       const saved = db.query<{ settings: string }, []>("SELECT settings FROM installation_live_audio WHERE id = 1").get()?.settings;
       const value = saved ? JSON.parse(saved) : null;

@@ -7,14 +7,15 @@ const check = (source: string) => {
   expect(result.status).toBe(0);
 };
 
-test("full storage keeps a stable opaque device ID and accepts later cross-tab changes", () => check(`
+test("full storage keeps the SDK identity stable and accepts later cross-tab changes", () => check(`
   import assert from "node:assert/strict";
   const values = new Map();
   globalThis.window = new EventTarget();
   globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: () => { throw new Error("QuotaExceededError"); } };
   const identity = await import("./src/client/session/device-id.ts");
   assert.match(identity.deviceId(), /^[A-Za-z0-9_-]{43}$/);
-  assert.equal(identity.deviceId(), identity.storage.getItem("couch.device-id"));
+  const { loadSendspinClientIdentity } = await import("@sendspin/sendspin-js");
+  assert.equal(identity.deviceId(), loadSendspinClientIdentity(identity.storage).clientId);
   await identity.saveLocalDeviceName("Laptop");
   assert.equal(identity.storage.getItem("couch.device-name"), "Laptop");
   const unsubscribe = identity.subscribeDeviceIdentity(() => {});

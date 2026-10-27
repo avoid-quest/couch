@@ -60,9 +60,10 @@ export function LiveSettings({ sharing }: { sharing: LiveSharing }) {
       </Select>
     </div>
     <div className="flex items-center justify-between gap-4">
-      <label htmlFor="live-buffer">Buffer (ms)</label>
+      <label htmlFor="live-buffer">Playback buffer (ms)</label>
       <Input key={settings.minBufferMs} id="live-buffer" className="w-44" type="number" min={0} max={5000} step={1} defaultValue={settings.minBufferMs} disabled={save.isPending}
         onBlur={event => { const minBufferMs = event.currentTarget.valueAsNumber; if (event.currentTarget.validity.valid && Number.isInteger(minBufferMs) && minBufferMs !== settings.minBufferMs) save.mutate({ ...settings, minBufferMs }); }} />
     </div>
+    <p className="text-meta text-muted-foreground">Restart sharing after changing the playback buffer.</p>
   </div>;
 }

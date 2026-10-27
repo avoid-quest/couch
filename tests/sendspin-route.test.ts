@@ -27,12 +27,12 @@ const credentials = { origin: "http://localhost", token: "fixture-token" };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 afterEach(async () => { listen(false, false, credentials, "Fixture"); await settle(); });
 
-test("Couch supplies identity and cookie authorization while the SDK keeps playback defaults", async () => {
+test("Couch supplies shared identity storage and cookie authorization while the SDK keeps playback defaults", async () => {
   listen(true, false, credentials, "Fixture"); await settle();
   const player = players.at(-1)!;
-  expect(player.options).toMatchObject({ baseUrl: credentials.origin, playerId: "opaque-device" });
+  expect(player.options).toMatchObject({ baseUrl: credentials.origin, storage: null, suite: "aesgcm" });
   expect(authenticated.at(-1)).toEqual([credentials, "/api/audio/session", { method: "POST", credentials: "include" }]);
-  for (const key of ["codecs", "requiredLeadTimeMs", "minBufferMs", "correctionMode", "outputMode", "latencyHint", "suite"]) expect(player.options[key]).toBeUndefined();
+  for (const key of ["playerId", "codecs", "requiredLeadTimeMs", "minBufferMs", "correctionMode", "outputMode", "latencyHint"]) expect(player.options[key]).toBeUndefined();
 });
 
 test("clock-only watch reuses the player; public buffer changes keep the connection", async () => {

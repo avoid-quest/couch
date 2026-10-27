@@ -2,8 +2,8 @@
 
 The owner-approved [use cases and capability contract](audio-video-use-cases.md)
 and [glossary](../GLOSSARY.md) define this baseline's scope. The objective is a
-simple, reliable integration. Further performance optimization is not requested
-and does not automatically follow this work.
+simple, reliable integration. Performance work stays within the owner-requested
+upstream SDK update and field measurements.
 
 This is the starting baseline, not the final low-delay Live implementation. The
 contract distinguishes the currently acceptable buffering/skew from Live's future
@@ -11,7 +11,7 @@ latency ambition, while preserving relaxed playback's separate UX and technical
 policies. The configured buffer is not measured input-to-ear latency.
 
 Live audio uses the unmodified official browser SDK, `@sendspin/sendspin-js`
-3.2.1, and the unmodified Node SDK, `@sonn-audio/node-sendspin` 0.6.2. There are
+5.0.0, and the unmodified Node SDK, `@sonn-audio/node-sendspin` 0.6.2. There are
 no local SDK patches. Native HOST capture feeds the same Sendspin groups used
 by relaxed scheduled audio; phones receive through the browser SDK.
 
@@ -36,38 +36,46 @@ lower-buffer latency estimates are documented separately from measured results.
 The later [150/100 ms measurements](sendspin-buffer-comparison-20261027.md)
 confirmed approximately 100/150 ms latency savings, respectively, but found one
 and three uncommanded Android attenuations. Linux had none. Neither lower setting
-is qualified as a new default; 250 ms was restored.
+was qualified as a new default for that 3.2.1 build; 250 ms was restored then.
+The owner subsequently authorized the current 5.0.0/Noise update and a lower
+initial Live buffer. Those earlier results remain historical comparisons.
+The [5.0.0 field run and measurement audit](sendspin-upstream5-20261027.md)
+found no valid 100 ms latency result, two successful short fresh-start 150 ms checks
+at about 151 ms, and remaining Android attenuations/live-recovery limitations.
+This is functional evidence, not a long stability qualification.
 
-## Upstream APIs and the plaintext version choice
 
-[Browser 3.2.1 README](https://github.com/Sendspin/sendspin-js/blob/830e8f1062b44746606b368e7e8823fe565f8b3c/README.md)
-documents `SendspinPlayer` with an explicit `playerId`. Its published protocol
-handler sends plaintext `client/hello`. Browser releases 4.0.0 and 5.0.0 always
-use Noise and expose only cipher-suite selection, not a plaintext switch.
-3.2.1 is pinned to meet the owner's plaintext requirement; continued maintenance
-of this older release is not assumed. The [SDK source comparison](sendspin-sdk-comparison.md)
-identifies an official timing-fix commit before Noise that could be measured in a
-separate bounded comparison. It is not integrated or measured here.
+## Upstream APIs, identity and Noise
+
+The [published browser 5.0.0 README](https://github.com/Sendspin/sendspin-js/blob/7d103075138dda5c8909045647bb42b33c2d44fc/README.md)
+documents SDK-owned Noise on every connection. The owner authorized this update
+to use current upstream timing behavior instead of remaining on 3.2.1 for plaintext.
+Couch selects the public `suite: "aesgcm"` option: Electron's BoringSSL crypto
+backend supports AES-GCM but lacks the default ChaCha20-Poly1305 cipher. No local
+SDK patch or Noise implementation is involved.
 
 The [Node SDK](https://github.com/sonn-audio/node-sendspin/tree/bb435a032e8a55aba0ef95a5945f961b5b3a6082)
-supports plaintext sessions without `enableEncryption`. Couch uses the public
-`SendspinSession` constructor, hooks, dispatch and stream APIs. A small exception
-boundary around `handleText`/`handleBinary` closes a peer if an SDK handler throws;
-this replaces the former SDK patch without modifying protocol parsing. A malformed
-peer must not terminate the shared worker. Unknown messages keep upstream behavior.
+remains 0.6.2. Its public `SendspinSession` security configuration receives a
+persisted SDK `Identity` and the standard `SENTINEL_RESOLVED` record. Couch's
+existing token and consent checks still authorize access; there is no second PIN
+or pairing flow. The SDK also retains its legacy plaintext transition path for
+other clients. A small exception boundary around public `handleText`/`handleBinary`
+closes a malformed peer without terminating the shared worker.
 
-No Noise identity, PSK, key exchange, cipher selection or cryptographic device ID
-is required. A locally stored opaque ID is passed as `playerId`. Existing Couch
-pairing tokens can rebind an old ID through the control connection's existing
-`identify` behavior; pairing does not need to be repeated. Saved SDK key material
-and old database rows are ignored, not read or rewritten.
+Couch obtains the browser's ID through public `loadSendspinClientIdentity(storage)`.
+The control connection and `SendspinPlayer` use that same persisted SDK identity
+and storage, including the existing in-memory fallback when storage is blocked.
+The old opaque `couch.device-id` is ignored. Existing Couch tokens rebind changed
+IDs through `identify`, retaining pairing and permissions. The server reuses or
+creates its SDK key in the existing `sendspin_identity` database table; it does
+not regenerate its identity on each start.
 
 An authenticated `POST /api/audio/session` establishes an HttpOnly cookie for
 `/sendspin`; the SDK opens that normal endpoint and owns reconnection. The cookie
 contains the existing Couch token and uses SameSite Strict, with Secure on HTTPS.
 The SDK URL contains no token. A token-bearing `/api/audio/<token>/sendspin` base
 path is available for non-browser SDK clients. The upgrade binds the authenticated
-Device to `client/hello.client_id`, checks host/origin and remote-control permission,
+Device to `client/init.client_id` (or legacy `client/hello.client_id`), checks host/origin and remote-control permission,
 and existing revocation removes its session. TLS for LAN access remains separate
 from Sendspin application-level encryption. Browser cookies must be usable for
 the selected Couch origin.
@@ -116,13 +124,14 @@ or queue authority. Ending capture ends that source without ending independent
 playback. Native input selection, capture rate/buffer and mute remain available.
 
 The share panel offers Automatic/PCM/Opus through the SDK's public `codecs`
-option, and Buffer (ms) through `minBufferMs`/`setMinBufferMs`. Automatic leaves
-codec preference upstream; Couch explicitly mirrors the SDK's 250 ms minimum-buffer
-default. The SDK separately defaults startup lead to 250 ms; those are different
-requests, not two buffers to add. Opus is preferred with PCM fallback using upstream browser capability filtering. A
-codec change recreates that player; buffer updates reuse its connection. Startup
-lead, output mode, correction, decoder and browser hardware buffering use SDK
-defaults. No preparation probe or readiness extension gates playback.
+option, and Playback buffer (ms) through `minBufferMs`/`setMinBufferMs`. Automatic leaves
+codec preference upstream; Couch's initial Live minimum buffer is 150 ms and remains
+operator-configurable. This is a starting setting, not a physical latency promise
+or a fixed acceptance threshold. The SDK separately retains its startup-lead
+hint; Live does not add latency just to reach it. Opus is preferred with PCM
+fallback using upstream browser capability filtering. A codec change recreates
+that player; buffer updates reuse its connection. Startup lead, output mode,
+correction, decoder and browser hardware buffering use SDK defaults. No preparation probe or readiness extension gates playback.
 An initial audio-session failure is shown through existing error feedback and
 offers Tap to hear to retry. Leaving cancels that retry; a rejected bootstrap is
 not retained as the active player.
@@ -134,10 +143,10 @@ not retained as the active player.
 | Native/browser acquisition and Main ownership | Selected audio device/system track → timestamped interleaved f32 PCM, format, generation and sample position | Existing OS/browser APIs and native helper protocol. The Sendspin browser player has no capture API. Local permissions, input identity, mute and retirement remain separate from receiver rights. | `native-live-authority.test.ts`, `live-client.test.ts`; native hardware is not exercised |
 | Authorized upload and worker bridge | Owned publication + f32 capture frames → validated `CaptureAudioPacket` in its source epoch | Retains the existing upload protocol. Node 0.6.2 has `sendSourceAudioChunk` but no public source stream-start/end method; it cannot replace this with a complete source-format negotiation. Worker messages and helper leases retire stale work. | `scheduled-capture.integration.ts`, `live-audience.integration.ts` |
 | Sample conversion | f32 at the acquired rate/channels → shared 48 kHz stereo samples and signed LE PCM16 | Standard FFmpeg `aresample`, channel conversion and `pcm_s16le`. Sendspin PCM is integer, not float; session APIs accept already formatted bytes. | `capture-continuity.integration.ts`: 44.1 kHz mono / 48 kHz stereo, channel mapping and integer samples |
-| Opus encoding/framing | Shared samples → libopus packets with duration/pre-skip, Ogg wrapper removed | Standard FFmpeg `libopus`; public `sendStreamStart` / `sendPcmAudioFrame` send complete Opus packets, not an Ogg byte stream. | `capture-continuity.integration.ts`, `audio-isolation.integration.ts`, `sendspin-plaintext.integration.ts` |
+| Opus encoding/framing | Shared samples → libopus packets with duration/pre-skip, Ogg wrapper removed | Standard FFmpeg `libopus`; public `sendStreamStart` / `sendPcmAudioFrame` send complete Opus packets, not an Ogg byte stream. | `capture-continuity.integration.ts`, `audio-isolation.integration.ts`, `sendspin-sdk.integration.ts` |
 | Capture-time mapping | Encoded sample offset + generation + measured capture-block timestamps → source timestamp in Core microseconds | A short block lookup, including Opus pre-skip; no oscillator estimator or browser clock replacement. SDK send-time defaults cannot reconstruct source acquisition time or keep differently delayed codec outputs on that source timeline. | `capture-continuity.integration.ts`: source generation replacement, non-nominal capture time and codec delay |
-| Playback/group scheduling | Source timestamp/bytes + consented members + SDK timing declarations → common presentation timestamps, per-session frames, level and metadata | Public `getPlayerTiming`, `getPlayerSupportedFormats`, `sendStreamStart`, `sendPcmAudioFrame`, group/metadata/volume APIs. The SDK session does not produce media or choose the application's group timeline. | `sendspin-plaintext.integration.ts`, `live-delivery.integration.ts`, `receiver-error-lifecycle.integration.ts` |
-| Device authorization and browser playback | Existing Couch token + opaque ID → token-bound plaintext session and stock player | HttpOnly `/sendspin` cookie and `SendspinPlayer({ playerId, baseUrl })`. Public `codecs`/`setMinBufferMs` implement operator choices. The SDK has no Couch consent/token model. Public `SendspinSession` dispatch has a peer exception boundary instead of a patch. | `sendspin-plaintext.integration.ts`, `sendspin-route.test.ts`, `audio-isolation.integration.ts`, `settings-authority.integration.ts`, `browser-device-identity.test.ts` |
+| Playback/group scheduling | Source timestamp/bytes + consented members + SDK timing declarations → common presentation timestamps, per-session frames, level and metadata | Public `getPlayerTiming`, `getPlayerSupportedFormats`, `sendStreamStart`, `sendPcmAudioFrame`, group/metadata/volume APIs. The SDK session does not produce media or choose the application's group timeline. | `sendspin-sdk.integration.ts`, `live-delivery.integration.ts`, `receiver-error-lifecycle.integration.ts` |
+| Device authorization and browser playback | Existing Couch token + SDK public-key ID → token-bound Noise session and stock player | HttpOnly `/sendspin` cookie and `loadSendspinClientIdentity(storage)` / `SendspinPlayer({ storage, baseUrl, suite: "aesgcm" })`. Public `codecs`/`setMinBufferMs` implement operator choices. The SDK has no Couch consent/token model. Public `SendspinSession` dispatch has a peer exception boundary instead of a patch. | `sendspin-sdk.integration.ts`, `sendspin-route.test.ts`, `audio-isolation.integration.ts`, `settings-authority.integration.ts`, `browser-device-identity.test.ts` |
 
 ## Actual capability limits
 
@@ -166,7 +175,7 @@ Opus browser support uses upstream capability filtering, with PCM fallback.
 | Fixed/automatic lead controller, bitrate policy, browser/listener hardware-buffer overrides | Public SDK codec preference and minimum buffer only |
 | `createCaptureClock` and its oscillator estimator/interpolating resampler | FFmpeg format conversion and capture-block timestamp mapping; standard WAV framing keeps source reads bounded |
 | Node SDK patch and `patchedDependencies` | Public session dispatch exception boundary; zero SDK patches |
-| Noise setup, PSKs, AES suite option, server key persistence and key-derived device IDs | Plaintext SDK 3.2.1 and token-bound opaque IDs |
+| Custom pairing/cipher UI and Noise implementation | SDK-owned Noise, persisted SDK identity, standard Sentinel handshake and compatible AES-GCM suite; existing Couch token authorization |
 | Direct `opusscript`/`opus-decoder` dependencies, worker WASM staging and related type declarations | Standard FFmpeg Opus and the SDK's own decoder dependency |
 | Custom DSP/clock/lead/fanout tests, replay fixtures, browser harness and fixed-chunk-count assertions | SDK-path lifecycle, protocol, capture and product correctness checks |
 
@@ -177,12 +186,12 @@ Build only Core and its worker before Node integration checks:
 ```sh
 bun scripts/core.ts
 bun run typecheck
-bun build tests/sendspin-plaintext.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts --target=node --outdir=build/checks
+bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts --target=node --outdir=build/checks
 COUCH_TEST_FFMPEG=/path/to/ffmpeg node --test build/checks/*.js
 ```
 
 These use temporary databases, loopback ports and synthetic PCM; they do not open
-hardware. The stock browser core check covers plaintext hello, token/ID binding,
+hardware. The stock browser core check covers Noise/AES-GCM, token/ID binding,
 PCM decoding, reconnect, SDK buffer updates, a concurrent Opus receiver and Leave.
 Capture checks cover native input formats, source generations, measured timestamp
 mapping and Opus pre-skip. Session isolation, source upload authorization and

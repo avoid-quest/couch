@@ -1,5 +1,9 @@
 # Sendspin Live 150 ms and 100 ms buffer measurements
 
+These are historical 3.2.1 results. The owner subsequently authorized the latest
+upstream SDK and Noise; see the [5.0.0 field run](sendspin-upstream5-20261027.md)
+for the updated implementation at 100 ms.
+
 Two fresh native Live shares reproduced the predicted latency savings without
 changing Couch or either SDK. **Neither lower buffer is qualified as a new
 default:** the Android electrical return had one uncommanded attenuation at

@@ -125,7 +125,7 @@ setInterval(() => {}, 1000);
   answerUploads(publisher);
   // A timestamped PCM producer like the desktop's: clock start, then real-time
   // 10 ms stereo frames in binary upload v1, so Core measures real headroom.
-  const streamCapture = async (client: { messages: ServerMessage[] }, sourceId: string, device = 0) => {
+  const streamCapture = async (client: { messages: ServerMessage[] }, sourceId: string, device = 0, sample?: (position: number, channel: number) => number) => {
     await until(() => client.messages.some(message => message.type === "livePeers" && message.sourceId === sourceId && message.upload));
     const demand = client.messages.findLast(message => message.type === "livePeers" && message.sourceId === sourceId);
     const url = new URL(uploadUrl(sourceId, uploadToken, device));
@@ -140,6 +140,7 @@ setInterval(() => {}, 1000);
         const frame = Buffer.alloc(40 + 480 * 8);
         frame.writeUInt32LE(0x31414343, 0); frame.writeUInt8(2, 4); frame.writeUInt8(1, 5); frame.writeUInt16LE(40, 6); frame.writeUInt32LE(48000, 8);
         frame.writeUInt32LE(sequence, 12); frame.writeBigUInt64LE(BigInt(sequence * 480), 16); frame.writeBigInt64LE(BigInt(origin + sequence * 10_000), 24); frame.writeUInt32LE(480, 32);
+        if (sample) for (let i = 0; i < 960; i++) frame.writeFloatLE(sample(sequence * 480 + (i >> 1), i % 2), 40 + i * 4);
         upload.send(frame);
       }
     }, 5);

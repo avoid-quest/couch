@@ -1,4 +1,4 @@
-import type { SendspinStorage } from "@sendspin/sendspin-js";
+import { loadSendspinClientIdentity, type SendspinStorage } from "@sendspin/sendspin-js";
 import { useSyncExternalStore } from "react";
 import type { SessionState } from "../../shared/protocol";
 import { normalizeDeviceName } from "../../shared/devices";
@@ -84,13 +84,9 @@ export const subscribeDeviceIdentity = (listener: () => void) => {
 export const useLocalDeviceName = () => useSyncExternalStore(subscribeDeviceIdentity, localDeviceName, () => null);
 export const useLocalDeviceSharing = () => useSyncExternalStore(subscribeDeviceIdentity, localDeviceSharing, () => defaultDeviceSharing);
 
-/** A stable, opaque device ID; Sendspin uses it through its public playerId option. */
+/** Couch and Sendspin share the SDK's persisted public-key identity. */
 export function deviceId() {
-  if (id) return id;
-  const saved = read("couch.device-id");
-  id = saved && /^[\w-]{43}$/.test(saved) ? saved : btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-  write("couch.device-id", id);
-  return id;
+  return id ??= loadSendspinClientIdentity(storage).clientId;
 }
 
 type Outputs = Pick<SessionState, "outputs" | "devices" | "controlling"> & { player: Pick<SessionState["player"], "status"> } | null | undefined;

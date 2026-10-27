@@ -14,10 +14,10 @@ import type { Member, SyncedLoad } from "./scheduled-audio";
 export type { Member, SyncedLoad } from "./scheduled-audio";
 
 /** Core owns authority/lifetimes. The worker owns clocks, encoding and Sendspin sessions. */
-export function createSendspin(options: { serverId?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: () => Promise<string>; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void; sourceFailed?: (sourceId: string, error: string) => void }) {
+export function createSendspin(options: { serverId?: string; privateKey?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: () => Promise<string>; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void; sourceFailed?: (sourceId: string, error: string) => void }) {
   const secret = randomUUID();
   const beside = new URL("./audio-worker.mjs", import.meta.url);
-  const worker = new Worker(existsSync(beside) ? beside : resolve("build/audio-worker.mjs"), { workerData: { serverId: options.serverId, name: options.name, secret } });
+  const worker = new Worker(existsSync(beside) ? beside : resolve("build/audio-worker.mjs"), { workerData: { serverId: options.serverId, privateKey: options.privateKey, name: options.name, secret } });
   const groups = new Map<string, (state: PlayerState) => void>(), sources = new Map<string, { epoch: string; queued: number; error?: string }>();
   const connections = new Set<WebSocket | Socket>();
   const uploads = new Map<string, WebSocket>();

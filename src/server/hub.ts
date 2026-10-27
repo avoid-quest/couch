@@ -130,7 +130,7 @@ export async function createHub(options: HubOptions) {
   const iceServers = () => [...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(liveRelay() ? [liveRelay()!] : [])];
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
-  const sendspin = createSendspin({ serverId: store.installationId(), name: store.installationName(),
+  const sendspin = createSendspin({ serverId: store.installationId(), privateKey: store.sendspinPrivateKey(), name: store.installationName(),
     savedDelay: id => store.deviceSyncDelay(id), saveDelay: (id, delay) => store.saveDeviceSyncDelay(id, delay),
     admit: (id, loopback) => id === store.hostDevice()?.id ? loopback && (!systemAudio || !servedBy(id)?.outputs.some(output => output.deviceId === id && output.sound) || !common.systemAudio?.error) : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast(), sourceFailed: (sourceId, error) => {
       logPlaybackError(sourceId, "Capture", undefined, error);

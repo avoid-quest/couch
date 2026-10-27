@@ -4,7 +4,7 @@ import type { IncomingMessage } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
 import type { WebSocket } from "ws";
-import { AudioCodec, PlaybackStateType, PlayerCommand, serverNowUs, SendspinSession, type SendspinSessionHooks } from "@sonn-audio/node-sendspin";
+import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, serverNowUs, SendspinSession, type SendspinSessionHooks } from "@sonn-audio/node-sendspin";
 import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError, safePlaybackError } from "./playback-log";
@@ -50,7 +50,8 @@ const wireOf = (session: SendspinSession): Wire | undefined => {
 };
 const tempo = (speed: number) => speed < 0.5 ? `atempo=0.5,atempo=${speed / 0.5}` : speed > 2 ? `atempo=2,atempo=${speed / 2}` : `atempo=${speed}`;
 
-export function createScheduledAudio(options: { serverId?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
+export function createScheduledAudio(options: { serverId?: string; privateKey?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
+  const security = { identity: options.privateKey ? Identity.fromPrivateB64u(options.privateKey) : Identity.generate(), pskProvider: () => SENTINEL_RESOLVED };
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
@@ -429,7 +430,7 @@ export function createScheduledAudio(options: { serverId?: string; name: string;
   }
 
   return {
-    // The HTTP adapter authorizes the Couch token; the SDK handles plaintext Sendspin.
+    // Couch authorizes the token and device ID; the SDK owns Noise and legacy plaintext.
     accept(socket: WebSocket, request: IncomingMessage, deviceId?: string) {
       sockets.add(socket);
       let session: SendspinSession | undefined;
@@ -445,10 +446,10 @@ export function createScheduledAudio(options: { serverId?: string; name: string;
           if (!session) {
             const hello = !binary && JSON.parse(String(data));
             const clientId = hello?.payload?.client_id;
-            if (hello?.type !== "client/hello" || typeof clientId !== "string" || deviceId !== undefined && clientId !== deviceId
+            if (!["client/hello", "client/init"].includes(hello?.type) || typeof clientId !== "string" || deviceId !== undefined && clientId !== deviceId
               || !options.admit(clientId, loopbackPeer(request.socket.remoteAddress ?? ""))) return socket.terminate();
             clearTimeout(timer);
-            session = new SendspinSession(socket, request, undefined, undefined, hooks, null, { serverId: options.serverId ?? options.name, name: options.name });
+            session = new SendspinSession(socket, request, undefined, undefined, hooks, security, { serverId: options.serverId ?? options.name, name: options.name });
             socketOf.set(session, socket);
           }
           // Public dispatch APIs need an application exception boundary: an SDK

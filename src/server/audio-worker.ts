@@ -13,7 +13,7 @@ let requestId = 0;
 const request = (type: string, data: Record<string, unknown> = {}) => new Promise<unknown>(resolve => { const id = ++requestId; pending.set(id, resolve); port.postMessage({ type, id, ...data }); });
 const registrations = new Map<string, string>();
 const notify = () => port.postMessage({ type: "status", value: engine.status() });
-const engine = createScheduledAudio({ serverId: workerData.serverId, name: workerData.name, admit: () => true, changed: notify,
+const engine = createScheduledAudio({ serverId: workerData.serverId, privateKey: workerData.privateKey, name: workerData.name, admit: () => true, changed: notify,
   ffmpeg: async () => {
     const result = await request("ffmpeg") as { path?: string; leaseId: number; error?: string };
     if (!result.path) throw new Error(result.error);
@@ -52,7 +52,7 @@ server.on("upgrade", (req, socket, head) => {
       let clientId: string | undefined;
       try {
         const hello = !binary && JSON.parse(String(data));
-        if (hello?.type === "client/hello" && typeof hello.payload?.client_id === "string") clientId = hello.payload.client_id;
+        if ((hello?.type === "client/hello" || hello?.type === "client/init") && typeof hello.payload?.client_id === "string") clientId = hello.payload.client_id;
       } catch { /* Refused below. */ }
       const admitted = clientId && (!expected || expected === clientId) && await request("admit", { clientId, loopback: url.searchParams.get("loopback") === "true" });
       if (!admitted || ws.readyState !== 1) return ws.terminate();

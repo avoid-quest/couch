@@ -123,11 +123,12 @@ Sheet on phones and the TV:
 A [Live audio](../live-audio.md) share lists listeners and a ⋯ **Remove** action.
 Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512 or 1024
 frames). **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
-option; Opus includes PCM fallback and Automatic leaves capability selection upstream. **Buffer (ms)** uses
-`minBufferMs` and `setMinBufferMs`, initially the SDK default of 250 ms. Settings
+option; Opus includes PCM fallback and Automatic leaves capability selection upstream. **Playback buffer (ms)** uses
+`minBufferMs` and `setMinBufferMs`, initially 150 ms. Settings
 apply to the running share and future shares; a codec change reconnects that
 player, while buffer updates reuse it. There are no custom lead controls,
-latency estimates, gap counters or listener polling.
+latency estimates, gap counters or listener polling. The panel asks users to restart sharing
+after changing the playback buffer.
 
 ## When it doesn't work
 

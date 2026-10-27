@@ -3,7 +3,7 @@ import type { SendspinPlayer } from "@sendspin/sendspin-js";
 import { apiFetch } from "../api/client";
 import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
-import { deviceId, storage } from "./device-id";
+import { storage } from "./device-id";
 import { failed } from "../toasts";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
@@ -33,7 +33,8 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = player ??= import("@sendspin/sendspin-js").then(async ({ SendspinPlayer }) => {
     await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
-    const created = new SendspinPlayer({ baseUrl: credentials.origin, playerId: deviceId(), clientName: name, storage,
+    // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
+    const created = new SendspinPlayer({ suite: "aesgcm", baseUrl: credentials.origin, clientName: name, storage,
       ...live?.codec && live.codec !== "auto" ? { codecs: live.codec === "opus" ? ["opus", "pcm"] : ["pcm"] } : {},
       ...live ? { minBufferMs: live.minBufferMs } : {},
       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });

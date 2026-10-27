@@ -2,7 +2,8 @@
 
 Current contract, refined with the owner on 27 October 2026. The goal for the
 current run is a simple, reliable upstream Sendspin integration with existing
-product behavior preserved. Further performance optimization is not requested.
+product behavior preserved. The owner now authorizes a current upstream SDK
+update, its required Noise handshake, and measurements at lower Live buffers.
 This contract supersedes old strict admission, latency and audience-size gates
 in the historical [refactor plan](audio-video-refactor-plan.md) and evidence.
 Those records remain useful history, not requirements to recreate their machinery.
@@ -10,10 +11,11 @@ Those records remain useful history, not requirements to recreate their machiner
 ## Starting baseline and intended Live mode
 
 This cleanup establishes a starting point for the product, not the final Live
-implementation. The owner accepts an initial result around 250 ms with a few
-milliseconds of difference between devices. These are acceptable examples, not
-new hard limits or measured results. The SDK's 250 ms buffer setting is not a
-measurement of total input-to-ear delay.
+implementation. The owner's earlier example around 250 ms with a few milliseconds
+of device skew was an acceptable starting result, not a target, runtime floor or
+acceptance gate. Current Live starts at a configurable 150 ms minimum buffer;
+that setting is separate from measured total input-to-ear delay. The intended
+trade-off remains low useful delay with quality, continuity and efficiency.
 
 Live and relaxed playback remain distinct in their UX and technical policies.
 Relaxed playback can read ahead and buffer a shared programme; Live follows an
@@ -226,7 +228,7 @@ discovery, source selection, output consent and handoff journeys.
 
 Produce a locally committed, reviewable software baseline with:
 
-1. Upstream browser playback and plaintext browser/server interoperability;
+1. Upstream browser playback and the current SDK's Noise browser/server interoperability;
    proprietary Live transport, listener DSP and unnecessary SDK patches removed.
    Keep Couch's existing authorization and consent. SDK versions and defaults
    are documented in [Live audio](live-audio.md).
