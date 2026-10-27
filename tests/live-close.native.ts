@@ -39,6 +39,7 @@ import { app, BrowserWindow, ipcMain, session, systemPreferences } from 'electro
 import { writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from ${JSON.stringify(pathToFileURL(join(root, 'node_modules/ws/wrapper.mjs')).href)};
+import { SendspinClient, Roles, AudioCodec } from ${JSON.stringify(pathToFileURL(join(root, 'node_modules/@sonn-audio/node-sendspin/dist/index.js')).href)};
 const evidence = { platform: process.platform, steps: [] };
 const record = () => writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringify(evidence, null, 2));
 // Synthetic media only: Chromium's fake microphone, and no macOS privacy prompt.
@@ -204,19 +205,21 @@ async function run(w, url) {
   assert.equal(await js("__close.session().startLive({ kind: 'microphone', intent: 'live', audioDeviceId: " + JSON.stringify(input) + " }).then(() => 'started', error => error.message)", true), 'started');
   const sourceId = await js('__close.session().localLiveSourceId');
   receiver.send(JSON.stringify({ type: 'command', requestId: 'join', action: { type: 'playLive', sourceId, deviceId: id } }));
-  await wait(() => messages.some(message => message.type === 'live' && message.sourceId === sourceId), 'Live instruction');
-  assert(!messages.some(message => message.type === 'sendspin' && message.listen), 'Live does not start Sendspin');
-  const audio = new WebSocket(info.origin.replace('http:', 'ws:') + '/api/live/listen?' + new URLSearchParams({ token, sourceId }), { headers: { Origin: info.origin } });
-  let packets = 0, closedCode;
-  audio.on('message', (_data, binary) => { if (binary) packets++; });
-  audio.on('close', code => { closedCode = code; });
-  await wait(() => packets > 10, 'timestamped audio packets');
+  await wait(() => messages.some(message => message.type === 'sendspin' && message.listen), 'Sendspin instruction');
+  const audio = new SendspinClient(id, 'Live close listener', [Roles.PLAYER], { playerSupport: {
+    supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48000, bit_depth: 16 }], buffer_capacity: 131072, supported_commands: [] } });
+  let packets = 0, ended = false;
+  audio.addAudioChunkListener(() => packets++);
+  audio.addStreamEndListener(() => { ended = true; });
+  await audio.connect(info.origin.replace('http:', 'ws:') + '/api/audio/' + token + '/sendspin');
+  await audio.sendPlayerState({ min_buffer_ms: 250 });
+  await wait(() => packets > 10, 'Sendspin audio packets');
   w.close();
   await until('ended', 'Close ending Main-owned Live capture');
-  await wait(() => closedCode !== undefined, 'share ends the listener socket');
-  assert.equal(closedCode, 1001);
-  await wait(() => messages.findLast(message => message.type === 'live')?.sourceId === null, 'stop Live instruction');
-  step('live listener stopped', { packets, closedCode, instruction: messages.findLast(message => message.type === 'live') });
+  await wait(() => ended, 'share ends the Sendspin stream');
+  await wait(() => messages.findLast(message => message.type === 'sendspin')?.listen === false, 'stop Sendspin instruction');
+  step('live listener stopped', { packets, ended });
+  await audio.disconnect();
   receiver.close();
   assert(await hosting(), 'Couch keeps hosting at the end');
   assert(!w.isDestroyed());

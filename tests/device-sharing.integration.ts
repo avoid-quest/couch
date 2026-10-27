@@ -22,13 +22,12 @@ async function fixture() {
   // A Device's Sendspin player: the levels Core sends it while its sound is synced.
   async function speaker(key: Identity) {
     const levels: number[] = [], client = new SendspinClient(key.peerId, "Test speaker", [Roles.PLAYER], {
-      encryption: { identity: key },
       playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.VOLUME] },
     });
     speakers.push(client);
     client.addAudioChunkListener(() => chunks.set(key.peerId, (chunks.get(key.peerId) ?? 0) + 1));
     client.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!); });
-    await client.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+    await client.connect(`${hub.origin.replace("http:", "ws:")}/api/audio/${key.peerId === adminId ? adminToken : deviceToken}/sendspin`, { timeoutMs: 3_000 });
     return levels;
   }
   async function connect(token: string, id: string, options = "") {

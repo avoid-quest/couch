@@ -149,7 +149,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
       </div>
     </div>
     {/* Live audio's host sees each listener as Core measures it, and sets the stream below. */}
-    {sharing.source.intent === "live" ? <LiveListeners sharing={sharing} viewers={viewers} /> : <ul aria-label="Watching" className="grid">
+    {sharing.source.intent === "live" ? <LiveListeners viewers={viewers} /> : <ul aria-label="Watching" className="grid">
       {viewers.map(viewer => <li key={viewer.device.id} className="flex items-center gap-3 border-t py-2.5">
         <div className="grid min-w-0 flex-1 gap-0.5">
           <span className="text-body break-words">{viewer.device.name}</span>

@@ -21,7 +21,7 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   writeFileSync(script, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
   const source = createServer((_request, response) => response.end("fixture input"));
   await new Promise<void>(resolve => source.listen(42701, "127.0.0.1", resolve));
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Test Couch", admit: () => false, changed: () => {}, ffmpeg: executable ?? (() => Promise.resolve(script)) });
+  const server = createSendspin({ name: "Test Couch", admit: () => false, changed: () => {}, ffmpeg: executable ?? (() => Promise.resolve(script)) });
   const group = server.group("a".repeat(36), state => states.push(state));
   group.members([{ deviceId: "unconnected", level: 100 }]);
   const load: SyncedLoad = { type: "load", playbackId: "p".repeat(36), source: "http://127.0.0.1:42701/input?sig=synthetic-secret" };

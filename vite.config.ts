@@ -89,5 +89,5 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-  build: { outDir: "../../dist", emptyOutDir: true, rolldownOptions: { preserveEntrySignatures: "exports-only", input: { main: "src/client/index.html", capture: "src/client/capture-audio.html" } } },
+  build: { outDir: "../../dist", emptyOutDir: true, rolldownOptions: { input: { main: "src/client/index.html", capture: "src/client/capture-audio.html" } } },
 }));

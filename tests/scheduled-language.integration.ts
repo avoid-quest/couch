@@ -35,13 +35,13 @@ for (const choice of cases) test(choice.name, { timeout: 15000 }, async t => {
     else response.writeHead(404).end();
   });
   const identity = Identity.generate(), states: PlayerState[] = [], chunks: Buffer[] = [];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: 'Language fixture', admit: id => id === identity.peerId, changed() {}, ffmpeg: async () => ffmpeg });
+  const core = createSendspin({ name: 'Language fixture', admit: id => id === identity.peerId, changed() {}, ffmpeg: async () => ffmpeg });
   server.on('upgrade', (request, socket, head) => core.upgrade(request, socket as import('node:net').Socket, head));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const prepared = await prepareSource({ source: `${origin}/master.m3u8` }, { picture: false, sound: true }, AbortSignal.timeout(3000));
   assert.ok(prepared.audioManifest); audioMaster = prepared.audioManifest.text;
-  const client = new SendspinClient(identity.peerId, 'Software listener', [Roles.PLAYER], { encryption: { identity }, playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [] } });
+  const client = new SendspinClient(identity.peerId, 'Software listener', [Roles.PLAYER], { playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [] } });
   client.addAudioChunkListener((_timestamp, data) => chunks.push(Buffer.from(data)));
   const group = core.group('language', state => states.push(state));
   t.after(async () => { group.close(); core.close(); await client.disconnect(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });

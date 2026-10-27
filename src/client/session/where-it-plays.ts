@@ -1,4 +1,3 @@
-import { liveListenerStatus } from "./live-listener/status";
 import type { ClientSessionState } from "./session";
 import type { Action, DeviceSummary, Output } from "../../shared/protocol";
 
@@ -118,8 +117,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     const busy = elsewhere && occupied.outputs.some(item => item.deviceId === device.id) && occupied.status !== "idle" ? occupied : undefined;
     // Private only where consent leaves you nothing to change on it.
     const locked = !picture.enabled && !sound.enabled && (picture.reason === "Private" || sound.reason === "Private") && "Private";
-    const listenerStatus = liveListenerStatus(current?.liveListener, mine && state.liveReception?.sourceId === source?.id ? state.liveReception : undefined);
-    const status = current && offline || sharing || hostOnly && lock || (current?.error ? `Can't play: ${current.error}` : listenerStatus ? listenerStatus : current?.buffered ? "Behind" : locked || (soundOn && device.muted ? "Muted" : busy ? `Playing ${busy.title ?? "something else"}` : ""));
+    const status = current && offline || sharing || hostOnly && lock || (current?.error ? `Can't play: ${current.error}` : current?.buffered ? "Behind" : locked || (soundOn && device.muted ? "Muted" : busy ? `Playing ${busy.title ?? "something else"}` : ""));
     return {
       device, output: current, mine, status: mine ? ["This device", status].filter(Boolean).join(", ") : status, failed: !!current?.error,
       picture, sound,

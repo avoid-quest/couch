@@ -69,12 +69,11 @@ async function fixture() {
     speaker: async (index: number) => {
       const identity = identities[index]!, levels: number[] = [];
       const client = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], {
-        encryption: { identity: identity.key },
         playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.VOLUME] },
       });
       speakers.push(client);
       client.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!); });
-      await client.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+      await client.connect(`${hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`, { timeoutMs: 3_000 });
       return levels;
     },
     restart: async () => { await stop(); return start(); },

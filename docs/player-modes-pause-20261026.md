@@ -1,3 +1,7 @@
+> Historical record. The 2026-10-27 [upstream Sendspin baseline](live-audio.md)
+> supersedes custom Live-engine decisions, SDK patches, admission rules and
+> performance gates below. Those historical results do not measure this baseline.
+
 # Player modes pause checkpoint
 
 > Historical checkpoint at `61a73b4`. The owner subsequently resumed execution

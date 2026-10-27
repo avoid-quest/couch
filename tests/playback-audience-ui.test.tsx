@@ -175,23 +175,3 @@ for (const priority of ["native", "group", "receiver"] as const) test(`Core-proj
   expect(html).not.toMatch(/Preparing audio|Listening|Waiting for audio|leave and join again/);
   expect(html).not.toMatch(/aria-label="(?:Pause|Stop|Next)"/);
 });
-
-test("timestamped Live status agrees in the player and local output row", async () => {
-  const { picker } = await import("../src/client/session/where-it-plays");
-  const state = fixture();
-  state.outputs![0]!.liveListener = { codec: "pcm", status: "warming", latencyMs: null, marginMs: null, gaps: 0, concealments: 0, behindMs: null };
-  const assertStatus = (text: string) => {
-    expect(renderToStaticMarkup(<LiveParticipation state={state} connected run={run} />)).toContain(text);
-    expect(picker(state, { here }).rows.find(row => row.mine)?.status).toContain(text);
-  };
-  assertStatus("Preparing audio…");
-  state.outputs![0]!.liveListener = { ...state.outputs![0]!.liveListener, status: "behind", behindMs: 23 };
-  assertStatus("Behind by 23 ms");
-  state.liveReception = { sourceId: "source", status: { state: "reconnecting" }, httpsAddress: "https://couch.home:4100" };
-  assertStatus("Reconnecting…");
-  state.liveReception.status = { state: "needs-https" };
-  assertStatus("Live needs the HTTPS address: https://couch.home:4100");
-  state.liveReception.status = { state: "removed", reason: "Removed by the host" };
-  state.outputs = []; state.controls = { ...audience, leave: false };
-  assertStatus("Removed by the host");
-});

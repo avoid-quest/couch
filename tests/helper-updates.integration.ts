@@ -296,7 +296,7 @@ async function heldSource(t: TestContext) {
 for (const outcome of ["exit", "failure", "stop"] as const) test(`updating FFmpeg while Sendspin awaits its source keeps the executable through launch and ${outcome}`, options, async t => {
   const f = await managedFfmpeg(t), source = await heldSource(t);
   const states: PlayerState[] = [];
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Helper lease fixture", admit: () => false, changed() {} });
+  const server = createSendspin({ name: "Helper lease fixture", admit: () => false, changed() {} });
   const group = server.group("helper-lease", state => states.push(state));
   try {
     group.members([{ deviceId: "fixture", level: 100 }]);
@@ -332,7 +332,7 @@ for (const outcome of ["stop", "source failure", "spawn failure", "source failur
   });
   syncBuiltinESMExports();
   const source = await heldSource(t), states: PlayerState[] = [];
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Helper lease fixture", admit: () => false, changed() {} });
+  const server = createSendspin({ name: "Helper lease fixture", admit: () => false, changed() {} });
   const group = server.group("helper-lease", state => states.push(state));
   try {
     group.members([{ deviceId: "fixture", level: 100 }]);
@@ -358,7 +358,7 @@ for (const outcome of ["stop", "source failure", "spawn failure", "source failur
 
 test("the next Sendspin encoder selects the upgraded FFmpeg without restarting Core", options, async t => {
   const f = await managedFfmpeg(t), source = await heldSource(t);
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Helper lease fixture", admit: () => false, changed() {} });
+  const server = createSendspin({ name: "Helper lease fixture", admit: () => false, changed() {} });
   const group = server.group("helper-lease", () => {});
   try {
     group.members([{ deviceId: "fixture", level: 100 }]);
@@ -379,7 +379,7 @@ test("the next Sendspin encoder selects the upgraded FFmpeg without restarting C
 
 test("independent Sendspin encoders retain a shared helper until the last one closes", options, async t => {
   const f = await managedFfmpeg(t), source = await heldSource(t);
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Concurrent lease fixture", admit: () => false, changed() {} });
+  const server = createSendspin({ name: "Concurrent lease fixture", admit: () => false, changed() {} });
   const first = server.group("first", () => {}), second = server.group("second", () => {});
   try {
     first.members([{ deviceId: "first", level: 100 }]); second.members([{ deviceId: "second", level: 100 }]);
@@ -415,9 +415,9 @@ for (const outcome of ["end", "failure", "close", "cancel", "spawn failure", "cl
     return access(...args);
   });
   syncBuiltinESMExports();
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture lease fixture", admit: () => false, changed() {} });
+  const server = createSendspin({ name: "Capture lease fixture", admit: () => false, changed() {} });
   try {
-    server.registerSource("capture", { intent: "relaxed" });
+    server.registerSource("capture");
     server.writeSource("capture", { generation: "capture", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
     await until(() => helperPending);
     if (outcome !== "cancel" && outcome !== "spawn failure" && outcome !== "close before helper resolution") await until(() => existsSync(f.started));
@@ -440,14 +440,14 @@ for (const outcome of ["end", "failure", "close", "cancel", "spawn failure", "cl
 
 test("a replacement capture selects upgraded FFmpeg in the same worker", options, async t => {
   const f = await managedFfmpeg(t);
-  const server = createSendspin({ identity: Identity.generate().privateB64u, name: "Capture lease fixture", admit: () => false, changed() {} });
+  const server = createSendspin({ name: "Capture lease fixture", admit: () => false, changed() {} });
   try {
-    server.registerSource("capture", { intent: "relaxed" });
+    server.registerSource("capture");
     server.writeSource("capture", { generation: "capture", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
     await until(() => existsSync(f.started));
     await f.check();
     assert.ok(existsSync(f.older));
-    server.endSource("capture"); server.registerSource("capture", { intent: "relaxed" });
+    server.endSource("capture"); server.registerSource("capture");
     server.writeSource("capture", { generation: "capture", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
     await until(() => existsSync(f.upgradedStarted));
     await until(async () => { await f.check(); return !existsSync(f.older); });

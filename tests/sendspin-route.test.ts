@@ -1,57 +1,42 @@
 import { afterEach, expect, mock, test } from "bun:test";
-import { AudioScheduler } from "../node_modules/@sendspin/sendspin-js/dist/audio/scheduler.js";
-import { StateManager } from "../node_modules/@sendspin/sendspin-js/dist/core/state-manager.js";
-import { SendspinTimeFilter } from "../node_modules/@sendspin/sendspin-js/dist/core/time-filter.js";
 
-// Real SDK queues, with only platform/audio I/O and the network player boundary
-// replaced. Device events exercise the product listen() relaxed path.
-const media = new EventTarget();
-Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaDevices: media, userAgent: "fixture" } });
-Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: "http://localhost" } });
-(globalThis as any).AudioContext = class {
-  state = "running"; currentTime = 0; destination = {};
-  createGain() { return { connect() {}, disconnect() {}, gain: { value: 1, setTargetAtTime() {} } }; }
-  createBuffer(channels: number, frames: number, sampleRate: number) {
-    const samples = Array.from({ length: channels }, () => new Float32Array(frames));
-    return { duration: frames / sampleRate, getChannelData: (channel: number) => samples[channel] };
-  }
-  async close() { this.state = "closed"; }
-};
 const players: FixturePlayer[] = [];
-let unlock: (() => Promise<void>) | undefined;
+const authenticated: unknown[][] = [];
+const taps: unknown[] = [];
 class FixturePlayer {
-  state = new StateManager();
-  scheduler = new AudioScheduler({ stateManager: this.state, timeFilter: new SendspinTimeFilter(), outputMode: "direct", useOutputLatencyCompensation: false });
-  constructor(readonly options: Record<string, unknown>) { players.push(this); this.scheduler.initAudioContext(); }
+  buffers: number[] = [];
+  disconnected = false;
+  constructor(readonly options: Record<string, unknown>) { players.push(this); }
   async connect() {}
-  async unlock() { await unlock?.(); }
-  disconnect() { this.scheduler.close(); }
-  buffer(seconds: number) { this.scheduler.handleDecodedChunk({ samples: [new Float32Array(seconds * 48000), new Float32Array(seconds * 48000)], sampleRate: 48000, serverTimeUs: 1_000_000, generation: this.state.streamGeneration }); }
+  async unlock() {}
+  disconnect() { this.disconnected = true; }
+  setMinBufferMs(value: number) { this.buffers.push(value); }
 }
 mock.module("@sendspin/sendspin-js", () => ({ SendspinPlayer: FixturePlayer }));
-mock.module("../src/client/session/renderer", () => ({ waitForTap() {} }));
-mock.module("../src/client/session/device-id", () => ({ storage: null }));
+mock.module("../src/client/api/client", () => ({ apiFetch: async (...args: unknown[]) => { authenticated.push(args); } }));
+mock.module("../src/client/session/renderer", () => ({ waitForTap: (callback: unknown) => taps.push(callback) }));
+mock.module("../src/client/session/device-id", () => ({ storage: null, deviceId: () => "opaque-device" }));
 const { listen } = await import("../src/client/session/sendspin");
+const credentials = { origin: "http://localhost", token: "fixture-token" };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-afterEach(async () => { unlock = undefined; listen(false, false, "Fixture"); await settle(); });
+afterEach(async () => { listen(false, false, credentials, "Fixture"); await settle(); });
 
-for (const seconds of [8, 1, .25]) test(`relaxed devicechange preserves ${seconds}s of queued audio including a fully buffered tail`, async () => {
-  listen(true, false, "Fixture"); await settle();
+test("Couch supplies identity and cookie authorization while the SDK keeps playback defaults", async () => {
+  listen(true, false, credentials, "Fixture"); await settle();
   const player = players.at(-1)!;
-  player.buffer(seconds);
-  expect(player.scheduler.measureBufferedPlaybackRunwaySec()).toBe(seconds);
-  media.dispatchEvent(new Event("devicechange")); await settle();
-  // No more packets arrive: a short track's entire tail is already queued.
-  expect(player.scheduler.measureBufferedPlaybackRunwaySec()).toBe(seconds);
-  expect(player.options.requiredLeadTimeMs).toBeUndefined();
+  expect(player.options).toMatchObject({ baseUrl: credentials.origin, playerId: "opaque-device" });
+  expect(authenticated.at(-1)).toEqual([credentials, "/api/audio/session", { method: "POST", credentials: "include" }]);
+  for (const key of ["codecs", "requiredLeadTimeMs", "minBufferMs", "correctionMode", "outputMode", "latencyHint", "suite"]) expect(player.options[key]).toBeUndefined();
 });
 
-test("clock-only watch keeps the connection and returning to sound reuses it", async () => {
-  listen(true, true, "Fixture"); await settle();
+test("clock-only watch reuses the player; public buffer changes keep the connection", async () => {
+  listen(true, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 }); await settle();
   const player = players.at(-1)!;
-  listen(false, true, "Fixture"); await settle();
+  expect(player.options.codecs).toEqual(["pcm"]);
+  listen(false, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 400 }); await settle();
   expect(players.at(-1)).toBe(player);
-  listen(true, true, "Fixture"); await settle();
-  expect(players.at(-1)).toBe(player);
-  expect(player.options.outputMode).toBeUndefined();
+  expect(player.buffers.at(-1)).toBe(400);
+  listen(true, true, credentials, "Fixture", { codec: "opus", minBufferMs: 400 }); await settle();
+  expect(player.disconnected).toBe(true);
+  expect(players.at(-1)!.options.codecs).toEqual(["opus", "pcm"]);
 });

@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { defaultNativeInputBuffer, isCaptureRatePreference, isNativeInputBufferPreference, isOutputBufferPreference } from "../shared/audio-settings";
+import { defaultNativeInputBuffer, isCaptureRatePreference, isNativeInputBufferPreference } from "../shared/audio-settings";
 
 function storedPreference<T extends string>(key: string, valid: (value: unknown) => value is T, fallback: T) {
   const listeners = new Set<() => void>();
@@ -23,12 +23,9 @@ function storedPreference<T extends string>(key: string, valid: (value: unknown)
   }
   return { read, usePreference };
 }
-const output = storedPreference("couch.live-output-buffer", isOutputBufferPreference, "auto");
 const capture = storedPreference("couch.live-capture-rate", isCaptureRatePreference, "auto");
 const nativeBuffer = storedPreference("couch.live-native-input-buffer", isNativeInputBufferPreference, defaultNativeInputBuffer);
 export const readNativeInputBufferPreference = nativeBuffer.read;
 export const useNativeInputBufferPreference = nativeBuffer.usePreference;
-export const readOutputBufferPreference = output.read;
-export const useOutputBufferPreference = output.usePreference;
 export const readCaptureRatePreference = capture.read;
 export const useCaptureRatePreference = capture.usePreference;

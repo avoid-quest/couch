@@ -12,7 +12,7 @@ const until = async (check: () => boolean, message: string, ms = 5000) => { cons
 
 test("picture-only media has a controllable timeline without opening an audio decoder", { timeout: 5000 }, async t => {
   let lookups = 0; const states: PlayerState[] = [];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Picture fixture", admit: () => false, changed() {}, ffmpeg: async () => { lookups++; throw new Error("No audio decoder expected"); } });
+  const core = createSendspin({ name: "Picture fixture", admit: () => false, changed() {}, ffmpeg: async () => { lookups++; throw new Error("No audio decoder expected"); } });
   const group = core.group("pictures", state => states.push(state));
   t.after(() => { group.close(); core.close(); });
   group.members([]); group.screens([]);
@@ -34,7 +34,7 @@ test("picture-only media has a controllable timeline without opening an audio de
 
 test("queued failures and acknowledgments cannot cross a reused public source ID", { timeout: 5000 }, async t => {
   const errors: string[] = [];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Lifetime fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
+  const core = createSendspin({ name: "Lifetime fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg, sourceFailed: (_id, error) => errors.push(error) });
   t.after(() => core.close());
   // Ensure the worker has booted; the timeline callback crosses its real message port.
   let ready = false;
@@ -42,10 +42,10 @@ test("queued failures and acknowledgments cannot cross a reused public source ID
   group.send({ type: "load", playbackId: "barrier", source: "", duration: 60 });
   await until(() => ready, "worker did not start");
   const packet = { generation: "first", sequence: 0, samplePosition: 0, capturedAtUs: serverNowUs(), sampleRate: 48000, channels: 2 as const, pcm: new Float32Array(960) };
-  core.registerSource("reused", { intent: "relaxed" });
+  core.registerSource("reused");
   core.writeSource("reused", { ...packet, sampleRate: 1 }); // Worker emits failure + ACK.
   const stall = performance.now(); while (performance.now() - stall < 100) { /* Queue worker notifications on parent. */ }
-  core.endSource("reused"); core.registerSource("reused", { intent: "relaxed" });
+  core.endSource("reused"); core.registerSource("reused");
   await sleep(50); // Deliver the previous registration's queued notifications.
   assert.equal(core.sourceError("reused"), undefined); assert.deepEqual(errors, []);
   // Hold the parent so current ACKs cannot run. Exactly 200 stereo frames fit the
@@ -57,8 +57,8 @@ test("queued failures and acknowledgments cannot cross a reused public source ID
 });
 
 test("an upload frame rejected by an earlier auth handler never reaches the worker", { timeout: 5000 }, async t => {
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Auth bridge fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg });
-  core.registerSource("auth", { intent: "relaxed" });
+  const core = createSendspin({ name: "Auth bridge fixture", admit: () => false, changed() {}, ffmpeg: async () => ffmpeg });
+  core.registerSource("auth");
   const server = createServer(), ws = new WebSocketServer({ server });
   ws.on("connection", socket => {
     socket.on("message", (_data, binary) => { if (binary) socket.close(1008, "Authorization revoked"); });

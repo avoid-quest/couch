@@ -1,24 +1,9 @@
-import type { LiveAudioSettings } from "./protocol";
-
-// Live audio's own stream (docs/live-audio.md). Leads are whole milliseconds up to a second.
-// Listeners ask for 256 frames, looser than the prototype's 128 (.scratch PRODUCT.md); the browser picks the real buffer.
-export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "pcm", opusBitrate: 192000, lead: "automatic", leadMs: 100, minLeadMs: 0, maxLeadMs: 100, raiseForSlowest: true, listenerBufferFrames: 256 };
-export const opusBitrates = [128000, 192000, 320000] as const;
-export const bufferFrameOptions = [128, 256, 512, 1024] as const;
-const leadValue = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 1000;
+export type LiveAudioSettings = { codec: "auto" | "pcm" | "opus"; minBufferMs: number };
+export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 250 };
 export const isLiveAudioSettings = (value: unknown): value is LiveAudioSettings => {
   const v = value as LiveAudioSettings;
-  return typeof v === "object" && v !== null && ["pcm", "opus"].includes(v.codec) && opusBitrates.includes(v.opusBitrate) && ["automatic", "fixed"].includes(v.lead)
-    && leadValue(v.leadMs) && leadValue(v.minLeadMs) && leadValue(v.maxLeadMs) && v.minLeadMs <= v.maxLeadMs && typeof v.raiseForSlowest === "boolean"
-    && bufferFrameOptions.includes(v.listenerBufferFrames);
+  return !!v && ["auto", "pcm", "opus"].includes(v.codec) && Number.isInteger(v.minBufferMs) && v.minBufferMs >= 0 && v.minBufferMs <= 5000;
 };
-
-// AudioContext accepts a latency preference, not an exact hardware frame count.
-export const outputBufferOptions = ["auto", "128", "256", "512", "1024"] as const;
-export type OutputBufferPreference = typeof outputBufferOptions[number];
-export const isOutputBufferPreference = (value: unknown): value is OutputBufferPreference => typeof value === "string" && outputBufferOptions.includes(value as OutputBufferPreference);
-// A device's own choice wins; Automatic asks for the operator's listener buffer when the share has one.
-export const outputLatencyHint = (value: OutputBufferPreference, operatorFrames?: number): number | undefined => value === "auto" ? operatorFrames && operatorFrames / 48_000 : Number(value) / 48_000;
 
 export const nativeInputBufferOptions = ["128", "256", "512", "1024"] as const;
 export type NativeInputBufferPreference = typeof nativeInputBufferOptions[number];

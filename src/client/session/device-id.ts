@@ -1,4 +1,4 @@
-import { loadSendspinClientIdentity, type SendspinStorage } from "@sendspin/sendspin-js";
+import type { SendspinStorage } from "@sendspin/sendspin-js";
 import { useSyncExternalStore } from "react";
 import type { SessionState } from "../../shared/protocol";
 import { normalizeDeviceName } from "../../shared/devices";
@@ -18,7 +18,7 @@ const read = (key: string) => { if (memory.has(key)) return memory.get(key)!; tr
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); memory.delete(key); } catch { memory.set(key, value); } };
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
 let name = couchApp?.deviceName ? null : validName(read(nameKey));
-// A deliberate browser switch carries only the public name, never the Sendspin key, and only a saved Couch may rename this browser.
+// A deliberate browser switch carries only the public name, never the device ID, and only a saved Couch may rename this browser.
 if (!couchApp && typeof location !== "undefined" && new URLSearchParams(location.hash.slice(1)).has("device-name")) {
   const fragment = new URLSearchParams(location.hash.slice(1));
   const carried = fromSavedCouch && validName(fragment.get("device-name"));
@@ -84,14 +84,12 @@ export const subscribeDeviceIdentity = (listener: () => void) => {
 export const useLocalDeviceName = () => useSyncExternalStore(subscribeDeviceIdentity, localDeviceName, () => null);
 export const useLocalDeviceSharing = () => useSyncExternalStore(subscribeDeviceIdentity, localDeviceSharing, () => defaultDeviceSharing);
 
-/**
- * This Device's one ID: the X25519 key the Sendspin JS SDK stores for this
- * origin, which is also its Sendspin client_id. Tabs on one origin share it.
- * The SDK generates it with @noble/curves, so plain-HTTP LAN pages have it too.
- */
+/** A stable, opaque device ID; Sendspin uses it through its public playerId option. */
 export function deviceId() {
   if (id) return id;
-  id = loadSendspinClientIdentity(storage).clientId;
+  const saved = read("couch.device-id");
+  id = saved && /^[\w-]{43}$/.test(saved) ? saved : btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  write("couch.device-id", id);
   return id;
 }
 

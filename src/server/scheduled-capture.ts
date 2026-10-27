@@ -1,102 +1,105 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { serverNowUs } from "@sonn-audio/node-sendspin";
-import { createCaptureClock, type CaptureAudioPacket } from "./capture-audio";
+import { spawn, type ChildProcess } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
+import { validateCapturePacket, type CaptureAudioPacket } from "./capture-audio";
 import { oggPackets, opusDuration } from "./audio-packets";
 
 export type Ffmpeg = () => Promise<string | { path: string; release: () => void }>;
-
 type Event = { type: "chunk"; wire: "opus" | "pcm"; at: number; duration: number; data: Buffer } | { type: "reset" } | { type: "error"; error: string };
-// Streaming IEEE-float WAV: normalized 48 kHz stereo, unknown RIFF/data/sample
-// lengths. Non-PCM has WAVEFORMATEX's empty extension and a fact sample count.
-function captureWaveHeader() {
-  const header = Buffer.alloc(58);
-  header.write("RIFF", 0); header.writeUInt32LE(0xffffffff, 4); header.write("WAVEfmt ", 8);
-  header.writeUInt32LE(18, 16); header.writeUInt16LE(3, 20); header.writeUInt16LE(2, 22);
-  header.writeUInt32LE(48000, 24); header.writeUInt32LE(384000, 28);
-  header.writeUInt16LE(8, 32); header.writeUInt16LE(32, 34); // cbSize at 36 is zero.
-  header.write("fact", 38); header.writeUInt32LE(4, 42); header.writeUInt32LE(0xffffffff, 46);
-  header.write("data", 50); header.writeUInt32LE(0xffffffff, 54);
-  return header;
-}
+
+/** Native/browser float PCM -> standard Sendspin formats. FFmpeg owns sample conversion and encoding. */
 export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) => void) {
-  const clock = createCaptureClock(), listeners = new Set<(event: Event) => void>();
-  let child: ChildProcessWithoutNullStreams | undefined, starting = false, closed = false, generation = 0;
-  let error: string | undefined, baseUs: number | undefined, offsetUs = 0, lateUs = 0;
-  let pending: { at: number; pcm: Float32Array }[] = [], queuedFrames = 0;
+  const listeners = new Set<(event: Event) => void>();
+  let child: ChildProcess | undefined, starting = false, closed = false, attempt = 0, error: string | undefined;
+  let format: CaptureAudioPacket | undefined, nextSample = 0, sequence = -1;
+  let pending: CaptureAudioPacket[] = [], queuedBytes = 0;
+  let anchors: { offset: number; at: number }[] = [];
   const emit = (event: Event) => { for (const listener of listeners) listener(event); };
   const fail = (message: string) => {
     if (closed || error) return;
-    error = message; child?.kill("SIGKILL"); child = undefined; pending = []; queuedFrames = 0;
+    error = message; child?.kill("SIGKILL"); child = undefined; pending = []; anchors = [];
     emit({ type: "error", error }); failed(error);
   };
-  const write = (block: { at: number; pcm: Float32Array }) => {
-    if (!child || error) return;
-    if (child.stdin.writableLength > 48_000 * 8 * .2) return fail("The audio encoder cannot keep up with capture.");
-    baseUs ??= block.at;
-    child.stdin.write(Buffer.from(block.pcm.buffer, block.pcm.byteOffset, block.pcm.byteLength));
-    const pcm = Buffer.alloc(block.pcm.length * 2);
-    for (let i = 0; i < block.pcm.length; i++) pcm.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(block.pcm[i]! * 32768))), i * 2);
-    emit({ type: "chunk", wire: "pcm", at: block.at, duration: block.pcm.length / 2 / 48_000 * 1e6, data: pcm });
+  // Map encoded sample offsets back to actual capture blocks. A nominal sample
+  // timeline alone drifts away from the input's hardware clock over a long share.
+  const capturedAt = (offset: number) => {
+    const anchor = anchors.findLast(block => block.offset <= offset) ?? anchors[0]!;
+    return Math.round(anchor.at + offset - anchor.offset);
+  };
+  const write = (packet: CaptureAudioPacket) => {
+    const stdin = child!.stdin!;
+    if (stdin.writableLength > packet.sampleRate * packet.channels * 4 * 2) return fail("The capture encoder cannot keep up with audio.");
+    stdin.write(Buffer.from(packet.pcm.buffer, packet.pcm.byteOffset, packet.pcm.byteLength));
   };
   const start = async () => {
     starting = true;
-    const attempt = generation;
-    let executable: { path: string; release: () => void } | undefined;
+    const generation = attempt, input = format!;
+    let lease: { path: string; release(): void } | undefined;
     try {
       const selected = await ffmpeg();
-      executable = typeof selected === "string" ? { path: selected, release() {} } : selected;
-      if (closed || error || attempt !== generation) return;
-      // Raw PCM's demuxer batches 4096 frames (85 ms). WAV's documented max_size
-      // bounds input packets to the existing 480-frame/10 ms Opus cadence.
-      // https://ffmpeg.org/ffmpeg-formats.html#wav
-      const process = child = spawn(executable.path, ["-hide_banner", "-loglevel", "error", "-nostdin", "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1", "-max_size", "3840", "-i", "pipe:0", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "128k", "-frame_duration", "10", "-f", "ogg", "-page_duration", "10000", "-flush_packets", "1", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
-      process.once("close", executable.release);
-      executable = undefined; // The child owns the lease until its process and pipes close.
-      offsetUs = lateUs = 0;
-      process.stdout.on("data", oggPackets(packet => {
+      lease = typeof selected === "string" ? { path: selected, release() {} } : selected;
+      if (closed || error || generation !== attempt) return;
+      const process = child = spawn(lease.path, ["-hide_banner", "-loglevel", "error", "-nostdin",
+        "-probesize", "32", "-analyzeduration", "0", "-f", "f32le", "-ar", String(input.sampleRate), "-ac", String(input.channels), "-i", "pipe:0",
+        "-filter_complex", "[0:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[opus][pcm]",
+        "-map", "[opus]", "-c:a", "libopus", "-f", "ogg", "-page_duration", "20000", "-flush_packets", "1", "pipe:1",
+        "-map", "[pcm]", "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"], { stdio: ["pipe", "pipe", "pipe", "pipe"] });
+      process.once("close", lease.release); lease = undefined;
+      let opusOffset = 0, pcmOffset = 0, diagnostic = "", pcm: Buffer = Buffer.alloc(0);
+      const output = (wire: "opus" | "pcm", offset: number, duration: number, data: Buffer) => {
+        if (child !== process) return;
+        emit({ type: "chunk", wire, at: capturedAt(offset), duration, data });
+        // Both outputs may be buffered independently; retain the block that covers
+        // the earlier cursor and the blocks after it, rather than a clock estimator.
+        const through = Math.min(opusOffset, pcmOffset);
+        while (anchors[1] && anchors[1].offset <= through) anchors.shift();
+      };
+      process.stdout!.on("data", oggPackets(packet => {
         if (child !== process) return;
         const magic = packet.toString("latin1", 0, 8);
-        if (magic === "OpusHead") { offsetUs = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
+        if (magic === "OpusHead") { opusOffset = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
         if (magic === "OpusTags") return;
-        if (baseUs === undefined) return fail("The capture encoder emitted audio before capture started.");
-        const duration = opusDuration(packet), at = Math.round(baseUs + offsetUs);
-        offsetUs += duration;
-        // Startup/probe delays and late data are not repaired by moving healthy listeners.
-        if (at <= serverNowUs()) {
-          lateUs += duration;
-          if (lateUs >= 500_000) fail("The audio encoder missed half a second of capture deadlines. Start sharing again.");
-          return;
-        }
-        lateUs = 0;
-        emit({ type: "chunk", wire: "opus", at, duration, data: packet });
+        const duration = opusDuration(packet);
+        output("opus", opusOffset, duration, packet); opusOffset += duration;
       }));
-      let diagnostic = "";
-      process.stderr.on("data", (data: Buffer) => { diagnostic = (diagnostic + data.toString()).slice(-1024); });
-      process.stdin.on("error", () => { if (child === process) fail("The capture encoder stopped accepting audio."); });
+      (process.stdio[3] as Readable).on("data", (bytes: Buffer) => {
+        if (child !== process) return;
+        pcm = Buffer.concat([pcm, bytes]);
+        const size = 3840; // 20 ms, within Sendspin's documented chunk bounds.
+        while (pcm.length >= size) {
+          output("pcm", pcmOffset, 20_000, pcm.subarray(0, size));
+          pcmOffset += 20_000; pcm = pcm.subarray(size);
+        }
+      });
+      process.stderr!.on("data", data => { diagnostic = (diagnostic + String(data)).slice(-1024); });
+      (process.stdin as Writable).on("error", () => { if (child === process) fail("The capture encoder stopped accepting audio."); });
       process.on("error", () => { if (child === process) fail("Couch could not start the capture encoder."); });
       process.on("close", () => { if (child === process) fail(`The capture encoder stopped. ${diagnostic.trim()}`); });
-      process.stdin.write(captureWaveHeader());
-      for (const block of pending) write(block);
-      pending = []; queuedFrames = 0;
-    } catch (reason) { if (attempt === generation) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
-    finally { executable?.release(); if (attempt === generation) starting = false; }
+      for (const packet of pending) write(packet);
+      pending = []; queuedBytes = 0;
+    } catch (reason) { if (generation === attempt) fail(reason instanceof Error ? reason.message : "Capture encoding failed."); }
+    finally { lease?.release(); if (generation === attempt) starting = false; }
   };
   return {
     write(packet: CaptureAudioPacket) {
       if (closed || error) return false;
       try {
-        const normalized = clock.push(packet, serverNowUs());
-        if (normalized.reset) {
-          generation++; const old = child; child = undefined; old?.kill("SIGKILL");
-          pending = []; queuedFrames = 0; starting = false; baseUs = undefined;
+        validateCapturePacket(packet);
+        if (format?.generation !== packet.generation) {
+          if (packet.sequence !== 0 || packet.samplePosition !== 0) throw new Error("A capture generation must start at sample zero.");
+          attempt++; const old = child; child = undefined; old?.kill("SIGKILL");
+          format = packet; sequence = -1; nextSample = 0; pending = []; anchors = []; queuedBytes = 0; starting = false;
           emit({ type: "reset" });
         }
-        const block = { at: normalized.atUs + 1_000_000, pcm: normalized.pcm };
-        if (block.pcm.length && child) write(block);
-        else if (block.pcm.length) {
-          queuedFrames += block.pcm.length / 2;
-          if (queuedFrames > 48_000 * 2) throw new Error("The capture encoder did not start within two seconds.");
-          pending.push(block);
+        if (packet.sampleRate !== format!.sampleRate || packet.channels !== format!.channels) throw new Error("Capture format changed without a new generation.");
+        if (packet.sequence <= sequence || packet.samplePosition !== nextSample) throw new Error("Capture samples are missing or out of order.");
+        sequence = packet.sequence; nextSample += packet.pcm.length / packet.channels;
+        anchors.push({ offset: packet.samplePosition / packet.sampleRate * 1e6, at: packet.capturedAtUs });
+        if (anchors.length > 4096) throw new Error("The capture encoder cannot keep up with audio.");
+        if (child) write(packet);
+        else {
+          queuedBytes += packet.pcm.byteLength;
+          if (queuedBytes > packet.sampleRate * packet.channels * 4 * 2) throw new Error("The capture encoder did not start.");
+          pending.push(packet);
           if (!starting) void start();
         }
         return !closed && !error;
@@ -108,6 +111,6 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
       return () => { listeners.delete(listener); };
     },
     error: () => error,
-    close() { closed = true; generation++; const old = child; child = undefined; old?.kill("SIGKILL"); pending = []; listeners.clear(); },
+    close() { closed = true; attempt++; const old = child; child = undefined; old?.kill("SIGKILL"); pending = []; anchors = []; listeners.clear(); },
   };
 }

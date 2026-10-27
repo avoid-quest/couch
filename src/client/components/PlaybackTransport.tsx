@@ -1,4 +1,3 @@
-import { liveListenerStatus } from "@/session/live-listener/status";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useRef, useState, type PointerEvent, type ReactNode } from "react";
@@ -141,13 +140,11 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
   const busy = useRef(false);
   const controls = playbackControls(state);
   const playback = state.playbacks?.find(item => item.id === state.playback);
-  const source = state.liveSources?.find(item => item.id === (playback?.liveSourceId ?? state.liveReception?.sourceId));
+  const source = state.liveSources?.find(item => item.id === playback?.liveSourceId);
   const receiving = controls.leave;
   const publisher = source?.deviceId === deviceId();
   const output = state.outputs?.find(output => output.deviceId === deviceId());
   const error = output?.error || state.player.error;
-  const local = state.liveReception?.sourceId === source?.id ? state.liveReception : undefined;
-  const listenerStatus = liveListenerStatus(output?.liveListener, local);
   if (!source || publisher) return null;
   const label = receiving ? "Leave" : failed ? "Try joining again" : "Join";
   return <div data-live-participation className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
@@ -158,7 +155,7 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
       catch { setFailed(true); }
       finally { busy.current = false; setPending(false); }
     }}>{pending ? receiving ? "Leaving…" : "Joining…" : label}</Button>
-    {(receiving || local?.status.state === "removed") && !error && <span role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{!connected ? "Reconnecting…" : listenerStatus || (state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…")}</span>}
+    {receiving && !error && <span role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{!connected ? "Reconnecting…" : (state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…")}</span>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {failed && <p role="alert" className="text-sm text-destructive">Couldn't {receiving ? "leave" : "join"}. Check this device's connection and audio output, then try again.</p>}
   </div>;

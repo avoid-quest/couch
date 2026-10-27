@@ -12,7 +12,7 @@ const until = async (check: () => boolean, message: string) => {
 async function fixture(t: any) {
   const key = Identity.generate(), clients: SendspinClient[] = [], states: any[] = [];
   const authorized = new Set([key.peerId]);
-  const facade = createSendspin({ identity: Identity.generate().privateB64u, name: 'Review fixture', admit: id => authorized.has(id),
+  const facade = createSendspin({ name: 'Review fixture', admit: id => authorized.has(id),
     changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });
   const server = createServer();
   server.on('upgrade', (req, socket, head) => facade.upgrade(req, socket as any, head));
@@ -22,8 +22,7 @@ async function fixture(t: any) {
   t.after(async () => { clearInterval(timer); group.close(); facade.close(); await Promise.all(clients.map(client => client.disconnect())); await new Promise<void>(resolve => server.close(() => resolve())); });
   async function receiver(format = true, identity = key) {
     authorized.add(identity.peerId);
-    const client = new SendspinClient(identity.peerId, 'Receiver', [Roles.PLAYER], { encryption: { identity },
-      playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, sample_rate: format ? 48000 : 44100, channels: 2, bit_depth: 16 }], buffer_capacity: 4096, supported_commands: [] } });
+    const client = new SendspinClient(identity.peerId, 'Receiver', [Roles.PLAYER], { playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, sample_rate: format ? 48000 : 44100, channels: 2, bit_depth: 16 }], buffer_capacity: 4096, supported_commands: [] } });
     clients.push(client);
     const observation = { starts: 0, frames: 0, clears: 0 };
     client.addStreamStartListener(() => observation.starts++);
@@ -43,10 +42,10 @@ async function fixture(t: any) {
   return { key, facade, group, receiver, feed, states };
 }
 
-// These are real worker/Noise/FFmpeg paths; only capture samples are synthetic.
+// These are real worker/plaintext Sendspin/FFmpeg paths; only capture samples are synthetic.
 for (const action of ['remove', 'close'] as const) test(`relaxed ${action} retires refusal before recovery and reassignment`, { timeout: 8000 }, async t => {
   const f = await fixture(t), refused = await f.receiver(false);
-  f.facade.registerSource('review-source', { intent: 'relaxed' });
+  f.facade.registerSource('review-source');
   f.group.members([{ deviceId: f.key.peerId, level: 100 }]);
   f.group.send({ type: 'load', playbackId: 'review-group', source: '', liveSourceId: 'review-source', live: true });
   f.feed();
@@ -77,14 +76,17 @@ test("old group retirement cannot clear the current relaxed failure", { timeout:
   const f = await fixture(t);
   await f.receiver(false);
   const member = { deviceId: f.key.peerId, level: 100 };
-  f.facade.registerSource('review-source', { intent: 'relaxed' });
+  f.facade.registerSource('review-source');
   f.group.members([member]);
   f.group.send({ type: 'load', playbackId: 'review-group', source: '', liveSourceId: 'review-source', live: true });
   f.feed();
   await until(() => !!f.facade.receiverError(f.key.peerId), 'old group has an unsupported format');
-  const replacement = f.facade.group('replacement', () => {}); t.after(() => replacement.close());
+  const replacementStates: any[] = [];
+  const replacement = f.facade.group('replacement', state => replacementStates.push(state)); t.after(() => replacement.close());
   replacement.members([member]);
   replacement.send({ type: 'load', playbackId: 'replacement', source: '', liveSourceId: 'review-source', live: true });
+  // Wait for the replacement's first source data, not merely its load command.
+  await until(() => replacementStates.some(state => state.status === 'playing'), 'replacement has source data');
   // Observe a replacement state before retiring its predecessor.
   const barrierStates: unknown[] = [], barrier = f.facade.group('barrier', state => barrierStates.push(state));
   t.after(() => barrier.close()); barrier.send({ type: 'stop' });

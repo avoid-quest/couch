@@ -106,42 +106,14 @@ Sheet on phones and the TV:
 
 ### Live audio
 
-A [Live audio](../live-audio.md) share's panel is its host's operator view.
-Who's watching becomes a summary line and one row per listener, and the
-stream's settings follow Mute audio input:
-
-```
-3 listening · Lead 100 ms, at its maximum · Full loop ≈ 107 ms
-Kitchen   Sets the lead · PCM · latency 97 ms · margin 4 ms · 0 gaps         ⋯
-Pixel     Behind by 20 ms · PCM · latency 140 ms · margin -20 ms · 3 gaps    ⋯
-Mute audio input                                       [on]
-Capture buffer                        [128 frames · 2.7 ms ▾]   native inputs
-Codec                                              [PCM ▾]
-Bitrate                                       [192 kbps ▾]      Opus
-Lead                                         [Automatic ▾]
-Maximum              ──────●──────                 100 ms      Automatic
-Minimum              ●────────────                   0 ms      Automatic
-Raise for the slowest                                  [on]     Automatic
-Fixed at             ───●─────────                  60 ms      Fixed
-Listener buffer                       [256 frames · 5.3 ms ▾]
-```
-
-- A row reads Core's measurements every second while the panel is open
-  (`GET /api/live/listeners`): its standing first (Preparing audio…,
-  Reconnecting…, Behind by N ms, Sets the lead), then the codec, the latency it
-  needs, its worst deadline margin and its gaps, with concealments when there
-  are any. Its ⋯ menu has **Remove**, which closes its stream with "Removed by
-  the host".
-- **Lead** is the shared lead now, and says when it's at Automatic's maximum.
-  **Full loop** is an estimate: the lead plus the input latency a native input
-  reports. A browser input has none to add.
-- A change applies at once to the running share and becomes the next share's
-  default. The lead ramps to it; a new codec or capture buffer starts the
-  listeners over, and their rows show them preparing again. Fixed starts at
-  the lead it replaces. **Listener buffer** is what each listener's browser
-  asks for, unless its device chooses its own in
-  [Advanced audio](settings.md#advanced-audio).
-- Only the host and paired admins can change them or remove a listener.
+A [Live audio](../live-audio.md) share lists listeners and a ⋯ **Remove** action.
+Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512 or 1024
+frames). **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
+option; Opus includes PCM fallback and Automatic leaves capability selection upstream. **Buffer (ms)** uses
+`minBufferMs` and `setMinBufferMs`, initially the SDK default of 250 ms. Settings
+apply to the running share and future shares; a codec change reconnects that
+player, while buffer updates reuse it. There are no custom lead controls,
+latency estimates, gap counters or listener polling.
 
 ## When it doesn't work
 
@@ -159,13 +131,10 @@ Listener buffer                       [256 frames · 5.3 ms ▾]
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
 
-Live audio uses [Couch's timestamped stream](../live-audio.md): 128-frame PCM
-or 2.5 ms Opus, with one shared lead and a default maximum of 100 ms. A device's own
-browser buffering overrides the host's listener buffer, on the next join. The listener's
-player and Where it plays show **Preparing audio…**, **Behind by N ms**,
-**Reconnecting…**, and **Removed by the host**. An insecure page shows the HTTPS
-address Live needs. Starting sound uses the existing **Tap to hear** prompt. Leaving releases this
-listener's audio, socket and wake lock; it never ends capture.
+Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
+**Tap to hear** unlocks sound. Leaving releases this listener without ending
+capture or interrupting other listeners. Actual source/output errors keep their
+reason; the SDK handles receiver timing and recovery.
 
 ## Not yet
 

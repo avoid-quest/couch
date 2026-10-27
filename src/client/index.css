@@ -390,7 +390,7 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
   .player-control-row span[data-player-last] { display: none; }
   .player-timeline [data-current-chapter] { display: none; }
 }
-/* Live's status can include an HTTPS address; wrap it within the screen beside the tools. */
+/* Wrap Live's connection and error status within the screen beside the tools. */
 .player-control-row:has(> [data-live-participation]) { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
 .player-control-row > [data-live-participation] { grid-column: 1; justify-self: start; gap: .5rem; }
 .player-control-row:has(> [data-live-participation]) > [data-player-tools] { grid-column: 2; }

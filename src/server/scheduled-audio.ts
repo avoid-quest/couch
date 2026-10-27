@@ -4,7 +4,7 @@ import type { IncomingMessage } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
 import type { WebSocket } from "ws";
-import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, SendspinCore, serverNowUs, type SendspinSession } from "@sonn-audio/node-sendspin";
+import { AudioCodec, PlaybackStateType, PlayerCommand, serverNowUs, SendspinSession, type SendspinSessionHooks } from "@sonn-audio/node-sendspin";
 import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
@@ -29,9 +29,9 @@ type Chunk = { offset: number; duration: number; data: Buffer };
 // start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
 // sent: released chunks that have not played yet, at their play times, so a speaker that joins late gets them too.
 // cursors: the play time of the last chunk each speaker got.
-type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; timelineOnly?: boolean; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
+type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; captureLead?: number; timelineOnly?: boolean; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
 
-const leadUs = 1_000_000; // A run's first chunk plays this long after Core has it.
+const leadUs = 1_000_000; // Buffered media lead; captures use the players' declared buffers.
 // Chunks go out this far ahead of their play time. Players schedule what they hold, so a page whose
 // timers stall or a radio that dozes (a locked Android phone) keeps playing instead of dropping late chunks.
 const sendUs = 8_000_000;
@@ -39,64 +39,59 @@ const aheadUs = 8_000_000; // Decoded audio that may wait in Core before FFmpeg 
 const pcmBytes = 19_200; // 100 ms of 48 kHz 16-bit stereo.
 const wireFormat = (wire: Wire) => ({ codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM, sampleRate: 48_000, channels: 2, bitDepth: 16 });
 // Outputs ask for Opus first (#644 Fan-out). Firefox's player offers only FLAC and PCM, so PCM is the second wire.
-const chosen = new WeakMap<SendspinSession, Wire | undefined>();
 const wireOf = (session: SendspinSession): Wire | undefined => {
-  if (chosen.has(session)) return chosen.get(session);
-  chosen.set(session, undefined);
-  for (const format of session.getPlayerSupportedFormats()) {
+  const current = session.getStreamFormat();
+  const formats = [{ codec: current.codec, sample_rate: current.sampleRate, channels: current.channels, bit_depth: current.bitDepth }, ...session.getPlayerSupportedFormats()];
+  for (const format of formats) {
     if (format.sample_rate !== 48_000 || format.channels !== 2) continue;
-    const wire = format.codec === AudioCodec.OPUS ? "opus" : format.codec === AudioCodec.PCM && format.bit_depth === 16 ? "pcm" : undefined;
-    if (wire) { chosen.set(session, wire); return wire; }
+    if (format.codec === AudioCodec.OPUS) return "opus";
+    if (format.codec === AudioCodec.PCM && format.bit_depth === 16) return "pcm";
   }
 };
 const tempo = (speed: number) => speed < 0.5 ? `atempo=0.5,atempo=${speed / 0.5}` : speed > 2 ? `atempo=2,atempo=${speed / 2}` : `atempo=${speed}`;
 
-export function createScheduledAudio(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
-  const core = new SendspinCore();
-  core.configureServer({ name: options.name });
+export function createScheduledAudio(options: { serverId?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
-  const readiness = new Map<string, string>();
   const sources = new Map<string, ReturnType<typeof createScheduledCapture>>();
   const sessions = new Map<string, SendspinSession>();
   const identified = new Set<SendspinSession>();
   const delays = new Map<string, number>();
-  const groups = new Set<{ joined: (clientId: string) => void }>();
+  const groups = new Set<{ joined: (clientId: string) => void; formatChanged: (session: SendspinSession) => void }>();
   const select = (clientId: string) => {
     const candidates = [...identified].filter(session => session.getClientId() === clientId);
     const next = candidates.at(-1), previous = sessions.get(clientId);
     if (next === previous) return false;
     if (next) sessions.set(clientId, next); else sessions.delete(clientId);
-    readiness.delete(clientId);
     return true;
   };
-  // Only this Couch's Devices get in: accept() admits the client_id, and the Noise handshake proves the client holds its key, its Device ID (#644 Model).
-  core.enableEncryption(Identity.fromPrivateB64u(options.identity), clientId => {
-    core.registerHooks(clientId, {
-      onIdentified: session => { identified.add(session); if (select(clientId)) { for (const group of groups) group.joined(clientId); options.changed(); } },
-      onPlayerState: (_session, update) => {
-        const selected = select(clientId);
-        if (sessions.get(clientId) !== _session) return;
-        const timing = JSON.stringify(_session.getPlayerTiming());
-        const timingChanged = readiness.get(clientId) !== timing;
-        if (timingChanged || selected) { readiness.set(clientId, timing); for (const group of groups) group.joined(clientId); }
-        const delayChanged = update.staticDelayMs !== undefined && delays.get(clientId) !== update.staticDelayMs;
-        if (delayChanged) {
-          delays.set(clientId, update.staticDelayMs!);
-          options.saveDelay?.(clientId, update.staticDelayMs!);
-        }
-        if (timingChanged || delayChanged) options.changed();
-      },
-      onDisconnected: session => { identified.delete(session); if (select(clientId)) { for (const group of groups) group.joined(clientId); options.changed(); } },
-    });
-    return SENTINEL_RESOLVED;
-  });
+  const hooks: SendspinSessionHooks = {
+    onFormatChanged: session => { for (const group of groups) group.formatChanged(session); },
+    onIdentified: session => { const clientId = session.getClientId()!; identified.add(session); if (select(clientId)) { for (const group of groups) group.joined(clientId); options.changed(); } },
+    onPlayerState: (_session, update) => {
+      const clientId = _session.getClientId()!;
+      if (sessions.get(clientId) !== _session) return;
+      const delayChanged = update.staticDelayMs !== undefined && delays.get(clientId) !== update.staticDelayMs;
+      if (delayChanged) {
+        delays.set(clientId, update.staticDelayMs!);
+        options.saveDelay?.(clientId, update.staticDelayMs!);
+      }
+      if (delayChanged) options.changed();
+    },
+    onDisconnected: session => { const clientId = session.getClientId()!; identified.delete(session); if (select(clientId)) { for (const group of groups) group.joined(clientId); options.changed(); } },
+  };
 
   // One Playback's speakers: its Sendspin group. It is the Playback's player while its outputs span Devices.
   function group(id: string, observe: (state: PlayerState) => void) {
     let members: Member[] = [];
     let screens: string[] = [];
+    // Sendspin servers supply timestamps. For capture use the group's largest
+    // declared buffer plus output delay, as the protocol specifies; no admission gate.
+    const captureLead = () => Math.max(0, ...members.map(member => {
+      const timing = sessions.get(member.deviceId)?.getPlayerTiming();
+      return ((timing?.minBufferMs ?? 0) + (timing?.staticDelayMs ?? 0)) * 1000;
+    }));
     let load: SyncedLoad | undefined;
     let input: ReturnType<typeof audioInput> | undefined;
     let run: Run | undefined;
@@ -180,24 +175,24 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const source = sources.get(current.liveSourceId)!;
-          const next: Run = { fixed: true, start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
+          const next: Run = { fixed: true, captureLead: captureLead(), start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 5) };
           run = next;
           next.dispose = source.subscribe(event => {
             if (run !== next) return;
             if (event.type === "error") { fail(event.error); return; }
             if (event.type === "reset") {
               next.queues = { opus: [], pcm: [] }; next.sent = { opus: [], pcm: [] };
-              next.cursors.clear(); next.base = undefined; next.released = 0;
+              next.cursors.clear(); next.base = undefined; next.released = 0; next.captureLead = captureLead();
               each(session => session.sendStreamClear()); return;
             }
             if (!next.wires.has(event.wire)) return;
+            next.captureLead = Math.max(next.captureLead ?? 0, captureLead());
+            const at = event.at + next.captureLead;
             if (next.base === undefined) {
-              next.base = event.at;
+              next.base = at;
               for (const member of members) begin(member.deviceId);
             }
-            if (event.at <= serverNowUs()) return; // Missed input is silence, never a new audience deadline.
-            next.queues[event.wire].push({ offset: event.at - next.base, duration: event.duration, data: event.data });
-            // Relaxed's one-second lead can retain >200 small PCM blocks already sent.
+            next.queues[event.wire].push({ offset: at - next.base, duration: event.duration, data: event.data });
             if (next.queues[event.wire].length > 200) fail("Captured audio exceeded its bounded queue.");
           });
           report(); return;
@@ -325,7 +320,6 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         while (sent[0] && sent[0].end <= now) sent.shift();
         while (list[0] && current.base + list[0].offset - sendUs <= now) {
           const chunk = list.shift()!, at = current.base + chunk.offset;
-          if (current.fixed && at <= now) continue;
           sent.push({ at, end: at + chunk.duration, data: chunk.data });
           current.released = Math.max(current.released, chunk.offset + chunk.duration);
         }
@@ -334,11 +328,6 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         each(session => {
           const from = current.cursors.get(session);
           if (wireOf(session) !== wire || from === undefined) return;
-          const socket = socketOf.get(session);
-          if (socket && socket.bufferedAmount > (current.fixed ? 64 * 1024 : 1024 * 1024)) {
-            receiverErrors.set(session.getClientId()!, { group: id, error: "This output's connection cannot keep up with audio." });
-            current.cursors.delete(session); socket.close(1013, "Audio output is too slow"); options.changed(); return;
-          }
           const capacity = session.getPlayerBufferCapacity() || 1024 * 1024;
           let held = 0;
           for (const chunk of sent) {
@@ -398,6 +387,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
         if (run && !load?.liveSourceId && load?.hasAudio !== false && !!before.length !== !!next.length) { void restart(); return; }
         if (state.playbackId) report();
       },
+      formatChanged(session: SendspinSession) { run?.cursors.delete(session); begin(session.getClientId()!); },
       joined(clientId: string) {
         if (screens.includes(clientId)) watch(clientId);
         const member = members.find(item => item.deviceId === clientId);
@@ -436,21 +426,33 @@ export function createScheduledAudio(options: { identity: string; name: string; 
   }
 
   return {
-    // wss://<Couch>/sendspin. Only Noise clients: a plaintext hello would skip the key check.
-    accept(socket: WebSocket, request: IncomingMessage) {
+    // The HTTP adapter authorizes the Couch token; the SDK handles plaintext Sendspin.
+    accept(socket: WebSocket, request: IncomingMessage, deviceId?: string) {
       sockets.add(socket);
-      socket.once("close", () => sockets.delete(socket));
+      let session: SendspinSession | undefined;
       const timer = setTimeout(() => socket.terminate(), 10_000);
-      socket.once("message", (data, binary) => {
-        clearTimeout(timer);
-        let init: { type?: string; payload?: { client_id?: unknown } } | undefined;
-        try { init = JSON.parse(String(data)); } catch { /* Refused below. */ }
-        if (binary || init?.type !== "client/init" || !options.admit(String(init.payload?.client_id), loopbackPeer(request.socket.remoteAddress ?? ""))) return void socket.terminate();
-        core.handleConnection(socket, request);
-        const session = core.getSessionBySocket(socket)!;
-        socketOf.set(session, socket);
-        socket.once("close", () => socketOf.delete(session));
-        session.handleText(String(data));
+      socket.once("close", () => {
+        clearTimeout(timer); sockets.delete(socket);
+        if (session) { socketOf.delete(session); session.destroy(); }
+      });
+      socket.on("error", () => socket.terminate());
+      socket.on("message", (data, binary) => {
+        if (socket.readyState !== 1) return;
+        try {
+          if (!session) {
+            const hello = !binary && JSON.parse(String(data));
+            const clientId = hello?.payload?.client_id;
+            if (hello?.type !== "client/hello" || typeof clientId !== "string" || deviceId !== undefined && clientId !== deviceId
+              || !options.admit(clientId, loopbackPeer(request.socket.remoteAddress ?? ""))) return socket.terminate();
+            clearTimeout(timer);
+            session = new SendspinSession(socket, request, undefined, undefined, hooks, null, { serverId: options.serverId ?? options.name, name: options.name });
+            socketOf.set(session, socket);
+          }
+          // Public dispatch APIs need an application exception boundary: an SDK
+          // parser/handler failure must retire this connection, never the worker.
+          if (binary) session.handleBinary(data as Buffer);
+          else session.handleText(String(data));
+        } catch { socket.terminate(); }
       });
     },
     group,
@@ -459,7 +461,7 @@ export function createScheduledAudio(options: { identity: string; name: string; 
     delay: (clientId: string) => delays.get(clientId) ?? options.savedDelay?.(clientId) ?? (sessions.has(clientId) ? 0 : undefined),
     connected: (clientId: string) => sessions.has(clientId),
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
-    drop(clientId: string) { for (const socket of sockets) if (core.getSessionBySocket(socket)?.getClientId() === clientId) socket.terminate(); },
+    drop(clientId: string) { for (const [session, socket] of socketOf) if (session.getClientId() === clientId) socket.terminate(); },
     status: () => ({ clients: [...sessions.keys()], delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]), sources: [...sources].map(([id, source]) => [id, source.error()]) }),
     registerSource(id: string) {
       if (sources.has(id)) return;

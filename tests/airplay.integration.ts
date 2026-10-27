@@ -161,9 +161,9 @@ async function fixture(t: TestContext, { executable = true, uxplay: replacement,
   const next = async (count: number) => { await until(() => fakes.length >= count); return fakes[count - 1]!; };
   return { hub, directory, databasePath, uxplay, fakes, next, request, airplay, player, connect, hear: async () => {
     const chunks: Buffer[] = [];
-    const speaker = new SendspinClient(receiverId, "AirPlay receiver", [Roles.PLAYER], { encryption: { identity: receiverKey }, playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [] } });
+    const speaker = new SendspinClient(receiverId, "AirPlay receiver", [Roles.PLAYER], { playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [] } });
     speakers.push(speaker); speaker.addAudioChunkListener((_time, bytes) => chunks.push(Buffer.from(bytes)));
-    await speaker.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3000 });
+    await speaker.connect(`${hub.origin.replace("http:", "ws:")}/api/audio/${receiverToken}/sendspin`, { timeoutMs: 3000 });
     return chunks;
   }, receiver: { id: receiverId, token: receiverToken }, controller: { id: controllerId, token: controllerToken }, hostToken };
 }

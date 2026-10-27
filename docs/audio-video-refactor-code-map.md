@@ -1,3 +1,7 @@
+> Historical record. The 2026-10-27 [upstream Sendspin baseline](live-audio.md)
+> supersedes custom Live-engine decisions, SDK patches, admission rules and
+> performance gates below. Those historical results do not measure this baseline.
+
 > **Historical scope, 24–25 October 2026.** The original document below is
 > preserved from `recovery/player-modes-20261026` (source `8147fc9`).
 > Retired module links now point to their replacements. Its “current”, baseline, workspace-transfer instructions and completion claims

@@ -161,7 +161,7 @@ setInterval(() => {}, 1000);
     },
     speaker: async (index: number, codec = AudioCodec.PCM, state?: Parameters<SendspinClient["sendPlayerState"]>[0]) => {
       const identity = identities[index]!, delays: number[] = [];
-      const speaker = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], { encryption: { identity: identity.key },
+      const speaker = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], {
         playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.SET_STATIC_DELAY] } });
       speakers.push(speaker);
       chunks[index] = 0;
@@ -173,7 +173,7 @@ setInterval(() => {}, 1000);
         speaker.setStaticDelayMs(delay);
         void speaker.sendPlayerState({ static_delay_ms: delay });
       });
-      await speaker.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+      await speaker.connect(`${hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`, { timeoutMs: 3_000 });
       if (state) await speaker.sendPlayerState(state);
       return delays;
     },

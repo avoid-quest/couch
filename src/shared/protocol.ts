@@ -1,3 +1,4 @@
+import type { LiveAudioSettings } from "./audio-settings";
 import type { RadioProgrammeDetails } from "./radio";
 import type { MediaCollection, MediaShape } from "./media";
 import type { ProviderId, VideoQuality } from "./providers";
@@ -50,22 +51,12 @@ export type PlayerState = {
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
 // buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
 // error: that buffered stream failed, so the live input doesn't reach it this item.
-// A Live audio listener as Core's stream measures it (docs/live-audio.md): latencyMs is the lead it needs,
-// marginMs its last worst deadline margin, gaps and concealments its reported counts since it connected.
-// behindMs is null while its reports are stale. State carries it as of the listener's last change of standing
-// (status, codec, behind by); the operator reads it live from GET /api/live/listeners.
-export type LiveListenerStatus = { codec: "pcm" | "opus"; status: "warming" | "ok" | "limiting" | "behind" | "stale" | "removed"; latencyMs: number | null; marginMs: number | null; gaps: number; concealments: number; behindMs: number | null };
-// The operator's Live audio stream: one codec per share, and the shared lead, automatic within its bounds or fixed at
-// leadMs. listenerBufferFrames: the AudioContext latency listeners ask for unless their own device overrides it.
-export type LiveAudioSettings = { codec: "pcm" | "opus"; opusBitrate: 128000 | 192000 | 320000; lead: "automatic" | "fixed"; leadMs: number; minLeadMs: number; maxLeadMs: number; raiseForSlowest: boolean; listenerBufferFrames: 128 | 256 | 512 | 1024 };
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string; liveListener?: LiveListenerStatus };
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
-// liveLeadMs: the shared lead Core's Live audio stream of its source holds its listeners to; liveListenerBufferFrames:
-// the operator's listener buffer, for listeners that keep their device's Automatic.
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean; intent?: "relaxed" | "live"; delivery?: "direct" | "scheduled" | "webrtc" | "mpv"; liveLeadMs?: number; liveListenerBufferFrames?: LiveAudioSettings["listenerBufferFrames"] };
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean; intent?: "relaxed" | "live"; delivery?: "direct" | "scheduled" | "webrtc" | "mpv" };
 export type PlaybackControls = { programme: boolean; queue: boolean; seek: boolean; speed: boolean; audioDelay: boolean; subtitleDelay: boolean; leave: boolean };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
@@ -182,8 +173,7 @@ export type ServerMessage =
   | { type: "player"; command: PlaybackCommand }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
-  | { type: "sendspin"; listen: boolean; watch: boolean }
-  | { type: "live"; sourceId: string | null; volume: number; removed?: string }
+  | { type: "sendspin"; listen: boolean; watch: boolean; live?: LiveAudioSettings }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 // A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the

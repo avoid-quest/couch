@@ -38,7 +38,7 @@
     "@fontsource-variable/inter-tight": "^5.3.0",
     "@fontsource-variable/mona-sans": "^5.3.0",
     "@iptv/playlist": "1.2.1",
-    "@sendspin/sendspin-js": "5.0.0",
+    "@sendspin/sendspin-js": "3.2.1",
     "@sonn-audio/node-sendspin": "0.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-hotkeys": "^0.12.0",
@@ -66,8 +66,6 @@
     "input-otp": "^1.5.0",
     "lucide-react": "1.41.0",
     "mpegts.js": "1.8.2",
-    "opus-decoder": "0.7.12",
-    "opusscript": "0.1.1",
     "qrcode.react": "4.2.0",
     "radix-ui": "1.6.7",
     "react": "19.2.8",
@@ -100,7 +98,6 @@
       "build/preload.cjs",
       "build/core.mjs",
       "build/audio-worker.mjs",
-      "build/opusscript_native_wasm.wasm",
       "dist/**",
       "packaging/icons/icon.png",
       "packaging/icons/icon.ico",
@@ -180,8 +177,5 @@
       "repo": "couch"
     },
     "afterPack": "./scripts/after-pack.ts"
-  },
-  "patchedDependencies": {
-    "@sonn-audio/node-sendspin@0.6.2": "patches/@sonn-audio%2Fnode-sendspin@0.6.2.patch"
   }
 }

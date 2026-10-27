@@ -238,14 +238,12 @@ pipe. Core owns that publication (`airplay`, never a Device): every receiver pla
 through relaxed scheduled PCM after rate normalization, without audio-only HLS. It ends when the
 sender leaves, and an admitted sender counts as playing for unattended updates.
 
-Core chooses Sendspin scheduled sound for related relaxed outputs across Devices,
-and timestamped Audio input and AirPlay even with one listener. Its shared implementation lives in `scheduled-audio.ts`,
+Core chooses Sendspin scheduled sound for Live audio, related relaxed outputs
+across Devices, and timestamped Audio input and AirPlay even with one listener. Its shared implementation lives in `scheduled-audio.ts`,
 with read-ahead URL decoding and fixed-deadline capture as separate sender policies.
 When a Playback has outputs on several Devices, its sound is Synced
-(`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
-`/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
-BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
-Sendspin key is their ID. The newest tab of every Device whose sound is in the mix
+(`src/server/sendspin.ts`). Core exposes `/sendspin` with unmodified Node SDK sessions, behind Couch token
+authorization. It binds a plaintext hello to the token's stable Device ID. The newest tab of every Device whose sound is in the mix
 plays it with the official player (`@sendspin/sendspin-js`,
 `src/client/session/sendspin.ts`), and a browser that needs a gesture shows "Tap to
 hear". One FFmpeg per Playback reads the audio-only rendition (YouTube's separate
@@ -261,9 +259,9 @@ local HTTP Origin, owner token, upload key and generation checked by Core.
 The native helper receives no credentials: Main brackets Core clock exchanges
 with the helper's clock, and keeps the PortAudio ADC-time estimate in each PCM
 packet. Bounded native/pipe/socket queues, sequence/sample validation and source
-clock normalization preserve timing or fail explicitly. Relaxed audio-only
-capture shares the scheduled path without MediaRecorder/AAC/HLS: a fixed one-second
-lead, 10 ms Opus and PCM compatibility. Core streams Live itself as described below.
+format conversion preserve the source mapping. Both Live and relaxed audio-only
+capture use Sendspin without MediaRecorder/AAC/HLS. FFmpeg supplies PCM/Opus;
+presentation timestamps retain measured capture-block times.
 
 Every Device showing the picture of a synced Playback fetches the video itself,
 resolved for its own engine and origin, and plays it muted. It connects to Sendspin
@@ -284,19 +282,22 @@ where their hardware introduces extra delay. Direct capture bypasses that buffer
 pipeline; each receiver's MediaStream keeps its own audio/video synchronization, but
 Direct receivers are not aligned with each other.
 
-Live audio sources use Core's own timestamped stream
-(`src/server/live-transport.ts`, which states its wire contract). The audio worker
-sends each listener 128-frame PCM or 2.5 ms Opus packets stamped with their capture
-time, and keeps one lead for all of them (`src/server/live-lead.ts`): it rises after
-two reports that need more, up to the operator's maximum, and lowers by measured
-cost; a listener beyond the maximum plays behind until the host removes it. A paired
-device connects to `/api/live/listen` while its sound plays that source; its socket
-stays on Core's main thread, which writes each packet the worker posts to every
-listener (`src/server/live-fanout.ts`), and Hub publishes each listener's status on its output. Hub sends a `live` instruction, and the browser session runs a Worker and
-AudioWorklet for that source, reporting stats over the same authorized socket.
-Live creates no Sendspin group; relaxed sources retain Sendspin. Core logs
-`live <source> send age pcm|opus max … mean …` every ten seconds and `live <source>
-lead <from> → <to> ms: <reason>` at each change.
+Live audio sources use the same Sendspin groups as other scheduled audio.
+The [capability contract](audio-video-use-cases.md) separates acquisition from
+delivery and control. The current Mac-only native helper remains wired to local
+desktop Live publication; this coupling is an implementation limit.
+The unmodified browser SDK 3.2.1 supports plaintext `client/hello` and an explicit
+opaque `playerId`; releases 4/5 require Noise, so they are not this baseline.
+Couch establishes an authenticated HttpOnly `/sendspin` cookie, binds the hello
+to that Device, and leaves reconnect, decoding, buffering and correction to the
+SDK. Node 0.6.2 public `SendspinSession` APIs handle each connection. Its dispatch
+has an application exception boundary instead of a local SDK patch. No encryption,
+receiver preparation extension, custom listener worklet, calibration, lead
+controller or custom fanout remains. Native capture is retained, with one FFmpeg
+process converting to PCM and Opus. The sender maps encoded offsets to measured
+capture blocks and uses player-declared buffers and output delays; SDK sessions
+need the application to supply encoded data and timestamps. See
+[Live audio](live-audio.md) for the adapter inventory and correctness checks.
 
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline

@@ -1,3 +1,7 @@
+> Historical record. The 2026-10-27 [upstream Sendspin baseline](live-audio.md)
+> supersedes custom Live-engine decisions, SDK patches, admission rules and
+> performance gates below. Those historical results do not measure this baseline.
+
 # Player modes integration validation
 
 This is a historical record of the Sendspin Live implementation. Its Live

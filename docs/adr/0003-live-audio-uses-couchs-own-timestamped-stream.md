@@ -1,8 +1,12 @@
 ---
-status: accepted
+status: superseded
 ---
 
-# Live audio uses Couch's own timestamped stream
+# Historical: Live audio used Couch's own timestamped stream
+
+> Superseded on 2026-10-27 by the owner's [upstream Sendspin baseline](../live-audio.md).
+> Claims below describe the discarded custom/patched implementations. They are
+> neither stock-Sendspin measurements nor requirements for future work.
 
 Live audio has to reach every listener within 100 ms of the input, in sync, on up to about 50 Wi-Fi devices, most of them phone browsers. Sendspin fed by Couch's native capture could not get there. On a wired listener its lowest clean lead was 75 ms, about 77 ms from the input to the listener. At 45 ms it refused listeners. Its browser player handles the socket and the audio scheduling on the page's main thread, so the page's own 25–38 ms stalls set that floor. Two linear-interpolation stages cost it 10–15 dB of signal-to-noise above 2 kHz. A prototype on the same rig, with the same capture and listener, held 31–37 ms. Moving the work off the main thread inside the SDK would mean writing a new transport inside a patch. [Live audio](../live-audio.md) has the measurements.
 

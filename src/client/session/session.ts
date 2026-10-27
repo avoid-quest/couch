@@ -5,10 +5,7 @@ import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage
 import type { ConnectionDetails, DeviceIdentity } from "../../shared/devices";
 import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
-import { connectRenderer, play, playsVp9, waitForTap } from "./renderer";
-import { createLiveListener, type ListenerState } from "./live-listener/listener";
-import { readOutputBufferPreference } from "../audio-settings";
-import { outputLatencyHint } from "../../shared/audio-settings";
+import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
 import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
 import type { DeviceSharing } from "../../shared/device-sharing";
@@ -20,8 +17,7 @@ import { replyDeadline } from "./reply-deadline";
 import type { LiveSelection, LiveVideoQuality } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
-export type LiveReception = { sourceId: string; status: ListenerState; httpsAddress: string };
-export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState; liveReception?: LiveReception };
+export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
@@ -43,7 +39,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<ClientSessionState | null>(null);
   const observation = useRef<SessionState | null>(null);
-  const [liveReception, setLiveReception] = useState<LiveReception>();
   const [clock, setClock] = useState<PlaybackClock>(emptyPlaybackClock);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const socket = useRef<WebSocket | null>(null);
@@ -79,7 +74,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
   useEffect(() => {
-    setLiveReception(undefined);
     setState(null);
     observation.current = null;
     setClock(emptyPlaybackClock);
@@ -100,8 +94,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
     let publishing = false;
-    let listener: ReturnType<typeof createLiveListener> | undefined, listeningSource: string | null = null;
-    const stopListener = (clear = true) => { const current = listener; listener = undefined; listeningSource = null; current?.stop(); if (clear) setLiveReception(undefined); };
     // The socket's URL carries the sharing it opened with; only a later change is sent.
     let advertised: DeviceSharing | undefined;
     const advertiseSharing = () => {
@@ -113,7 +105,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(publishing ? "playing" : ["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; publishing = false; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; publishing = false; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, credentials, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -124,7 +116,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
 
     const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { stopListener(); authenticate = false; ready.current = false; observation.current = null; setClock(emptyPlaybackClock); setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
+    const pairingRequired = () => { authenticate = false; ready.current = false; observation.current = null; setClock(emptyPlaybackClock); setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
       clearTimeout(retry);
@@ -275,30 +267,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         } else if (message.type === "livePeers" || message.type === "liveSignal" || message.type === "liveIceServers") {
           live.current?.receive(message);
         } else if (message.type === "sendspin") {
-          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
-        } else if (message.type === "live") {
-          if (message.removed) {
-            stopListener(false);
-            setLiveReception({ sourceId: message.removed, status: { state: "removed", reason: "Removed by the host" }, httpsAddress: "" });
-          } else if (!message.sourceId) {
-            stopListener(false);
-            setLiveReception(previous => previous?.status.state === "removed" ? previous : undefined);
-          } else {
-            if (listeningSource !== message.sourceId) {
-              stopListener();
-              const sourceId = listeningSource = message.sourceId;
-              const url = new URL("/api/live/listen", origin);
-              url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-              url.searchParams.set("token", credentials.token); url.searchParams.set("sourceId", sourceId);
-              const https = new URL(origin); https.protocol = "https:";
-              const current = listener = createLiveListener({ url: url.href, latencyHint: outputLatencyHint(readOutputBufferPreference(), observation.current?.playbacks?.find(playback => playback.liveSourceId === sourceId)?.liveListenerBufferFrames), waitForTap,
-                onState: status => { if (listener === current) setLiveReception({ sourceId, status, httpsAddress: https.origin }); },
-                onStats: () => {}, // The network Worker reports directly over its authorized Live socket.
-              });
-              current.volume(message.volume);
-              void current.start();
-            } else listener?.volume(message.volume);
-          }
+          listen(message.listen, message.watch, credentials, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch", message.live);
         } else if (message.type === "text") {
           void (textInput?.receive(message) ?? Promise.resolve(false)).then(ok => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok })); });
         } else if (message.type === "navigation") {
@@ -321,8 +290,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         socketCredentials.current = null;
         clearTimeout(handshake);
         stopPlayback();
-        if (event.code === 4001) stopListener();
-        else if (listeningSource) setLiveReception(previous => previous && { ...previous, status: { state: "reconnecting" } });
         ready.current = false;
         observation.current = null;
         setClock(emptyPlaybackClock);
@@ -355,7 +322,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       clearTimeout(retry);
       clearTimeout(handshake);
       rejectPending();
-      stopListener();
       stopPlayback();
       socket.current?.close();
       socket.current = null;
@@ -364,7 +330,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   }, [credentials?.origin, credentials?.token, credentials?.installationId, reconnectAttempt]);
 
   const current = sameCredentials(owner, credentials);
-  const snapshot = useMemo(() => current && state ? { ...state, ...liveReception ? { liveReception } : {} } : null, [current, state, liveReception]);
+  const snapshot = current ? state : null;
   const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
   const origin = credentials?.origin ?? location.origin;
   const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;

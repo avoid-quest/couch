@@ -131,12 +131,10 @@ entry points. The publisher owns capture and **Stop sharing**; selecting or
 joining its source grants reception only. Local device controls and a permitted
 remote output remain separate from programme authority. Relaxed sources keep
 collaborative controls.
-Each Live output row shows **Preparing audio…** while warming, **Behind by N ms**
-when late, and **Reconnecting…** when its reports go stale. The local row also
-reflects its connection immediately, **Removed by the host**, and **Live needs
-the HTTPS address:** with that address on an insecure page. The player uses the
-same status copy. Source and output failures retain their reasons. Live's shared
-lead replaces Sendspin's per-output Sync correction; relaxed outputs keep Sync.
+Source and output failures retain their reasons. Live sound uses Sendspin
+and applies the player's persisted output delay. Receiver scheduling,
+clock correction and reconnection belong to the upstream player; there are no
+custom warming, behind-by or measured-latency rows.
 
 ## Fader and Sync
 

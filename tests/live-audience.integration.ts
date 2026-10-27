@@ -7,7 +7,7 @@ import type { Action } from "../src/shared/protocol";
 
 const publication = { type: "publishLive", sourceId: "concert", uploadToken: "1".repeat(64), kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" } as const;
 
-test("Live rejects Sendspin output correction before changing device levels", { timeout: 15_000 }, async () => {
+test("Live output correction requires an active Sendspin output before changing device levels", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     const host = await f.connect(-1);
@@ -18,7 +18,7 @@ test("Live rejects Sendspin output correction before changing device levels", { 
     for (const delay of [0, 10, 100]) {
       const denied = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay, level: volume === 20 ? 30 : 20 });
       assert.equal(denied.ok, false);
-      assert.match(denied.error ?? "", /shared lead/);
+      assert.match(denied.error ?? "", /plays in sync/);
       assert.equal(f.receiver.state.devices!.find(device => device.id === f.receiver.id)!.volume, volume);
     }
   } finally { await f.close(); }
@@ -39,7 +39,7 @@ test("live audience can join privately, set its own zero level and leave; all pr
     assert.equal((await host.command(publication)).ok, true);
     assert.equal((await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id, picture: false, sound: true })).ok, true);
     await until(() => f.receiver.state.controls?.leave === true);
-    await until(() => f.receiver.messages.some(message => message.type === "live" && message.sourceId === "concert"));
+    await until(() => f.receiver.messages.some(message => message.type === "sendspin" && message.listen));
     assert.equal(f.receiver.state.playbacks?.find(item => item.id === f.receiver.state.playback)?.delivery, "scheduled", "one receiver stays scheduled");
     const playback = f.receiver.state.playback, playbackId = f.receiver.state.player.playbackId!, entryId = f.receiver.state.currentEntryId!;
     const queue = f.receiver.state.queue.map(entry => entry.id);
@@ -114,10 +114,10 @@ test("audience disconnect and newest-tab handover never pause healthy live recei
     await until(() => other.state.outputs?.length === 2);
     const playback = other.state.playback, status = other.state.player.status;
     const newer = await f.connect(1);
-    await until(() => newer.messages.some(message => message.type === "live" && message.sourceId === "concert"));
-    await until(() => { const instruction = f.receiver.messages.findLast(message => message.type === "live"); return instruction?.type === "live" && !instruction.sourceId; });
-    const oldInstruction = f.receiver.messages.findLast(message => message.type === "live");
-    assert.ok(oldInstruction?.type === "live" && !oldInstruction.sourceId, "only newest tab gets audio");
+    await until(() => newer.messages.some(message => message.type === "sendspin" && message.listen));
+    await until(() => { const instruction = f.receiver.messages.findLast(message => message.type === "sendspin"); return instruction?.type === "sendspin" && !instruction.listen; });
+    const oldInstruction = f.receiver.messages.findLast(message => message.type === "sendspin");
+    assert.ok(oldInstruction?.type === "sendspin" && !oldInstruction.listen, "only newest tab gets audio");
     f.receiver.socket.terminate();
     newer.socket.terminate();
     await until(() => other.state.devices?.find(device => device.id === newer.id)?.online === false);
@@ -130,7 +130,7 @@ test("audience disconnect and newest-tab handover never pause healthy live recei
     assert.equal(summary?.status, status, "zero online listeners does not pause the source clock");
     assert.equal(summary?.delivery, "scheduled");
     const rejoined = await f.connect(2);
-    await until(() => rejoined.messages.some(message => message.type === "live" && message.sourceId === "concert"));
+    await until(() => rejoined.messages.some(message => message.type === "sendspin" && message.listen));
     assert.equal(rejoined.state.playback, playback);
     assert.equal(rejoined.state.controls?.programme, false);
   } finally { await f.close(); }

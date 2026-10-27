@@ -263,24 +263,22 @@ async function liveListener(): Promise<ClientSessionState> {
   } as ClientSessionState;
 }
 
-test("live Where it plays presents warming as status and retains Leave and own volume", async () => {
+test("Live participation retains Leave and own volume while awaiting source audio", async () => {
   const state = await liveListener();
-  state.outputs![0]!.liveListener = { codec: "pcm", status: "warming", latencyMs: null, marginMs: null, gaps: 0, concealments: 0, behindMs: null };
   for (const status of ["loading", "playing"] as const) {
     state.player.status = status;
     const html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
     expect(html).toContain('role="status"');
-    expect(html).toContain("Preparing audio…");
+    expect(html).toContain(status === "playing" ? "Listening" : "Waiting for audio…");
     expect(html).toContain(">Leave</button>");
     expect(html).toContain('aria-label="Your volume"');
-    expect(html).not.toMatch(/role="alert"|text-destructive|leave and join again|Listening|Waiting for audio/);
+    expect(html).not.toMatch(/role="alert"|text-destructive|leave and join again/);
     expect(html).not.toMatch(/aria-label="(?:Pause|Stop|Next)"|where-it-plays-in-sync/);
   }
 });
 
-test("live Where it plays preserves source errors while warming", async () => {
+test("Live participation preserves source errors", async () => {
   const state = await liveListener();
-  state.outputs![0]!.liveListener = { codec: "pcm", status: "warming", latencyMs: null, marginMs: null, gaps: 0, concealments: 0, behindMs: null };
   state.outputs![0]!.error = "The live input stopped sending media.";
   const html = renderToStaticMarkup(<Mixer state={state} connected run={async () => true} />);
   expect(html).toContain('role="alert"');

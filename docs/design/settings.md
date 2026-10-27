@@ -181,16 +181,11 @@ pairing: [Shell](shell.md#first-run-and-pairing).
 
 ## Advanced audio
 
-Live audio's lead, codec and buffers are its host's, set in the share panel
-while it runs ([Share](share.md#live-audio)); the last values used are the next
-share's. Settings keeps no copy.
-
-This device → General offers **Live browser output buffering**: Automatic
-(the host's listener buffer), 128, 256, 512 or 1024 frames, with milliseconds
-at 48 kHz. This requests `AudioContext.latencyHint`; the browser chooses its
-actual buffer. The preference is saved locally and applies on the next Live
-join. Saving leaves active playback running, and a storage failure appears
-beside the control.
+Live audio's codec and Sendspin buffer are set in the share panel while it runs
+([Share](share.md#live-audio)); saved values apply to the next share. Automatic
+leaves codec selection upstream and the initial buffer is the SDK default,
+250 ms. There is no browser output-buffer override, custom lead controller or
+parallel copy in Settings.
 
 On the host desktop, **Live audio capture sample rate** offers Automatic,
 44.1 kHz and 48 kHz for the next Live share. Browser capture uses an ideal
@@ -207,6 +202,8 @@ separately, including the running readback when upload starts. Neither is labele
 period. The capture helper changes no system default device.
 
 Linux and Windows retain the isolated browser capture option. Native capture
-is currently Mac-only, and ordinary Audio input sharing retains browser capture.
+is currently Mac-only and wired through local desktop Live publication. Ordinary
+Audio input currently retains browser capture; that coupling is an implementation
+limit, not a product rule. See the [capability contract](../audio-video-use-cases.md).
 Audience reception uses browser APIs. Hardware capture/rate behavior, browser
 output fidelity, background phones and Bluetooth still need qualification.

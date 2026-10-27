@@ -23,7 +23,7 @@ async function until(predicate: () => boolean, label: string) {
 for (const silent of [false, true]) test(`live HLS ${silent ? "silence" : "sound"} starts near capture time on both speakers`, { timeout: 15_000, skip: !available && "Set COUCH_TEST_FFMPEG to run real-media latency coverage." }, async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-live-latency-"));
   const clients: SendspinClient[] = [], keys = [Identity.generate(), Identity.generate()];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Latency fixture", admit: id => keys.some(key => key.peerId === id), changed() {}, ffmpeg: async () => ffmpeg });
+  const core = createSendspin({ name: "Latency fixture", admit: id => keys.some(key => key.peerId === id), changed() {}, ffmpeg: async () => ffmpeg });
   const group = core.group("live-latency", () => {});
   let began = Date.now();
   const latest = () => 13 + Math.floor((Date.now() - began) / 1000);
@@ -57,8 +57,7 @@ for (const silent of [false, true]) test(`live HLS ${silent ? "silence" : "sound
   const origin = `http://127.0.0.1:${address.port}`;
   const receivers = await Promise.all(keys.map(async (key, index) => {
     const frames: { timestamp: number; received: number; capturePosition: number; data: Buffer }[] = [], metadata: SessionUpdateMetadata[] = [];
-    const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER, Roles.METADATA], { encryption: { identity: key },
-      playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, sample_rate: 48_000, channels: 2, bit_depth: 16 }], buffer_capacity: 2_000_000, supported_commands: [] } });
+    const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER, Roles.METADATA], { playerSupport: { supported_formats: [{ codec: AudioCodec.OPUS, sample_rate: 48_000, channels: 2, bit_depth: 16 }], buffer_capacity: 2_000_000, supported_commands: [] } });
     clients.push(client);
     client.addAudioChunkListener((timestamp, data) => frames.push({ timestamp, received: serverNowUs(), capturePosition: capturePosition(), data: Buffer.from(data) }));
     client.addMetadataListener(payload => { if (payload.metadata) metadata.push(payload.metadata); });
@@ -96,7 +95,7 @@ for (const kind of ["live-hls", "vod-hls", "radio-hls", "live-mpegts"] as const)
     response.setHeader("Content-Type", kind === "live-mpegts" ? "video/mp2t" : "application/vnd.apple.mpegurl");
     response.end(kind === "live-mpegts" ? Buffer.from([0x47, 0x40, 0x11, 0x10]) : "#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsegment.ts\n");
   });
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Options fixture", admit: () => false, changed() {}, ffmpeg: async () => executable });
+  const core = createSendspin({ name: "Options fixture", admit: () => false, changed() {}, ffmpeg: async () => executable });
   const group = core.group("options", () => {});
   group.members([{ deviceId: "speaker", level: 100 }]);
   t.after(async () => { group.close(); core.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });

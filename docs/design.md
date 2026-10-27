@@ -14,20 +14,24 @@ one serves, and **Where it plays**, a Playback's Devices with their picture and
 sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
+The [use-case and capability contract](audio-video-use-cases.md) separates source,
+acquisition environment and playback behavior. Native capture is currently
+Mac-only and wired to local desktop Live publication; that coupling is an
+implementation limit, not a product rule.
+
 Share offers **Audio input** for ordinary collaborative listening and **Live audio**
 on the Couch computer. A live audience gets **Join/Leave** and its own volume;
 programme and queue controls remain with ordinary playback. These choices use the
 same source discovery and player ([Share](design/share.md)).
 Mac Live publishers can select a native audio input; Share distinguishes its
-requested buffer from device readback. The share panel shows the host every Live
-listener and sets the stream's lead, codec and buffers ([Share](design/share.md#live-audio));
-[Advanced audio](design/settings.md#advanced-audio) keeps the capture rate and
-each device's own browser buffering. Audience playback stays in the browser.
-Live listeners play [Couch's timestamped stream](live-audio.md) in the browser.
-The existing **Tap to hear** prompt unlocks sound. The player and Where it plays show
-**Preparing audio…**, **Behind by N ms**, **Reconnecting…**, and **Removed by the
-host**. Insecure pages show that Live needs the HTTPS address, with that address.
-Actual failures keep their reason; normal warming and reconnect need no rejoin.
+requested buffer from device readback. The share panel lists listeners and offers
+Automatic/PCM/Opus plus the Sendspin buffer in milliseconds
+([Share](design/share.md#live-audio)). Advanced audio retains capture sample rate;
+native capture buffer and input mute remain in Share. Audience playback uses the
+unmodified [Sendspin browser player](live-audio.md), with its default clock,
+correction and recovery. The existing **Tap to hear** prompt unlocks sound.
+The player shows **Waiting for audio…**, **Listening**, reconnect status or the
+actual source/output error. No custom latency or gap measurements are displayed.
 
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset

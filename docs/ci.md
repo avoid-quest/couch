@@ -25,38 +25,9 @@ stale caches.
 Add a test only where a behaviour must stay locked, and run it with
 `bun test <path>`.
 
-The timestamped Live listener checks run separately:
-
-```sh
-bun test tests/live-worklet.test.ts
-bun test tests/live-listener-clock.test.ts
-bun test tests/live-transport-message.test.ts
-bun test tests/live-listener-network.test.ts
-bun test tests/live-listener-lifecycle.test.ts
-bun run build
-bun test tests/live-listener-bundle.test.ts
-```
-
-The bundle check requires the preceding build. These are offline/module checks;
-the Core/browser check runs the built app with synthetic capture ([Live audio](live-audio.md)):
-
-```sh
-bun build tests/live-listener.browser.ts --target=node --outfile=build/live-listener.browser.mjs
-COUCH_PLAYWRIGHT=/path/to/playwright/index.mjs COUCH_CHROME=/path/to/chrome \
-  node build/live-listener.browser.mjs
-```
-
-Use a headless Chrome and an external Playwright installation; no X display is
-used. It starts its own fixture Core process with a temporary `COUCH_DATA_DIR`
-and reserved `COUCH_PORT`, and stops only its own PIDs. A private LAN interface is
-required for the genuine insecure HTTP origin; set `COUCH_LAN_INTERFACE` if
-needed. The default run measures 125 seconds with a fixed 200 ms lead and Chrome's
-128-frame test output buffer, muted. `COUCH_LIVE_SECONDS` can shorten a smoke
-check, `COUCH_EVIDENCE` retains stats and results, and `COUCH_SCREENSHOTS` saves the
-seven states on phone/desktop in light/dark. Behind is induced with synthetic
-receiver reports after the measurement. A Core restart loses publications, so
-the fixture republishes and rejoins; the browser reconnects without reloading.
-This checks continuity and routing, not physical latency or device qualification.
+Live audio source correctness checks are listed in [Live audio](live-audio.md).
+They use unmodified Sendspin SDKs and synthetic PCM without hardware or performance
+gates. The former custom listener/worklet and fanout checks were removed.
 
 The update regressions run with `bun test tests/updates.test.ts` and
 `bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
@@ -85,11 +56,8 @@ The diagnosis integration (`tests/tv-diagnose.integration.ts`) runs
 secrets. Set `COUCH_EVIDENCE=<directory>` on the latency integrations to keep
 their measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
 
-The capture Close regression runs after the build with
-`bun tests/live-close.native.ts <evidence directory>`. It checks ordinary capture
-and Main-owned Live capture, the new listener instruction, packet delivery and
-share-ended close code. Use a display with a window manager: bare Xvfb cannot
-verify minimization. Keep its display, data directory and processes isolated.
+Native capture lifecycle checks are separate from the source-only Sendspin
+baseline. They require an explicitly authorized native/display run.
 
 Main's window lifecycle has a native check, after `bun run build`, on a display
 (`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence
@@ -156,10 +124,7 @@ Development on Mac: `bun scripts/build-live-audio.ts`; logs remain under
 hook loader, non-Mac no-op and combined update-feed checks. Capture lifecycle
 and authorization use `tests/native-live-authority.test.ts`,
 `tests/capture.test.ts` and Node `tests/native-capture.integration.ts`.
-Live audio's own stream runs with `bun test tests/live-lead.test.ts`,
-`bun test tests/live-lead-replay.test.ts` (recorded listener reports),
-`bun test tests/live-packet.test.ts`, Node `tests/live-transport.integration.ts` and
-Node `tests/live-fanout.integration.ts` (listener backlog and paired writes).
+Sendspin source checks are listed in [Live audio](live-audio.md).
 
 For the C queue test, use the verified extracted PortAudio source's `include`
 and `src/common` directories, compile `native/live-audio/capture-queue.test.c`

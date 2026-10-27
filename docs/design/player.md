@@ -28,12 +28,11 @@ For a publication started as **Live audio**, the transport is **Join/Leave** and
 the volume belongs to this device. Up next, shared pause/Stop/Next, seeking,
 speed and programme settings are absent. Leaving uses this receiver even while
 it is looking at another device's playback. The publisher ends capture with
-**Stop sharing** in the header. The existing **Tap to hear** prompt unlocks the listener's AudioContext. Its status is
-**Preparing audio…** while warming, **Listening** while playing, **Behind by N ms**
-when late, **Reconnecting…** during reconnect, or **Removed by the host** after
-removal. On an insecure page it says **Live needs the HTTPS address:** and shows
-that address, wrapping within the controls on phones. Volume and mute affect this listener without restarting its stream.
-Actual errors retain their reason without pausing healthy listeners. Ordinary sharing retains its existing controls.
+**Stop sharing** in the header. The existing **Tap to hear** prompt unlocks
+Sendspin playback. Status is **Waiting for audio…**, **Listening**, or
+**Reconnecting…** while the Couch control connection returns. Volume and mute
+use SDK commands without restarting the stream. Actual errors retain their
+reason. Ordinary sharing retains its existing controls.
 Keyboard shortcuts and Media Session actions follow the same Core-provided rights.
 
 Audio delay appears only for the separate-audio Direct adapter that applies it.

@@ -27,7 +27,7 @@ for (const { codec, capacity, lead, interval } of cases) test(`synced ${codec} g
   const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-ahead-"));
   const clients: SendspinClient[] = [];
   const keys = [Identity.generate(), Identity.generate()];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Ahead fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
+  const core = createSendspin({ name: "Ahead fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
   const group = core.group("ahead", () => {});
   const server = createServer((_request, response) => { response.setHeader("Content-Type", "audio/wav"); response.end(readFileSync(join(directory, "tone.wav"))); });
   const sockets = new WebSocketServer({ server, path: "/sendspin" });
@@ -48,7 +48,6 @@ for (const { codec, capacity, lead, interval } of cases) test(`synced ${codec} g
     const key = keys[index]!, frames: { timestamp: number; bytes: Buffer }[] = [];
     let most = 0;
     const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], {
-      encryption: { identity: key },
       playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: capacity, supported_commands: [] },
     });
     clients.push(client);
