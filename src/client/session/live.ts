@@ -1,4 +1,4 @@
-import type { AudioCaptureFormat } from "../../shared/capture";
+import type { AudioCaptureFormat, NativeBufferFrames } from "../../shared/capture";
 import { readCaptureRatePreference, readNativeInputBufferPreference } from "../audio-settings";
 import { captureSampleRate, liveCaptureConstraints, nativeInputBufferFrames } from "../../shared/audio-settings";
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
@@ -384,7 +384,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       current.quality = quality;
     },
     /** Restarts a native input with a new callback buffer; its listeners start a new session. */
-    async setCaptureBuffer(bufferFrames: 128 | 256 | 512 | 1024) {
+    async setCaptureBuffer(bufferFrames: NativeBufferFrames) {
       const current = publication;
       if (!current?.nativeAudioId) return;
       try {

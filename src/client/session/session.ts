@@ -388,7 +388,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     current: () => live.current?.sharing() ?? null,
     setQuality: (quality: LiveVideoQuality) => live.current?.setQuality(quality) ?? Promise.resolve(),
     setMuted: (muted: boolean) => live.current?.setMuted(muted),
-    setCaptureBuffer: (frames: 128 | 256 | 512 | 1024) => live.current?.setCaptureBuffer(frames) ?? Promise.resolve(),
+    setCaptureBuffer: (frames: import("../../shared/capture").NativeBufferFrames) => live.current?.setCaptureBuffer(frames) ?? Promise.resolve(),
     routes: () => live.current?.routes() ?? Promise.resolve({}),
   }), []);
 

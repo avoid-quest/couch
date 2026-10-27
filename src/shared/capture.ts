@@ -4,14 +4,17 @@ export type CaptureSource = { id: string; name: string; kind: "screen" | "window
 // `audio` asks for this computer's audio with a screen or window; system audio always includes it.
 export type CaptureSelection = { kind: CaptureKind; sourceId?: string; audio?: boolean };
 
+/** A native input's callback size. */
+export type NativeBufferFrames = 128 | 256 | 512 | 1024;
+
 /** One desktop Live microphone publication; stale publication/upload commands are harmless. */
 export type LiveAudioAction = { id: string } & (
-  | { op: "prepare"; deviceId: string; sampleRate?: 44100 | 48000; bufferFrames?: 128 | 256 | 512 | 1024 }
+  | { op: "prepare"; deviceId: string; sampleRate?: 44100 | 48000; bufferFrames?: NativeBufferFrames }
   | { op: "upload"; uploadId: string; url: string }
   | { op: "stop-upload"; uploadId: string }
   | { op: "mute"; muted: boolean }
   // Restarts a native input with a new callback buffer; its upload continues with a new sample generation.
-  | { op: "buffer"; bufferFrames: 128 | 256 | 512 | 1024 }
+  | { op: "buffer"; bufferFrames: NativeBufferFrames }
   | { op: "stop" }
 );
 export type LiveAudioError = { id: string; uploadId?: string; error: string };

@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
-import type { AudioCaptureFormat, LiveAudioAction, NativeAudioInput } from "../src/shared/capture";
+import type { AudioCaptureFormat, LiveAudioAction, NativeAudioInput, NativeBufferFrames } from "../src/shared/capture";
 import { prepareNativeCapture } from "./native-capture";
 
 export async function nativeAudioInputs(executable?: string): Promise<NativeAudioInput[]> {
@@ -17,7 +17,7 @@ export async function nativeAudioInputs(executable?: string): Promise<NativeAudi
 
 /** One already-authorized publication. Each upload gets a fresh sample generation. */
 export function nativeAudioInput(executable: string, input: NativeAudioInput,
-  sampleRate: 44100 | 48000, bufferFrames: 128 | 256 | 512 | 1024,
+  sampleRate: 44100 | 48000, bufferFrames: NativeBufferFrames,
   failed: (message: string, uploadId?: string) => void, signal: AbortSignal, setDeviceRate = false) {
   type Producer = Awaited<ReturnType<typeof prepareNativeCapture>>;
   const lifetime = new AbortController();

@@ -15,7 +15,7 @@ const captureErrors: Record<number, string> = {
 export type NativeCaptureFormat = {
   sampleRate: 44100 | 48000;
   channels: 2;
-  requestedCallbackFrames: 128 | 256 | 512 | 1024;
+  requestedCallbackFrames: import("../src/shared/capture").NativeBufferFrames;
   ownerHalBufferFrames: number;
   nominalRate: number;
   reportedInputLatencyMs: number;

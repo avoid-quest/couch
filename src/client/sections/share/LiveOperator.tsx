@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { LiveSharing } from "@/session/live";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { nativeInputBufferOptions, type LiveAudioSettings } from "../../../shared/audio-settings";
+import { nativeInputBufferFrames, nativeInputBufferOptions, type LiveAudioSettings, type NativeInputBufferPreference } from "../../../shared/audio-settings";
 import { viewerLine, type Viewer } from "./share";
 
 export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
@@ -63,7 +63,7 @@ export function LiveSettings({ sharing }: { sharing: LiveSharing }) {
       <label htmlFor="live-capture-buffer">Capture buffer</label>
       <Select value={String(native.requestedFrames)} disabled={restarting} onValueChange={value => {
         nativeBuffer.save(value); setRestarting(true);
-        void liveSharing.setCaptureBuffer(Number(value) as 128 | 256 | 512 | 1024).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
+        void liveSharing.setCaptureBuffer(nativeInputBufferFrames(value as NativeInputBufferPreference)).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
       }}><SelectTrigger id="live-capture-buffer" className="w-44"><SelectValue /></SelectTrigger>
         <SelectContent data-tv-local-only>{nativeInputBufferOptions.map(value => <SelectItem key={value} value={value}>{value} frames</SelectItem>)}</SelectContent>
       </Select>
