@@ -56,6 +56,29 @@ test("Windows supports an older Ethernet driver reporting an unspecified physica
   assert.equal(selectLan({ "Wi-Fi": [entry], Office: [entry] }, undefined, undefined, await lanInterfacePriorities()).name, "Office");
 });
 
+test("first enabling sharing discovers an Ethernet adapter added after startup, without probing on polls", async t => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let inventory = { "Wi-Fi": [entry] } as NodeJS.Dict<NetworkInterfaceInfo[]>;
+  let probes = 0;
+  const lan = createLanListener({
+    port: 4100, enabled: false, advertised: [], interfaces: () => inventory,
+    priorities: async () => { probes++; return new Map([["Wi-Fi", 1], ["Office", 0]]); },
+    start: async () => ({ stop: async () => {} }), changed() {},
+  });
+  t.after(() => lan.close());
+  await lan.refresh();
+  assert.equal(probes, 0);
+  inventory = { "Wi-Fi": [entry], Office: [{ ...entry, address: "192.168.1.21" }] };
+  await lan.setEnabled(true);
+  assert.equal(lan.network?.name, "Office");
+  assert.equal(probes, 1);
+  t.mock.timers.tick(60_000);
+  await lan.refresh();
+  await lan.setEnabled(false);
+  await lan.setEnabled(true);
+  assert.equal(probes, 1, "an established selection must not repeat adapter discovery");
+});
+
 test("macOS uses hardware ports so Wi-Fi on en0 follows USB Ethernet", async t => {
   platform(t, "darwin");
   command(t, "/usr/sbin/networksetup", "Hardware Port: Wi-Fi\nDevice: en0\nEthernet Address: 00:11:22:33:44:55\n\nHardware Port: USB 10/100/1000 LAN\nDevice: en7\nEthernet Address: 00:11:22:33:44:66\n\nHardware Port: Thunderbolt Bridge\nDevice: bridge0\n");
@@ -64,19 +87,20 @@ test("macOS uses hardware ports so Wi-Fi on en0 follows USB Ethernet", async t =
   assert.equal(selectLan({ bridge0: [entry], en0: [entry] }, undefined, undefined, priorities).name, "en0");
 });
 
-test("Linux uses sysfs to distinguish renamed wired, wireless and virtual adapters", async t => {
+for (const devtype of [true, false]) test(`Linux identifies wireless hardware ${devtype ? "with" : "without"} DEVTYPE=wlan`, async t => {
   platform(t, "linux");
-  t.mock.method(fs, "readdir", async () => ["radio", "office", "guest", "gone"]);
+  t.mock.method(fs, "readdir", async () => ["a-radio", "office", "guest", "gone"]);
   t.mock.method(fs, "realpath", async path => {
     const name = String(path).split("/").at(-1);
     if (name === "gone") throw new Error("adapter removed");
     return `/sys/devices/${name === "guest" ? "virtual" : "pci0000:00"}/net/${name}`;
   });
-  t.mock.method(fs, "readFile", async path => String(path).endsWith("/type") ? "1\n" : String(path).includes("/radio/") ? "DEVTYPE=wlan\nINTERFACE=radio\n" : "INTERFACE=office\n");
+  t.mock.method(fs, "readFile", async path => String(path).endsWith("/type") ? "1\n" : devtype && String(path).includes("/a-radio/") ? "DEVTYPE=wlan\nINTERFACE=a-radio\n" : "INTERFACE=office\n");
+  t.mock.method(fs, "access", async path => { if (!String(path).endsWith("/a-radio/wireless")) throw new Error("not wireless"); });
   syncBuiltinESMExports();
   const priorities = await lanInterfacePriorities();
-  assert.equal(selectLan({ radio: [entry], guest: [entry], office: [entry] }, undefined, undefined, priorities).name, "office");
-  assert.equal(selectLan({ guest: [entry], radio: [entry] }, undefined, undefined, priorities).name, "radio");
+  assert.equal(selectLan({ "a-radio": [entry], guest: [entry], office: [entry] }, undefined, undefined, priorities).name, "office");
+  assert.equal(selectLan({ guest: [entry], "a-radio": [entry] }, undefined, undefined, priorities).name, "a-radio");
   assert.equal(priorities.has("gone"), false);
 });
 

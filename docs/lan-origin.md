@@ -18,6 +18,8 @@ private IPv4 address. Multiple adapters or addresses do not require any setup:
 ties use the interface name, then the lowest IPv4 address. Windows and macOS
 hardware information and Linux sysfs identify adapter types; conventional names
 are the fallback if that information is unavailable.
+Hardware information is read when sharing is first enabled, including adapters
+connected while sharing was off, and cached for subsequent polling.
 
 Couch checks its private IPv4 selection every second, so sharing can start after
 DHCP assigns an address and recover when an address or occupied port returns.

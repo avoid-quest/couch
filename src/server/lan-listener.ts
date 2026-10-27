@@ -62,18 +62,19 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
   start: (network: LanNetwork, port: number) => Promise<T>;
   changed: (urls: string[], error: string | null, suggested: string) => void;
   interfaces?: typeof networkInterfaces;
-  priorities?: ReadonlyMap<string, number>;
+  priorities?: ReadonlyMap<string, number> | (() => Promise<ReadonlyMap<string, number>>);
   resolve?: typeof lookup;
 }) {
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
   let automaticNetwork: LanNetwork | null = null;
+  let priorities = typeof options.priorities === "function" ? undefined : options.priorities;
   let pending: Promise<void> = Promise.resolve(), changes = 0, enabledAt = 0;
   let last = "";
   const selectedNetwork = () => {
     const interfaces = (options.interfaces ?? networkInterfaces)();
     // Keep the automatic choice through outages; never migrate sharing to another LAN.
     if (automaticNetwork) return selectLan(interfaces, automaticNetwork.name, automaticNetwork.address);
-    return selectLan(interfaces, options.selected, options.address, options.priorities);
+    return selectLan(interfaces, options.selected, options.address, priorities);
   };
   const stopAll = async () => { await Promise.all([active?.stop(), port80?.stop()]); active = port80 = null; };
   const changed = (urls: string[], error: string | null, suggested = "") => {
@@ -85,6 +86,12 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
     const advertised = typeof options.advertised === "function" ? options.advertised() : options.advertised;
     const wantsPort80 = options.port !== 80 && advertised.some(value => { try { const url = new URL(value); return url.protocol === "http:" && !url.port; } catch { return false; } });
     try {
+      // Discover hardware when sharing first needs it, after any adapters added
+      // while sharing was off. Polls keep using the cached priorities.
+      if (enabled && !priorities && !options.selected && !options.address && typeof options.priorities === "function") {
+        priorities = await options.priorities();
+        if (closed) return;
+      }
       const next = selectedNetwork();
       const moved = JSON.stringify(next) !== JSON.stringify(network);
       if ((active || port80) && (!enabled || moved)) await stopAll();

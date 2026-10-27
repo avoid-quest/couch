@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir, realpath } from "node:fs/promises";
+import { access, readFile, readdir, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 
 // Ethernet, Wi-Fi, other, virtual. Use hardware information: interface names
@@ -24,8 +24,8 @@ export async function lanInterfacePriorities() {
       await Promise.all((await readdir("/sys/class/net")).map(async name => {
         try {
           const path = await realpath(`/sys/class/net/${name}`);
-          const [details, type] = await Promise.all([readFile(`${path}/uevent`, "utf8"), readFile(`${path}/type`, "utf8")]);
-          priorities.set(name, /^DEVTYPE=wlan$/m.test(details) ? 1 : path.includes("/virtual/") ? 3 : type.trim() === "1" && !/^DEVTYPE=/m.test(details) ? 0 : 2);
+          const [details, type, wireless] = await Promise.all([readFile(`${path}/uevent`, "utf8"), readFile(`${path}/type`, "utf8"), access(`${path}/wireless`).then(() => true, () => false)]);
+          priorities.set(name, wireless || /^DEVTYPE=wlan$/m.test(details) ? 1 : path.includes("/virtual/") ? 3 : type.trim() === "1" && !/^DEVTYPE=/m.test(details) ? 0 : 2);
         } catch { /* An adapter can disappear while it is being inspected. */ }
       }));
     }
