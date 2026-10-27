@@ -1514,9 +1514,8 @@ export async function createHub(options: HubOptions) {
   const appearance = createAppearance(store, value => { common.appearance = value; broadcast(); });
   const metadata = createProviderMetadata({ store, cachedItem: providers.cachedItem, onChange: () => invalidate("progress") });
   const catalog = createCatalog({ radio, viewing: { store, session: viewing, refreshHistory: metadata.refreshHistory } });
-  let pairWindow = Date.now(), pairSuccesses = 0, pairFailures = 0;
-  const failedPairing = new Map<string, number>();
-  const pairedIdentities = new Map<string, number>();
+  let pairWindow = Date.now();
+  let pairAttempts = 0;
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
@@ -1659,42 +1658,31 @@ export async function createHub(options: HubOptions) {
   const frontend = createFrontend();
   // Unauthenticated pairing: the LAN's own origins only, while sharing is on, with a JSON body.
   type Respond = (body: unknown, status?: number) => Response;
-  const publicPairing = (handle: (body: Record<string, unknown>, respond: Respond, request: Request) => Promise<Response>, throttled = (_request: Request) => false) => async (request: Request) => {
+  const publicPairing = (handle: (body: Record<string, unknown>, respond: Respond) => Promise<Response>, throttled = () => false) => async (request: Request) => {
     if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
     const respond: Respond = (body, status = 200) => cors(request, json(body, status));
     if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
-    if (throttled(request)) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
+    if (throttled()) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
     if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
     let body: unknown;
     try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
     if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
     if (typeof body !== "object" || body === null) return respond({ error: "Invalid pairing request." }, 400);
-    try { return await handle(body as Record<string, unknown>, respond, request); } catch (error) {
+    try { return await handle(body as Record<string, unknown>, respond); } catch (error) {
       return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500);
     }
   };
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
     "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance, tvModeChangeable: !!options.nativeTvMode && !tvAppliance, systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
-    "POST /api/pair": publicPairing(async (body, respond, request) => {
-      if (!("code" in body) || body.code !== pairingCode) {
-        pairFailures++;
-        failedPairing.set(requestPeer(request), (failedPairing.get(requestPeer(request)) ?? 0) + 1);
-        return respond({ error: "The pairing code is incorrect." }, 401);
-      }
-      const id = typeof body.id === "string" ? body.id : "";
-      if (pairSuccesses >= 128 || (pairedIdentities.get(id) ?? 0) >= 2) return respond({ error: "Many devices just paired. Try again in a minute." }, 429);
-      const token = store.pair(id, "name" in body ? body.name : undefined);
-      pairSuccesses++;
-      pairedIdentities.set(id, (pairedIdentities.get(id) ?? 0) + 1);
+    "POST /api/pair": publicPairing(async (body, respond) => {
+      if (!("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
+      const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
       invalidate("devices");
       return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
-    }, request => {
-      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairSuccesses = pairFailures = 0; failedPairing.clear(); pairedIdentities.clear(); }
-      const peer = requestPeer(request);
-      // Failed guesses have their own bounded budget; successful audience pairing
-      // does not consume it. A global ceiling also bounds spoofed/distributed peers.
-      return pairFailures >= 300 || (failedPairing.get(peer) ?? 0) >= 20;
+    }, () => {
+      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
+      return ++pairAttempts > 20;
     }),
     // A TV asks for a code to show, then polls with its secret until an admin approves it (tv-pairing.ts).
     "POST /api/pair/tv": publicPairing(async (body, respond) => respond(tvPairing.request(body.id, body.name))),

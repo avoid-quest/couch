@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Identity } from "@sonn-audio/node-sendspin";
 import WebSocket from "ws";
 import { liveFixture, until } from "./live-input.fixture";
 import type { Action } from "../src/shared/protocol";
@@ -163,16 +162,6 @@ test("capture failure reaches affected output errors while an independent progra
     assert.equal(other.state.currentEntryId, "independent");
     assert.deepEqual(other.state.queue.map(entry => entry.id), ["independent"]);
   } finally { upload?.terminate(); await f.close(); }
-});
-
-test("successful 50-person pairing burst has a separate budget from failed guesses", { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    const pair = (code: string, id = Identity.generate().peerId) => fetch(`${f.hub.origin}/api/pair`, { method: "POST", headers: { Origin: f.hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code, id, name: "Audience" }) });
-    for (let i = 0; i < 50; i++) assert.equal((await pair(f.hub.pairingCode)).status, 200);
-    for (let i = 0; i < 20; i++) assert.equal((await pair("wrong-code")).status, 401);
-    assert.equal((await pair("wrong-code")).status, 429, "guess budget stays bounded after successful joins");
-  } finally { await f.close(); }
 });
 
 test("an audio-only legacy join never requests permission for a disabled private screen", { timeout: 15_000 }, async () => {
