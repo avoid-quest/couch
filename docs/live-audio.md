@@ -28,6 +28,10 @@ A subsequent [six-minute recovery check](sendspin-stability-20261027.md) recover
 from both receivers' Leave/Join and an Android-only Wi-Fi interruption. Its two
 brief Android attenuations coincide with intrusive heap-observer reacquisition;
 they remain measurement-confounded rather than established spontaneous defects.
+A [passive six-minute confirmation](sendspin-passive-confirmation-20261027.md)
+without that inspection reproduced the latency and recovery, with no uncommanded
+attenuation of at least 20 ms. A smaller Android timing excursion remains recorded;
+lower-buffer latency estimates are documented separately from measured results.
 
 ## Upstream APIs and the plaintext version choice
 

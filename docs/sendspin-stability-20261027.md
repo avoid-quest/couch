@@ -92,3 +92,8 @@ Original recording SHA-256 is unchanged:
 
 This inspection used saved files and a small official-source read. It started
 no audio hardware, app, receiver, ADB, network disruption or additional agent.
+
+A later [passive confirmation](sendspin-passive-confirmation-20261027.md) repeated
+the six-minute defaults run without heap inspection. The earlier long
+attenuations did not recur; its findings and latency-reduction estimates are
+recorded separately.
