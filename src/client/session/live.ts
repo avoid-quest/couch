@@ -158,6 +158,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   window.addEventListener("pagehide", leaving);
   // Core's buffered stream (In sync, or a receiver that couldn't connect directly) reads one continuous
   // recording. Its failure ends only that upload; Core stops buffered delivery and receivers keep their peers.
+  // Timestamped audio reaches listeners only through its upload, so that share ends with it.
   const stopUpload = (current: Publication, error?: Error) => {
     const { recorder, socket } = current;
     current.recorder = current.socket = undefined;
@@ -167,6 +168,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     if (error && publication === current && current.uploadId) {
       options.send({ type: "liveUploadFailed", sourceId: current.source.id, uploadId: current.uploadId, error: error.message });
       options.failed(error);
+      if (current.source.audioDelivery === "pcm") void end().catch(() => {});
     }
   };
   const startUpload = (current: Publication) => {

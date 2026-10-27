@@ -12,7 +12,7 @@ const check = (source: string, couchApp = "undefined") => {
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
     globalThis.window = new EventTarget();
-    const windowClosed = new Set(), prepared = [];
+    const windowClosed = new Set(), prepared = [], liveActions = [], audioErrors = new Set();
     let preparing;
     const closeWindow = () => { for (const listener of [...windowClosed]) listener(); };
     mock.module("./src/client/session/native-context.ts", () => ({ couchApp: ${couchApp} }));
@@ -83,7 +83,7 @@ const check = (source: string, couchApp = "undefined") => {
     const { createLiveSession } = await import("./src/client/session/live.ts");
     const iceServers = [{ urls: "turn:relay.example:3478?transport=tcp", username: "test", credential: "test-only" }];
     let publishing;
-    const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); if (action.type === "publishLive" && publishing) await publishing.promise; }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {} });
+    const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); if (action.type === "publishLive" && publishing) await publishing.promise; }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {}, uploadUrl: (sourceId, key, uploadId) => \`wss://couch.example/api/live/upload?sourceId=\${sourceId}&key=\${key}&uploadId=\${uploadId}\` });
     const direct = (options = {}) => ({ type: "load", playbackId: "playing", source: "", liveSourceId: "source", livePeerId: "peer", liveOutput: { picture: true, sound: true, volume: 75 }, ...options });
     const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     const unreachable = () => signals.filter(message => message.type === "liveFailed");
@@ -485,6 +485,24 @@ test("late events from a failed upload cannot stop or report failure for an inte
   recorders[1].onerror();
   assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed").map(message => message.uploadId), ["attempt-1", "attempt-2"], "each failure echoes the Core request that created its recorder");
 `));
+
+test("a Live share ends, saying why, when its desktop capture upload fails", () => check(`
+  const source = await session.start({ kind: "microphone", intent: "live", audioDeviceId: "interface" });
+  assert.equal(source.audioDelivery, "pcm");
+  requestUpload(source.id);
+  await flush();
+  assert.deepEqual(liveActions.filter(action => action.op === "upload").map(action => action.uploadId), ["attempt-1"]);
+  for (const listener of audioErrors) listener({ id: source.id, uploadId: "attempt-1", error: "Couch fell behind reading the audio input." });
+  await flush();
+  assert.deepEqual(failures.map(error => error.message), ["Couch fell behind reading the audio input."]);
+  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed").map(message => message.uploadId), ["attempt-1"]);
+  assert.ok(commands.some(action => action.type === "endLive" && action.sourceId === source.id), "nothing else can reach its listeners");
+  assert.ok(liveActions.some(action => action.op === "stop" && action.id === source.id));
+`, `{
+  ...${desktop},
+  async liveAudio(action) { liveActions.push(action); return action.op === "prepare" ? { sampleRate: 48000, channels: 2 } : undefined; },
+  onLiveAudioError(listener) { audioErrors.add(listener); return () => audioErrors.delete(listener); },
+}`));
 
 test("a source Core removed reports failure and releases capture", () => check(`
   await session.start({ kind: "screen" });
