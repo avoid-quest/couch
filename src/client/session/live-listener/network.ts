@@ -28,7 +28,7 @@ const browserRuntime: NetworkRuntime = {
   timeout: (fn, ms) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
 };
 
-// Network and decoding run only in the Worker. The wire boundary stays here until Core wiring lands.
+// Network, decoding and interval stats share the authorized Live socket in the Worker.
 export class ListenerNetwork {
   readonly batches: AudioBatches;
   private socket: Socket | null = null;
@@ -102,6 +102,7 @@ export class ListenerNetwork {
       if (event.code === 4001) {
         this.stop(); this.emit({ type: "state", value: { state: "removed", reason: event.reason || "Removed by the host" } }); return;
       }
+      if (event.code === 1001) { this.stop(); this.emit({ type: "state", value: { state: "stopped" } }); return; }
       if (event.code === 4003 || event.code === 1008) { this.fail(event.reason || "Live audio is no longer authorized."); return; }
       this.emit({ type: "state", value: { state: "reconnecting" } });
       this.cancelRetry = this.runtime.timeout(() => this.connect(), Math.min(5000, 250 * 2 ** Math.min(this.retry++, 5)));

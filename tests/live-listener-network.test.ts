@@ -97,3 +97,9 @@ test("a decoder that opens after an epoch change is freed and never publishes ol
   expect(f.messages.filter(m => m.type === "audio")).toHaveLength(0);
   f.network.stop();
 });
+
+test("a share ending stops its socket and retries", () => {
+  const f = fixture(); f.network.start(); f.sockets[0]!.disconnect(1001, "Share ended");
+  expect(f.events.at(-1)).toEqual({ type: "state", value: { state: "stopped" } });
+  expect(f.timeouts).toHaveLength(0); expect(f.intervals).toHaveLength(0);
+});

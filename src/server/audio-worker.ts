@@ -19,10 +19,13 @@ const budgets = new Map<string, string>();
 // Live sources also stream their own timestamped packets to their listeners (live-transport.ts).
 const transports = new Map<string, ReturnType<typeof createLiveTransport>>();
 const writeSource = (sourceId: string, epoch: string, packet: CaptureAudioPacket) => {
+  const transport = transports.get(sourceId);
+  if (transport) {
+    try { transport.write(packet); return true; }
+    catch (error) { port.postMessage({ type: "sourceFailed", sourceId, epoch, error: error instanceof Error ? error.message : "Live audio failed." }); return false; }
+  }
   const written = engine.writeSource(sourceId, packet), value = engine.sourceBudgets(sourceId), key = JSON.stringify(value);
   if (budgets.get(sourceId) !== key) { budgets.set(sourceId, key); port.postMessage({ type: "budgets", sourceId, epoch, budgets: value }); }
-  try { if (written) transports.get(sourceId)?.write(packet); }
-  catch (error) { port.postMessage({ type: "sourceFailed", sourceId, epoch, error: error instanceof Error ? error.message : "Live audio failed." }); return false; }
   return written;
 };
 const engine = createScheduledAudio({ identity: workerData.identity, name: workerData.name, admit: () => true, changed: notify,
@@ -50,11 +53,11 @@ server.on("upgrade", (req, socket, head) => {
     ws.once("close", () => clearTimeout(timeout));
     if (url.searchParams.get("source")) {
       const sourceId = url.searchParams.get("source")!, epoch = url.searchParams.get("epoch");
-      if (!engine.hasSource(sourceId) || epoch !== registrations.get(sourceId) || uploads.has(sourceId)) return ws.close(1008, "Source upload is already owned or unavailable");
+      if (!registrations.has(sourceId) || epoch !== registrations.get(sourceId) || uploads.has(sourceId)) return ws.close(1008, "Source upload is already owned or unavailable");
       uploads.set(sourceId, ws);
       ws.once("close", () => { if (uploads.get(sourceId) === ws) uploads.delete(sourceId); });
       acceptCaptureUpload(ws, packet => uploads.get(sourceId) === ws && writeSource(sourceId, epoch!, packet), error => {
-        if (uploads.get(sourceId) === ws && epoch === registrations.get(sourceId) && engine.hasSource(sourceId)) port.postMessage({ type: "sourceFailed", sourceId, epoch, error });
+        if (uploads.get(sourceId) === ws && epoch === registrations.get(sourceId) && registrations.has(sourceId)) port.postMessage({ type: "sourceFailed", sourceId, epoch, error });
       });
       return;
     }
@@ -85,7 +88,8 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
     if (message.method === "close") { group.close(); groups.delete(message.group!); }
   } else if (message.type === "register") {
     const { sourceId, epoch } = message as { sourceId: string; epoch: string };
-    registrations.set(sourceId, epoch); engine.registerSource(sourceId, message.policy!);
+    registrations.set(sourceId, epoch);
+    if (!message.live) engine.registerSource(sourceId, message.policy!);
     if (message.live) transports.set(sourceId, createLiveTransport({ sourceId, epoch, settings: message.live,
       changed: status => port.postMessage({ type: "liveListeners", sourceId, epoch, status }), log: line => console.log(`${new Date().toISOString()} ${line}`) }));
   }

@@ -110,7 +110,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
 // sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; receiverPreparation: boolean; receiverId?: string; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; pendingCommands?: number; signaling?: { window: number; count: number; bytes: number; peers: Map<string, { descriptions: number; candidates: number }> } };
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; receiverPreparation: boolean; receiverId?: string; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; liveInstruction?: string; pendingCommands?: number; signaling?: { window: number; count: number; bytes: number; peers: Map<string, { descriptions: number; candidates: number }> } };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -375,10 +375,6 @@ export async function createHub(options: HubOptions) {
   const sharingSource = (deviceId: string) => `${nameOf(deviceId)} is sharing this source. Choose where it plays.`;
   const requireReceiver = (playback: Playback, deviceId: string) => {
     if (capturing(playback, deviceId)) throw new ControllerError(sharingSource(deviceId), 409);
-    if (intentOf(playback) === "live" && playback.outputs.some(output => output.deviceId === deviceId && output.sound) && newest(deviceId)) {
-      const admission = sendspin.receiverAdmission(deviceId, receiverId(playback, deviceId));
-      if (admission?.state === "failed") throw new ControllerError(admission.error, 409);
-    }
   };
   // Counted from Core's start time, so a request after a restart is never one a window already dismissed.
   let choices = Date.now();
@@ -442,7 +438,7 @@ export async function createHub(options: HubOptions) {
   const rendered = (playback: Playback, output: Output | undefined) => !output?.sound ? 0 : Math.round((systemAudio && output.deviceId === hostId() ? 100 : heard(output.deviceId)) * trimOf(playback, output.deviceId) / 100);
   const levelOf = (playback: Playback) => rendered(playback, playback.outputs[0]);
   const deliveryOf = (playback: Playback) => playbackDelivery({ source: live.source(sourceOf(playback) ?? ""), outputs: playback.outputs, inSync: playback.inSync, mpv: mpvPlayback === playback });
-  const grouped = (playback: Playback) => deliveryOf(playback) === "scheduled";
+  const grouped = (playback: Playback) => intentOf(playback) !== "live" && deliveryOf(playback) === "scheduled";
   // This item's relayed receivers stay failed until this playback retries, even if another restarts the shared stream.
   const bufferFailed = (playback: Playback) => playback.bufferFailure?.playbackId === stateOf(playback).player.playbackId ? playback.bufferFailure.error : undefined;
   // An online receiver of this playback couldn't connect directly.
@@ -587,6 +583,11 @@ export async function createHub(options: HubOptions) {
       if (command.type === "load") { syncMembers(playback); show(playback); }
       else if (command.type === "stop") hide(playback);
       else if (command.type === "addSubtitle" || command.type === "subtitleDelay" || command.type === "track" && command.kind === "subtitle") for (const tab of playback.screens.keys()) send(tab, playerCommand(command));
+      return;
+    }
+    if (intentOf(playback) === "live") {
+      if (playback.renderer) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
+      if (command.type === "load") playback.session.observe({ ...stateOf(playback).player, status: "playing", buffering: false });
       return;
     }
     if (mpvPlayback !== playback && !playback.renderer) {
@@ -753,6 +754,7 @@ export async function createHub(options: HubOptions) {
   // that couldn't connect directly plays Core's buffered stream instead, once it is ready; the others are unaffected.
   const routeLive = (playback: Playback, sourceId: string) => {
     const source = live.source(sourceId), { player } = stateOf(playback);
+    if (source?.intent === "live") return; // Volume is carried by the Live instruction, never a WebRTC route.
     const load = playback.loaded?.playbackId === player.playbackId && active(player.status) ? playback.loaded : undefined;
     const failed = !!bufferFailed(playback);
     const relaying = !!source && !!load && !failed && relays(playback, sourceId);
@@ -797,6 +799,11 @@ export async function createHub(options: HubOptions) {
       playback.held = own;
       release(playback, own.deviceId, false);
       if (!playback.outputs.length) choose(playback, own.deviceId);
+    }
+    if (source && source.intent === "live") {
+      if (playback.synced) { playback.synced.close(); playback.synced = undefined; hide(playback); }
+      if (playback.renderer) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
+      return;
     }
     if (grouped(playback)) {
       const fresh = !playback.synced;
@@ -1052,6 +1059,7 @@ export async function createHub(options: HubOptions) {
   // Where it plays (#644 Actions): a Device's sound joins or leaves, and a screen's tile toggles
   // its picture. A speaker's delay is its own (Sendspin).
   const requireOutputDelay = (playback: Playback, deviceId: string, delay: number) => {
+    if (intentOf(playback) === "live") throw new ControllerError("Live audio uses its shared lead; output correction is unavailable.", 409);
     // Direct playback has no shared clock to align with; the saved value waits for the next group.
     if (!syncing(playback, deviceId)) throw new ControllerError(`Sync adjustment applies while ${nameOf(deviceId)} plays in sync with other devices.`, 409);
     sendspin.validateDelay(deviceId, delay, intentOf(playback));
@@ -1224,7 +1232,7 @@ export async function createHub(options: HubOptions) {
   const flush = () => {
     if (!pending) return;
     pending = false;
-    for (const entry of liveListeners) if (!listens(entry.sourceId, entry.deviceId)) { liveListeners.delete(entry); entry.socket.close(1008, "This device no longer plays this live audio."); }
+    for (const entry of liveListeners) if (!listens(entry.sourceId, entry.deviceId)) { liveListeners.delete(entry); entry.socket.close(live.source(entry.sourceId) ? 1008 : 1001, live.source(entry.sourceId) ? "This device no longer plays this live audio." : "The share ended."); }
     if (closed || !sockets.size) return;
     for (const socket of sockets) {
       try { socket.data.authorize(); } catch { sockets.delete(socket); delete socket.data.receiverId; socket.close(4001, "Pair this device again."); continue; }
@@ -1237,18 +1245,20 @@ export async function createHub(options: HubOptions) {
     for (const source of live.sources()) if (liveStreams.has(source.id) && !buffered(source.id)) { liveStreams.end(source.id); queueMicrotask(() => live.upload(source.id, false)); }
     for (const playback of all()) {
       const sourceId = sourceOf(playback), relayed = (deviceId: string) => !!sourceId && !playback.synced && live.relayed(sourceId, deviceId);
-      const delivery = `${playback.synced ? "Synced" : "Direct"} on ${playback.outputs.map(output => `${nameOf(output.deviceId)}${relayed(output.deviceId) ? bufferFailed(playback) ? " (unavailable)" : " (buffered)" : ""}`).join(", ")}`;
+      const delivery = `${intentOf(playback) === "live" ? "Live" : playback.synced ? "Synced" : "Direct"} on ${playback.outputs.map(output => `${nameOf(output.deviceId)}${relayed(output.deviceId) ? bufferFailed(playback) ? " (unavailable)" : " (buffered)" : ""}`).join(", ")}`;
       if (playback.outputs.length && playback.delivery !== delivery) log(`playback ${playback.id.slice(0, 8)} ${delivery}`);
       playback.delivery = delivery;
     }
     // A speaker's delay is its player's own, as it last reported it; it applies while the speaker is in sync.
     const delays = (playback: Playback) => playback.outputs.map(output => {
-      const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback), token = receiverId(playback, output.deviceId);
-      const audioAdmission = playback.synced && intentOf(playback) === "live" && output.sound ? (newest(output.deviceId) ? sendspin.receiverAdmission(output.deviceId, token) : undefined) ?? (token ? { state: "preparing" as const } : undefined) : undefined;
+      const isLive = intentOf(playback) === "live", sourceId = sourceOf(playback);
+      const delay = isLive ? undefined : sendspin.delay(output.deviceId);
       const error = (systemAudio && output.deviceId === hostId() && output.sound ? common.systemAudio?.error : undefined)
-        || (playback.synced ? (sourceId ? sendspin.sourceError(sourceId) : undefined) || stateOf(playback).player.error || (audioAdmission?.state === "failed" ? audioAdmission.error : intentOf(playback) !== "live" ? sendspin.receiverError(output.deviceId) : undefined) : undefined);
-      const liveListener = sourceId && intentOf(playback) === "live" ? sendspin.liveListener(sourceId, output.deviceId) : undefined;
-      return { ...output, ...audioAdmission ? { audioAdmission } : {}, ...liveListener ? { liveListener } : {}, ...error ? { error } : {}, ...delay === undefined ? {} : { delay }, ...syncing(playback, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback) ? { error: bufferFailed(playback) } : { buffered: true } : {} };
+        || (isLive || playback.synced ? (sourceId ? sendspin.sourceError(sourceId) : undefined) || stateOf(playback).player.error || (!isLive ? sendspin.receiverError(output.deviceId) : undefined) : undefined);
+      const liveListener = sourceId && isLive && output.sound ? sendspin.liveListener(sourceId, output.deviceId) ?? {
+        codec: store.liveAudioSettings().codec, status: "warming" as const, latencyMs: null, marginMs: null, gaps: 0, concealments: 0, behindMs: null,
+      } : undefined;
+      return { ...output, ...liveListener ? { liveListener } : {}, ...error ? { error } : {}, ...delay === undefined ? {} : { delay }, ...syncing(playback, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback.synced && live.relayed(sourceId, output.deviceId) && !live.hosted(sourceId) ? bufferFailed(playback) ? { error: bufferFailed(playback) } : { buffered: true } : {} };
     });
     const outputViews = new Map(all().map(playback => [playback, delays(playback)]));
     const shared = {
@@ -1284,10 +1294,13 @@ export async function createHub(options: HubOptions) {
       if (sentStates.get(socket) !== message) { sentStates.set(socket, message); send(socket, message); }
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
-      const receiving = servedBy(deviceOf(socket)), intent = receiving && intentOf(receiving) === "live" ? "live" : "relaxed";
-      const token = listen && receiving ? receiverId(receiving, deviceOf(socket)) : undefined;
-      const instruction = `${listen}${watch}${intent}:${token ?? ""}`;
-      if (socket.data.sendspin !== instruction) { socket.data.sendspin = instruction; send(socket, JSON.stringify({ type: "sendspin", listen, watch, intent, ...token ? { receiverId: token } : {} } satisfies ServerMessage)); }
+      const receiving = servedBy(deviceOf(socket));
+      const instruction = `${listen}${watch}`;
+      if (socket.data.sendspin !== instruction) { socket.data.sendspin = instruction; send(socket, JSON.stringify({ type: "sendspin", listen, watch } satisfies ServerMessage)); }
+      const sourceId = receiving && intentOf(receiving) === "live" && newest(deviceOf(socket)) === socket && receiving.outputs.some(output => output.deviceId === deviceOf(socket) && output.sound) ? sourceOf(receiving)! : null;
+      const level = receiving ? rendered(receiving, receiving.outputs.find(output => output.deviceId === deviceOf(socket))) : 0;
+      const liveInstruction = JSON.stringify({ type: "live", sourceId, volume: level } satisfies ServerMessage);
+      if (socket.data.liveInstruction !== liveInstruction) { socket.data.liveInstruction = liveInstruction; send(socket, liveInstruction); }
     }
   };
   const publish = (playback: Playback, state: SessionState, clock?: PlaybackClock) => {
@@ -2194,6 +2207,7 @@ export async function createHub(options: HubOptions) {
             const sourceId = playback && intentOf(playback) === "live" ? sourceOf(playback) : undefined;
             if (!playback || !sourceId || !playback.outputs.some(output => output.deviceId === action.deviceId)) throw new ControllerError("That device no longer listens to this live audio.", 409);
             for (const entry of liveListeners) if (entry.sourceId === sourceId && entry.deviceId === action.deviceId) { liveListeners.delete(entry); entry.socket.close(4001, "Removed by the host."); }
+            for (const tab of sockets) if (deviceOf(tab) === action.deviceId) send(tab, JSON.stringify({ type: "live", sourceId: null, removed: sourceId, volume: 0 } satisfies ServerMessage));
             sendspin.dropListener(sourceId, action.deviceId);
             leave(playback, action.deviceId);
             reconcile(playback);

@@ -57,7 +57,7 @@ test("the emitted network worker opens bundled Opus WASM and transfers decoded a
   await decoded;
   expect(messages).not.toContainEqual(expect.objectContaining({ value: expect.objectContaining({ state: "failed" }) }));
   expect(audio).toHaveLength(1); expect(audio[0]!.frames).toBe(960);
-  expect(bundle("liveListener")).toContain("listener-worklet-");
-  expect(bundle("liveListener")).toContain("calibration-worker-");
-  expect(bundle("liveListener")).toContain("listener-worker-");
+  expect(bundle("PlaybackDevice")).toContain("listener-worklet-");
+  expect(bundle("PlaybackDevice")).toContain("calibration-worker-");
+  expect(bundle("PlaybackDevice")).toContain("listener-worker-");
 });

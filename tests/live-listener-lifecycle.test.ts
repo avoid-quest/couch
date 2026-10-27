@@ -34,6 +34,8 @@ function browser() {
     onstatechange: (() => void) | null = null;
     audioWorklet = { addModule: async () => {} };
     destination = {};
+    gain = { gain: { value: 1 }, connect() {}, disconnect() {} };
+    createGain() { return this.gain; }
     constructor() { contexts.push(this); }
     resume() { return Promise.resolve(); }
     close() { this.state = "closed"; return Promise.resolve(); }
@@ -44,7 +46,7 @@ function browser() {
     onprocessorerror: (() => void) | null = null;
     disconnected = false;
     constructor(_context: unknown, _name: string, options: unknown) { expect(options).toMatchObject({ processorOptions: { calibration: calibration() } }); nodes.push(this); }
-    connect() {}
+    connect(target: unknown) { return target; }
     disconnect() { this.disconnected = true; }
   }
   const document = Object.assign(new EventTarget(), { visibilityState: "visible" });

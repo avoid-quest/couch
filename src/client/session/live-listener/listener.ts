@@ -11,12 +11,13 @@ export interface ListenerOptions extends ListenerConnection {
   onState(state: ListenerState): void;
   onStats(stats: ListenerStats): void;
 }
-export interface LiveListener { start(): Promise<void>; stop(): void }
+export interface LiveListener { start(): Promise<void>; stop(): void; volume(value: number): void }
 
 // One instance owns one listening lifetime. Stop also cancels a pending startup.
 export function createLiveListener(options: ListenerOptions): LiveListener {
   let started = false, stopped = false;
   let context: AudioContext | undefined, node: AudioWorkletNode | undefined;
+  let gain: GainNode | undefined, volume = 1;
   let worker: Worker | undefined, calibrator: Worker | undefined;
   let channel: MessageChannel | undefined, timer: ReturnType<typeof setInterval> | undefined;
   let wake: WakeLockSentinel | undefined, requestingWake = false;
@@ -50,7 +51,7 @@ export function createLiveListener(options: ListenerOptions): LiveListener {
   const cleanup = () => {
     stopped = true;
     clearInterval(timer); cancelCalibration?.(); cancelCalibration = undefined;
-    calibrator?.terminate(); worker?.terminate(); node?.disconnect(); node?.port.close();
+    calibrator?.terminate(); worker?.terminate(); node?.disconnect(); gain?.disconnect(); node?.port.close();
     channel?.port1.close(); channel?.port2.close();
     document.removeEventListener("visibilitychange", visibility);
     options.waitForTap(null); releaseWake();
@@ -80,7 +81,7 @@ export function createLiveListener(options: ListenerOptions): LiveListener {
           if (stopped) return;
           if (data.type === "state") {
             connection = data.value;
-            if (connection.state === "removed" || connection.state === "failed") { cleanup(); state(connection); }
+            if (connection.state === "removed" || connection.state === "failed" || connection.state === "stopped") { cleanup(); state(connection); }
             else contextState();
           } else {
             if (data.stats.played > 0 && connection.state !== "reconnecting") connection = { state: "playing" };
@@ -125,9 +126,11 @@ export function createLiveListener(options: ListenerOptions): LiveListener {
         };
         node.port.postMessage({ type: "port", port: channel.port2 }, [channel.port2]);
         if (pendingOutput) { node.port.postMessage({ type: "clock", fit: pendingOutput }); pendingOutput = null; }
-        node.connect(context.destination);
+        gain = context.createGain(); gain.gain.value = volume;
+        node.connect(gain).connect(context.destination);
       } catch (error) { if (!stopped) fail(error instanceof Error ? error.message : "Live audio could not start."); }
     },
+    volume(value) { volume = Math.max(0, Math.min(100, value)) / 100; if (gain) gain.gain.value = volume; },
     stop() { if (!stopped) { cleanup(); state({ state: "stopped" }); } },
   };
 }

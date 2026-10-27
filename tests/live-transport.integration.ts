@@ -74,7 +74,7 @@ test("Core streams timestamped Live PCM to an authorized listener and keeps its 
   await waitFor(() => a.messages.some(message => message.type === "hello"));
   const hello = a.messages.find(message => message.type === "hello")!;
   assert.deepEqual({ ...hello, session: typeof hello.session }, { type: "hello", leadMs: 40, codec: 1, opusFrames: 120, session: "string" });
-  assert.ok(a.messages.some(message => message.type === "lead-status" && message.status === "warming"));
+  await waitFor(() => a.messages.some(message => message.type === "lead-status" && message.status === "warming"));
 
   // Pong on the host clock: the same clock the packets' capture times use.
   const hostNow = await hostClock(a);

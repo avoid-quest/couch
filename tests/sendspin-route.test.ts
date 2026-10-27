@@ -4,7 +4,7 @@ import { StateManager } from "../node_modules/@sendspin/sendspin-js/dist/core/st
 import { SendspinTimeFilter } from "../node_modules/@sendspin/sendspin-js/dist/core/time-filter.js";
 
 // Real SDK queues, with only platform/audio I/O and the network player boundary
-// replaced. Device events exercise the product listen() subscription/intent path.
+// replaced. Device events exercise the product listen() relaxed path.
 const media = new EventTarget();
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaDevices: media, userAgent: "fixture" } });
 Object.defineProperty(globalThis, "location", { configurable: true, value: { origin: "http://localhost" } });
@@ -18,7 +18,7 @@ Object.defineProperty(globalThis, "location", { configurable: true, value: { ori
   async close() { this.state = "closed"; }
 };
 const players: FixturePlayer[] = [];
-let preparation: (() => Promise<void>) | undefined;
+let unlock: (() => Promise<void>) | undefined;
 class FixturePlayer {
   state = new StateManager();
   scheduler = new AudioScheduler({ stateManager: this.state, timeFilter: new SendspinTimeFilter(), outputMode: "direct", useOutputLatencyCompensation: false });
@@ -27,7 +27,7 @@ class FixturePlayer {
   constructor(readonly options: Record<string, unknown>) { players.push(this); this.scheduler.initAudioContext(); }
   reports: { report: any; timing?: unknown }[] = [];
   async connect() { (this.options.onConnectionChange as (on: boolean) => void)?.(true); }
-  async unlock() {} async prepareAudio() { await preparation?.(); }
+  async unlock() { await unlock?.(); }
   setOutputPreparation(report: unknown, timing?: unknown) { this.reports.push({ report, timing }); }
   invalidateAudio() { this.scheduler.invalidateOutput(); }
   setRequiredLeadTimeMs() {} setMinBufferMs() {}
@@ -39,10 +39,10 @@ mock.module("../src/client/session/renderer", () => ({ waitForTap() {} }));
 mock.module("../src/client/session/device-id", () => ({ storage: null }));
 const { listen } = await import("../src/client/session/sendspin");
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-afterEach(async () => { preparation = undefined; listen(false, false, "Fixture"); await settle(); });
+afterEach(async () => { unlock = undefined; listen(false, false, "Fixture"); await settle(); });
 
 for (const seconds of [8, 1, .25]) test(`relaxed devicechange preserves ${seconds}s of queued audio including a fully buffered tail`, async () => {
-  listen(true, false, "Fixture", "relaxed"); await settle();
+  listen(true, false, "Fixture"); await settle();
   const player = players.at(-1)!;
   player.buffer(seconds);
   expect(player.scheduler.measureBufferedPlaybackRunwaySec()).toBe(seconds);
@@ -52,33 +52,13 @@ for (const seconds of [8, 1, .25]) test(`relaxed devicechange preserves ${second
   expect(player.options.requiredLeadTimeMs).toBeUndefined();
 });
 
-test("live devicechange withdraws its queue, and switching to relaxed removes that subscription", async () => {
-  listen(true, false, "Fixture", "live"); await settle();
-  const live = players.at(-1)!; live.buffer(1);
-  media.dispatchEvent(new Event("devicechange"));
-  expect(live.scheduler.measureBufferedPlaybackRunwaySec()).toBe(0);
-  listen(true, false, "Fixture", "relaxed"); await settle();
-  const relaxed = players.at(-1)!; relaxed.buffer(.25);
-  media.dispatchEvent(new Event("devicechange"));
-  expect(relaxed.scheduler.measureBufferedPlaybackRunwaySec()).toBe(.25);
-});
-
-for (const reject of [false, true]) test(`clock-only watch cancels hearing; old ${reject ? "failure" : "success"} cannot publish into new token`, async () => {
-  let finish!: () => void;
-  preparation = () => new Promise<void>((resolve, fail) => { finish = () => reject ? fail(new Error("retired")) : resolve(); });
-  listen(true, true, "Fixture", "live", "old-token"); await settle();
-  const old = players.at(-1)!; expect(old.reports.at(-1)!.report.state).toBe("preparing");
-  listen(false, true, "Fixture", "live"); await settle();
-  expect(players.at(-1)).toBe(old); // The clock connection stays alive.
-  const retiredCount = old.reports.length;
-  media.dispatchEvent(new Event("devicechange")); expect(old.reports.length).toBe(retiredCount);
-  preparation = undefined;
-  listen(true, true, "Fixture", "live", "new-token"); await settle();
-  const current = players.at(-1)!; expect(current).not.toBe(old);
-  expect(current.reports.at(-1)!.report).toMatchObject({ receiverId: "new-token", state: "ready" });
-  const currentCount = current.reports.length;
-  finish(); await settle();
-  expect(old.reports.length).toBe(retiredCount); expect(current.reports.length).toBe(currentCount);
-  listen(true, true, "Fixture", "live", "new-token"); await settle();
-  expect(players.at(-1)).toBe(current); expect(current.reports.length).toBe(currentCount);
+test("clock-only watch keeps the connection and returning to sound reuses it", async () => {
+  listen(true, true, "Fixture"); await settle();
+  const player = players.at(-1)!;
+  listen(false, true, "Fixture"); await settle();
+  expect(players.at(-1)).toBe(player);
+  listen(true, true, "Fixture"); await settle();
+  expect(players.at(-1)).toBe(player);
+  expect(player.options.outputMode).toBeUndefined();
+  expect(player.reports).toEqual([]);
 });

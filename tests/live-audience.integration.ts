@@ -1,40 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AudioCodec, Identity } from "@sonn-audio/node-sendspin";
+import { Identity } from "@sonn-audio/node-sendspin";
 import WebSocket from "ws";
 import { liveFixture, until } from "./live-input.fixture";
 import type { Action } from "../src/shared/protocol";
 
 const publication = { type: "publishLive", sourceId: "concert", uploadToken: "1".repeat(64), kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" } as const;
 
-test("live output correction rejects before changing device levels and zero clears a stale correction", { timeout: 15_000 }, async () => {
+test("Live rejects Sendspin output correction before changing device levels", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     const host = await f.connect(-1);
-    // PCM is measured without an encoder; the fixture's FFmpeg produces no Opus.
-    const corrections = await f.speaker(1, AudioCodec.PCM, { required_lead_time_ms: 25, min_buffer_ms: 25, static_delay_ms: 100 });
-    assert.equal((await host.command(publication)).ok, true);
-    assert.equal((await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id, picture: false, sound: true })).ok, true);
-    const capture = await f.streamCapture(host, "concert", -1);
-    await until(() => f.receiver.state.outputs?.[0]?.delay === 100);
+    await host.command(publication);
+    await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id });
+    await until(() => f.receiver.state.controls?.leave === true);
     const volume = f.receiver.state.devices!.find(device => device.id === f.receiver.id)!.volume;
-    const denied = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 100, level: volume === 20 ? 30 : 20 });
-    assert.equal(denied.ok, false);
-    assert.match(denied.error ?? "", /live audio deadline/i);
-    assert.equal(f.receiver.state.devices!.find(device => device.id === f.receiver.id)!.volume, volume, "refused correction cannot persist a bundled level change");
-    assert.equal(f.receiver.state.outputs?.[0]?.delay, 100);
-    assert.deepEqual(corrections, [], "refused correction never reaches the receiver");
-    const reset = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 0 });
-    assert.equal(reset.ok, true, reset.error);
-    await until(() => f.receiver.state.outputs?.[0]?.delay === 0 && !f.receiver.state.outputs[0].error);
-    assert.deepEqual(corrections, [0], "zero can recover a receiver outside the current deadline");
-    // A supported correction is accepted once Core has measured the uploaded source's headroom.
-    let accepted = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 10 });
-    for (const deadline = Date.now() + 3000; !accepted.ok && Date.now() < deadline; accepted = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay: 10 })) await new Promise(resolve => setTimeout(resolve, 50));
-    assert.equal(accepted.ok, true, accepted.error);
-    await until(() => f.receiver.state.outputs?.[0]?.delay === 10);
-    assert.deepEqual(corrections, [0, 10], "supported correction remains usable");
-    capture.stop();
+    for (const delay of [0, 10, 100]) {
+      const denied = await f.receiver.command({ type: "output", deviceId: f.receiver.id, delay, level: volume === 20 ? 30 : 20 });
+      assert.equal(denied.ok, false);
+      assert.match(denied.error ?? "", /shared lead/);
+      assert.equal(f.receiver.state.devices!.find(device => device.id === f.receiver.id)!.volume, volume);
+    }
   } finally { await f.close(); }
 });
 
@@ -53,7 +39,7 @@ test("live audience can join privately, set its own zero level and leave; all pr
     assert.equal((await host.command(publication)).ok, true);
     assert.equal((await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id, picture: false, sound: true })).ok, true);
     await until(() => f.receiver.state.controls?.leave === true);
-    await until(() => f.receiver.messages.some(message => message.type === "sendspin" && message.listen && "intent" in message && message.intent === "live"));
+    await until(() => f.receiver.messages.some(message => message.type === "live" && message.sourceId === "concert"));
     assert.equal(f.receiver.state.playbacks?.find(item => item.id === f.receiver.state.playback)?.delivery, "scheduled", "one receiver stays scheduled");
     const playback = f.receiver.state.playback, playbackId = f.receiver.state.player.playbackId!, entryId = f.receiver.state.currentEntryId!;
     const queue = f.receiver.state.queue.map(entry => entry.id);
@@ -128,10 +114,10 @@ test("audience disconnect and newest-tab handover never pause healthy live recei
     await until(() => other.state.outputs?.length === 2);
     const playback = other.state.playback, status = other.state.player.status;
     const newer = await f.connect(1);
-    await until(() => newer.messages.some(message => message.type === "sendspin" && message.listen));
-    await until(() => { const instruction = f.receiver.messages.findLast(message => message.type === "sendspin"); return instruction?.type === "sendspin" && !instruction.listen; });
-    const oldInstruction = f.receiver.messages.findLast(message => message.type === "sendspin");
-    assert.ok(oldInstruction?.type === "sendspin" && !oldInstruction.listen, "only newest tab gets audio");
+    await until(() => newer.messages.some(message => message.type === "live" && message.sourceId === "concert"));
+    await until(() => { const instruction = f.receiver.messages.findLast(message => message.type === "live"); return instruction?.type === "live" && !instruction.sourceId; });
+    const oldInstruction = f.receiver.messages.findLast(message => message.type === "live");
+    assert.ok(oldInstruction?.type === "live" && !oldInstruction.sourceId, "only newest tab gets audio");
     f.receiver.socket.terminate();
     newer.socket.terminate();
     await until(() => other.state.devices?.find(device => device.id === newer.id)?.online === false);
@@ -144,7 +130,7 @@ test("audience disconnect and newest-tab handover never pause healthy live recei
     assert.equal(summary?.status, status, "zero online listeners does not pause the source clock");
     assert.equal(summary?.delivery, "scheduled");
     const rejoined = await f.connect(2);
-    await until(() => rejoined.messages.some(message => message.type === "sendspin" && message.listen));
+    await until(() => rejoined.messages.some(message => message.type === "live" && message.sourceId === "concert"));
     assert.equal(rejoined.state.playback, playback);
     assert.equal(rejoined.state.controls?.programme, false);
   } finally { await f.close(); }
