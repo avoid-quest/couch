@@ -2,6 +2,16 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 
+// capture-queue.h's CaptureError codes, in the words a sharer sees. The log keeps the helper's raw event.
+const captureErrors: Record<number, string> = {
+  1: "The audio input dropped samples.",
+  2: "The audio input stopped delivering sound.",
+  3: "The audio input changed its format or device.",
+  4: "The audio input's clock jumped.",
+  5: "Couch fell behind reading the audio input.",
+  6: "The audio input delivered invalid samples.",
+};
+
 export type NativeCaptureFormat = {
   sampleRate: 44100 | 48000;
   channels: 2;
@@ -57,8 +67,8 @@ export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams
   child.stdin.on("error", () => fail(new Error("The native capture control pipe closed.")));
   child.stdout.on("error", () => fail(new Error("The native capture audio pipe closed.")));
   child.stderr.on("error", () => fail(new Error("The native capture status pipe closed.")));
-  child.once("close", (code, signal) => {
-    if (!stopped) fail(new Error(`Native capture ended (${signal ?? code ?? "unknown"}).`));
+  child.once("close", () => {
+    if (!stopped) fail(new Error("The audio input stopped."));
     clearTimeout(stopTimer); clearTimeout(killTimer);
   });
   const ready = wait("ready", 5000);
@@ -78,7 +88,7 @@ export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams
         const event = JSON.parse(line) as Record<string, unknown>;
         observed(event);
         if (stopped) continue;
-        if (event.event === "end") throw new Error(`Native capture ended: ${String(event.reason)} (capture error ${String(event.captureError)}).`);
+        if (event.event === "end") throw new Error(event.reason === "capture" && captureErrors[Number(event.captureError)] || "The audio input stopped.");
         const key = event.event === "clock" ? `clock:${event.nonce}` : String(event.event);
         const entry = waiters.get(key);
         if (!entry) throw new Error("Unexpected native capture response.");

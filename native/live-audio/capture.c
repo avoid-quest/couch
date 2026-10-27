@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
 #include "pa_mac_core.h"
@@ -194,6 +195,8 @@ int main(int argc, char **argv) {
         property(native, kAudioDevicePropertyNominalSampleRate, sizeof(nominal), &nominal) || nominal != rate ||
         property(native, kAudioDevicePropertyBufferFrameSize, sizeof(bufferFrames), &bufferFrames)) goto done;
     if (!nonblocking(STDIN_FILENO) || !nonblocking(STDOUT_FILENO)) { failure = "pipe"; goto done; }
+    // Node gives stdout a Unix socketpair: about 2.6 s of 128-frame packets ride out a busy Main.
+    (void)setsockopt(STDOUT_FILENO, SOL_SOCKET, SO_SNDBUF, &(int){1 << 20}, sizeof(int));
     fprintf(stderr, "{\"event\":\"ready\",\"sampleRate\":%lu,\"channels\":2,\"format\":\"f32le\",\"requestedCallbackFrames\":%lu,\"ownerHalBufferFrames\":%u,\"nominalRate\":%.0f,\"previousNominalRate\":%.0f,\"reportedInputLatencyMs\":%.6f,\"timestampConvention\":\"PortAudio ADC estimate\"}\n",
             rate, frames, bufferFrames, nominal, previousRate, actual->inputLatency * 1000);
     double deadline = seconds ? Pa_GetStreamTime(stream) + seconds : INFINITY;

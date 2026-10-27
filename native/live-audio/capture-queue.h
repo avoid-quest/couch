@@ -8,8 +8,10 @@
 #include "portaudio.h"
 #include "pa_ringbuffer.h"
 
-#define CAPTURE_MAX_FRAMES 4096
-#define CAPTURE_QUEUE_SIZE 8
+// Callbacks are fixed at the requested 128-1024 frames. 256 slots (about 0.7 s at 128
+// frames) let the non-realtime writer be descheduled while the system is busy.
+#define CAPTURE_MAX_FRAMES 1024
+#define CAPTURE_QUEUE_SIZE 256
 enum CaptureError { CAPTURE_OK, CAPTURE_XRUN, CAPTURE_NULL_INPUT, CAPTURE_FORMAT,
                     CAPTURE_CLOCK, CAPTURE_QUEUE_FULL, CAPTURE_NONFINITE };
 typedef struct { uint32_t bytes; unsigned char wire[40 + CAPTURE_MAX_FRAMES * 8]; } CapturePacket;

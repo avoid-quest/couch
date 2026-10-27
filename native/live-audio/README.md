@@ -16,8 +16,10 @@ using the device. No system default device changes. Callback requests of
 buffer readback are distinct facts. Share shows requested and reported sizes;
 neither is presented as the raw hardware callback period.
 
-The callback copies stereo float32 and PortAudio's ADC-time estimate into eight
-preallocated SPSC slots. It performs no allocation, I/O, lock or wait. Overflow,
+The callback copies stereo float32 and PortAudio's ADC-time estimate into 256
+preallocated SPSC slots (about 0.7 s at 128 frames), and stdout's socket buffer
+holds about another 2.6 s, so a briefly busy Mac or desktop window delays audio
+instead of ending the share. It performs no allocation, I/O, lock or wait. Overflow,
 driver xruns, invalid input and duplicate/backward time fail explicitly. Timing
 spacing variations retain their original timestamps and diagnostic counts rather
 than being relabeled as lost samples. stdout carries the existing 40-byte Couch
