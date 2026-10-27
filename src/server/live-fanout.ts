@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import type { Writable } from "node:stream";
 import { WebSocket } from "ws";
 import type { ListenerSocket } from "./live-transport";
 
@@ -17,14 +18,30 @@ export type ListenerCommand =
   | { type: "listenerSend"; id: number; text: string }
   | { type: "listenerClose"; id: number; code: number; reason: string };
 
+// Each write to a listener, with its TLS record, costs Core's main thread far more than the bytes in it. From
+// this many listeners on, each one's audio leaves two packets per write: the first waits one packet longer
+// (2.67 ms PCM, 2.5 ms Opus). A message to the listener takes its waiting packet along, never waits itself.
+export const pairedFrom = 20;
+
+type Listener = { socket: WebSocket; stream: Writable; stalledMs: () => number; waiting: Buffer[] };
+
 /** Core's side: each listener's socket and its backlog guard. */
 export function createListenerFanout(post: (event: ListenerEvent) => void) {
-  const listeners = new Map<number, { socket: WebSocket; stalledMs: () => number }>();
-  let ids = 0;
+  const listeners = new Map<number, Listener>();
+  let ids = 0, timeout: ReturnType<typeof setTimeout> | undefined;
+  const write = (l: Listener, last?: string) => {
+    l.stream.cork();
+    for (const packet of l.waiting) l.socket.send(packet);
+    if (last !== undefined) l.socket.send(last);
+    l.stream.uncork();
+    l.waiting = [];
+  };
+  const flush = () => { for (const l of listeners.values()) if (l.waiting.length) write(l); };
   return {
-    listen(socket: WebSocket, sourceId: string, deviceId: string) {
+    /** stream: the socket the WebSocket upgraded, corked around each write. */
+    listen(socket: WebSocket, stream: Writable, sourceId: string, deviceId: string) {
       const id = ++ids, pings: number[] = [], stalledMs = () => pings.length ? performance.now() - pings[0]! : 0;
-      listeners.set(id, { socket, stalledMs });
+      listeners.set(id, { socket, stream, stalledMs, waiting: [] });
       const gone = () => { if (listeners.delete(id)) { clearInterval(pinging); post({ type: "listenerClosed", id }); } };
       // A listener's audio never queues behind a stalled connection. Pings wait behind everything sent, kernel
       // buffers included: one unanswered for half a second stops its audio, for two seconds closes it so that
@@ -41,19 +58,22 @@ export function createListenerFanout(post: (event: ListenerEvent) => void) {
     },
     receive(command: ListenerCommand) {
       if (command.type === "listenerAudio") {
-        const packet = Buffer.from(command.packet.buffer, command.packet.byteOffset, command.packet.byteLength);
+        const packet = Buffer.from(command.packet.buffer, command.packet.byteOffset, command.packet.byteLength), per = command.to.length < pairedFrom ? 1 : 2;
         for (const id of command.to) {
           const l = listeners.get(id);
           if (!l || l.socket.readyState !== WebSocket.OPEN || l.stalledMs() > 500) continue;
-          if (l.socket.bufferedAmount > 256 * 1024) l.socket.terminate();
-          else l.socket.send(packet);
+          if (l.socket.bufferedAmount > 256 * 1024) { l.socket.terminate(); continue; }
+          if (l.waiting.push(packet) >= per) write(l);
         }
-      } else if (command.type === "listenerSend") {
-        const socket = listeners.get(command.id)?.socket;
-        if (socket?.readyState === WebSocket.OPEN) socket.send(command.text);
-      } else listeners.get(command.id)?.socket.close(command.code, command.reason);
+        // Should the next packet not come, the waiting ones leave without it.
+        (timeout ??= setTimeout(flush, 5)).refresh();
+        return;
+      }
+      const l = listeners.get(command.id);
+      if (command.type === "listenerSend") { if (l?.socket.readyState === WebSocket.OPEN) write(l, command.text); }
+      else if (l) { write(l); l.socket.close(command.code, command.reason); }
     },
-    close() { for (const { socket } of listeners.values()) socket.terminate(); },
+    close() { clearTimeout(timeout); for (const { socket } of listeners.values()) socket.terminate(); },
   };
 }
 

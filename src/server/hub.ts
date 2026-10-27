@@ -1815,11 +1815,11 @@ export async function createHub(options: HubOptions) {
     if (listen) {
       const sourceId = url.searchParams.get("sourceId") ?? "", deviceId = trusted ? hostId() : caller.device!.id;
       if (!listens(sourceId, deviceId)) return json({ error: "This device doesn't play this live audio." }, 403);
-      return upgrade(socket => {
+      return upgrade((socket, request) => {
         if (!identity() || !listens(sourceId, deviceId)) return void socket.close(1008, "This device no longer plays this live audio.");
         const entry = { socket, sourceId, deviceId };
         liveListeners.add(entry); socket.once("close", () => liveListeners.delete(entry));
-        sendspin.listen(socket, sourceId, deviceId);
+        sendspin.listen(socket, request.socket, sourceId, deviceId);
       }) ? undefined : json({ error: "WebSocket upgrade required." }, 426);
     }
     // The operator's view of a Live audio stream: its lead and each listener's measurements, read while it's open.
