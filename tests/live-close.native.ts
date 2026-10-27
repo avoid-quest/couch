@@ -45,6 +45,7 @@ const record = () => writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringi
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.commandLine.appendSwitch('use-file-for-fake-audio-capture', ${JSON.stringify(wave)});
 app.commandLine.appendSwitch('mute-audio');
+app.commandLine.appendSwitch('alsa-output-device', 'null');
 systemPreferences.askForMediaAccess = async () => true;
 // The test window never takes focus from the owner.
 BrowserWindow.prototype.show = function () { this.showInactive(); };

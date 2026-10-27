@@ -8,6 +8,7 @@ const evidence = { platform: process.platform, steps: [], pids: [process.pid], h
 const record = () => writeFileSync(config.evidence, JSON.stringify(evidence, null, 2));
 const step = (name, value = {}) => { evidence.steps.push({ name, ...value }); record(); return value; };
 app.commandLine.appendSwitch("use-fake-device-for-media-stream");
+app.commandLine.appendSwitch("alsa-output-device", "null");
 app.commandLine.appendSwitch("use-file-for-fake-audio-capture", config.wave);
 systemPreferences.askForMediaAccess = async () => true;
 BrowserWindow.prototype.show = function () { this.showInactive(); };

@@ -82,7 +82,7 @@ if (process.argv.includes("--core")) {
     await connectHost(); await publish();
     const playwright = await import(process.env.COUCH_PLAYWRIGHT ?? "playwright");
     browser = await playwright.chromium.launch({ headless: true, executablePath: process.env.COUCH_CHROME,
-      args: ["--no-sandbox", "--ignore-certificate-errors", "--mute-audio", "--audio-buffer-size=128", "--autoplay-policy=document-user-activation-required"] });
+      args: ["--alsa-output-device=null", "--no-sandbox", "--ignore-certificate-errors", "--mute-audio", "--audio-buffer-size=128", "--autoplay-policy=document-user-activation-required"] });
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 800 }, serviceWorkers: "block" });
     await context.addInitScript(({ token, installationId, key }: any) => {
       localStorage.setItem("couch.remote-token", token); localStorage.setItem("couch.remote-installation-id", installationId);
