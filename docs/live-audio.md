@@ -5,6 +5,11 @@ and [glossary](../GLOSSARY.md) define this baseline's scope. The objective is a
 simple, reliable integration. Further performance optimization is not requested
 and does not automatically follow this work.
 
+This is the starting baseline, not the final low-delay Live implementation. The
+contract distinguishes the currently acceptable buffering/skew from Live's future
+latency ambition, while preserving relaxed playback's separate UX and technical
+policies. The configured buffer is not measured input-to-ear latency.
+
 Live audio uses the unmodified official browser SDK, `@sendspin/sendspin-js`
 3.2.1, and the unmodified Node SDK, `@sonn-audio/node-sendspin` 0.6.2. There are
 no local SDK patches. Native HOST capture feeds the same Sendspin groups used

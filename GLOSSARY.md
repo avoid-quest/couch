@@ -36,5 +36,6 @@ A shared programme whose picture and sound follow a common timeline, with
 collaborative programme controls and ordinary buffering.
 
 **Live audio**:
-An ongoing audio publication whose audience follows the source and controls its
-own listening. It grants no audience control over the programme or its queue.
+An ongoing audio publication intended for timely listening close to the source
+event. Its audience follows the source and controls its own listening, without
+programme or queue authority.

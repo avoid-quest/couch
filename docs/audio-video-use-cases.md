@@ -7,6 +7,33 @@ This contract supersedes old strict admission, latency and audience-size gates
 in the historical [refactor plan](audio-video-refactor-plan.md) and evidence.
 Those records remain useful history, not requirements to recreate their machinery.
 
+## Starting baseline and intended Live mode
+
+This cleanup establishes a starting point for the product, not the final Live
+implementation. The owner accepts an initial result around 250 ms with a few
+milliseconds of difference between devices. These are acceptable examples, not
+new hard limits or measured results. The SDK's 250 ms buffer setting is not a
+measurement of total input-to-ear delay.
+
+Live and relaxed playback remain distinct in their UX and technical policies.
+Relaxed playback can read ahead and buffer a shared programme; Live follows an
+ongoing source and ultimately seeks much lower delay. Source preparation,
+buffering, delivery and recovery choices should fit the actual mode. Sharing
+Sendspin or other components does not require identical pipelines or defaults,
+and native/browser acquisition still follows source and runtime capabilities.
+
+For a future mature Live system, roughly 30 ms maximum input-to-ear delay is an
+ambition to evaluate, not a feasibility claim or this run's acceptance gate.
+Later improvements should target the lowest useful, stable delay for the mode,
+source, environment and devices, with quality and continuity considered together.
+A few milliseconds of inter-device skew can be acceptable; sample-perfect output
+is not a product requirement. Acoustic travel through a venue is separate from
+electronic delay and does not make chasing isolated timing numbers useful.
+
+Build a solid, understandable baseline before making those trade-offs. Future
+measurements may show that some improvements or architectures are unhelpful;
+the cleanup does not preselect a later optimization or replacement engine.
+
 The [glossary](../GLOSSARY.md) defines the product terms. Built integration details
 and verification limits belong in [Live audio](live-audio.md), with user-facing
 behavior in [Share](design/share.md). A documented capability and a physically
@@ -59,7 +86,7 @@ preserves the supported path without promising a new generalized capture API.
 | --- | --- | --- |
 | Direct | Ordinary media plays on one permitted destination using its existing renderer. Captured sharing retains its existing direct WebRTC route. A controller may be a different device. | Authorized programme/queue actions and controls the source actually supports. |
 | Relaxed synchronized | A shared programme spans permitted outputs; sound and picture follow a common timeline with ordinary buffering. Existing Sendspin audio, picture following and captured A/V paths remain. | Collaborative programme/queue controls, source-dependent seek/speed, output consent and individual levels. |
-| Live audio | Receivers follow the ongoing source through the upstream Sendspin player. Buffering uses supported SDK options; no promised input-to-ear number defines this behavior. | Join/Leave and own volume/mute. Publisher owns capture; host removal remains. Audience membership grants no programme/queue authority. |
+| Live audio | Follow the ongoing source on a path intended for low-delay listening. This starting baseline uses the upstream Sendspin player and ordinary supported buffering; the mature Live latency ambition remains future work. | Join/Leave and own volume/mute. Publisher owns capture; host removal remains. Audience membership grants no programme/queue authority. |
 
 Keep routing and authority decisions in the existing
 [`playback-policy.ts`](../src/shared/playback-policy.ts) and Core. A single speaker
@@ -139,9 +166,11 @@ microphone or screen capture; that requires Share and local capture permission.
 ## 3. Live audio: follow the source
 
 The existing local desktop publication feeds the upstream Sendspin browser player.
-Its name expresses source-following participation, not a measured latency or
-capacity guarantee. Native capture remains available; its device controls do not
-establish a performance advantage over browser capture.
+This is a baseline for Live's source-following UX and eventual low-delay technical
+path, with no measured latency or capacity guarantee yet. Relaxed playback keeps
+its own UX and buffering policies even where implementation is shared. Native
+capture remains available; its device controls do not establish a performance
+advantage over browser capture.
 
 Listeners join, leave and set their own volume/mute. The publisher owns capture
 and its programme. Ordinary buffering and the SDK's timing/recovery behavior are
