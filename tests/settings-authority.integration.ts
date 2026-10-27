@@ -104,3 +104,25 @@ test("advanced audio settings require administrator authority and validate befor
     }
   } finally { await f.close(); }
 });
+
+test("Live audio settings are the host's and admins': controllers can't read or change them", async () => {
+  const f = await fixture();
+  const path = "/api/settings/live-audio";
+  const read = (token: string) => fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  try {
+    assert.equal((await f.post(path, "unpaired", { settings: { maxLeadMs: 150 } })).status, 401);
+    assert.equal((await f.post(path, f.controller, { settings: { maxLeadMs: 150 } })).status, 403);
+    assert.equal((await read(f.controller)).status, 403);
+    assert.equal((await fetch(`${f.hub.origin}/api/live/listeners?sourceId=any`, { headers: { Authorization: `Bearer ${f.controller}` } })).status, 403, "nor see its listeners");
+    assert.equal((await read(f.admin).then(response => response.json())).maxLeadMs, 100, "a refused change leaves the default");
+    for (const settings of [{ maxLeadMs: 1001 }, { minLeadMs: 120 }, { codec: "flac" }, { listenerBufferFrames: 300 }, null])
+      assert.equal((await f.post(path, f.admin, { settings })).status, 400);
+    const saved = await f.post(path, f.admin, { settings: { maxLeadMs: 150, listenerBufferFrames: 512 } });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), { codec: "pcm", opusBitrate: 192000, lead: "automatic", leadMs: 100, minLeadMs: 0, maxLeadMs: 150, raiseForSlowest: true, listenerBufferFrames: 512 });
+    assert.equal((await f.post(path, hostToken, { settings: { codec: "opus" } })).status, 200);
+    assert.equal((await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "controller" })).status, 200);
+    assert.equal((await f.post(path, f.admin, { settings: { codec: "pcm" } })).status, 403, "a demoted admin loses them");
+    assert.equal((await read(hostToken).then(response => response.json())).codec, "opus");
+  } finally { await f.close(); }
+});

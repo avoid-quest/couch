@@ -5,6 +5,7 @@ import type { BluetoothState } from "../../shared/bluetooth";
 import type { DisplayState } from "../../shared/display";
 import type { SoundOutput, SoundProfile, SoundState } from "../../shared/sound";
 import type { StartupState } from "../../shared/startup";
+import type { LiveAudioSettings, LiveListenerStatus } from "../../shared/protocol";
 import { validStreamingCommunityOrigin } from "../../shared/streamingcommunity";
 import { apiJson, type ApiCredentials } from "./client";
 
@@ -68,8 +69,18 @@ export const displayQuery = (credentials: ApiCredentials) =>
     retry: false,
   });
 
-export const audioSettingsQuery = (credentials: ApiCredentials) =>
-  queryOptions({ queryKey: ["settings", "audio"], queryFn: ({ signal }) => apiJson<{ liveAudioLeadMs: number }>(credentials, "/api/settings/audio", { signal }) });
+export const liveAudioSettingsQuery = (credentials: ApiCredentials) =>
+  queryOptions({ queryKey: ["settings", "live-audio"], queryFn: ({ signal }) => apiJson<LiveAudioSettings>(credentials, "/api/settings/live-audio", { signal }) });
+
+// Each Live listener's measurements, read every second while the share panel shows them.
+export type LiveListeners = { leadMs: number; listeners: (LiveListenerStatus & { deviceId: string })[] };
+export const liveListenersQuery = (credentials: ApiCredentials, sourceId: string) =>
+  queryOptions({
+    queryKey: ["live", "listeners", sourceId],
+    queryFn: ({ signal }) => apiJson<LiveListeners>(credentials, `/api/live/listeners?${new URLSearchParams({ sourceId })}`, { signal }),
+    refetchInterval: 1_000,
+    retry: false,
+  });
 
 export const startupQuery = (credentials: ApiCredentials) =>
   queryOptions({

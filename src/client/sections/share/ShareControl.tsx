@@ -12,6 +12,7 @@ import type { LiveRoute } from "@/session/live-route";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { dismiss, stillSharing } from "@/toasts";
+import { LiveListeners, LiveSettings } from "./LiveOperator";
 import { QualitySelect, ShareDialog } from "./ShareDialog";
 import { shareKindOf, viewerLine, viewersOf, type Viewer } from "./share";
 import { useShowShare } from "./show-share";
@@ -93,7 +94,7 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
   return <div data-live-sharing data-tv-local-only className="flex min-w-0 shrink-0 items-center gap-1 rounded-full bg-bar p-0.5 shadow-(--float-shadow) touch:order-last">
     {desktop && !tv ? <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent data-tv-local-only align="center" collisionPadding={16} aria-label="Sharing" className="w-[min(26rem,calc(100vw-2rem))] gap-0 p-4">{panel}</PopoverContent>
+      <PopoverContent data-tv-local-only align="center" collisionPadding={16} aria-label="Sharing" className="max-h-(--radix-popover-content-available-height) w-[min(26rem,calc(100vw-2rem))] gap-0 overflow-y-auto p-4">{panel}</PopoverContent>
     </Popover> : <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent data-tv-local-only side="bottom" aria-describedby={undefined} showCloseButton={false} className="max-h-[85dvh] items-center overflow-y-auto px-(--gutter) pt-4 pb-8">
@@ -147,7 +148,8 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
           : sharing.captureFormat.firstBlockFrames !== undefined ? ` · first block ${sharing.captureFormat.firstBlockFrames} frames` : ""}</p>}
       </div>
     </div>
-    <ul aria-label="Watching" className="grid">
+    {/* Live audio's host sees each listener as Core measures it, and sets the stream below. */}
+    {sharing.source.intent === "live" ? <LiveListeners sharing={sharing} viewers={viewers} /> : <ul aria-label="Watching" className="grid">
       {viewers.map(viewer => <li key={viewer.device.id} className="flex items-center gap-3 border-t py-2.5">
         <div className="grid min-w-0 flex-1 gap-0.5">
           <span className="text-body break-words">{viewer.device.name}</span>
@@ -156,7 +158,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
         {viewer.sound && <Level moving={viewer.playing && !viewer.behind && !viewer.error && viewer.device.online && !viewer.device.muted && viewer.device.volume > 0} className="text-muted-foreground" />}
       </li>)}
       {!viewers.length && <li className="border-t py-2.5 text-meta text-muted-foreground">Not playing anywhere yet.</li>}
-    </ul>
+    </ul>}
     {sharing.source.kind === "screen" && <div className="flex items-center justify-between gap-4 border-t pt-3">
       <label className="text-body">Picture</label>
       <QualitySelect value={sharing.quality} onValueChange={quality => void liveSharing.setQuality(quality).then(() => refresh(count => count + 1), reason => setError(errorText(reason)))} />
@@ -165,6 +167,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
       <label htmlFor="live-mute" className="text-body">Mute audio input</label>
       <Switch id="live-mute" checked={sharing.muted} onCheckedChange={muted => { liveSharing.setMuted(muted); refresh(count => count + 1); }} />
     </div>}
+    {sharing.source.intent === "live" && <LiveSettings sharing={sharing} />}
     {behind && <p className="text-meta text-muted-foreground">{sharing.relay
       ? "A device marked behind couldn't connect directly, even through the relay."
       : <>A device marked behind couldn't connect directly. A relay can fix that, in <Link to="/settings/couch/devices" className="text-foreground underline underline-offset-4" onClick={onClose}>Devices &amp; network</Link>.</>}</p>}

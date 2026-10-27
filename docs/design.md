@@ -19,9 +19,10 @@ on the Couch computer. A live audience gets **Join/Leave** and its own volume;
 programme and queue controls remain with ordinary playback. These choices use the
 same source discovery and player ([Share](design/share.md)).
 Mac Live publishers can select a native audio input; Share distinguishes its
-requested buffer from device readback. [Advanced audio](design/settings.md#advanced-audio)
-separates host scheduling lead, browser latency preference and native input
-rate/buffer requests. Audience playback stays in the browser.
+requested buffer from device readback. The share panel shows the host every Live
+listener and sets the stream's lead, codec and buffers ([Share](design/share.md#live-audio));
+[Advanced audio](design/settings.md#advanced-audio) keeps the capture rate and
+each device's own browser buffering. Audience playback stays in the browser.
 Live listeners play [Couch's timestamped stream](live-audio.md) in the browser.
 The existing **Tap to hear** prompt unlocks sound. The player and Where it plays show
 **Preparing audio…**, **Behind by N ms**, **Reconnecting…**, and **Removed by the

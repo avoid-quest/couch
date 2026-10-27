@@ -3,7 +3,7 @@ import type { ClientSessionState } from "@/session/session";
 import type { LiveRoute } from "@/session/live-route";
 import type { CaptureKind, CaptureSource } from "../../../shared/capture";
 import type { LiveSelection, LiveVideoQuality } from "../../../shared/live-input";
-import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
+import type { DeviceSummary, LiveListenerStatus, PlaybackSummary } from "../../../shared/protocol";
 
 // What this device can share, in the order the Share dialog offers it (docs/design/share.md). Each kind says how it
 // captures; the dialog and the capsule read only these fields, so a new kind (a specific sound card, say) is one more entry.
@@ -59,7 +59,7 @@ export const shareTargets = (state: ClientSessionState | null | undefined, here:
   (state?.devices ?? []).filter(device => device.id !== here && device.online && (device.sharing?.audio || device.sharing?.video));
 
 /** A device watching or hearing this device's share, and how it gets it. */
-export type Viewer = { device: DeviceSummary; picture: boolean; sound: boolean; playing: boolean; behind: boolean; delivery?: PlaybackSummary["delivery"]; delayActive?: boolean; error?: string };
+export type Viewer = { device: DeviceSummary; playbackId: string; picture: boolean; sound: boolean; playing: boolean; behind: boolean; delivery?: PlaybackSummary["delivery"]; delayActive?: boolean; error?: string; liveListener?: LiveListenerStatus };
 /** Every online device the share plays on, in each playback that plays it; the publisher never plays its own (docs/live-inputs.md). */
 export function viewersOf(state: ClientSessionState | null | undefined, sourceId: string): Viewer[] {
   const viewers = new Map<string, Viewer>();
@@ -69,7 +69,7 @@ export function viewersOf(state: ClientSessionState | null | undefined, sourceId
     const device = state?.devices?.find(item => item.id === output.deviceId);
     const picture = output.picture && source?.video !== false, sound = output.sound && source?.audio !== false;
     // An offline device keeps its output in the playback (Where it plays says Offline) but watches nothing.
-    if (device?.online && (picture || sound)) viewers.set(device.id, { device, picture, sound, playing: playback.status === "playing", behind: !!output.buffered, delivery: playback.delivery, delayActive: output.delayActive, error: output.error });
+    if (device?.online && (picture || sound)) viewers.set(device.id, { device, playbackId: playback.id, picture, sound, playing: playback.status === "playing", behind: !!output.buffered, delivery: playback.delivery, delayActive: output.delayActive, error: output.error, liveListener: output.liveListener });
   }
   return [...viewers.values()];
 }
@@ -86,4 +86,16 @@ export function viewerLine(viewer: Viewer, route: LiveRoute | undefined) {
   if (viewer.delivery === "scheduled") return viewer.sound ? `${channels}, ${viewer.delayActive ? "in sync" : "connecting"}` : channels;
   if (viewer.delivery && viewer.delivery !== "webrtc") return channels;
   return route ? `${channels}, ${route === "relay" ? "through the relay" : "direct"}` : channels;
+}
+
+/** A Live audio listener's row on its operator's panel: its standing first, then what Core measures of it. */
+export function listenerLine(viewer: Viewer, listener = viewer.liveListener) {
+  if (viewer.error) return `Can't play: ${viewer.error}`;
+  if (!listener) return "Connecting…";
+  if (listener.status === "warming") return "Preparing audio…";
+  if (listener.status === "stale") return "Reconnecting…";
+  if (listener.status === "removed") return "Removed";
+  const standing = listener.behindMs ? `Behind by ${Math.ceil(listener.behindMs)} ms` : listener.status === "limiting" ? "Sets the lead" : null;
+  return [standing, listener.codec === "opus" ? "Opus" : "PCM", listener.latencyMs !== null && `latency ${listener.latencyMs} ms`, listener.marginMs !== null && `margin ${listener.marginMs} ms`,
+    `${listener.gaps} ${listener.gaps === 1 ? "gap" : "gaps"}`, listener.concealments > 0 && `${listener.concealments} concealed`].filter(Boolean).join(" · ");
 }

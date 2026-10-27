@@ -15,7 +15,8 @@ couch-capture (native, 128 frames)
 
 - Every listener reports what it needs: its output latency plus the margin it measured.
 - Core sets one lead for the share and schedules each change at a host time, so all listeners move together. It rises after two elevated reports and falls by up to 10 ms every 6 s once 12 s of reports show it can.
-- **Maximum** (100 ms by default) and **minimum** (0) are operator settings.
+- **Maximum** (100 ms by default) and **minimum** (0) are operator settings. **Fixed** holds one lead instead.
+- The operator's changes apply to the running share: the lead ramps to a new fixed value or into new bounds, a new Opus bitrate takes the next packet, and a new codec or capture buffer starts listeners on a new session.
 - **Raise for the slowest** (on by default): the lead rises for the slowest listener, up to the maximum. Off: a listener that needs more than the others by itself doesn't move the lead.
 - A listener the lead can't cover keeps playing, **behind by** what it lacks. It's never refused; only the operator removes it.
 
