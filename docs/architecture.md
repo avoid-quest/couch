@@ -237,10 +237,10 @@ sender leaves, and an admitted sender counts as playing for unattended updates.
 
 Core chooses Sendspin scheduled sound for Live audio, related relaxed outputs
 across Devices, and timestamped Audio input and AirPlay even with one listener. Its shared implementation lives in `scheduled-audio.ts`,
-with read-ahead URL decoding and fixed-deadline capture as separate sender policies.
+with read-ahead URL decoding and capture-timestamped sending as separate sender policies.
 When a Playback has outputs on several Devices, its sound is Synced
 (`src/server/sendspin.ts`). Core exposes `/sendspin` with unmodified Node SDK sessions, behind Couch token
-authorization. It binds a plaintext hello to the token's stable Device ID. The newest tab of every Device whose sound is in the mix
+authorization. It binds the SDK's `client/init` (or a Node client's plaintext `client/hello`) to the token's stable Device ID. The newest tab of every Device whose sound is in the mix
 plays it with the official player (`@sendspin/sendspin-js`,
 `src/client/session/sendspin.ts`), and a browser that needs a gesture shows "Tap to
 hear". One FFmpeg per Playback reads the audio-only rendition (YouTube's separate

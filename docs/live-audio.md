@@ -11,7 +11,8 @@ user-facing behavior is in [Share](design/share.md#live-audio).
 
 ## Connection and identity
 
-Every Sendspin connection is Noise-encrypted by the SDK. Couch selects the public
+Browsers connect with the SDK's Noise encryption (`client/init`). Core also accepts
+the Node SDK's plaintext `client/hello`, behind the same token check. Couch selects the public
 `suite: "aesgcm"` option because Electron's BoringSSL has no ChaCha20-Poly1305.
 Core keeps its SDK identity in the `sendspin_identity` table and passes it, with
 the standard `SENTINEL_RESOLVED` PSK, to each public `SendspinSession`.
@@ -46,8 +47,9 @@ sessions off Core's main thread.
 A relaxed share keeps at least one second of lead. A Live share's lead is the
 largest `min_buffer_ms` plus static output delay any member declares. It grows
 at once when a member declares more, which moves later timestamps forward by
-the difference. It never shrinks while the share runs, so listeners never jump
-backwards or lose queued audio; a smaller buffer applies when sharing restarts.
+the difference. It never shrinks while the input keeps running, so listeners never
+jump backwards or lose queued audio; a smaller buffer applies when sharing or the
+input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction.
 
