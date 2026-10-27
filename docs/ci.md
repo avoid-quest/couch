@@ -126,7 +126,7 @@ and `src/common` directories, compile `native/live-audio/capture-queue.test.c`
 with `src/common/pa_ringbuffer.c` using `cc -std=c11 -O2 -Wall -Wextra -Werror`
 and `-lm`, then execute it. Neither it nor discovery tests microphone consent
 attribution, device audio, physical timing or Intel Ventura execution. Those
-remain separate packaged-app checks; Linux act proves hook/no-op behavior only.
+remain separate packaged-app checks; on Linux the hook is a no-op.
 
 ## Bundled AirPlay receiver
 
