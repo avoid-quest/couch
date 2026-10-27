@@ -27,6 +27,10 @@ is status, and an actual failure shows its reason. Once ready, a starved source
 still shows **Waiting for audio…**; preparation does not require leaving and
 joining again.
 
+The [new timestamped Live listener](live-listener.md) is implemented as standalone
+modules only. Its states have no screen wiring yet; the existing audience UI
+and Start-tap presentation stay in use.
+
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset
 to default; see [Where it plays](design/where-it-plays.md#compressor).

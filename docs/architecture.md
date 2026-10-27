@@ -500,6 +500,10 @@ entry points with their dependencies. electron-builder packages only those files
 `dist` and two icons (see `build` in `package.json`); the app ships no
 `node_modules`. Core reads `dist` beside its bundle, inside `app.asar`.
 
+The [timestamped Live listener modules](live-listener.md) are also emitted as a
+standalone Vite entry with network/calibration Workers and an AudioWorklet. They
+are not connected to the session or Hub yet; existing playback remains unchanged.
+
 Only browser remotes in a supported secure context register `/sw.js`; the app
 window never does.
 

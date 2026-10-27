@@ -89,5 +89,7 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-  build: { outDir: "../../dist", emptyOutDir: true, rolldownOptions: { input: { main: "src/client/index.html", capture: "src/client/capture-audio.html" } } },
+  // Keep the unwired Live listener as a build entry until the session imports it.
+  // This also proves Vite emits its worklet and both Worker bundles.
+  build: { outDir: "../../dist", emptyOutDir: true, rolldownOptions: { preserveEntrySignatures: "exports-only", input: { main: "src/client/index.html", capture: "src/client/capture-audio.html", liveListener: "src/client/session/live-listener/listener.ts" } } },
 }));

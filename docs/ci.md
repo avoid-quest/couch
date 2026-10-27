@@ -25,6 +25,21 @@ stale caches.
 Add a test only where a behaviour must stay locked, and run it with
 `bun test <path>`.
 
+The standalone timestamped Live listener checks run separately:
+
+```sh
+bun test tests/live-worklet.test.ts
+bun test tests/live-listener-clock.test.ts
+bun test tests/live-transport-message.test.ts
+bun test tests/live-listener-network.test.ts
+bun test tests/live-listener-lifecycle.test.ts
+bun run build
+bun test tests/live-listener-bundle.test.ts
+```
+
+The bundle check requires the preceding build. These are offline/module checks;
+Core wiring and browser/hardware validation are separate ([listener](live-listener.md)).
+
 The update regressions run with `bun test tests/updates.test.ts` and
 `bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
 coverage runs with `bun test tests/browser-device-identity.test.ts`, and browser
