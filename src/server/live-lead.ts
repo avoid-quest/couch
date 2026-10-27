@@ -4,7 +4,7 @@
 export const leadDefaults = Object.freeze({ hysteresisMs: 3, historySec: 12, warmupSec: 20, staleSec: 20, rampMsPerSec: 20,
   commandAheadMs: 28, maxLeadMs: 100, minLeadMs: 0, raiseForSlowest: true, fixed: false, loweringStepMs: 10, lowerEverySec: 6,
   debtMsPerHour: 3600, debtAreaFraction: 0.05 });
-export type LeadPolicy = typeof leadDefaults;
+export type LeadPolicy = { [K in keyof typeof leadDefaults]: typeof leadDefaults[K] extends boolean ? boolean : number };
 export type LeadStats = Partial<Record<"needMs" | "leadMs" | "deadlineMarginMinMs" | "marginMinMs" | "debtMs" | "arrivalGapMaxMs" | "headroomMinMs" | "resyncs", number | null>> & { recovering?: boolean };
 export type LeadCommand = { type: "lead"; leadMs: number; atServerUs: number };
 export type LeadDecision = (LeadCommand & { reason: string | null; fromMs: number; rampEndUs: number })

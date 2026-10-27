@@ -12,8 +12,10 @@ export const coreBundle = "build/core.mjs";
 export async function buildCore(identity?: string) {
   let workerChanged = false;
   for (const [entry, output] of [["src/server/audio-worker.ts", "build/audio-worker.mjs"], ["src/main.ts", coreBundle]] as const) {
-    const result = await Bun.build({ entrypoints: [entry], target: "node", format: "esm", ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
+    const result = await Bun.build({ entrypoints: [entry], target: "node", format: "esm", naming: { asset: "[name].[ext]" }, ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
     if (!result.success) throw new AggregateError(result.logs, `${entry} build failed`);
+    // Files a bundle imports `with { type: "file" }` (the worker's Opus WASM) sit beside it.
+    for (const asset of result.outputs.filter(output => output.kind === "asset")) await Bun.write(`build/${asset.path.replace(/^\.\//, "")}`, asset);
     const bundle = await result.outputs[0]!.text();
     const changed = bundle !== await readFile(output, "utf8").catch(() => null);
     if (changed || output === coreBundle && workerChanged) await Bun.write(output, bundle);
