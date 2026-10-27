@@ -1,3 +1,4 @@
+import { ClientAudioSettings } from "./AdvancedAudioSettings";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -53,6 +54,7 @@ export function ThisDevicePage() {
     </SettingsSection>
     {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
     {!nativeHost && screenWakeLock.error && <Alert variant="destructive"><AlertDescription>{screenWakeLock.error}</AlertDescription></Alert>}
+    <ClientAudioSettings capture={nativeHost} />
     <CouchChoice credentials={credentials} installationName={state?.installationName ?? details?.name} />
     {host ? <SettingsSection><SettingsRow label="Let other devices use" description={`${couch}'s speakers and screen are shared while Share on network is on.`} /></SettingsSection> : <DeviceSharingSettings />}
     <QuitAppSettings host={host} couch={couch} />

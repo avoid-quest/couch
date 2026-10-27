@@ -89,5 +89,5 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-  build: { outDir: "../../dist", emptyOutDir: true },
+  build: { outDir: "../../dist", emptyOutDir: true, rolldownOptions: { input: { main: "src/client/index.html", capture: "src/client/capture-audio.html" } } },
 }));

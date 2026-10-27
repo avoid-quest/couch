@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { CouchApp, UpdateAction, UpdateState } from "../src/shared/app-bridge";
+import type { LiveAudioError } from "../src/shared/capture";
 
 // The Couch window's bridge to Main (app/main.ts). The page may be this
 // computer's Core (Full mode) or another Couch (Client mode).
@@ -9,6 +10,14 @@ const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
   return result.value as T;
 };
 
+const captureId = process.argv.find(value => value.startsWith("--couch-audio-capture="))?.slice("--couch-audio-capture=".length);
+if (captureId) {
+  if (!process.isMainFrame) throw new Error("Audio capture requires its own main frame.");
+  contextBridge.exposeInMainWorld("couchAudioCapture", {
+    onCommand: (listener: (value: unknown) => void) => ipcRenderer.on("couch:audio-capture-command", (_event, value) => listener(value)),
+    event: (value: Record<string, unknown>) => ipcRenderer.send("couch:audio-capture-event", { ...value, id: captureId }),
+  });
+} else {
 // Desktop windows have no title bar: reserve their native controls in the page.
 if (!process.argv.includes("--couch-tv-presentation")) {
   const controls = (shown: boolean) => {
@@ -79,6 +88,12 @@ contextBridge.exposeInMainWorld("couchApp", {
   deviceSharing: sharing => call("device-sharing", sharing),
   captureSources: () => call("capture-sources"),
   prepareCapture: selection => call("prepare-capture", selection),
+  liveAudio: action => call("live-audio", action),
+  onLiveAudioError: listener => {
+    const handler = (_event: unknown, error: LiveAudioError) => listener(error);
+    ipcRenderer.on("couch:live-audio-error", handler);
+    return () => { ipcRenderer.off("couch:live-audio-error", handler); };
+  },
   captureAccess: kind => call("capture-access", kind),
   openCaptureSettings: kind => call("capture-settings", kind),
   mode: () => call("mode"),
@@ -112,5 +127,6 @@ contextBridge.exposeInMainWorld("couchApp", {
   reportPlayback: status => call("update-playback", status),
   shellReady: () => call("shell-ready"),
 } satisfies CouchApp);
+}
 
 function update(action: UpdateAction) { return call<UpdateState>("update-action", action); }

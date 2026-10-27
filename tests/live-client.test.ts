@@ -241,6 +241,105 @@ test("the capture can publish to another tab on the same device", () => check(`
   assert.equal(signals[0].peerId, "other-tab");
 `));
 
+test("publisher offers pace a hundred peers in batches of four without duplicate announcements", () => check(`
+  const source = await session.start({ kind: "screen" });
+  const targets = Array.from({ length: 100 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: true, sound: false }));
+  const announcement = { type: "livePeers", sourceId: source.id, peers: targets };
+  session.receive(announcement);
+  session.receive(announcement);
+  await flush();
+  assert.equal(peers.length, 4, "a burst starts only four offer operations");
+  assert.equal(signals.length, 4);
+  advance(99); await flush();
+  session.receive(announcement);
+  assert.equal(peers.length, 4, "settlement and repeated announcements cannot bypass pacing");
+  advance(1); await flush();
+  assert.equal(signals.length, 8);
+  for (let i = 0; i < 23; i++) { advance(100); await flush(); }
+  assert.equal(signals.length, 100);
+  assert.equal(new Set(signals.map(message => message.peerId)).size, 100);
+  assert.ok(peers.every(peer => peer.tracks.length === 1 && peer.tracks[0].kind === "video"));
+  assert.equal(unreachable().length, 0);
+  // Mocked negotiation proves setup bounds, not a hundred working media paths.
+`));
+
+for (const operation of ["createOffer", "setLocalDescription"]) for (const cancellation of ["peer removal", "publication restart"])
+  test(`publisher ${operation} keeps unsettled slots through ${cancellation}`, () => check(`
+  let source = await session.start({ kind: "screen" });
+  const pending = [];
+  let active = 0, peak = 0;
+  RTCPeerConnection.prototype[${JSON.stringify(operation)}] = function (description) {
+    const work = Promise.withResolvers();
+    pending.push(work); peak = Math.max(peak, ++active);
+    if (description) this.localDescription = description;
+    // Closing the peer deliberately leaves its browser operation unsettled.
+    return work.promise.finally(() => active--);
+  };
+  const targets = Array.from({ length: 8 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: true, sound: true }));
+  const announce = peers => session.receive({ type: "livePeers", sourceId: source.id, peers });
+  announce(targets.slice(0, 4)); await flush();
+  advance(5000); await flush();
+  assert.equal(pending.length, 4, "four stalled operations fill the session's budget");
+  for (let round = 0; round < 3; round++) {
+    if (${JSON.stringify(cancellation)} === "publication restart") {
+      await session.end();
+      assert.ok(captures.at(-1).getTracks().every(track => track.stopped));
+      assert.equal(timers.size, 0, "ending capture immediately cancels queued setup");
+      source = await session.start({ kind: "screen" });
+    } else announce([]);
+    announce(targets); advance(100); await flush();
+    assert.equal(active, 4, "removing a peer cannot release its unsettled slot");
+    assert.equal(pending.length, 4);
+    assert.ok(peers.every(peer => peer.connectionState === "closed"));
+  }
+  pending[0].resolve({ type: "offer", sdp: "stale" }); await flush();
+  assert.equal(active, 3);
+  advance(99); await flush();
+  assert.equal(pending.length, 4, "settlement still observes the pacing interval");
+  advance(1); await flush();
+  assert.equal(pending.length, 5, "one settlement releases exactly one slot");
+  assert.equal(active, 4);
+  pending[1].reject(new Error("stale browser failure")); await flush();
+  advance(100); await flush();
+  assert.equal(pending.length, 6, "rejection also releases exactly one slot");
+  assert.equal(active, 4);
+  assert.equal(signals.length, 0, "stale completion and failure cannot affect a reused peer ID");
+  // Canceled operations remain pending throughout these removals and restarts.
+  session.close();
+  assert.equal(timers.size, 0);
+  assert.ok(peers.every(peer => peer.connectionState === "closed"));
+  assert.ok(captures.every(stream => stream.getTracks().every(track => track.stopped)));
+  for (const work of pending) work.resolve({ type: "offer", sdp: "closed" });
+  await flush(); advance(10000); await flush();
+  assert.equal(active, 0);
+  assert.equal(peak, 4);
+  assert.equal(peers.length, 6);
+  assert.equal(signals.length, 0, "closing cannot revive offers, failures or queued peers");
+  assert.equal(timers.size, 0);
+`));
+
+test("publisher queue follows the latest Core targets and disappears when Core removes the publication", () => check(`
+  const source = await session.start({ kind: "screen" });
+  const targets = Array.from({ length: 8 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: true, sound: true }));
+  const announce = peers => session.receive({ type: "livePeers", sourceId: source.id, peers });
+  announce(targets); await flush();
+  assert.equal(peers.length, 4);
+  const latest = { peerId: "latest", deviceId: "latest-device", picture: false, sound: true };
+  announce([...targets.slice(0, 4), latest]);
+  announce([...targets.slice(0, 4), { ...latest, picture: true, sound: false }]);
+  session.receive({ type: "livePeers", sourceId: "stale-source", peers: targets });
+  advance(100); await flush();
+  assert.deepEqual(signals.map(message => message.peerId), ["peer-0", "peer-1", "peer-2", "peer-3", "latest"]);
+  assert.deepEqual(peers[4].tracks.map(track => track.kind), ["video"], "queued channel selection uses Core's latest request");
+  announce([...targets.slice(0, 4), latest, ...targets.slice(4)]);
+  session.observe([]);
+  assert.equal(timers.size, 0, "Core removal cancels pending setup immediately");
+  assert.ok(peers.every(peer => peer.connectionState === "closed"));
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  advance(10000); await flush();
+  assert.equal(peers.length, 5, "removed queued peers never create browser connections");
+`));
+
 test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () => check(`
   const source = await session.start({ kind: "screen" });
   assert.equal(uploads.length, 0, "Publish starts no recording");
@@ -468,7 +567,7 @@ test("a refused or closed capture prompt says what happened in Couch's words", (
 test("choosing an audio input translates permission errors and releases desktop preparation", () => check(`
   const originalCapture = navigator.mediaDevices.getUserMedia;
   navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
-  await assert.rejects(session.audioInputs(), /Microphone access wasn't allowed/);
+  await assert.rejects(session.audioInputs(), /Audio input access wasn't allowed/);
   assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
   assert.equal(commands.length, 0, "a refused probe publishes nothing");
   navigator.mediaDevices.getUserMedia = originalCapture;

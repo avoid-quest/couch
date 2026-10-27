@@ -22,29 +22,55 @@ bottom Sheet on phones and the TV:
 
 ```
 Share this device                                  ×
-(✓ Screen) (Window) (Sound only) (Microphone)
+(✓ Screen) (Window) (System audio) (Audio input)
+Share an entire display.
 [picture] [picture] [picture]          screens or windows
-Input                        [System default ▾]   Microphone only
-                             Choose audio input
+Playback                     (✓ Relaxed) (Live)    local desktop Audio input
+Device                       [System default ▾]   relaxed Audio input
+Device                       [Choose an input ▾]  Live Audio input
+                             Find audio inputs
+Playback buffer (ms)                     [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
-Include this computer's sound               [on]   Screen and Window
+Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
                               Cancel  [Start sharing]
 ```
 
-- **What to share** is one row of chips, the chosen one checked
-  (`shareKinds`). Each kind says how it captures: Screen and Window are a
-  `screen` capture of a screen or a window, Sound only is `system-audio`, and
-  Microphone is `microphone`, with today's input choice. Another kind (a
-  specific sound card, say) is one more entry there.
+- **What to share** is one row of four source choices, the chosen one checked
+  (`shareKinds`): **Screen**, **Window**, **System audio** and **Audio input**.
+  A short description explains the selected source. Screen shares an entire
+  display; Window shares one app window. System audio shares sound without
+  video; in a browser it asks for a tab or screen with audio enabled in the
+  browser's picker. Audio input includes microphones, line inputs and audio
+  interfaces, with a neutral cable icon. The internal `microphone` capture kind
+  retains its protocol and permission meaning.
+- **Playback** is a separate **Relaxed / Live** choice for Audio input on the
+  Couch computer in the desktop app. Relaxed keeps collaborative playback
+  controls and System default as an input choice. Live listeners control their
+  own listening; it requires an explicit input, so its selector starts empty,
+  omits System default and keeps Start sharing disabled until a device is selected.
+  Live requires an actual stereo input and timestamped capture;
+  unsupported capture fails with a reason. No duplicate mono is advertised as
+  stereo. Live listeners find the
+  source in Home or Search, **Join**, adjust their own volume, and **Leave**;
+  leaving does not stop sharing or affect another listener.
+- **Live input selection** opens the chosen input in an isolated hidden browser
+  capture page. This is an explicit input choice; a failed input never switches
+  devices.
+- **Playback buffer (ms)**, for Live, is how far behind the input listeners hear
+  it; more rides out Wi-Fi and phone hiccups. It is the same Couch-wide setting
+  as in the running share's panel.
 - **Screens and windows** in the desktop app are small pictures with their
   names (`desktopCapturer` thumbnails, 320 × 200), for this computer's own
   Couch only: another Couch's page (Client mode) lists their names alone, as it
   would otherwise see a window's content before the owner allows it. A screen
   is chosen for you; a window waits for your choice. In a browser Screen and
   Window hand off to the browser's own picker, which opens on that surface and
-  still offers the rest. Sound only takes the first screen's capture for its
+  still offers the rest. System audio takes the first screen's capture for its
   sound in the desktop app, so Start sharing waits there until it lists one.
+  Screen and Window offer **Include system audio** on desktop, explaining that
+  it includes everything the computer plays. Browsers say **Include audio** and
+  ask the person to enable it in the browser's picker when offered.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
   place, disabled, and leaves the choice. Without a choice the share waits in
@@ -53,7 +79,7 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   order: the first that takes it plays it, then each other joins the same
   playback. Closing the dialog while it starts cancels it, as Cancel does.
 - **Disabled keeps its place:** a browser that can't capture a display (a
-  phone's) keeps Screen, Window and Sound only, disabled, with today's reason
+  phone's) keeps Screen, Window and System audio disabled, with today's reason
   under the chips.
 
 ## While it runs
@@ -66,6 +92,8 @@ Screen"). It floats on the toasts' surface and shadow,
 without the bar's filter, which stays the page's one backdrop filter
 ([Glass](../design.md#glass)). Below `xl` the name leaves, below 960px the
 count too (thumbnail and Stop); on a phone Stop keeps only its icon.
+Home and Search also omit a source's type caption when its name already ends
+with that type, so Audio input is shown once.
 
 Pressing it opens its panel, a Popover hanging from it on desktop and a bottom
 Sheet on phones and the TV:
@@ -74,7 +102,7 @@ Sheet on phones and the TV:
   with this computer's sound") and since when.
 - **Who's watching**, one divided row per device the share plays on, from the
   playbacks that play it: its channels and its route, "Picture and sound,
-  direct" or "Sound, through the relay", read every two seconds from the
+  direct" or "Sound, through the relay" for WebRTC, read every two seconds from the
   publisher's own connection (the selected candidate pair in
   `RTCPeerConnection.getStats()`). Where it plays names only exceptions; this
   panel is the sharer's own, so every row names its route. Behind and "Can't
@@ -82,13 +110,23 @@ Sheet on phones and the TV:
   sound plays shows the [level](../design.md#motion), moving only where Where
   it plays' would (online, unmuted, above zero).
 - **Picture**, changed live through `applyConstraints` on the captured track,
-  without restarting it; **Mute microphone** turns the microphone's track off
+  without restarting it; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections.
+- Live sharing reports the delivered rate, channels and first block size.
 - One line about the relay only when a device is Behind: with no relay, that a
   relay can fix it, linking Devices & network; with one, that it couldn't
   connect even through it.
 - **Where it plays**, while this window views the playback that plays the
   share. Stop sharing stays on the capsule.
+
+### Live audio
+
+A [Live audio](../live-audio.md) share lists listeners, each with a ⋯ **Remove**
+action. Input mute remains. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
+option; a change reconnects each listener's player. **Playback buffer (ms)** is
+the SDK's `minBufferMs`, initially 150 ms. A larger buffer applies to the running
+share at once; a smaller one applies when sharing restarts, which the panel says.
+There are no latency estimates, gap counters or listener polling.
 
 ## When it doesn't work
 
@@ -105,6 +143,11 @@ Sheet on phones and the TV:
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
+
+Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
+**Tap to hear** unlocks sound. Leaving releases this listener without ending
+capture or interrupting other listeners. Actual source/output errors keep their
+reason; the SDK handles receiver timing and recovery.
 
 ## Not yet
 

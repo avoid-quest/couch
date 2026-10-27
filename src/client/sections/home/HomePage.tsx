@@ -1,3 +1,4 @@
+import { playbackControls } from "@/session/playback-controls";
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaContext } from "@/components/MediaContext";
 import { playbackStatus } from "@/playback-status";
@@ -106,7 +107,7 @@ export function HomePage() {
   const queue = state?.queue ?? [];
   const currentIndex = queue.findIndex(entry => entry.id === state?.currentEntryId);
   const cursor = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
-  const upcoming = queue.slice(cursor + 1);
+  const upcoming = playbackControls(state).queue ? queue.slice(cursor + 1) : [];
 
   const past = history.data?.items ?? [];
   const unfinished = past.filter(item => item.position > 0 && !item.watched);
@@ -270,7 +271,7 @@ function UpcomingBoard({ cursor, pageFirst, onMore }: { cursor: number; pageFirs
   const playbackClock = usePlaybackClock();
   const now = useDurationClock();
   const queue = state?.queue ?? [];
-  const upcoming = queue.slice(cursor + 1);
+  const upcoming = playbackControls(state).queue ? queue.slice(cursor + 1) : [];
   const shape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
   const length = current ? current.live ? null : playbackClock.duration || knownLength(current) : 0;
   // Up next as a timetable: each entry starts when the one before it ends.

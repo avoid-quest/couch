@@ -390,6 +390,10 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
   .player-control-row span[data-player-last] { display: none; }
   .player-timeline [data-current-chapter] { display: none; }
 }
+/* Wrap Live's connection and error status within the screen beside the tools. */
+.player-control-row:has(> [data-live-participation]) { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
+.player-control-row > [data-live-participation] { grid-column: 1; justify-self: start; gap: .5rem; }
+.player-control-row:has(> [data-live-participation]) > [data-player-tools] { grid-column: 2; }
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }

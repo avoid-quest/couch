@@ -58,7 +58,7 @@ export type Row = {
 export type Picker = {
   /** A shared source waiting for receivers: "Choose where {title} plays". */
   choose?: string;
-  /** In sync, where it applies: a live input on several devices, or already on. */
+  /** Optional buffered synchronization for captured video/legacy input delivery. */
   inSync?: boolean;
   /** Every device, the playback's first. */
   rows: Row[];
@@ -128,8 +128,8 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
   });
   return {
     choose: waiting ? `Choose where ${title ?? "it"} plays` : undefined,
-    // A live input plays directly on each device unless In sync is chosen (docs/adr/0001).
-    inSync: source && (outputs.length > 1 || playback?.inSync) ? !!playback?.inSync : undefined,
+    // PCM audio is already scheduled, even at one receiver; this choice remains for captured A/V.
+    inSync: source && !(source.audioDelivery === "pcm" && !source.video) && (outputs.length > 1 || playback?.inSync) ? !!playback?.inSync : undefined,
     rows,
   };
 }

@@ -21,6 +21,10 @@ thickens to .25rem. Each shelf takes its own line, so Up and Down always go
 shelf to shelf. A shelf's padding and the tile's scroll margin keep the
 lifted tile clear of the clip and the screen's edge.
 
+The Where it plays row's OK menu includes **Move here**, using the same exclusive
+move and consent checks as pointer controls. Live audio uses Join/Leave instead
+of programme transport; another device's Remote never grants capture consent.
+
 ## Pairing
 
 An unpaired TV shows its code, six digits as large as the screen allows, and

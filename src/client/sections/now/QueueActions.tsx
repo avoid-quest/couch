@@ -1,3 +1,5 @@
+import { playbackControls } from "@/session/playback-controls";
+import { useOptionalSessionGate } from "@/session/session-context";
 import { browserActions, queuePageUrl } from "@/original-page";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
@@ -21,11 +23,12 @@ export type QueueActionsProps = {
 /** An Up next entry's other verbs: Details, Play next, Earlier, Later, Save for later and Remove. Nothing for rows without them. */
 export function useQueueActions(props?: QueueActionsProps): MenuAction[] {
   const details = useDetailNavigation();
+  const session = useOptionalSessionGate();
   const save = useMutation({
     mutationFn: () => apiSend(props!.credentials, "/api/for-later", { reference: { kind: "queue", id: props!.entry.id } }, "POST", 20_000),
     onError: error => failed(`Couldn't save ${props?.entry.title}.`, error),
   });
-  if (!props) return [];
+  if (!props || !playbackControls(session?.state).queue) return [];
   const { entry, index, queue, connected, run, firstUpcomingIndex, lastUpcomingIndex } = props;
   const upcoming = index >= firstUpcomingIndex && firstUpcomingIndex < lastUpcomingIndex;
   return [

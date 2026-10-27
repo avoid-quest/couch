@@ -92,7 +92,7 @@ const sharingLocalOnly = async () => {
   assert(share.closest("[data-tv-local-only]"), "Share is not local to this device");
   share.click(); await wait(350);
   const choice = (label: string) => [...document.querySelectorAll<HTMLElement>('[aria-label="What to share"] [role="radio"]')].find(item => item.textContent === label);
-  const microphone = choice("Microphone"), screen = choice("Screen");
+  const microphone = choice("Audio input"), screen = choice("Screen");
   assert(microphone && screen && !microphone.matches(":disabled"), "Sharing has no enabled capture choices; stop any existing capture first");
   assert(screen!.getAttribute("aria-checked") === "true", "Sharing did not start on Screen");
   const remote = async (key: Parameters<typeof applyTvNavigation>[0]) => { applyTvNavigation(key); await wait(350); };

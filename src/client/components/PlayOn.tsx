@@ -3,6 +3,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup,
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { playOnTargets } from "@/session/where-it-plays";
+import { playbackControls } from "@/session/playback-controls";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
 export function usePlayOn() {
@@ -13,6 +14,7 @@ export function usePlayOn() {
   return {
     devices: playOnTargets(state, here),
     here,
+    queueAllowed: playbackControls(state).queue,
     /** A Play label that names the controlled Device when Play goes elsewhere: "Play on Studio". */
     on: (label: string) => target ? `${label} on ${target.name}` : label,
     /** Plays, with Play on's Device passed to `work` for its request, then says where it plays. */

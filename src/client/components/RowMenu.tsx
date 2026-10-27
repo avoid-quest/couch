@@ -25,9 +25,9 @@ type ItemProps = Pick<HTMLAttributes<HTMLElement>, "className" | "onContextMenu"
  * which navigation.ts turns into `contextmenu` on a target marked `data-item-menu`.
  */
 export function useItemMenu(actions: MenuAction[]) {
-  const { devices, on } = usePlayOn();
+  const { devices, on, queueAllowed } = usePlayOn();
   // Play on waits for a second online Device, so it alone never makes a menu.
-  const shown = actions.filter(action => !action.playOn || devices.length > 0);
+  const shown = actions.filter(action => (queueAllowed !== false || action.label !== "Queue" && action.label !== "Play next") && (!action.playOn || devices.length > 0));
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const press = useRef<{ release: () => boolean; x: number; y: number } | null>(null);

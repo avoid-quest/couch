@@ -1,3 +1,4 @@
+import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
@@ -105,7 +106,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const light = useArtworkLight(programme?.artworkUrl || current?.thumbnail);
   if (!current) return null;
   const playback = state.playbacks?.find(item => item.id === state.playback);
-  const settings = state.preferences ? { entry: current, player, ready: playbackCapabilities(state, connected).transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run } : null;
+  const settings = state.preferences && playbackControls(state).programme ? { entry: current, player, ready: playbackCapabilities(state, connected).transportReady, connected, credentials, preferences: state.preferences, profile: state.activeProfile, onCommand: run, controls: state.controls } : null;
   const details = current.liveSourceId ? undefined : queueItemLocation(current);
   const radio = isRadio(current);
   // The player's words, less the title shown right above them and the plain states the transport already shows.
@@ -144,11 +145,11 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
     </div>
     <PlaybackTransport state={state} connected={connected} run={run} moreClassName={desktop} />
     <div data-bar-tools className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5 max-sm:gap-0">
-      <VolumeButton state={state} connected={connected} run={run} className={desktop} />
-      <WhereItPlays state={state} connected={connected} run={run} className={desktop} />
+      <VolumeButton state={state} connected={connected} run={run} className={livePlayback(state) ? undefined : desktop} />
+      {!livePlayback(state) && <WhereItPlays state={state} connected={connected} run={run} className={desktop} />}
       <UpNextButton state={state} className={desktop} onClick={() => onOpen("queue")} />
       {/* The player's own Playback menu, for whatever plays, here or on another device. */}
-      <Popover open={menu} onOpenChange={setMenu}>
+      {!livePlayback(state) && <Popover open={menu} onOpenChange={setMenu}>
         <PopoverTrigger asChild><Button ref={gear} data-panel="settings" variant="ghost" size="icon-lg" className={desktop} aria-label="Playback" title="Playback" disabled={!settings}><Settings aria-hidden="true" /></Button></PopoverTrigger>
         {menu && settings && <PlaybackMenu {...settings} trigger={gear.current} tracks={!isAudioOnly(playback, current, player.tracks)} details={details && <Button asChild variant="ghost" className={playbackMenuRow}><Link to={detailHref(details)} aria-label="Details" onClick={event => {
           // As the player's own Details: in the section it was opened from, and Back returns to the gear.
@@ -156,7 +157,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
           if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           event.preventDefault(); detailNavigation.open(details, '[data-now-playing] button[aria-label="Playback"]');
         }}>Details<ChevronRight aria-hidden="true" className="-mr-1 ml-auto" /></Link></Button>} />}
-      </Popover>
+      </Popover>}
       {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. */}
       <Button data-player-last variant="ghost" size="icon-lg" aria-label="Open player" title="Open player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
     </div>
