@@ -2,7 +2,8 @@ import { createSocket } from "node:dgram";
 import { crc32 } from "node:zlib";
 import type { LanNetwork } from "./lan-listener";
 
-// IPv4 Binding discovery on Couch's selected LAN supplies address candidates
+// IPv4 Binding discovery on Couch's selected LAN address, for local and routed
+// clients alike, supplies address candidates
 // without a microphone prompt or an Internet service. Browser candidate policies
 // vary; authenticated TURN remains available when direct connectivity fails.
 export async function serveLiveStun(network: LanNetwork, port: number) {
