@@ -43,7 +43,7 @@ returned 403 through curl and Core even with per-format headers and matching
 IPv4 egress, then worked when replayed later. yt-dlp's downloadability check made
 the immediate relay requests succeed, without cookies or a pinned player client.
 
-Core stores protected loopback media for Synced playback. A media-only loopback
+Core prepares protected loopback media for relaxed scheduled playback through the common source-preparation and audio-worker path. A media-only loopback
 listener keeps native decoding independent of the UI listener’s bind address and
 TLS configuration; it closes with Core. FFmpeg also uses the
 restricted proxy and a media format allowlist; its only local exception is the

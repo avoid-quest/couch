@@ -1,3 +1,5 @@
+import { Identity } from "@sonn-audio/node-sendspin";
+import { defaultLiveAudioSettings, isLiveAudioSettings, type LiveAudioSettings } from "../shared/audio-settings";
 import type { LiveRelay } from "../shared/live-relay";
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
@@ -92,6 +94,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation (id, name) VALUES (1, '${UNNAMED_COUCH}');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS sendspin_identity (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_live_audio (id INTEGER PRIMARY KEY CHECK (id = 1), settings TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_live_chooser (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
@@ -101,7 +105,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
-    CREATE TABLE IF NOT EXISTS sendspin_identity (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS device_sync_delay (id TEXT PRIMARY KEY, delay REAL NOT NULL);
   `);
 
@@ -180,10 +183,21 @@ export function openStore(path: string, remoteControlEnabled = false) {
   };
   return {
     installationId() { return db.query<{ installationId: string }, []>("SELECT installationId FROM installation_identity WHERE id = 1").get()!.installationId; },
-    // Core's Sendspin server key (#644 ticket 10): clients know this Couch by it.
-    sendspinKey(fresh: () => string) {
-      if (!db.query("SELECT 1 FROM sendspin_identity").get()) db.query("INSERT INTO sendspin_identity VALUES (1, ?)").run(fresh());
-      return db.query<{ key: string }, []>("SELECT key FROM sendspin_identity WHERE id = 1").get()!.key;
+    sendspinPrivateKey() {
+      const saved = db.query<{ key: string }, []>("SELECT key FROM sendspin_identity WHERE id = 1").get();
+      if (saved) return saved.key;
+      const value = Identity.generate().privateB64u;
+      db.query("INSERT INTO sendspin_identity VALUES (1, ?)").run(value);
+      return value;
+    },
+    liveAudioSettings(): LiveAudioSettings {
+      const saved = db.query<{ settings: string }, []>("SELECT settings FROM installation_live_audio WHERE id = 1").get()?.settings;
+      const value = saved ? JSON.parse(saved) : null;
+      return isLiveAudioSettings(value) ? { codec: value.codec, minBufferMs: value.minBufferMs } : defaultLiveAudioSettings;
+    },
+    saveLiveAudioSettings(value: unknown) {
+      if (!isLiveAudioSettings(value)) throw new ControllerError("Choose Automatic, PCM or Opus and a buffer between 0 and 5000 ms.");
+      db.query("INSERT INTO installation_live_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET settings = excluded.settings").run(JSON.stringify({ codec: value.codec, minBufferMs: value.minBufferMs }));
     },
     askEveryDevice() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_live_chooser WHERE id = 1").get()?.enabled; },
     saveAskEveryDevice(enabled: boolean) { db.query("INSERT INTO installation_live_chooser VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
@@ -437,7 +451,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     // A speaker's Sendspin static delay as it last reported it; its player keeps the value itself.
     deviceSyncDelay: (id: string) => db.query<{ delay: number }, [string]>("SELECT delay FROM device_sync_delay WHERE id = ?").get(id)?.delay,
     saveDeviceSyncDelay(id: string, delay: number) { db.query("INSERT INTO device_sync_delay VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET delay = excluded.delay").run(id, delay); },
-    /** Pairs the Device whose key is `id`, or gives an already paired key a new token. */
+    /** Pairs the Device whose ID is `id`, or gives an already paired ID a new token. */
     pair(id: unknown, name?: unknown) {
       if (!isDeviceId(id)) throw new ControllerError("Update Couch on this device, then pair again.");
       if (id === installation().deviceId) throw new ControllerError("This device already runs this Couch.", 409);
@@ -454,8 +468,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return token;
     },
     /**
-     * A connected Device presents its key. Pairings made before keys were IDs,
-     * and Devices whose key changed, take the presented key as their ID. Returns
+     * A connected Device presents its stable ID. Legacy pairings and Devices
+     * whose ID changed take the presented ID after token authentication. Returns
      * whether anything changed.
      */
     identify(token: string | null, id: unknown) {

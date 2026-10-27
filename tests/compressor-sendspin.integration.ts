@@ -20,7 +20,7 @@ async function until(predicate: () => boolean) {
 test("one compressed Sendspin mix feeds Opus and PCM, preserves timestamps, and applies paused edits", { timeout: 30_000, skip: !available && "Set COUCH_TEST_FFMPEG to a real FFmpeg." }, async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-compressor-sendspin-")), clients: SendspinClient[] = [];
   const keys = [Identity.generate(), Identity.generate(), Identity.generate()];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Compressor fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
+  const core = createSendspin({ name: "Compressor fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
   let state: PlayerState;
   const group = core.group("compressed", next => { state = next; });
   const server = createServer((_request, response) => { response.setHeader("Content-Type", "audio/wav"); response.end(readFileSync(join(directory, "tone.wav"))); });
@@ -38,7 +38,7 @@ test("one compressed Sendspin mix feeds Opus and PCM, preserves timestamps, and 
   async function receiver(index: number, codec: AudioCodec) {
     const key = keys[index]!, frames: { timestamp: number; bytes: Buffer }[] = [];
     let starts = 0, clears = 0;
-    const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], { encryption: { identity: key }, playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 2_000_000, supported_commands: [] } });
+    const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], { playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 2_000_000, supported_commands: [] } });
     clients.push(client);
     client.addStreamStartListener(() => { starts++; frames.length = 0; });
     client.addStreamClearListener(() => { clears++; frames.length = 0; });

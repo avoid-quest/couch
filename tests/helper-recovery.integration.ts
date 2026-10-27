@@ -616,12 +616,18 @@ test("media rejected after yt-dlp's output was read, such as a live stream's fal
 
   // 2026.09.01 offers a live variant playlist that answers 403, and no master playlist to fall back to.
   writeFileSync(f.path("2026.09.01"), `#!${process.execPath}\nconsole.log(process.argv[2] === "--version" ? "2026.09.01" : ${JSON.stringify(JSON.stringify({ url: "https://media.example/live.m3u8", protocol: "m3u8_native", is_live: true, manifest_url: "", title: "live" }))});\n`, { mode: 0o755 });
-  t.mock.method(https, "request", (_url: unknown, _options: unknown, answer: (response: unknown) => void) => {
+  let probes = 0;
+  t.mock.method(https, "request", (url: URL, _options: unknown, answer: (response: unknown) => void) => {
+    assert.equal(url.href, "https://media.example/live.m3u8"); probes++;
     const request = new PassThrough();
-    request.once("finish", () => answer(Object.assign(Readable.from([]), { statusCode: 403, statusMessage: "Forbidden", rawHeaders: [], headers: {} })));
+    // publicFetch records the checked final peer before returning the response.
+    request.once("finish", () => answer(Object.assign(Readable.from([]), {
+      statusCode: 403, statusMessage: "Forbidden", rawHeaders: [], headers: {}, socket: { remoteAddress: "93.184.216.34" },
+    })));
     return request;
   });
   await assert.rejects(f.play(), /Web media must use/);
+  assert.equal(probes, 1, "the rejected variant reaches the real fallback URL validation");
   assert.deepEqual((await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked, {});
   f.release("2026.10.01", true);
   await checkHelper("yt-dlp");

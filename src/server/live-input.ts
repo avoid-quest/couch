@@ -8,8 +8,8 @@ type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; so
 // Receivers that couldn't connect directly play this source through Core's stream instead.
 // uploadId: Core asks for encoded capture only while something plays it buffered. Each request has its own identity.
 // A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
-type Publication<Socket> = { source: LiveSource; owner?: Socket; uploadToken?: string; relayed: Set<string>; uploadId?: string };
-type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; relay?: string };
+type Publication<Socket> = { source: LiveSource; startedAt: number; owner?: Socket; uploadToken?: string; relayed: Set<string>; uploadId?: string };
+type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; volume: number; relay?: string };
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
 export function createLiveInputs<Socket>(options: {
@@ -21,9 +21,19 @@ export function createLiveInputs<Socket>(options: {
 }) {
   const sources = new Map<string, Publication<Socket>>();
   const peers = new Map<string, Peer<Socket>>();
+  const announcements = new Set<string>();
+  let announcing: ReturnType<typeof setImmediate> | undefined;
   const announce = (sourceId: string) => {
-    const publication = sources.get(sourceId);
-    if (publication?.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
+    announcements.add(sourceId);
+    // A burst of socket closes or joins needs one current list, not every intermediate routing.
+    announcing ??= setImmediate(() => {
+      announcing = undefined;
+      const changed = [...announcements]; announcements.clear();
+      for (const sourceId of changed) {
+        const publication = sources.get(sourceId);
+        if (publication?.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
+      }
+    });
   };
   const removePeer = (peer: Peer<Socket>) => {
     peers.delete(peer.peerId);
@@ -33,6 +43,7 @@ export function createLiveInputs<Socket>(options: {
     const publication = sources.get(sourceId);
     if (!publication) return;
     sources.delete(sourceId);
+    announcements.delete(sourceId);
     // Publish the ending notice before any peer's Stop can close its player.
     options.ended(publication.source, publisherName);
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
@@ -42,27 +53,29 @@ export function createLiveInputs<Socket>(options: {
   return {
     sources: () => [...sources.values()].map(publication => publication.source),
     source: (sourceId: string) => sources.get(sourceId)?.source,
+    position: (sourceId: string) => { const publication = sources.get(sourceId); return publication ? (performance.now() - publication.startedAt) / 1000 : 0; },
     publish(socket: Socket, action: Extract<Action, { type: "publishLive" }>): LiveSource {
       if (sources.has(action.sourceId)) throw new Error("That live source already exists.");
       for (const [sourceId, publication] of sources) if (publication.owner === socket) end(sourceId);
       const deviceId = options.deviceOf(socket);
-      const label = action.kind === "microphone" ? "Microphone" : action.kind === "system-audio" ? "System audio" : "Screen";
-      const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video };
-      sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken, relayed: new Set() });
+      const label = action.kind === "microphone" ? "Audio input" : action.kind === "system-audio" ? "System audio" : "Screen";
+      const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video, ...(action.intent ? { intent: action.intent } : {}), ...(action.audioDelivery ? { audioDelivery: action.audioDelivery } : {}) };
+      sources.set(source.id, { source, startedAt: performance.now(), owner: socket, uploadToken: action.uploadToken, relayed: new Set() });
       options.changed();
       return source;
     },
     // Core's own publication, ended only by Core.
     host(source: LiveSource) {
       if (sources.has(source.id)) throw new Error("That live source already exists.");
-      sources.set(source.id, { source, relayed: new Set() });
+      sources.set(source.id, { source, startedAt: performance.now(), relayed: new Set() });
       options.changed();
     },
     unhost(sourceId: string) { if (sources.has(sourceId) && !sources.get(sourceId)!.owner) end(sourceId); },
     hosted: (sourceId: string) => sources.has(sourceId) && !sources.get(sourceId)!.owner,
-    acceptsUpload(sourceId: string, deviceId: string, key: string) {
+    acceptsUpload(sourceId: string, deviceId: string, key: string, uploadId?: string) {
       const publication = sources.get(sourceId);
       if (!publication?.uploadToken || publication.source.deviceId !== deviceId) return false;
+      if (publication.source.audioDelivery === "pcm" && (!uploadId || publication.uploadId !== uploadId)) return false;
       const expected = Buffer.from(publication.uploadToken), supplied = Buffer.from(key);
       return expected.length === supplied.length && timingSafeEqual(expected, supplied);
     },
@@ -95,8 +108,15 @@ export function createLiveInputs<Socket>(options: {
       }
       if (publication && load) for (const receiver of wanted) {
         const existing = [...peers.values()].find(peer => peer.playbackId === playbackId && peer.receiver === receiver.socket);
-        if (existing) { options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } }); continue; }
-        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, relay: receiver.relay };
+        if (existing) {
+          // Routing another output must not make this renderer echo its unchanged level.
+          if (existing.volume !== receiver.volume) {
+            existing.volume = receiver.volume;
+            options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } });
+          }
+          continue;
+        }
+        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, volume: receiver.volume, relay: receiver.relay };
         peers.set(peer.peerId, peer);
         if (peer.relay) {
           // Core's channel-filtered stream in the ordinary player: the publisher sends it nothing.
@@ -142,6 +162,6 @@ export function createLiveInputs<Socket>(options: {
       for (const peer of [...peers.values()]) if (peer.receiver === socket) { peers.delete(peer.peerId); changed.add(peer.sourceId); }
       for (const sourceId of changed) announce(sourceId);
     },
-    close() { for (const sourceId of [...sources.keys()]) end(sourceId); },
+    close() { clearImmediate(announcing); announcing = undefined; announcements.clear(); for (const sourceId of [...sources.keys()]) end(sourceId); },
   };
 }

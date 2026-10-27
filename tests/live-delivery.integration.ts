@@ -18,7 +18,7 @@ const rtc = (load: Load, sourceId = "screen") => {
 const synced = (load: Load, group: string) => {
   assert.equal(load.hls, true, "Synced live playback must reload the normal HLS picture");
   assert.equal("livePeerId" in load, false);
-  assert.deepEqual(load.follow, { group, pts: true });
+  assert.deepEqual(load.follow, { group, pts: true, timeline: { kind: "source-pts", generation: load.playbackId, mapping: "hls" } });
 };
 // A receiver that couldn't connect directly plays Core's buffered stream from its own link, alone.
 const relayed = (load: Load, receiver: Receiver) => {
@@ -173,7 +173,7 @@ test("replacing Direct RTC retires its peer and later outputs receive only the c
     await until(() => !!other.load());
     assert.equal(other.load()!.source, source);
     assert.equal("livePeerId" in other.load()!, false);
-    assert.deepEqual(other.load()!.follow, { group, pts: false });
+    assert.deepEqual(other.load()!.follow, { group, pts: false, timeline: { kind: "position", generation: other.load()!.playbackId, mapping: "media" } });
     assert.equal(f.receiver.messages.slice(afterReplacement).some(message => "peerId" in message && message.peerId === peerId), false, "retired peer signaling must not reach the receiver");
     await f.publisher.command({ type: "endLive", sourceId: "screen" });
     assert.equal(f.publisher.state.playback, group);

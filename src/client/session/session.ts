@@ -105,7 +105,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(publishing ? "playing" : ["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; publishing = false; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; publishing = false; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, credentials, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -265,7 +265,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         } else if (message.type === "livePeers" || message.type === "liveSignal" || message.type === "liveIceServers") {
           live.current?.receive(message);
         } else if (message.type === "sendspin") {
-          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
+          listen(message.listen, message.watch, credentials, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch", message.live);
         } else if (message.type === "text") {
           void (textInput?.receive(message) ?? Promise.resolve(false)).then(ok => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok })); });
         } else if (message.type === "navigation") {

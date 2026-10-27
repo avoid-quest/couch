@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
+import { channel } from "node:diagnostics_channel";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { openStore } from "../src/server/store";
 import { parseCommand, parsePlayer } from "../src/server/validation";
 import type { ServerMessage } from "../src/shared/protocol";
@@ -81,8 +83,12 @@ const coreLink = /\/api\/live\/media\/[^"]*\/core\//;
 test("each screen's live link names its Device and stops serving it once unpaired, while the others play on", { timeout: 20_000 }, async () => {
   const f = await liveFixture({ local: true });
   // Core's own decoder reads its link through the same endpoint, from this machine.
-  const core: number[] = [], fetchHub = globalThis.fetch;
-  globalThis.fetch = (async (input, init) => { const response = await fetchHub(input, init); if (coreLink.test(String(input))) core.push(response.status); return response; }) as typeof fetch;
+  const core: number[] = [], responses = channel("http.server.response.finish");
+  const observe = (message: unknown) => {
+    const { request, response } = message as { request: IncomingMessage; response: ServerResponse };
+    if (coreLink.test(request.url ?? "")) core.push(response.statusCode);
+  };
+  responses.subscribe(observe);
   let feeding: ReturnType<typeof setInterval> | undefined;
   try {
     await f.publish("screen");
@@ -132,7 +138,7 @@ test("each screen's live link names its Device and stops serving it once unpaire
     clearInterval(feeding);
     assert.equal((await f.publisher.command({ type: "endLive", sourceId: "screen" })).ok, true);
     assert.equal((await fetch(receiving)).status, 404);
-  } finally { clearInterval(feeding); await f.close(); }
+  } finally { responses.unsubscribe(observe); clearInterval(feeding); await f.close(); }
 });
 
 test("a screen's live link ends with its picture or its output, lasts through a pause and a new tab, and ends when the item is replaced", { timeout: 20_000 }, async () => {

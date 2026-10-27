@@ -97,6 +97,7 @@
       "build/main.mjs",
       "build/preload.cjs",
       "build/core.mjs",
+      "build/audio-worker.mjs",
       "dist/**",
       "packaging/icons/icon.png",
       "packaging/icons/icon.ico",

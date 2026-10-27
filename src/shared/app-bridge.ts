@@ -20,6 +20,9 @@ export type CouchApp = {
   captureSources?(): Promise<CaptureSource[]>;
   /** Selects one capture request; null cancels a prepared selection. */
   prepareCapture?(selection: CaptureSelection | null): Promise<void>;
+  /** Desktop Live microphone capture owned by Main, independent of this page's render loop. */
+  liveAudio?(action: import("./capture").LiveAudioAction): Promise<import("./capture").AudioCaptureFormat | undefined>;
+  onLiveAudioError?(listener: (error: import("./capture").LiveAudioError) => void): () => void;
   /** What to allow in the system's settings before capturing this kind; null when nothing. */
   captureAccess?(kind: CaptureKind): Promise<string | null>;
   /** Opens the system's setting that allows this kind. */

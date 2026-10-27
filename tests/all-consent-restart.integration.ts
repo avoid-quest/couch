@@ -69,12 +69,11 @@ async function fixture() {
     speaker: async (index: number) => {
       const identity = identities[index]!, levels: number[] = [];
       const client = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], {
-        encryption: { identity: identity.key },
         playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.VOLUME] },
       });
       speakers.push(client);
       client.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!); });
-      await client.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+      await client.connect(`${hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`, { timeoutMs: 3_000 });
       return levels;
     },
     restart: async () => { await stop(); return start(); },
@@ -142,6 +141,9 @@ test("restored All follows live audio consent in Direct and Synced delivery", { 
     await b!.command({ type: "output", deviceId: b!.id, level: 40 });
     const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
     await until(() => levels[0]!.at(-1) === 14 && levels[1]!.at(-1) === 8);
+    // SDK volume commands can precede Core's worker-admission snapshot. Capture
+    // the comparison only after both receivers' delay fields are published.
+    await until(() => b!.state.outputs?.length === 2 && b!.state.outputs.every(output => output.delay === 0 && output.delayActive === true));
     const localOutputs = b!.state.outputs;
     for (const audio of [false, true, false]) {
       await b!.command({ type: "sharing", sharing: { audio, video: true } });

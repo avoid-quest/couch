@@ -25,7 +25,7 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS]) test(`live ${codec} share
   const directory = mkdtempSync(join(tmpdir(), "couch-live-clock-"));
   const clients: SendspinClient[] = [];
   const keys = [Identity.generate(), Identity.generate()];
-  const core = createSendspin({ identity: Identity.generate().privateB64u, name: "Clock fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
+  const core = createSendspin({ name: "Clock fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
   const group = core.group("live-clock", () => {});
   const server = createServer((request, response) => {
     const name = new URL(request.url!, "http://localhost").pathname.slice(1);
@@ -63,7 +63,6 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS]) test(`live ${codec} share
     const frames: { timestamp: number; bytes: Buffer }[] = [], metadata: SessionUpdateMetadata[] = [], groups: string[] = [];
     let starts = 0, ends = 0, clears = 0;
     const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER, Roles.METADATA], {
-      encryption: { identity: key },
       playerSupport: { supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 2_000_000, supported_commands: [] },
     });
     clients.push(client);

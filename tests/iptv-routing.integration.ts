@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createServer, type ServerResponse } from "node:http";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
+import { checkHelper, helper, startHelpers } from "../src/server/helpers";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 
@@ -48,6 +49,8 @@ async function fixture(raw = false) {
   };
   const binary = join(directory, "bin"), nativeLog = join(directory, "mpv.jsonl"), readyLog = join(directory, "mpv-ready"), originalPath = process.env.PATH;
   mkdirSync(binary);
+  // A repo-local COUCH_DATA_DIR otherwise inherits the app's ESM package scope.
+  writeFileSync(join(binary, "package.json"), '{"type":"commonjs"}\n');
   // The native process can create its log before its first record is readable.
   writeFileSync(nativeLog, "");
   // Model only the external mpv executable/IPC boundary. No video/audio device is opened.
@@ -87,8 +90,13 @@ async function fixture(raw = false) {
       const response = new Response('<div data-page="{&quot;component&quot;:&quot;Home&quot;,&quot;props&quot;:{}}"></div>');
       Object.defineProperty(response, "url", { value: String(input) }); return response;
     }
+    if (new URL(String(input)).hostname === "api.github.com") return new Response("Offline helper fixture", { status: 503 });
     return originalFetch(input, init);
   }) as typeof fetch;
+  startHelpers(join(directory, "helpers"));
+  const helpers = await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp"), checkHelper("mpv")]);
+  assert.deepEqual(helpers[0], { status: "fulfilled", value: join(binary, "ffmpeg") });
+  assert.deepEqual(helpers[3], { status: "fulfilled", value: join(binary, "mpv") });
   const hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: Number(process.env.COUCH_PORT ?? 0) });
   const sockets: WebSocket[] = [];
   const connect = async (auth: string, id: string, sharing = false) => {
@@ -262,10 +270,14 @@ for (const raw of [false, true]) {
       assert.equal((await f.play(raw ? "TS_HEVC" : "HEVC", f.targetId)).status, 200);
       await gate.entered;
       await until(() => f.remote.state.outputs?.[0]?.deviceId === f.targetId);
-      const playback = f.remote.state.playback;
+      const playback = f.remote.state.playback, entryId = f.remote.state.currentEntryId;
       assert.equal((await target.command({ type: "sharing", sharing: { audio: false, video: false } })).ok, true);
       gate.release();
-      await until(() => f.remote.state.player.error === "Choose a shared output to play it.");
+      await until(() => f.remote.state.player.status === "unavailable");
+      assert.equal(f.remote.state.player.error, "Target fixture is not sharing video.");
+      assert.equal(f.remote.state.player.playbackId, null);
+      assert.equal(f.remote.state.currentEntryId, entryId);
+      assert.ok(f.remote.state.queue.some(entry => entry.id === entryId), "withdrawing consent keeps the queued channel");
       assert.deepEqual(f.remote.state.playbacks?.find(item => item.id === playback)?.outputs, []);
       assert.equal(loads(target).length, 0);
       assert.equal(loads(f.host).length, 0);
