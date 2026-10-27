@@ -3,7 +3,7 @@
 //   nice -n 19 node build/live-fanout.performance.mjs <evidence directory> [pcm|opus ...]
 // A scratch Core on the LAN HTTPS address streams the capture fixture to fixture listeners in a separate
 // process, so their CPU doesn't count against Core. Core's threads are read from /proc (Linux only).
-// COUCH_FANOUT_STEPS (1,10,25,50), COUCH_FANOUT_SECONDS (20) and COUCH_CPU_PROF=1 (V8 profiles of each Core thread).
+// COUCH_FANOUT_STEPS (1,10,25,50), COUCH_FANOUT_SECONDS (30) and COUCH_CPU_PROF=1 (V8 profiles of each Core thread).
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -25,7 +25,7 @@ async function until(check: () => unknown, label: string, timeout = 20_000) {
   while (!await check()) { assert(Date.now() < deadline, label); await sleep(20); }
 }
 const hostToken = "h".repeat(64), sourceId = "fanout", uploadToken = "1".repeat(64);
-const steps = (process.env.COUCH_FANOUT_STEPS ?? "1,10,25,50").split(",").map(Number), seconds = Number(process.env.COUCH_FANOUT_SECONDS ?? 20);
+const steps = (process.env.COUCH_FANOUT_STEPS ?? "1,10,25,50").split(",").map(Number), seconds = Number(process.env.COUCH_FANOUT_SECONDS ?? 30);
 type Device = { id: string; token: string };
 const quantile = (values: number[], q: number) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]! : NaN; };
 
@@ -41,7 +41,7 @@ if (process.argv.includes("--core")) {
   process.on("SIGTERM", () => void hub.close().then(() => process.exit()));
 } else if (process.argv.includes("--listeners")) {
   // Like the browser listener: pings every 50 ms, one stats report a second, the clock from the quickest pong.
-  type Listener = { arrivals: number[]; ages: number[]; gapMax: number; last: number; offsetUs: number; rtt: number; packets: number };
+  type Listener = { ages: number[]; gapMax: number; last: number; offsetUs: number; rtt: number; packets: number; status?: string };
   const listeners: Listener[] = [], options = { rejectUnauthorized: false, headers: {} as Record<string, string> };
   let origin = "";
   const join = async (device: Device) => {
@@ -54,7 +54,7 @@ if (process.argv.includes("--core")) {
     await until(() => messages.some(message => message.type === "result" && message.requestId === "1"), "playLive");
     const result = messages.find(message => message.type === "result")!;
     assert(result.type === "result" && result.ok, result.type === "result" ? result.error : "");
-    const l: Listener = { arrivals: [], ages: [], gapMax: 0, last: 0, offsetUs: 0, rtt: Infinity, packets: 0 };
+    const l: Listener = { ages: [], gapMax: 0, last: 0, offsetUs: 0, rtt: Infinity, packets: 0 };
     const socket = new WebSocket(`${origin.replace("https:", "wss:")}/api/live/listen?${new URLSearchParams({ token: device.token, sourceId })}`, options);
     socket.on("error", () => {});
     socket.on("message", (data, binary) => {
@@ -67,6 +67,7 @@ if (process.argv.includes("--core")) {
         return;
       }
       const message = JSON.parse(String(data));
+      if (message.type === "lead-status") l.status = message.status;
       if (message.type === "pong") { const rtt = now - message.t; if (rtt < l.rtt) { l.rtt = rtt; l.offsetUs = message.s - (message.t + now) / 2 * 1000; } }
     });
     await new Promise(resolve => socket.once("open", resolve));
@@ -76,9 +77,11 @@ if (process.argv.includes("--core")) {
     await until(() => l.packets > 0, "listener receives audio");
     listeners.push(l);
   };
-  process.on("message", async (message: { origin?: string; devices?: Device[]; measure?: boolean }) => {
+  process.on("message", async (message: { origin?: string; devices?: Device[]; settle?: boolean; measure?: boolean }) => {
     if (message.origin) origin = message.origin;
     if (message.devices) { await Promise.all(message.devices.map(join)); process.send!({ joined: listeners.length }); }
+    // Each standing change resends every window's state; measure once they've all settled.
+    if (message.settle) { await until(() => listeners.every(l => l.status === "ok"), "listeners settle", 60_000); process.send!({ settled: true }); }
     if (message.measure) {
       for (const l of listeners) { l.ages = []; l.gapMax = 0; l.packets = 0; }
       await sleep(seconds * 1000);
@@ -94,7 +97,7 @@ if (process.argv.includes("--core")) {
     const stat = readFileSync(`/proc/${pid}/task/${tid}/stat`, "utf8"), fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
     return [`${tid}`, { name: readFileSync(`/proc/${pid}/task/${tid}/comm`, "utf8").trim(), user: Number(fields[11]) / ticks, system: Number(fields[12]) / ticks }];
   }));
-  const results: Record<string, unknown>[] = [];
+  const results: Record<string, unknown>[] = [], logs = new Map<string, string[]>();
   for (const codec of codecs) {
     const data = join(directory, `data-${codec}`); mkdirSync(data, { recursive: true });
     const portServer = createServer(); await new Promise<void>(resolve => portServer.listen(0, "127.0.0.1", resolve));
@@ -106,6 +109,7 @@ if (process.argv.includes("--core")) {
       const core = spawn(process.execPath, [...profile, process.argv[1]!, "--core"], { env: { ...process.env, COUCH_DATA_DIR: data, COUCH_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe", "ipc"] });
       children.push(core);
       const log: string[] = [];
+      logs.set(codec, log);
       for (const stream of [core.stdout!, core.stderr!]) stream.on("data", chunk => log.push(...String(chunk).split("\n").filter(Boolean)));
       const config = await new Promise<{ devices: Device[]; origin: string }>((resolve, reject) => { core.once("message", value => resolve(value as never)); core.once("exit", code => reject(new Error(`Core exited (${code}): ${log.join("\n")}`))); });
       const hostMessages: ServerMessage[] = [];
@@ -128,16 +132,17 @@ if (process.argv.includes("--core")) {
       let joined = 0;
       for (const listeners of steps) {
         await ask({ devices: config.devices.slice(joined, listeners) }, "joined"); joined = listeners;
-        // Send age is logged per ten seconds: settle past the joins first.
-        await sleep(11_000);
-        const before = threads(core.pid!), fixtureBefore = Object.values(threads(fixture.pid!)), from = log.length, started = performance.now();
+        await ask({ settle: true }, "settled");
+        await sleep(2000);
+        const before = threads(core.pid!), fixtureBefore = Object.values(threads(fixture.pid!)), from = log.length, started = performance.now(), startedAt = Date.now();
         const measured = await ask<Record<string, unknown>>({ measure: true }, "measured");
         const after = threads(core.pid!), fixtureAfter = Object.values(threads(fixture.pid!)), wall = (performance.now() - started) / 1000;
         const busy = (all: { user: number; system: number }[]) => all.reduce((sum, thread) => sum + thread.user + thread.system, 0);
         const percent = (seconds: number) => Math.round(seconds / wall * 1000) / 10;
         const usage = Object.entries(after).map(([tid, { name, user, system }]) => ({ tid, name, percent: percent(user + system - (before[tid] ? before[tid].user + before[tid].system : 0)), systemPercent: percent(system - (before[tid]?.system ?? 0)) }));
         const worker = usage.filter(thread => thread.name === "WorkerThread").sort((a, b) => b.percent - a.percent)[0];
-        const ages = log.slice(from).map(line => /send age \w+ max ([\d.]+) ms, mean ([\d.]+) ms over (\d+) packets(?:; (\d+) past)?/.exec(line)).filter(match => !!match);
+        // Only the ten-second windows entirely within this measurement.
+        const ages = log.slice(from).filter(line => Date.parse(line.slice(0, 24)) - 10_000 >= startedAt).map(line => /send age \w+ max ([\d.]+) ms, mean ([\d.]+) ms over (\d+) packets(?:; (\d+) past)?/.exec(line)).filter(match => !!match);
         const main = usage.find(thread => thread.tid === String(core.pid))!;
         const result = { codec, listeners, mainPercent: main.percent, mainSystemPercent: main.systemPercent, workerPercent: worker?.percent, workerSystemPercent: worker?.systemPercent, processPercent: Math.round(usage.reduce((sum, thread) => sum + thread.percent, 0) * 10) / 10, fixturePercent: percent(busy(fixtureAfter) - busy(fixtureBefore)),
           sendAgeMs: { max: Math.max(...ages.map(match => Number(match[1]))), mean: ages.reduce((sum, match) => sum + Number(match[2]), 0) / Math.max(1, ages.length), late: ages.reduce((sum, match) => sum + Number(match[4] ?? 0), 0) }, ...measured, threads: usage.filter(thread => thread.percent >= 1) };
@@ -146,6 +151,7 @@ if (process.argv.includes("--core")) {
       }
       await capture.stop();
     } finally {
+      writeFileSync(join(directory, `core-${codec}.log`), (logs.get(codec) ?? []).join("\n"));
       for (const child of children.reverse()) if (child.exitCode === null) { child.kill("SIGTERM"); await new Promise(resolve => { child.once("exit", resolve); setTimeout(resolve, 5000); }); }
     }
   }
