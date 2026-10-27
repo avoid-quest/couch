@@ -18,8 +18,11 @@ by relaxed scheduled audio; phones receive through the browser SDK.
 The owner selected this baseline on 2026-10-27. It supersedes the proprietary
 Live transport, receiver DSP, admission policies and earlier performance gates.
 Previous patched-Sendspin/B1 results were not stock upstream measurements. They
-do not establish a limitation of this baseline. No latency, fidelity, background
-phone or audience-size performance qualification is claimed here.
+do not establish a limitation of this baseline. A subsequent
+[one-minute electrical field run at defaults](sendspin-baseline-20261027.md)
+measured about 405 ms on Linux and 413 ms on Android, with 7.5 ms median receiver
+skew. It is a bounded baseline observation, not a lowest-latency, fidelity,
+background-phone or audience-size qualification.
 
 ## Upstream APIs and the plaintext version choice
 
@@ -169,6 +172,9 @@ mapping and Opus pre-skip. Session isolation, source upload authorization and
 product audience/Direct/relaxed routing have separate regressions. Browser player
 adapter checks use only its public API (`tests/sendspin-route.test.ts`).
 
-Native capture itself, audible browser output, background/sleep recovery and
-physical latency/alignment remain unmeasured in this source-only phase. There
-were no hardware runs, benchmark campaigns, packaging, CI or release runs.
+The source-only cleanup phase performed no hardware runs, benchmark campaigns,
+packaging, CI or releases. The subsequent
+[default electrical baseline](sendspin-baseline-20261027.md) exercised native
+capture and two real browser outputs and measured their physical latency/skew.
+Background/sleep recovery, fidelity and broader platform/scale behavior remain
+unqualified.
