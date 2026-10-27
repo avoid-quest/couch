@@ -53,13 +53,14 @@ input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction.
 
-**Playback buffer (ms)** is one Couch-wide setting, 150 ms initially, set in the
+**Playback buffer (ms)** is one Couch-wide setting, 250 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
 to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`.
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
 recreates that listener's player. Startup lead, correction and output buffering
 keep SDK defaults. The buffer is a receiver request, not a measured
-input-to-ear latency.
+input-to-ear latency. 250 ms is the default because 150 ms had audible gaps on a
+Wi-Fi phone in both measured runs, while 250 and 300 ms had none (below).
 
 The sender produces 48 kHz stereo PCM16 and Opus only. A receiver supporting
 only other formats gets an error on its row.
