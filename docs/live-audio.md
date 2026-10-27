@@ -24,6 +24,11 @@ measured about 405 ms on Linux and 413 ms on Android, with 7.5 ms median receive
 skew. It is a bounded baseline observation, not a lowest-latency, fidelity,
 background-phone or audience-size qualification.
 
+A subsequent [six-minute recovery check](sendspin-stability-20261027.md) recovered
+from both receivers' Leave/Join and an Android-only Wi-Fi interruption. Its two
+brief Android attenuations coincide with intrusive heap-observer reacquisition;
+they remain measurement-confounded rather than established spontaneous defects.
+
 ## Upstream APIs and the plaintext version choice
 
 [Browser 3.2.1 README](https://github.com/Sendspin/sendspin-js/blob/830e8f1062b44746606b368e7e8823fe565f8b3c/README.md)
