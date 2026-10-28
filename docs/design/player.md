@@ -146,7 +146,9 @@ every pointer value and would repeat cropping work inside the same cue.
 `TimeSlider` binds to a local player store and seeks during drag, so it is not
 appropriate for Couch's shared transport. No Video.js player store, media element
 or receiver is created. Couch commands, observed playback position, renderers and
-Sendspin picture follower keep their existing ownership.
+Sendspin picture follower keep their existing ownership. The
+[full Video.js component audit](../videojs-components-review.md) records which
+other public primitives fit these boundaries and which need a separate experiment.
 Non-seekable Live has no timeline or previews.
 
 Core reuses existing extraction and player-page responses. YouTube and Twitch

@@ -2,9 +2,21 @@
 
 Research snapshot: 28 October 2026. Couch baseline: `595d588c2de353a02d62af29d341d529e5d1c4aa` (`videojs/player-ux`). This is a research note, not an implementation specification or a claim that proposed interactions have passed browser testing.
 
+## Integration status
+
+The current stack implements actual `Slider.Root/Track/Fill/Thumb/Preview/Value`
+and standalone `Thumbnail.Root/Image`, styled by Couch. Release-only shared
+seeking, cancellation, duration changes, keyboard/TV navigation and preview
+recovery are verified; see [built player behavior](design/player.md) and
+[measurements](preview-performance.md). The recommendations below for Menu,
+RadioGroup and a small media projection remain follow-up work, with their own
+acceptance checks. Existing shadcn menus, volume controls and Select remain.
+The final disposable Sendspin combination was verified at `bf6c2279`; the
+research snapshots below identify the earlier source inspected for this audit.
+
 ## Recommendation
 
-Adopt actual Video.js primitives in Couch's existing presentation. Keep the standalone Thumbnail already present and the generic Slider being implemented separately. The next substantial opportunity is **Menu, including its generic RadioGroup**, followed by selected Tooltip/Popover parts. These can work without a Player, decoder or media element, so Couch can retain its options, permissions, commands and observations. They offer more useful reuse than importing a whole skin or merely imitating Video.js's appearance. Preserve the transport/tool positions, flat surfaces, lucide icons and complete settings menu. [v-thumbnail] [v-slider] [v-menu] [v-tooltip] [v-popover] [c-player] [c-settings]
+Adopt actual Video.js primitives in Couch's existing presentation. Keep the standalone Thumbnail and generic Slider now implemented. The next substantial opportunity is **Menu, including its generic RadioGroup**, followed by selected Tooltip/Popover parts. These can work without a Player, decoder or media element, so Couch can retain its options, permissions, commands and observations. They offer more useful reuse than importing a whole skin or merely imitating Video.js's appearance. Preserve the transport/tool positions, flat surfaces, lucide icons and complete settings menu. [v-thumbnail] [v-slider] [v-menu] [v-tooltip] [v-popover] [c-player] [c-settings]
 
 Do not rule out media-aware components solely because a controller has no local media. A bounded probe successfully connected actual PlayButton and Time.Value to an EventTarget projection through public store attachment, with zero audio/video elements. That route is possible, but has significant lifecycle and optimistic-state limits; investigate it for a **small, explicit set of controls**, after standalone composition. It is not yet a proven general replacement for Couch's player state. [a-create-player] [a-media-capabilities] [s-store] [s-player-context] [s-time-feature] See the probe and adapter analysis below.
 
@@ -14,7 +26,7 @@ Do not rule out media-aware components solely because a controller has no local 
 
 The audit covers every one of the **79 component reference pages** shipped in `@videojs/react@10.2.0`, their parts, relevant guides, API references, package exports and implementation. Documentation URLs below are the official public pages; implementation links are pinned to the release tag's commit, **`1042afd430d4d661606a71abf98a3ca87c2fb6be`**. The installed package documentation and pinned source settle version-specific questions where a broad API table is misleading. [release-tag] [s-react-exports]
 
-Read Couch's [player design](design/player.md), [shell design](design/shell.md), [remote design](design/remote.md), renderer, picture follower, playback clock, session/control code, transport, settings and fullscreen implementation. Also read the task handoff at `/home/avoid/.t3/worktrees/couch/t3-0316ea76/docs/videojs-agent-handoff.md`; its requested direction is context, not a source for Video.js API claims. No parent checkout was edited. [c-player] [c-shell] [c-remote] [c-renderer] [c-picture] [c-clock] [c-session] [c-control] [c-remote-session] [c-transport] [c-settings] [c-fullscreen]
+Read Couch's [player design](design/player.md), [shell design](design/shell.md), [remote design](design/remote.md), renderer, picture follower, playback clock, session/control code, transport, settings and fullscreen implementation. Also read the task handoff at `/home/avoid/.t3/worktrees/couch/t3-0316ea76/docs/videojs-agent-handoff.md`; its requested direction is context, not a source for Video.js API claims. [c-player] [c-shell] [c-remote] [c-renderer] [c-picture] [c-clock] [c-session] [c-control] [c-remote-session] [c-transport] [c-settings] [c-fullscreen]
 
 Open Sendspin work was inspected with `git show`, without merging:
 
@@ -288,7 +300,7 @@ For any adoption, qualify meaningful behavior rather than snapshotting implement
 
 ## Prioritized adoption roadmap
 
-1. **Finish the separate actual generic Slider work and keep Thumbnail.** Add only useful Slider Preview/Value/Buffer parts. Acceptance: one authorized seek on release, local drafts/cancellation, no hover seeks, stale-identity/permission rejection, keyboard ten-second steps, local-only buffer and no generated previews. Do not duplicate the other agent's implementation. [v-slider] [v-thumbnail] [s-slider-root] [c-range] [c-player]
+1. **Completed: actual generic Slider and Thumbnail.** Add only useful Slider Preview/Value/Buffer parts. Acceptance: one authorized seek on release, local drafts/cancellation, no hover seeks, stale-identity/permission rejection, keyboard ten-second steps, local-only buffer and no generated previews. [v-slider] [v-thumbnail] [s-slider-root] [c-range] [c-player]
 2. **Convert the Playback gear to actual Video.js Menu/generic RadioGroup in a focused change.** Keep its slot, width, flat surface, in-place navigation and all current actions. Use Couch-provided selected values/options and existing commands. Explicitly verify chosen-item focus, Back/Escape nesting, long scrolling lists, async selection failure, file upload and return focus. This is the largest overlooked public primitive opportunity. If the menu cannot retain upload/delay interactions cleanly, use standalone Popover for the outer surface and Menu only where its menu semantics fit. [v-menu] [v-popover] [c-settings] [c-player]
 3. **Optionally add Video.js Tooltip/Shortcut and a simple Popover.** Keep accessible names, avoid duplicate `title`, preserve presentation scale/placement and test top-layer/fullscreen behavior. No Base UI migration prerequisite. Do not replace dialogs/mixer merely for library uniformity. [v-tooltip] [v-popover] [g-browser-support] [registry-video] [c-player]
 4. **Run a strictly bounded public projection spike for PlayButton, BufferingIndicator and StatusAnnouncer; consider Time current/duration only.** Compare total code and behavior against standalone composition. Required demonstrations: zero additional media elements; actual components; no private imports/store writes; correct local/remote permissions; Retry/Replay preserved; observation/command separation; rejection/disconnection/source-switch cleanup; no duplicate announcements; React lifecycle qualification. Keep TimeSlider, volume/track policy, Cast and extensions out of the first spike. Reject the spike if state emulation becomes broader than the UI it replaces. [a-create-player] [s-store] [s-player-context] [s-time-feature] [v-play-button] [v-buffering-indicator] [v-status-announcer] [c-transport] [ss-policy]
