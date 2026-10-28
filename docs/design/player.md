@@ -39,13 +39,10 @@ Over a picture, these surfaces are one translucent black,
 darker so that subtitles behind a panel don't fight its text. There is no
 blur, no shadow and no hairline.
 
-In a window, the bars around a contained picture are lit by the item's artwork, as
-YouTube's ambient mode lights its player ([Room](../design.md#room)): its
-first colour glows 8rem out of the picture's edges, over a dark haze of its
-second. The light lies
-behind the video element, so it shows only in the bars, and it is painted
-once: nothing reads or redraws the picture while it plays. Fullscreen video and
-the always-fullscreen TV presentation keep these bars black.
+Video keeps black letterbox bars in a window, fullscreen and the TV presentation.
+The playing item's artwork never colors the margins or control bands. The neutral
+control scrims still keep text legible over bright footage; audio and browsing
+keep their artwork-lit rooms ([Room](../design.md#room)).
 
 The four panels the tools open, Volume, Where it plays, Up next and the gear's
 menu, are one family wherever they open, from the band or the now-playing bar:
@@ -310,7 +307,9 @@ as it was beneath it. On phones it takes the artwork's place.
     row's end.
   - The meta line has the length, and "added by {device}" when another
     device queued it.
-  - A row is one target that plays it. Its "…" holds Details, Play next,
+  - A row is one target that plays it immediately. A Play glyph appears over
+    its whole thumbnail on hover or keyboard focus, and stays visible on touch.
+    Start times are estimates, not scheduled actions. Its "…" holds Details, Play next,
     ordering, Save for later, Open in browser and Remove.
   - Removing a row keeps focus on the adjacent row.
 - A status line counts the rows and says when they end ("2 to play, until
@@ -318,7 +317,12 @@ as it was beneath it. On phones it takes the artwork's place.
 - **Autoplay** continues only the current series, album or playlist, after the
   queued rows:
   - "Then from {context}", then up to ten of its upcoming entries as quieter,
-    display-only rows. Their start times continue the board.
+    playable rows. Their start times continue the board. Selecting one starts it
+    immediately, keeps manually queued entries waiting, then continues the
+    collection after that selection. At the 500-entry limit, the oldest played
+    entry can make room; the current item and waiting entries are retained.
+    Disconnected or unavailable playback
+    disables every Play target.
   - Or "Finding the next item…".
   - The Autoplay switch shows in the heading row only while something can
     continue, as YouTube's autoplay switch does. Settings → Playback always

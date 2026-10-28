@@ -93,11 +93,12 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setBlocked(text ? { kind: on.id, text } : null);
   };
   const list = async () => {
-    if (!couchApp?.captureSources) return;
+    if (!couchApp?.captureSources || listing || pending) return;
     setListing(true); setError(null);
     try {
       const next = await couchApp.captureSources();
       setSources(next);
+      setSourceId(previous => next.some(source => source.id === previous) ? previous : "");
       if (!next.length) await checkAccess();
     } catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setListing(false); }
@@ -151,7 +152,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
 
   return <div className="grid gap-4">
     <div className="grid gap-2">
-      <ToggleGroup type="single" aria-label="What to share" spacing={2} className="w-full flex-wrap" value={kind.id} disabled={pending}
+      <ToggleGroup type="single" aria-label="What to share" spacing={2} className="w-full flex-wrap" value={kind.id} disabled={pending || listing}
         onValueChange={value => { const next = shareKinds.find(item => item.id === value); if (next) { setKind(next); setError(null); setSourceId(""); } }}>
         {shareKinds.map(item => <ToggleGroupItem key={item.id} value={item.id} className={chip} disabled={!!unavailable(item, browser)} title={unavailable(item, browser)}>
           {item.id === kind.id ? <Check aria-hidden="true" /> : <item.icon aria-hidden="true" />}{item.label}
@@ -159,7 +160,10 @@ function ShareForm({ onDone }: { onDone: () => void }) {
       </ToggleGroup>
       {shareKinds.some(item => unavailable(item, browser)) && <p className="text-meta text-muted-foreground">{reason ?? shareKinds.map(item => unavailable(item, browser)).find(Boolean)}</p>}
     </div>
-    {access || lists && kind.pictures && <Pictures sources={pictures} listing={listing} value={sourceId} onValueChange={setSourceId} disabled={pending} kind={kind} />}
+    {access || lists && kind.pictures && <Pictures sources={pictures} listing={listing} value={sourceId} onValueChange={setSourceId} disabled={!available} kind={kind} />}
+    {lists && <Button variant="ghost" size="sm" className="justify-self-end" disabled={!available} onClick={() => void list()}>
+      {listing && <Spinner aria-hidden="true" />}Refresh {kind.pictures === "window" ? "windows" : "screens"}
+    </Button>}
     {kind.inputs && <Row label="Input" htmlFor="live-audio-input">
       <div className="grid justify-items-end gap-1">
         <Select value={audioDeviceId} disabled={!available || !!reason} onValueChange={setAudioDeviceId}>

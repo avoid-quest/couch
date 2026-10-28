@@ -314,7 +314,10 @@ export async function createHub(options: HubOptions) {
   // A Playback's mix: its outputs and the publisher's output held while its own capture plays there.
   const mixOf = (playback: Playback) => playback.held ? [...playback.outputs, playback.held] : playback.outputs;
   const memberOf = (deviceId: string) => servedBy(deviceId) ?? all().find(playback => playback.held?.deviceId === deviceId);
-  const holding = (entryId: string) => all().find(playback => stateOf(playback).queue.some(entry => entry.id === entryId));
+  const holding = (entryId: string, includeAutoplay = false) => all().find(playback => {
+    const state = stateOf(playback);
+    return state.queue.some(entry => entry.id === entryId) || includeAutoplay && state.autoplay?.enabled && state.autoplay.upcoming.some(entry => entry.id === entryId);
+  });
   const playing = (playbackId: string) => all().find(playback => stateOf(playback).player.playbackId === playbackId);
   // The output Device each controller chose (Play on, or following its mix) while Core runs.
   const targets = new Map<string, string>();
@@ -1848,7 +1851,7 @@ export async function createHub(options: HubOptions) {
             if (!tvSocket(guardedTarget)) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             if ((action.type === "volume" || action.type === "mute" || action.type === "navigate" || action.type === "text") && action.deviceId && action.deviceId !== guardedTarget) throw new Error("This command addresses another TV. Select it before using Remote.");
             if ("playbackId" in action && action.playbackId && servedBy(guardedTarget) !== playing(action.playbackId)) throw new Error("The TV's playing item changed. Try again.");
-            if ("entryId" in action && servedBy(guardedTarget) !== holding(action.entryId)) throw new Error("The TV's queue changed. Try again.");
+            if ("entryId" in action && servedBy(guardedTarget) !== holding(action.entryId, action.type === "play")) throw new Error("The TV's queue changed. Try again.");
           }
           let playback: Playback | undefined;
           let removed: string | undefined;
@@ -2023,7 +2026,7 @@ export async function createHub(options: HubOptions) {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on the selected Device's.
             if (remoteTarget && action.type !== "enqueue" && !servedBy(remoteTarget)) throw new Error("The TV's queue or playing item changed. Try again.");
-            playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;
+            playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId, action.type === "play") : undefined;
             playback ??= action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
             // Queue entries can outlive their TV assignment. Recheck the resolved Playback at
             // dispatch (and async authorization), even for an older client without an envelope guard.
