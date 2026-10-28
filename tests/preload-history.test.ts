@@ -13,6 +13,7 @@ function fixture(platform = "darwin", tv = false) {
   const ipc = new Map<string, (...args: any[]) => void>();
   const visits: number[] = [];
   const attributes = new Map<string, string>();
+  const fullscreen = { fullscreenElement: null as object | null };
   class Element {
     scrollWidth = 100;
     clientWidth = 100;
@@ -29,6 +30,7 @@ function fixture(platform = "darwin", tv = false) {
     Element, getComputedStyle: (element: Element) => element,
     history: { go: (direction: number) => visits.push(direction) },
     document: {
+      get fullscreenElement() { return fullscreen.fullscreenElement; },
       createElement: () => ({ textContent: "" }),
       head: { append() {} },
       documentElement: { classList: { add: (...names: string[]) => names.forEach(name => classes.add(name)), toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) }, setAttribute: (name: string, value: string) => attributes.set(name, value), removeAttribute: (name: string) => attributes.delete(name) },
@@ -41,7 +43,7 @@ function fixture(platform = "darwin", tv = false) {
     composedPath: () => [target], ...extra,
   });
   const end = () => ipc.get("couch:scroll-end")?.({});
-  return { listeners, ipc, attributes, classes, overlay, geometry, target, visits, wheel, end };
+  return { listeners, ipc, attributes, classes, overlay, geometry, fullscreen, target, visits, wheel, end };
 }
 
 test("desktop controls reserve the platform's space and release it in fullscreen", () => {
@@ -84,6 +86,29 @@ test("TV windows never reserve desktop controls on any platform", () => {
     const f = fixture(platform, true);
     expect(f.listeners.has("DOMContentLoaded")).toBe(false);
     expect(f.ipc.has("couch:full-screen")).toBe(false);
+  }
+});
+
+test("fullscreen suppresses stale visible overlay geometry until both fullscreen modes end", () => {
+  for (const platform of ["win32", "linux"]) {
+    const f = fixture(platform);
+    f.listeners.get("DOMContentLoaded")!();
+    f.ipc.get("couch:full-screen")!({}, true);
+    f.geometry.get("geometrychange")!();
+    expect(f.classes.has("wco")).toBe(false);
+    f.fullscreen.fullscreenElement = {};
+    f.listeners.get("fullscreenchange")!();
+    f.ipc.get("couch:full-screen")!({}, false);
+    f.geometry.get("geometrychange")!();
+    expect(f.classes.has("wco")).toBe(false);
+    f.fullscreen.fullscreenElement = null;
+    f.listeners.get("fullscreenchange")!();
+    expect(f.classes.has("wco")).toBe(true);
+    // DOM fullscreen can also precede Main's notification.
+    f.fullscreen.fullscreenElement = {};
+    f.listeners.get("fullscreenchange")!();
+    f.geometry.get("geometrychange")!();
+    expect(f.classes.has("wco")).toBe(false);
   }
 });
 

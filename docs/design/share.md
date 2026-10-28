@@ -13,8 +13,10 @@ it.
 
 ## Share
 
-**Share** sits in the header's right cluster, before the search field (an icon
-after it in a phone's top bar), on every device whose browser can capture.
+**Share** is a compact icon immediately before the header's search field, in its own 44px
+slot, on every device whose browser can capture. An open or populated phone
+search uses that space for typing (and Cancel while open); the active sharing
+row stays available.
 **Show Share in the header** (Settings → This device, saved per device) hides
 it; until chosen it is off on a TV and on everywhere else. While it is off, the
 same row offers Share screen or sound. It opens one Dialog on desktop and a
@@ -45,6 +47,8 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   Window hand off to the browser's own picker, which opens on that surface and
   still offers the rest. Sound only takes the first screen's capture for its
   sound in the desktop app, so Start sharing waits there until it lists one.
+  Choices keep their whole thumbnail and name in narrow windows too; their
+  height grows with the picture instead of using a fixed touch-button height.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
   place, disabled, and leaves the choice. Without a choice the share waits in
@@ -52,20 +56,30 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 - **Start sharing** starts the capture, then plays it on the chosen devices in
   order: the first that takes it plays it, then each other joins the same
   playback. Closing the dialog while it starts cancels it, as Cancel does.
+  Dismissing the Dialog or Sheet returns keyboard focus to its Share button while that button remains mounted.
 - **Disabled keeps its place:** a browser that can't capture a display (a
   phone's) keeps Screen, Window and Sound only, disabled, with today's reason
   under the chips.
 
 ## While it runs
 
-The header's Share becomes the **capsule**: a silent picture of what goes out
+While sharing, the entry slot stays the same size and the **capsule** appears
+in its own row below primary navigation and search: a silent picture of what goes out
 (the capture's own video track; a white disc with its kind's glyph for sound),
-the share's name, how many devices watch, and Stop sharing, its one place. The
+the share's name, how many devices watch, and **Stop**, its one place (accessible
+name: Stop sharing). The
 name is the one Home, the Stage and the now-playing bar show ("Studio Mac ·
 Screen"). It floats on the toasts' surface and shadow,
 without the bar's filter, which stays the page's one backdrop filter
-([Glass](../design.md#glass)). Below `xl` the name leaves, below 960px the
-count too (thumbnail and Stop); on a phone Stop keeps only its icon.
+([Glass](../design.md#glass)). Its name truncates within the available width,
+up to 20rem; preview, viewer count and the readable Stop action keep their
+space on phones too. The full name remains in its hover title, accessible name
+and panel. Sharing state, names, viewer counts and interface size never push
+search onto another row. Search keeps its mounted field, query and focus while
+sharing starts or stops. The measured header includes the capsule, keeping page
+content, focus and the scrollbar track below it. When idle there is no capsule
+row or reserved vertical space.
+On desktop it stays left of the search palette, so suggestions never cover Stop.
 
 Pressing it opens its panel, a Popover hanging from it on desktop and a bottom
 Sheet on phones and the TV:

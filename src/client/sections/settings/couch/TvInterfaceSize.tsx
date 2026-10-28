@@ -22,6 +22,7 @@ export function TvInterfaceSize({ appearance, credentials, connected, administra
   const change = (path: string, input: object) => { if (credentials && !pending) mutation.mutate({ path, input }); };
   const canWrite = administrator && connected && !pending;
   const previewing = !!appearance.preview && seconds > 0;
+  const countdown = `Reverting in ${seconds} s.`;
   const confirmed = interfaceSizes.find(size => size.value === appearance.confirmedSize)?.label;
 
   return (
@@ -32,7 +33,7 @@ export function TvInterfaceSize({ appearance, credentials, connected, administra
         </> : <span className="text-sm">{confirmed}</span>}
       </SettingsRow>
       {previewing && (
-        <SettingsRow role="status" label="Keep this size?" description={`Reverting in ${seconds} s.`} data-tv-local-only={native ? "" : undefined}>
+        <SettingsRow role="status" label={previewOnly ? countdown : "Keep this size?"} description={previewOnly ? undefined : countdown} data-tv-local-only={native ? "" : undefined}>
           {administrator && <>
             <Button disabled={!canWrite} onClick={() => change("/confirm", { previewId: appearance.preview!.id })}>Keep</Button>
             <Button variant="outline" disabled={!canWrite} onClick={() => change("/cancel", { previewId: appearance.preview!.id })}>Revert</Button>

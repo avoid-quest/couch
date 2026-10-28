@@ -18,7 +18,7 @@ import { useShowShare } from "./show-share";
 
 /**
  * The header's Share (docs/design/share.md): a button that opens the Share dialog on a device that can capture, and,
- * while this device shares, the capsule that shows what goes out, who watches, and Stop sharing. Both stay this
+ * while this device shares, a separate row showing what goes out, who watches, and Stop sharing. Both stay this
  * device's own: another device's Remote never reaches them on a TV. Settings can hide the button (a TV does by
  * default), never the capsule.
  */
@@ -41,19 +41,23 @@ export function ShareControl() {
     }
     if (!sharing) { watched.current = false; dismiss("sharing"); }
   }, [viewers.length, sharing?.source.id]);
-  if (sharing) return <Capsule sharing={sharing} viewers={viewers} stop={stop} tv={tvPresentation} />;
-  if (!shown || !navigator.mediaDevices?.getUserMedia) return null;
-  return <ShareButton className="touch:order-last touch:size-11 touch:px-0 tv:size-auto tv:px-3.5" tv={tvPresentation}>
-    <ScreenShare aria-hidden="true" /><span className="touch:sr-only tv:not-sr-only">Share</span>
-  </ShareButton>;
+  return <>
+    <div className="app-header-share-entry size-11">
+      {!sharing && shown && !!navigator.mediaDevices?.getUserMedia && <ShareButton className="size-11 px-0" tv={tvPresentation}>
+        <ScreenShare aria-hidden="true" />
+      </ShareButton>}
+    </div>
+    {sharing && <div className="app-header-sharing min-w-0"><Capsule sharing={sharing} viewers={viewers} stop={stop} tv={tvPresentation} /></div>}
+  </>;
 }
 
 /** A button that opens the Share dialog: the header's, or Settings' while the header hides it. */
 export function ShareButton({ className, tv, children }: { className?: string; tv: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
   return <>
-    <Button data-tv-local-only variant="secondary" className={className} aria-label="Share screen or sound" title="Share screen or sound" onClick={() => setOpen(true)}>{children}</Button>
-    <ShareDialog open={open} onOpenChange={setOpen} tv={tv} />
+    <Button ref={opener} data-tv-local-only variant="secondary" className={className} aria-label="Share screen or sound" title="Share screen or sound" onClick={() => setOpen(true)}>{children}</Button>
+    <ShareDialog open={open} onOpenChange={setOpen} tv={tv} openerRef={opener} />
   </>;
 }
 
@@ -82,15 +86,14 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
   const label = `Sharing ${sharing.source.name}`;
   const trigger = <button type="button" aria-label={`${label}, show sharing controls`} title={label}
-    className="flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1 text-sm text-foreground/80 outline-none hover:text-foreground aria-expanded:text-foreground max-sm:pr-1">
+    className="flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1 text-sm text-foreground/80 outline-none hover:text-foreground aria-expanded:text-foreground">
     <Preview sharing={sharing} className="h-7 shrink-0" />
-    {/* The title from xl, as the header's status always was; narrower, the picture says it, and on touch Stop alone stays. */}
-    <span role="status" aria-label={label} className="max-w-44 truncate max-xl:sr-only">{sharing.source.name}</span>
-    {viewers.length > 0 && <span className="flex items-center gap-1 text-meta text-muted-foreground tabular-nums touch:hidden tv:flex" aria-label={`${viewers.length} watching`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>}
+    <span role="status" aria-label={label} className="min-w-0 max-w-80 truncate">{sharing.source.name}</span>
+    {viewers.length > 0 && <span className="flex shrink-0 items-center gap-1 text-meta text-muted-foreground tabular-nums" aria-label={`${viewers.length} watching`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>}
   </button>;
   const panel = <SharingPanel sharing={sharing} viewers={viewers} onClose={() => setOpen(false)} />;
   // Toasts' floating surface, without the bar's filter: the bar's glass is a page's one backdrop filter (design.md, Glass).
-  return <div data-live-sharing data-tv-local-only className="flex min-w-0 shrink-0 items-center gap-1 rounded-full bg-bar p-0.5 shadow-(--float-shadow) touch:order-last">
+  return <div data-live-sharing data-tv-local-only className="flex w-fit min-w-0 max-w-full items-center gap-1 rounded-full bg-bar p-0.5 shadow-(--float-shadow)">
     {desktop && !tv ? <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent data-tv-local-only align="center" collisionPadding={16} aria-label="Sharing" className="w-[min(26rem,calc(100vw-2rem))] gap-0 p-4">{panel}</PopoverContent>
@@ -104,9 +107,8 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
         </div>
       </SheetContent>
     </Sheet>}
-    {/* Stop's one place, at every width: a phone keeps its icon. */}
-    <Button variant="secondary" size="sm" className="max-sm:size-8 max-sm:px-0" aria-label={stop.pending ? "Stopping…" : "Stop sharing"} title="Stop sharing" disabled={stop.pending} onClick={() => void stop.run()}>
-      <Square aria-hidden="true" /><span className="max-sm:sr-only">{stop.pending ? "Stopping…" : "Stop sharing"}</span>
+    <Button variant="secondary" size="sm" aria-label={stop.pending ? "Stopping…" : "Stop sharing"} title="Stop sharing" disabled={stop.pending} onClick={() => void stop.run()}>
+      <Square aria-hidden="true" />{stop.pending ? "Stopping…" : "Stop"}
     </Button>
   </div>;
 }

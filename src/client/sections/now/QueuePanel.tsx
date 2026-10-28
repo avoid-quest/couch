@@ -25,6 +25,7 @@ import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
 import { browserActions, queuePageUrl } from "@/original-page";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
+import { queueCursorIndex } from "../../../shared/queue";
 
 type Props = {
   state: ClientSessionState | null;
@@ -85,7 +86,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const focusedEntry = useRef<{ element: HTMLElement; id: string; index: number; label: string | null } | null>(null);
   const queue = state?.queue ?? [];
   const currentIndex = queue.findIndex(entry => entry.id === state?.currentEntryId);
-  const cursorIndex = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
+  const cursorIndex = state ? queueCursorIndex(state) : -1;
   const previous = queue.slice(0, cursorIndex + 1).filter(entry => entry.id !== state?.currentEntryId);
   const upNext = queue.slice(cursorIndex + 1);
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
