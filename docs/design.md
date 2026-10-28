@@ -148,7 +148,11 @@ hue, measured. The tone cross-fades over 600 ms when what plays changes. It is
 the one backdrop filter on a page (Up next, summoned over the player's room,
 is the other, on the player). Toasts and the header's sharing capsule float in
 the same family, on its solid surface and shadow (`--float-shadow`) without
-the filter.
+the filter. The sharing capsule has its own row below navigation and search;
+its name, viewers and Stop never displace those primary controls ([Shell](design/shell.md#header)).
+Share sits immediately before search, which fills the row to the right page
+gutter. Keyboard shortcuts is in the Couch popover. Windows/Linux captions have
+only their native-height area above that row, over the Stage.
 
 ## Stage
 
@@ -175,9 +179,8 @@ The copy sits at the bottom left in the room left of the picture (at most
 46rem, less the picture's width and a gap): the trail, the title at display
 size ([Type](#type)), one muted meta line ending in its links, progress, the
 verbs, the synopsis. Nothing of it lies over the picture. The header is
-see-through while the page is at its top and black once it scrolls; Windows/Linux
-desktop windows keep a black native title-bar strip and scroll below it
-([Shell](design/shell.md#header)).
+see-through while the page is at its top and black once it scrolls, including
+Windows/Linux desktop windows ([Shell](design/shell.md#header)).
 
 - **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
   Details page with nothing under its stage fills the window above the bar
@@ -490,6 +493,8 @@ toast and clear their saved results automatically; failures stay visible for ret
   prefers HLS picture and original sound when available, preserving the selected
   quality and audio instead of taking the first dubbed track from the master
   playlist. Original-language HTTPS audio takes priority over a dubbed HLS rendition.
+  Bandcamp selects browser-compatible MP3, AAC, FLAC or WAV audio, retaining
+  supported lossless formats while excluding ALAC and AIFF downloads.
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
@@ -508,6 +513,11 @@ Portalled surfaces and their backdrops share `z-50`, above the page and its bars
 Later portals cover earlier ones: a confirmation covers the Couch switch that
 opened it, and a menu or Select opened inside a dialog or sheet stays above it.
 Keep this order across overlay types rather than giving one type a higher layer.
+
+Dialogs and confirmations stay within the viewport with a 1rem gutter at the
+client's interface size; long content scrolls inside the dialog. A caller's
+smaller height uses `--dialog-max-height` (Keyboard shortcuts requests `85dvh`),
+so it keeps the shared zoom-aware viewport cap.
 
 ## Menus
 
@@ -545,6 +555,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Home](design/home.md): the hero, your own rows and the sources.
 - [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
   rows and tiles, filters and pages, breadcrumbs.
+  Captions remove confirmed type/category overlaps while keeping compound genres
+  and creator names; channel Details preserves chosen Saved names and canonical identity.
 - [Player](design/player.md): the picture, scrims, the band, settings, Up next,
   status.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.
@@ -554,6 +566,17 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Remote](design/remote.md): the Remote section and Type on TV.
 - [Settings](design/settings.md): its pages and section nav. Network sharing
   chooses Ethernet before Wi-Fi automatically, without requiring network flags.
+  AirPlay's admin controls, including open confirmations and retries, wait for
+  the Couch to reconnect.
+
+[123MoviesFree](123moviesfree.md) keeps the selected film or episode while
+trying one supported advertised Server 2 stream if its direct manifest is
+unavailable. Playback uses the same controls and language preference; the
+fallback's own subtitle tracks take precedence when available.
+When a source offers external subtitle files, HLS does not add automatic in-band
+captions beside them; the subtitle selection and Off control all visible text.
+Browser playback reports only changed player state and advancing position ticks;
+subtitle initialization keeps the connection stable even with 16 tracks.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).

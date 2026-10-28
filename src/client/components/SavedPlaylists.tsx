@@ -28,12 +28,12 @@ const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
 type Write = { path: string; body: unknown; method?: string };
 
 /** Saved's Lists tab: lists kept from Up next or a source, and one list's detail. */
-export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, onFind }: {
+export function SavedPlaylists({ origin, token, connected, canPlay, upNextCount, onFind }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
-  queueCount: number;
+  upNextCount: number;
   onFind: () => void;
 }) {
   const credentials = { origin, token };
@@ -98,7 +98,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
   return <section ref={section} aria-label="Lists">
     {!openId ? <>
       {/* Save as list waits for something in Up next; with no lists either, the Empty says it all. */}
-      <PageHeader title="Lists" hidden actions={(!!queueCount || !!playlists.length) && <Button disabled={disabled || !queueCount || full} title={!queueCount ? "Queue something first" : undefined} onClick={() => void create()}>Save as list</Button>} />
+      <PageHeader title="Lists" hidden actions={(!!upNextCount || !!playlists.length) && <Button disabled={disabled || !upNextCount || full} title={!upNextCount ? "Queue something first" : undefined} onClick={() => void create()}>Save as list</Button>} />
       {connected && full && <p className="mb-4 text-sm text-muted-foreground">100-list limit. Delete one first.</p>}
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
@@ -119,15 +119,17 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, 
         <PlayOnMenu title={playlist.name} disabled={disabled || !canPlay || !playlist.entries.length} onPlay={deviceId => void load(playlist, "play", deviceId)} />
         <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load(playlist, "append")}>Queue</Button>
         <AlertDialog>
-          <AlertDialogTrigger asChild><Button variant="ghost" disabled={disabled || !queueCount}>Update from Up next</Button></AlertDialogTrigger>
-          <AlertDialogContent>
+          <AlertDialogTrigger asChild><Button variant="ghost" disabled={disabled || !upNextCount}>Update from Up next</Button></AlertDialogTrigger>
+          <AlertDialogContent onCloseAutoFocus={event => {
+            if (disabled || !upNextCount) { event.preventDefault(); focus("[data-back]"); }
+          }}>
             <AlertDialogHeader>
               <AlertDialogTitle>Replace {playlist.name}?</AlertDialogTitle>
-              <AlertDialogDescription>Its items become the {queueCount} in Up next.</AlertDialogDescription>
+              <AlertDialogDescription>Its items become the {upNextCount} in Up next.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void write(listPath(playlist.id), { revision: playlist.revision, operation: "saveQueue" })}>Replace</AlertDialogAction>
+              <AlertDialogAction disabled={disabled || !upNextCount} onClick={() => void write(listPath(playlist.id), { revision: playlist.revision, operation: "saveQueue", scope: "upNext" })}>Replace</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

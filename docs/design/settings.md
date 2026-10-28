@@ -18,7 +18,7 @@ hand, and the Couch everyone shares, its hardware included:
 | Updates | This device | `/settings/device/updates` | this app's updates and logs, only for a non-admin in the desktop app |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
 | Playback | Couch | `/settings/couch/playback` | the watching profile's preferences: Autoplay, Audio language, Subtitles (Off or a language, one row), Speed (the player's speeds, `playbackSpeeds`); Ask every device where a shared source plays |
-| Sources | Couch | `/settings/couch/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under Sources), AirPlay (hidden off Linux; one muted line when this build or computer lacks the receiver), Hidden |
+| Sources | Couch | `/settings/couch/sources` | source pages (Live TV, Radio playlists, StreamingCommunity under Sources), AirPlay (hidden off Linux for every role; one muted line when this build or computer lacks the receiver), Hidden |
 | Sound | Couch | `/settings/couch/sound` | output, test and delay, Bluetooth (where Couch controls the system's sound) |
 | TV | Couch | `/settings/couch/tv` | TV mode, Start on boot, Screen, text size (where the Couch is or can be a TV) |
 | Updates | Couch | `/settings/couch/updates` | all apps this admin can update, including this app; replaces the device entry |
@@ -54,8 +54,9 @@ Flat settings rows lead with device names, installed and offered versions, and
 **Up to date**, **Update ready**, download progress or a failure. A single ready
 device gets **Update {name}** with no selection step. Several ready devices start
 selected and use **Update N devices**; current devices have no inert checkboxes.
-Media tools occupy one row with versions and status, including system-managed
-copies and an operator's yt-dlp hold. **Check for updates** checks every app and
+Media tools occupy one row with concise versions (including build suffixes, without
+command names or copyright banners) and status, including system-managed copies
+and an operator's yt-dlp hold. **Check for updates** checks every app and
 maintains the media tools; there is no separate tools action.
 
 **What’s new** appears when an app has an update. It loads on demand and shows the
@@ -105,8 +106,13 @@ the row stacks, a choice's check sits on the label's edge instead.
 Section headings use the same Mona Sans as the rest of Couch. A status or an
 admin restriction belongs to its row, rather than a heading with no controls.
 Screen and text-size previews put Keep/Revert in a row with a politely announced
-countdown; Default is already one of the text-size choices. Relay checks and saves give
-temporary toasts; connection state stays beside the relay's switch.
+countdown. The TV's text-size dialog asks “Keep this size?” once in its title,
+with the countdown and Keep/Revert in the status row; the shared settings page
+keeps the question in its row. Keep, Revert and expiry return the TV's focus to
+the control it had before the dialog opened, if it is still on the page.
+Default is already one of the text-size choices.
+Relay checks and saves give temporary toasts; connection state stays beside the
+relay's switch.
 Sound tests, AirPlay and relay state changes keep polite announcements in their
 row descriptions. An unavailable test explains why before any older result.
 Test and Stop reuse the output's button so focus stays through a sound test;
@@ -121,6 +127,14 @@ confirmations stay local to the device using them.
 Sources opens each subpage from its whole row, with a chevron. Live TV Edit
 focuses and scrolls to the Name field in the form. Bluetooth uses one section;
 addresses appear only to distinguish devices with the same name.
+
+AirPlay visibility follows the Couch's public receiver capability, including
+when disconnected; it stays hidden until that capability is known. On Linux,
+non-admins see an admin restriction when available, or a single unavailable
+line otherwise. Only admins fetch its settings, code, sender and diagnostic
+details; losing that role removes those controls immediately.
+While reconnecting, its controls, an open code confirmation and error retry
+stay disabled until the connection returns.
 
 ## Devices
 

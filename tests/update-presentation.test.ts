@@ -1,6 +1,29 @@
 import { expect, test } from "bun:test";
 import type { SessionState } from "../src/shared/protocol";
-import { automaticUpdateStatus, updateInstallHint, updateInterrupts } from "../src/client/sections/updates/update-presentation";
+import { automaticUpdateStatus, mediaToolVersion, updateInstallHint, updateInterrupts } from "../src/client/sections/updates/update-presentation";
+
+test("media tool banners keep the full release or build version without command names and copyright", () => {
+  for (const [name, version, expected] of [
+    ["ffmpeg", "ffmpeg version 7.1.5-0+deb13u1 Copyright (c) 2000-2026 the FFmpeg developers", "7.1.5-0+deb13u1"],
+    ["ffmpeg", "ffmpeg version n8.0.1-4-gabc123 Copyright (c) 2000-2026 the FFmpeg developers", "n8.0.1-4-gabc123"],
+    ["ffmpeg", "ffmpeg version N-119542-gabc123 Copyright (c) 2000-2026 the FFmpeg developers", "N-119542-gabc123"],
+    ["mpv", "mpv v0.40.0 Copyright © 2000-2025 mpv/MPlayer/mplayer2 projects", "v0.40.0"],
+    ["mpv", "mpv 0.40.0-3-gabc123\r\nbuilt on Oct 27 2026", "0.40.0-3-gabc123"],
+    ["ffmpeg", " ffmpeg version 7.0\r\n", "7.0"],
+  ] as const) expect(mediaToolVersion({ name, version })).toBe(expected);
+});
+
+test("media tool display accepts plain versions and missing or unfamiliar host values", () => {
+  for (const [name, version, expected] of [
+    ["yt-dlp", "2026.10.21", "2026.10.21"],
+    ["qjs", "v0.17.0", "v0.17.0"],
+    ["ffmpeg", "n8.0.1", "n8.0.1"],
+    ["mpv", "v0.40.0", "v0.40.0"],
+    ["mpv", "custom build", "custom build"],
+    ["ffmpeg", null, null],
+    ["mpv", "", null],
+  ] as const) expect(mediaToolVersion({ name, version })).toBe(expected);
+});
 
 test.each(["loading", "playing", "paused"] as const)("updating the server checks every %s playback", status => {
   const state = { player: { status: "idle" as const }, playbacks: [{ id: "other", title: "Music", status, outputs: [{ deviceId: "tv", sound: true, picture: true }] }] };

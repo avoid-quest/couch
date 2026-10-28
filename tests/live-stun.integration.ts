@@ -36,7 +36,7 @@ test("LAN STUN returns the receiver's real address and port", async () => {
 });
 
 const outsideAddress = Object.values(networkInterfaces()).flatMap(entries => entries ?? []).find(entry => entry.family === "IPv4" && !entry.internal)?.address;
-test("LAN STUN ignores malformed discovery and peers outside its selected subnet", { skip: !outsideAddress }, async () => {
+test("LAN STUN accepts routed peers and ignores malformed discovery", { skip: !outsideAddress }, async () => {
   const server = await serveLiveStun({ name: "test", address: "127.0.0.1", netmask: "255.255.255.255" }, 0);
   const local = createSocket("udp4"), outside = createSocket("udp4");
   try {
@@ -49,7 +49,7 @@ test("LAN STUN ignores malformed discovery and peers outside its selected subnet
     outside.send(request, server.port, "127.0.0.1");
     for (const malformed of [request.subarray(0, 19), Buffer.alloc(20), Buffer.concat([request, Buffer.alloc(4)]), Buffer.from("000100082112a4420102030405060708090a0b0c0006000461626364", "hex")]) local.send(malformed, server.port, "127.0.0.1");
     await new Promise(resolve => setTimeout(resolve, 30));
-    assert.equal(replies.length, 0);
+    assert.equal(replies.length, 1);
   } finally { local.close(); outside.close(); await server.stop(); }
 });
 
