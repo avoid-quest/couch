@@ -72,7 +72,7 @@ recreates that listener's player. Correction and output buffering keep SDK
 defaults. Live ignores the SDK's declared startup lead (`requiredLeadTimeMs`): a
 joining listener takes the group's running lead, and its SDK may skip the first
 chunks while it starts. The buffer is a receiver request, not a measured
-input-to-ear latency. See the measurements below for each receiver's floor.
+input-to-ear latency. See the bounded measurements and coverage below.
 
 The sender produces 48 kHz stereo PCM16 and Opus only. A receiver supporting
 only other formats gets an error on its row.
@@ -80,32 +80,53 @@ only other formats gets an error on its row.
 ## Measured behavior
 
 Electrical measurements, 27–28 October 2026: a Mac desktop host capturing a
-UMC404HD native input (48 kHz, 128 frames), a Linux Chrome receiver on wired LAN
-and a Redmi Note 8T Chrome receiver on Wi-Fi, recorded on the UMC's own clock.
-Measured delay was within about 1 ms of the playback buffer in every run, so the
-buffer is the delay; what limits it is the time audio needs to reach each player
-in time.
+UMC404HD native input at 48 kHz, a Linux Chrome receiver on wired LAN and a
+Redmi Note 8T Chrome receiver on Wi-Fi, recorded on the UMC's own clock. The
+later runs tabulated below used 128-frame capture; earlier settings varied.
+The buffer is a scheduling setting, not a physical latency guarantee. In the
+110 ms run, Linux delay median/p95 was 110.32/111.04 ms and Redmi was
+112.17/112.89 ms. These timing estimates describe matched half-second windows;
+successful timing matches do not establish continuity between them.
 
-That time has two parts. Core holds a captured sample until its encoded chunk is
-ready: about 18 ms for Opus and 11 ms for PCM (p50, timed in Core; 54 and 27 ms
-before the encoding steps shrank to 5 ms). The receiver side (network, SDK
-decoding and scheduling, and the browser's output path, which the SDK reports as
-about 43 ms on the Linux receiver) needs roughly another 65 ms.
+Separate Core instrumentation measured capture-to-encoded-chunk p50 around
+18 ms for Opus and 11 ms for PCM (54 and 27 ms before 5 ms encoding steps).
+The electrical recordings do not isolate network, decoding, scheduling and
+browser output costs into a further fixed delay budget.
 
-| Condition | Linux, wired | Redmi, Wi-Fi |
+Offline reprocessing covers all 126 retained recordings; the full table, method
+and validation stay with the field evidence, outside this repository.
+The old absolute −40 dBFS cutoff scored only 13.62 s of the Redmi's twelve
+“one-hour” recordings. Its zero count did not mean an hour without gaps.
+
+Below, each receiver cell is **attenuation candidates; scored seconds (% of the
+entire recording)**. Coverage estimates where a 20 ms interruption is detectable
+above that receiver's measured noise floor. Unscored time remains unknown.
+
+| Condition (recorded duration) | Linux, wired | Redmi, Wi-Fi, L−R return |
 |---|---|---|
-| One hour at 200 ms (12 × 5 min) | 2 gaps (30, 50 ms); delay within 0.2 ms | no gaps; delay within 0.2 ms |
-| 5 min at 180, 150 and 120 ms | no gaps | no gaps |
-| 90 s at 110, 100 and 90 ms | no gaps | no gaps |
-| 5 min at 150 ms, 85 s forced Doze, screen on | no gaps | no gaps |
-| 5 min, 10 extra SDK listeners, one frozen 60 s | no gaps | no gaps |
+| 200 ms, twelve separate captures (3,589.7 s) | 3; 339.3 s (9.45%) | 113; 3,397.7 s (94.65%) |
+| 180 ms, screen on (299.2 s) | 0; 57.7 s (19.29%) | 0; 283.9 s (94.89%) |
+| 150 ms, screen on (299.1 s) | 0; 11.5 s (3.84%) | 0; 283.8 s (94.88%) |
+| 120 ms, screen on (299.1 s) | 0; 5.3 s (1.78%) | 14; 283.9 s (94.90%) |
+| 110 ms (91.0 s) | 0; 0.22 s (0.24%) | 61; 86.2 s (94.70%) |
+| 100 ms (91.0 s) | 0; 0.61 s (0.67%) | 98; 86.2 s (94.70%) |
+| 90 ms (91.0 s) | 0; 0.84 s (0.93%) | 107; 86.2 s (94.68%) |
+| 150 ms, 85 s forced Doze, screen on (299.1 s) | 0; 80.5 s (26.91%) | 1; 284.4 s (95.08%) |
+| 200 ms, 10 extra SDK listeners, one frozen 60 s (299.1 s) | 0; 80.3 s (26.83%) | 0; 284.4 s (95.06%) |
 
-A gap is a return more than 20 dB below the delayed source for 20 ms or more.
-The Linux gaps came from that host's audio output under load; a Linux receiver
-whose PulseAudio stream died kept reporting playing in the SDK while silent, and
-reloading the page recovered it. The frozen listener received 6 s of stale audio
-from transport buffers on waking, against 60 s before Core stopped queueing for
-it.
+The detector compares a locally aligned, level-matched source envelope with each
+return: a 10 dB deficit across sixteen overlapping 4 ms windows (19 ms support),
+with expected signal at least 14 dB above measured noise. On covered positions,
+synthetic 20 ms silence/−20 dB dips were detected in 98.1–100% of trials;
+10 ms edits occasionally triggered (0.11–0.16%). Counts are electrical
+attenuation candidates, not sample-exact gap durations, audible stereo gaps or
+identified transport faults. Redmi mono output cancels in this L−R wiring and
+cannot receive a continuity verdict. Linux's noisy return sharply limits coverage.
+
+A separate Linux silent-output incident retained the SDK's playing state until
+page reload; this does not establish the cause of every attenuation. The frozen
+headless listener's telemetry reported about 6 s of stale timestamps on waking,
+against 60 s before Core stopped queueing for it; it was not an electrical return.
 
 Resampling 44.1 kHz inputs with a 64-tap filter instead of FFmpeg's default 32
 puts images 92 dB down instead of 25 dB, with ripple under 0.001 dB, for 0.35 ms
@@ -126,25 +147,26 @@ Most of the gain is bitrate; 10 ms frames would add about 10 ms in Core for
 0.04 more. Opus payload averages about 173 kbit/s per listener instead of 105.
 The scores are a codec proxy, not a listening test.
 
-The limit is phones going to sleep. On 28 October, with a MacBook and a Pixel
-(GrapheneOS, Vanadium) on Wi-Fi listening against the source on headphones:
+Owner listening on 28 October also found trouble with a screen-off Pixel
+(GrapheneOS, Vanadium). The Pixel was not electrically recorded:
 
-| Buffer | Pixel, screen off | Redmi (Chrome), screen off | Electrical returns |
+| Buffer / condition | Pixel owner report | Linux candidates; coverage | Redmi candidates; coverage |
 |---|---|---|---|
-| 150 ms | no artifacts heard | — | no gaps |
-| 120 ms | dropouts and clicks, fewer with Vanadium's JavaScript JIT on | no gaps | no gaps |
+| 150 ms, Pixel screen off | no clear artifacts heard | 0; 25.2 s (8.44%) | 28; 284.0 s (94.93%) |
+| 120 ms, both phones screen off | struggled / dropouts | 0; 30.8 s (10.31%) | 117; 283.5 s (94.76%) |
+| 120 ms, Pixel JIT/reload changed during run | dropouts remained after reload | 0; 21.9 s (7.32%) | 39; 283.3 s (94.70%) |
 
-The default is 150 ms, the lowest buffer where a phone with its screen off played
-cleanly; hosts whose listeners stay on screen or on wired devices can lower it.
-Vanadium disables the JIT by default; enabling it for Couch's site reduces, but
-does not remove, the Pixel's dropouts at 120 ms. PCM uses
-about 1.5 Mbit/s per listener; over this Wi-Fi it starved a Pixel that played
-Opus without trouble.
+The selected 150 ms default remains configurable; the bounded Pixel listening
+report does not qualify continuity across phones. The JIT comparison was
+confounded by a reload during recording and does not establish a causal
+improvement. PCM uses about 1.5 Mbit/s per listener; the owner reported Pixel
+starvation with PCM where Opus played.
 
-Median Android-minus-Linux skew was 0–0.9 ms, p95 at most 2.3 ms. Capture mute,
-Leave/Join, host Remove, each listener's own volume and mute, and recovery 13 s
-after a 10 s Android Wi-Fi outage were confirmed on the electrical returns. These
-runs are not an audience-size qualification.
+Android-minus-Linux skew median/p95 was 1.69/2.61 ms in the 110 ms run;
+per-run estimates and matched-window counts are in the field evidence. Lifecycle
+recordings retain post-action evidence for mute, volume, Leave/Join, host Remove
+and Wi-Fi recovery, with their individual coverage listed in the field evidence. They do not
+provide continuous coverage through those actions or an audience-size qualification.
 
 ## Checks
 
