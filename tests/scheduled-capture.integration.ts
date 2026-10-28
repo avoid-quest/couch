@@ -5,10 +5,28 @@ import { once } from "node:events";
 import { WebSocket, WebSocketServer } from "ws";
 import { Identity, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
+import { createScheduledAudio } from "../src/server/scheduled-audio";
 import type { PlayerState } from "../src/shared/protocol";
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean, message: string, ms = 5000) => { const deadline = Date.now() + ms; while (!check()) { if (Date.now() > deadline) throw new Error(message); await sleep(10); } };
+
+test("repeated resume cannot leave a picture timeline running after Stop", t => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const states: PlayerState[] = [];
+  const core = createScheduledAudio({ name: "Resume fixture", admit: () => false, changed() {} });
+  const group = core.group("pictures", state => states.push(state));
+  t.after(() => { group.close(); core.close(); });
+  group.send({ type: "load", playbackId: "pictures", source: "", duration: 60 });
+  group.send({ type: "pause", playbackId: "pictures", paused: true });
+  group.send({ type: "pause", playbackId: "pictures", paused: false });
+  group.send({ type: "pause", playbackId: "pictures", paused: false });
+  group.send({ type: "stop" });
+  const stopped = states.length;
+  t.mock.timers.tick(100);
+  assert.equal(states.length, stopped, "Stop retires every timeline callback");
+  assert.equal(states.at(-1)!.status, "idle");
+});
 
 test("picture-only media has a controllable timeline without opening an audio decoder", { timeout: 5000 }, async t => {
   let lookups = 0; const states: PlayerState[] = [];

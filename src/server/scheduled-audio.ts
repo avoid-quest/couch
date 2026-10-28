@@ -166,6 +166,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     const restart = async () => { const at = position(); halt(); state = { ...state, position: at }; await start(); };
     const start = async () => {
       const current = load!, attempt = ++generation;
+      state = { ...state, status: "loading", buffering: false, error: null };
       const signal = AbortSignal.timeout(15_000);
       const inputUrl = current.audioSource ?? current.source;
       const credentialOrigin = current.credentialOrigin ?? current.source;
@@ -241,7 +242,6 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
         const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
         run = next;
-        state = { ...state, status: "loading", buffering: false, error: null };
         report();
         const diagnostic = ffmpegErrorLog();
         let partial = "";
