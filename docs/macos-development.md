@@ -36,7 +36,7 @@ security find-identity -v -p codesigning
 
 ## Package and launch the isolated app
 
-Install Go 1.27.2 on PATH, CMake, git and Xcode command line tools for packaging.
+Install the latest stable Go on PATH, CMake, git and Xcode command line tools for packaging.
 The package hook builds the live relay and bundled QuickJS for the selected
 architecture inside the app before code signing ([packaging](ci.md)).
 The app supports Intel macOS 13+ and Apple Silicon macOS 14+. Bundled QuickJS

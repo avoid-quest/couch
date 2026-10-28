@@ -244,7 +244,7 @@ scaling, multiple simultaneous Playbacks, or the complete Sendspin pipeline.
 
 ## Reproduce on the T480
 
-Use a checkout with dependencies installed using the pinned Bun and frozen
+Use a checkout with dependencies installed using the latest stable Bun and frozen
 lockfile. The harness starts its own temporary HTTP server and Electron profile;
 it does not launch the installed Couch or use its database. Run from a desktop/TV
 graphical session with the intended audio output and power settings. An Xvfb
