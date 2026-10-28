@@ -88,8 +88,8 @@ were used.
 | RaiPlay Sassuolo–Lazio 27/10/2026 | 100 cues, 4 sheets, 280 s | 2,326,987 |
 | StreamingCommunity `/it/watch/66337` | 210 cues, 4 sheets, 3,360 s | 490,230 |
 | AnimeUnity Super Cube `110884` | 80 cues, 2 sheets, 1,280 s | 192,902 |
-| AnimeSaturn One Piece episode 1180 | No supplied descriptor observed | 0 |
-| 123MoviesFree `7500-100943` | No supplied descriptor observed | 0 |
+| AnimeSaturn One Piece episode 1180 | HLS has no declared image track | 0 |
+| 123MoviesFree `7500-100943` | HLS has no declared image track | 0 |
 | Bandcamp “Lanius (Battle)” | Audio; no timed descriptor observed | 0 |
 | SoundCloud “Sideways (prod. Mad Real)” | Audio; no timed descriptor observed | 0 |
 
