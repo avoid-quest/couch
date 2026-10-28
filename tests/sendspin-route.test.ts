@@ -8,6 +8,10 @@ let authenticationFailure: Error | undefined;
 class FixturePlayer {
   buffers: number[] = [];
   disconnected = false;
+  isConnected = true;
+  isPlaying = true;
+  timeSyncInfo = { synced: true };
+  syncInfo = { outputLatencyMs: 27 };
   constructor(readonly options: Record<string, unknown>) { players.push(this); }
   async connect() {}
   async unlock() {}
@@ -45,6 +49,52 @@ test("clock-only watch reuses the player; public buffer changes keep the connect
   listen(true, true, credentials, "Fixture", { codec: "opus", minBufferMs: 400 }); await settle();
   expect(player.disconnected).toBe(true);
   expect(players.at(-1)!.options.codecs).toEqual(["opus", "pcm"]);
+});
+
+test("Live declarations use public output latency, respect the floor and retain increases across codec changes", async () => {
+  const settings = { codec: "pcm", minBufferMs: 150, sourceId: "concert" } as const;
+  listen(true, false, credentials, "Fixture", settings); await settle();
+  const player = players.at(-1)!;
+  expect(player.options.minBufferMs).toBe(150);
+  player.syncInfo.outputLatencyMs = 118;
+  listen(true, false, credentials, "Fixture", settings); await settle();
+  expect(player.buffers.at(-1)).toBe(155);
+  player.syncInfo.outputLatencyMs = 27;
+  listen(true, false, credentials, "Fixture", { ...settings, minBufferMs: 0 }); await settle();
+  expect(player.buffers.at(-1)).toBe(155);
+  listen(true, false, credentials, "Fixture", { ...settings, codec: "opus", minBufferMs: 0 }); await settle();
+  expect(players.at(-1)!.options.minBufferMs).toBe(155);
+});
+
+test("a new Live source or a new Join gets a fresh declaration", async () => {
+  const settings = { codec: "pcm", minBufferMs: 150, sourceId: "first" } as const;
+  listen(true, false, credentials, "Fixture", settings); await settle();
+  const first = players.at(-1)!;
+  first.syncInfo.outputLatencyMs = 201;
+  listen(true, false, credentials, "Fixture", settings); await settle();
+  expect(first.buffers.at(-1)).toBe(240);
+  listen(true, false, credentials, "Fixture", { ...settings, sourceId: "second" }); await settle();
+  expect(first.disconnected).toBe(true);
+  expect(players.at(-1)!.options.minBufferMs).toBe(150);
+  listen(false, false, credentials, "Fixture"); await settle();
+  listen(true, false, credentials, "Fixture", settings); await settle();
+  expect(players.at(-1)!.options.minBufferMs).toBe(150);
+});
+
+test("Live output changes are sampled while playing and sampling stops on Leave", async () => {
+  listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150, sourceId: "concert" }); await settle();
+  const player = players.at(-1)!;
+  player.syncInfo.outputLatencyMs = 201;
+  player.timeSyncInfo.synced = false;
+  await new Promise(resolve => setTimeout(resolve, 1050));
+  expect(player.buffers).toEqual([]);
+  player.timeSyncInfo.synced = true;
+  await new Promise(resolve => setTimeout(resolve, 1050));
+  expect(player.buffers).toEqual([240]);
+  listen(false, false, credentials, "Fixture"); await settle();
+  player.syncInfo.outputLatencyMs = 450;
+  await new Promise(resolve => setTimeout(resolve, 1050));
+  expect(player.buffers).toEqual([240]);
 });
 
 test("a failed audio bootstrap is visible and its retry creates a fresh player", async () => {

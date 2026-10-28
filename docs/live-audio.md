@@ -85,16 +85,45 @@ A relaxed share keeps at least one second of lead. A Live share's lead is the
 largest `min_buffer_ms` plus static output delay any member declares. It grows
 at once when a member declares more, which moves later timestamps forward by
 the difference. It never shrinks while the input keeps running, so listeners never
-jump backwards or lose queued audio; a smaller buffer applies when sharing or the
-input restarts (a new capture buffer restarts the input).
+jump backwards or lose queued audio; lower declarations apply when sharing or
+the input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction: a listener whose connection stops draining (a frozen tab, a dozing
 radio) gets nothing more until it drains, then resumes at audio that can still play.
 Its incoming requests wait in order meanwhile.
 
-**Playback buffer (ms)** is one Couch-wide setting, 150 ms initially, set in the
-Share dialog when Live is chosen and in the running share's panel. Core sends it
-to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`.
+**Playback buffer floor (ms)** is one Couch-wide setting, 150 ms initially, set in
+the Share dialog and the running share's panel; 0 removes the host floor. Each
+Receiver declares `ceil(max(previous declaration, host floor, output latency +
+35 ms) / 5) * 5`, capped at Core's existing 5000 ms declaration limit, through
+the SDK's public `minBufferMs`/`setMinBufferMs`. Until a reading is available it
+declares the floor, rounded up. Once per second while connected, playing and
+clock-synchronized, it reads the public `syncInfo.outputLatencyMs`. Invalid
+readings leave the previous declaration and floor intact. The SDK's reading can
+include platform estimates; it is not an acoustic measurement. A 27 ms output still
+declares 150 ms at the default floor; a 118 ms output declares 155 ms. With a zero
+floor, 27/42 ms outputs declare 65/80 ms. These are scheduling requests, not
+measured input-to-ear latency or continuity guarantees.
+
+The **35 ms allowance is fixed**, not measured jitter. SDK 5.0.0's public
+`SendspinPlayer` has no arrival/queue statistics or late/dropped chunk counters.
+`syncInfo` exposes output latency, sync error and resync count; `timeSyncInfo`
+exposes clock synchronization and uncertainty, not audio arrival jitter.
+Neither clock error nor resyncs identify starvation. There is no starvation
+feedback in this version: that needs public player statistics upstream. Couch
+does not access SDK internals, intercept its transport or parse console logs.
+The allowance needs rig validation, especially on weak Wi-Fi and sleeping phones;
+the host floor remains available for those conditions.
+
+Declarations never decrease during a Join, including a codec change or SDK
+reconnect. Leave/Join or a new Source starts a fresh declaration; the shared lead
+still retains its high-water mark until sharing or the input restarts. An input
+restart resets Core's lead to the current declarations, but does not reset the
+browser's declaration: the public player does not expose input generations.
+Restart sharing to apply a reduced host floor to all Receivers. The host panel
+shows the actual shared lead, including static delay, and the Receiver that set
+it; attribution remains after that Receiver leaves.
+
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
 recreates that listener's player. SDK correction and buffering options keep their
 defaults. Live ignores the SDK's declared startup lead (`requiredLeadTimeMs`): a
@@ -238,7 +267,10 @@ formats, source generations, timestamp mapping and Opus pre-skip.
 and the stock browser SDK, edits without stream restarts, late discovery,
 reconnect, clearing, Leave and a fresh publication clock.
 
-`live-lifecycle.integration.ts` covers input changes during playback, same-identity
+`live-lifecycle.integration.ts` verifies that different Receiver declarations
+produce identical samples and timestamps at one shared maximum lead (including
+static delay), with host attribution retained after the limiting Receiver leaves.
+It also covers input changes during playback, same-identity
 takeover, PCM ↔ Opus switches, Stop during Join, buffer changes across restarts,
 concurrent shares, publisher crash, rejected and stalled uploads, and Core restart
 (which ends runtime-only shares and Joins; the SDK reconnects).

@@ -27,6 +27,8 @@ export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" |
 // "menu" is OK held, which opens a focused item's menu (docs/design/remote.md).
 export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "menu" | "back" | "home" | "info";
 
+// The shared capture lead and the Receiver whose declaration raised it, retained until input restart.
+export type LiveLead = { ms: number; deviceId?: string };
 export type PlayerState = {
   playbackId: string | null;
   status: "unavailable" | "idle" | "loading" | "playing" | "paused" | "ended" | "error";
@@ -44,6 +46,7 @@ export type PlayerState = {
   subtitleError?: string | null;
   nowPlaying?: NowPlaying | null;
   timeline?: { mapping: "hls" | "media" | "unavailable"; error?: string };
+  liveLead?: LiveLead;
 };
 
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
@@ -56,7 +59,7 @@ export type Output = { deviceId: string; picture: boolean; sound: boolean; delay
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean; intent?: "relaxed" | "live"; delivery?: "direct" | "scheduled" | "webrtc" | "mpv" };
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; liveLead?: LiveLead; choosing?: number; held?: Output; inSync?: boolean; intent?: "relaxed" | "live"; delivery?: "direct" | "scheduled" | "webrtc" | "mpv" };
 export type PlaybackControls = { programme: boolean; queue: boolean; seek: boolean; speed: boolean; audioDelay: boolean; subtitleDelay: boolean; leave: boolean };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
@@ -177,7 +180,7 @@ export type ServerMessage =
   | { type: "player"; command: PlaybackCommand }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
-  | { type: "sendspin"; listen: boolean; watch: boolean; live?: LiveAudioSettings }
+  | { type: "sendspin"; listen: boolean; watch: boolean; live?: LiveAudioSettings & { sourceId: string } }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 // A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the

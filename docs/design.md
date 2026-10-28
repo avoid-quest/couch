@@ -23,7 +23,9 @@ Share separates **Screen**, **Window**, **System audio** and **Audio input** fro
 playback behavior. Audio input offers **Relaxed / Live** on the Couch computer;
 browser input sharing keeps relaxed playback. A live audience gets **Join/Leave**
 and its own volume; programme and queue controls remain with ordinary playback.
-The host chooses Live's playback buffer and codec when sharing. Native inputs
+The host chooses Live's playback buffer floor and codec when sharing. Each
+Receiver can declare more for its output latency plus a fixed allowance; the
+host panel shows the shared lead and the Receiver that set it. Native inputs
 also have a capture buffer and, on inputs with more than two channels, a stereo
 pair or mono channel choice in Share and the running share's panel
 ([Share](design/share.md#live-audio)). Listeners use the unmodified
