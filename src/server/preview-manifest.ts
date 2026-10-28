@@ -86,7 +86,7 @@ export function createPreviewResolver(fetcher: typeof fetch = publicFetch) {
     running++;
     try {
       const signal = AbortSignal.any([cancellation, AbortSignal.timeout(5000)]);
-      const response = await fetcher(source.url, { signal, credentials: "omit", headers: { accept: "text/vtt" } });
+      const response = await fetcher(source.url, { signal, credentials: "omit", headers: { "user-agent": "Couch", accept: "text/vtt" } });
       if (!response.ok) {
         await response.body?.cancel();
         if ([404, 410].includes(response.status)) return;

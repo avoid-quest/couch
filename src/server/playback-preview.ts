@@ -72,7 +72,7 @@ export function createPreviewImages(fetcher: typeof fetch = publicFetch) {
     running++;
     try {
       const signal = AbortSignal.any([cancellation, AbortSignal.timeout(5000)]);
-      const response = await fetcher(url, { signal, headers: { accept: "image/jpeg, image/webp, image/png" } });
+      const response = await fetcher(url, { signal, headers: { "user-agent": "Couch", accept: "image/jpeg, image/webp, image/png" } });
       if (!response.ok) { await response.body?.cancel(); throw new Error("Preview image is unavailable."); }
       const bytes = await boundedBytes(response, previewImageLimit, signal);
       const size = dimensions(bytes);

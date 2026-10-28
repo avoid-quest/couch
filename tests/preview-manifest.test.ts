@@ -51,7 +51,7 @@ test("VTT preserves actual fractional ranges, relative URLs, full images, crops 
   expect(parsePreviewVtt(sample.replaceAll("\n", "\r\n"), base)?.metadata).toEqual(source.metadata);
   expect(parsePreviewVtt(sample.replaceAll("\n", "\r"), base)?.metadata).toEqual(source.metadata);
   expect(parsePreviewVtt(`\uFEFF${sample}`, base)?.metadata).toEqual(source.metadata);
-  for (const [name, cues, images, duration] of [["streamingcommunity", 210, 4, 3360], ["animeunity", 80, 2, 1280]] as const) {
+  for (const [name, cues, images, duration] of [["streamingcommunity", 210, 4, 3360], ["animeunity", 80, 2, 1280], ["raiplay", 100, 4, 280]] as const) {
     const source = parsePreviewVtt(readFileSync(new URL(`./fixtures/${name}-preview.vtt`, import.meta.url), "utf8"), base)!;
     expect(source.metadata).toMatchObject({ kind: "cues", duration, images });
     if (source.metadata.kind === "cues") expect(source.metadata.cues).toHaveLength(cues);
@@ -85,7 +85,9 @@ test("literal discovery never executes page expressions or fetches manifests whi
 
 test("lazy manifests deduplicate per source, use the final redirect base and never expose URLs", async () => {
   let calls = 0, images = 0;
-  const read = createPreviewResolver((async () => {
+  const read = createPreviewResolver((async (_url, options) => {
+    expect(new Headers(options?.headers).get("user-agent")).toBe("Couch");
+    expect(options?.credentials).toBe("omit");
     calls++; const result = response(); Object.defineProperty(result, "url", { value: "https://cdn.example/redirected/track.vtt" }); return result;
   }) as typeof fetch);
   const source = vttPreview(base)!;
