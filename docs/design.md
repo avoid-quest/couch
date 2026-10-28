@@ -126,7 +126,11 @@ hue, measured. The tone cross-fades over 600 ms when what plays changes. It is
 the one backdrop filter on a page (Up next, summoned over the player's room,
 is the other, on the player). Toasts and the header's sharing capsule float in
 the same family, on its solid surface and shadow (`--float-shadow`) without
-the filter.
+the filter. The sharing capsule has its own row below navigation and search;
+its name, viewers and Stop never displace those primary controls ([Shell](design/shell.md#header)).
+Share sits immediately before search, which fills the row to the right page
+gutter. Keyboard shortcuts is in the Couch popover. Windows/Linux captions have
+only their native-height area above that row, over the Stage.
 
 ## Stage
 
@@ -153,9 +157,8 @@ The copy sits at the bottom left in the room left of the picture (at most
 46rem, less the picture's width and a gap): the trail, the title at display
 size ([Type](#type)), one muted meta line ending in its links, progress, the
 verbs, the synopsis. Nothing of it lies over the picture. The header is
-see-through while the page is at its top and black once it scrolls; Windows/Linux
-desktop windows keep a black native title-bar strip and scroll below it
-([Shell](design/shell.md#header)).
+see-through while the page is at its top and black once it scrolls, including
+Windows/Linux desktop windows ([Shell](design/shell.md#header)).
 
 - **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
   Details page with nothing under its stage fills the window above the bar
@@ -488,6 +491,11 @@ Portalled surfaces and their backdrops share `z-50`, above the page and its bars
 Later portals cover earlier ones: a confirmation covers the Couch switch that
 opened it, and a menu or Select opened inside a dialog or sheet stays above it.
 Keep this order across overlay types rather than giving one type a higher layer.
+
+Dialogs and confirmations stay within the viewport with a 1rem gutter at the
+client's interface size; long content scrolls inside the dialog. A caller's
+smaller height uses `--dialog-max-height` (Keyboard shortcuts requests `85dvh`),
+so it keeps the shared zoom-aware viewport cap.
 
 ## Menus
 
