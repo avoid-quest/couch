@@ -489,7 +489,9 @@ screenshots, raw measurements and harnesses are in `/tmp/couch-videojs-timeline/
 The final integrated UI passes preview/recovery, seek, transition, clock and all
 16 TV-focus cases, plus trusted mouse/touch and desktop/TV menu/Select checks.
 The resize regression grows a visible unchanged cue from 160×90 to 238×133 when
-resizing 390→1920px, retaining the same blob and one image download. The radio
+resizing 390→1920px, retaining the same blob and one image download. Trusted pointer release also matches the displayed draft when duration shrinks
+or grows during a held drag; idle Escape/TV Back reaches normal navigation after
+an active edit is canceled. The radio
 regression now requires real programme progress, holds its wall clock fixed and
 rechecks seeking/end labels after injected media-clock observations.
 
@@ -503,13 +505,13 @@ No decoded-video synchronization claim follows from these rendered crop checks.
 
 At main `ee4f5876`, the source-only layer's client assets total 2,773,351 raw /
 852,449 gzip bytes. With the integrated Slider and Thumbnail they total
-2,833,618 raw / 872,219 gzip: **+60,267 raw / +19,770 gzip bytes**. These are sums
+2,833,618 raw / 872,302 gzip: **+60,267 raw / +19,853 gzip bytes**. These are sums
 of emitted `dist/assets` JavaScript and CSS (Python gzip level 9, zlib 1.3.1), not initial-route
 transfer or source-map sizes. The image-size dependency stays in Core. This
 supersedes the initial total bundle delta; the +5.8 KB figure above isolates the
 later Slider migration alone.
 
-A fresh disposable combination with Sendspin `bf6c2279` builds and passes 54
+A fresh disposable combination with Sendspin `bf6c2279` builds and passes 56
 preview/source-preparation unit tests and 48 integration cases, including the
 preview-admission case, shared transport rights, Live audience and official SDK.
 This supersedes the earlier combined-tree snapshot. Explicit reconciliation
