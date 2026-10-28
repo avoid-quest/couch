@@ -43,6 +43,20 @@ returned 403 through curl and Core even with per-format headers and matching
 IPv4 egress, then worked when replayed later. yt-dlp's downloadability check made
 the immediate relay requests succeed, without cookies or a pinned player client.
 
+Bandcamp can advertise free downloads alongside its MP3 preview. yt-dlp's default
+audio ranking can select ALAC (`falac`), which Chromium rejects after a successful
+HTTP response. Playback restricts Bandcamp to MP3, AAC, FLAC and WAV, keeping the
+best supported audio, including lossless formats, without an unrestricted fallback.
+The Device's VP9 capability does not imply ALAC support. See
+[yt-dlp format filtering and sorting](https://github.com/yt-dlp/yt-dlp#filtering-formats)
+and [Chromium's audio decoder support](https://github.com/chromium/chromium/blob/main/media/base/supported_types.cc).
+Offline selection regressions use the real extractor with sanitized format fixtures:
+
+```sh
+bun build tests/youtube-playback.integration.ts --target=node --outfile=build/youtube-playback.integration.mjs
+COUCH_TEST_YT_DLP=/absolute/path/to/yt-dlp node --test build/youtube-playback.integration.mjs
+```
+
 Core stores protected loopback media for Synced playback. A media-only loopback
 listener keeps native decoding independent of the UI listener’s bind address and
 TLS configuration; it closes with Core. FFmpeg also uses the

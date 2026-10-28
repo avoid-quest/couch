@@ -25,7 +25,7 @@ const aac: Format = { format_id: "aac", url: "https://media.example/aac.m4a", ex
 const opus: Format = { ...aac, format_id: "opus", url: "https://media.example/opus.webm", ext: "webm", acodec: "opus", abr: 160 };
 const unavailable = "This website offers no format Couch can play yet.";
 
-test("YouTube playback selection and safe extraction errors", async t => {
+test("Web playback selection and safe extraction errors", async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-youtube-playback-"));
   const root = join(directory, "helpers"), fixture = join(directory, "info.json");
   const originalEnv = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE };
@@ -205,6 +205,26 @@ test("YouTube playback selection and safe extraction errors", async t => {
   await t.test("non-YouTube selection keeps its existing height cap and codecs", real, async () => {
     const media = await select([video("small", 240, 426, "vp9"), video("large", 480, 854, "vp9"), opus], "480p", false, "https://www.dailymotion.com/video/fixture");
     assert.equal(new URL(media.source).pathname, "/small.mp4");
+  });
+  for (const vp9 of [false, true]) await t.test(`Bandcamp keeps supported lossless audio and rejects incompatible fallbacks, vp9=${vp9}`, real, async () => {
+    // BigBuckBunny offers free downloads as well as its MP3 preview. yt-dlp ranks
+    // ALAC above FLAC, and AIFF above AAC/MP3; neither ALAC nor AIFF plays in Chromium.
+    const audio = (id: string, ext: string, acodec = id): Format => ({
+      format_id: id, url: `https://media.example/${id}.${ext}`, ext, protocol: "https", vcodec: "none", acodec,
+    });
+    const mp3 = { ...audio("mp3-128", "mp3", "mp3"), abr: 128 };
+    const flac = audio("flac", "flac"), wav = audio("wav", "wav");
+    const alac = audio("falac", "m4a", "alac"), aiff = audio("aiff-lossless", "aiff", "aiff");
+    const bandcamp = (formats: Format[]) => select(formats, "auto", vp9, "https://artist.bandcamp.com/track/fixture");
+    for (const compatible of [flac, wav, { ...aac, acodec: "aac" }, mp3]) {
+      const media = await bandcamp([compatible, aiff, alac]);
+      assert.equal(media.source, compatible.url);
+      assert.equal(media.audioOnly, true);
+      assert.equal(media.audioSource, undefined);
+      assert.equal(media.publicNetwork, true);
+    }
+    await noFormat(bandcamp([alac, aiff]));
+    await noFormat(bandcamp([audio("unknown", "m4a", "unknown")]));
   });
   await t.test("YouTube skips a refused advertised format and rejects an entirely refused selection", real, async () => {
     const contacts: string[] = [];
