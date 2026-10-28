@@ -30,6 +30,8 @@ checks host, origin and remote-control permission, and revocation closes the
 authenticated transport even during the Noise handshake. A peer whose messages
 throw closes alone; the shared worker continues. Turning off network sharing
 also closes paired audio transports on the primary listener.
+Each device may keep at most eight control connections and eight audio connections,
+including pending audio handshakes, to bound duplicate tabs and reconnects.
 
 ## Pipeline
 

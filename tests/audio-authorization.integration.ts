@@ -61,3 +61,35 @@ test("identity rebinding retires the old control connection and its publication"
   await until(() => audio.readyState === WebSocket.CLOSED);
   assert.equal(replacement.state.liveSources?.some(source => source.id === "old-publication"), false);
 });
+
+test("one paired device cannot accumulate unlimited audio connections", { timeout: 10_000 }, async t => {
+  const f = await liveFixture(), identity = f.identities[1]!, sockets: WebSocket[] = [];
+  t.after(async () => { for (const socket of sockets) socket.terminate(); await f.close(); });
+  const connect = () => new Promise<boolean>(resolve => {
+    const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
+    sockets.push(socket);
+    socket.once("open", () => resolve(true));
+    socket.on("error", () => resolve(false));
+    socket.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(false); });
+  });
+  for (let i = 0; i < 8; i++) assert.equal(await connect(), true);
+  assert.equal(await connect(), false, "a ninth connection must be refused before allocating another worker transport");
+  const closed = once(sockets[0]!, "close"); sockets[0]!.terminate(); await closed;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(await connect(), true, "closing a connection returns its slot");
+});
+
+test("one paired device cannot multiply control connections and capture publications without limit", { timeout: 10_000 }, async t => {
+  const f = await liveFixture(), identity = f.identities[1]!, sockets: WebSocket[] = [];
+  t.after(async () => { for (const socket of sockets) socket.terminate(); await f.close(); });
+  const connect = () => new Promise<number>(resolve => {
+    const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/ws?token=${identity.token}&device=${identity.id}`, { origin: f.hub.origin });
+    sockets.push(socket);
+    socket.once("open", () => resolve(101));
+    socket.on("error", () => resolve(0));
+    socket.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(response.statusCode!); });
+  });
+  // The fixture already has one connection for this device.
+  for (let i = 1; i < 8; i++) assert.equal(await connect(), 101);
+  assert.equal(await connect(), 429);
+});
