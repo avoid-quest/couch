@@ -18,6 +18,7 @@ import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery, radioRecognitionsQuery } from "@/api/radio";
 import { playlistsQuery } from "@/api/playlists";
 import { historyQuery } from "@/api/progress";
+import { upcomingQueue } from "../../../shared/queue";
 
 export const savedTabs = ["later", "channels", "lists", "played", "identified"] as const;
 export type SavedTab = typeof savedTabs[number];
@@ -86,7 +87,7 @@ export function SavedSections({ state, credentials, connected, canPlay, tab: nam
     <div data-nav-content className="min-w-0">{choosing ? <MediaRowsSkeleton /> : <>
       {tab === "later" && <><PageHeader title="For later" hidden /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
       {tab === "channels" && <><PageHeader title="Channels & stations" hidden /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
-      {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} onFind={onFind} />}
+      {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} upNextCount={upcomingQueue(state).length} onFind={onFind} />}
       {tab === "played" && <><PageHeader title="Played" hidden /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
       {tab === "identified" && <><PageHeader title="Identified songs" hidden /><IdentifiedSection credentials={credentials} connected={connected} /></>}
     </>}</div>

@@ -42,7 +42,7 @@ export async function mountSettingsAudit() {
     return uiFetch(input, init);
   };
   const hardware = () => audit.updateSession(gate => ({ ...gate,
-    details: { ...gate.details!, urls, lanError: null, systemAudio: true, tvPresentation: true, tvModeChangeable: true, tvAppliance: true },
+    details: { ...gate.details!, urls, lanError: null, systemAudio: true, airplay: "available", tvPresentation: true, tvModeChangeable: true, tvAppliance: true },
     state: { ...gate.state!, appearance: defaultTvAppearance },
   }));
   await hardware();
@@ -106,6 +106,96 @@ export async function runSettingsPreviewRegression() {
     assert(screen!.textContent !== before[0] && size!.textContent !== before[1], "Preview countdown announcements stop updating");
     assert(screen!.querySelectorAll("button").length === 2 && size!.querySelectorAll("button").length === 2, "A preview lost its Keep/Revert actions");
     return "Passed: screen and text-size confirmations expose live countdowns and retain Keep/Revert actions.";
+  } finally { audit.close(); }
+}
+
+export async function runAirPlayConnectionRegression() {
+  const audit = await mountSettingsAudit();
+  const fetchSettings = window.fetch;
+  const requests: string[] = [];
+  let failRead = false;
+  window.fetch = async (input, init) => {
+    const path = new URL(String(input), location.href).pathname;
+    if (path.startsWith("/api/settings/airplay")) {
+      requests.push(`${init?.method ?? "GET"} ${path}`);
+      if (failRead) return Response.json({ error: "Couldn't read AirPlay." }, { status: 503 });
+    }
+    return fetchSettings(input, init);
+  };
+  const connection = (connected: boolean) => audit.updateSession(gate => ({ ...gate, connected, status: connected ? "connected" : "reconnecting" }));
+  try {
+    await audit.go("/settings/couch/sources");
+    audit.respond("/api/settings/airplay", { enabled: true, status: "receiving", error: null, name: "Living room", code: "private-code", sender: "Private phone" });
+    await audit.client.refetchQueries({ queryKey: ["airplay"] }); await wait();
+    await audit.click("New code");
+    await connection(false);
+    const confirmation = document.querySelector<HTMLButtonElement>('[role="alertdialog"] [data-slot="alert-dialog-action"]')!;
+    assert(confirmation?.disabled, "An open AirPlay confirmation can renew the code while disconnected");
+    const before = requests.length;
+    confirmation.click(); await wait();
+    assert(requests.length === before, "Disconnected AirPlay confirmation sends a request");
+    await audit.click("Cancel");
+    await connection(true);
+    failRead = true;
+    await audit.client.refetchQueries({ queryKey: ["airplay"] }); await wait();
+    await connection(false);
+    const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Try again")!;
+    assert(retry?.disabled, "AirPlay retry can fetch privileged settings while disconnected");
+    retry.click(); await wait();
+    assert(requests.length === before + 1, "Disconnected AirPlay retry sends a request");
+    failRead = false;
+    await connection(true);
+    await audit.click("New code");
+    await audit.updateSession(gate => ({ ...gate, identity: { ...gate.identity!, authority: "controller" } }));
+    assert(!document.querySelector('[role="alertdialog"]'), "Demotion leaves an AirPlay confirmation open");
+    for (const secret of ["private-code", "Private phone"]) assert(!document.body.textContent?.includes(secret), "Demotion exposes cached AirPlay details");
+    assert(document.body.textContent?.includes("Only an admin can change this."), "A Linux controller loses its availability placeholder");
+    for (const airplay of ["unsupported", undefined] as const) {
+      await audit.updateSession(gate => ({ ...gate, details: { ...gate.details!, airplay } }));
+      assert(!document.body.textContent?.includes("AirPlay"), "Unsupported or unknown capability shows AirPlay");
+    }
+    assert(audit.client.getQueryCache().find({ queryKey: ["airplay"] })?.getObserversCount() === 0, "Hidden AirPlay keeps a privileged query mounted");
+    return "Passed: disconnect blocks open code confirmations and retries; demotion closes the dialog and hides secrets; unknown/unsupported capability unmounts AirPlay.";
+  } finally { audit.close(); }
+}
+
+// Run in the TV presentation (?tv=1); these are the production shell and dialog.
+export async function runTvSizePreviewFocusRegression() {
+  const audit = await mountSettingsAudit();
+  const fetchSettings = window.fetch;
+  const requests: string[] = [];
+  window.fetch = async (input, init) => {
+    const path = new URL(String(input), location.href).pathname;
+    if (path.startsWith("/api/appearance/")) requests.push(path);
+    return fetchSettings(input, init);
+  };
+  try {
+    await audit.go("/settings/couch/tv");
+    const opener = document.querySelector<HTMLElement>('[data-settings-page="display"]')!;
+    for (const action of ["Keep", "Revert", "timeout"]) {
+      opener.focus();
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, appearance: { size: 1.15, confirmedSize: 1, preview: { id: "preview", expiresAt: Date.now() + (action === "timeout" ? 3000 : 20_000) } } } }));
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      assert(dialog?.textContent?.split("Keep this size?").length === 2, "The TV preview must ask its question once");
+      const keep = [...dialog.querySelectorAll("button")].find(button => button.textContent === "Keep")!;
+      keep.focus();
+      const countdown = dialog.querySelector('[role="status"]')!;
+      const before = countdown.textContent;
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      assert(countdown.textContent !== before && document.activeElement === keep, "The TV countdown stops updating or moves focus");
+      if (action === "timeout") await new Promise(resolve => setTimeout(resolve, 2300));
+      else {
+        const path = `/api/appearance/${action === "Keep" ? "confirm" : "cancel"}`;
+        audit.respond(path, {});
+        [...dialog.querySelectorAll("button")].find(button => button.textContent === action)!.click(); await wait();
+        assert(requests.at(-1) === path, `${action} doesn't reach its preview endpoint`);
+      }
+      // Core's resulting snapshot ends the preview; expiry also closes the local dialog on its own.
+      if (action === "timeout") assert(!document.querySelector('[role="dialog"]'), "The expired TV preview stays open");
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, appearance: { size: action === "Keep" ? 1.15 : 1, confirmedSize: action === "Keep" ? 1.15 : 1, preview: null } } }));
+      assert(!document.querySelector('[role="dialog"]') && document.activeElement === opener, `${action} loses the TV's prior focus`);
+    }
+    return "Passed: the TV preview asks once, counts down without moving focus, and restores focus after Keep, Revert and expiry.";
   } finally { audit.close(); }
 }
 

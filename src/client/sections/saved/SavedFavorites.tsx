@@ -19,7 +19,7 @@ import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
-import { metaLine } from "@/media-caption";
+import { collectionSubtitle, metaLine } from "@/media-caption";
 import { collectionLabel, providerNames } from "@/sections/find/SearchOnlineResults";
 
 export type SavedFavoriteActions = {
@@ -32,9 +32,11 @@ const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.it
 const shapeOf = (favorite: Favorite): ArtShape => favorite.kind === "radio" ? "square" : providerItemShape(providerNames[favorite.item.provider], favorite.item);
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
-const meta = (favorite: Favorite) => favorite.kind === "provider"
-  ? metaLine(providerNames[favorite.item.provider], collectionLabel(favorite.item), mediaSubtitle(favorite.item))
-  : metaLine("Radio", favorite.item.groupTitle || favorite.item.countryCode);
+const meta = (favorite: Favorite) => {
+  if (favorite.kind === "radio") return metaLine("Radio", favorite.item.groupTitle || favorite.item.countryCode);
+  const type = collectionLabel(favorite.item);
+  return metaLine(providerNames[favorite.item.provider], type, collectionSubtitle(favorite.item.subtitle === favorite.item.title ? undefined : mediaSubtitle(favorite.item), type, providerNames[favorite.item.provider]));
+};
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.
 export function moveFavorite(favorites: Favorite[], favorite: Favorite, offset: number): { kind: Favorite["kind"]; order: string[] } | null {

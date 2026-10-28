@@ -14,7 +14,7 @@ import { useUpdateCenter, type UpdateCenterTarget } from "@/session/update-cente
 import { UPDATE_INTERRUPTS_PLAYBACK } from "../../../shared/updates";
 import type { HelperUpdates } from "../../../shared/helper-updates";
 import { ReleaseNotes } from "./ReleaseNotes";
-import { automaticUpdateStatus, updateInstallHint, updateBusy, updateInterrupts, updateReady, updateStatuses } from "./update-presentation";
+import { automaticUpdateStatus, mediaToolVersion, updateInstallHint, updateBusy, updateInterrupts, updateReady, updateStatuses } from "./update-presentation";
 
 const helperStatuses: Record<HelperUpdates["items"][number]["status"], string> = { checking: "Checking…", updated: "Updated", current: "Up to date", compatible: "Compatible", held: "Kept for compatibility", system: "Managed by the system", error: "Update failed" };
 const batchStatuses = { waiting: "Waiting", installing: "Updating…", updated: "Updated", failed: "Update failed" };
@@ -24,7 +24,10 @@ function MediaTools() {
   const skipped = batch?.helpers === "skipped";
   const problem = batch?.helperError ?? helperError ?? helpers?.items.filter(item => item.status === "error").map(item => `${item.name}: ${item.error ?? "Update failed"}`).join("; ");
   const checking = helpers?.status === "checking" || batch?.helpers === "checking";
-  return <SettingsRow label="Media tools" description={helpers?.items.map(item => `${item.name === "qjs" ? "QuickJS" : item.name === "ffmpeg" ? "FFmpeg" : item.name}${item.version ? ` ${item.version}` : ""}${["held", "system"].includes(item.status) ? ` (${helperStatuses[item.status].toLowerCase()})` : ""}`).join(", ")}>
+  return <SettingsRow label="Media tools" description={helpers?.items.map(item => {
+    const version = mediaToolVersion(item);
+    return `${item.name === "qjs" ? "QuickJS" : item.name === "ffmpeg" ? "FFmpeg" : item.name}${version ? ` ${version}` : ""}${["held", "system"].includes(item.status) ? ` (${helperStatuses[item.status].toLowerCase()})` : ""}`;
+  }).join(", ")}>
     <span className={cn("flex min-w-0 items-center gap-2 break-words text-sm", problem && !skipped ? "text-destructive" : "text-muted-foreground")}>
       {checking && <Spinner />}
       {problem || (checking ? "Checking…" : helpers?.items.some(item => item.status === "held") ? "Kept for compatibility" : helpers?.status === "done" ? "Up to date" : helpers?.items.length ? "Compatible" : "Not checked yet")}

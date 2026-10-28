@@ -26,7 +26,7 @@ function thumbnail(value: unknown) {
 }
 
 function viewers(value: unknown) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? `${value.toLocaleString("en-US")} viewers` : "";
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? `${value.toLocaleString("en-US")} ${value === 1 ? "viewer" : "viewers"}` : "";
 }
 
 function channel(value: unknown): ProviderItem | null {

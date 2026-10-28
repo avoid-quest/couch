@@ -30,9 +30,11 @@ trail above their h1 ([Browse](browse.md#breadcrumbs)).
 
 ## Header
 
-One sticky row: the Couch switch (or, on a TV, its own name) and the section
-tabs at the left; Share (or, while sharing, its capsule), search and, on
-desktop, Keyboard shortcuts at the right; the TV adds a small clock. No hairline under it: it is
+One sticky header: the Couch switch (or, on a TV, its own name) and the section
+tabs at the left; a compact Share icon immediately before search, which fills
+the row to the right page gutter; the TV adds a small clock. Keyboard shortcuts
+lives in the Couch switch popover, with `?` opening the same dialog. The popover divides Radix's available height by the interface scale so its contents remain reachable in short windows. Active
+sharing has its own compact row below these controls. No hairline under it: it is
 ink on the room. The current tab is white with a short white rule under its
 name, the others muted until a pointer brings them up. The search field keeps
 a solid fill (`muted`), so artwork under the see-through header never shows
@@ -40,23 +42,37 @@ through its text. Over a [Stage](../design.md#stage), while the page is at its
 top, the header is see-through over the Stage's room, dark enough for muted
 ink at 7:1; once the page scrolls it is black again. The header
 publishes its height as `--top-bar` so scroll padding keeps focus clear of it
-and the Stage reaches up under it. Windows/Linux desktop windows keep a black
-title-bar strip and scroll below it instead. Below `lg` a TV centres its tabs on a second row.
+and the Stage reaches up under it on every platform. Below 60rem of available
+header width a TV centres its tabs on a deliberate second row; active sharing
+then follows those tabs.
 
-Its geometry holds from page to page: the search field fills the right column
-(16rem to 30rem, Keyboard shortcuts included; on the TV up to 20rem, 24rem
-with a token), tokens or not, and on Remote, whose keys
-drive the TV, Keyboard shortcuts keeps its slot unseen. Remote shows while the
+The primary controls use one grid row and never wrap. The Couch name truncates
+inside a bounded column; search takes all remaining space, with no width cap
+or trailing tools slot (only the TV clock follows it). A header container query
+follows interface size as well as window width: desktop tabs use their familiar
+icons below 60rem, with accessible names
+and hover titles. Sharing starts and
+stops without moving or resizing search or navigation, or remounting the field,
+its draft, tokens or palette. The Share entry keeps its 44px slot while the
+active capsule appears below. Idle sharing reserves no extra row. Tokens
+truncate within a bounded, horizontally scrollable strip, leaving room to type.
+Below 640px the Couch switch is its mark, with its full name in the accessible
+label and picker. An open or populated search takes the primary row there;
+Cancel stays beside an open search. The phone field uses Enter or the palette's
+search action; its empty field has a small search glyph instead of a second
+44px submit target.
+On Remote, whose keys drive the TV, Keyboard shortcuts is absent from the
+Couch popover and its hotkeys are inactive. Remote shows while the
 Couch has a TV, on or off.
 
-**Offline**, the mark is hollow, and the right cluster says "Reconnecting…"
-with a Spinner before the search, as sharing does (the Spinner alone on a
-phone); the shell's `sr-only` status and the Couch switch's name carry it for
-screen readers. Nothing pushes the page down. Only the app pointed at another
+**Offline**, the mark is hollow, and a status row below the primary controls
+says "Reconnecting…" with a Spinner (the Spinner alone on a phone); the shell's
+`sr-only` status and the Couch switch's name carry it for screen readers.
+Status text never competes with search for width. Only the app pointed at another
 Couch keeps a line under the header, for its Try again and Use this computer.
 An updated Couch and a player error keep their line too.
 
-An available app update shows a ghost link beside the header's other controls:
+An available app update shows a ghost link in that status row:
 **Update ready**, or **N updates ready**, with a circle-arrow icon. On touch the
 icon stands alone with the same accessible name. It opens the viewer's one
 [Updates page](settings.md#updates). During an update the same link shows progress;
@@ -66,38 +82,58 @@ stays out of the player, fullscreen and Updates
 settings, and off a TV while it plays. Success uses a brief toast and removes the
 link automatically. There is no update banner, review dialog or dismissal step.
 
-Connection and error lines belong to the measured header, above a Stage's artwork;
+Active sharing, connection, update and error lines belong to the measured
+header, so page content, focus and the page scrollbar clear all of them;
 when empty they occupy no space.
 
 **Touch** (`touch:`): the tabs move to a bottom tab bar (Home, Saved, Remote
 while the Couch has a TV, Settings; lucide icons over labels), and the
-top bar is the Couch switch, the search field, then Share as an icon. A narrow TV undoes
-`touch:` with `tv:`. **Desktop windows** put their native buttons and drag region
-in the header, without a separate title bar. macOS (`[data-window-controls]`)
+top bar is the Couch switch, Share as an icon, then the search field. A narrow TV undoes
+`touch:` with `tv:`. **Desktop windows** keep native buttons and a drag region
+in the header. macOS (`[data-window-controls]`)
 keeps its traffic lights at the left; Windows and Linux use Electron's
 `titleBarOverlay` with t3code's Linux-safe `#01000000` and white symbols.
-Windows/Linux caption buttons keep t3code's fixed 40px height independently of
-the header and interface size, so enlarging the search and tabs never stretches
-the native buttons. Couch keeps its 3rem search field. The header and player
-heading reserve the controls' space: 90pt on the Mac; on Windows/Linux, the
+Windows/Linux caption buttons use Electron's
+[default system height](https://www.electronjs.org/docs/latest/api/base-window#new-basewindowoptions) independently
+of the header and interface size, so enlarging the search and tabs never stretches
+the native buttons. Their shapes, order, hover and window actions remain native;
+macOS keeps its native traffic lights. Couch keeps its 3rem search field. The
+Mac header and player heading reserve 90pt at the left. On Windows/Linux, the
 `wco` class follows `navigator.windowControlsOverlay.visible` and its
 `geometrychange` events. The preload supplies its `--workspace-*` variables,
 insets and drag regions, so older remote renderers also clear the overlay
 without matching their Mac-only `[data-window-controls]` rules. The variables
 read `titlebar-area-*` in viewport pixels and divide by the interface scale.
-The player clears that native controls row. Empty header space drags the window;
-a double-click uses the OS's maximize/restore behavior. Fullscreen drops the controls' inset.
+The local header reserves only that physical native height at its top, transparent
+over the Stage; its complete primary row sits below and uses the normal page
+gutters on both sides. Caption buttons reserve no right rail beside search.
+The player and older remote renderers keep their existing control insets.
+The measured header includes the caption area and every sharing/status row.
+Empty header space, including the caption area, drags the window; a double-click
+uses the OS's maximize/restore behavior. Main's fullscreen state and DOM fullscreen
+both suppress the inset and caption area, even if Chromium reports a stale visible
+overlay. Mac, browser and TV gain no caption row.
 Windows/Linux auto-hide the menu bar, as
 [t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts)
 does, keeping its accelerators; the tray keeps working as before. The TV stays
 frameless and fullscreen. Unpaired there is no header (see First run and pairing).
 
 Windows/Linux keep the document inside the window and scroll `.app-page`
-below the header, so no scrollbar reaches the window controls. Page navigation
-and Back restore that container's position; focus clears its top and footer.
-Scrollbars are 6 physical pixels with transparent tracks, white 8% thumbs and
-12% on hover, as in t3code's dark theme. Windows leaves a 6px right resize
-edge outside the renderer's content. The header keeps Couch's Inter Tight.
+behind the header, with top padding preserving the content's position and the
+scrollbar track starting below the header, clear of the window controls. The
+Stage's room reaches behind the transparent header at the top; scrolling makes
+the header black, just as on macOS. Settings and pages without a Stage keep
+their black ground. Page navigation and Back restore that container's position;
+focus clears its top and footer.
+The page uses shadcn's Radix ScrollArea: native wheel, touch and keyboard scrolling,
+with a draggable overlay thumb only when content overflows. Its transparent track
+starts below the measured header and ends above the footer, so artwork fills the
+window without a reserved scrollbar strip or a track among the caption buttons.
+The thumb is 6 physical pixels in a 10-pixel hit area, white 8% and 12% on hover,
+as in t3code's dark theme. Nested scrollers keep their existing scrollbars.
+The page and fixed footer fill the
+client width in restored, maximized and fullscreen windows; native resizing
+needs no extra CSS gutter. The header keeps Couch's Inter Tight.
 macOS, the browser and the TV retain their existing chrome and document
 scrolling.
 
@@ -115,10 +151,9 @@ frame/corners and restore/show/focus on a second launch already follow
 t3code's shell and remain in place.
 
 **Share.** On a device that can capture, Share opens the Share dialog (a TV
-hides it until Settings → This device shows it); while this device shares, it
-becomes the capsule (its picture, the share's name, viewers and Stop sharing)
-whose panel lists who watches and how ([Share](share.md)). While
-it shows, the right column takes the room it needs. It stays local to the
+hides it until Settings → This device shows it); while this device shares,
+its capsule appears below navigation and search (picture, name, viewers and
+Stop). Its panel lists who watches and how ([Share](share.md)). It stays local to the
 publishing device: another device's Remote can't use it. The player's top band
 keeps "Sharing screen" with Stop sharing.
 
@@ -140,8 +175,9 @@ under it, at its left edge and width, on the menus' ground (`bg-popover`,
 is. Its rows are `min-h-10` at `text-body` with `rounded-sm` thumbnails
 (`size-10`), its headings `text-meta`, and the query row `text-title`. On a phone
 it fills the screen under the header, the field takes the whole row and Cancel
-closes it. Below `sm`, the closed field hides its scope tokens to leave room for
-the query; opening it reveals the tokens.
+closes it. Scope tokens stay within a bounded strip: they truncate, then scroll
+horizontally when space is scarce, without covering the query or Clear.
+In the query suggestion, scope names truncate within half the row so the query stays visible.
 On the TV it fills the screen too: OK on the field opens it (arrows pass a
 closed field, which is a plain field to the remote), a phone's Remote types
 into it ([Type on TV](remote.md#type-on-tv)), and the typed query reads large
@@ -277,10 +313,11 @@ keeps the requested page.
 
 ## Keyboard
 
-TanStack Hotkeys, inside the app only; the header's Keyboard shortcuts dialog
+TanStack Hotkeys, inside the app only; the Couch popover's Keyboard shortcuts dialog
 lists them: K/Space play or pause, J/L seek 10 s, 0–9 jump, M mute, C
 subtitles, F fullscreen, I the player's Info, Shift+N play next, H/S Home and Saved, `/` Search,
-`,` Settings, P/Q player and Up next, Esc close or back, `?` the list. Space and
+`,` Settings, P/Q player and Up next, Esc close or back, `?` the list. Closing
+the dialog returns focus to its opener. Space and
 the player's arrows act only when focus isn't on a control (or is on a
 `tabindex="-1"` target such as the player's picture). Open panels, text
 fields and TV navigation own their keys; fields keep native editing keys.

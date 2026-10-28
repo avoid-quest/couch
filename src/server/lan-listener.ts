@@ -7,10 +7,6 @@ const ipv4 = (value: string) => {
   return parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255) ? parts.reduce((value, part) => (value * 256 + Number(part)) >>> 0, 0) : null;
 };
 export const loopbackPeer = (value: string) => value === "::1" || /^127\./.test(value.replace(/^::ffff:/, ""));
-export function lanPeer(network: LanNetwork, peer: string) {
-  const address = ipv4(network.address), mask = ipv4(network.netmask), value = ipv4(peer);
-  return address !== null && mask !== null && value !== null && (address & mask) === (value & mask);
-}
 export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string, priorities: ReadonlyMap<string, number> = new Map()): LanNetwork {
   const priority = (name: string) => priorities.get(name) ?? (/^(vEthernet|vmnet|vbox|bridge|vpn|tailscale|wg)/i.test(name) ? 3 : /^(Ethernet\b|eth\d|en\w)/i.test(name) ? 0 : /^(Wi-?Fi\b|Wireless\b|wl)/i.test(name) ? 1 : 2);
   const networks = Object.entries(interfaces).flatMap(([name, entries]) => (entries ?? []).filter(entry => entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address) && (!address || entry.address === address) && (selected ? name === selected : !/^(docker|br-|veth|virbr|tun|tap|utun)/.test(name))).map(entry => ({ name, address: entry.address, netmask: entry.netmask })));

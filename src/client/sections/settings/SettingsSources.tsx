@@ -15,6 +15,7 @@ import { StreamingCommunitySettings } from "./sources/StreamingCommunitySettings
 import { AirPlaySettings } from "./sources/AirPlaySettings";
 import { HiddenSettings } from "./sources/HiddenSettings";
 import { useSettingsScope } from "./settings-scope";
+import { useSessionGate } from "@/session/session-context";
 import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
 // Sharing this device is on This device; these are the Couch's own sources.
@@ -29,6 +30,7 @@ export function SettingsSources({ source, ...props }: SourceSettingsProps & { so
 }
 
 function SourcesOverview({ credentials, connected, canManage }: SourceSettingsProps) {
+  const { details } = useSessionGate();
   const available = connected && !!credentials;
   const empty = { origin: "", token: "" };
   const iptv = useQuery({ ...iptvSourcesQuery(credentials ?? empty), enabled: available });
@@ -55,7 +57,7 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
       ))}
       {failed.length > 0 && <Alert variant="destructive"><AlertDescription>Couldn't load sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => failed.forEach(query => void query.refetch())}>Try again</Button></AlertAction></Alert>}
     </SettingsSection>
-    <AirPlaySettings credentials={credentials} connected={available} administrator={canManage} couch={couch} />
+    <AirPlaySettings availability={details?.airplay} credentials={credentials} connected={available} administrator={canManage} couch={couch} />
     <HiddenSettings credentials={credentials} connected={available} />
   </>;
 }

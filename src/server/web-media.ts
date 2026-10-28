@@ -180,9 +180,12 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     // Fresh YouTube URLs can answer 403 before they are usable. Let yt-dlp check
     // downloadability before Core hands the selected streams to a player.
     const selection = youtube ? ["--check-formats", "--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
+    // Bandcamp also offers free downloads: its best audio can be ALAC or AIFF,
+    // which Chromium can't play. Keep browser-compatible lossless formats eligible.
+    const format = providerForUrl(source) === "bandcamp" ? `ba${playable}[acodec~='^(mp3|aac|flac|wav)$']` : formatSelector(selectedQuality, youtube, vp9, output);
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
     // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
-    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, youtube, vp9, output), ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async extracted => {
+    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", format, ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async extracted => {
       const info = parseInfo(extracted);
       // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
       // maximum instead; formats with no known dimensions remain eligible.
