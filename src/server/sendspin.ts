@@ -73,7 +73,7 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
       upstream = new WebSocket(`ws://127.0.0.1:${port}/?secret=${secret}&${query}`, { perMessageDeflate: false, maxPayload: 1024 * 1024 });
       const other = upstream;
       const forward = (from: WebSocket, to: WebSocket, data: WebSocket.RawData, binary: boolean) => {
-        if (from.readyState !== WebSocket.OPEN || to.readyState !== WebSocket.OPEN || to.bufferedAmount > 256 * 1024) { socket.terminate(); other.terminate(); return; }
+        if (from.readyState !== WebSocket.OPEN || to.readyState !== WebSocket.OPEN) { socket.terminate(); other.terminate(); return; }
         to.send(data, { binary });
       };
       socket.on("message", (data, binary) => forward(socket, other, data, binary));
@@ -85,8 +85,6 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
   };
   const upgrade = (request: IncomingMessage, socket: Socket, head: Buffer, deviceId?: string) => {
     if (deviceId !== undefined && !options.admit(deviceId, loopbackPeer(request.socket.remoteAddress ?? ""))) { socket.destroy(); return; }
-    // Tabs and reconnects may overlap, but one token must not allocate unlimited worker sessions.
-    if (deviceId !== undefined && [...devices.values()].filter(id => id === deviceId).length >= 8) { socket.destroy(); return; }
     socket.pause(); connections.add(socket);
     if (deviceId !== undefined) devices.set(socket, deviceId);
     socket.once("close", () => { connections.delete(socket); devices.delete(socket); });

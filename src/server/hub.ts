@@ -110,7 +110,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
 // sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; pendingCommands?: number; signaling?: { window: number; count: number; bytes: number; peers: Map<string, { descriptions: number; candidates: number }> } };
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; sharing: DeviceSharing; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string; signaling?: { window: number; count: number; bytes: number; peers: Map<string, { descriptions: number; candidates: number }> } };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -1948,8 +1948,6 @@ export async function createHub(options: HubOptions) {
         }
       }));
       if (!websocket) return cors(request, await (/^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-      if ([...sockets].filter(socket => deviceOf(socket) === (caller.device?.id ?? hostId())).length >= 8)
-        return cors(request, json({ error: "Too many connections from this device. Close another Couch tab and try again." }, 429));
       const sharing = { audio: url.searchParams.get("audio") === "1", video: url.searchParams.get("video") === "1" };
       return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", updates: url.searchParams.get("updates") === "1", sharing, tv: url.searchParams.get("tv") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
@@ -2114,11 +2112,6 @@ export async function createHub(options: HubOptions) {
           return;
         }
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
-        if ((socket.data.pendingCommands ?? 0) >= 8) {
-          send(socket, JSON.stringify({ ...result, ok: false, error: "Too many actions are being prepared. Wait a moment and try again." }));
-          return;
-        }
-        socket.data.pendingCommands = (socket.data.pendingCommands ?? 0) + 1;
         const existing = new Set(playbacks.keys());
         try {
           const action = command.action;
@@ -2399,7 +2392,6 @@ export async function createHub(options: HubOptions) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };
         } finally {
           // A Playback started for a command that failed ends with it.
-          socket.data.pendingCommands!--;
           for (const playback of all()) if (!existing.has(playback.id)) settle(playback);
         }
         send(socket, JSON.stringify(result));

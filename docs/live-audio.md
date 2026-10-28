@@ -32,8 +32,7 @@ base path. The upgrade binds the authenticated Device to `client/init.client_id`
 checks host, origin and remote-control permission, and revocation closes the
 authenticated transport even during the Noise handshake. A peer whose messages
 throw closes alone; the shared worker continues. Turning off network sharing
-also closes paired audio transports. Each device may keep at most eight control
-and eight audio connections, and an audio handshake must identify within ten
+also closes paired audio transports. An audio handshake must identify within ten
 seconds.
 
 ## Pipeline
@@ -63,8 +62,7 @@ input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction: a listener whose connection stops draining (a frozen tab, a dozing
 radio) gets nothing more until it drains, then resumes at audio that can still play.
-Its incoming requests wait in order meanwhile (at most 128 frames / 256 KiB, or
-that connection closes).
+Its incoming requests wait in order meanwhile.
 
 **Playback buffer (ms)** is one Couch-wide setting, 150 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
@@ -160,7 +158,7 @@ COUCH_TEST_FFMPEG=/path/to/ffmpeg node --test <that directory>/*.js
 ```
 
 They use temporary databases, loopback ports and synthetic stereo signals with
-opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `audio-authorization.integration.ts` covers cookie and upgrade boundaries, revocation, re-pairing, connection limits and handshake deadlines. `sendspin-sdk.integration.ts` drives the stock
+opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `audio-authorization.integration.ts` covers cookie and upgrade boundaries, revocation, re-pairing, identity changes and handshake deadlines. `sendspin-sdk.integration.ts` drives the stock
 browser SDK core through Noise/AES-GCM, token binding, decoding, buffer changes,
 reconnect, a concurrent Opus receiver and Leave. Capture checks cover input
 formats, source generations, timestamp mapping and Opus pre-skip.
