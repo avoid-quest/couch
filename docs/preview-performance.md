@@ -335,3 +335,39 @@ All five suites pass in normal and reduced-motion runs with that correction.
 Evidence is in `.artifacts/pr-stack/reviews/duration-focus-detail` (failure) and
 `duration-active{,-reduced}` (passing runs). This diagnoses the keyboard-test
 failure; the earlier 135-second drag result remains unexplained.
+
+## YouTube timeline previews, 28 October 2026
+
+Video.js 10.2.0 supplies standalone thumbnail selection and sprite cropping;
+Couch retains its shadcn slider and authoritative seek commands. The provider
+sample was Khruangbin's NPR Tiny Desk concert (`vWLJeqLPfSU`): yt-dlp 2026.10.26
+returned six 5×5 storyboard sheets of 160×90 tiles, 140 intervals over 693 seconds.
+Core reused the playback extraction. A controller with no local media fetched
+88 bytes of metadata and one 77,226–77,518-byte WebP sheet per visited interval
+sheet. Moving within a cached sheet adds no request. Entering the bar after
+unmounting the player fetches its sheet again; Core shares cached upstream bytes.
+Other providers and missing storyboards retain timestamps.
+
+Sequential before/after runs used matching production route fixtures in headless
+Chromium on Linux, with 120 pointer moves per phase and 250 ms clock/buffer
+updates. They measure development React work and frame scheduling, with the
+same timestamp-only fallback on both trees; real-image delivery was checked
+separately above. Baseline is main at `ef61a4ae` (its client matches `02863ce4`).
+
+| Workload | Before | After |
+| --- | --- | --- |
+| Bar hover: p95 frame / React commit | 16.8 / 0.5 ms | 16.8 / 0.7 ms |
+| Bar drag: p95 frame / React commit | 16.8 / 4.4 ms | 16.7 / 4.8 ms |
+| Player hover: p95 frame / React commit | 16.8 / 0.5 ms | 16.8 / 0.7 ms |
+| Player drag: p95 frame / React commit | 16.8 / 3.0 ms | 16.8 / 3.9 ms |
+| Drag commits per phase | 126 | 126 |
+| Production JS + CSS, gzip sum | 848,285 bytes | 862,006 bytes |
+
+The production asset delta is 41,107 raw / 13,721 gzip bytes. Hover-only
+regressions still read zero chapters; touch hover and disabled timelines read
+zero track geometry. Trusted mouse/touch drags send zero seeks until release,
+one on release and none on cancellation; TV retains ten-second steps and Down
+to Play. These are interaction improvements, not a measured decoding or seek
+latency improvement. No physical TV, mobile GPU or cross-device latency claim
+is made. The existing Live-radio Home/Up-next clock assertion fails on both
+baseline and changed trees; the earlier clock-isolation assertions pass.

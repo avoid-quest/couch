@@ -63,6 +63,10 @@ export async function runPreviewRegression() {
     hover(.1); await wait(200);
     const root = document.querySelector<HTMLElement>("[data-preview-thumbnail]");
     assert(root && !root.hasAttribute("data-error") && !root.hasAttribute("data-loading"), "Sprite never loaded");
+    const image = root!.querySelector("img")!;
+    await image.decode();
+    const crop = root!.getBoundingClientRect(), sheet = image.getBoundingClientRect();
+    assert(crop.width > 0 && crop.height > 0 && sheet.left <= crop.left && sheet.top <= crop.top && sheet.right >= crop.right && sheet.bottom >= crop.bottom, "The sprite does not cover its visible crop");
     assert(fixture.audit.actions.length === 0, "Hover issued a command");
     const count = fixture.requests.length;
     for (let i = 0; i < 10; i++) { hover(.1 + i * .001); await wait(10); }
