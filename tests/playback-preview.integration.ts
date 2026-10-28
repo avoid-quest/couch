@@ -31,10 +31,11 @@ test("a controller without media reads the current preview; private, replaced an
   const downloads = t.mock.method(globalThis, "fetch", async () => { throw new Error("No helper downloads"); });
   t.mock.method(cp, "execFile", (file: string, args: string[], options: object, callback: (...args: unknown[]) => void) => versions.has(file)
     ? execFile(process.execPath, ["-e", `console.log(${JSON.stringify(versions.get(file))})`], options, callback) : execFile(file, args, options, callback));
-  let extractions = 0;
+  let extractions = 0, failExtraction = false;
   t.mock.method(cp, "spawn", (file: string, args: string[], options: cp.SpawnOptions) => {
     if (!versions.has(file)) return spawn(file, args, options);
     extractions++;
+    if (failExtraction) return spawn(process.execPath, ["-e", "process.stderr.write('ERROR: Video unavailable'); process.exit(1)"], options);
     const info = { ...fixture, title: "Preview fixture", url: "https://media.example/film.mp4", protocol: "https", vcodec: "avc1", acodec: "mp4a" };
     return spawn(process.execPath, ["-e", `process.stdout.write(${JSON.stringify(JSON.stringify(info))})`], options);
   });
@@ -52,20 +53,39 @@ test("a controller without media reads the current preview; private, replaced an
     const pending = new Map<string, (message: Extract<ServerMessage, { type: "result" }>) => void>();
     socket.on("message", data => { const message = JSON.parse(String(data)) as ServerMessage; messages.push(message); if (message.type === "state") state = message.state; if (message.type === "result") pending.get(message.requestId)?.(message); });
     await until(() => !!state);
-    return { messages, get state() { return state!; }, command: (action: Action) => new Promise<Extract<ServerMessage, { type: "result" }>>(resolve => { const requestId = String(++seq); pending.set(requestId, resolve); socket.send(JSON.stringify({ type: "command", requestId, action })); }) };
+    return { messages, get state() { return state!; }, report: () => socket.send(JSON.stringify({ type: "player", state: { ...state!.player, status: "playing", duration: 693, seekable: true, buffering: false, speed: 1 } })), command: (action: Action) => new Promise<Extract<ServerMessage, { type: "result" }>>(resolve => { const requestId = String(++seq); pending.set(requestId, resolve); socket.send(JSON.stringify({ type: "command", requestId, action })); }) };
   };
   const tv = await connect(tvId, true), controller = await connect(controllerId, false);
   assert.equal((await tv.command({ type: "enqueue", entry: { id: "film", title: "Film", source: "web:https://www.youtube.com/watch?v=vWLJeqLPfSU" }, playNow: true, deviceId: tvId })).ok, true);
   await until(() => tv.messages.some(message => message.type === "player" && message.command.type === "load"));
-  const playbackId = tv.state.player.playbackId!;
-  const path = `${hub.origin}/api/playback-preview?playbackId=${playbackId}`;
-  const read = (token = tokens[controllerId]) => fetch(path, { headers: { Authorization: `Bearer ${token}`, Origin: hub.origin } });
+  let playbackId = tv.state.player.playbackId!;
+  const read = (token = tokens[controllerId]) => fetch(`${hub.origin}/api/playback-preview?playbackId=${playbackId}`, { headers: { Authorization: `Bearer ${token}`, Origin: hub.origin } });
   assert.equal((await read("invalid")).status, 401);
   const response = await read(); assert.equal(response.status, 200);
   const text = await response.text(); assert.equal(JSON.parse(text).sheets, 6); assert.ok(!text.includes("ytimg"));
   assert.equal(extractions, 1, "preview reuses playback extraction");
   assert.ok(!controller.messages.some(message => message.type === "player" && message.command.type === "load"), "controller creates no receiver");
   assert.ok(!JSON.stringify(tv.messages).includes("storyboard3"), "renderer commands do not leak preview URLs");
+  tv.report(); await until(() => tv.state.player.status === "playing");
+  failExtraction = true;
+  assert.equal((await tv.command({ type: "videoQuality", playbackId, quality: "720p" })).ok, false);
+  assert.equal(tv.state.player.playbackId, playbackId);
+  assert.equal((await read()).status, 200, "failed quality change retains the active preview");
+  failExtraction = false;
+  const timeout = AbortSignal.timeout, deadlines: AbortController[] = [];
+  const deadlineMock = t.mock.method(AbortSignal, "timeout", (ms: number) => {
+    if (ms !== 30_000) return timeout(ms);
+    const controller = new AbortController(); deadlines.push(controller); return controller.signal;
+  });
+  const previousId = playbackId;
+  assert.equal((await tv.command({ type: "videoQuality", playbackId, quality: "720p" })).ok, true);
+  await until(() => tv.state.player.playbackId !== previousId);
+  playbackId = tv.state.player.playbackId!;
+  assert.ok(deadlines.length > 0);
+  deadlines.forEach(controller => controller.abort(new DOMException("Resolution deadline", "TimeoutError")));
+  deadlineMock.mock.restore();
+  assert.equal((await read()).status, 200, "successful quality change outlives its extraction deadline");
+  assert.equal((await fetch(`${hub.origin}/api/playback-preview?playbackId=${previousId}`, { headers: { Authorization: `Bearer ${tokens[tvId]}` } })).status, 404);
   assert.equal((await tv.command({ type: "sharing", sharing: { audio: false, video: false } })).ok, true);
   await until(() => tv.state.devices?.find(device => device.id === tvId)?.sharing?.audio === false);
   assert.equal((await read()).status, 404, "private output denies another controller");
