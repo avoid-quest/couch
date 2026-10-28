@@ -51,6 +51,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@types/ws": "8.18.1",
+    "@videojs/react": "10.2.0",
     "@vitejs/plugin-react": "^6.1.1",
     "bun": "1.4.2",
     "class-variance-authority": "0.7.1",

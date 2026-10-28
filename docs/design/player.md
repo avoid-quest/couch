@@ -109,10 +109,69 @@ The timeline row:
 - As on YouTube, the line thickens under a pointer and while it is dragged,
   here, beside artwork and on the now-playing bar alike. Over a picture, and
   on the bar, its thumb shows only while a pointer or focus is on it.
-- A hovering pointer reads the time under it, on the panel surface. Its preview
-  updates independently of the slider, chapters and playback labels; touch and
-  disabled timelines do no hover work. Dragging previews locally and sends one
-  seek on release. Keyboard seeking keeps its ten-second steps across clock updates.
+- Hover reads the time under the pointer; dragging (including touch) and keyboard
+  seeking show the draft time. Available provider storyboards or timed image cues add a small scene
+  preview above it, inside the timeline's edges. The picture and controls never
+  move. These are provider intervals, not exact frames; missing or unreadable
+  images and cue gaps leave the timestamp alone. Preview lookup retains fractional
+  cue timing; the label still rounds to seconds. A duration change clamps the
+  preview, thumb and committed target to the same range.
+- Preview pointer updates leave the track, chapter cues and playback labels alone;
+  touch without a drag and disabled timelines do no hover work. Dragging stays
+  local and sends one Couch seek on release. Cancellation, Escape, lost pointer
+  capture, a changed source or lost permission discard the draft. Escape cancels an
+  active edit before leaving the player. Keyboard seeking keeps its ten-second
+  steps across clock updates; Home/End go to the endpoints, Page Up/Down move a
+  minute, and Down returns focus to Play. The invisible target is 1.5rem tall
+  with a 44px minimum on touch, while the visible line keeps its thin profile.
+
+The same previews work in the now-playing bar and on a controller without local
+media. `PlaybackThumbnail` uses Video.js 10.2.0's standalone `Thumbnail` with
+supplied images or sprite coordinates. It selects one covering cue, memoizes the
+image presentation and leaves Video.js responsible for cropping and resize
+observation. Moving within that cue updates only its timestamp/position, without
+re-rendering the thumbnail. Viewport resizing refreshes its CSS constraints even
+when the selected cue is unchanged. `PlaybackSeekBar` uses Video.js's generic `Slider.Root`,
+`Track`, `Fill`, `Thumb`, `Preview` and `Value`, styled with Couch's existing tokens. Its public change and
+commit callbacks keep a smooth local draft and authorize just one seek on release;
+lost capture alone cannot commit. Keyboard targets remain cumulative until blur,
+Escape or rejection. Late replies cannot clear a newer edit. Buffer and chapter
+cues use Couch observations. Volume and device faders keep their shadcn slider.
+
+The slider operates on a unit interval so fractional durations reach both
+endpoints; its ARIA values, spoken time, labels and commands use seconds. `Value`'s
+public render prop supplies pointer time to the on-demand preview cache. The
+standalone `Thumbnail` preserves cue memoization: `Slider.Thumbnail` subscribes to
+every pointer value and would repeat cropping work inside the same cue.
+`TimeSlider` binds to a local player store and seeks during drag, so it is not
+appropriate for Couch's shared transport. No Video.js player store, media element
+or receiver is created. Couch commands, observed playback position, renderers and
+Sendspin picture follower keep their existing ownership. The
+[full Video.js component audit](../videojs-components-review.md) records which
+other public primitives fit these boundaries and which need a separate experiment.
+Non-seekable Live has no timeline or previews.
+
+Core reuses existing extraction and player-page responses. YouTube and Twitch
+supply storyboard grids; RaiPlay, StreamingCommunity and AnimeUnity supply
+WebVTT cues. Direct, web and IPTV HLS can use explicitly declared JPEG image
+tracks for finite, continuous VOD. [Provider previews](../provider-previews.md) records discovery,
+coverage and limits. Declared manifests load only when an authorized controller
+requests previews. `/api/playback-preview` checks pairing, current playback and
+output consent for metadata and each image. Provider URLs and playback headers
+stay in Core; preview reads use its public-network fetcher.
+
+Metadata is bounded to 4,000 frames / 128 images. Manifest reads have a 512 KiB
+limit; images have a 2 MiB compressed / four-million-pixel limit, four concurrent
+downloads and a shared 16 MiB cache. A controller keeps four successfully decoded
+images and releases their object URLs when the source changes. Hidden previews
+cancel pending image reads and retry timers; source changes also cancel metadata
+reads. Image network, 503 and decode failures retry at most twice while requested;
+later hover can retry a failed or missing image. Core keeps image bytes fresh
+for 30 seconds so a repaired, previously undecodable image can recover without
+changing playback. Missing or malformed metadata is fresh for 30 seconds in Core
+and in the controller, and reconnection invalidates it through the session query client.
+Expired or unavailable assets never delay playback or trigger another media
+extraction. Failed quality changes retain the current source's preview.
 
 The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the

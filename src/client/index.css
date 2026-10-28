@@ -348,6 +348,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
    is on it. The hover time sits on the panel surface. */
 :is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
+[data-playback-seek][data-dragging]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; }
 .player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
 /* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
    tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
@@ -365,7 +366,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
 .bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
 :is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] { @apply motion-safe:transition-[scale]; }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
-.player-video-controls [data-hover-time] { background: var(--player-surface); }
+.player-video-controls [data-timeline-preview] { background: var(--player-surface); }
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[data-osd] :is(.player-queue, .player-next-up) { background: var(--player-surface); box-shadow: none; }

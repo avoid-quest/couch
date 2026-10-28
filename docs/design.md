@@ -417,8 +417,15 @@ Shared building blocks in `src/client/components`:
   restoration; `useRelatedMenu` gives the same relationships as a tile's or a
   row's "Go to …" verbs.
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
-  ([Player](design/player.md)). The timeline's pointer preview owns its state;
-  pointer motion leaves the slider, chapter markers and playback labels alone.
+  ([Player](design/player.md)). The dedicated `PlaybackSeekBar` uses Video.js Slider
+  primitives with Couch styling. Pointer motion leaves the track, chapter cues
+  and playback labels alone.
+  `PlaybackThumbnail` uses standalone Video.js thumbnails for optional provider
+  grids and timed cues, including on remote controllers. The selected cue is
+  memoized; failed images can recover and cue gaps keep timestamps. Couch keeps
+  transport and clocks, with one seek on release and cumulative keyboard edits.
+  Touch drags and keyboard drafts share the preview. shadcn keeps volume, faders
+  and the surrounding menus.
 - `RadioRecognition`: the player's manual **Identify song** icon beside Info,
   cancellation and a dismissible, clickable `RadioRecognitionItem` below the
   station line, before Info's programme details. The shared item links directly
