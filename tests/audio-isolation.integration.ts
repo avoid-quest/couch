@@ -60,11 +60,12 @@ test("a Live listener that stops reading holds no backlog in Core and resumes at
   };
   const healthy = player("healthy", frames), stalled = player("stalled", stalledFrames);
   await healthy.connect(url); await stalled.connect(url);
+  await healthy.sendPlayerState({ min_buffer_ms: 150 }); await stalled.sendPlayerState({ min_buffer_ms: 150 });
   const stalledSocket = served.at(-1)!;
   audio.registerSource("capture");
   const group = audio.group("programme", () => {});
   group.members([{ deviceId: "healthy", level: 100 }, { deviceId: "stalled", level: 100 }]);
-  group.send({ type: "load", playbackId: "programme", source: "", liveSourceId: "capture", live: true });
+  group.send({ type: "load", playbackId: "programme", source: "", liveSourceId: "capture", live: true, captureIntent: "live" });
   let sequence = 0;
   const origin = serverNowUs(), timer = setInterval(() => {
     while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
