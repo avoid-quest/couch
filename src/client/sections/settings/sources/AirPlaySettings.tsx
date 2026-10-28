@@ -53,11 +53,11 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={renew.isPending} onClick={() => renew.mutate()}>New code</AlertDialogAction>
+            <AlertDialogAction variant="destructive" disabled={!connected || renew.isPending} onClick={() => renew.mutate()}>New code</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </SettingsRow>}
-    {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>}
+    {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" disabled={!connected} onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>}
   </SettingsSection>;
 }

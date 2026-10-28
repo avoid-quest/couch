@@ -294,6 +294,11 @@ test("a connection is not admission: only a sender's decoded sound publishes and
   assert.deepEqual({ ...source, id: undefined }, { id: undefined, deviceId: "airplay", name: "AirPlay · Kitchen iPhone", kind: "airplay", audio: true, video: false });
   assert.equal((await airplay()).status, "receiving");
   assert.equal((await airplay()).sender, "Kitchen iPhone");
+  const publicDetails = await (await fetch(`${hub.origin}/api/connection`)).json() as Record<string, unknown>;
+  assert.equal(publicDetails.airplay, "available", "receiving doesn't change public capability");
+  for (const field of ["enabled", "status", "code", "sender", "error"]) assert.equal(field in publicDetails, false);
+  assert.equal(JSON.stringify(publicDetails).includes("Kitchen iPhone"), false);
+  assert.equal(JSON.stringify(publicDetails).includes((await airplay()).code), false);
   assert.ok(["loading", "playing"].includes(await player()), "an admitted sender holds off unattended updates");
   assert.equal(host.state.playbacks?.length, 1, "the sender starts one playback on the host");
 

@@ -102,7 +102,9 @@ admin restriction belongs to its row, rather than a heading with no controls.
 Screen and text-size previews put Keep/Revert in a row with a politely announced
 countdown. The TV's text-size dialog asks “Keep this size?” once in its title,
 with the countdown and Keep/Revert in the status row; the shared settings page
-keeps the question in its row. Default is already one of the text-size choices.
+keeps the question in its row. Keep, Revert and expiry return the TV's focus to
+the control it had before the dialog opened, if it is still on the page.
+Default is already one of the text-size choices.
 Relay checks and saves give temporary toasts; connection state stays beside the
 relay's switch.
 Sound tests, AirPlay and relay state changes keep polite announcements in their
@@ -125,6 +127,8 @@ when disconnected; it stays hidden until that capability is known. On Linux,
 non-admins see an admin restriction when available, or a single unavailable
 line otherwise. Only admins fetch its settings, code, sender and diagnostic
 details; losing that role removes those controls immediately.
+While reconnecting, its controls, an open code confirmation and error retry
+stay disabled until the connection returns.
 
 ## Devices
 
