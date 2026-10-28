@@ -8,20 +8,22 @@ import type { LiveAudioSettings } from "../src/shared/audio-settings";
 // Product components with only their session, storage and request boundaries replaced.
 let connected = true;
 const run = mock(async (_action: unknown) => true);
-const restart = mock(async (_frames: number) => {});
+const restart = mock(async (_action: unknown) => {});
+const setError = mock((_error: string) => {});
 const preference = { save: mock((_value: string) => {}), error: undefined as string | undefined };
+const channelPreference = { save: mock((_value: string) => {}), error: undefined as string | undefined };
 mock.module("../src/client/session/session-context", () => ({
-  useSessionGate: () => ({ connected, run, credentials: { origin: "http://couch", token: "test" }, liveSharing: { setCaptureBuffer: restart }, setError() {} }),
+  useSessionGate: () => ({ connected, run, credentials: { origin: "http://couch", token: "test" }, liveSharing: { setCaptureInput: restart }, setError }),
   errorText: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
-mock.module("../src/client/audio-settings", () => ({ useNativeInputBufferPreference: () => preference }));
+mock.module("../src/client/audio-settings", () => ({ useNativeInputBufferPreference: () => preference, useNativeInputChannelPreference: () => channelPreference }));
 const query = { data: { codec: "auto", minBufferMs: 200 } as LiveAudioSettings | undefined, error: null as Error | null, isFetching: false, refetch: mock(async () => {}) };
 const save = { isPending: false, error: null as Error | null, variables: { codec: "auto", minBufferMs: 350 } as LiveAudioSettings, mutate: mock((_settings: LiveAudioSettings, _options?: unknown) => {}) };
 const realQuery = await import("@tanstack/react-query");
 mock.module("@tanstack/react-query", () => ({ ...realQuery, useQuery: () => query, useMutation: () => save, useQueryClient: () => ({ setQueryData() {} }) }));
-const { LiveListeners, LiveSettings, LiveSettingsStatus, PlaybackBufferInput } = await import("../src/client/sections/share/LiveOperator");
+const { CaptureBufferSelect, CaptureChannelsSelect, LiveListeners, LiveSettings, LiveSettingsStatus, PlaybackBufferInput } = await import("../src/client/sections/share/LiveOperator");
 const live = () => ({ settings: query.data, query, save, connected }) as unknown as Parameters<typeof PlaybackBufferInput>[0]["live"];
-const sharing = { captureFormat: { sampleRate: 48000, channels: 2, native: { requestedFrames: 128, reportedFrames: 128 } } } as LiveSharing;
+const sharing = { captureFormat: { sampleRate: 48000, channels: 2, native: { requestedFrames: 128, reportedFrames: 128, inputChannels: 4, channelMap: [0, 1] } } } as LiveSharing;
 
 type Props = { children?: ReactNode; id?: string; disabled?: boolean; value?: unknown; onBlur?: (event: unknown) => void; onKeyDown?: (event: unknown) => void; onValueChange?: (value: string) => void; onSelect?: () => void; onCloseAutoFocus?: (event: unknown) => void; onClick?: () => void; [key: string]: unknown };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
@@ -32,14 +34,15 @@ function read<T>(render: () => T): T {
 }
 
 beforeEach(() => {
-  connected = true; query.data = { codec: "auto", minBufferMs: 200 }; query.error = null; query.isFetching = false; save.isPending = false; save.error = null; preference.error = undefined;
-  run.mockClear(); restart.mockClear(); preference.save.mockClear(); save.mutate.mockClear(); query.refetch.mockClear();
+  connected = true; query.data = { codec: "auto", minBufferMs: 200 }; query.error = null; query.isFetching = false; save.isPending = false; save.error = null; preference.error = undefined; channelPreference.error = undefined;
+  run.mockClear(); restart.mockReset(); restart.mockImplementation(async () => {}); setError.mockClear(); preference.save.mockClear(); channelPreference.save.mockClear(); save.mutate.mockClear(); query.refetch.mockClear();
 });
 
 test("audio settings retain their labelled controls while loading and offer a fetch retry", () => {
   query.data = undefined;
   const html = renderToStaticMarkup(<LiveSettings sharing={sharing} />);
   expect(html).toContain('id="live-capture-buffer"');
+  expect(html).toContain('id="live-capture-channels"');
   expect(html).toContain('id="live-codec"');
   expect(html).toContain('id="live-buffer"');
   expect(html).toContain("Loading audio settings…");
@@ -61,17 +64,52 @@ test("settings saves and storage failures remain visible in the open share panel
   expect(save.mutate).toHaveBeenCalledWith(save.variables);
   preference.error = "Allow local storage and try again.";
   expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain(preference.error);
+  preference.error = undefined; channelPreference.error = "Couldn’t save input channels.";
+  const channelError = renderToStaticMarkup(<LiveSettings sharing={sharing} />);
+  expect(channelError).toContain('role="alert"');
+  expect(channelError).toContain(channelPreference.error);
 });
 
-test("capture buffer changes refresh the parent so its delivered format and selection can update", async () => {
+test.each([
+  { id: "live-capture-buffer", value: "512", action: { op: "buffer", bufferFrames: 512 }, stored: preference },
+  { id: "live-capture-channels", value: "3/4", action: { op: "channels", channelMap: [2, 3] }, stored: channelPreference },
+  { id: "live-capture-channels", value: "3", action: { op: "channels", channelMap: [2] }, stored: channelPreference },
+])("capture changes refresh the delivered format and selection: $id $value", async ({ id, value, action, stored }) => {
   const changed = mock(() => {});
   const tree = read(() => LiveSettings({ sharing, onCaptureChange: changed }));
-  const select = elements(tree).find(item => item.props.value === "128")!;
-  select.props.onValueChange!("512");
-  expect(restart).toHaveBeenCalledWith(512);
-  expect(preference.save).toHaveBeenCalledWith("512");
+  const select = elements(tree).find(item => item.props.id === id)!;
+  select.props.onValueChange!(value);
+  expect(restart).toHaveBeenCalledWith(action);
+  expect(stored.save).toHaveBeenCalledWith(value);
   await Promise.resolve(); await Promise.resolve();
   expect(changed).toHaveBeenCalledTimes(1);
+});
+
+test("native channel choices only appear for inputs with more than two channels", () => {
+  const stereo = { ...sharing, captureFormat: { ...sharing.captureFormat!, native: { ...sharing.captureFormat!.native!, inputChannels: 2 } } };
+  expect(renderToStaticMarkup(<LiveSettings sharing={stereo} />)).not.toContain('id="live-capture-channels"');
+});
+
+test("both capture controls keep their trigger focusable during a restart", () => {
+  for (const control of [
+    <CaptureBufferSelect id="capture" value="128" open={false} restarting />,
+    <CaptureChannelsSelect id="capture" channels={4} value="1/2" open={false} restarting />,
+  ]) {
+    const html = renderToStaticMarkup(control);
+    expect(html).toMatch(/<button[^>]*aria-disabled="true"/);
+    expect(html).not.toMatch(/<button[^>]* disabled=""/);
+    expect(html).toContain('aria-expanded="false"');
+  }
+});
+
+test.each(["live-capture-buffer", "live-capture-channels"])("capture failures report the reason without refreshing the format: %s", async id => {
+  restart.mockRejectedValueOnce(new Error("The input is unavailable."));
+  const changed = mock(() => {});
+  const tree = read(() => LiveSettings({ sharing, onCaptureChange: changed }));
+  elements(tree).find(item => item.props.id === id)!.props.onValueChange!(id === "live-capture-buffer" ? "512" : "3/4");
+  await Promise.resolve(); await Promise.resolve();
+  expect(setError).toHaveBeenCalledWith("The input is unavailable.");
+  expect(changed).not.toHaveBeenCalled();
 });
 
 test("playback buffer validates integers and commits the chosen value on blur or Enter", () => {

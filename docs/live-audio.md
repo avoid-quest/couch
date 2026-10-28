@@ -74,6 +74,18 @@ joining listener takes the group's running lead, and its SDK may skip the first
 chunks while it starts. The buffer is a receiver request, not a measured
 input-to-ear latency. See the measurements below for each receiver's floor.
 
+Mac native inputs with more than two channels expose **Input channels** beside
+**Capture buffer**, both before and during sharing. The host chooses an adjacent
+stereo pair (1/2, 3/4, …) or one channel as mono, remembered on this desktop.
+Inputs with two or fewer channels retain their existing behavior. Main and the
+helper validate the map against the selected device; PortAudio's public
+`PaMacCore_SetupChannelMap` selects only those inputs. The helper reports its
+zero-based map, which Main checks before accepting PCM. Mono stays one channel
+through capture and Core converts it to the existing stereo receiver format.
+A channel change, like a capture-buffer change, replaces the helper and upload
+generation while retaining mute. An unavailable selection fails with a request
+to refresh inputs and choose again; it never substitutes another input.
+
 The sender produces 48 kHz stereo PCM16 and Opus only. A receiver supporting
 only other formats gets an error on its row.
 
