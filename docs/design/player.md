@@ -109,10 +109,31 @@ The timeline row:
 - As on YouTube, the line thickens under a pointer and while it is dragged,
   here, beside artwork and on the now-playing bar alike. Over a picture, and
   on the bar, its thumb shows only while a pointer or focus is on it.
-- A hovering pointer reads the time under it, on the panel surface. Its preview
-  updates independently of the slider, chapters and playback labels; touch and
-  disabled timelines do no hover work. Dragging previews locally and sends one
-  seek on release. Keyboard seeking keeps its ten-second steps across clock updates.
+- Hover reads the time under the pointer; dragging (including touch) and keyboard
+  seeking show the draft time. Available YouTube storyboards add a small scene
+  preview above it, inside the timeline's edges. The picture and controls never
+  move. These are provider intervals, not exact frames; missing or unreadable
+  images leave the timestamp alone. Other providers currently have timestamps only.
+- Preview state updates independently of the slider, chapters and playback labels;
+  touch without a drag and disabled timelines do no hover work. Dragging stays
+  local and sends one Couch seek on release. Cancellation, Escape, lost pointer
+  capture, a changed source or lost permission discard the draft. Keyboard seeking
+  keeps its ten-second steps across clock updates; Down returns focus to Play.
+
+The same previews work in the now-playing bar and on a controller without local
+media. `PlaybackThumbnail` uses Video.js 10.2.0's standalone `Thumbnail` with
+supplied sprite coordinates. The shadcn slider, Couch commands, observed playback
+position, renderers and Sendspin picture follower keep their existing ownership.
+Non-seekable Live has no timeline or previews.
+
+Core reuses YouTube's existing yt-dlp extraction (`mhtml` storyboard formats),
+preferring 160px tiles. `/api/playback-preview` checks pairing, current playback
+identity and output consent for metadata and each image. URLs and playback headers
+stay in Core; image reads use its public-network fetcher. Source changes cancel
+obsolete reads. Metadata is bounded to 4,000 frames / 128 sheets; images to 2 MiB,
+four concurrent downloads and a shared 16 MiB cache. A controller keeps four
+on-demand sheets and releases their object URLs when the source changes. Expired
+or unavailable assets never delay playback or trigger another media extraction.
 
 The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the

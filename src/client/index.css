@@ -365,7 +365,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
 .bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
 :is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] { @apply motion-safe:transition-[scale]; }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
-.player-video-controls [data-hover-time] { background: var(--player-surface); }
+.player-video-controls [data-timeline-preview] { background: var(--player-surface); }
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[data-osd] :is(.player-queue, .player-next-up) { background: var(--player-surface); box-shadow: none; }

@@ -419,6 +419,9 @@ Shared building blocks in `src/client/components`:
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
   ([Player](design/player.md)). The timeline's pointer preview owns its state;
   pointer motion leaves the slider, chapter markers and playback labels alone.
+  `PlaybackThumbnail` uses standalone Video.js thumbnails for optional YouTube
+  storyboards, including on remote controllers; shadcn keeps the slider and Couch
+  keeps transport and clocks. Touch drags and keyboard drafts share the preview.
 - `RadioRecognition`: the player's manual **Identify song** icon beside Info,
   cancellation and a dismissible, clickable `RadioRecognitionItem` below the
   station line, before Info's programme details. The shared item links directly

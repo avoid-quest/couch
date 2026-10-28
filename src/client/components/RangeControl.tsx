@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
 import { isTvPresentation } from "@/session/presentation";
+
+// The timeline can observe drafts without lifting hover state into its slider or labels.
+export const RangePreviewContext = createContext<((value: number | null) => void) | null>(null);
 
 // A remote moves volume and faders 5 per press; the playback position passes its own 10 s step.
 export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = isTvPresentation() ? 5 : 1, pageFirst = false, orientation, buffered }: {
@@ -16,18 +19,24 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
   buffered?: number | null;
 }) {
   const [draft, setDraft] = useState<number | null>(null);
+  const preview = useContext(RangePreviewContext);
+  const updateDraft = (next: number | null) => { setDraft(next); preview?.(next); };
   // A focused keyboard edit keeps its target; command acceptance is not a player observation.
   const keyboard = useRef(false);
   const revision = useRef(0);
-  const cancel = () => { keyboard.current = false; revision.current++; setDraft(null); };
+  const canceled = useRef(false);
+  const pointer = useRef<number | null>(null);
+  const cancel = () => { canceled.current = true; pointer.current = null; keyboard.current = false; revision.current++; updateDraft(null); };
+  useEffect(() => () => { revision.current++; }, []);
   useEffect(() => { if (disabled) cancel(); }, [disabled]);
   const current = Math.min(max, draft ?? value);
   const [less, more] = orientation === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowLeft", "ArrowRight"];
   const commit = (next: number) => {
+    if (disabled || canceled.current) return;
     const committed = ++revision.current;
     void onCommit(next).then(
-      accepted => { if (committed === revision.current && (!accepted || !keyboard.current)) setDraft(null); },
-      () => { if (committed === revision.current) setDraft(null); },
+      accepted => { if (committed === revision.current && (!accepted || !keyboard.current)) updateDraft(null); },
+      () => { if (committed === revision.current) updateDraft(null); },
     );
   };
   return <Slider
@@ -41,14 +50,16 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
     step={1}
     value={[current]}
     disabled={disabled}
-    onValueChange={values => setDraft(values[0]!)}
+    onValueChange={values => { if (!disabled && !canceled.current) updateDraft(values[0]!); }}
     onKeyDownCapture={event => {
       if (disabled) return;
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); return; }
+      canceled.current = false;
       if (keyboardStep !== 1 && (event.key === less || event.key === more)) {
         event.preventDefault(); event.stopPropagation();
         keyboard.current = true;
         const next = Math.max(0, Math.min(max, current + (event.key === less ? -keyboardStep : keyboardStep)));
-        setDraft(next); commit(next);
+        updateDraft(next); commit(next);
       }
       if (label === "Playback position" && event.key === "ArrowDown") {
         const play = event.currentTarget.closest(".player-page")?.querySelector<HTMLElement>("[data-play-button]:not(:disabled)");
@@ -56,7 +67,9 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
       }
     }}
     onKeyDown={event => { if (!disabled && ["Home", "End", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(event.key)) keyboard.current = true; }}
-    onPointerDown={() => { keyboard.current = false; revision.current++; }}
+    onPointerDown={event => { if (disabled || event.button !== 0) { event.preventDefault(); return; } canceled.current = false; pointer.current = event.pointerId; keyboard.current = false; revision.current++; }}
+    onPointerUp={() => { pointer.current = null; }}
+    onLostPointerCapture={() => { if (pointer.current !== null) cancel(); }}
     onValueCommit={values => commit(values[0]!)}
     onBlur={cancel}
     onPointerCancel={cancel}
