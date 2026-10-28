@@ -60,7 +60,14 @@ export async function runPlayerClockRenderingRegression() {
     await audit.go('/now', { player: 'playing', live: true });
     if (document.querySelector('[data-player-ends]')) throw new Error('Live radio must not show an end time');
     await audit.go('/', { player: 'playing', live: true });
-    if (document.querySelector('[data-home-hero] [role="progressbar"], [data-home-board] section[aria-label="Up next"] header p')) throw new Error('Live radio must not show Home progress or an Up next end time');
+    if (document.querySelector('[aria-label="Playback position"], [data-home-board] section[aria-label="Up next"] header p')) throw new Error('Live radio must not show seeking or an Up next end time');
+    // Radio's published programme window has its own wall-clock progress. It
+    // must survive without becoming a seekable media duration or clock follower.
+    const programme = document.querySelector('[data-home-hero] [role="progressbar"]');
+    const programmePosition = programme?.getAttribute('aria-valuenow');
+    if (programme?.getAttribute('aria-label')?.includes('ends ')) throw new Error('Live radio showed a media-derived end time');
+    await audit.updateClock({ playbackId: 'p', position: 100, duration: 900 });
+    if (programme?.getAttribute('aria-valuenow') !== programmePosition) throw new Error('Radio programme progress followed the media clock');
     return { passed: true, artworkReads, backgroundReads, closedPanelReads, firstEnd, secondEnd };
   } finally {
     Element.prototype.getBoundingClientRect = rect; audit.close();

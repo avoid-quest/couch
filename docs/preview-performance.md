@@ -415,9 +415,12 @@ cache was introduced. Raw evidence: scratch `client-implementation/measurements.
 Browser regressions now cover transient HTTP and missing-image re-hover,
 corrupt-image decode recovery, bounded active retry and cancellation, arbitrary
 provider URLs, fractional cues and gaps, and duration-shrink draft clamping.
-Trusted mouse/touch/TV interactions and 14 TV focus cases passed. The existing
-Live-radio Home/Up-next clock assertion still fails; earlier isolation checks
-pass. Matching before/after desktop, phone, TV, fullscreen and bar captures
+Trusted mouse/touch/TV interactions and 14 TV focus cases passed. Investigation
+of the previously failing Live-radio assertion found that it rejected the
+intentional wall-clock programme progress (`RadioProgress`). The corrected
+regression preserves that feature and passes: no seek control or Up-next end
+time, no media-derived end time, and media clock updates do not move programme
+progress. Matching before/after desktop, phone, TV, fullscreen and bar captures
 use the same real provider image bytes, await decode and two animation frames,
 and demonstrate the unchanged layout. They replay captured assets and do not
 prove fresh provider extraction or A/V playback.
