@@ -29,6 +29,9 @@ pair or mono channel choice in Share and the running share's panel
 ([Share](design/share.md#live-audio)). Listeners use the unmodified
 [Sendspin browser player](live-audio.md); the player shows **Waiting for audio…**,
 **Listening**, reconnect status or the actual source/output error.
+On macOS, desktop listeners request a smaller Chromium audio buffer for lower Live
+output latency; Linux and Windows keep their default buffer
+([Timing](live-audio.md#timing)).
 Capture errors remain visible until sharing ends or restarts.
 The sharing panel polls connection routes only for WebRTC shares; PCM shares
 use Core's listener state.

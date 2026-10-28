@@ -68,11 +68,21 @@ Its incoming requests wait in order meanwhile.
 Share dialog when Live is chosen and in the running share's panel. Core sends it
 to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`.
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
-recreates that listener's player. Correction and output buffering keep SDK
+recreates that listener's player. SDK correction and buffering options keep their
 defaults. Live ignores the SDK's declared startup lead (`requiredLeadTimeMs`): a
 joining listener takes the group's running lead, and its SDK may skip the first
 chunks while it starts. The buffer is a receiver request, not a measured
 input-to-ear latency. See the bounded measurements and coverage below.
+
+Desktop listeners on macOS request Chromium's
+[`audio-buffer-size=128`](https://chromium.googlesource.com/chromium/src/+/152.0.7977.130/media/base/media_switches.cc#52)
+before Electron is ready (128 frames, about 2.7 ms at 48 kHz). Linux keeps
+Chromium's default until it is measured there, since the switch also affects
+ordinary playback; Windows keeps its device-selected period because
+[WASAPI warns that mismatched sizes can glitch](https://chromium.googlesource.com/chromium/src/+/152.0.7977.130/media/audio/win/audio_low_latency_output_win.cc#296).
+This app-wide request also affects relaxed browser audio and some browser capture
+paths, trades more frequent callbacks for less buffering, and leaves actual output
+latency and stability dependent on the device, audio server and load.
 
 Mac native inputs with more than two channels expose **Input channels** beside
 **Capture buffer**, both before and during sharing. The host chooses an adjacent

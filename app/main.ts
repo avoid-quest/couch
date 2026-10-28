@@ -20,6 +20,10 @@ import { createLiveAudio } from "./live-audio";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
 
+// 128 frames cut MacBook Chrome's reported Sendspin output latency from 42 to 27 ms.
+// Linux is unmeasured; Windows' WASAPI warns that mismatched fixed sizes can glitch.
+if (process.platform === "darwin") app.commandLine.appendSwitch("audio-buffer-size", "128");
+
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
 // Couch Preview packages name their own window and tray icon (scripts/package.ts).
