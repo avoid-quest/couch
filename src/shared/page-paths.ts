@@ -1,4 +1,4 @@
-import { settingsAliases, settingsPageForPath, settingsPages } from "./settings-pages";
+import { settingsAliases, settingsPageForPath, settingsPages } from "./settings-pages.ts";
 
 // The sections in tab order, then the search results and the player. Sources are shelves on Home, not places.
 export const pagePaths: Record<string, string> = {

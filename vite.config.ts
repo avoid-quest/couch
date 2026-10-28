@@ -5,8 +5,8 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
-import { frontendPaths } from "./src/shared/page-paths";
-import { version } from "./package.json";
+import { frontendPaths } from "./src/shared/page-paths.ts";
+import { version } from "./package.json" with { type: "json" };
 
 // scripts/build.ts writes the release identity before the client build runs;
 // a standalone `vite build` falls back to an unsigned identity. Development

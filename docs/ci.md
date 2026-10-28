@@ -1,20 +1,29 @@
 # Checks and releases
 
-Use the pinned Bun 1.4.2 and the frozen lockfile.
+Use the latest stable Bun (1.4.4 or newer) and the committed lockfile.
 
 ```sh
 bun install --frozen-lockfile
 bun run typecheck
+bun run test
 bun run build
 ```
 
-[Check](../.github/workflows/check.yml) runs the same three commands on Linux.
+[Check](../.github/workflows/check.yml) runs the same commands on Linux.
+Package also typechecks and runs the tests before building installers on each OS.
+Both workflows install the latest stable Bun. The test command uses Bun's
+`--isolate` so module mocks, globals and timers stay within each test file.
+
+Dependencies use semver ranges. Run `bun update --recursive` for compatible
+updates, or `bun update --latest --recursive` to update across major versions,
+then run the checks and commit the manifests and `bun.lock` together.
+CI's frozen install uses that tested dependency set without restricting upgrades.
 
 Nothing runs on push or on pull requests. Every workflow starts by hand:
 
 | Workflow | Start it with | It does |
 |---|---|---|
-| Check | `gh workflow run check.yml` | Typecheck and build on Linux |
+| Check | `gh workflow run check.yml` | Typecheck, test and build on Linux |
 | Package | `gh workflow run package.yml --ref <branch>` | Unpublished installers of any branch, kept 14 days as run artifacts |
 | Release | `gh workflow run release.yml -f channel=preview` | Publishes `main` as the next preview |
 | Release | `gh workflow run release.yml -f channel=production` | Promotes the latest preview to production |
@@ -23,7 +32,7 @@ Housekeeping also runs weekly on its own and only deletes expired artifacts and
 stale caches.
 
 Add a test only where a behaviour must stay locked, and run it with
-`bun test <path>`.
+`bun run test <path>`.
 
 The update regressions run with `bun test tests/updates.test.ts` and
 `bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
@@ -55,9 +64,10 @@ directory>`. It reserves `COUCH_PORT` (default 42870) and the next two ports.
 
 ## Bundled live relay
 
-Packaging also requires Go **1.27.2** on PATH. Package installs that pinned toolchain;
+Packaging also requires Go on PATH (at least the version in `native/live-relay/go.mod`).
+Package installs the latest stable Go;
 ordinary `bun run build` still needs only Bun/Node. The electron-builder `afterPack`
-hook compiles the pinned `native/live-relay` module for the actual platform and
+hook compiles the `native/live-relay` module for the actual platform and
 architecture with CGO disabled, and puts the executable and dependency notices in
 `Resources/live-relay` before signing. Users need neither Go nor a separate relay
 installation. macOS signing covers the helper along with the app.
@@ -77,7 +87,9 @@ allocation held open across revocation. Keep Go on PATH for that test too.
 
 The desktop resource pattern follows t3code's
 [native resource monitor packaging](https://github.com/pingdotgg/t3code/blob/main/scripts/build-desktop-artifact.ts).
-The helper uses [Pion TURN](https://github.com/pion/turn), pinned by `go.mod`/`go.sum`.
+The helper uses [Pion TURN](https://github.com/pion/turn), recorded in `go.mod`/`go.sum`.
+Update it with `go get -u ./...` and `go mod tidy` in `native/live-relay`, then run
+the Go tests and the lifecycle integration above.
 Validate native lifecycle/allocation on the target platform; cross-compilation
 alone is not a runtime test.
 Package runs the Go allocation tests on each target OS. Network tests explicitly
@@ -170,12 +182,17 @@ sentences: they become the release notes. Package can also be dispatched on its
 own for a test build of `package.json`'s version, kept as run artifacts and
 never published.
 
+Release preflight uses a shallow checkout and fetches only `v*` release tags,
+one commit deep and without historical file contents. Version resolution needs
+tag names and their commits, so it does not clone every branch's history.
+The job has ten minutes for checkout, Bun setup and version resolution.
+
 The single Mac invocation builds **arm64 and x64 DMGs and ZIPs** with architecture
-in every filename. ZIPs are the updater payloads. The pinned electron-builder
+in every filename. ZIPs are the updater payloads. electron-builder
 merges both architectures into one `preview-mac.yml` or `latest-mac.yml`;
 electron-updater chooses the matching ZIP. Keep both architectures in this
 invocation: separate jobs uploading the same feed with `--clobber` would lose
-one architecture. `bun test tests/package-hooks.test.ts` exercises the pinned
+one architecture. `bun test tests/package-hooks.test.ts` exercises the installed
 builder's merge and updater's selection on both channels.
 
 Mac support is **Apple Silicon on macOS 14+**, **Intel on macOS 13+**. The app's
