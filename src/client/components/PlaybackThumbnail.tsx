@@ -1,5 +1,5 @@
 import { Thumbnail, type ThumbnailImage } from "@videojs/react";
-import { memo, useContext, useEffect, useMemo, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, apiFetch, apiJson } from "@/api/client";
 import { SessionGateContext } from "@/session/gate-context";
@@ -76,6 +76,13 @@ export function PlaybackThumbnail({ playbackId, time }: { playbackId: string; ti
 // selection, sizing or decoding. Video.js owns cropping the selected frame.
 const Scene = memo(function Scene({ thumbnail, onLoad, onError }: { thumbnail: ThumbnailImage; onLoad: () => void; onError: () => void }) {
   const thumbnails = useMemo(() => [thumbnail], [thumbnail]);
+  const [, resize] = useReducer(value => value + 1, 0);
+  useEffect(() => {
+    // A larger rem maximum doesn't resize Video.js's existing inline width, so
+    // its own ResizeObserver cannot discover the newly available space.
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
   return <Thumbnail.Root data-preview-thumbnail time={thumbnail.startTime} thumbnails={thumbnails}
     className="mx-auto max-w-40 overflow-hidden rounded-sm data-[loading]:hidden data-[error]:hidden data-[hidden]:hidden">
     <Thumbnail.Image alt="" loading="eager" fetchPriority="low" onLoad={onLoad} onError={onError} />

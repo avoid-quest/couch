@@ -105,6 +105,7 @@ export async function runPreviewRegression() {
 // Optional provider data must recover independently of programme playback.
 export async function runPreviewRecoveryRegression() {
   const fixture = await preparePreviewRegression();
+  const fontSize = document.documentElement.style.fontSize;
   const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
   const track = () => document.querySelector('[role="slider"][aria-label="Playback position"]')!.closest('[data-slot="slider"]')!.parentElement!;
   const hover = async (time: number) => {
@@ -136,8 +137,18 @@ export async function runPreviewRecoveryRegression() {
     await hover(4.6); assert(visible(), "Fractional position was rounded into a cue gap");
     await hover(5); assert(!visible(), "Provider cue gap showed the previous image");
     await hover(10.1); assert(visible(), "Next provider cue was not shown");
+    document.documentElement.style.fontSize = "16px";
+    window.dispatchEvent(new Event("resize")); await wait();
+    const small = document.querySelector("[data-preview-thumbnail]")!.getBoundingClientRect().width;
+    document.documentElement.style.fontSize = "24px";
+    window.dispatchEvent(new Event("resize")); await wait();
+    await hover(10.2);
+    const large = document.querySelector("[data-preview-thumbnail]")!.getBoundingClientRect().width;
+    assert(large > small, "Same-cue preview did not grow with the responsive size constraint");
+    document.documentElement.style.fontSize = fontSize;
+    window.dispatchEvent(new Event("resize"));
     await hover(20.1); assert(!visible(), "Provider cue end was ignored");
     assert(fixture.audit.actions.length === 0, "Preview recovery sent a programme command");
     return { passed: true, requests: fixture.requests.length };
-  } finally { fixture.close(); }
+  } finally { document.documentElement.style.fontSize = fontSize; fixture.close(); }
 }

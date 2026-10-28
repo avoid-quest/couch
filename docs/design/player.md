@@ -138,7 +138,8 @@ stay in Core; image reads use its public-network fetcher. Source changes cancel
 obsolete reads. Metadata is bounded to 4,000 frames / 128 sheets; images to 2 MiB,
 four concurrent downloads and a shared 16 MiB cache. A controller keeps four
 successfully decoded images and releases their object URLs when the source
-changes. Hidden/stale previews cancel pending reads and retry timers. Network,
+changes. Hidden previews cancel pending image reads and retry timers; source
+changes also cancel metadata reads. Network,
 503 and decode failures retry at most twice while requested; later hover can
 retry a failed or missing image. Missing metadata is fresh for 30 seconds, and
 reconnection invalidates it through the session query client. Expired
