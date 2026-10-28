@@ -35,6 +35,7 @@ import { createCatalog, type Viewing } from "./catalog";
 import { createProviderMetadata, providerMetadata } from "./provider-metadata";
 import { playbackMediaId, ViewingError } from "./progress";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
+import { playbackPreviewResponse } from "./playback-preview";
 import { logMediaDiagnostic, mediaAddress } from "./media-diagnostics";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
@@ -214,7 +215,7 @@ export async function createHub(options: HubOptions) {
   // Private speakers keep their effective trim when another Device sets All. Output consent is live.
   type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; compressor: CompressorSettings; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live" | "publicNetwork"> & { audioOnly?: boolean };
-    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
+    resolved?: { playbackId: string; signal: AbortSignal; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
     undoable?: ReturnType<typeof setTimeout>;
     // Its shared source had no receiving output: the first output chosen in Where it plays starts it. Each
@@ -763,7 +764,7 @@ export async function createHub(options: HubOptions) {
     const playback = { id, outputs: [], mixTrim: saved.mixTrim(), compressor: saved.compressor(), privateTrims: new Map(), renderer: null, screens: new Map() } as unknown as Playback;
     const prepareMedia = async (resolved: MediaSource & { headers?: Record<string, string> }, playbackId: string, signal: AbortSignal) => {
       signal.throwIfAborted();
-      const { headers = {}, ...media } = resolved;
+      const { headers = {}, preview: _preview, ...media } = resolved;
       const tab = playback.next ?? playback.renderer;
       if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       // Native decoders must see the same guarded playlists as browser Devices.
@@ -789,12 +790,12 @@ export async function createHub(options: HubOptions) {
         // Solo resolves for the Device it moves to: its engine and origin choose formats and Pass-through.
         const tab = playback.next ?? playback.renderer;
         const resolving = resolveEntry(entry, playbackId, signal, tab, playback);
-        playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: resolving };
+        playback.resolved = { playbackId, signal, vp9: tab?.data.vp9 ?? true, media: resolving };
         return prepareMedia(await resolving, playbackId, signal);
       },
       prepareRecoveredSource: async (media, playbackId, signal) => {
         const tab = playback.next ?? playback.renderer;
-        playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: Promise.resolve(media) };
+        playback.resolved = { playbackId, signal, vp9: tab?.data.vp9 ?? true, media: Promise.resolve(media) };
         return prepareMedia(media, playbackId, signal);
       },
       observe: player => subtitles.observe(player),
@@ -1660,6 +1661,17 @@ export async function createHub(options: HubOptions) {
       if (!websocket && ["/api/radio/recognize", "/api/radio/recognitions"].includes(url.pathname)) return cors(request, await radioRecognition.handle(request, authorize, playedBy!));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
+      if (!websocket && url.pathname === "/api/playback-preview") {
+        const playbackId = url.searchParams.get("playbackId") ?? "";
+        const playback = playing(playbackId);
+        const resolved = playback?.resolved;
+        const reading = new Request(request, { signal: AbortSignal.any([request.signal, shutdown.signal, ...(resolved ? [resolved.signal] : [])]) });
+        return cors(request, await playbackPreviewResponse(reading, async () => (await resolved?.media)?.preview, () => {
+          authorize();
+          if (!playback || !playback.outputs.length || playing(playbackId) !== playback || resolved !== playback.resolved || resolved?.playbackId !== playbackId) throw new ControllerError("Playback changed.", 404);
+          requirePlayback(playback, playedBy?.deviceId ?? hostId());
+        }));
+      }
       if (!websocket && url.pathname === "/api/artwork") return cors(request, await artworkResponse(request, authorize));
       if (!websocket && url.pathname === "/api/subtitles") return cors(request, await subtitles.handle(request, () => {
         authorize();

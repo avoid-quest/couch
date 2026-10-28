@@ -15,11 +15,12 @@ import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 import { logMediaResolution } from "./media-diagnostics";
+import { youtubePreview, type PreviewSource } from "./playback-preview";
 
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { preview?: PreviewSource; publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -117,7 +118,8 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     }
   }
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  const preview = selected.every(stream => stream.vcodec === "none") ? undefined : youtubePreview(info);
+  return { source, ...(preview ? { preview } : {}), ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
