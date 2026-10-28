@@ -11,7 +11,9 @@ import fixture from "./fixtures/youtube-storyboard.json";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { startHelpers, helper } from "../src/server/helpers";
-import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { createSession, type MediaSource } from "../src/server/session";
+import { storyboardPreview } from "../src/server/playback-preview";
+import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../src/shared/protocol";
 
 const until = async (check: () => boolean) => {
   const end = Date.now() + 5000;
@@ -62,7 +64,7 @@ test("a controller without media reads the current preview; private, replaced an
   const read = (token = tokens[controllerId]) => fetch(`${hub.origin}/api/playback-preview?playbackId=${playbackId}`, { headers: { Authorization: `Bearer ${token}`, Origin: hub.origin } });
   assert.equal((await read("invalid")).status, 401);
   const response = await read(); assert.equal(response.status, 200);
-  const text = await response.text(); assert.equal(JSON.parse(text).sheets, 6); assert.ok(!text.includes("ytimg"));
+  const text = await response.text(); assert.equal(JSON.parse(text).images, 6); assert.ok(!text.includes("ytimg"));
   assert.equal(extractions, 1, "preview reuses playback extraction");
   assert.ok(!controller.messages.some(message => message.type === "player" && message.command.type === "load"), "controller creates no receiver");
   assert.ok(!JSON.stringify(tv.messages).includes("storyboard3"), "renderer commands do not leak preview URLs");
@@ -96,4 +98,22 @@ test("a controller without media reads the current preview; private, replaced an
   assert.equal((await read()).status, 401, "replaced token loses access");
   assert.equal((await tv.command({ type: "stop" })).ok, true);
   assert.equal((await read(tokens[tvId])).status, 404);
+});
+
+test("initial loads, direct reloads and quality changes never send private preview descriptors to a renderer", async () => {
+  const store = openStore(":memory:");
+  const media: MediaSource = { source: "https://media.example/video.mp4", preview: storyboardPreview(fixture) };
+  const commands: PlaybackCommand[] = [];
+  let state: SessionState;
+  const session = createSession({ ...store, ...store.playback("preview") }, command => commands.push(command), next => { state = structuredClone(next); }, { resolveSource: () => media });
+  try {
+    session.command({ type: "enqueue", entry: { id: "film", title: "Film", source: "web:https://www.youtube.com/watch?v=vWLJeqLPfSU" }, playNow: true });
+    session.observe({ ...state!.player, status: "playing", duration: 693, seekable: true });
+    session.reload(media);
+    await session.command({ type: "videoQuality", playbackId: state!.player.playbackId!, quality: "720p" });
+    const loads = commands.filter(command => command.type === "load");
+    assert.equal(loads.length, 3);
+    assert.ok(loads.every(command => !("preview" in command)));
+    assert.ok(!JSON.stringify(commands).includes("i.ytimg.com"));
+  } finally { session.close(); store.close(); }
 });

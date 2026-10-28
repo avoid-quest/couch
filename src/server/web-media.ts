@@ -15,7 +15,7 @@ import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 import { logMediaResolution } from "./media-diagnostics";
-import { youtubePreview, type PreviewSource } from "./playback-preview";
+import { storyboardPreview, type PreviewSource } from "./playback-preview";
 
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
@@ -118,7 +118,7 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     }
   }
   const metadata = publicMetadata(info);
-  const preview = selected.every(stream => stream.vcodec === "none") ? undefined : youtubePreview(info);
+  const preview = storyboardPreview(info);
   return { source, ...(preview ? { preview } : {}), ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 

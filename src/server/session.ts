@@ -207,6 +207,9 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   let progressContext: { profileId: string; playedBy?: PlaybackActor } | undefined;
   const send = (command: PlaybackCommand) => {
     if (command.type === "load") {
+      // Private preview descriptors stay in Core, including reloads and recovery.
+      const { preview: _preview, ...load } = command as typeof command & Pick<MediaSource, "preview">;
+      command = load;
       const entry = state.queue.find(item => item.id === state.currentEntryId);
       if (entry?.live || isRadio(entry) || command.radio) command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
       loaded = command;
