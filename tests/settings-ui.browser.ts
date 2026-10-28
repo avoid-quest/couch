@@ -42,7 +42,7 @@ export async function mountSettingsAudit() {
     return uiFetch(input, init);
   };
   const hardware = () => audit.updateSession(gate => ({ ...gate,
-    details: { ...gate.details!, urls, lanError: null, systemAudio: true, tvPresentation: true, tvModeChangeable: true, tvAppliance: true },
+    details: { ...gate.details!, urls, lanError: null, systemAudio: true, airplay: "available", tvPresentation: true, tvModeChangeable: true, tvAppliance: true },
     state: { ...gate.state!, appearance: defaultTvAppearance },
   }));
   await hardware();

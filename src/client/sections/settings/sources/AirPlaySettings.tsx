@@ -7,12 +7,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ADMIN_ONLY } from "@/copy";
-import type { AirPlayState } from "../../../../shared/airplay";
+import type { AirPlayAvailability, AirPlayState } from "../../../../shared/airplay";
 
 /** The Couch receives AirPlay sound as a shared source; only an admin turns it on. */
-export function AirPlaySettings({ credentials, connected, administrator, couch }: { credentials: ApiCredentials | null; connected: boolean; administrator: boolean; couch: string }) {
+export function AirPlaySettings({ availability, credentials, connected, administrator, couch }: { availability?: AirPlayAvailability; credentials: ApiCredentials | null; connected: boolean; administrator: boolean; couch: string }) {
+  if (!availability || availability === "unsupported") return null;
   const description = `Play sound from an iPhone, iPad or Mac on this network through ${couch}. It appears in Shared sources while a device plays.`;
-  if (!administrator || !credentials) return <SettingsSection title="AirPlay" description={description}><SettingsRow label="Receive AirPlay" description={ADMIN_ONLY} /></SettingsSection>;
+  if (!administrator || !credentials) return availability === "unavailable"
+    ? <SettingsSection><SettingsRow label="AirPlay" description="The AirPlay receiver isn't available on this Couch." /></SettingsSection>
+    : <SettingsSection title="AirPlay" description={description}><SettingsRow label="Receive AirPlay" description={ADMIN_ONLY} /></SettingsSection>;
   return <AirPlayControls credentials={credentials} connected={connected} description={description} />;
 }
 

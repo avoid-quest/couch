@@ -1,4 +1,5 @@
 import type { PlayerState } from "./protocol";
+import type { AirPlayAvailability } from "./airplay";
 
 export type ConnectionDetails = {
   lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; tvPresentation?: boolean; tvAppliance?: boolean;
@@ -6,6 +7,8 @@ export type ConnectionDetails = {
   tvModeChangeable?: boolean;
   /** Couch controls this computer's sound outputs and Bluetooth (Linux, #644 ticket 3). */
   systemAudio?: boolean;
+  /** Public AirPlay capability; settings, code and sender remain admin-only. */
+  airplay?: AirPlayAvailability;
   /** Main can update this Couch through an authenticated administrator request. */
   updates?: boolean };
 
