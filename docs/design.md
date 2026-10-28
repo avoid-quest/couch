@@ -547,6 +547,15 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
   AirPlay's admin controls, including open confirmations and retries, wait for
   the Couch to reconnect.
 
+[123MoviesFree](123moviesfree.md) keeps the selected film or episode while
+trying one supported advertised Server 2 stream if its direct manifest is
+unavailable. Playback uses the same controls and language preference; the
+fallback's own subtitle tracks take precedence when available.
+When a source offers external subtitle files, HLS does not add automatic in-band
+captions beside them; the subtitle selection and Off control all visible text.
+Browser playback reports only changed player state and advancing position ticks;
+subtitle initialization keeps the connection stable even with 16 tracks.
+
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).
 Download uses flat rows per channel, with explicit **Mac (Apple Silicon)**

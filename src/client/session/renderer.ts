@@ -44,6 +44,7 @@ let unfollow: (() => void) | null = null;
 let ptsOffset: number | undefined;
 let report: ((state: PlayerState) => void) | undefined;
 let reportedAt = 0;
+let reported = "";
 const blockedListeners = new Set<(blocked: boolean) => void>();
 
 // Chromium plays YouTube's VP9 (#644 ticket 1); other engines get H.264.
@@ -82,7 +83,15 @@ const state = (): PlayerState => ({
   audioDelay: mediaStream ? undefined : audioDelay,
   subtitleDelay,
 });
-const send = () => { reportedAt = performance.now(); report?.(state()); };
+const send = (positionChanged = false) => {
+  if (!report) return;
+  const current = state(), next = JSON.stringify({ ...current, position: undefined });
+  // Chromium queues each subtitle mode change. Position alone reports on ticks and seeks.
+  if (next === reported && !positionChanged) return;
+  reported = next;
+  reportedAt = performance.now();
+  report(current);
+};
 // Synced sound's player waits for a tap too (#644 ticket 10); this unlocks it.
 let unlockSound: (() => void) | null = null;
 const notify = () => { for (const listener of blockedListeners) listener(blocked || !!unlockSound); };
@@ -139,19 +148,19 @@ const observeElements = () => {
       if (event === "pause" || event === "ended") suspendCompression();
       else if (event === "playing") resumeCompression();
       if (event !== "durationchange" && event !== "resize") follow(event !== "ratechange");
-      send();
+      send(event === "seeked");
     });
   }
   on(video, "canplay", () => { ready = true; send(); });
   for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"]) on(video, event, buffered);
-  on(video, "timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
+  on(video, "timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(true); });
   on(video, "error", () => {
     if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
     else if (isPlaylist(loading)) void playlist(loading, false);
     else sourceFailed();
   });
   on(audio, "error", () => fail(audio.error?.message || "This media couldn't play here."));
-  on(video.textTracks, "change", send);
+  on(video.textTracks, "change", () => send());
 };
 observeElements();
 
@@ -238,11 +247,12 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
     return;
   }
   // A sliding live window is not a finite, zero-based movie timeline.
-  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true });
+  // In-band CEA captions otherwise show beside external subtitles and bypass Off.
+  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true, enableCEA708Captions: !command.subtitles?.length });
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
   hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
-  for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, send);
+  for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, () => send());
   // Tracks follow the profile's language preferences.
   const { audioLanguage = "" } = command.preferences ?? {};
   // Tracks chosen on another Device come with the item (#644 ticket 9). hls.js lists a
@@ -412,7 +422,7 @@ export function play(command: PlaybackCommand) {
     case "subtitleDelay": subtitleDelay = command.delay; shiftCues(); break;
     case "stop": reset(); break;
   }
-  send();
+  send(command.type === "seek");
 }
 
 function addTrack(source: string, label: string, language = "", show = false) {
@@ -427,6 +437,7 @@ function addTrack(source: string, label: string, language = "", show = false) {
 export function connectRenderer(listener: (state: PlayerState) => void) {
   if (!holder.isConnected) document.body.append(holder);
   report = listener;
+  reported = "";
   send();
   return () => { report = undefined; reset(); };
 }

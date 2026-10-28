@@ -14,8 +14,9 @@ and paired remotes.
 - **StreamingCommunity** catalogue browsing, search, seasons and episodes. An
   administrator sets its current origin in **Settings → Sources**.
 - **123MoviesFree** film and TV-season browsing, search, saved items and episode
-  selection. Its direct player integration is experimental: live manifests
-  returned HTTP 502 during verification. See [source details](123moviesfree.md).
+  selection. Its direct player integration is experimental: some titles return
+  HTTP 502 for their HLS playlists while others resolve. See
+  [source details](123moviesfree.md).
 - **[AnimeSaturn](animesaturn.md) and [AnimeUnity](animeunity.md)** anime browsing,
   search, episode selection, saved items and lists, with direct playback from
   their public players. Whole-anime queueing and automatic continuation support

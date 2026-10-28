@@ -15,7 +15,9 @@ const check = (source: string) => {
     class Element extends EventTarget {
       style = {}; dataset = {}; children = []; attributes = new Map();
       currentTime = 0; duration = Infinity; volume = 1; paused = true; playbackRate = 1; defaultPlaybackRate = 1;
-      textTracks = Object.assign([], { addEventListener() {} });
+      buffered = { length: 0 };
+      textTrackEvents = new EventTarget();
+      textTracks = Object.assign([], { addEventListener: (...args) => this.textTrackEvents.addEventListener(...args) });
       constructor(tag) { super(); this.tagName = tag; if (["video", "audio"].includes(tag)) media.push(this); }
       canPlayType(type) { return type === "application/vnd.apple.mpegurl" ? nativeHls : ""; }
       append(...children) {
@@ -24,6 +26,16 @@ const check = (source: string) => {
           child.parent = this;
           if (child.tagName === "track") {
             child.track = { kind: child.kind, label: child.label, language: child.srclang, mode: "disabled" };
+            let mode = "disabled";
+            Object.defineProperty(child.track, "mode", {
+              get: () => mode,
+              set: value => {
+                if (value === mode) return;
+                mode = value;
+                // Chromium queues one event per mode change, including hidden -> disabled.
+                setTimeout(() => this.textTrackEvents.dispatchEvent(new Event("change")), 0);
+              },
+            });
             this.textTracks.push(child.track);
           }
         }
@@ -58,11 +70,17 @@ const check = (source: string) => {
       static Events = { ERROR: "error", INIT_PTS_FOUND: "pts", LEVEL_LOADED: "level", AUDIO_TRACKS_UPDATED: "audio-tracks", AUDIO_TRACK_SWITCHED: "audio-switch", SUBTITLE_TRACKS_UPDATED: "subtitle-tracks", SUBTITLE_TRACK_SWITCH: "subtitle-switch" };
       static ErrorDetails = {};
       audioTracks = []; subtitleTracks = [];
+      listeners = new Map();
       constructor(config) { this.config = config; decoders.push(this); }
-      on() {}
-      once() {}
+      on(event, listener) { this.listeners.set(event, [...this.listeners.get(event) ?? [], listener]); }
+      once(event, listener) { const once = (...args) => { this.listeners.set(event, this.listeners.get(event).filter(item => item !== once)); listener(...args); }; this.on(event, once); }
+      emit(event, data) { for (const listener of this.listeners.get(event) ?? []) listener(event, data); }
       loadSource(source) { this.source = source; }
       attachMedia(element) { this.media = element; }
+      broadcastCaptions() {
+        // hls.js's timeline controller creates CEA captions outside subtitleTracks.
+        if (this.config.enableCEA708Captions !== false) this.media.textTracks.push({ kind: "captions", label: "English", language: "en", mode: "showing" });
+      }
       destroy() { this.destroyed = true; }
     }
     mock.module("hls.js", () => ({ default: Hls }));
@@ -70,13 +88,107 @@ const check = (source: string) => {
     const disconnect = connectRenderer(state => reports.push(state));
     const [video, audio] = media;
     const load = (options = {}) => play({ type: "load", playbackId: "playback", source: "https://couch.example/stream.m3u8", ...options });
-    const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(setImmediate); };
+    const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
     ${source}
     disconnect();
   `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 };
+
+test("16 subtitle tracks and HLS initialization do not flood Core with identical reports", () => check(`
+  const subtitles = Array.from({ length: 16 }, (_, index) => ({ source: "https://couch.example/" + index + ".vtt", title: "Captions " + index, language: "en" }));
+  let changes = 0;
+  video.textTracks.addEventListener("change", () => { changes++; if (video.duration === 60) video.currentTime += .001; });
+  for (let cycle = 0; cycle < 3; cycle++) {
+    video.duration = Infinity;
+    const before = reports.length, previousChanges = changes;
+    load({ subtitles, preferences: { subtitles: "off" } });
+    await flush();
+    const decoder = decoders.at(-1);
+    decoder.emit(Hls.Events.LEVEL_LOADED, {});
+    for (const event of [Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED]) decoder.emit(event, {});
+    await flush();
+    assert.equal(changes - previousChanges, 64, "two selections really drained Chromium's 64 queued mode changes");
+    assert.equal(reports.length - before, 1, "only the new loading state goes to Core");
+    video.dispatchEvent(new Event("canplay"));
+    assert.equal(reports.at(-1).tracks.filter(track => track.kind === "subtitle").length, 16);
+    assert.equal(reports.length - before, 2, "ready publishes the full track list");
+    video.duration = 60;
+    video.dispatchEvent(new Event("durationchange"));
+    for (const index of [15, -1]) {
+      const count = reports.length;
+      play({ type: "track", playbackId: "playback", kind: "subtitle", index });
+      await flush();
+      assert.equal(reports.length, count + 1, "track selection reports once despite 32 queued events and an advancing clock");
+      assert.deepEqual(reports.at(-1).tracks.filter(track => track.kind === "subtitle" && track.selected).map(track => track.index), index < 0 ? [] : [index]);
+    }
+    decoder.audioTracks = [{ name: "English", lang: "en" }];
+    decoder.emit(Hls.Events.AUDIO_TRACKS_UPDATED, {});
+    assert.equal(reports.at(-1).tracks.find(track => track.kind === "audio").label, "English", "real HLS track changes still report");
+    const count = reports.length;
+    play({ type: "stop", playbackId: "playback" });
+    await flush();
+    assert.equal(reports.length, count + 1);
+    assert.equal(reports.at(-1).status, "idle");
+    assert.equal(video.textTracks.length, 0);
+  }
+`));
+
+test("report deduplication preserves position ticks, controls, failures and new subscribers", () => check(`
+  let now = 0;
+  Object.defineProperty(performance, "now", { value: () => now });
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
+  video.duration = 60;
+  video.dispatchEvent(new Event("canplay"));
+  const before = reports.length;
+  video.currentTime = .5; now = 500;
+  video.dispatchEvent(new Event("timeupdate"));
+  assert.equal(reports.length, before);
+  video.currentTime = 1.1; now = 1100;
+  video.dispatchEvent(new Event("timeupdate"));
+  assert.equal(reports.length, before + 1);
+  assert.equal(reports.at(-1).position, 1.1);
+  play({ type: "seek", playbackId: "playback", position: 1.2 });
+  assert.equal(reports.at(-1).position, 1.2, "even a small seek reports immediately between ticks");
+  video.currentTime = 1.3;
+  video.dispatchEvent(new Event("seeked"));
+  assert.equal(reports.at(-1).position, 1.3, "the browser's completed seek reports its actual position");
+  play({ type: "pause", playbackId: "playback", paused: true });
+  assert.equal(reports.at(-1).status, "paused");
+  play({ type: "speed", playbackId: "playback", speed: 1.25 });
+  assert.equal(reports.at(-1).speed, 1.25);
+  play({ type: "audioDelay", playbackId: "playback", delay: .2 });
+  assert.equal(reports.at(-1).audioDelay, .2);
+  play({ type: "subtitleDelay", playbackId: "playback", delay: .5 });
+  assert.equal(reports.at(-1).subtitleDelay, .5);
+  video.error = { code: 3, message: "decoder failed" };
+  video.dispatchEvent(new Event("error"));
+  assert.equal(reports.at(-1).status, "error");
+  assert.equal(reports.at(-1).error, "decoder failed");
+  const reconnected = [];
+  connectRenderer(state => reconnected.push(state));
+  assert.deepEqual(reconnected, [reports.at(-1)], "a new connection receives even an unchanged state");
+`));
+
+test("external subtitles remain the only visible captions and Off disables them all", () => check(`
+  for (const subtitles of ["off", "on"]) {
+    load({ subtitles: [{ source: "https://couch.example/english.vtt", title: "English", language: "en" }], preferences: { subtitles, subtitleLanguage: "en" } });
+    await flush();
+    const decoder = decoders.at(-1);
+    decoder.emit(Hls.Events.LEVEL_LOADED, {});
+    video.dispatchEvent(new Event("canplay"));
+    decoder.broadcastCaptions();
+    assert.equal(video.textTracks.filter(track => track.mode === "showing").length, subtitles === "off" ? 0 : 1, "in-band CEA captions must not bypass the chosen external subtitles");
+    play({ type: "track", playbackId: "playback", kind: "subtitle", index: -1 });
+    await flush();
+    assert.ok(video.textTracks.every(track => track.mode !== "showing"), "Subtitle Off leaves no captions showing");
+  }
+  load();
+  await flush();
+  decoders.at(-1).broadcastCaptions();
+  assert.ok(video.textTracks.some(track => track.kind === "captions"), "streams without external subtitles keep their in-band captions");
+`));
 
 test("blocked audio is replayed when the shell subscribes again after recovery", () => check(`
   const { onBlocked, waitForTap } = await import("./src/client/session/renderer.ts");
