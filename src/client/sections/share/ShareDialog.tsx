@@ -215,7 +215,7 @@ function Pictures({ sources, listing, value, onValueChange, disabled, kind }: { 
   return <ToggleGroup type="single" aria-label={label} spacing={0} value={value} disabled={disabled} onValueChange={next => { if (next) onValueChange(next); }}
     className="grid max-h-80 w-full grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-x-3 gap-y-4 overflow-y-auto rounded-none p-1">
     {sources.map(source => <ToggleGroupItem key={source.id} value={source.id} title={source.name}
-      className="group/picture h-auto min-w-0 flex-col items-stretch justify-start gap-1.5 rounded-md p-0 text-left font-normal whitespace-normal focus-visible:bg-transparent focus-visible:text-foreground data-[state=on]:bg-transparent">
+      className="group/picture h-auto touch:h-auto min-w-0 flex-col items-stretch justify-start gap-1.5 rounded-md p-0 text-left font-normal whitespace-normal focus-visible:bg-transparent focus-visible:text-foreground data-[state=on]:bg-transparent">
       <span className={cn("grid aspect-video place-items-center overflow-hidden rounded-md bg-muted outline-2 outline-offset-2 outline-transparent group-focus-visible/picture:outline-foreground", source.id === value && "outline-foreground")}>
         {source.thumbnail && <img src={source.thumbnail} alt="" className="size-full object-contain" />}
       </span>

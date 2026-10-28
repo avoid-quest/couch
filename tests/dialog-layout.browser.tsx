@@ -83,6 +83,13 @@ export function checkDialogBounds(panel: DialogCase) {
   const scale = Number(style.zoom);
   const gutter = parseFloat(getComputedStyle(document.documentElement).fontSize) * scale;
   const rect = dialog.getBoundingClientRect();
+  if (panel === "share") for (const image of dialog.querySelectorAll<HTMLImageElement>('[data-slot="toggle-group-item"] img')) {
+    const picture = image.parentElement!.getBoundingClientRect();
+    const button = image.closest("button")!;
+    const label = button.lastElementChild!.getBoundingClientRect();
+    if (Math.abs(picture.width / picture.height - 16 / 9) > .05) throw new Error("Share thumbnail must retain its aspect ratio in narrow windows");
+    if (label.bottom > button.getBoundingClientRect().bottom + 1) throw new Error("Share source name must fit its button");
+  }
   if (dialog.dataset.slot === "sheet-content") {
     if (rect.top < -1 || rect.bottom > innerHeight + 1 || rect.height > innerHeight * .9 + 1) throw new Error("Share sheet escapes viewport");
     if (style.overflowY !== "auto") throw new Error("Share sheet must own vertical scrolling");

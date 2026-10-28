@@ -47,6 +47,8 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   Window hand off to the browser's own picker, which opens on that surface and
   still offers the rest. Sound only takes the first screen's capture for its
   sound in the desktop app, so Start sharing waits there until it lists one.
+  Choices keep their whole thumbnail and name in narrow windows too; their
+  height grows with the picture instead of using a fixed touch-button height.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
   place, disabled, and leaves the choice. Without a choice the share waits in
