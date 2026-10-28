@@ -26,7 +26,8 @@ whether each device last connected as a TV with its record, so a TV stays one
 while it's off and across restarts.
 
 Commands reject a disconnected, revoked or reassigned target rather than act
-on a different TV.
+on a different TV. Up next can play that TV's Autoplay suggestions directly;
+ordering and removal still apply only to entries already in its queue.
 
 ## Type on TV
 

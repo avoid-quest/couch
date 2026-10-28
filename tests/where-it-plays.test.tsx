@@ -237,12 +237,19 @@ test("reconnecting keeps device controls in place but disables every mixer chang
   const outputs = [inSync, { deviceId: "phone", picture: false, sound: true }];
   const state = { ...waiting(0), devices: [...devices, phone, kitchen], outputs, player: { status: "playing", volume: 50 }, playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs, liveSourceId: "s", inSync: true }] } as unknown as ClientSessionState;
   for (const tv of [false, true]) {
-    const tree = Mixer({ state, connected: false, tv, run: async () => true });
+    const run = mock(async () => true);
+    const tree = Mixer({ state, connected: false, tv, run });
     const all = elements(tree);
     const labelled = (label: string) => all.find(item => item.props.label === label || item.props["aria-label"] === label)!;
     for (const label of ["TV picture", "TV sound", "TV sync", "Phone picture", "Phone sound", "Kitchen picture", "Kitchen sound"]) expect(labelled(label).props.disabled).toBe(true);
     expect(all.find(item => item.props.id === "where-it-plays-in-sync")!.props.disabled).toBe(true);
     if (!tv) for (const label of ["TV volume", "Phone volume", "Move here: Kitchen", "Options for TV"]) expect(labelled(label).props.disabled).toBe(true);
+    else {
+      const slider = all.find(item => item.props["aria-label"] === "TV" && "onKeyDown" in item.props)!;
+      const { onKeyDown } = slider.props as unknown as { onKeyDown: (event: { key: string; preventDefault: () => void }) => void };
+      for (const key of ["ArrowLeft", "ArrowRight"]) onKeyDown({ key, preventDefault: () => {} });
+    }
+    expect(run).not.toHaveBeenCalled();
     const html = renderToStaticMarkup(<>{tree}</>);
     expect(html).toContain("TV");
     expect(html).toContain("Kitchen");

@@ -29,6 +29,9 @@ export async function runPlayerQueueRegression() {
     await check("windowed video has black letterbox bars", async () => {
       assert(!document.querySelector(".player-page .ambient-light, .player-page .room"), "Video still paints artwork color behind the picture");
       assert(getComputedStyle(document.querySelector(".player-page")!).backgroundColor === "rgb(0, 0, 0)", "Video background is not black");
+      for (const selector of [".player-video", ".player-video video"]) {
+        assert(["rgba(0, 0, 0, 0)", "rgb(0, 0, 0)"].includes(getComputedStyle(document.querySelector(selector)!).backgroundColor), "Video surface paints a non-black margin");
+      }
     });
     if (!isTvPresentation()) await check("fullscreen video keeps black letterbox bars", async () => {
       await audit.click("Enter fullscreen");
@@ -49,6 +52,15 @@ export async function runPlayerQueueRegression() {
       button!.click();
       assert(audit.actions.at(-1)?.type === "play" && (audit.actions.at(-1) as { entryId: string }).entryId === "autoplay-two", "Autoplay Play did not target the selected entry");
       assert(button!.getAttribute("aria-label") === "Play Second recommendation", "Play label implies a scheduled action");
+    });
+    await check("connected but unavailable playback disables Autoplay Play", async () => {
+      await audit.updateSession(gate => ({ ...gate, connected: true, state: { ...gate.state!, player: { ...gate.state!.player, status: "unavailable" } } }));
+      const button = document.querySelector<HTMLButtonElement>('[data-queue-entry-id="autoplay-two"] [data-play]');
+      assert(button?.disabled, "Unavailable playback still offers Autoplay Play");
+      const before = audit.actions.length;
+      button!.click();
+      assert(audit.actions.length === before, "Unavailable playback sent a command");
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player, status: "playing" } } }));
     });
     await check("disconnected queues cannot send playback commands", async () => {
       await audit.updateSession(gate => ({ ...gate, connected: false }));

@@ -319,7 +319,9 @@ as it was beneath it. On phones it takes the artwork's place.
   - "Then from {context}", then up to ten of its upcoming entries as quieter,
     playable rows. Their start times continue the board. Selecting one starts it
     immediately, keeps manually queued entries waiting, then continues the
-    collection after that selection. Disconnected or unavailable playback
+    collection after that selection. At the 500-entry limit, the oldest played
+    entry can make room; the current item and waiting entries are retained.
+    Disconnected or unavailable playback
     disables every Play target.
   - Or "Finding the next item…".
   - The Autoplay switch shows in the heading row only while something can

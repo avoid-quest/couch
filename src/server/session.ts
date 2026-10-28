@@ -8,6 +8,7 @@ import { supportsCurrentVideoQuality } from "../shared/video-quality";
 import type { WebMediaSource } from "./web-media";
 import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
+import { queueCursorIndex } from "../shared/queue";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"> & { title?: string };
 export type MediaSource = { preview?: WebMediaSource["preview"]; publicNetwork?: boolean; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
@@ -750,8 +751,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
           const pick = !state.queue.some(entry => entry.id === action.entryId) && state.autoplay?.enabled
             ? state.autoplay.upcoming.find(entry => entry.id === action.entryId) : undefined;
           if (pick && continuation) {
-            if (state.queue.length >= 500) throw new Error(QUEUE_FULL);
-            play(pick.id, action.fromStart, "play", authorize, playedBy, [], [...state.queue, pick], {
+            // At capacity, only played history may make room; the current item and waiting entries stay.
+            const queue = state.queue.length >= 500 && queueCursorIndex(state) > 0 ? state.queue.slice(1) : state.queue;
+            if (queue.length >= 500) throw new Error(QUEUE_FULL);
+            play(pick.id, action.fromStart, "play", authorize, playedBy, [], [...queue, pick], {
               ...continuation, entries: continuation.entries.slice(continuation.entries.findIndex(entry => entry.id === pick.id) + 1),
             });
           }

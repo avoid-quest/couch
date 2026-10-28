@@ -272,6 +272,7 @@ export function PlaysOnLine({ at, children }: { at: ReturnType<typeof playsOn>; 
 function Delay({ id, label, word, delay, disabled, onCommit }: { id: string; label: string; word: string; delay: number; disabled: boolean; onCommit: (delay: number) => void }) {
   const revealed = useContext(RevealedSync);
   const [draft, setDraft] = useState<number | null>(null);
+  useEffect(() => { if (disabled) setDraft(null); }, [disabled]);
   const value = draft ?? delay;
   // A line taken to 0 while its slider is in use stays until focus leaves it, as a revealed one would.
   const shown = revealed.id === id || draft !== null;

@@ -117,7 +117,8 @@ source"). A private picture disables Picture for other devices, while its
 shared sound keeps its Sound and fader. This device keeps its own
 controls while viewing another Playback. While reconnecting, the whole mixer
 keeps its rows but disables changes, including In sync, device channels,
-faders and Sync.
+faders and Sync. Sync discards its local edit when disabled and shows the
+received delay again.
 
 ## Fader and Sync
 

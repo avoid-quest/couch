@@ -85,3 +85,25 @@ test("playing an Autoplay pick cannot evict a waiting entry from a full queue", 
     assert.deepEqual(session.state, before);
   } finally { session.close(); store.close(); }
 });
+
+test("playing an Autoplay pick makes room in a full queue by retiring only played history", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("autoplay");
+  const session = createSession({ ...store, ...playback }, () => {}, () => {}, {
+    resolveSource: item => ({ source: item.source }),
+    resolveContinuation: () => ({ title: "Series", entries: [entry("suggestion"), entry("following")] }),
+  });
+  try {
+    session.loadQueue(Array.from({ length: 500 }, (_, index) => entry(`episode-${index}`)), "replace");
+    const queue = session.state.queue;
+    session.command({ type: "play", entryId: queue[0]!.id });
+    session.command({ type: "next", playbackId: session.state.player.playbackId! });
+    await flush();
+    session.command({ type: "play", entryId: "suggestion" });
+    assert.equal(session.state.currentEntryId, "suggestion");
+    assert.equal(session.state.queue.length, 500);
+    assert.deepEqual(session.state.queue.map(item => item.id), [queue[1]!.id, "suggestion", ...queue.slice(2).map(item => item.id)]);
+    assert.deepEqual(store.playback("autoplay").queue.map(item => item.id), session.state.queue.map(item => item.id));
+    assert.deepEqual(session.state.autoplay?.upcoming.map(item => item.id), ["following"]);
+  } finally { session.close(); store.close(); }
+});

@@ -100,11 +100,11 @@ export async function runFilterControlsRegression() {
     assert(document.body.textContent?.includes("No stations match"), "Radio empty filter has no explanation");
     button("Clear filter").click(); await wait();
     assert(field("Filter stations").value === "" && document.activeElement === field("Filter stations") && !button("Clear filter"), "Clear station filter lost focus or value, or kept its button");
-    await audit.go('/radio?radioSource=Radio%20directory&genre=Missing&filter=missing');
+    await audit.go('/radio?radioSource=Radio%20directory&genre=Missing&filter=missing&page=2');
     const resetRadio = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === "Clear filters");
     assert(resetRadio, "Empty radio results offer no way to clear combined filters");
     resetRadio!.focus(); resetRadio!.click(); await wait();
-    assert(!audit.router.state.location.search.genre && !audit.router.state.location.search.filter && audit.router.state.location.search.radioSource === "Radio directory", "Radio reset did not clear genre and text while preserving its source");
+    assert(!audit.router.state.location.search.genre && !audit.router.state.location.search.filter && !audit.router.state.location.search.page && audit.router.state.location.search.radioSource === "Radio directory", "Radio reset did not clear genre, text and page while preserving its source");
     assert(document.querySelector('[aria-label="Radio stations"]') && document.activeElement === field("Filter stations"), "Radio reset did not recover stations and a useful focus target");
 
     const collection = '/collection?provider=youtube&url=' + encodeURIComponent('https://www.youtube.com/playlist?list=PL1B627337ED6F55F0');
