@@ -243,6 +243,10 @@ line by the caption rules (Played adds what's left, "4:11 left") and a "…"
 holding the row's verbs (Played: Play or Resume, Play on, Queue, Open in
 browser); Details holds the rest. Lists shows Save as list at its top once
 Up next holds something or a list exists; with neither, only the Empty speaks.
+Save as list and Update from Up next require upcoming entries, excluding the
+current item and Played. Their count and saved items follow the current item,
+or the saved queue cursor after Stop; Autoplay's suggestions are not included.
+Replace becomes unavailable if Up next empties while its confirmation is open.
 A list keeps its own title and verbs. An empty tab says what goes there and
 offers Search, which focuses the header's field. Removing says "Removed …
 from Saved." with Undo. Artwork this page has already shown appears at once on

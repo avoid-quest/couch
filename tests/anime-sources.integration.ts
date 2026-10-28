@@ -4,7 +4,7 @@ import { createProviders } from "../src/server/providers";
 import { createPlaylists } from "../src/server/playlists";
 import { createContinuationResolver } from "../src/server/continuation";
 import { parseCommand } from "../src/server/validation";
-import type { ProviderItem, ProviderPage } from "../src/shared/providers";
+import { maxCollectionIndex, type ProviderItem, type ProviderPage } from "../src/shared/providers";
 
 const sources = [
   { provider: "animesaturn", series: "https://animesaturn.ro/anime/example/", episodes: ["https://animesaturn.ro/example-episode-1/", "https://animesaturn.ro/example-episode-2/"] },
@@ -45,7 +45,8 @@ for (const source of sources) {
     const action = { type: "enqueueProvider", provider: source.provider, shape: "atom", url: source.episodes[0], collection: { title: item.title, url: source.series, index: 1179 } };
     const command = (index: number) => JSON.stringify({ type: "command", requestId: "request", action: { ...action, collection: { ...action.collection, index } } });
     assert.deepEqual(parseCommand(command(1179)).action, action);
-    for (const index of [-1, 1.5, 2401]) assert.throws(() => parseCommand(command(index)));
+    assert.equal(parseCommand(command(maxCollectionIndex)).action.type, "enqueueProvider");
+    for (const index of [-1, 1.5, maxCollectionIndex + 1]) assert.throws(() => parseCommand(command(index)));
   });
 
   test(`${source.provider} saves an anime as a source playlist`, async () => {

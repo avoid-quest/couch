@@ -44,6 +44,7 @@ import { createPassThrough } from "./pass-through";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
+import { upcomingQueue } from "../shared/queue";
 import { ControllerError, createDevices, settingField } from "./devices";
 import { createTvPairing } from "./tv-pairing";
 import type { DeviceIdentity } from "../shared/devices";
@@ -1187,12 +1188,7 @@ export async function createHub(options: HubOptions) {
   for (const id of store.playbackIds()) settle(createPlayback(id));
   const queueOf = (actor: PlaybackActor | undefined) => { const playback = lookedAt(actor?.deviceId ?? hostId()); return playback ? stateOf(playback) : idle(); };
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidate("playlists"), queue: playedBy => queueOf(playedBy).queue,
-    upNext: playedBy => {
-      const { queue, currentEntryId, queueCursorEntryId } = queueOf(playedBy);
-      const current = queue.findIndex(entry => entry.id === currentEntryId);
-      const cursor = current >= 0 ? current : queue.findIndex(entry => entry.id === queueCursorEntryId);
-      return queue.slice(cursor + 1);
-    },
+    upNext: playedBy => upcomingQueue(queueOf(playedBy)),
     loadQueue: (entries, mode, authorize, playedBy, title) => { const playback = mediaPlayback(playedBy, mode === "play"); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize ?? (() => {}), playedBy?.deviceId ?? hostId()), playedBy, undefined, title); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
