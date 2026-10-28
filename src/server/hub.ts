@@ -36,6 +36,7 @@ import { createProviderMetadata, providerMetadata } from "./provider-metadata";
 import { playbackMediaId, ViewingError } from "./progress";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { playbackPreviewResponse } from "./playback-preview";
+import { hlsPreview } from "./hls-preview";
 import { logMediaDiagnostic, mediaAddress } from "./media-diagnostics";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
@@ -1191,8 +1192,11 @@ export async function createHub(options: HubOptions) {
     }
     // Local files, the library and Jellyfin were removed; their saved entries stay readable but unplayable.
     if (!/^https?:/.test(entry.source)) throw new Error("This source is no longer supported. Remove it from the queue.");
-    const isLive = await liveHls(entry.source, AbortSignal.any([signal, AbortSignal.timeout(5000)])).catch(() => false);
-    return { source: entry.source, ...isLive ? { metadata: { live: true } } : {} };
+    let preview: ReturnType<typeof hlsPreview>;
+    const isLive = await liveHls(entry.source, AbortSignal.any([signal, AbortSignal.timeout(5000)]), (master, media) => {
+      preview = hlsPreview(master.url, master.lines.join("\n"), { url: media.url, text: media.lines.join("\n") });
+    }).catch(() => false);
+    return { source: entry.source, ...isLive ? { metadata: { live: true } } : preview ? { preview } : {} };
   }
   const subtitles = createSubtitles(playbackId => playing(playbackId) && stateOf(playing(playbackId)!).player, (playbackId, subtitle) => playing(playbackId)?.session.addSubtitle(playbackId, subtitle));
   // Saved Playbacks come back idle, with no outputs, until a Device plays them.

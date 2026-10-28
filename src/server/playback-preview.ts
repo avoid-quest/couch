@@ -7,7 +7,7 @@ import { boundedBytes, guideUrl, record } from "./iptv-feeds";
 import { publicFetch } from "./public-network";
 import { createPreviewResolver, type PreviewInput } from "./preview-manifest";
 
-export type PreviewSource = { metadata: PlaybackPreview; images: string[]; expiresAt?: number };
+export type PreviewSource = { metadata: PlaybackPreview; images: string[]; expiresAt?: number; imageType?: "image/jpeg" };
 export const previewImageLimit = 2 * 1024 * 1024;
 const pixelLimit = 4_000_000;
 const positiveInteger = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
@@ -72,7 +72,7 @@ export function createPreviewImages(fetcher: typeof fetch = publicFetch) {
     running++;
     try {
       const signal = AbortSignal.any([cancellation, AbortSignal.timeout(5000)]);
-      const response = await fetcher(url, { signal, headers: { "user-agent": "Couch", accept: "image/jpeg, image/webp, image/png" } });
+      const response = await fetcher(url, { signal, credentials: "omit", headers: { "user-agent": "Couch", accept: "image/jpeg, image/webp, image/png" } });
       if (!response.ok) { await response.body?.cancel(); throw new Error("Preview image is unavailable."); }
       const bytes = await boundedBytes(response, previewImageLimit, signal);
       const size = dimensions(bytes);
@@ -105,7 +105,7 @@ export async function playbackPreviewResponse(request: Request, source: () => Pr
     check();
     if (!picture || preview.expiresAt !== undefined && preview.expiresAt <= Date.now()) return new Response(null, { status: 204, headers });
     const size = dimensions(picture.bytes), metadata = preview.metadata, index = Number(image);
-    if (!size) return new Response(null, { status: 204, headers });
+    if (!size || preview.imageType && preview.imageType !== size.type) return new Response(null, { status: 204, headers });
     const fits = metadata.kind === "grid"
       ? size.width >= metadata.width * metadata.columns && size.height >= metadata.height * Math.ceil(Math.min(metadata.columns * metadata.rows, metadata.frames - index * metadata.columns * metadata.rows) / metadata.columns)
       : metadata.cues.every(cue => cue.image !== index || !cue.coords || cue.coords.x + cue.width! <= size.width && cue.coords.y + cue.height! <= size.height);

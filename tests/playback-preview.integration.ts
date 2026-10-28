@@ -21,7 +21,7 @@ const until = async (check: () => boolean) => {
   const end = Date.now() + 5000;
   while (!check()) { if (Date.now() > end) throw new Error("State did not arrive"); await new Promise(resolve => setTimeout(resolve, 10)); }
 };
-for (const kind of ["storyboard", "vtt"]) test(`${kind}: a controller without media reads the current preview; private, replaced and revoked playback cannot`, async t => {
+for (const kind of ["storyboard", "vtt", "hls"]) test(`${kind}: a controller without media reads the current preview; private, replaced and revoked playback cannot`, async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-preview-"));
   const databasePath = join(directory, "couch.sqlite"), root = join(directory, "helpers");
   const originalPath = process.env.PATH;
@@ -40,14 +40,15 @@ for (const kind of ["storyboard", "vtt"]) test(`${kind}: a controller without me
   const nativeRequest = https.request;
   t.mock.method(https, "request", (url: URL, options: import("node:http").RequestOptions, callback: (response: import("node:http").IncomingMessage) => void) => {
     if (url.hostname !== "preview.example") return nativeRequest(url, options, callback);
-    manifests++;
+    if (kind !== "hls" || (options.headers as Record<string, string>).accept === "application/vnd.apple.mpegurl") manifests++;
     const stream = new PassThrough({ autoDestroy: false });
     const abort = () => stream.destroy(Object.assign(new Error("Aborted"), { name: "AbortError" }));
     options.signal?.addEventListener("abort", abort, { once: true });
     stream.once("close", () => options.signal?.removeEventListener("abort", abort));
     stream.once("finish", () => {
-      if (hangManifest) { pendingManifest = options.signal; return; }
-      const response = Readable.from([Buffer.from("WEBVTT\n\n00:00.000 --> 00:16.000\nsheet.webp#xywh=0,0,180,101\n\n00:20.000 --> 00:32.000\nsheet.webp#xywh=180,0,180,101\n")]) as import("node:http").IncomingMessage;
+      if (hangManifest && (kind !== "hls" || url.pathname === "/images.m3u8")) { pendingManifest = options.signal; return; }
+      const hls = url.pathname === "/master.m3u8" ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=10,RESOLUTION=180x101,CODECS="jpeg",URI="images.m3u8"\n' : `#EXTM3U\n#EXT-X-TARGETDURATION:32\n${url.pathname === "/images.m3u8" ? "#EXT-X-IMAGES-ONLY\n" : ""}#EXTINF:32,\nsheet.jpg\n#EXT-X-ENDLIST\n`;
+      const response = Readable.from([Buffer.from(kind === "hls" ? hls : "WEBVTT\n\n00:00.000 --> 00:16.000\nsheet.webp#xywh=0,0,180,101\n\n00:20.000 --> 00:32.000\nsheet.webp#xywh=180,0,180,101\n")]) as import("node:http").IncomingMessage;
       response.statusCode = 200; response.statusMessage = "OK"; response.rawHeaders = ["Content-Type", "application/octet-stream"];
       response.headers = { "content-type": "application/octet-stream" };
       Object.defineProperty(response, "socket", { value: { remoteAddress: "93.184.216.34" } });
@@ -59,7 +60,7 @@ for (const kind of ["storyboard", "vtt"]) test(`${kind}: a controller without me
     if (!versions.has(file)) return spawn(file, args, options);
     extractions++;
     if (failExtraction) return spawn(process.execPath, ["-e", "process.stderr.write('ERROR: Video unavailable'); process.exit(1)"], options);
-    const info = { ...fixture, title: "Preview fixture", url: "https://media.example/film.mp4", protocol: "https", vcodec: "avc1", acodec: "mp4a", ...(kind === "vtt" ? { formats: [], couch_preview_vtt: "https://preview.example/previews.vtt" } : {}) };
+    const info = { ...fixture, title: "Preview fixture", url: "https://media.example/film.mp4", protocol: "https", vcodec: "avc1", acodec: "mp4a", ...(kind === "vtt" ? { formats: [], couch_preview_vtt: "https://preview.example/previews.vtt" } : kind === "hls" ? { formats: [], url: "https://preview.example/video.m3u8", protocol: "m3u8_native", manifest_url: "https://preview.example/master.m3u8" } : {}) };
     return spawn(process.execPath, ["-e", `process.stdout.write(${JSON.stringify(JSON.stringify(info))})`], options);
   });
   syncBuiltinESMExports();
@@ -86,18 +87,18 @@ for (const kind of ["storyboard", "vtt"]) test(`${kind}: a controller without me
   assert.equal((await read("invalid")).status, 401);
   assert.equal(manifests, 0, "No preview manifest before an authorized request");
   const response = await read(); assert.equal(response.status, 200);
-  const text = await response.text(); assert.equal(JSON.parse(text).images, kind === "vtt" ? 1 : 6); assert.ok(!text.includes("ytimg")); assert.ok(!text.includes("preview.example"));
-  if (kind === "vtt") { assert.equal(JSON.parse(text).duration, 32); assert.equal(manifests, 1); }
+  const text = await response.text(); assert.equal(JSON.parse(text).images, kind === "storyboard" ? 6 : 1); assert.ok(!text.includes("ytimg")); assert.ok(!text.includes("preview.example"));
+  if (kind !== "storyboard") { assert.equal(JSON.parse(text).duration, 32); assert.equal(manifests, kind === "hls" ? 3 : 1); }
   assert.equal(extractions, 1, "preview reuses playback extraction");
   assert.ok(!controller.messages.some(message => message.type === "player" && message.command.type === "load"), "controller creates no receiver");
-  assert.ok(!JSON.stringify(tv.messages).includes("preview.example"));
+  assert.ok(!JSON.stringify(tv.messages).includes(kind === "hls" ? "master.m3u8" : "preview.example"));
   assert.ok(!JSON.stringify(tv.messages).includes("storyboard3"), "renderer commands do not leak preview URLs");
   tv.report(); await until(() => tv.state.player.status === "playing");
   failExtraction = true;
   assert.equal((await tv.command({ type: "videoQuality", playbackId, quality: "720p" })).ok, false);
   assert.equal(tv.state.player.playbackId, playbackId);
   assert.equal((await read()).status, 200, "failed quality change retains the active preview");
-  if (kind === "vtt") assert.equal(manifests, 1, "Failed quality change retains the same lazy metadata");
+  if (kind !== "storyboard") assert.equal(manifests, kind === "hls" ? 3 : 1, "Failed quality change retains the same lazy metadata");
   failExtraction = false;
   const timeout = AbortSignal.timeout, deadlines: AbortController[] = [];
   const deadlineMock = t.mock.method(AbortSignal, "timeout", (ms: number) => {
@@ -121,7 +122,7 @@ for (const kind of ["storyboard", "vtt"]) test(`${kind}: a controller without me
   assert.equal((await read()).status, 200);
   const revoke = openStore(databasePath, true); revoke.pair(controllerId, "Repaired controller"); revoke.close();
   assert.equal((await read()).status, 401, "replaced token loses access");
-  if (kind === "vtt") {
+  if (kind !== "storyboard") {
     tv.report(); await until(() => tv.state.player.status === "playing");
     const old = playbackId;
     assert.equal((await tv.command({ type: "videoQuality", playbackId, quality: "480p" })).ok, true);

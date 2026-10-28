@@ -2,8 +2,9 @@ import type { PlaybackPreview, PreviewFrame } from "../shared/playback-preview";
 import type { PreviewSource } from "./playback-preview";
 import { boundedBytes, guideUrl } from "./iptv-feeds";
 import { publicFetch } from "./public-network";
+import { hlsImageTrack, hlsPreviewVod, parseHlsImages, type HlsPreviewManifest } from "./hls-preview";
 
-export type PreviewManifest = { kind: "vtt"; url: string; metadata?: never };
+export type PreviewManifest = { kind: "vtt"; url: string; metadata?: never } | HlsPreviewManifest;
 export type PreviewInput = PreviewSource | PreviewManifest;
 export const previewManifestLimit = 512 * 1024;
 
@@ -86,14 +87,43 @@ export function createPreviewResolver(fetcher: typeof fetch = publicFetch) {
     running++;
     try {
       const signal = AbortSignal.any([cancellation, AbortSignal.timeout(5000)]);
-      const response = await fetcher(source.url, { signal, credentials: "omit", headers: { "user-agent": "Couch", accept: "text/vtt" } });
-      if (!response.ok) {
-        await response.body?.cancel();
-        if ([404, 410].includes(response.status)) return;
-        throw new Error("Preview manifest is unavailable.");
-      }
-      const bytes = await boundedBytes(response, previewManifestLimit, signal);
-      return parsePreviewVtt(new TextDecoder().decode(bytes), response.url || source.url);
+      // At most master + one A/V playlist + one declared image playlist. Their
+      // reused/downloaded bodies share 512 KiB and three redirects (six requests).
+      let remaining = previewManifestLimit, redirects = 0;
+      const read = async (url: string, text?: string): Promise<{ url: string; text: string } | undefined> => {
+        if (text !== undefined) {
+          remaining -= Buffer.byteLength(text);
+          if (remaining < 0) throw new Error("Preview manifests exceed their size limit.");
+          return { url, text };
+        }
+        for (;;) {
+          signal.throwIfAborted();
+          const response = await fetcher(url, { signal, redirect: "manual", credentials: "omit", headers: { "user-agent": "Couch", accept: source.kind === "vtt" ? "text/vtt" : "application/vnd.apple.mpegurl" } });
+          if ([301, 302, 303, 307, 308].includes(response.status)) {
+            await response.body?.cancel();
+            if (++redirects > 3) throw new Error("Preview manifests redirected too often.");
+            url = guideUrl(response.headers.get("location"), response.url || url);
+            continue;
+          }
+          if (!response.ok) {
+            await response.body?.cancel();
+            if ([404, 410].includes(response.status)) return;
+            throw new Error("Preview manifest is unavailable.");
+          }
+          const bytes = await boundedBytes(response, remaining, signal);
+          remaining -= bytes.byteLength;
+          return { url: response.url || url, text: new TextDecoder().decode(bytes) };
+        }
+      };
+      const root = await read(source.url, source.kind === "hls" ? source.text : undefined);
+      if (!root) return;
+      if (source.kind === "vtt") return parsePreviewVtt(root.text, root.url);
+      const track = hlsImageTrack(root.text, root.url);
+      if (!track) return;
+      const media = await read(source.media?.url ?? track.media, source.media?.text);
+      if (!media || !hlsPreviewVod(media.text)) return;
+      const images = await read(track.image.url);
+      return images ? parseHlsImages(images.text, { ...track.image, url: images.url }) : undefined;
     } finally { running--; }
   };
   return async (source: PreviewInput | undefined, signal: AbortSignal): Promise<PreviewSource | undefined> => {

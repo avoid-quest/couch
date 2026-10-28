@@ -76,7 +76,8 @@ function oggPackets(onPacket: (packet: Buffer) => void) {
 }
 
 // An HLS playlist's lines and final URL, or null when the URL is something else.
-async function playlist(url: string, headers: Record<string, string>, signal: AbortSignal) {
+type Playlist = { url: string; lines: string[] };
+async function playlist(url: string, headers: Record<string, string>, signal: AbortSignal): Promise<Playlist | null> {
   const response = await fetch(url, { headers, signal }).catch(() => null);
   if (!response?.ok || !/mpegurl/i.test(response.headers.get("content-type") ?? "") && !/\.m3u8$/.test(new URL(response.url || url).pathname)) {
     void response?.body?.cancel().catch(() => {});
@@ -105,10 +106,12 @@ export async function audioRendition(url: string, headers: Record<string, string
 
 // A direct link has no metadata to say it is live, so an HLS playlist is live while it has no
 // end (RFC 8216 EXT-X-ENDLIST); a master is judged by its first variant.
-export async function liveHls(url: string, signal: AbortSignal) {
+export async function liveHls(url: string, signal: AbortSignal, inspected?: (master: Playlist, media: Playlist) => void) {
   let media = await playlist(url, {}, signal);
+  const master = media;
   const variant = media?.lines.find((_line, index) => index > 0 && media!.lines[index - 1]!.startsWith("#EXT-X-STREAM-INF:"));
   if (variant) media = await playlist(new URL(variant.trim(), media!.url).href, {}, signal);
+  if (master && media) inspected?.(master, media);
   return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }
 
