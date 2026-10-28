@@ -93,3 +93,18 @@ test("one paired device cannot multiply control connections and capture publicat
   for (let i = 1; i < 8; i++) assert.equal(await connect(), 101);
   assert.equal(await connect(), 429);
 });
+
+test("an unfinished Noise handshake cannot hold an audio connection indefinitely", { timeout: 15_000 }, async t => {
+  const f = await liveFixture(), identity = f.identities[1]!;
+  const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
+  socket.on("error", () => {});
+  t.after(async () => { socket.terminate(); await f.close(); });
+  await once(socket, "open");
+  const greeting = once(socket, "message");
+  socket.send(beginClientHandshake({ identity: identity.key, suite: "25519_AESGCM_SHA256" }).clientInit);
+  await greeting;
+  const closed = await Promise.race([once(socket, "close").then(() => true), new Promise<boolean>(resolve => {
+    const timer = setTimeout(() => resolve(false), 11_000); timer.unref();
+  })]);
+  assert.equal(closed, true, "the deadline must cover the complete handshake, not just its first frame");
+});

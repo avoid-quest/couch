@@ -32,6 +32,7 @@ throw closes alone; the shared worker continues. Turning off network sharing
 also closes paired audio transports on the primary listener.
 Each device may keep at most eight control connections and eight audio connections,
 including pending audio handshakes, to bound duplicate tabs and reconnects.
+An audio handshake must finish identification within ten seconds.
 
 ## Pipeline
 

@@ -461,8 +461,10 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
             const clientId = hello?.payload?.client_id;
             if (!["client/hello", "client/init"].includes(hello?.type) || typeof clientId !== "string" || deviceId !== undefined && clientId !== deviceId
               || !options.admit(clientId, loopbackPeer(request.socket.remoteAddress ?? ""))) return socket.terminate();
-            clearTimeout(timer);
-            session = new SendspinSession(socket, request, undefined, undefined, hooks, security, { serverId: options.serverId ?? options.name, name: options.name });
+            session = new SendspinSession(socket, request, undefined, undefined, {
+              ...hooks,
+              onIdentified: (session, request) => { clearTimeout(timer); hooks.onIdentified?.(session, request); },
+            }, security, { serverId: options.serverId ?? options.name, name: options.name });
             socketOf.set(session, socket);
           }
           // Public dispatch APIs need an application exception boundary: an SDK
