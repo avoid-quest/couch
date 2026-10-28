@@ -69,41 +69,46 @@ only other formats gets an error on its row.
 
 ## Measured behavior
 
-Electrical measurements, 27 October 2026: a Mac desktop host capturing a UMC404HD
-native input (48 kHz, 128 frames), a Linux Chrome receiver on wired LAN and a
-Redmi Note 8T Chrome receiver on Wi-Fi, recorded on the UMC's own clock. Measured
-delay was within about 1 ms of the playback buffer in every run, so the buffer is
-the delay; what limits it is the time audio needs to reach each player in time.
+Electrical measurements, 27–28 October 2026: a Mac desktop host capturing a
+UMC404HD native input (48 kHz, 128 frames), a Linux Chrome receiver on wired LAN
+and a Redmi Note 8T Chrome receiver on Wi-Fi, recorded on the UMC's own clock.
+Measured delay was within about 1 ms of the playback buffer in every run, so the
+buffer is the delay; what limits it is the time audio needs to reach each player
+in time.
 
 That time has two parts. Core holds a captured sample until its encoded chunk is
-ready: about 29 ms for Opus and 16 ms for PCM (p50, timed in Core). The receiver
-side (network, SDK decoding and scheduling, and the browser's output path, which
-the SDK reports as about 43 ms on the Linux receiver) needs roughly another 65 ms.
-Smaller encoding steps halved Core's part (from 54 and 27 ms), lowering each
-receiver's floor, measured alone with level-matched music:
+ready: about 18 ms for Opus and 11 ms for PCM (p50, timed in Core; 54 and 27 ms
+before the encoding steps shrank to 5 ms). The receiver side (network, SDK
+decoding and scheduling, and the browser's output path, which the SDK reports as
+about 43 ms on the Linux receiver) needs roughly another 65 ms.
 
-| Receiver | Codec | Clean | Fails | Before smaller steps |
-|---|---|---|---|---|
-| Linux, wired | Opus | 80 ms | 70 ms | 120–140 ms |
-| Linux, wired | PCM | 70 ms (5 gaps) | 60 ms | 100 ms |
-| Redmi, Wi-Fi | Opus | 120 ms (90 s, no gaps) | 100–110 ms (intermittent) | 130 ms |
+| Condition | Linux, wired | Redmi, Wi-Fi |
+|---|---|---|
+| One hour at 200 ms (12 × 5 min) | 2 gaps (30, 50 ms); delay within 0.2 ms | no gaps; delay within 0.2 ms |
+| 5 min at 180, 150 and 120 ms | no gaps | no gaps |
+| 90 s at 110, 100 and 90 ms | no gaps | no gaps |
+| 5 min at 150 ms, 85 s forced Doze, screen on | no gaps | no gaps |
+| 5 min, 10 extra SDK listeners, one frozen 60 s | no gaps | no gaps |
 
-With both receivers plus a MacBook and a Pixel on Wi-Fi in one group, five-minute
-runs at 150 and 120 ms had no gaps of 20 ms or more on either recorded receiver.
-Turning the Pixel's screen off during the 120 ms run caused heavy artifacts. The
-200 ms default sits between that and 250 ms, where a Redmi with its screen off
-had only short gaps (below); 200 ms with a screen off is not yet measured.
-Before the smaller steps, two 260 s runs at 150 ms had 10 and 47 Android gaps,
-and 250–300 ms runs had none. PCM uses about 1.5 Mbit/s per listener; over this
-Wi-Fi at 250 ms it starved a Pixel that played Opus without trouble.
+A gap is a return more than 20 dB below the delayed source for 20 ms or more.
+The Linux gaps came from that host's audio output under load; a Linux receiver
+whose PulseAudio stream died kept reporting playing in the SDK while silent, and
+reloading the page recovered it. The frozen listener received 6 s of stale audio
+from transport buffers on waking, against 60 s before Core stopped queueing for
+it.
 
-Median Android-minus-Linux skew was 0–0.9 ms, p95 at most 2.3 ms. Capture mute, Leave/Join,
-host Remove, each listener's own volume and mute, and recovery 13 s after a
-10 s Android Wi-Fi outage were confirmed on the electrical returns. At 250 ms the Redmi kept
-playing with its screen off, with short gaps (≤ 90 ms) as the screen switched off
-and on. These short runs are not a long-stability or audience-size qualification.
-A Linux receiver whose PulseAudio stream died under host load kept reporting
-playing in the SDK while silent; reloading the page recovered it.
+The limit is phones going to sleep. Before the encoding steps shrank, a Pixel
+whose screen turned off at 120 ms played heavy artifacts, and at 250 ms a Redmi
+had short gaps (≤ 90 ms) as its screen switched off and on. At 200 ms the owner
+heard no artifacts on a MacBook and a Pixel on Wi-Fi with the Pixel's screen off
+and on. The default stays 200 ms until a locked phone passes at 150 ms. PCM uses
+about 1.5 Mbit/s per listener; over this Wi-Fi it starved a Pixel that played
+Opus without trouble.
+
+Median Android-minus-Linux skew was 0–0.9 ms, p95 at most 2.3 ms. Capture mute,
+Leave/Join, host Remove, each listener's own volume and mute, and recovery 13 s
+after a 10 s Android Wi-Fi outage were confirmed on the electrical returns. These
+runs are not an audience-size qualification.
 
 ## Checks
 
