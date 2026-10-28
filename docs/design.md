@@ -468,6 +468,8 @@ toast and clear their saved results automatically; failures stay visible for ret
   prefers HLS picture and original sound when available, preserving the selected
   quality and audio instead of taking the first dubbed track from the master
   playlist. Original-language HTTPS audio takes priority over a dubbed HLS rendition.
+  Bandcamp selects browser-compatible MP3, AAC, FLAC or WAV audio, retaining
+  supported lossless formats while excluding ALAC and AIFF downloads.
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
