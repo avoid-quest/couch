@@ -64,7 +64,7 @@ radio) gets nothing more until it drains, then resumes at audio that can still p
 Its incoming requests wait in order meanwhile (at most 128 frames / 256 KiB, or
 that connection closes).
 
-**Playback buffer (ms)** is one Couch-wide setting, 200 ms initially, set in the
+**Playback buffer (ms)** is one Couch-wide setting, 150 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
 to each listener, which applies it with the SDK's `minBufferMs`/`setMinBufferMs`.
 **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option; a codec change
@@ -126,11 +126,18 @@ Most of the gain is bitrate; 10 ms frames would add about 10 ms in Core for
 0.04 more. Opus payload averages about 173 kbit/s per listener instead of 105.
 The scores are a codec proxy, not a listening test.
 
-The limit is phones going to sleep. Before the encoding steps shrank, a Pixel
-whose screen turned off at 120 ms played heavy artifacts, and at 250 ms a Redmi
-had short gaps (≤ 90 ms) as its screen switched off and on. At 200 ms the owner
-heard no artifacts on a MacBook and a Pixel on Wi-Fi with the Pixel's screen off
-and on. The default stays 200 ms until a locked phone passes at 150 ms. PCM uses
+The limit is phones going to sleep. On 28 October, with a MacBook and a Pixel
+(GrapheneOS, Vanadium) on Wi-Fi listening against the source on headphones:
+
+| Buffer | Pixel, screen off | Redmi (Chrome), screen off | Electrical returns |
+|---|---|---|---|
+| 150 ms | no artifacts heard | — | no gaps |
+| 120 ms | dropouts and clicks, fewer with Vanadium's JavaScript JIT on | no gaps | no gaps |
+
+The default is 150 ms, the lowest buffer where a phone with its screen off played
+cleanly; hosts whose listeners stay on screen or on wired devices can lower it.
+Vanadium disables the JIT by default; enabling it for Couch's site reduces, but
+does not remove, the Pixel's dropouts at 120 ms. PCM uses
 about 1.5 Mbit/s per listener; over this Wi-Fi it starved a Pixel that played
 Opus without trouble.
 

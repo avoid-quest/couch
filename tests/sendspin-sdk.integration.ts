@@ -47,7 +47,7 @@ for (const intent of ["live", "relaxed"] as const) test(`unmodified browser SDK 
   assert.ok(chunks.every(chunk => (chunk.serverTimeUs - input.origin - lead) % 5_000 === 0));
   if (intent === "relaxed") return;
   await until(() => receiver.state.outputs?.some(output => output.deviceId === identity.id && output.delayActive) === true);
-  if (intent === "live") assert.ok(receiver.messages.some(message => message.type === "sendspin" && message.listen && message.live?.minBufferMs === 200));
+  if (intent === "live") assert.ok(receiver.messages.some(message => message.type === "sendspin" && message.listen && message.live?.minBufferMs === 150));
   assert.equal(receiver.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.livePeerId), false);
   // The SDK's public option is applied without a custom output preparation protocol.
   player.setMinBufferMs(400);
