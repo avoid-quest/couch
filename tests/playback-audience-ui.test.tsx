@@ -113,18 +113,47 @@ test("the real playback menu keeps split audio delay and omits unsupported muxed
   expect(delayRows(menu(.3, false))).toHaveLength(0);
 });
 
-test("Media Session installs no shared programme handlers for a live audience, and restores ordinary controls", () => {
-  const handlers = new Map<string, unknown>();
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaSession: { setActionHandler: (action: string, callback: unknown) => handlers.set(action, callback), setPositionState() {} } } });
-  Object.assign(globalThis, { MediaMetadata: class {} });
-  effects.length = 0; state = fixture();
+test("Live owns Media Session without a queued item, Stop leaves, and ordinary playback is restored", () => {
+  const handlers = new Map<string, MediaSessionActionHandler | null>();
+  const mediaSession = { metadata: null as MediaMetadata | null, playbackState: "none", position: undefined as MediaPositionState | undefined,
+    setActionHandler: (action: string, callback: MediaSessionActionHandler | null) => handlers.set(action, callback),
+    setPositionState(position?: MediaPositionState) { this.position = position; } };
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaSession } });
+  Object.assign(globalThis, { MediaMetadata: class { constructor(metadata: MediaMetadataInit) { Object.assign(this, metadata); } } });
+  effects.length = 0; sent.length = 0;
+  state = { ...fixture(), queue: [], currentEntryId: null };
   read(useMediaSession);
   for (const effect of effects.splice(0)) effect();
-  expect([...handlers.values()].every(value => value === null)).toBe(true);
-  state = { ...fixture(), controls: undefined, playbacks: [], liveSources: [], queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film" }, { id: "next", source: "web:https://example.com/next", title: "Next" }] };
+  expect(mediaSession.metadata?.title).toBe("Concert");
+  expect(mediaSession.playbackState).toBe("playing");
+  expect(mediaSession.position).toBeUndefined();
+  for (const action of ["play", "pause", "nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
+  expect(typeof handlers.get("stop")).toBe("function");
+  handlers.get("stop")!({ action: "stop" });
+  expect(sent).toEqual([{ type: "leave", playbackId: "load-generation" }]);
+  // Ordinary player updates cannot clear Live or supply stale programme metadata.
+  state = { ...state, player: { ...state.player, status: "idle", nowPlaying: { title: "Old programme", artist: "Old artist" } } };
   read(useMediaSession);
   for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "", album: "", artwork: [] });
+  expect(mediaSession.playbackState).toBe("playing");
+  state = { ...fixture(), controls: undefined, playbacks: [], liveSources: [], player: { ...fixture().player, status: "paused" }, queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film", duration: 300 }, { id: "next", source: "web:https://example.com/next", title: "Next" }] };
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata?.title).toBe("Film");
+  expect(mediaSession.playbackState).toBe("paused");
+  expect(mediaSession.position).toEqual({ duration: 300, position: 0, playbackRate: 1.25 });
   for (const action of ["play", "pause", "stop", "nexttrack", "seekto"]) expect(typeof handlers.get(action)).toBe("function");
+  handlers.get("stop")!({ action: "stop" });
+  expect(sent.at(-1)).toEqual({ type: "stop", playbackId: "load-generation" });
+  // A remaining source and audience do not claim this device after it leaves.
+  state = { ...fixture(), controls: { ...audience, leave: false }, outputs: [], queue: [], currentEntryId: null, player: { ...fixture().player, playbackId: null, status: "idle" } };
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toBeNull();
+  expect(mediaSession.playbackState).toBe("none");
+  expect(mediaSession.position).toBeUndefined();
+  expect([...handlers.values()].every(value => value === null)).toBe(true);
 });
 
 test("a receiver failure is actionable and disconnected audience controls cannot send", () => {

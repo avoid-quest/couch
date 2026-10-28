@@ -7,6 +7,7 @@ import { useRadioClock } from "@/radio-clock";
 import { isRadio, freshRadioProgramme, radioNow } from "../../shared/radio";
 import { useSessionGate } from "./session-context";
 import { usePlaybackClock } from "./playback-clock";
+import { livePlayback } from "./playback-controls";
 
 const actions = ["play", "pause", "stop", "nexttrack", "seekto", "seekbackward", "seekforward"] as const;
 
@@ -17,27 +18,31 @@ export function useMediaSession() {
   const clock = usePlaybackClock();
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
-  const playbackId = player?.playbackId && current && ["playing", "paused", "loading"].includes(player.status) ? player.playbackId : null;
+  // A joined Live Source owns system controls, independently of the ordinary queue.
+  const listening = livePlayback(state) && !!state?.controls?.leave;
+  const source = listening ? state?.liveSources?.find(source => source.id === state.playbacks?.find(playback => playback.id === state.playback)?.liveSourceId) : undefined;
+  const playbackId = player?.playbackId && (listening || current && ["playing", "paused", "loading"].includes(player.status)) ? player.playbackId : null;
   const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : "";
   const guides = useQuery({ ...radioProgrammesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && !!stationId, refetchInterval: 60_000 });
   const now = useRadioClock(Object.values(guides.data ?? {}), state?.radioProgramme);
   const programme = (state?.radioProgramme?.playbackId === playbackId ? freshRadioProgramme(state?.radioProgramme, now) : null) ?? (stationId && playbackId ? radioNow(guides.data?.[stationId], stationId, now) : null);
-  const title = programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "";
-  const artist = programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "";
-  const album = programme?.album ?? current?.collection?.title ?? "";
-  const artwork = programme?.artworkUrl ?? current?.thumbnail ?? null;
-  const live = !!current?.live || isRadio(current);
+  const title = listening ? source?.name ?? "Couch Live" : programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "";
+  const artist = listening ? "" : programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "";
+  const album = listening ? "" : programme?.album ?? current?.collection?.title ?? "";
+  const artwork = listening ? null : programme?.artworkUrl ?? current?.thumbnail ?? null;
+  const live = listening || !!current?.live || isRadio(current);
   const position = clock.playbackId === playbackId ? clock.position : 0;
   const duration = live ? null : clock.playbackId === playbackId ? clock.duration ?? current?.duration ?? null : current?.duration ?? null;
   const { transportReady, pausable, seekable, nextReady, hasNext, stoppable } = playbackCapabilities(state, connected);
-  const allowed = { play: transportReady && pausable, pause: transportReady && pausable, stop: stoppable, nexttrack: nextReady && hasNext,
+  const allowed = listening ? { play: false, pause: false, stop: connected && !!playbackId, nexttrack: false, seekto: false, seekbackward: false, seekforward: false }
+    : { play: transportReady && pausable, pause: transportReady && pausable, stop: stoppable, nexttrack: nextReady && hasNext,
     seekto: transportReady && seekable, seekbackward: transportReady && seekable, seekforward: transportReady && seekable };
 
   const act = useEffectEvent((action: MediaSessionAction, details: MediaSessionActionDetails) => {
     if (!playbackId || !allowed[action as keyof typeof allowed]) return;
     const seek = (to: number) => ({ type: "seek", playbackId, position: Math.max(0, Math.min(duration ?? Infinity, to)) }) satisfies Action;
     const command: Action | null = action === "play" || action === "pause" ? { type: "pause", playbackId, paused: action === "pause" }
-      : action === "stop" ? { type: "stop", playbackId }
+      : action === "stop" ? { type: listening ? "leave" : "stop", playbackId }
       : action === "nexttrack" ? { type: "next", playbackId }
       : action === "seekto" && Number.isFinite(details.seekTime) ? seek(details.seekTime!)
       : action === "seekbackward" ? seek(position - (details.seekOffset ?? 10))
@@ -55,8 +60,8 @@ export function useMediaSession() {
   }, [playbackId, title, artist, album, artwork]);
   useEffect(() => {
     if (!navigator.mediaSession) return;
-    navigator.mediaSession.playbackState = !playbackId ? "none" : player?.status === "playing" ? "playing" : "paused";
+    navigator.mediaSession.playbackState = !playbackId ? "none" : listening || player?.status === "playing" ? "playing" : "paused";
     if (playbackId && duration && Number.isFinite(duration)) navigator.mediaSession.setPositionState({ duration, position: Math.min(position, duration), playbackRate: player?.speed || 1 });
     else navigator.mediaSession.setPositionState();
-  }, [playbackId, player?.status, player?.speed, position, duration]);
+  }, [playbackId, listening, player?.status, player?.speed, position, duration]);
 }

@@ -191,6 +191,9 @@ the control that started it.
   page's error, and the share keeps playing where it can.
 
 Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
+While joined, system media controls show the Live Source's name as playing;
+Stop leaves this listener, with no play, pause, seek or next actions. Leaving
+restores ordinary playback's metadata and controls, or clears them when idle.
 **Tap to hear** unlocks sound. Leaving releases this listener without ending
 capture or interrupting other listeners. Actual source/output errors keep their
 reason; the SDK handles receiver timing and recovery.
