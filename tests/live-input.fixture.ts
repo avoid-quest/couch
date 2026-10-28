@@ -125,7 +125,7 @@ setInterval(() => {}, 1000);
   answerUploads(publisher);
   // A timestamped PCM producer like the desktop's: clock start, then real-time
   // 10 ms stereo frames in binary upload v1, so Core measures real headroom.
-  const streamCapture = async (client: { messages: ServerMessage[] }, sourceId: string, device = 0, sample?: (position: number, channel: number) => number) => {
+  const streamCapture = async (client: { messages: ServerMessage[] }, sourceId: string, device = 0, sample?: (position: number, channel: number) => number, { sampleRate = 48000, channels = 2 } = {}) => {
     await until(() => client.messages.some(message => message.type === "livePeers" && message.sourceId === sourceId && message.upload));
     const demand = client.messages.findLast(message => message.type === "livePeers" && message.sourceId === sourceId);
     const url = new URL(uploadUrl(sourceId, uploadToken, device));
@@ -133,25 +133,29 @@ setInterval(() => {}, 1000);
     const upload = new WebSocket(url, { headers: { Origin: hub.origin } });
     sockets.push(upload); upload.on("error", () => {});
     await new Promise(resolve => upload.once("open", resolve));
-    upload.send(JSON.stringify({ type: "start", generation: "fixture", offsetUs: 0, rttUs: 0 }));
+    upload.send(JSON.stringify({ type: "start", generation: crypto.randomUUID(), offsetUs: 0, rttUs: 0 }));
     let sequence = 0; const origin = serverNowUs();
+    const frames = sampleRate / 100;
     const timer = setInterval(() => {
+      if (upload.readyState !== WebSocket.OPEN) return;
       for (; origin + (sequence + 1) * 10_000 <= serverNowUs(); sequence++) {
-        const frame = Buffer.alloc(40 + 480 * 8);
-        frame.writeUInt32LE(0x31414343, 0); frame.writeUInt8(2, 4); frame.writeUInt8(1, 5); frame.writeUInt16LE(40, 6); frame.writeUInt32LE(48000, 8);
-        frame.writeUInt32LE(sequence, 12); frame.writeBigUInt64LE(BigInt(sequence * 480), 16); frame.writeBigInt64LE(BigInt(origin + sequence * 10_000), 24); frame.writeUInt32LE(480, 32);
-        if (sample) for (let i = 0; i < 960; i++) frame.writeFloatLE(sample(sequence * 480 + (i >> 1), i % 2), 40 + i * 4);
+        const frame = Buffer.alloc(40 + frames * channels * 4);
+        frame.writeUInt32LE(0x31414343, 0); frame.writeUInt8(channels, 4); frame.writeUInt8(1, 5); frame.writeUInt16LE(40, 6); frame.writeUInt32LE(sampleRate, 8);
+        frame.writeUInt32LE(sequence, 12); frame.writeBigUInt64LE(BigInt(sequence * frames), 16); frame.writeBigInt64LE(BigInt(origin + sequence * 10_000), 24); frame.writeUInt32LE(frames, 32);
+        if (sample) for (let i = 0; i < frames * channels; i++) frame.writeFloatLE(sample(sequence * frames + Math.floor(i / channels), i % channels), 40 + i * 4);
         upload.send(frame);
       }
     }, 5);
     timer.unref();
-    return { origin, stop: () => { clearInterval(timer); upload.close(); } };
+    const closed = new Promise<void>(resolve => upload.once("close", () => { clearInterval(timer); resolve(); }));
+    return { origin, upload, pause: () => clearInterval(timer), stop: () => { clearInterval(timer); upload.close(); return closed; } };
   };
   return { get hub() { return hub; }, publisher, receiver, connect, identities, databasePath, uploadToken, uploadUrl, uploads, uploadStarts, answerUploads, streamCapture,
     capturePids: () => captures.map(capture => capture.pid!),
     encoders: () => media && existsSync(encoderLog) ? readFileSync(encoderLog, "utf8").trim().split("\n").map(line => { const [pid, cwd, args] = line.split("|"); return { pid: Number(pid), cwd: cwd!, args: args! }; }) : [],
-    // Core restarts on the same database; every socket and speaker reconnects itself.
+    // Keep Core's database and address so SDK clients can exercise their own reconnection.
     restart: async () => {
+      hubOptions.port = Number(new URL(hub.origin).port);
       await Promise.all(speakers.splice(0).map(speaker => speaker.disconnect()));
       await hub.close();
       for (const socket of sockets.splice(0)) socket.terminate();
