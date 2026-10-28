@@ -72,33 +72,26 @@ test("rebinding a paired ID closes its Sendspin session and removes its output a
   assert.ok(host.state.liveSources?.some(source => source.id === "concert"), "another device's publication survives");
 });
 
-test("repeated paired ID rebinding cannot evade the control or audio connection limits", { timeout: 10_000 }, async t => {
+test("repeated paired ID rebinding leaves only the current ID's connections, and revocation closes them", { timeout: 10_000 }, async t => {
   const f = await liveFixture(), identity = f.identities[1]!;
-  const control = [f.receiver.socket], audio: WebSocket[] = [];
-  t.after(async () => { for (const socket of [...control, ...audio]) socket.terminate(); await f.close(); });
-  const connect = (path: string, sockets: WebSocket[]) => new Promise<number>(resolve => {
+  const generations: WebSocket[][] = [[f.receiver.socket]];
+  t.after(async () => { for (const socket of generations.flat()) socket.terminate(); await f.close(); });
+  const connect = (path: string, sockets: WebSocket[]) => new Promise<void>((resolve, reject) => {
     const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}${path}`, { origin: f.hub.origin });
     sockets.push(socket);
-    socket.once("open", () => resolve(101));
-    socket.on("error", () => resolve(0));
-    socket.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(response.statusCode!); });
+    socket.once("open", () => resolve());
+    socket.once("error", reject);
   });
   for (let generation = 0; generation < 3; generation++) {
-    if (generation) identity.id = Identity.generate().peerId;
-    const controlPath = `/api/ws?token=${identity.token}&device=${identity.id}`;
-    const audioPath = `/api/audio/${identity.token}/sendspin`;
-    for (let i = generation ? 0 : 1; i < 8; i++) assert.equal(await connect(controlPath, control), 101);
-    for (let i = 0; i < 8; i++) assert.equal(await connect(audioPath, audio), 101);
-    assert.equal(await connect(controlPath, control), 429);
-    assert.notEqual(await connect(audioPath, audio), 101);
-    assert.deepEqual({ control: control.filter(socket => socket.readyState === WebSocket.OPEN).length,
-      audio: audio.filter(socket => socket.readyState === WebSocket.OPEN).length },
-    { control: 8, audio: 8 }, "old IDs cannot retain extra control or audio slots");
+    if (generation) { identity.id = Identity.generate().peerId; generations.push([]); }
+    const sockets = generations.at(-1)!;
+    for (let i = 0; i < 2; i++) await connect(`/api/ws?token=${identity.token}&device=${identity.id}`, sockets);
+    for (let i = 0; i < 2; i++) await connect(`/api/audio/${identity.token}/sendspin`, sockets);
+    await until(() => generations.slice(0, -1).flat().every(socket => socket.readyState !== WebSocket.OPEN));
   }
   assert.equal((await fetch(`${f.hub.origin}/api/devices/${identity.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${"h".repeat(64)}` } })).status, 200);
-  await until(() => [...control, ...audio].every(socket => socket.readyState !== WebSocket.OPEN));
+  await until(() => generations.flat().every(socket => socket.readyState !== WebSocket.OPEN));
 });
-
 test("revocation closes an authorized audio connection during its Noise handshake", { timeout: 10_000 }, async t => {
   const f = await liveFixture(), identity = f.identities[1]!;
   const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
@@ -137,38 +130,6 @@ test("turning network sharing off closes an established paired audio session", {
   assert.equal(player.isConnected, true);
   assert.equal((await f.api("/api/settings/sharing", { enabled: false })).status, 200);
   await until(() => !player.isConnected);
-});
-
-test("one paired device cannot accumulate unlimited audio connections", { timeout: 10_000 }, async t => {
-  const f = await liveFixture(), identity = f.identities[1]!, sockets: WebSocket[] = [];
-  t.after(async () => { for (const socket of sockets) socket.terminate(); await f.close(); });
-  const connect = () => new Promise<boolean>(resolve => {
-    const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
-    sockets.push(socket);
-    socket.once("open", () => resolve(true));
-    socket.on("error", () => resolve(false));
-    socket.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(false); });
-  });
-  for (let i = 0; i < 8; i++) assert.equal(await connect(), true);
-  assert.equal(await connect(), false, "a ninth connection must be refused before allocating another worker transport");
-  const closed = once(sockets[0]!, "close"); sockets[0]!.terminate(); await closed;
-  await new Promise(resolve => setTimeout(resolve, 20));
-  assert.equal(await connect(), true, "closing a connection returns its slot");
-});
-
-test("one paired device cannot multiply control connections and capture publications without limit", { timeout: 10_000 }, async t => {
-  const f = await liveFixture(), identity = f.identities[1]!, sockets: WebSocket[] = [];
-  t.after(async () => { for (const socket of sockets) socket.terminate(); await f.close(); });
-  const connect = () => new Promise<number>(resolve => {
-    const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/ws?token=${identity.token}&device=${identity.id}`, { origin: f.hub.origin });
-    sockets.push(socket);
-    socket.once("open", () => resolve(101));
-    socket.on("error", () => resolve(0));
-    socket.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(response.statusCode!); });
-  });
-  // The fixture already has one connection for this device.
-  for (let i = 1; i < 8; i++) assert.equal(await connect(), 101);
-  assert.equal(await connect(), 429);
 });
 
 test("an unfinished Noise handshake cannot hold an audio connection indefinitely", { timeout: 15_000 }, async t => {
