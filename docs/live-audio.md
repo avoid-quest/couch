@@ -35,7 +35,7 @@ session. A peer whose messages throw closes alone; the shared worker continues.
 |---|---|---|
 | Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture in an isolated hidden capture page. |
 | Upload | f32 frames → validated `CaptureAudioPacket` in its source epoch | Node 0.6.2 has `sendSourceAudioChunk` but no public source stream start/end to declare a format. Publication tokens, epochs and helper leases retire stale work. |
-| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample`, stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 160 kbps stereo VBR, 5 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 5 ms chunks, because each step holds audio until it is full. Core sends each chunk to listeners as it arrives. Gaps up to 40 ms are filled with silence so sample positions hold. |
+| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample` (64-tap filter), stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 160 kbps stereo VBR, 5 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 5 ms chunks, because each step holds audio until it is full. Core sends each chunk to listeners as it arrives. Gaps up to 40 ms are filled with silence so sample positions hold. |
 | Capture-time mapping | Encoded offset + generation + measured capture blocks → source time in Core microseconds | The Node SDK's default timestamp is send time; it cannot recover capture time. A short block lookup, including Opus pre-skip, keeps long shares on the input's clock. |
 | Group scheduling | Source time + members + player timing → presentation timestamps per session | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, group, metadata and volume APIs. The SDK session does not choose an application timeline. |
 
@@ -99,6 +99,11 @@ whose PulseAudio stream died kept reporting playing in the SDK while silent, and
 reloading the page recovered it. The frozen listener received 6 s of stale audio
 from transport buffers on waking, against 60 s before Core stopped queueing for
 it.
+
+Resampling 44.1 kHz inputs with a 64-tap filter instead of FFmpeg's default 32
+puts images 92 dB down instead of 25 dB, with ripple under 0.001 dB, for 0.35 ms
+more delay; 48 kHz inputs are not resampled. PCM is not dithered: on quiet piano
+dither scored worse.
 
 Opus runs at 160 kbps instead of FFmpeg's implicit 96. On ViSQOL v3.1.0 (audio
 mode, nine music excerpts with transients, wide stereo and quiet piano), mean
