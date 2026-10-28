@@ -56,6 +56,7 @@ test("FFmpeg converts native mono/stereo rates to PCM and Opus and retires old c
     const pcm = output.filter(chunk => chunk.generation === generation && chunk.wire === "pcm");
     const opus = output.filter(chunk => chunk.generation === generation && chunk.wire === "opus");
     assert.ok(pcm.length && opus.length);
+    assert.ok(opus.every(chunk => chunk.duration === 5_000), "Live Opus uses 5 ms frames");
     assert.equal(pcm[0]!.at, origin);
     assert.ok(opus[0]!.at < origin, "Opus pre-skip maps before the first captured sample");
     const last = pcm.at(-1)!;

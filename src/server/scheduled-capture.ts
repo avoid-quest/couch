@@ -55,7 +55,7 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
         "-probesize", "32", "-analyzeduration", "0", "-f", "wav", "-ignore_length", "1",
         "-max_size", String(input.sampleRate * input.channels * 4 / 200), "-i", "pipe:0",
         "-filter_complex", "[0:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[opus][pcm]",
-        "-map", "[opus]", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "5", "-f", "ogg", "-page_duration", "5000", "-flush_packets", "1", "pipe:1",
+        "-map", "[opus]", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "160k", "-frame_duration", "5", "-f", "ogg", "-page_duration", "5000", "-flush_packets", "1", "pipe:1",
         "-map", "[pcm]", "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"], { stdio: ["pipe", "pipe", "pipe", "pipe"] });
       process.once("close", lease.release); lease = undefined;
       let opusOffset = 0, pcmOffset = 0, diagnostic = "", pcm: Buffer = Buffer.alloc(0);
