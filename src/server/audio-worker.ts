@@ -40,7 +40,7 @@ server.on("upgrade", (req, socket, head) => {
       uploads.set(sourceId, ws);
       ws.once("close", () => { if (uploads.get(sourceId) === ws) uploads.delete(sourceId); });
       acceptCaptureUpload(ws, packet => uploads.get(sourceId) === ws && engine.writeSource(sourceId, packet), error => {
-        if (uploads.get(sourceId) === ws && epoch === registrations.get(sourceId) && registrations.has(sourceId)) port.postMessage({ type: "sourceFailed", sourceId, epoch, error });
+        if (uploads.get(sourceId) === ws && epoch === registrations.get(sourceId) && registrations.has(sourceId)) engine.failSource(sourceId, error);
       });
       return;
     }

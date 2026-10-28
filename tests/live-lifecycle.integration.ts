@@ -250,3 +250,44 @@ test("the browser SDK reconnects after Core restarts and a republished Live shar
   assert.equal(receiver.state.player.error, null);
   player.disconnect("user_request");
 });
+
+for (const failure of ["clock renegotiation", "capture stops sending"] as const) test(`a mid-share upload failure stays visible and isolated: ${failure}`, { timeout: 15_000 }, async t => {
+  const f = await fixture(t), player = await f.listener(1), other = await f.connect(2), healthy = await f.listener(2);
+  const otherHost = await f.connect(-1);
+  assert.equal((await otherHost.command({ ...publication, sourceId: "unaffected" })).ok, true);
+  assert.equal((await other.command({ type: "playLive", sourceId: "unaffected", deviceId: other.id })).ok, true);
+  await f.streamCapture(otherHost, "unaffected", -1, signal);
+  assert.equal((await f.host.command(publication)).ok, true);
+  assert.equal((await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id })).ok, true);
+  const input = await f.streamCapture(f.host, "concert", -1, signal);
+  await until(() => player.frames.length > 40 && healthy.frames.length > 40 && f.receiver.state.player.status === "playing");
+  const closed = once(input.upload, "close");
+  if (failure === "clock renegotiation") {
+    // A restarted uploader must open a new socket; renegotiating the current clock is rejected.
+    input.upload.send(JSON.stringify({ type: "start", generation: "invalid-restart", offsetUs: 0, rttUs: 0 }));
+  } else input.pause(); // The socket stays open, but capture never supplies another frame.
+  await closed;
+  await until(() => !!f.receiver.state.player.error);
+  const reason = failure === "clock renegotiation" ? /capture clock/i : /stopped sending audio/i;
+  assert.match(f.receiver.state.player.error!, reason);
+  await until(() => player.ends === 1);
+  // A live group reports every second; none may replace its failure with "Waiting for audio".
+  const before = healthy.frames.length, stopped = player.frames.length;
+  await until(() => healthy.frames.length > before + 220);
+  assert.equal(f.receiver.state.player.status, "error");
+  assert.match(f.receiver.state.outputs?.[0]?.error ?? "", reason);
+  assert.equal(player.frames.length, stopped);
+  assert.equal(healthy.ends, 0);
+  assert.equal(other.state.player.error, null);
+  assert.ok(healthy.frames.every((frame, i, frames) => i === 0 || frame.at - frames[i - 1]!.at === 5000));
+
+  assert.equal((await f.host.command({ type: "endLive", sourceId: "concert" })).ok, true);
+  assert.equal((await f.host.command(publication)).ok, true);
+  assert.equal((await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id })).ok, true);
+  const restarted = await f.streamCapture(f.host, "concert", -1, () => -.5);
+  await until(() => player.frames.length > stopped + 20);
+  const recovered = player.frames.slice(stopped);
+  assert.equal(recovered[0]!.at, restarted.origin + 150_000);
+  assert.ok(recovered.every(frame => frame.bytes.readInt16LE(0) === -16384 && frame.bytes.readInt16LE(2) === -16384));
+  assert.equal(f.receiver.state.player.error, null, "a failed upload cannot poison the replacement publication");
+});

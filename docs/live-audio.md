@@ -41,6 +41,9 @@ session. A peer whose messages throw closes alone; the shared worker continues.
 
 Core's audio worker (`build/audio-worker.mjs`) runs encoding and Sendspin
 sessions off Core's main thread.
+An upload rejected by ingest or timed out after five seconds without audio
+fails its capture source: encoding stops, affected SDK streams end, and the
+error remains visible until sharing ends or restarts. Other sources continue.
 
 ## Timing
 
@@ -131,7 +134,7 @@ directory:
 
 ```sh
 bun scripts/core.ts
-bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts --target=node --outdir="$(mktemp -d)"
+bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts tests/live-lifecycle.integration.ts --target=node --outdir="$(mktemp -d)"
 COUCH_TEST_FFMPEG=/path/to/ffmpeg node --test <that directory>/*.js
 ```
 
@@ -140,3 +143,19 @@ opposite channel polarities. `audio-isolation.integration.ts` covers a malformed
 browser SDK core through Noise/AES-GCM, token binding, decoding, buffer changes,
 reconnect, a concurrent Opus receiver and Leave. Capture checks cover input
 formats, source generations, timestamp mapping and Opus pre-skip.
+
+Lifecycle coverage at these boundaries (no audio hardware or browser output):
+
+| Path | Checks |
+| --- | --- |
+| L1: publish, authenticate and convert capture | `sendspin-sdk`, `live-audience`, `capture-continuity` |
+| L2: join without restarting capture | `live-audience`; `live-lifecycle` verifies uninterrupted samples during same-identity takeover and PCM ↔ Opus replacement |
+| L3: own levels, Leave, removal and programme restrictions | `live-audience`, `sendspin-sdk`; `live-lifecycle` covers Stop before the audio connection arrives |
+| L4: reconnect and isolate failures | `sendspin-sdk`, `audio-isolation`; `live-lifecycle` adds automatic browser SDK reconnect after Core restart, upload replacement and independent concurrent audiences |
+| Input generation and buffer changes | `capture-continuity` covers conversion; `live-lifecycle` checks queue clearing and the lowered lead after input restart or Stop/reshare |
+| Publisher crash and rejected/stalled upload | `live-client` covers capture cleanup; `live-lifecycle` checks stream termination, durable errors, unaffected audiences and republishing the same source ID |
+
+Core restart ends runtime-only capture and audience grants. The SDK reconnects,
+but the publisher must share again and listeners must Join again; the lifecycle
+check verifies the new capture's samples and lead. Input-generation tests drive
+the upload protocol; they do not qualify physical device switching or latency.

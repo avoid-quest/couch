@@ -485,6 +485,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
       sources.set(id, createScheduledCapture(options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }));
     },
     writeSource(id: string, packet: CaptureAudioPacket) { return sources.get(id)?.write(packet) ?? false; },
+    failSource(id: string, error: string) { sources.get(id)?.fail(error); },
     endSource(id: string) { sources.get(id)?.close(); sources.delete(id); },
     close() { for (const source of sources.values()) source.close(); sources.clear(); for (const socket of sockets) socket.terminate(); },
   };
