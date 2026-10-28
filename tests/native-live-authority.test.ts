@@ -18,6 +18,7 @@ function harness() {
   const calls = { prepared: 0, consumed: 0, spawned: 0, stopped: 0, commands: 0 };
   let prepare = async () => format, stop = async () => {}, grant = async () => {};
   let signal: AbortSignal | undefined;
+  let channels = 4;
   const module = { exports: {} as typeof import("../app/live-audio") };
   runInNewContext(code, {
     module, exports: module.exports, URL, Promise, AbortController, setTimeout, clearTimeout, __dirname: "/test",
@@ -25,7 +26,7 @@ function harness() {
       if (name === "node:path") return { join };
       if (name === "electron") return { ipcMain: new EventEmitter(), BrowserWindow: class { constructor() { throw new Error("Native capture must not open a renderer"); } } };
       if (name === "native-input-test") return {
-        nativeAudioInputs: async () => [{ uid: "umc", name: "UMC", channels: 4, nominalRate: 48000, ownerHalBufferFrames: 512 }],
+        nativeAudioInputs: async () => [{ uid: "umc", name: "UMC", channels, nominalRate: 48000, ownerHalBufferFrames: 512 }],
         nativeAudioInput: (...args: unknown[]) => {
           calls.spawned++; signal = args[5] as AbortSignal;
           return { prepare: () => { entered.resolve(); return prepare(); }, stop: () => { calls.stopped++; return stop(); }, command: async () => { calls.commands++; return undefined; } };
@@ -36,9 +37,27 @@ function harness() {
   });
   const capture = { prepare: async () => { calls.prepared++; await grant(); }, consumeMicrophone: () => { calls.consumed++; }, clear: () => {} };
   const live = module.exports.createLiveAudio(() => owner as never, capture as never, "http://localhost:4100", () => "test-token", "/test/capture");
-  return { live, owner, entered, calls, signal: () => signal, prepare: (fn: typeof prepare) => { prepare = fn; }, stop: (fn: typeof stop) => { stop = fn; }, grant: (fn: typeof grant) => { grant = fn; } };
+  return { live, owner, entered, calls, channels: (value: number) => { channels = value; }, signal: () => signal, prepare: (fn: typeof prepare) => { prepare = fn; }, stop: (fn: typeof stop) => { stop = fn; }, grant: (fn: typeof grant) => { grant = fn; } };
 }
 const selection = { op: "prepare", id: "publication", deviceId: "native:umc", bufferFrames: 128 };
+
+test("Main rejects unavailable or malformed channel maps before microphone permission or restart", async () => {
+  const h = harness();
+  for (const channelMap of [null, [], [4], [-1], [1.5], [0, 0], [1, 2], [0, 2], [2, 3, 4], "1/2"]) {
+    await expect(h.live.action({ ...selection, channelMap })).rejects.toThrow("available channel");
+  }
+  expect(h.calls.prepared).toBe(0); expect(h.calls.spawned).toBe(0);
+  await h.live.action({ ...selection, channelMap: [2, 3] });
+  for (const channelMap of [[4], [3, 4], [0, 0]]) await expect(h.live.action({ op: "channels", id: selection.id, channelMap })).rejects.toThrow("available channel");
+  expect(h.calls.commands).toBe(0);
+  await h.live.action({ op: "channels", id: selection.id, channelMap: [1] });
+  expect(h.calls.commands).toBe(1);
+  await h.live.stop();
+  h.channels(2);
+  await expect(h.live.action({ ...selection, channelMap: [1] })).rejects.toThrow("available channel");
+  await h.live.action(selection); await h.live.stop();
+  await expect(h.live.action({ ...selection, deviceId: "browser-input", channelMap: [0, 1] })).rejects.toThrow("Choose a native input");
+});
 
 test("native preparation requires microphone authority and consumes it before spawn", async () => {
   const h = harness(); h.grant(async () => { throw new Error("Microphone denied"); });

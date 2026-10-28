@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
-import type { AudioCaptureFormat, LiveAudioAction, NativeAudioInput, NativeBufferFrames } from "../src/shared/capture";
+import type { AudioCaptureFormat, LiveAudioAction, NativeAudioInput, NativeBufferFrames, NativeChannelMap } from "../src/shared/capture";
+import { isNativeChannelMap } from "../src/shared/audio-settings";
 import { prepareNativeCapture } from "./native-capture";
 
 export async function nativeAudioInputs(executable?: string): Promise<NativeAudioInput[]> {
@@ -18,18 +19,20 @@ export async function nativeAudioInputs(executable?: string): Promise<NativeAudi
 /** One already-authorized publication. Each upload gets a fresh sample generation. */
 export function nativeAudioInput(executable: string, input: NativeAudioInput,
   sampleRate: 44100 | 48000, bufferFrames: NativeBufferFrames,
-  failed: (message: string, uploadId?: string) => void, signal: AbortSignal, setDeviceRate = false) {
+  failed: (message: string, uploadId?: string) => void, signal: AbortSignal, setDeviceRate = false, channelMap: NativeChannelMap = [0, 1]) {
   type Producer = Awaited<ReturnType<typeof prepareNativeCapture>>;
   const lifetime = new AbortController();
   const canceled = AbortSignal.any([signal, lifetime.signal]);
   let producer: Producer | undefined, opening: Promise<Producer> | undefined, uploadId: string | undefined, uploadUrl: string | undefined;
   let muted = false, stopped = false, serial: Promise<unknown> = Promise.resolve();
-  const formatOf = (next: Producer): AudioCaptureFormat => ({ sampleRate: next.format.sampleRate, channels: 2,
-    native: { requestedFrames: bufferFrames, reportedFrames: next.format.ownerHalBufferFrames, inputLatencyMs: next.format.reportedInputLatencyMs } });
+  const formatOf = (next: Producer): AudioCaptureFormat => ({ sampleRate: next.format.sampleRate, channels: next.format.channels,
+    native: { requestedFrames: bufferFrames, reportedFrames: next.format.ownerHalBufferFrames, inputLatencyMs: next.format.reportedInputLatencyMs,
+      inputChannels: input.channels, channelMap: next.format.channelMap } });
   const prepare = async (): Promise<AudioCaptureFormat> => {
     if (stopped || signal.aborted) throw new Error("Audio capture was canceled.");
-    const child = spawn(executable, [input.name, input.uid, String(sampleRate), String(bufferFrames), "0", ...(setDeviceRate ? ["--set-rate"] : [])], { stdio: ["pipe", "pipe", "pipe"] });
-    const pending = opening = prepareNativeCapture(child, { sampleRate, requestedCallbackFrames: bufferFrames }, error => {
+    if (!isNativeChannelMap(channelMap, input.channels)) throw new Error("Choose an available channel or stereo pair for this native input.");
+    const child = spawn(executable, [input.name, input.uid, String(sampleRate), String(bufferFrames), "0", "--channels", channelMap.map(channel => channel + 1).join(","), ...(setDeviceRate ? ["--set-rate"] : [])], { stdio: ["pipe", "pipe", "pipe"] });
+    const pending = opening = prepareNativeCapture(child, { sampleRate, requestedCallbackFrames: bufferFrames, channelMap }, error => {
       if (!stopped && !signal.aborted) failed(error.message, uploadId);
     }, event => { if (event.event === "end" || event.event === "ready") console.info("Native audio capture", event); }, canceled);
     try {
@@ -63,10 +66,12 @@ export function nativeAudioInput(executable: string, input: NativeAudioInput,
           try { await producer!.upload(action.url); }
           catch (error) { await stopUpload(); throw error; }
           return formatOf(producer!);
-        } else if (action.op === "buffer") {
-          // The helper opens its stream with one buffer size: a new size is a new helper, and a new generation for listeners.
+        } else if (action.op === "buffer" || action.op === "channels") {
+          if (action.op === "channels" && !isNativeChannelMap(action.channelMap, input.channels)) throw new Error("Choose an available channel or stereo pair for this native input.");
+          // Stream settings belong to one helper; replacing it starts a new sample generation.
           const resume = uploadId, url = uploadUrl, old = producer;
-          producer = undefined; bufferFrames = action.bufferFrames;
+          producer = undefined;
+          if (action.op === "buffer") bufferFrames = action.bufferFrames; else channelMap = [...action.channelMap];
           await old?.stop();
           const format = await prepare();
           if (resume && url && uploadId === resume) {

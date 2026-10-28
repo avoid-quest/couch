@@ -35,6 +35,20 @@ static int number(const char *text, unsigned long *result) {
     *result = strtoul(text, &end, 10);
     return !errno && !*end;
 }
+/* CLI channel numbers are one-based; CoreAudio's input map is zero-based. */
+static unsigned channel_map(const char *text, SInt32 map[2]) {
+    for (unsigned i = 0; i < 2; i++) {
+        char *end; errno = 0;
+        if (*text < '0' || *text > '9') return 0;
+        unsigned long channel = strtoul(text, &end, 10);
+        if (errno || !channel || channel > INT32_MAX) return 0;
+        map[i] = (SInt32)channel - 1;
+        if (!*end) return i + 1;
+        if (*end != ',') return 0;
+        text = end + 1;
+    }
+    return 0;
+}
 static AudioDeviceID device_uid(const char *text) {
     CFStringRef uid = CFStringCreateWithCString(NULL, text, kCFStringEncodingUTF8);
     if (!uid) return kAudioObjectUnknown;
@@ -140,14 +154,25 @@ static int list_devices(void) {
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--list")) return list_devices();
     unsigned long rate, frames, seconds;
-    if ((argc != 6 && argc != 7) || (argc == 7 && strcmp(argv[6], "--set-rate")) || !number(argv[3], &rate) || !number(argv[4], &frames) || !number(argv[5], &seconds) ||
+    if (argc < 6 || !number(argv[3], &rate) || !number(argv[4], &frames) || !number(argv[5], &seconds) ||
         (rate != 48000 && rate != 44100) || (frames != 128 && frames != 256 && frames != 512 && frames != 1024) ||
         seconds > 300) {
-        fputs("Usage: capture --list | <exact name> <CoreAudio UID> <44100|48000> <128|256|512|1024> <0..300 seconds; 0 = owner lifetime> [--set-rate]\n", stderr);
+        fputs("Usage: capture --list | <exact name> <CoreAudio UID> <44100|48000> <128|256|512|1024> <0..300 seconds; 0 = owner lifetime> [--channels N[,N]] [--set-rate]\n", stderr);
         return 2;
     }
+    SInt32 channelMap[2] = {0, 1};
+    unsigned channels = 2;
+    int setDeviceRate = 0, mapped = 0;
+    for (int i = 6; i < argc; i++) {
+        if (!strcmp(argv[i], "--set-rate") && !setDeviceRate) setDeviceRate = 1;
+        else if (!strcmp(argv[i], "--channels") && !mapped && i + 1 < argc) { channels = channel_map(argv[++i], channelMap); mapped = 1; }
+        else channels = 0;
+        if (!channels || (channels == 2 && (channelMap[0] % 2 || channelMap[1] != channelMap[0] + 1))) {
+            fputs("{\"event\":\"end\",\"reason\":\"channels\"}\n", stderr); return 2;
+        }
+    }
     uint32_t endian = 1;
-    if (*(unsigned char *)&endian != 1 || sizeof(float) != 4 || !capture_queue_init(&queue, (uint32_t)rate)) return 2;
+    if (*(unsigned char *)&endian != 1 || sizeof(float) != 4 || !capture_queue_init(&queue, (uint32_t)rate, channels)) return 2;
     signal(SIGINT, interrupt_capture); signal(SIGTERM, interrupt_capture); signal(SIGPIPE, SIG_IGN);
     setvbuf(stderr, NULL, _IONBF, 0);
     PaError error = Pa_Initialize();
@@ -179,13 +204,18 @@ int main(int argc, char **argv) {
         if (api->type == paCoreAudio && device->maxInputChannels >= 2 && !strcmp(device->name, argv[1])) { selected = i; matches++; }
     }
     if (matches != 1) goto done;
+    failure = "channels";
+    unsigned deviceChannels = input_channels(native);
+    if ((deviceChannels <= 2 && (channels != 2 || channelMap[0] != 0)) ||
+        channelMap[channels - 1] >= (SInt32)deviceChannels || channelMap[channels - 1] >= Pa_GetDeviceInfo(selected)->maxInputChannels) goto done;
     failure = "device-rate";
-    if (nominal != rate && (argc != 7 || !set_rate(native, rate))) goto done;
+    if (nominal != rate && (!setDeviceRate || !set_rate(native, rate))) goto done;
     for (; listeners < 2; listeners++)
         if (AudioObjectAddPropertyListener(native, &properties[listeners], device_changed, NULL)) goto done;
     PaMacCoreStreamInfo info;
     PaMacCore_SetupStreamInfo(&info, paMacCorePlayNice);
-    PaStreamParameters input = {selected, 2, paFloat32, (double)frames / rate, &info};
+    PaMacCore_SetupChannelMap(&info, channelMap, channels);
+    PaStreamParameters input = {selected, (int)channels, paFloat32, (double)frames / rate, &info};
     error = Pa_OpenStream(&stream, &input, NULL, (double)rate, frames, paDitherOff, capture_callback, &queue);
     failure = "open";
     if (error != paNoError) goto done;
@@ -197,8 +227,10 @@ int main(int argc, char **argv) {
     if (!nonblocking(STDIN_FILENO) || !nonblocking(STDOUT_FILENO)) { failure = "pipe"; goto done; }
     // Node gives stdout a Unix socketpair: about 2.6 s of 128-frame packets ride out a busy Main.
     (void)setsockopt(STDOUT_FILENO, SOL_SOCKET, SO_SNDBUF, &(int){1 << 20}, sizeof(int));
-    fprintf(stderr, "{\"event\":\"ready\",\"sampleRate\":%lu,\"channels\":2,\"format\":\"f32le\",\"requestedCallbackFrames\":%lu,\"ownerHalBufferFrames\":%u,\"nominalRate\":%.0f,\"previousNominalRate\":%.0f,\"reportedInputLatencyMs\":%.6f,\"timestampConvention\":\"PortAudio ADC estimate\"}\n",
-            rate, frames, bufferFrames, nominal, previousRate, actual->inputLatency * 1000);
+    fprintf(stderr, "{\"event\":\"ready\",\"sampleRate\":%lu,\"channels\":%u,\"channelMap\":[%d", rate, channels, channelMap[0]);
+    if (channels == 2) fprintf(stderr, ",%d", channelMap[1]);
+    fprintf(stderr, "],\"format\":\"f32le\",\"requestedCallbackFrames\":%lu,\"ownerHalBufferFrames\":%u,\"nominalRate\":%.0f,\"previousNominalRate\":%.0f,\"reportedInputLatencyMs\":%.6f,\"timestampConvention\":\"PortAudio ADC estimate\"}\n",
+            frames, bufferFrames, nominal, previousRate, actual->inputLatency * 1000);
     double deadline = seconds ? Pa_GetStreamTime(stream) + seconds : INFINITY;
     char command[128]; size_t commandBytes = 0, sent = 0;
     while (!interrupted && Pa_GetStreamTime(stream) < deadline) {

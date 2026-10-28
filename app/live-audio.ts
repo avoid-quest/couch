@@ -3,10 +3,11 @@ import { join } from "node:path";
 import type { AudioCaptureFormat, LiveAudioAction } from "../src/shared/capture";
 import type { createCapture } from "./capture";
 import { nativeAudioInput, nativeAudioInputs } from "./native-audio-input";
+import { isNativeChannelMap } from "../src/shared/audio-settings";
 
 /** Owns the microphone independently of renderer progress, including during preparation. */
 export function createLiveAudio(ownerOf: () => WebContents | null, capture: ReturnType<typeof createCapture>, localOrigin: string, token: () => string | undefined, nativeHelper?: string) {
-  type Active = { id: string; stop(): Promise<void>; command(action: LiveAudioAction): Promise<AudioCaptureFormat | undefined> };
+  type Active = { id: string; nativeChannels?: number; stop(): Promise<void>; command(action: LiveAudioAction): Promise<AudioCaptureFormat | undefined> };
   let active: Active | undefined;
   let retiring = Promise.resolve();
   let generation = 0;
@@ -38,6 +39,8 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
           if (typeof action.muted !== "boolean") throw new Error("Invalid microphone mute.");
         } else if (action.op === "buffer") {
           if (![128, 256, 512, 1024].includes(action.bufferFrames)) throw new Error("Choose a supported native input buffer.");
+        } else if (action.op === "channels") {
+          if (!isNativeChannelMap(action.channelMap, active.nativeChannels ?? 0)) throw new Error("Choose an available channel or stereo pair for this native input.");
         } else if (action.op !== "stop-upload" || typeof action.uploadId !== "string") throw new Error("Invalid audio command.");
         return active.command(action);
       }
@@ -116,12 +119,15 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
           const inputs = await nativeAudioInputs(nativeHelper); ensure();
           const input = inputs.find(input => input.uid === action.deviceId.slice(7));
           if (!input) throw new Error("The selected native input is no longer available.");
+          if (action.channelMap !== undefined && !isNativeChannelMap(action.channelMap, input.channels)) throw new Error("Choose an available channel or stereo pair for this native input.");
+          state.nativeChannels = input.channels;
           await capture.prepare({ kind: "microphone" }); ensure();
           capture.consumeMicrophone();
-          native = nativeAudioInput(nativeHelper, input, action.sampleRate ?? input.nominalRate, action.bufferFrames ?? 256, fail, lifetime.signal, action.sampleRate !== undefined);
+          native = nativeAudioInput(nativeHelper, input, action.sampleRate ?? input.nominalRate, action.bufferFrames ?? 256, fail, lifetime.signal, action.sampleRate !== undefined, action.channelMap);
           const result = await native.prepare(); ensure();
           return result;
         }
+        if (action.channelMap !== undefined) throw new Error("Choose a native input to select its channels.");
         helper = new BrowserWindow({ show: false, webPreferences: { session: owner.session, sandbox: true, contextIsolation: true, nodeIntegration: false,
           backgroundThrottling: false, preload: join(import.meta.dirname, "preload.cjs"), additionalArguments: [`--couch-audio-capture=${action.id}`] } });
         helper.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
