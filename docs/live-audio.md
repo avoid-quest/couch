@@ -57,7 +57,7 @@ at once when a member declares more, which moves later timestamps forward by
 the difference. It never shrinks while the input keeps running, so listeners never
 jump backwards or lose queued audio; a smaller buffer applies when sharing or the
 input restarts (a new capture buffer restarts the input).
-A listener leaving keeps the lead. There is no admission limit or slow-listener
+A listener leaving keeps the lead. There is no audience-size limit or slow-listener
 eviction: a listener whose connection stops draining (a frozen tab, a dozing
 radio) gets nothing more until it drains, then resumes at audio that can still play.
 Control input pauses too while the send queue exceeds 64 KiB. Already received
@@ -141,12 +141,12 @@ directory:
 
 ```sh
 bun scripts/core.ts
-bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts --target=node --outdir="$(mktemp -d)"
+bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/audio-authorization.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts --target=node --root=tests --outdir="$(mktemp -d)"
 COUCH_TEST_FFMPEG=/path/to/ffmpeg node --test <that directory>/*.js
 ```
 
 They use temporary databases, loopback ports and synthetic stereo signals with
-opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `sendspin-sdk.integration.ts` drives the stock
+opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `audio-authorization.integration.ts` covers cookie and upgrade boundaries, revocation, identity changes, connection limits and handshake deadlines. `sendspin-sdk.integration.ts` drives the stock
 browser SDK core through Noise/AES-GCM, token binding, decoding, buffer changes,
 reconnect, a concurrent Opus receiver and Leave. Capture checks cover input
 formats, source generations, timestamp mapping and Opus pre-skip.
