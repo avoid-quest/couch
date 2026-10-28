@@ -57,6 +57,9 @@ export async function runSeekBarRegression() {
     if (seeks.length !== 2 || seeks[0]?.position !== 130 || seeks[1]?.position !== 140) failures.push('Keyboard seeking lost its cumulative ten-second steps');
     await audit.updateClock({ playbackId: 'p', position: 121, duration: 900 });
     if (thumb.getAttribute('aria-valuenow') !== '140') failures.push('Clock update displaced the keyboard draft');
+    await audit.updateClock({ playbackId: 'p', position: 90, duration: 100 });
+    if (thumb.getAttribute('aria-valuenow') !== '100' || track.querySelector('[data-hover-time]')?.textContent !== '1:40') failures.push('Duration change left the preview outside the slider');
+    await audit.updateClock({ playbackId: 'p', position: 121, duration: 900 });
     thumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     const deadline = performance.now() + 1000;
     while (thumb.getAttribute('aria-valuenow') !== '121' && performance.now() < deadline) await nextFrame();

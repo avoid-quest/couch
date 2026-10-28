@@ -29,12 +29,12 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
   const cancel = () => { canceled.current = true; pointer.current = null; keyboard.current = false; revision.current++; updateDraft(null); };
   useEffect(() => () => { revision.current++; }, []);
   useEffect(() => { if (disabled) cancel(); }, [disabled]);
-  const current = Math.min(max, draft ?? value);
+  const current = Math.max(0, Math.min(max, draft ?? value));
   const [less, more] = orientation === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowLeft", "ArrowRight"];
   const commit = (next: number) => {
     if (disabled || canceled.current) return;
     const committed = ++revision.current;
-    void onCommit(next).then(
+    void onCommit(Math.max(0, Math.min(max, next))).then(
       accepted => { if (committed === revision.current && (!accepted || !keyboard.current)) updateDraft(null); },
       () => { if (committed === revision.current) updateDraft(null); },
     );

@@ -371,3 +371,53 @@ to Play. These are interaction improvements, not a measured decoding or seek
 latency improvement. No physical TV, mobile GPU or cross-device latency claim
 is made. The existing Live-radio Home/Up-next clock assertion fails on both
 baseline and changed trees; the earlier clock-isolation assertions pass.
+
+
+## Provider-independent preview refinement, 28 October 2026
+
+The client accepts Core's compact grid or timed-cue metadata for any source.
+It selects only the covering cue (Video.js 10.2.0 does not enforce `endTime`),
+then memoizes the small `Thumbnail.Root` / `Thumbnail.Image` presentation with
+stable inputs. Its resize observer and image load/error handlers remain owned
+by Video.js. The slider, transport and clocks are unchanged. The root package
+export is the documented public Thumbnail entry; no player/store or media engine
+is imported. npm still reported 10.2.0 as stable on this run. This follows
+[Video.js Thumbnail](https://videojs.org/docs/framework/react/reference/components/thumbnail),
+[React memo](https://react.dev/reference/react/memo) (local state, stable props,
+measured boundaries) and [effect cleanup](https://react.dev/reference/react/useEffect)
+(cancel obsolete work and mirror acquired resource lifetimes).
+
+Three alternating runs compared the original preview components from `c5357ee8`
+against the refinement in the same current shell. Each phase sent 120 pointer
+moves through the production route fixture in headless Chromium, at 1440×900,
+with the same captured 43,112-byte YouTube WebP. The baseline modules were
+substituted by the scratch Vite harness; no installed app was changed.
+
+| Measurement | Previous preview | Refined preview |
+| --- | --- | --- |
+| Style reads, 120 moves within one cue (each run) | 119 | 0 |
+| React render time, same-cue phases summed | 432.4 ms | 252.3 ms |
+| Style reads, 120 moves crossing cues (each run) | 120 | 25 |
+| React render time, crossing-cue phases summed | 449.3 ms | 270.6 ms |
+| Same-cue p95 React commit, run range | 1.4–1.7 ms | 0.8–1.2 ms |
+| Same-cue p95 frame scheduling, run range | 17.2–17.3 ms | 17.3–17.4 ms |
+| Additional image requests / loads / object URLs in either phase | 0 / 0 / 0 | 0 / 0 / 0 |
+
+Measured render work fell 41.7% within a cue and 39.8% across cues; overall
+frame scheduling did not improve. The timestamp still renders on pointer
+updates (119/120 commits), and track geometry remains 120 reads. This is
+development React and no media element, not a production/decoder/hardware
+latency or memory benchmark. One image URL was created and revoked per run.
+The shared Core cache avoids repeat upstream downloads; each remounted
+player/bar still obtains its own image URL. No global credential-independent
+cache was introduced. Raw evidence: scratch `client-implementation/measurements.json`.
+
+Browser regressions now cover transient HTTP and missing-image re-hover,
+corrupt-image decode recovery, bounded active retry and cancellation, arbitrary
+provider URLs, fractional cues and gaps, and duration-shrink draft clamping.
+Trusted mouse/touch/TV interactions and 14 TV focus cases passed. The existing
+Live-radio Home/Up-next clock assertion still fails; earlier isolation checks
+pass. Matching before/after desktop, phone, TV, fullscreen and bar captures
+use the same real provider image bytes, await decode and two animation frames,
+and demonstrate the unchanged layout. They replay captured assets and do not
+prove fresh provider extraction or A/V playback.

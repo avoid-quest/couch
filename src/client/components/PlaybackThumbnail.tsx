@@ -1,60 +1,83 @@
 import { Thumbnail, type ThumbnailImage } from "@videojs/react";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch, apiJson } from "@/api/client";
+import { ApiError, apiFetch, apiJson } from "@/api/client";
 import { SessionGateContext } from "@/session/gate-context";
-import { previewSheet, type PlaybackPreview } from "../../shared/playback-preview";
+import { previewAt, type PlaybackPreview } from "../../shared/playback-preview";
 
-// Mounted for one playback identity. Four on-demand sheets at most; leaving the
-// source releases their object URLs. Failed sheets keep the timestamp fallback.
+type LoadedImage = { index: number; url: string; onLoad: () => void; onError: () => void };
+
+// Mounted for one playback identity within SessionGate's authenticated lifetime.
+// Keep four successfully decoded images; cancel pending work when no longer used.
 export function PlaybackThumbnail({ playbackId, time }: { playbackId: string; time: number | null }) {
   const credentials = useContext(SessionGateContext)?.credentials;
   const path = `/api/playback-preview?playbackId=${encodeURIComponent(playbackId)}`;
+  const active = time !== null;
   const { data: preview } = useQuery({
     queryKey: ["playback-preview", playbackId],
     queryFn: ({ signal }) => apiJson<PlaybackPreview | undefined>(credentials!, path, { signal }).then(value => value ?? null),
-    enabled: !!credentials && time !== null,
-    staleTime: Infinity, gcTime: 0, retry: false,
+    enabled: !!credentials && active,
+    staleTime: query => query.state.data === null ? 30_000 : Infinity, gcTime: 0, retry: false,
   });
-  const [images] = useState(() => new Map<number, string | null>());
-  const [image, setImage] = useState<{ sheet: number; url: string } | null>(null);
-  const sheet = preview && time !== null ? previewSheet(preview, time) : null;
-  useEffect(() => () => { for (const url of images.values()) if (url) URL.revokeObjectURL(url); images.clear(); }, [images]);
+  const [images] = useState(() => new Map<number, string>());
+  const [image, setImage] = useState<LoadedImage | null>(null);
+  const frame = preview && time !== null ? previewAt(preview, time) : null;
+  const index = frame?.image ?? null;
+  useEffect(() => () => { for (const url of images.values()) URL.revokeObjectURL(url); images.clear(); }, [images]);
   useEffect(() => {
-    if (!credentials || sheet === null) return;
+    if (!credentials || index === null || !active) return;
     const controller = new AbortController();
-    const keep = (url: string | null) => {
-      images.delete(sheet); images.set(sheet, url);
+    let timer: ReturnType<typeof setTimeout> | undefined, pending: string | undefined;
+    const keep = (url: string) => {
+      images.delete(index); images.set(index, url);
       for (const [oldest, kept] of images) {
         if (images.size <= 4) break;
-        images.delete(oldest); if (kept) URL.revokeObjectURL(kept);
+        images.delete(oldest); URL.revokeObjectURL(kept);
       }
     };
-    const load = async () => {
-      let url = images.get(sheet);
-      if (url === undefined) {
-        const response = await apiFetch(credentials, `${path}&sheet=${sheet}`, { signal: controller.signal });
-        const blob = response.status === 204 ? null : await response.blob();
-        controller.signal.throwIfAborted();
-        url = blob?.size ? URL.createObjectURL(blob) : null;
-      }
-      keep(url);
-      setImage(url ? { sheet, url } : null);
+    const load = async (attempt = 0) => {
+      const failed = (error?: unknown) => {
+        if (controller.signal.aborted) return;
+        setImage(null);
+        if (attempt < 2 && (!(error instanceof ApiError) || error.status === 503)) timer = setTimeout(() => { void load(attempt + 1); }, 1000 * (attempt + 1));
+      };
+      try {
+        let url = images.get(index);
+        if (url === undefined) {
+          const response = await apiFetch(credentials, `${path}&image=${index}`, { signal: controller.signal });
+          const blob = response.status === 204 ? null : await response.blob();
+          controller.signal.throwIfAborted();
+          if (!blob?.size) { setImage(null); return; }
+          url = pending = URL.createObjectURL(blob);
+        }
+        const selected = url;
+        setImage({ index, url, onLoad: () => {
+          if (controller.signal.aborted) return;
+          pending = undefined; keep(selected);
+        }, onError: () => {
+          if (controller.signal.aborted) return;
+          images.delete(index); pending = undefined; URL.revokeObjectURL(selected); failed();
+        } });
+      } catch (error) { failed(error); }
     };
-    void load().catch(() => { if (!controller.signal.aborted) { keep(null); setImage(null); } });
-    return () => controller.abort();
-  }, [credentials, images, path, sheet]);
-  const thumbnails = useMemo<ThumbnailImage[]>(() => {
-    if (!preview || !image || image.sheet !== sheet) return [];
-    const { width, height, columns, rows, interval, duration } = preview;
-    return Array.from({ length: columns * rows }, (_, index) => {
-      const startTime = (image.sheet * columns * rows + index) * interval;
-      return { url: image.url, startTime, endTime: Math.min(duration, startTime + interval), width, height, coords: { x: index % columns * width, y: Math.floor(index / columns) * height } };
-    }).filter(thumbnail => thumbnail.startTime < duration);
-  }, [preview, image, sheet]);
-  if (time === null || !thumbnails.length) return null;
-  return <Thumbnail.Root data-preview-thumbnail time={Math.min(time, preview!.duration - .001)} thumbnails={thumbnails}
-    className="mx-auto max-w-40 overflow-hidden rounded-sm data-[loading]:hidden data-[error]:hidden data-[hidden]:hidden">
-    <Thumbnail.Image alt="" loading="eager" fetchPriority="low" />
-  </Thumbnail.Root>;
+    void load();
+    return () => { controller.abort(); clearTimeout(timer); if (pending) URL.revokeObjectURL(pending); };
+  }, [credentials, images, path, index, active]);
+  const startTime = frame?.startTime, endTime = frame?.endTime, width = frame?.width, height = frame?.height;
+  const x = frame?.coords?.x, y = frame?.coords?.y;
+  const thumbnail = useMemo<ThumbnailImage | null>(() => {
+    if (!image || image.index !== index || startTime === undefined) return null;
+    return { url: image.url, startTime, endTime, width, height, coords: x === undefined || y === undefined ? undefined : { x, y } };
+  }, [image, index, startTime, endTime, width, height, x, y]);
+  return thumbnail && image ? <Scene thumbnail={thumbnail} onLoad={image.onLoad} onError={image.onError} /> : null;
 }
+
+// Pointer motion within one provider interval changes the timestamp, not sprite
+// selection, sizing or decoding. Video.js owns cropping the selected frame.
+const Scene = memo(function Scene({ thumbnail, onLoad, onError }: { thumbnail: ThumbnailImage; onLoad: () => void; onError: () => void }) {
+  const thumbnails = useMemo(() => [thumbnail], [thumbnail]);
+  return <Thumbnail.Root data-preview-thumbnail time={thumbnail.startTime} thumbnails={thumbnails}
+    className="mx-auto max-w-40 overflow-hidden rounded-sm data-[loading]:hidden data-[error]:hidden data-[hidden]:hidden">
+    <Thumbnail.Image alt="" loading="eager" fetchPriority="low" onLoad={onLoad} onError={onError} />
+  </Thumbnail.Root>;
+});

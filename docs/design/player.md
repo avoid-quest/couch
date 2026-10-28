@@ -110,10 +110,12 @@ The timeline row:
   here, beside artwork and on the now-playing bar alike. Over a picture, and
   on the bar, its thumb shows only while a pointer or focus is on it.
 - Hover reads the time under the pointer; dragging (including touch) and keyboard
-  seeking show the draft time. Available YouTube storyboards add a small scene
+  seeking show the draft time. Available provider storyboards or timed image cues add a small scene
   preview above it, inside the timeline's edges. The picture and controls never
   move. These are provider intervals, not exact frames; missing or unreadable
-  images leave the timestamp alone. Other providers currently have timestamps only.
+  images and cue gaps leave the timestamp alone. Preview lookup retains fractional
+  cue timing; the label still rounds to seconds. A duration change clamps the
+  preview, thumb and committed target to the same range.
 - Preview state updates independently of the slider, chapters and playback labels;
   touch without a drag and disabled timelines do no hover work. Dragging stays
   local and sends one Couch seek on release. Cancellation, Escape, lost pointer
@@ -122,17 +124,24 @@ The timeline row:
 
 The same previews work in the now-playing bar and on a controller without local
 media. `PlaybackThumbnail` uses Video.js 10.2.0's standalone `Thumbnail` with
-supplied sprite coordinates. The shadcn slider, Couch commands, observed playback
+supplied images or sprite coordinates. It selects one covering cue, memoizes the
+image presentation and leaves Video.js responsible for cropping and resize
+observation. Moving within that cue updates only its timestamp/position, without
+re-rendering the thumbnail. The shadcn slider, Couch commands, observed playback
 position, renderers and Sendspin picture follower keep their existing ownership.
 Non-seekable Live has no timeline or previews.
 
-Core reuses YouTube's existing yt-dlp extraction (`mhtml` storyboard formats),
+Core reuses the existing yt-dlp extraction (`mhtml` storyboard formats),
 preferring 160px tiles. `/api/playback-preview` checks pairing, current playback
 identity and output consent for metadata and each image. URLs and playback headers
 stay in Core; image reads use its public-network fetcher. Source changes cancel
 obsolete reads. Metadata is bounded to 4,000 frames / 128 sheets; images to 2 MiB,
 four concurrent downloads and a shared 16 MiB cache. A controller keeps four
-on-demand sheets and releases their object URLs when the source changes. Expired
+successfully decoded images and releases their object URLs when the source
+changes. Hidden/stale previews cancel pending reads and retry timers. Network,
+503 and decode failures retry at most twice while requested; later hover can
+retry a failed or missing image. Missing metadata is fresh for 30 seconds, and
+reconnection invalidates it through the session query client. Expired
 or unavailable assets never delay playback or trigger another media extraction.
 
 The control row:

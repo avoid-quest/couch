@@ -1,7 +1,7 @@
 import { mountUiAudit } from "./ui-audit.browser";
 import type { PlaybackPreview } from "../src/shared/playback-preview";
 const wait = (ms = 60) => new Promise(resolve => setTimeout(resolve, ms));
-const preview: PlaybackPreview = { width: 160, height: 90, columns: 5, rows: 5, interval: 4.95, duration: 693, sheets: 6 };
+const preview: PlaybackPreview = { width: 160, height: 90, columns: 5, rows: 5, interval: 4.95, duration: 693, kind: "grid", frames: 140, images: 6 };
 
 // The real route tree and command path, no receiver. The native browser runner
 // can replace these deterministic sprite bytes with real provider assets.
@@ -11,6 +11,7 @@ export async function preparePreviewRegression(imageUrl?: string) {
   const fetch = window.fetch;
   const requests: { sheet: string | null; aborted: boolean }[] = [];
   let delay = 0, missing = false, denied = false, accepted = true, pending: ((value: boolean) => void) | undefined;
+  let metadata = preview, imageStatus = 200, corrupt = false;
   const canvas = document.createElement("canvas"); canvas.width = 800; canvas.height = 450;
   const context = canvas.getContext("2d")!;
   for (let i = 0; i < 25; i++) { context.fillStyle = `hsl(${i * 14} 70% 40%)`; context.fillRect(i % 5 * 160, Math.floor(i / 5) * 90, 160, 90); }
@@ -20,7 +21,7 @@ export async function preparePreviewRegression(imageUrl?: string) {
   window.fetch = async (input, init) => {
     const url = new URL(String(input), location.origin);
     if (url.pathname !== "/api/playback-preview") return fetch(input, init);
-    const request = { sheet: url.searchParams.get("sheet"), aborted: false }; requests.push(request);
+    const request = { sheet: url.searchParams.get("image"), aborted: false }; requests.push(request);
     if (delay) await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, delay);
       init?.signal?.addEventListener("abort", () => { request.aborted = true; clearTimeout(timer); reject(init.signal!.reason); }, { once: true });
@@ -28,7 +29,9 @@ export async function preparePreviewRegression(imageUrl?: string) {
     init?.signal?.throwIfAborted();
     if (denied) return new Response(null, { status: 404 });
     if (missing) return new Response(null, { status: 204 });
-    return request.sheet === null ? Response.json(preview) : new Response(real ?? sprite, { headers: { "content-type": real?.type || "image/png" } });
+    if (request.sheet === null) return Response.json(metadata);
+    if (imageStatus !== 200) return new Response(null, { status: imageStatus });
+    return new Response(corrupt ? new Blob(["invalid image"], { type: "image/png" }) : real ?? sprite, { headers: { "content-type": real?.type || "image/png" } });
   };
   await audit.go("/now", { player: "paused" });
   await audit.updateClock({ playbackId: "p", position: 120, duration: 693 });
@@ -38,12 +41,13 @@ export async function preparePreviewRegression(imageUrl?: string) {
   } }));
   return {
     audit, requests,
-    options(value: { delay?: number; missing?: boolean; denied?: boolean; accepted?: boolean }) {
+    options(value: { delay?: number; missing?: boolean; denied?: boolean; accepted?: boolean; metadata?: PlaybackPreview; imageStatus?: number; corrupt?: boolean }) {
       delay = value.delay ?? 0; missing = value.missing ?? false; denied = value.denied ?? false; accepted = value.accepted ?? true;
+      metadata = value.metadata ?? preview; imageStatus = value.imageStatus ?? 200; corrupt = value.corrupt ?? false;
     },
     respond(value: boolean) { pending?.(value); pending = undefined; },
-    async source(id: string) {
-      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player, playbackId: id }, queue: gate.state!.queue.map((entry, i) => i ? entry : { ...entry, source: `web:https://www.youtube.com/watch?v=${id}` }) } }));
+    async source(id: string, source = `web:https://www.youtube.com/watch?v=${id}`) {
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player, playbackId: id }, queue: gate.state!.queue.map((entry, i) => i ? entry : { ...entry, source }) } }));
       await audit.updateClock({ playbackId: id, position: 30, duration: 693 });
     },
     close() { window.fetch = fetch; audit.close(); },
@@ -95,5 +99,45 @@ export async function runPreviewRegression() {
     await fixture.audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player, seekable: false } } }));
     assert(!document.querySelector('[aria-label="Playback position"]'), "Non-seekable Live gained seeking");
     return { passed: true, requests: fixture.requests.length, canceled: fixture.requests.filter(request => request.aborted).length, seeks: fixture.audit.actions.filter(action => action.type === "seek").length };
+  } finally { fixture.close(); }
+}
+
+// Optional provider data must recover independently of programme playback.
+export async function runPreviewRecoveryRegression() {
+  const fixture = await preparePreviewRegression();
+  const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
+  const track = () => document.querySelector('[role="slider"][aria-label="Playback position"]')!.closest('[data-slot="slider"]')!.parentElement!;
+  const hover = async (time: number) => {
+    const element = track(), rect = element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse", clientX: rect.left + rect.width * time / 693 }));
+    await wait(120);
+  };
+  const visible = () => document.querySelector<HTMLElement>("[data-preview-thumbnail]")?.checkVisibility();
+  const leave = async () => { track().dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body })); await wait(); };
+  try {
+    for (const [name, failure] of [["busy", { imageStatus: 503 }], ["missing", { imageStatus: 204 }], ["corrupt", { corrupt: true }]] as const) {
+      await fixture.source(name, "web:https://www.twitch.tv/videos/635475444");
+      fixture.options(failure); await hover(50);
+      assert(!visible(), `${name} image should leave the timestamp`);
+      fixture.options({}); await leave(); await hover(50);
+      assert(visible(), `${name} image did not recover on re-hover`);
+    }
+    await fixture.source("retry"); fixture.options({ imageStatus: 503 }); await hover(50);
+    fixture.options({}); await wait(1100);
+    assert(visible(), "Temporary failure did not retry while visible");
+    await fixture.source("cancel"); fixture.options({ imageStatus: 503 }); await hover(50); await leave();
+    const requests = fixture.requests.length; await wait(1100);
+    assert(fixture.requests.length === requests, "Hidden preview retried image work");
+    const metadata: PlaybackPreview = { kind: "cues", duration: 693, images: 1, cues: [
+      { image: 0, startTime: 0, endTime: 4.95, width: 160, height: 90, coords: { x: 0, y: 0 } },
+      { image: 0, startTime: 10, endTime: 20, width: 160, height: 90, coords: { x: 160, y: 0 } },
+    ] };
+    await fixture.source("cues", "web:https://www.raiplay.it/video/provider-example.html"); fixture.options({ metadata });
+    await hover(4.6); assert(visible(), "Fractional position was rounded into a cue gap");
+    await hover(5); assert(!visible(), "Provider cue gap showed the previous image");
+    await hover(10.1); assert(visible(), "Next provider cue was not shown");
+    await hover(20.1); assert(!visible(), "Provider cue end was ignored");
+    assert(fixture.audit.actions.length === 0, "Preview recovery sent a programme command");
+    return { passed: true, requests: fixture.requests.length };
   } finally { fixture.close(); }
 }
