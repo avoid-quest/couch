@@ -11,13 +11,14 @@ type Picture = { type: string; bytes: Uint8Array };
  * lit on several pages or Devices is fetched from its host once. Only whole, valid pictures are kept; an empty one, or
  * one over a quarter of the budget, never is.
  */
-export function createArtworkCache(budget = 24 * 1024 * 1024) {
-  const entries = new Map<string, { type: string; bytes: Uint8Array; cost: number }>();
+export function createArtworkCache(budget = 24 * 1024 * 1024, maxAge = Infinity) {
+  const entries = new Map<string, { type: string; bytes: Uint8Array; cost: number; expiresAt: number }>();
   const pending = new Map<string, { promise: Promise<Picture | null>; controller: AbortController; readers: number }>();
   let size = 0;
   const cache = {
     get(key: string) {
       const entry = entries.get(key);
+      if (entry && entry.expiresAt <= Date.now()) { entries.delete(key); size -= entry.cost; return; }
       // Read again, it is the newest.
       if (entry) { entries.delete(key); entries.set(key, entry); }
       return entry;
@@ -28,7 +29,7 @@ export function createArtworkCache(budget = 24 * 1024 * 1024) {
       const old = entries.get(key);
       if (old) { entries.delete(key); size -= old.cost; }
       // A copy of its own, so a small picture doesn't hold on to the shared buffer it was read into.
-      entries.set(key, { type, bytes: new Uint8Array(bytes), cost }); size += cost;
+      entries.set(key, { type, bytes: new Uint8Array(bytes), cost, expiresAt: Date.now() + maxAge }); size += cost;
       for (const [oldest, entry] of entries) { if (size <= budget) break; entries.delete(oldest); size -= entry.cost; }
     },
     async read(key: string, load: (signal: AbortSignal) => Promise<Picture | null>, signal: AbortSignal): Promise<Picture | null> {

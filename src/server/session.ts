@@ -10,7 +10,7 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"> & { title?: string };
-export type MediaSource = { publicNetwork?: boolean; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { preview?: WebMediaSource["preview"]; publicNetwork?: boolean; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
   prepareRecoveredSource?: (media: WebMediaSource, playbackId: string, signal: AbortSignal) => Promise<MediaSource>;
@@ -207,6 +207,9 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   let progressContext: { profileId: string; playedBy?: PlaybackActor } | undefined;
   const send = (command: PlaybackCommand) => {
     if (command.type === "load") {
+      // Private preview descriptors stay in Core, including reloads and recovery.
+      const { preview: _preview, ...load } = command as typeof command & Pick<MediaSource, "preview">;
+      command = load;
       const entry = state.queue.find(item => item.id === state.currentEntryId);
       if (entry?.live || isRadio(entry) || command.radio) command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
       loaded = command;

@@ -5,6 +5,8 @@ import { providerForUrl } from "../shared/providers";
 import { checkHelper, helperWorked, useHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 import { soundCloudPlugin } from "./soundcloud";
+import { raiPlayPreviewPlugin } from "./raiplay-preview";
+import { twitchPlugin } from "./twitch";
 import { createPublicMediaProxy } from "./public-media-proxy";
 
 // Only fixed, public messages from the extractor may cross the catalog boundary.
@@ -123,7 +125,9 @@ async function extractWith(command: string, args: string[], { signal, timeoutMs 
     try {
       const target = args.at(-1) ?? "";
       const soundcloud = /^scsearch\d*:/.test(target) || providerForUrl(target) === "soundcloud";
-      const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : soundcloud ? await soundCloudPlugin() : null;
+      const provider = providerForUrl(target);
+      const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : soundcloud ? await soundCloudPlugin()
+        : provider === "raiplay" ? await raiPlayPreviewPlugin() : provider === "twitch" ? await twitchPlugin() : null;
       try {
         const proxy = await createPublicMediaProxy(cancellation);
         // yt-dlp caches SoundCloud's public client ID and refreshes it on 401/403.
