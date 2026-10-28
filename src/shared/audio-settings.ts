@@ -13,7 +13,7 @@ export const nativeInputBufferFrames = (value: NativeInputBufferPreference) => N
 
 export function isNativeChannelMap(value: unknown, channels: number): value is import("./capture").NativeChannelMap {
   return Array.isArray(value) && (value.length === 1 || value.length === 2) &&
-    value.every(channel => Number.isInteger(channel) && channel >= 0 && channel < channels) &&
+    [...value].every(channel => Number.isInteger(channel) && channel >= 0 && channel < channels) &&
     (value.length === 1 ? channels > 2 : value[0] % 2 === 0 && value[1] === value[0] + 1) &&
     (channels > 2 || value.length === 2 && value[0] === 0);
 }

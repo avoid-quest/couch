@@ -43,7 +43,7 @@ const selection = { op: "prepare", id: "publication", deviceId: "native:umc", bu
 
 test("Main rejects unavailable or malformed channel maps before microphone permission or restart", async () => {
   const h = harness();
-  for (const channelMap of [null, [], [4], [-1], [1.5], [0, 0], [1, 2], [0, 2], [2, 3, 4], "1/2"]) {
+  for (const channelMap of [null, [], Array(1), [NaN], [Infinity], [4], [-1], [1.5], [0, 0], [1, 2], [0, 2], [2, 3, 4], "1/2"]) {
     await expect(h.live.action({ ...selection, channelMap })).rejects.toThrow("available channel");
   }
   expect(h.calls.prepared).toBe(0); expect(h.calls.spawned).toBe(0);
