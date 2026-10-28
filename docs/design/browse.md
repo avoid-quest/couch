@@ -247,6 +247,7 @@ Save as list and Update from Up next require upcoming entries, excluding the
 current item and Played. Their count and saved items follow the current item,
 or the saved queue cursor after Stop; Autoplay's suggestions are not included.
 Replace becomes unavailable if Up next empties while its confirmation is open.
+Closing it returns focus to Lists when Update from Up next is unavailable.
 A list keeps its own title and verbs. An empty tab says what goes there and
 offers Search, which focuses the header's field. Removing says "Removed …
 from Saved." with Undo. Artwork this page has already shown appears at once on

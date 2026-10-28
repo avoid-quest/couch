@@ -43,6 +43,8 @@ export async function runSavedListsRegression() {
     assert(writes[0]?.path === "/api/playlists" && writes[0].body.scope === "upNext", "Save as list must explicitly scope its capture");
     document.querySelector<HTMLButtonElement>('[data-playlist-id="audit-list"] [data-play]')!.click();
     await until(() => !![...document.querySelectorAll("button")].find(item => item.textContent === "Update from Up next"));
+    await until(() => !!document.activeElement?.matches("[data-back]"));
+    button("Update from Up next").focus();
     button("Update from Up next").click();
     await until(() => !!document.querySelector('[role="alertdialog"]'));
     assert(document.querySelector('[role="alertdialog"]')?.textContent?.includes("2 in Up next"), "Confirmation must count only upcoming entries");
@@ -52,7 +54,13 @@ export async function runSavedListsRegression() {
     assert(button("Replace").disabled, "Remote exhaustion must disable the open Replace action");
     button("Replace").click();
     assert(writes.length === 1 && !!document.querySelector('[role="alertdialog"]'), "Disabled Replace must neither write nor close");
+    button("Cancel").click();
+    await until(() => !document.querySelector('[role="alertdialog"]'));
+    await until(() => !!document.activeElement?.matches("[data-back]"));
     await advance(null, "next");
+    button("Update from Up next").focus();
+    button("Update from Up next").click();
+    await until(() => !!document.querySelector('[role="alertdialog"]'));
     assert(!button("Replace").disabled, "Stopped cursor with upcoming entries must permit replacement");
     await advance(null, "next", false);
     assert(button("Replace").disabled, "Disconnect must disable the open Replace action");
@@ -62,7 +70,7 @@ export async function runSavedListsRegression() {
     assert(writes[1]?.path === `/api/playlists/${playlist.id}` && writes[1].body.revision === 7 && writes[1].body.operation === "saveQueue" && writes[1].body.scope === "upNext", "Replace must send the list revision and explicit Up next scope");
     await advance(null, "later");
     assert(button("Update from Up next").disabled, "Exhausted stopped queue must disable Update from Up next");
-    return { passed: true, checks: ["scoped Save as list", "only upcoming entries counted", "remote advance updates open confirmation", "exhaustion blocks Replace without closing", "Stop cursor", "disconnect and reconnect", "scoped Replace with revision"] };
+    return { passed: true, checks: ["scoped Save as list", "only upcoming entries counted", "remote advance updates open confirmation", "exhaustion blocks Replace without closing", "Cancel restores Lists focus when the opener is disabled", "Stop cursor", "disconnect and reconnect", "scoped Replace with revision"] };
   } finally {
     window.fetch = fixtureFetch;
     audit.close();

@@ -120,7 +120,9 @@ export function SavedPlaylists({ origin, token, connected, canPlay, upNextCount,
         <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load(playlist, "append")}>Queue</Button>
         <AlertDialog>
           <AlertDialogTrigger asChild><Button variant="ghost" disabled={disabled || !upNextCount}>Update from Up next</Button></AlertDialogTrigger>
-          <AlertDialogContent>
+          <AlertDialogContent onCloseAutoFocus={event => {
+            if (disabled || !upNextCount) { event.preventDefault(); focus("[data-back]"); }
+          }}>
             <AlertDialogHeader>
               <AlertDialogTitle>Replace {playlist.name}?</AlertDialogTitle>
               <AlertDialogDescription>Its items become the {upNextCount} in Up next.</AlertDialogDescription>
