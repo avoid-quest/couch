@@ -1707,7 +1707,14 @@ export async function createHub(options: HubOptions) {
       return device ? { device, authority: device.role, claimAvailable: devices.claimAvailable() } : null;
     };
     // Each connection presents its Sendspin key, the Device's one ID (#644 ticket 5).
-    if (websocket && !upload && store.identify(trusted ? null : token, url.searchParams.get("device"))) invalidate("devices");
+    if (websocket && !upload) {
+      // Host windows can present different SDK IDs; keep their existing connections and work.
+      const previous = trusted ? null : store.deviceForToken(token);
+      if (store.identify(trusted ? null : token, url.searchParams.get("device"))) {
+        if (previous) retireDevice(previous.id, previous.name);
+        invalidate("devices");
+      }
+    }
     const caller = identity();
     if (!caller) return cors(request, json({ error: "Pair this device first." }, 401));
     if (url.pathname === "/api/live/ice-servers") return cors(request, request.method === "GET"
@@ -1774,7 +1781,10 @@ export async function createHub(options: HubOptions) {
       if (!live.acceptsUpload(sourceId, trusted ? hostId() : caller.device!.id, key, uploadId)) return json({ error: "This capture upload is not authorized." }, 403);
       return upgrade(socket => {
         const source = live.source(sourceId), deviceId = trusted ? hostId() : caller.device!.id;
-        const admitted = () => !!identity() && live.source(sourceId) === source && live.acceptsUpload(sourceId, deviceId, key, uploadId);
+        const admitted = () => {
+          const current = identity();
+          return !!current && (trusted || current.device?.id === deviceId) && live.source(sourceId) === source && live.acceptsUpload(sourceId, deviceId, key, uploadId);
+        };
         if (!admitted()) return void socket.close(1008, "The capture upload is no longer authorized.");
         socket.on("message", () => { if (!admitted()) socket.close(1008, "The capture upload is no longer authorized."); });
         if (!(source?.audioDelivery === "pcm" ? sendspin.acceptSource(socket, sourceId) : liveStreams.accept(sourceId, socket))) socket.close(1008, "The capture upload is no longer available.");
@@ -1905,7 +1915,8 @@ export async function createHub(options: HubOptions) {
       const playedBy = playingOn(playbackActor(trusted ? null : caller.device!.id), !websocket && /\/(?:load|play)$/.test(url.pathname) ? url.searchParams.get("on") : null);
       const currentIdentity = identity;
       const authorize = () => {
-        if (!identity()) throw new ControllerError("This device was removed. Pair again.", 401);
+        const current = identity();
+        if (!current || !trusted && current.device?.id !== caller.device!.id) throw new ControllerError("This device was removed. Pair again.", 401);
       };
       if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: VERSION_MISMATCH }, 409));
       if (!trusted) store.touchDevice(caller.device!.id);
