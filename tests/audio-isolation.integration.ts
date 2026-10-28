@@ -5,9 +5,55 @@ import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { AudioCodec, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createScheduledAudio } from "../src/server/scheduled-audio";
+import { createSendspin } from "../src/server/sendspin";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean) => { const deadline = Date.now() + 5000; while (!check()) { if (Date.now() > deadline) throw new Error("Expected audio state did not arrive"); await sleep(10); } };
+
+test("a non-finite player timing declaration cannot crash the shared audio worker", { timeout: 10_000 }, async t => {
+  const errors: string[] = [], frames: number[] = [];
+  const audio = createSendspin({ name: "Timing isolation", admit: () => true, changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });
+  const server = createServer();
+  server.on("upgrade", (request, socket, head) => audio.upgrade(request, socket as import("node:net").Socket, head));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const healthy = new SendspinClient("healthy", "Healthy", [Roles.PLAYER], { playerSupport: {
+    supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 1 << 20, supported_commands: [],
+  } });
+  healthy.addAudioChunkListener(timestamp => frames.push(timestamp));
+  const group = audio.group("programme", state => { if (state.error) errors.push(state.error); });
+  let bad: WebSocket | undefined, timer: ReturnType<typeof setInterval> | undefined;
+  t.after(async () => { clearInterval(timer); bad?.terminate(); group.close(); audio.close(); await healthy.disconnect(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  await healthy.connect(url);
+  await healthy.sendPlayerState({ min_buffer_ms: 150 });
+  audio.registerSource("capture");
+  group.members([{ deviceId: "healthy", level: 100 }, { deviceId: "bad", level: 100 }]);
+  group.send({ type: "load", playbackId: "programme", source: "", liveSourceId: "capture", captureIntent: "live" });
+  let sequence = 0;
+  const origin = serverNowUs();
+  timer = setInterval(() => {
+    while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
+      audio.writeSource("capture", { generation: "capture", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10000,
+        sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
+      sequence++;
+    }
+  }, 5);
+  await until(() => frames.length > 10);
+  bad = new WebSocket(url);
+  await once(bad, "open");
+  const greeting = once(bad, "message");
+  bad.send(JSON.stringify({ type: "client/hello", payload: { client_id: "bad", version: 1, name: "Bad", supported_roles: ["player@v1"],
+    "player@v1_support": { supported_formats: [{ codec: "pcm", sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 1 << 20, supported_commands: [] },
+  } }));
+  await greeting;
+  // Valid JSON numbers can overflow JavaScript's finite range. The SDK forwards this declaration unchanged.
+  bad.send('{"type":"client/state","payload":{"player":{"min_buffer_ms":1e309,"static_delay_ms":0}}}');
+  await until(() => bad!.readyState === WebSocket.CLOSED || errors.length > 0);
+  assert.deepEqual(errors, [], "a player's invalid timing must not fail other playbacks");
+  const before = frames.length;
+  await until(() => frames.length > before + 10);
+  assert.equal(audio.connected("healthy"), true);
+});
 
 test("capture sends on arrival with the maximum playback buffer and output delay", { timeout: 10_000 }, async t => {
   const frames: number[] = [], errors: string[] = [];
