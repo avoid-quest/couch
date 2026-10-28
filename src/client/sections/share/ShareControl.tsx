@@ -124,12 +124,13 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
   const [routes, setRoutes] = useState<Record<string, LiveRoute>>({});
   const [, refresh] = useState(0);
   useEffect(() => {
+    if (sharing.source.audioDelivery === "pcm") return;
     let live = true;
     const read = () => void liveSharing.routes().then(next => { if (live) setRoutes(next); });
     read();
     const timer = setInterval(read, 2_000);
     return () => { live = false; clearInterval(timer); };
-  }, [liveSharing]);
+  }, [liveSharing, sharing.source.audioDelivery]);
   const kind = shareKindOf(sharing.source.kind === "airplay" ? "screen" : sharing.source.kind, sharing.surface, sharing.source.intent);
   const what = kind.pictures && sharing.source.audio ? `${kind.label}, with this computer's sound` : kind.label;
   const since = new Date(sharing.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

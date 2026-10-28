@@ -105,7 +105,8 @@ Sheet on phones and the TV:
   playbacks that play it: its channels and its route, "Picture and sound,
   direct" or "Sound, through the relay" for WebRTC, read every two seconds from the
   publisher's own connection (the selected candidate pair in
-  `RTCPeerConnection.getStats()`). Where it plays names only exceptions; this
+  `RTCPeerConnection.getStats()`). PCM shares use Core's listener state without
+  polling WebRTC routes. Where it plays names only exceptions; this
   panel is the sharer's own, so every row names its route. Behind and "Can't
   play: {reason}" (in red) read as Where it plays says them, and a row whose
   sound plays shows the [level](../design.md#motion), moving only where Where

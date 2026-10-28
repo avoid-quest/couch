@@ -25,6 +25,8 @@ The host chooses Live's playback buffer and codec when sharing
 ([Share](design/share.md#live-audio)). Listeners use the unmodified
 [Sendspin browser player](live-audio.md); the player shows **Waiting for audio…**,
 **Listening**, reconnect status or the actual source/output error.
+The sharing panel polls connection routes only for WebRTC shares; PCM shares
+use Core's listener state.
 
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset
