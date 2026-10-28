@@ -9,6 +9,7 @@ import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { applyUndo, undoPlan } from "../src/client/session/undo";
 import type { Action, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
+import type { SavedPlaylist } from "../src/shared/playlists";
 
 // Remote tests exercise local Core only; source discovery must not depend on the Internet.
 const fetchLocal = globalThis.fetch;
@@ -69,6 +70,61 @@ async function choose(f: Awaited<ReturnType<typeof fixture>>) {
   await until(() => f.phone.state.player.status === "playing");
 }
 const queueIds = (state: SessionState) => state.queue.map(entry => entry.id);
+
+test("saved lists capture the caller's selected Up next and reject stale replacements after remote advance", async () => {
+  const f = await fixture();
+  const api = (token: string, path: string, body?: unknown) => fetchLocal(`${f.hub.origin}/api/playlists${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Origin: f.hub.origin, "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }),
+  });
+  const save = async (token: string, name: string, expected: string[]) => {
+    const response = await api(token, "", { name, scope: "upNext" });
+    assert.equal(response.status, 201);
+    const { playlist } = await response.json() as { playlist: SavedPlaylist };
+    assert.deepEqual(playlist.entries.map(entry => entry.id), expected);
+    return playlist;
+  };
+  try {
+    await f.host.command({ type: "enqueue", entry: entry("host-current", f.source), playNow: true });
+    await f.host.command({ type: "enqueue", entry: entry("host-next", f.source) });
+    await choose(f);
+    await save(hostToken, "Host", ["host-next"]);
+    assert.equal((await f.phone.command({ type: "control", deviceId: hostId })).ok, true);
+    await save(f.phoneToken, "Phone looking at host", ["host-next"]);
+    await save(f.tvToken, "TV looking at itself", ["waiting", "later"]);
+    assert.equal((await f.phone.command({ type: "control", deviceId: tvId })).ok, true);
+    let playlist = await save(f.phoneToken, "Phone", ["waiting", "later"]);
+    const update = { revision: playlist.revision, operation: "saveQueue", scope: "upNext" };
+    // Another Device advances while the controller's confirmation is open.
+    assert.equal((await f.tv.command({ type: "play", entryId: "waiting" })).ok, true);
+    await until(() => f.phone.state.currentEntryId === "waiting");
+    const replaced = await api(f.phoneToken, `/${playlist.id}`, update);
+    assert.equal(replaced.status, 200);
+    ({ playlist } = await replaced.json() as { playlist: SavedPlaylist });
+    assert.deepEqual(playlist.entries.map(entry => entry.id), ["later"]);
+    assert.equal((await api(f.phoneToken, `/${playlist.id}`, update)).status, 409);
+    assert.equal((await f.tv.command({ type: "stop" })).ok, true);
+    await until(() => f.phone.state.currentEntryId === null && f.phone.state.queueCursorEntryId === "waiting");
+    await save(f.phoneToken, "Stopped", ["later"]);
+    const whole = await api(f.phoneToken, "", { name: "Unscoped" });
+    assert.equal(whole.status, 201);
+    const wholeList = (await whole.json() as { playlist: SavedPlaylist }).playlist;
+    assert.deepEqual(wholeList.entries.map(entry => entry.id), ["chosen", "waiting", "later"]);
+    assert.equal((await f.tv.command({ type: "play", entryId: "later" })).ok, true);
+    await until(() => f.phone.state.currentEntryId === "later");
+    const exhausted = { ...update, revision: playlist.revision };
+    assert.equal((await api(f.phoneToken, `/${playlist.id}`, exhausted)).status, 400);
+    assert.equal((await api(f.phoneToken, "", { name: "Empty", scope: "upNext" })).status, 400);
+    assert.equal((await api("invalid", `/${playlist.id}`, exhausted)).status, 401);
+    assert.deepEqual((await (await api(f.phoneToken, `/${playlist.id}`)).json() as { playlist: SavedPlaylist }).playlist, playlist);
+    assert.equal(f.host.state.currentEntryId, "host-current");
+    assert.deepEqual(queueIds(f.host.state), ["host-current", "host-next"]);
+    const revoke = await fetchLocal(`${f.hub.origin}/api/devices/${phoneId}`, { method: "DELETE", headers: { Authorization: `Bearer ${hostToken}`, Origin: f.hub.origin } });
+    assert.equal(revoke.status, 200);
+    assert.equal((await api(f.phoneToken, `/${playlist.id}`, exhausted)).status, 401);
+    assert.deepEqual((await (await api(hostToken, `/${playlist.id}`)).json() as { playlist: SavedPlaylist }).playlist, playlist);
+  } finally { await f.close(); }
+});
 
 test("delayed Remote queue and transport commands cannot follow their entries to another TV, with or without an envelope", async () => {
   const f = await fixture();
