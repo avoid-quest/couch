@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,8 +9,8 @@ import { isRadio } from "../../shared/radio";
 import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
-import { RangeControl, RangePreviewContext } from "./RangeControl";
-import { PlaybackThumbnail } from "./PlaybackThumbnail";
+import { RangeControl } from "./RangeControl";
+import { PlaybackSeekBar } from "./PlaybackSeekBar";
 import { useDurationClock } from "./DurationBar";
 import { useBufferedEnd } from "@/session/buffered";
 
@@ -77,33 +77,13 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   const max = canSeek ? playbackClock.duration! : length;
   const disabled = !transportReady || !canSeek;
   return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
-    <TimelineHover key={`${state.playback}:${player.playbackId}:${current.id}:${current.source}`} max={max} disabled={disabled} playbackId={player.playbackId}><RangeControl label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled} buffered={canSeek ? buffered : null}
-      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
-    </TimelineHover>
+    <PlaybackSeekBar key={`${state.playback}:${player.playbackId}:${current.id}:${current.source}`} value={playbackClock.position || 0} max={max} disabled={disabled} playbackId={player.playbackId} buffered={canSeek ? buffered : null} pageFirst={pageFirst}
+      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false}>
+      {canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
+    </PlaybackSeekBar>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
       <span className="shrink-0">{!live && length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
-    </div>
-  </div>;
-}
-
-// Pointer previews own their state so moving over the bar doesn't render its slider, chapters or playback labels.
-function TimelineHover({ max, disabled, playbackId, children }: { max: number; disabled: boolean; playbackId: string | null; children: ReactNode }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const [draft, setDraft] = useState<number | null>(null);
-  const track = (event: PointerEvent<HTMLDivElement>) => {
-    if (disabled || event.pointerType === "touch") return;
-    const { left, width } = event.currentTarget.getBoundingClientRect();
-    if (width) setHover(Math.min(1, Math.max(0, (event.clientX - left) / width)));
-  };
-  const target = draft ?? (hover === null ? null : hover * max);
-  const time = disabled || target === null ? null : Math.max(0, Math.min(max, target));
-  return <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)}>
-    <RangePreviewContext value={setDraft}>{children}</RangePreviewContext>
-    {/* Keep the preview above the handle and inside either end of the bar (100cqw). */}
-    <div data-timeline-preview hidden={time === null} aria-hidden="true" className="pointer-events-none absolute bottom-[calc(50%+.5rem)] left-0 rounded-sm bg-background text-center text-meta tabular-nums" style={{ translate: `clamp(0px, calc(${(time ?? 0) / max} * 100cqw - 50%), calc(100cqw - 100%))` }}>
-      {playbackId && <PlaybackThumbnail playbackId={playbackId} time={time} />}
-      {time !== null && <span data-hover-time className="block px-1.5 py-0.5">{formatDuration(Math.round(time))}</span>}
     </div>
   </div>;
 }

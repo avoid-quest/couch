@@ -116,19 +116,36 @@ The timeline row:
   images and cue gaps leave the timestamp alone. Preview lookup retains fractional
   cue timing; the label still rounds to seconds. A duration change clamps the
   preview, thumb and committed target to the same range.
-- Preview state updates independently of the slider, chapters and playback labels;
+- Preview pointer updates leave the track, chapter cues and playback labels alone;
   touch without a drag and disabled timelines do no hover work. Dragging stays
   local and sends one Couch seek on release. Cancellation, Escape, lost pointer
-  capture, a changed source or lost permission discard the draft. Keyboard seeking
-  keeps its ten-second steps across clock updates; Down returns focus to Play.
+  capture, a changed source or lost permission discard the draft. Escape cancels an
+  active edit before leaving the player. Keyboard seeking keeps its ten-second
+  steps across clock updates; Home/End go to the endpoints, Page Up/Down move a
+  minute, and Down returns focus to Play. The invisible target is 1.5rem tall
+  with a 44px minimum on touch, while the visible line keeps its thin profile.
 
 The same previews work in the now-playing bar and on a controller without local
 media. `PlaybackThumbnail` uses Video.js 10.2.0's standalone `Thumbnail` with
 supplied images or sprite coordinates. It selects one covering cue, memoizes the
 image presentation and leaves Video.js responsible for cropping and resize
 observation. Moving within that cue updates only its timestamp/position, without
-re-rendering the thumbnail. The shadcn slider, Couch commands, observed playback
-position, renderers and Sendspin picture follower keep their existing ownership.
+re-rendering the thumbnail. `PlaybackSeekBar` uses Video.js's generic `Slider.Root`,
+`Track`, `Fill`, `Thumb`, `Preview` and `Value`, styled with Couch's existing tokens. Its public change and
+commit callbacks keep a smooth local draft and authorize just one seek on release;
+lost capture alone cannot commit. Keyboard targets remain cumulative until blur,
+Escape or rejection. Late replies cannot clear a newer edit. Buffer and chapter
+cues use Couch observations. Volume and device faders keep their shadcn slider.
+
+The slider operates on a unit interval so fractional durations reach both
+endpoints; its ARIA values, spoken time, labels and commands use seconds. `Value`'s
+public render prop supplies pointer time to the on-demand preview cache. The
+standalone `Thumbnail` preserves cue memoization: `Slider.Thumbnail` subscribes to
+every pointer value and would repeat cropping work inside the same cue.
+`TimeSlider` binds to a local player store and seeks during drag, so it is not
+appropriate for Couch's shared transport. No Video.js player store, media element
+or receiver is created. Couch commands, observed playback position, renderers and
+Sendspin picture follower keep their existing ownership.
 Non-seekable Live has no timeline or previews.
 
 Core reuses the existing yt-dlp extraction (`mhtml` storyboard formats),

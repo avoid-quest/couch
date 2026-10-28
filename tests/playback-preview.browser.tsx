@@ -57,7 +57,7 @@ export async function preparePreviewRegression(imageUrl?: string) {
 export async function runPreviewRegression() {
   const fixture = await preparePreviewRegression();
   const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
-  const track = () => document.querySelector('[role="slider"][aria-label="Playback position"]')!.closest('[data-slot="slider"]')!.parentElement!;
+  const track = () => document.querySelector('[role="slider"][aria-label="Playback position"]')!.closest('[data-slot="slider"]')!;
   const hover = (fraction: number) => {
     const element = track(), rect = element.getBoundingClientRect();
     element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse", clientX: rect.left + rect.width * fraction }));
@@ -107,7 +107,7 @@ export async function runPreviewRecoveryRegression() {
   const fixture = await preparePreviewRegression();
   const fontSize = document.documentElement.style.fontSize;
   const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
-  const track = () => document.querySelector('[role="slider"][aria-label="Playback position"]')!.closest('[data-slot="slider"]')!.parentElement!;
+  const track = () => document.querySelector('[role="slider"][aria-label="Playback position"]')!.closest('[data-slot="slider"]')!;
   const hover = async (time: number) => {
     const element = track(), rect = element.getBoundingClientRect();
     element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse", clientX: rect.left + rect.width * time / 693 }));
@@ -135,6 +135,7 @@ export async function runPreviewRecoveryRegression() {
     ] };
     await fixture.source("cues", "web:https://www.raiplay.it/video/provider-example.html"); fixture.options({ metadata });
     await hover(4.6); assert(visible(), "Fractional position was rounded into a cue gap");
+    await hover(4.9496); assert(visible(), "Sub-millisecond position was rounded into a cue gap");
     await hover(5); assert(!visible(), "Provider cue gap showed the previous image");
     await hover(10.1); assert(visible(), "Next provider cue was not shown");
     document.documentElement.style.fontSize = "16px";

@@ -348,6 +348,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
    is on it. The hover time sits on the panel surface. */
 :is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
+[data-playback-seek][data-dragging]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; }
 .player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
 /* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
    tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness

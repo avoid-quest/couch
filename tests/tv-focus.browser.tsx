@@ -126,6 +126,17 @@ export async function runTvFocusRegression() {
       await remote('down');
       assert(document.activeElement?.textContent === 'Try again', "Down left content before its second recovery action");
     });
+    await check("Language Select opens, moves and cancels back to its trigger", async () => {
+      await audit.go('/settings/couch/playback');
+      const trigger = control('[role="combobox"][aria-label="More audio language options"]');
+      trigger.focus(); await remote('select');
+      assert(document.activeElement?.closest('[role="listbox"]'), "Language Select did not take focus");
+      const first = document.activeElement;
+      await remote('down');
+      assert(document.activeElement !== first && document.activeElement?.matches('[role="option"]'), "Language Select did not move to another option");
+      await remote('back');
+      assert(document.activeElement === trigger && trigger.getAttribute('aria-expanded') === 'false', "Language Select Back lost its opener");
+    });
     await check("Player panels and nested queue menus restore their own openers", async () => {
       await audit.go('/now', { player: 'paused', video: true });
       for (const label of ['Volume', 'Playback', 'Up next']) {

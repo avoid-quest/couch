@@ -424,3 +424,59 @@ progress. Matching before/after desktop, phone, TV, fullscreen and bar captures
 use the same real provider image bytes, await decode and two animation frames,
 and demonstrate the unchanged layout. They replay captured assets and do not
 prove fresh provider extraction or A/V playback.
+
+## Video.js seek interaction, 28 October 2026
+
+`PlaybackSeekBar` replaces only the playback timeline with the documented
+Video.js 10.2.0 generic Slider parts. Its shared `useSlider` machinery caches drag
+geometry and separates change from commit. Couch guards commit with a matching
+pointer release, since this Video.js version also calls commit on lost capture.
+The standalone Thumbnail retains the previous cue memoization and recovery.
+The [Slider reference](https://videojs.org/docs/framework/react/reference/components/slider),
+[TimeSlider reference](https://videojs.org/docs/framework/react/reference/components/time-slider)
+and published 10.2.0 implementation were checked. TimeSlider's media-store seek
+during drag does not match Couch's command contract. The
+[shadcn guide](https://videojs.org/docs/guides/installation/shadcn) and registry
+describe optional editable skins; the primitives require no Base UI migration.
+
+Three alternating baseline/changed runs used `595d588c`'s components in the same
+1440×900 Linux headless Chromium development fixture. Trusted mouse input made
+120 moves per hover/drag phase with 250ms clock and buffer observations, on the
+bar and player. A separate 120-move preview workload reused the same captured
+43,112-byte image as the prior refinement. Results are accumulated React Profiler
+time across the three runs, not input latency or production CPU:
+
+| Measurement | Refined shadcn timeline | Video.js timeline |
+| --- | --- | --- |
+| Bar drag render time | 1,176.2ms | 689.2ms |
+| Player drag render time | 1,252.2ms | 734.3ms |
+| Geometry reads per drag | 122 | 3 |
+| Bar / player hover render time, timestamp only | 315.0 / 295.4ms | 268.4 / 213.5ms |
+| Same-cue preview render time | 225.6ms | 237.4ms |
+| Crossing-cue preview render time | 264.5ms | 353.8ms |
+| Thumbnail style reads, same / crossing cue (each run) | 0 / 25 | 0 / 25 |
+| Additional preview requests / loads / object URLs in either phase | 0 / 0 / 0 | 0 / 0 / 0 |
+
+Drag render work fell about 41%; crossing-cue render work rose about 34% with the
+additional Slider parts/subscriptions (p95 1.3–1.4ms → 2.7ms). This tradeoff keeps
+the previous same-cue crop optimization and improves dragging, without claiming
+an across-the-board speedup. Layout counts remained roughly 124–141 per phase;
+fewer explicit geometry reads do not mean fewer browser layouts. Most p95 frame
+intervals were 16.7–16.8ms; one changed bar drag reached 33.3ms. Neither tree met
+a strict frame budget in every sample. No decoding, physical phone/TV GPU,
+distributed-clock or seek acknowledgement latency was measured.
+
+The production JS/CSS asset sum changed from 2,815,233 to 2,833,353 raw bytes and
+866,374 to 872,177 gzip bytes: +18,120 raw / +5,803 gzip. The frozen dependency
+versions are unchanged.
+
+Trusted mouse and touch regressions cover click/tap, release, cancellation,
+lost capture, Escape, disconnect, source replacement, unmount, shrinking/fractional
+duration and exact endpoints. Trusted keys cover ten-second cumulative edits
+across clock ticks, Home/End, Page Up/Down and Down to Play. The touch target
+measured 44px; the desktop target 27px at this viewport. The visible line and
+transport layout remain unchanged. The fixtures create no media element.
+Language Select selection/cancellation and player popover focus restoration pass
+with trusted keyboard input on desktop and TV presentation; the TV regression
+also covers nested queue menus. Matching desktop, phone, TV, fullscreen and bar
+screenshots, raw measurements and harnesses are in `/tmp/couch-videojs-timeline/`.
