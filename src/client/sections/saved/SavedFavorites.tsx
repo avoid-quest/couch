@@ -35,7 +35,7 @@ const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "r
 const meta = (favorite: Favorite) => {
   if (favorite.kind === "radio") return metaLine("Radio", favorite.item.groupTitle || favorite.item.countryCode);
   const type = collectionLabel(favorite.item);
-  return metaLine(providerNames[favorite.item.provider], type, collectionSubtitle(favorite.item.subtitle === favorite.item.title ? undefined : mediaSubtitle(favorite.item), type));
+  return metaLine(providerNames[favorite.item.provider], type, collectionSubtitle(favorite.item.subtitle === favorite.item.title ? undefined : mediaSubtitle(favorite.item), type, providerNames[favorite.item.provider]));
 };
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.

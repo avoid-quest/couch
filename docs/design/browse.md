@@ -102,9 +102,11 @@ admin can add a playlist."; Radio's empty Playlists does the same.
 Radio keeps a station's **tags** apart from its current show's **categories**.
 Categories come from XMLTV and fresh live enrichment; playlist group
 names remain source labels. Labels fold whitespace, Unicode form and case
-without guessing genres or splitting compound labels. When live genre text
-repeats guide categories as a comma-joined list, those categories appear once;
-other genre text keeps its punctuation and multi-word labels. Neither is
+without guessing genres or splitting compound labels. When the whole live genre
+text repeats known guide categories as a comma-joined list, those categories
+appear once. A partial overlap keeps the complete genre: “Jazz, Blues & Soul”
+is not cut to “Blues & Soul” by a “Jazz” category. Other genre text keeps its
+punctuation and multi-word labels. Neither is
 labelled on screen; where a line sits says what it describes:
 
 - **A row or tile** says what it plays: the show and its categories ("Early
@@ -243,6 +245,10 @@ looking them up or rewriting them on list reads. A subtitle identical to the
 saved title is omitted from the caption. Opening Details can repair an
 ID-only saved title; chosen names, artwork, descriptions and order are kept when
 an alias becomes canonical, with an existing canonical bookmark taking precedence.
+Only the channel's own ID or handle is an address fallback; a name resembling
+another channel's ID or a legacy custom slug stays as chosen. Search uses a
+verified canonical channel reference when provided. A device removed while
+Details loads cannot repair Saved; another paired reader can reuse that metadata.
 Playlist Queue all retains each occurrence's list and position.
 A rail on wide screens (white ink on a
 `secondary` capsule for the current entry; a pointer only brings another
@@ -321,8 +327,9 @@ disabled.
 a provider's own "Game · 1,204 viewers" becomes "Game, 1,204 viewers"). An
 episode leads with its series ("Phony") and its meta with "S1 E1, Episodio 1",
 wherever tiles, rows or the hero show it. Saved collections and Search use one
-type term: "Series, 2022, HD", without a second "Series" from the source's
-subtitle, and "List" for a YouTube playlist, without another "Playlist".
+type term: "Series, 2022, HD", without a second "Series" from a catalogue's
+type metadata, and "List" for a YouTube playlist. Creator names remain intact,
+including a YouTube owner called “Playlist” or a Bandcamp artist called “Album”.
 
 **`Shelf`**: an optional linked heading (a focus stop) over a plain overflow
 row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll

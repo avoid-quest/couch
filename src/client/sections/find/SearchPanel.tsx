@@ -201,7 +201,7 @@ export function SearchPanel(props: Props) {
   </section>;
 }
 
-const hitContext = (hit: SearchHit) => metaLine(...(collectionSubtitle(hit.meta, hit.collection) ?? "").split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })));
+const hitContext = (hit: SearchHit) => metaLine(...(collectionSubtitle(hit.meta, hit.collection, hit.source) ?? "").split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })));
 /** One meta line by the caption rules: the byline the links don't already give, what an openable hit is, then its length. */
 const hitMeta = (hit: SearchHit, showCollection = true) => metaLine(hitContext(hit), showCollection && hit.collection, !hit.live && !hit.collection && hit.duration != null && formatDuration(hit.duration));
 

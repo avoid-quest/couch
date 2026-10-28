@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "../src/server/sqlite";
+import { ControllerError } from "../src/server/devices";
 import { createYouTubeBrowser, createYouTubePlaylistLoader } from "../src/server/providers/youtube";
 import { createProviders } from "../src/server/providers";
 import { createForLater } from "../src/server/for-later";
@@ -56,6 +57,19 @@ test("channel aliases and search share one new favorite and canonical section li
     assert.equal(favorites.length, 1);
     assert.equal(favorites[0].url, channel);
     assert.equal(favorites[0].title, creator.title);
+  } finally { providers.close(); }
+});
+
+test("a search channel's verified canonical reference takes precedence over its alias URL and ID title", async () => {
+  const providers = catalog(createYouTubeBrowser(runner(rawPage([{ url: alias, title: channel.split("/").at(-1), channel: creator.title, channel_url: channel }]))));
+  try {
+    const page = await (await providers.handle(get("/api/providers/youtube/items?q=NPR"))).json();
+    assert.equal(page.items[0].url, channel);
+    assert.equal(page.items[0].id, providerItemId("youtube", channel));
+    assert.equal(page.items[0].title, creator.title);
+    const saved = await (await providers.handle(post("/api/providers/favorites", { item: page.items[0] }))).json();
+    assert.equal(saved.item.url, channel);
+    assert.equal(saved.item.title, creator.title);
   } finally { providers.close(); }
 });
 
@@ -124,6 +138,60 @@ test("opening a canonical channel repairs only an address title and preserves it
     assert.deepEqual(await read(), [other, custom]);
     assert.equal(changes, 4, "a custom title survives resolution");
   } finally { providers.close(); }
+});
+
+test("saved names resembling a different channel ID or a legacy slug remain chosen names", async () => {
+  const names = ["UCDKjZ6tnLsoxSEfy0GMsfbw", "Piano"];
+  for (const title of names) {
+    const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel })));
+    try {
+      const url = title === "Piano" ? "https://www.youtube.com/c/Piano" : channel;
+      const saved: ProviderItem = { id: providerItemId("youtube", url), provider: "youtube", kind: "channel", url, title, subtitle: "Another name" };
+      assert.deepEqual((await (await providers.handle(post("/api/providers/favorites", { item: saved }))).json()).item, saved);
+      assert.ok((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.some((item: ProviderItem) => item.title === title));
+      await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url })}`));
+      assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.find((item: ProviderItem) => item.url === channel).title, title);
+    } finally { providers.close(); }
+  }
+});
+
+test("an existing canonical name equal to the alias takes precedence during a collision", async () => {
+  const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel })));
+  const saved = (url: string, title: string) => ({ provider: "youtube", kind: "channel", url, title });
+  try {
+    await providers.handle(post("/api/providers/favorites", { item: saved(alias, "My concerts") }));
+    await providers.handle(post("/api/providers/favorites", { item: saved(channel, "@nprmusic") }));
+    await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`));
+    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, "@nprmusic");
+  } finally { providers.close(); }
+});
+
+test("resolving an alias recognizes its verified canonical ID as a fallback title", async () => {
+  const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel })));
+  try {
+    await providers.handle(post("/api/providers/favorites", { item: { provider: "youtube", kind: "channel", url: alias, title: channel.split("/").at(-1) } }));
+    await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`));
+    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, creator.title);
+  } finally { providers.close(); }
+});
+
+test("a removed caller cannot repair Saved after channel metadata resolves, but a paired caller can reuse the cache", async () => {
+  const gate = Promise.withResolvers<void>();
+  const providers = catalog(createYouTubeBrowser(async () => { await gate.promise; return JSON.stringify({ channel: creator.title, channel_url: channel }); }));
+  const saved = { provider: "youtube", kind: "channel", title: channel.split("/").at(-1), url: channel };
+  let allowed = true;
+  const authorize = () => { if (!allowed) throw new ControllerError("This device was removed. Pair again.", 401); };
+  try {
+    await providers.handle(post("/api/providers/favorites", { item: saved }));
+    const request = () => get(`/api/providers/youtube/items?${new URLSearchParams({ url: channel })}`);
+    const removed = providers.handle(request(), authorize);
+    await flush(); allowed = false; gate.resolve();
+    assert.equal((await removed).status, 401);
+    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, saved.title);
+    // A still-paired caller may repair from the shared cache without a second metadata request.
+    assert.equal((await providers.handle(request())).status, 200);
+    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, creator.title);
+  } finally { gate.resolve(); providers.close(); }
 });
 
 for (const duplicate of [false, true]) {

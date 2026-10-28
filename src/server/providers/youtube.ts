@@ -13,11 +13,13 @@ const object = (value: unknown): value is Metadata => typeof value === "object" 
 const label = (value: unknown, limit = 200) => typeof value === "string" ? value.replace(/[\s\u0000-\u001f\u007f]+/g, " ").trim().slice(0, limit) || undefined : undefined;
 
 // Keep a chosen name, but replace an address fallback when a human name is known.
-export function youtubeChannelTitle(url: string, ...titles: (string | undefined)[]): string {
-  let address = new URL(url).pathname.split("/").filter(Boolean).at(-1) ?? "YouTube";
-  try { address = decodeURIComponent(address); } catch { /* Saved URLs may contain invalid escapes. */ }
-  return titles.find(title => title && title !== address && !/^UC[A-Za-z0-9_-]{22}$/.test(title))
-    ?? titles.find(title => !!title) ?? label(address) ?? "YouTube";
+export function youtubeChannelTitle(url: string | string[], ...titles: (string | undefined)[]): string {
+  const addresses = (typeof url === "string" ? [url] : url).map(url => {
+    const address = new URL(url).pathname.split("/").filter(Boolean).at(-1) ?? "YouTube";
+    try { return decodeURIComponent(address); } catch { return address; }
+  });
+  return titles.find(title => title && !addresses.some(address => title === address && /^(?:UC[A-Za-z0-9_-]{22}|@.+)$/.test(address)))
+    ?? titles.find(title => !!title) ?? label(addresses[0]) ?? "YouTube";
 }
 
 function searchUrl(query: string): string {
@@ -80,7 +82,8 @@ function item(info: unknown, inheritedCreator?: CollectionLink): ProviderItem | 
     source = target(url);
   } catch { return null; }
   if (source.kind === "search") return null;
-  const title = source.kind === "channel" ? youtubeChannelTitle(source.url, label(info.title), label(info.channel), label(info.uploader)) : label(info.title) ?? label(info.channel);
+  if (source.kind === "channel") source.url = canonicalChannelUrl(info) ?? source.url;
+  const title = source.kind === "channel" ? youtubeChannelTitle(source.url, label(info.channel), label(info.uploader), label(info.title)) : label(info.title) ?? label(info.channel);
   if (!title || ["[Private video]", "[Deleted video]"].includes(title)) return null;
   const image = thumbnail(info, source);
   const description = label(info.description, 1_000);

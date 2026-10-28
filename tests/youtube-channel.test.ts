@@ -1,3 +1,4 @@
+import { collectionSubtitle, metaLine } from "../src/client/media-caption";
 import { expect, test } from "bun:test";
 import { createYouTubeBrowser, createYouTubePlaylistLoader } from "../src/server/providers/youtube";
 
@@ -31,6 +32,14 @@ test("channel names survive title-only metadata and ID titles in search results"
   ] }))({ query: "NPR Music" });
   expect(search.items.map(item => item.title)).toEqual(["NPR Music", "A concert"]);
   expect(search.items[0]?.url).toBe(url);
+});
+
+test("a playlist owner's name is retained even when it is a type word", async () => {
+  for (const owner of ["Playlist", "List", "Channel · List"]) {
+    const page = await createYouTubeBrowser(async () => JSON.stringify({ title: "My mix", channel: owner, entries: [] }))({ url: "https://www.youtube.com/playlist?list=PLabcdefghijk" });
+    expect(page.item?.kind).toBe("collection");
+    expect(metaLine("YouTube", "List", collectionSubtitle(page.item?.subtitle, "List", "YouTube"))).toBe(`YouTube, List, ${metaLine(owner)}`);
+  }
 });
 
 test("a video's creator survives separately from the selected playlist", async () => {

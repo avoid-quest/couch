@@ -523,6 +523,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Home](design/home.md): the hero, your own rows and the sources.
 - [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
   rows and tiles, filters and pages, breadcrumbs.
+  Captions remove confirmed type/category overlaps while keeping compound genres
+  and creator names; channel Details preserves chosen Saved names and canonical identity.
 - [Player](design/player.md): the picture, scrims, the band, settings, Up next,
   status.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.

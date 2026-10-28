@@ -135,8 +135,9 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
     const other = canonical.id === id ? null : db.query<{ item: string }, [string]>("SELECT item FROM provider_favorites WHERE id = ?").get(canonical.id);
     let existing: ProviderItem | undefined;
     try { if (other) existing = savedItem(JSON.parse(other.item)); } catch { /* Ignore an unusable duplicate. */ }
+    const title = youtubeChannelTitle([previous.url, canonical.url], previous.title, canonical.title);
     const item = savedItem({ ...canonical, ...previous, ...existing, url: canonical.url,
-      title: youtubeChannelTitle(previous.url, existing?.title, previous.title, canonical.title) });
+      title: existing ? youtubeChannelTitle(existing.url, existing.title, title) : title });
     if (item.id === id && item.title === previous.title) return;
     db.transaction(() => {
       if (item.id !== id) db.query("DELETE FROM provider_favorites WHERE id = ?").run(id);
@@ -219,7 +220,6 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
             signal.throwIfAborted();
             const page = await browse[provider]({ ...(query ? { query } : {}), ...(url ? { url } : {}), ...(cursor ? { cursor } : {}) }, signal);
             signal.throwIfAborted();
-            normalizeChannelFavorite(provider, url, page);
             if (cache.size >= 100) cache.delete(cache.keys().next().value!);
             cache.set(key, { page, expires: Date.now() + (provider === "twitch" ? 20_000 : 60_000) });
             return page;
@@ -236,7 +236,10 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         callerSignal.addEventListener("abort", cancel, { once: true });
         if (callerSignal.aborted) cancel();
         try {
-          return Response.json(await Promise.race([work.promise, canceled.promise]));
+          const page = await Promise.race([work.promise, canceled.promise]);
+          authorize();
+          normalizeChannelFavorite(provider, url, page);
+          return Response.json(page);
         } finally {
           callerSignal.removeEventListener("abort", cancel);
           if (--work.waiters === 0) {
