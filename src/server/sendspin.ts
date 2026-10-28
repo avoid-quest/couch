@@ -125,7 +125,7 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
       if (source.queued + packet.pcm.byteLength > 768_000) { source.error = "The audio worker cannot keep up with capture."; options.sourceFailed?.(id, source.error); return false; }
       source.queued += packet.pcm.byteLength; post({ type: "write", sourceId: id, epoch: source.epoch, packet }); return true;
     },
-    acceptSource(socket: WebSocket, id: string, _uploadId?: string) {
+    acceptSource(socket: WebSocket, id: string) {
       if (!sources.has(id) || uploads.has(id)) return false;
       uploads.set(id, socket);
       socket.once("close", () => { if (uploads.get(id) === socket) uploads.delete(id); });

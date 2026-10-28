@@ -1775,7 +1775,7 @@ export async function createHub(options: HubOptions) {
         const admitted = () => !!identity() && live.source(sourceId) === source && live.acceptsUpload(sourceId, deviceId, key, uploadId);
         if (!admitted()) return void socket.close(1008, "The capture upload is no longer authorized.");
         socket.on("message", () => { if (!admitted()) socket.close(1008, "The capture upload is no longer authorized."); });
-        if (!(source?.audioDelivery === "pcm" ? sendspin.acceptSource(socket, sourceId, uploadId) : liveStreams.accept(sourceId, socket))) socket.close(1008, "The capture upload is no longer available.");
+        if (!(source?.audioDelivery === "pcm" ? sendspin.acceptSource(socket, sourceId) : liveStreams.accept(sourceId, socket))) socket.close(1008, "The capture upload is no longer available.");
       }) ? undefined : json({ error: "WebSocket upgrade required." }, 426);
     }
     if (url.pathname === "/api/audio/session" && request.method === "POST") {

@@ -29,7 +29,7 @@ type Chunk = { offset: number; duration: number; data: Buffer };
 // start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
 // sent: released chunks that have not played yet, at their play times, so a speaker that joins late gets them too.
 // cursors: the play time of the last chunk each speaker got.
-type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; captureLead?: number; timelineOnly?: boolean; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
+type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; captureLead?: number; timelineOnly?: boolean; start: number; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
 
 const leadUs = 1_000_000; // Buffered media and relaxed capture; Live uses player declarations.
 // Chunks go out this far ahead of their play time. Players schedule what they hold, so a page whose
@@ -179,14 +179,14 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         const headers = new Headers(current.headers);
         if (/^https?:/.test(inputUrl) && new URL(inputUrl).origin !== new URL(credentialOrigin).origin) stripCrossOriginHeaders(headers);
         if ((!members.length || current.hasAudio === false) && !current.liveSourceId) {
-          const next: Run = { timelineOnly: true, start: state.position, live: false, anchored: true, speed: state.speed ?? 1, wires: new Set(), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, base: serverNowUs() + leadUs, released: Infinity, timer: setInterval(() => tick(next), 50) };
+          const next: Run = { timelineOnly: true, start: state.position, anchored: true, speed: state.speed ?? 1, wires: new Set(), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, base: serverNowUs() + leadUs, released: Infinity, timer: setInterval(() => tick(next), 50) };
           run = next;
           state = { ...state, duration: current.duration ?? state.duration, seekable: !current.live, timeline: { mapping: current.live ? "unavailable" : "media", ...(current.live ? { error: "This picture-only broadcast has no source timestamp mapping." } : {}) } };
           report(); return;
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const source = sources.get(current.liveSourceId)!;
-          const next: Run = { fixed: true, captureLead: captureLead(), start: 0, live: true, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 50) };
+          const next: Run = { fixed: true, captureLead: captureLead(), start: 0, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 50) };
           run = next;
           next.dispose = source.subscribe(event => {
             if (run !== next) return;
@@ -196,7 +196,6 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
               next.cursors.clear(); next.base = undefined; next.released = 0; next.captureLead = captureLead();
               each(session => session.sendStreamClear()); return;
             }
-            if (!next.wires.has(event.wire)) return;
             next.captureLead = Math.max(next.captureLead ?? 0, captureLead());
             const at = event.at + next.captureLead;
             if (next.base === undefined) {
@@ -221,14 +220,10 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         if (!wires.size) wires.add("opus");
         const speed = state.speed ?? 1, start = state.position, live = !!current.live && !current.radio;
         const seek = start > 0 && !current.radio && !live && (state.duration !== null || !!current.startPosition);
-        // A live run keeps the source's timestamps and prints its first one (ashowinfo, on one wire only).
+        // A live run keeps the source's timestamps and prints its first one with ashowinfo.
         const compressed = current.compressor?.enabled && !current.liveSourceId;
         const graph = `[0:a:${audioStream}]${[...live ? ["ashowinfo"] : [], ...speed === 1 ? [] : [tempo(speed)], "aresample=48000", "aformat=channel_layouts=stereo", ...compressed ? [compressorFilter(current.compressor!)] : [], ...wires.size > 1 ? [`asplit=${wires.size}`] : []].join(",")}${[...wires].map(wire => `[${wire}]`).join("")}`;
-        const shape = (wire: Wire, first: boolean) => {
-          if (graph) return ["-map", `[${wire}]`, "-vn", "-sn", "-dn", "-ar", "48000", "-ac", "2"];
-          const filters = [...live && first ? ["ashowinfo"] : [], ...speed === 1 ? [] : [tempo(speed)]];
-          return ["-map", `0:a:${audioStream}`, "-vn", "-sn", "-dn", ...filters.length ? ["-af", filters.join(",")] : [], "-ar", "48000", "-ac", "2"];
-        };
+        const shape = (wire: Wire) => ["-map", `[${wire}]`, "-vn", "-sn", "-dn", "-ar", "48000", "-ac", "2"];
         // Network protocols only, and a 10 s timeout on every read (#644 FFmpeg safety).
         const child = spawn(executable.path, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto,httpproxy", "-rw_timeout", "10000000",
           ...proxy ? ["-http_proxy", proxy.url, "-format_whitelist", "aac,ac3,aiff,ape,asf,flac,flv,hls,matroska,webm,mov,mp3,mpeg,mpegts,ogg,wav,wv"] : [],
@@ -237,13 +232,13 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           // through several seconds before anchoring the shared playback clock.
           ...live && hls ? ["-live_start_index", "-1", "-probesize", "32768", "-analyzeduration", "100000"] : [],
           ...live ? ["-copyts"] : [], ...seek ? ["-ss", String(start)] : [], "-i", source,
-          ...graph ? ["-filter_complex", graph] : [],
-          ...wires.has("opus") ? [...shape("opus", true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
-          ...wires.has("pcm") ? [...shape("pcm", !wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
+          "-filter_complex", graph,
+          ...wires.has("opus") ? [...shape("opus"), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
+          ...wires.has("pcm") ? [...shape("pcm"), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
         child.once("close", executable.release);
         ffmpeg = undefined; // The child owns the lease until its process and pipes close.
         if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
-        const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
+        const next: Run = { child, start, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
         run = next;
         report();
         const diagnostic = ffmpegErrorLog();
@@ -271,7 +266,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         const queue = (wire: Wire, pipe: Readable, chunk: Chunk) => {
           const list = next.queues[wire];
           list.push(chunk);
-          if (list.length && list.at(-1)!.offset - list[0]!.offset > aheadUs) pipe.pause();
+          if (list.at(-1)!.offset - list[0]!.offset > aheadUs) pipe.pause();
         };
         if (wires.has("opus")) {
           const pipe = next.pipes.opus = child.stdout!;
@@ -354,9 +349,10 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         if (current.pipes[wire]?.isPaused() && (!list.length || list.at(-1)!.offset - list[0]!.offset < aheadUs / 2)) current.pipes[wire]!.resume();
       }
       // Waiting for the source: the speakers have played everything they were sent.
-      const starving = current.exit === undefined && Object.values(current.queues).every(list => !list.length) && now >= current.base + current.released;
+      const drained = Object.values(current.queues).every(list => !list.length) && now >= current.base + current.released;
+      const starving = current.exit === undefined && drained;
       const status = now >= current.base && !starving ? "playing" : "loading";
-      if (current.exit === 0 && Object.values(current.queues).every(list => !list.length) && now >= current.base + current.released) {
+      if (current.exit === 0 && drained) {
         halt(true);
         state = { ...state, position: position(), status: "ended" };
         report();
@@ -483,16 +479,13 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     connected: (clientId: string) => sessions.has(clientId),
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
     drop(clientId: string) { for (const [session, socket] of socketOf) if (session.getClientId() === clientId) socket.terminate(); },
-    status: () => ({ clients: [...sessions.keys()], delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]), sources: [...sources].map(([id, source]) => [id, source.error()]) }),
+    status: () => ({ clients: [...sessions.keys()], delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]) }),
     registerSource(id: string) {
       if (sources.has(id)) return;
       sources.set(id, createScheduledCapture(options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }));
     },
     writeSource(id: string, packet: CaptureAudioPacket) { return sources.get(id)?.write(packet) ?? false; },
     endSource(id: string) { sources.get(id)?.close(); sources.delete(id); },
-    hasSource: (id: string) => sources.has(id),
-    sourceError: (id: string) => sources.get(id)?.error(),
-    receiverError: (id: string) => receiverErrors.get(id)?.error,
     close() { for (const source of sources.values()) source.close(); sources.clear(); for (const socket of sockets) socket.terminate(); },
   };
 }

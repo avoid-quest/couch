@@ -130,7 +130,6 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
       if (error) queueMicrotask(() => { if (listeners.has(listener)) listener({ type: "error", error: error! }); });
       return () => { listeners.delete(listener); };
     },
-    error: () => error,
     close() { closed = true; attempt++; const old = child; child = undefined; old?.kill("SIGKILL"); pending = []; anchors = []; listeners.clear(); },
   };
 }
