@@ -1,7 +1,5 @@
 import { publicFetch } from "./public-network";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { stageExtractor } from "./yt-dlp-plugin";
 import extractor from "../../vendor/streamingcommunity/streamingcommunity.py" with { type: "text" };
 import type { BrowseRequest, ProviderItem, ProviderPage, StreamingCommunityPreview } from "../shared/providers";
 import { isStreamingCommunityHost, streamingCommunityOrigin, validStreamingCommunityOrigin } from "../shared/streamingcommunity";
@@ -390,12 +388,4 @@ export async function streamingCommunityList(value: string, signal?: AbortSignal
 }
 
 // Bundled into Core; the only directory this extraction can load.
-export async function streamingCommunityPlugin() {
-  const directory = await mkdtemp(join(tmpdir(), "couch-streamingcommunity-"));
-  try {
-    const target = join(directory, "bundled", "yt_dlp_plugins", "extractor");
-    await mkdir(target, { recursive: true, mode: 0o700 });
-    await writeFile(join(target, "streamingcommunity.py"), extractor, { mode: 0o600 });
-    return { directory, close: () => rm(directory, { recursive: true, force: true }) };
-  } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
-}
+export const streamingCommunityPlugin = () => stageExtractor("streamingcommunity", extractor);

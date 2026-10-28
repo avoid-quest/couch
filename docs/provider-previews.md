@@ -67,8 +67,9 @@ memory or decoder CPU.
 ## Verified source coverage, 28 October 2026
 
 Fresh anonymous production-Core resolution succeeded for all nine website
-providers below. Preview delivery used the same protected response path; no
-accounts, regional bypass or installed Couch data were used.
+providers below. Production preview response code delivered the images; separate HTTP route
+tests verify authorization. No accounts, regional bypass or installed Couch data
+were used.
 
 | Provider / sample | Observed timed previews | All demanded image bytes |
 | --- | --- | ---: |
