@@ -264,9 +264,9 @@ Do not extend a short AAC/MP4 by stream-copy looping it.
 ```
 
 ```sh
-./node_modules/.bin/bun tests/compressor.native.ts .artifacts/compressor-t480-audio --tv --warmup=30 --seconds=60 --rounds=3 --modes=none,bypass,enabled,paused-native,paused
-COUCH_PERF_MEDIA=/absolute/path/to/movie.mp4 ./node_modules/.bin/bun tests/compressor.native.ts .artifacts/compressor-t480-movie --tv --warmup=30 --seconds=60 --rounds=3 --modes=none,bypass,enabled,toggle
-COUCH_TEST_FFMPEG=/absolute/path/to/ffmpeg ./node_modules/.bin/bun tests/compressor-ffmpeg.performance.ts .artifacts/compressor-t480-ffmpeg
+bun tests/compressor.native.ts .artifacts/compressor-t480-audio --tv --warmup=30 --seconds=60 --rounds=3 --modes=none,bypass,enabled,paused-native,paused
+COUCH_PERF_MEDIA=/absolute/path/to/movie.mp4 bun tests/compressor.native.ts .artifacts/compressor-t480-movie --tv --warmup=30 --seconds=60 --rounds=3 --modes=none,bypass,enabled,toggle
+COUCH_TEST_FFMPEG=/absolute/path/to/ffmpeg bun tests/compressor-ffmpeg.performance.ts .artifacts/compressor-t480-ffmpeg
 ```
 
 Keep the complete JSON, screenshots and source identity. Use continuous media
@@ -284,10 +284,10 @@ this target-device baseline exists.
 For automated regressions:
 
 ```sh
-./node_modules/.bin/bun test tests/compressor.test.ts tests/compressor-relay.test.ts tests/compressor-mpv.test.ts tests/renderer-hls.test.ts
-./node_modules/.bin/bun build tests/compressor.integration.ts tests/compressor-sendspin.integration.ts --target=node --outdir=build
+bun run test tests/compressor.test.ts tests/compressor-relay.test.ts tests/compressor-mpv.test.ts tests/renderer-hls.test.ts
+bun build tests/compressor.integration.ts tests/compressor-sendspin.integration.ts --target=node --outdir=build
 COUCH_TEST_FFMPEG=/absolute/path/to/ffmpeg node --test build/compressor.integration.js build/compressor-sendspin.integration.js
-xvfb-run -a ./node_modules/.bin/bun tests/compressor.native.ts .artifacts/compressor-check --rounds=0 --perf-checks --tv
+xvfb-run -a bun tests/compressor.native.ts .artifacts/compressor-check --rounds=0 --perf-checks --tv
 ```
 
 `--serve` leaves just the browser fixture open for inspection. Stop its recorded
