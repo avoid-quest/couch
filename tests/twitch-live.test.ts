@@ -19,6 +19,22 @@ test("saved Twitch channels are asked about in one query and say whether they ar
   expect(now.get("https://www.twitch.tv/asleep")).toEqual({ live: false, subtitle: "Offline" });
 });
 
+test.each([[0, "0 viewers"], [1, "1 viewer"], [2, "2 viewers"]] as const)("Twitch viewer count %i is consistent across search, categories and saved channels", async (viewersCount, label) => {
+  const user = { login: "live", stream: { id: "1", viewersCount, game: { name: "Music" } } };
+  const responses = [
+    { searchFor: { channels: { edges: [{ item: user }] } } },
+    { games: { edges: [{ node: { name: "Music", slug: "music", viewersCount } }] } },
+    { users: [user] },
+  ];
+  globalThis.fetch = (async () => Response.json({ data: responses.shift() })) as unknown as typeof fetch;
+  const search = await browseTwitch({ query: "live" });
+  const categories = await browseTwitch({ url: "https://www.twitch.tv/directory" });
+  const now = await liveTwitchChannels([channel("live")]);
+  expect(search.items[0]?.subtitle).toBe(`Music · ${label}`);
+  expect(categories.items[0]?.subtitle).toBe(label);
+  expect(now.get("https://www.twitch.tv/live")).toEqual({ live: true, subtitle: `Music · ${label}` });
+});
+
 test("more than 100 saved Twitch channels are asked about 100 at a time", async () => {
   const asked: string[][] = [];
   globalThis.fetch = (async (_url: string, init: RequestInit) => {

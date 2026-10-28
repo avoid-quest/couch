@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { artShape, fillsFrame, majorityShape } from "../src/client/art-shape";
-import { episodeLabel, episodeRow, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
+import { collectionSubtitle, episodeLabel, episodeRow, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
 
 test("each kind of item has one artwork shape", () => {
   expect(artShape("StreamingCommunity")).toBe("poster");
@@ -41,6 +41,17 @@ test("an episode in its series' own list goes by its name, its number leading th
 test("a meta line has one separator", () => {
   expect(metaLine("Phony · StreamingCommunity", "35:30")).toBe("Phony, StreamingCommunity, 35:30");
   expect(metaLine(undefined, false, "", "YouTube")).toBe("YouTube");
+});
+
+test("collection captions use one canonical type and retain the other metadata", () => {
+  expect(metaLine("StreamingCommunity", "Series", collectionSubtitle("2022 · HD · Series", "Series", "StreamingCommunity"))).toBe("StreamingCommunity, Series, 2022, HD");
+  expect(collectionSubtitle("Series · 2022 · SUB ITA", "Series", "AnimeUnity")).toBe("2022 · SUB ITA");
+  expect(collectionSubtitle("Playlist", "List", "YouTube")).toBe("Playlist");
+  expect(collectionSubtitle("Album", "Album", "Bandcamp")).toBe("Album");
+  expect(collectionSubtitle("Season 2 · 8 episodes", "Season", "StreamingCommunity")).toBe("Season 2 · 8 episodes");
+  expect(collectionSubtitle("Playlist Radio · Series Finale", "List", "YouTube")).toBe("Playlist Radio · Series Finale");
+  expect(collectionSubtitle("Film · 2022", undefined, "StreamingCommunity")).toBe("Film · 2022");
+  expect(collectionSubtitle(undefined, "Album", "Bandcamp")).toBeUndefined();
 });
 
 test("descriptions drop bare addresses and the lines that only carried one", () => {
