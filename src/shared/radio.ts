@@ -86,11 +86,19 @@ export function radioNow(guide: RadioGuide | undefined, stationId: string, now =
   return { ...matching, ...scheduled, stationId, provider: "xmltv", sampledAt: matching?.sampledAt ?? scheduled.start,
     expiresAt: Math.min(scheduled.end, nextStart, matching?.expiresAt ?? scheduled.end),
     description: scheduled.description || matching?.description, artworkUrl: scheduled.artworkUrl || matching?.artworkUrl,
-    categories: radioLabels([...(scheduled.categories ?? []), ...(matching?.genre ? [matching.genre] : [])]) };
+    categories: radioShowLabels({ categories: scheduled.categories, genre: matching?.genre }) };
 }
 
 export const radioNext = (guide: RadioGuide | undefined, now = Date.now()) => guide?.programmes.filter(item => item.start > now).sort((a, b) => a.start - b.start)[0];
-export const radioShowLabels = (show: RadioProgrammeDetails | null | undefined) => radioLabels([...(show?.categories ?? []), ...(show?.genre ? [show.genre] : [])]);
+/** Live genre text can repeat XMLTV's categories as a comma-joined list. Keep other text and compound labels whole. */
+export function radioShowLabels(show: Pick<RadioProgrammeDetails, "categories" | "genre"> | null | undefined) {
+  const categories = radioLabels(show?.categories ?? []);
+  let genre = radioLabels(show?.genre ? [show.genre] : [])[0] ?? "";
+  for (const category of categories.toSorted((a, b) => b.length - a.length)) {
+    genre = genre.replace(new RegExp(`(^|,\\s*)${RegExp.escape(category)}(?=\\s*(?:,|$))`, "giu"), "$1");
+  }
+  return radioLabels([...categories, genre.split(",").map(part => part.trim()).filter(Boolean).join(", ")]);
+}
 /** A show's host, unless the show is named after them ("DJ Alé" hosted by DJ Alé): its title already says it. */
 export const radioHost = (show: RadioProgrammeDetails | null | undefined) => show?.artist && show.artist.localeCompare(show.title, undefined, { sensitivity: "base" }) ? show.artist : undefined;
 export function radioMatches(station: RadioStation, query: string, show?: RadioProgrammeDetails | null) {

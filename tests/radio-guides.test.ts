@@ -89,6 +89,24 @@ test("a broad schedule slot does not replace a fresh live show's title and artwo
   expect(radioNext(rotation, now)).toEqual(guide.programmes[1]!);
 });
 
+test("guide categories and a comma-joined live genre describe each genre once", () => {
+  const categories = ["Ambient", "Dub", "Breakbeat", "Downtempo"];
+  const overlapping = { ...guide, programmes: [{ ...guide.programmes[0]!, categories }], live: { ...live, genre: "Ambient, Dub, Breakbeat, Downtempo" } };
+  const current = radioNow(overlapping, "station", now)!;
+  expect(current.categories).toEqual(categories);
+  expect(radioShowLabels(current)).toEqual(categories);
+  expect(radioShowLabels({ ...live, categories, genre: " dub , Ambient, Deep House / Dub" })).toEqual([...categories, "Deep House / Dub"]);
+});
+
+test("overlapping genres keep compound labels, punctuation and unrelated genre text", () => {
+  const categories = ["R&B", "Jazz, Blues & Soul", "Deep House (Live)"];
+  const genre = "r&b, Jazz, Blues & Soul, Deep House (Live), Dub Techno, R / B";
+  expect(radioShowLabels({ ...live, categories, genre })).toEqual([...categories, "Dub Techno, R / B"]);
+  expect(radioShowLabels({ ...live, categories: ["Dub"], genre: "Dub Techno, Jazz, Blues & Soul" })).toEqual(["Dub", "Dub Techno, Jazz, Blues & Soul"]);
+  expect(radioShowLabels({ ...live, genre: "Jazz, Blues & Soul" })).toEqual(["Jazz, Blues & Soul"]);
+  expect(radioLabels(["Jazz, Blues & Soul", "R&B", "R / B", "Deep House"])).toEqual(["Jazz, Blues & Soul", "R&B", "R / B", "Deep House"]);
+});
+
 test("guide reads share cache and retry-after, restrict redirects, and explicitly allow another origin", async () => {
   let calls = 0, clock = now, mode = "limited";
   const hub = createRadioGuides({ now: () => clock, signal: new AbortController().signal, fetch: async () => {

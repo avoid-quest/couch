@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { artShape, fillsFrame, majorityShape } from "../src/client/art-shape";
-import { episodeLabel, episodeRow, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
+import { collectionSubtitle, episodeLabel, episodeRow, isChannelTab, mediaCaption, metaLine, pageTitle, withoutUrls } from "../src/client/media-caption";
 
 test("each kind of item has one artwork shape", () => {
   expect(artShape("StreamingCommunity")).toBe("poster");
@@ -41,6 +41,16 @@ test("an episode in its series' own list goes by its name, its number leading th
 test("a meta line has one separator", () => {
   expect(metaLine("Phony · StreamingCommunity", "35:30")).toBe("Phony, StreamingCommunity, 35:30");
   expect(metaLine(undefined, false, "", "YouTube")).toBe("YouTube");
+});
+
+test("collection captions use one canonical type and retain the other metadata", () => {
+  expect(metaLine("StreamingCommunity", "Series", collectionSubtitle("2022 · HD · Series", "Series"))).toBe("StreamingCommunity, Series, 2022, HD");
+  expect(metaLine("YouTube", "List", collectionSubtitle("Playlist", "List"))).toBe("YouTube, List");
+  expect(collectionSubtitle(" list · Playlist · Earth, Wind & Fire", "List")).toBe("Earth, Wind & Fire");
+  expect(collectionSubtitle("Season 2 · 8 episodes", "Season")).toBe("Season 2 · 8 episodes");
+  expect(collectionSubtitle("Playlist Radio · Series Finale", "List")).toBe("Playlist Radio · Series Finale");
+  expect(collectionSubtitle("Film · 2022", undefined)).toBe("Film · 2022");
+  expect(collectionSubtitle(undefined, "Album")).toBeUndefined();
 });
 
 test("descriptions drop bare addresses and the lines that only carried one", () => {

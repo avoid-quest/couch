@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "../src/server/sqlite";
 import { createYouTubeBrowser, createYouTubePlaylistLoader } from "../src/server/providers/youtube";
 import { createProviders } from "../src/server/providers";
 import { createForLater } from "../src/server/for-later";
@@ -13,7 +14,7 @@ import { createSession } from "../src/server/session";
 import { openStore } from "../src/server/store";
 import { parseCommand } from "../src/server/validation";
 import { providerCollectionCursor, readCollectionSearch } from "../src/client/collection-pagination";
-import type { BrowseRequest, ProviderPage } from "../src/shared/providers";
+import type { BrowseRequest, ProviderItem, ProviderPage } from "../src/shared/providers";
 import type { QueueEntry } from "../src/shared/protocol";
 
 const channel = "https://www.youtube.com/channel/UC4eYXhJI4-7wSWc8UNRwD4A";
@@ -37,7 +38,7 @@ function forLater(providers: ReturnType<typeof createProviders>) {
 
 test("channel aliases and search share one new favorite and canonical section links", async () => {
   const browse = createYouTubeBrowser(async args => JSON.stringify(args.at(-1)?.includes("/results?")
-    ? rawPage([{ url: channel, title: "NPR Music" }])
+    ? rawPage([{ url: channel, title: channel.split("/").at(-1), channel: creator.title, channel_url: channel }])
     : { title: "NPR Music", channel: "NPR Music", channel_url: channel, entries: [] }));
   const providers = catalog(browse);
   try {
@@ -54,6 +55,7 @@ test("channel aliases and search share one new favorite and canonical section li
     const { favorites } = await (await providers.handle(get("/api/providers/favorites"))).json();
     assert.equal(favorites.length, 1);
     assert.equal(favorites[0].url, channel);
+    assert.equal(favorites[0].title, creator.title);
   } finally { providers.close(); }
 });
 
@@ -68,6 +70,85 @@ test("failed or unusable channel metadata keeps the requested identity and secti
   const controller = new AbortController();
   await assert.rejects(createYouTubeBrowser(async () => { controller.abort(); throw controller.signal.reason; })({ url: alias }, controller.signal), { name: "AbortError" });
 });
+
+test("legacy and newly saved ID titles use their known channel name without looking up or rewriting legacy data", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-youtube-title-"));
+  const databasePath = join(directory, "favorites.sqlite");
+  const url = "https://www.youtube.com/channel/UCDKjZ6tnLsoxSEfy0GMsfbw";
+  const legacy: ProviderItem = { id: providerItemId("youtube", url), provider: "youtube", kind: "channel", url,
+    title: "UCDKjZ6tnLsoxSEfy0GMsfbw", subtitle: "Sabaku no Pureeyaa", thumbnail: "https://yt3.googleusercontent.com/avatar=s900" };
+  const db = new Database(databasePath);
+  db.exec("CREATE TABLE provider_favorites (id TEXT PRIMARY KEY, item TEXT NOT NULL, position INTEGER NOT NULL)");
+  db.query("INSERT INTO provider_favorites VALUES (?, ?, ?)").run(legacy.id, JSON.stringify(legacy), 7);
+  let changes = 0, lookups = 0;
+  const providers = createProviders({ databasePath, onChange() { changes++; }, browse: { youtube: async () => { lookups++; throw new Error("Saved must not browse"); } } as Parameters<typeof createProviders>[0]["browse"] });
+  const read = async () => (await (await providers.handle(get("/api/providers/favorites"))).json()).favorites as ProviderItem[];
+  try {
+    assert.deepEqual(await read(), [{ ...legacy, title: legacy.subtitle }]);
+    assert.equal(db.query<{ item: string }, [string]>("SELECT item FROM provider_favorites WHERE id = ?").get(legacy.id)?.item, JSON.stringify(legacy));
+    assert.equal(changes, 0, "reading Saved leaves the stored legacy entry intact");
+    assert.equal(lookups, 0, "a known saved name needs no metadata lookup");
+    const saved = await providers.handle(post("/api/providers/favorites", { item: legacy }));
+    assert.equal((await saved.json()).item.title, legacy.subtitle);
+    assert.equal(JSON.parse(db.query<{ item: string }, [string]>("SELECT item FROM provider_favorites WHERE id = ?").get(legacy.id)!.item).title, legacy.subtitle);
+    const custom = { ...legacy, title: "My  streams", description: "My note" };
+    await providers.handle(post("/api/providers/favorites", { item: custom }));
+    assert.deepEqual(await read(), [custom]);
+    await providers.handle(post("/api/providers/favorites", { item: { ...legacy, subtitle: undefined } }));
+    assert.equal((await read())[0]?.title, legacy.title, "an unknown name keeps the address fallback");
+    await providers.handle(post("/api/providers/favorites", { item: { ...legacy, kind: "collection" } }));
+    assert.equal((await read())[0]?.title, legacy.title, "the fallback applies only to channels");
+  } finally { providers.close(); db.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("opening a canonical channel repairs only an address title and preserves its saved metadata and position", async () => {
+  const browse = createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel, entries: [] }));
+  let changes = 0;
+  const providers = createProviders({ databasePath: ":memory:", onChange() { changes++; }, browse: { youtube: browse } as Parameters<typeof createProviders>[0]["browse"] });
+  const saved: ProviderItem = { id: providerItemId("youtube", channel), provider: "youtube", kind: "channel", url: channel,
+    title: channel.split("/").at(-1)!, description: "My note", thumbnail: "https://yt3.googleusercontent.com/custom=s900" };
+  const other = { ...saved, id: providerItemId("youtube", alias), url: alias, title: "Another bookmark" };
+  const request = () => get(`/api/providers/youtube/items?${new URLSearchParams({ url: channel })}`);
+  const read = async () => (await (await providers.handle(get("/api/providers/favorites"))).json()).favorites;
+  try {
+    await providers.handle(post("/api/providers/favorites", { item: saved }));
+    await providers.handle(post("/api/providers/favorites", { item: other }));
+    assert.equal((await providers.handle(request())).status, 200);
+    assert.deepEqual(await read(), [other, { ...saved, title: creator.title }]);
+    assert.equal(changes, 3);
+    await providers.handle(request());
+    assert.equal(changes, 3, "a cached page does not repeatedly rewrite the repaired title");
+    const custom = { ...saved, title: "My concerts" };
+    await providers.handle(post("/api/providers/favorites", { item: custom }));
+    await providers.handle(request());
+    assert.deepEqual(await read(), [other, custom]);
+    assert.equal(changes, 4, "a custom title survives resolution");
+  } finally { providers.close(); }
+});
+
+for (const duplicate of [false, true]) {
+  test(`alias migration preserves chosen metadata${duplicate ? " from an existing canonical bookmark" : ""}`, async () => {
+    const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel, entries: [] })));
+    const saved: ProviderItem = { id: providerItemId("youtube", alias), provider: "youtube", kind: "channel", url: alias,
+      title: "My  concerts", description: "My note", thumbnail: "https://yt3.googleusercontent.com/custom=s900" };
+    const canonical = { ...saved, id: providerItemId("youtube", channel), url: channel, title: "My  music", description: "Canonical note" };
+    const other = { ...saved, id: providerItemId("youtube", `${alias}-other`), url: `${alias}-other` };
+    const request = () => get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`);
+    const read = async () => (await (await providers.handle(get("/api/providers/favorites"))).json()).favorites;
+    try {
+      await providers.handle(post("/api/providers/favorites", { item: saved }));
+      if (duplicate) await providers.handle(post("/api/providers/favorites", { item: canonical }));
+      await providers.handle(post("/api/providers/favorites", { item: other }));
+      assert.equal((await providers.handle(request())).status, 200);
+      const expected = [other, duplicate ? canonical : { ...saved, id: canonical.id, url: channel }];
+      assert.deepEqual(await read(), expected);
+      await providers.handle(request());
+      assert.deepEqual(await read(), expected, "cached resolution preserves the same bookmark and order");
+      assert.equal((await providers.handle(new Request(`http://localhost/api/providers/favorites/${canonical.id}`, { method: "DELETE" }))).status, 204);
+      assert.deepEqual(await read(), [other]);
+    } finally { providers.close(); }
+  });
+}
 
 test("opening a saved alias lazily preserves Saved/Remove state and its position", async () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-youtube-favorites-"));

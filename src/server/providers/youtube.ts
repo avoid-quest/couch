@@ -12,6 +12,14 @@ type Metadata = Record<string, unknown>;
 const object = (value: unknown): value is Metadata => typeof value === "object" && value !== null && !Array.isArray(value);
 const label = (value: unknown, limit = 200) => typeof value === "string" ? value.replace(/[\s\u0000-\u001f\u007f]+/g, " ").trim().slice(0, limit) || undefined : undefined;
 
+// Keep a chosen name, but replace an address fallback when a human name is known.
+export function youtubeChannelTitle(url: string, ...titles: (string | undefined)[]): string {
+  let address = new URL(url).pathname.split("/").filter(Boolean).at(-1) ?? "YouTube";
+  try { address = decodeURIComponent(address); } catch { /* Saved URLs may contain invalid escapes. */ }
+  return titles.find(title => title && title !== address && !/^UC[A-Za-z0-9_-]{22}$/.test(title))
+    ?? titles.find(title => !!title) ?? label(address) ?? "YouTube";
+}
+
 function searchUrl(query: string): string {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 }
@@ -66,14 +74,14 @@ function channelCreator(info: Metadata): CollectionLink | undefined {
 
 function item(info: unknown, inheritedCreator?: CollectionLink): ProviderItem | null {
   if (!object(info) || ["private", "premium_only", "subscriber_only", "needs_auth"].includes(String(info.availability))) return null;
-  const title = label(info.title) ?? label(info.channel);
-  if (!title || ["[Private video]", "[Deleted video]"].includes(title)) return null;
   let source: Target;
   try {
     const url = label(info.webpage_url, 2_049) ?? label(info.url, 2_049) ?? (typeof info.id === "string" && videoId.test(info.id) ? `https://www.youtube.com/watch?v=${info.id}` : "");
     source = target(url);
   } catch { return null; }
   if (source.kind === "search") return null;
+  const title = source.kind === "channel" ? youtubeChannelTitle(source.url, label(info.title), label(info.channel), label(info.uploader)) : label(info.title) ?? label(info.channel);
+  if (!title || ["[Private video]", "[Deleted video]"].includes(title)) return null;
   const image = thumbnail(info, source);
   const description = label(info.description, 1_000);
   const creator = mediaCreator(info) ?? (source.kind === "media" ? inheritedCreator : undefined);
@@ -97,7 +105,7 @@ async function channelPage(url: string, run: typeof runYtDlp, signal?: AbortSign
   } catch { signal?.throwIfAborted(); }
   url = canonicalChannelUrl(info) ?? url;
   return withProviderItem("youtube", url, "channel", {
-    title: label(info.channel) ?? label(info.uploader) ?? label(decodeURIComponent(new URL(url).pathname.split("/").at(-1)!)),
+    title: youtubeChannelTitle(url, label(info.channel), label(info.uploader), label(info.title)),
     thumbnail: thumbnail(info, { url, kind: "channel" }),
     items: [["videos", "Videos"], ["playlists", "Playlists"], ["shorts", "Shorts"], ["streams", "Live streams"]].map(([tab, title]) => ({
       id: providerItemId("youtube", `${url}/${tab}`), provider: "youtube", kind: "collection", title: title!, url: `${url}/${tab}`,

@@ -21,7 +21,7 @@ import { SearchOnlineResults, providerNames, type SearchHit, type SearchResultSu
 import { Shelf } from "@/components/Shelf";
 import { MediaTile } from "@/components/MediaTile";
 import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
-import { episodeRow, metaLine, withoutUrls } from "@/media-caption";
+import { collectionSubtitle, episodeRow, metaLine, withoutUrls } from "@/media-caption";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
@@ -201,7 +201,7 @@ export function SearchPanel(props: Props) {
   </section>;
 }
 
-const hitContext = (hit: SearchHit) => metaLine(...hit.meta.split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })));
+const hitContext = (hit: SearchHit) => metaLine(...(collectionSubtitle(hit.meta, hit.collection) ?? "").split(" · ").filter(part => part !== hit.source && mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context })));
 /** One meta line by the caption rules: the byline the links don't already give, what an openable hit is, then its length. */
 const hitMeta = (hit: SearchHit, showCollection = true) => metaLine(hitContext(hit), showCollection && hit.collection, !hit.live && !hit.collection && hit.duration != null && formatDuration(hit.duration));
 

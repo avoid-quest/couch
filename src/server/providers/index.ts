@@ -6,7 +6,7 @@ import { ProviderError, providerItemId } from "./http";
 import { isStreamingCommunityHost, streamingCommunityOrigin as defaultStreamingCommunityOrigin } from "../../shared/streamingcommunity";
 import { streamingCommunityPreview } from "../streamingcommunity";
 import { browseStreamingCommunity } from "./streamingcommunity";
-import { browseYouTube } from "./youtube";
+import { browseYouTube, youtubeChannelTitle } from "./youtube";
 import { browseTwitch, liveTwitchChannels } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
 import { browseBandcamp } from "./bandcamp";
@@ -63,6 +63,7 @@ function savedItem(value: unknown): ProviderItem {
     if (typeof value.live !== "boolean") throw new ProviderError("Invalid live status.", 400);
     item.live = value.live;
   }
+  if (provider === "youtube" && item.kind === "channel") item.title = youtubeChannelTitle(url, item.title, item.subtitle?.replace(/\s+/g, " ").trim().slice(0, 200));
   return item;
 }
 
@@ -119,10 +120,10 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
     }
   }
 
-  // Normalize only the saved alias the user actually opened, after its channel resolved.
+  // Repair only the saved channel the user opened; keep its chosen name and metadata.
   function normalizeChannelFavorite(provider: ProviderId, url: string, page: ProviderPage) {
     const resolved = page.item;
-    if (provider !== "youtube" || !url || resolved?.provider !== "youtube" || resolved.kind !== "channel" || resolved.url === url
+    if (provider !== "youtube" || !url || resolved?.provider !== "youtube" || resolved.kind !== "channel"
       || !/^https:\/\/www\.youtube\.com\/channel\/UC[A-Za-z0-9_-]{22}$/.test(resolved.url)) return;
     const id = providerItemId(provider, url);
     const row = db.query<{ item: string; position: number }, [string]>("SELECT item, position FROM provider_favorites WHERE id = ?").get(id);
@@ -130,9 +131,15 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
     let previous: ProviderItem;
     try { previous = savedItem(JSON.parse(row.item)); } catch { return; }
     if (previous.provider !== "youtube" || previous.kind !== "channel") return;
-    const item = savedItem(resolved);
+    const canonical = savedItem(resolved);
+    const other = canonical.id === id ? null : db.query<{ item: string }, [string]>("SELECT item FROM provider_favorites WHERE id = ?").get(canonical.id);
+    let existing: ProviderItem | undefined;
+    try { if (other) existing = savedItem(JSON.parse(other.item)); } catch { /* Ignore an unusable duplicate. */ }
+    const item = savedItem({ ...canonical, ...previous, ...existing, url: canonical.url,
+      title: youtubeChannelTitle(previous.url, existing?.title, previous.title, canonical.title) });
+    if (item.id === id && item.title === previous.title) return;
     db.transaction(() => {
-      db.query("DELETE FROM provider_favorites WHERE id = ?").run(id);
+      if (item.id !== id) db.query("DELETE FROM provider_favorites WHERE id = ?").run(id);
       db.query("INSERT INTO provider_favorites (id, item, position) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET item = excluded.item").run(item.id, JSON.stringify(item), row.position);
     })();
     onChange();

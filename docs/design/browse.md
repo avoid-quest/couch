@@ -80,7 +80,9 @@ Nothing at all for the query is "Nothing found", with Add a source and no
 filters. A pasted link opens here as a page or as direct media ("Choose how to
 play" in the palette); Enter in the palette plays it at once.
 
-Twitch results refresh every 20 s while visible and connected.
+Twitch results refresh every 20 s while visible and connected. Viewer counts in
+search, channels, categories and saved live status read "1 viewer", with
+"viewers" for zero and larger counts.
 
 ## Radio and Live TV
 
@@ -100,8 +102,10 @@ admin can add a playlist."; Radio's empty Playlists does the same.
 Radio keeps a station's **tags** apart from its current show's **categories**.
 Categories come from XMLTV and fresh live enrichment; playlist group
 names remain source labels. Labels fold whitespace, Unicode form and case
-without guessing genres or splitting compound labels. Neither is labelled on
-screen; where a line sits says what it describes:
+without guessing genres or splitting compound labels. When live genre text
+repeats guide categories as a comma-joined list, those categories appear once;
+other genre text keeps its punctuation and multi-word labels. Neither is
+labelled on screen; where a line sits says what it describes:
 
 - **A row or tile** says what it plays: the show and its categories ("Early
   Bird, Jazz, Experimental"), else the station's tags and group. A row adds the
@@ -122,6 +126,9 @@ screen; where a line sits says what it describes:
 
 Global Search matches the current show's host and a station's tags even when
 the caption leaves them out. Upcoming shows don't supply search matches.
+
+Settings → Sources → Radio playlists uses “1 station” and otherwise “N stations”
+for both built-in and imported playlists, including “0 stations”.
 
 Radio playlists discover a single XMLTV URL from `x-tvg-url` on the M3U header.
 Automatic discovery and its redirects stay on that playlist origin; an admin
@@ -230,7 +237,13 @@ newest first). A saved YouTube channel's Play, Play on and
 Queue read its Videos section, with the same 500-video limit as other lists.
 Channel Details use the canonical address when available; opening an older
 saved alias keeps its Saved/Remove state and merges an already saved canonical
-channel. Playlist Queue all retains each occurrence's list and position.
+channel. YouTube channels use a known human name in place of an ID title,
+including older Saved entries whose subtitle already holds the name, without
+looking them up or rewriting them on list reads. A subtitle identical to the
+saved title is omitted from the caption. Opening Details can repair an
+ID-only saved title; chosen names, artwork, descriptions and order are kept when
+an alias becomes canonical, with an existing canonical bookmark taking precedence.
+Playlist Queue all retains each occurrence's list and position.
 A rail on wide screens (white ink on a
 `secondary` capsule for the current entry; a pointer only brings another
 entry's ink up; no heading; counts only when not zero) and a Select on phones
@@ -307,7 +320,9 @@ disabled.
 **Captions** read as one line of parts joined by commas ("YouTube, 10:34";
 a provider's own "Game · 1,204 viewers" becomes "Game, 1,204 viewers"). An
 episode leads with its series ("Phony") and its meta with "S1 E1, Episodio 1",
-wherever tiles, rows or the hero show it.
+wherever tiles, rows or the hero show it. Saved collections and Search use one
+type term: "Series, 2022, HD", without a second "Series" from the source's
+subtitle, and "List" for a YouTube playlist, without another "Playlist".
 
 **`Shelf`**: an optional linked heading (a focus stop) over a plain overflow
 row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll

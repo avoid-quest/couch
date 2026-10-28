@@ -22,6 +22,17 @@ test("A channel whose listing fails keeps its sections, named after its address"
   expect(page.items).toHaveLength(4);
 });
 
+test("channel names survive title-only metadata and ID titles in search results", async () => {
+  const page = await createYouTubeBrowser(async () => JSON.stringify({ title: "NPR Music", entries: [] }))({ url });
+  expect(page.item?.title).toBe("NPR Music");
+  const search = await createYouTubeBrowser(async () => JSON.stringify({ entries: [
+    { url, title: url.split("/").at(-1), channel: "NPR Music", channel_url: url },
+    { url: "https://www.youtube.com/watch?v=abcdefghijk", title: "A concert", channel: "NPR Music", channel_url: url },
+  ] }))({ query: "NPR Music" });
+  expect(search.items.map(item => item.title)).toEqual(["NPR Music", "A concert"]);
+  expect(search.items[0]?.url).toBe(url);
+});
+
 test("a video's creator survives separately from the selected playlist", async () => {
   const playlist = "https://www.youtube.com/playlist?list=PLabcdefghijk";
   const page = await createYouTubeBrowser(async () => JSON.stringify({title: "Tiny Desk", entries: [
