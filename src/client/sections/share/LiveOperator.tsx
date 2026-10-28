@@ -73,7 +73,7 @@ export function PlaybackBufferInput({ id, live, className, disabled }: { id: str
     else if (valid) setDraft(null);
   };
   return <div className={cn("grid w-44 max-w-full gap-1", className)}>
-    <Input id={id} type="number" min={0} max={5000} step={1} required value={draft ?? settings?.minBufferMs ?? ""} disabled={disabled || !live.connected || !settings || save.isPending}
+    <Input id={id} type="number" min={0} max={5000} step={1} required value={draft ?? settings?.minBufferMs ?? ""} disabled={disabled || !live.connected || !settings} readOnly={save.isPending} aria-busy={save.isPending || undefined} className="read-only:opacity-50"
       aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined}
       onChange={event => { setDraft(event.currentTarget.value); setInvalid(false); }} onBlur={event => commit(event.currentTarget)}
       onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commit(event.currentTarget); } }} />
@@ -88,14 +88,16 @@ export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharin
   const { settings, save } = live;
   const nativeBuffer = useNativeInputBufferPreference();
   const [restarting, setRestarting] = useState(false);
+  const [opened, setOpened] = useState<"capture" | "codec" | null>(null);
   const native = sharing.captureFormat?.native;
   return <div className="grid gap-2 border-t pt-2">
     {native && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <label htmlFor="live-capture-buffer">Capture buffer</label>
-      <Select value={String(native.requestedFrames)} disabled={restarting || !live.connected} onValueChange={value => {
+      <Select open={opened === "capture"} onOpenChange={open => setOpened(open && !restarting ? "capture" : null)} value={String(native.requestedFrames)} disabled={!live.connected} onValueChange={value => {
+        if (restarting) return;
         nativeBuffer.save(value); setRestarting(true);
         void liveSharing.setCaptureBuffer(nativeInputBufferFrames(value as NativeInputBufferPreference)).then(onCaptureChange).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
-      }}><SelectTrigger id="live-capture-buffer" className="ml-auto w-44"><SelectValue /></SelectTrigger>
+      }}><SelectTrigger id="live-capture-buffer" aria-disabled={restarting || undefined} className="ml-auto w-44 aria-disabled:opacity-50"><SelectValue /></SelectTrigger>
         <SelectContent data-tv-local-only>{nativeInputBufferOptions.map(value => <SelectItem key={value} value={value}>{value} frames</SelectItem>)}</SelectContent>
       </Select>
     </div>}
@@ -103,8 +105,8 @@ export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharin
     {nativeBuffer.error && <Alert variant="destructive"><AlertDescription>{nativeBuffer.error}</AlertDescription></Alert>}
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <label htmlFor="live-codec">Codec</label>
-      <Select value={settings?.codec ?? ""} disabled={!live.connected || !settings || save.isPending} onValueChange={codec => { if (settings) save.mutate({ ...settings, codec: codec as LiveAudioSettings["codec"] }); }}>
-        <SelectTrigger id="live-codec" className="ml-auto w-44"><SelectValue placeholder="Loading…" /></SelectTrigger>
+      <Select open={opened === "codec"} onOpenChange={open => setOpened(open && !save.isPending ? "codec" : null)} value={settings?.codec ?? ""} disabled={!live.connected || !settings} onValueChange={codec => { if (settings && !save.isPending) save.mutate({ ...settings, codec: codec as LiveAudioSettings["codec"] }); }}>
+        <SelectTrigger id="live-codec" aria-disabled={save.isPending || undefined} className="ml-auto w-44 aria-disabled:opacity-50"><SelectValue placeholder="Loading…" /></SelectTrigger>
         <SelectContent data-tv-local-only><SelectItem value="auto">Automatic</SelectItem><SelectItem value="pcm">PCM</SelectItem><SelectItem value="opus">Opus</SelectItem></SelectContent>
       </Select>
     </div>

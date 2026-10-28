@@ -145,6 +145,8 @@ Settings retain their labelled controls while loading, report errors inline,
 and offer Try again after a failed read. Playback buffer accepts whole numbers
 from 0 to 5000, saved on blur or Enter; invalid edits show a reason. Controls
 wrap onto a second line on narrow screens and disable while disconnected.
+Saving or restarting prevents another edit while keeping keyboard focus on
+the control that started it.
 
 ## When it doesn't work
 

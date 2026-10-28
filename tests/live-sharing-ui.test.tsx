@@ -87,6 +87,20 @@ test("playback buffer validates integers and commits the chosen value on blur or
   expect(save.mutate.mock.calls[1]![0]).toEqual({ codec: "auto", minBufferMs: 400 });
 });
 
+test("saving keeps the active controls focusable while rejecting another edit", () => {
+  save.isPending = true;
+  const tree = read(() => PlaybackBufferInput({ id: "buffer", live: live() }));
+  const input = elements(tree).find(item => item.props.id === "buffer")!;
+  expect(input.props.disabled).toBeFalsy();
+  expect(input.props.readOnly).toBe(true);
+  input.props.onBlur!({ currentTarget: { valueAsNumber: 400, validity: { valid: true } } });
+  const panel = read(() => LiveSettings({ sharing }));
+  const codec = elements(panel).find(item => item.props.value === "auto")!;
+  expect(codec.props.disabled).toBeFalsy();
+  codec.props.onValueChange!("pcm");
+  expect(save.mutate).not.toHaveBeenCalled();
+});
+
 test("disconnected share settings and listener actions stay disabled", () => {
   connected = false;
   const tree = read(() => LiveSettings({ sharing }));
