@@ -6,7 +6,7 @@ Describe the behavior changed, relevant issues and any real PR dependency.
 
 - [ ] `bun run typecheck` and `bun run build` pass.
 - [ ] The changed behavior was observed running (app, browser or phone), not only built.
-- [ ] Workflow/packaging changes: `act` proof before hosted dispatch (docs/ci.md).
+- [ ] Workflow/packaging changes: a dispatched Check or Package run on the branch (docs/ci.md).
 
 ## Release
 

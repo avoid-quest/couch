@@ -83,8 +83,8 @@ allocation held open across revocation. Keep Go on PATH for that test too.
 The desktop resource pattern follows t3code's
 [native resource monitor packaging](https://github.com/pingdotgg/t3code/blob/main/scripts/build-desktop-artifact.ts).
 The helper uses [Pion TURN](https://github.com/pion/turn), pinned by `go.mod`/`go.sum`.
-Validate native lifecycle/allocation on the target platform as well as the Linux
-package workflow in `act`; cross-compilation alone is not a runtime test.
+Validate native lifecycle/allocation on the target platform; cross-compilation
+alone is not a runtime test.
 Package runs the Go allocation tests on each target OS. Network tests explicitly
 skip if that runner has no active, non-loopback private IPv4
 host admitted by the relay's subnet policy (for example, a /32 is ineligible).
@@ -102,7 +102,7 @@ libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev` and git, and fetches the
 pinned commit once into `.artifacts/uxplay`. macOS and Windows packages have no
 receiver. Build it for a development Core and run its tests as
 [Receive AirPlay](airplay.md#develop-and-test) describes; prove changes to it in a
-Package run under `act` as for any packaging change.
+dispatched Package run.
 
 electron-builder loads `scripts/after-pack.ts` with Node, not Bun, so its imports
 name their `.ts` extension; `bun test tests/package-hooks.test.ts` loads the hook
@@ -196,7 +196,7 @@ simulated Mac selection and executable fixtures on Linux.
 The Intel FFmpeg supplier stops making
 new Intel releases in January 2027; migrate that verified distribution source
 before promising continued maintained support ([audit](intel-macos-research.md)).
-Cross-packaging on the ARM runner and Linux `act` are not Intel runtime tests:
+Cross-packaging on the ARM runner is not an Intel runtime test:
 before shipping, validate clean helper setup, playback (including native TV
 codecs with a compatible local mpv, and their clear failure without one), screen
 and audio-input capture, pairing and signed install/update on an Intel Ventura
@@ -234,32 +234,3 @@ The website's fallback catalog should list only installers that have actually
 been published here. Intel downloads come from real release assets; add no
 Intel entry to `apps/web/src/releases.json` until one has shipped. Catalog
 coverage runs with `bun test tests/release-catalog.test.ts`.
-
-## Workflow changes
-
-Prove workflow and packaging edits with [`act`](https://nektosact.com) before
-dispatching them, using `catthehacker/ubuntu:full-latest` (the default act image
-lacks `gh`). Release's preflight reads git inside the container, so run it from
-a clone rather than a worktree, with an event that says the run is on `main`:
-
-```sh
-act workflow_dispatch -W .github/workflows/check.yml -j linux \
-  -P blacksmith-4vcpu-ubuntu-2404=catthehacker/ubuntu:full-latest
-git clone -q --depth 1 --branch v4.6.2 https://github.com/actions/upload-artifact /tmp/upload-artifact-v4
-act workflow_dispatch -W .github/workflows/package.yml -j package --matrix name:linux \
-  -P blacksmith-4vcpu-ubuntu-2404=catthehacker/ubuntu:full-latest \
-  --container-architecture linux/amd64 --artifact-server-path /tmp/act-artifacts \
-  --local-repository actions/upload-artifact@v7=/tmp/upload-artifact-v4
-echo '{"ref":"refs/heads/main","inputs":{"channel":"preview"}}' > /tmp/release-event.json
-act workflow_dispatch -W .github/workflows/release.yml -j preflight \
-  -e /tmp/release-event.json \
-  -P blacksmith-4vcpu-ubuntu-2404=catthehacker/ubuntu:full-latest \
-  --container-architecture linux/amd64
-```
-
-act's artifact server doesn't accept upload-artifact v7's requests, so the
-Package run swaps in v4 for that step only. A dispatched Package builds
-`package.json`'s version; to build a preview, as Release does, run it from a
-clone with `bun pm pkg set version=X.Y.Z-preview.N` left uncommitted. The
-installers land zipped in `/tmp/act-artifacts/1/couch-linux/`. Local emulation
-does not prove hosted capacity, secret access or timings.

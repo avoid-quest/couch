@@ -2,7 +2,6 @@
 - Prefer first class solutions. Check official docs.
 - UI: use shadcn components, keep it flat (no Card or bordered panels) and show only what people need: no filler copy, no headers or labels that repeat the screen. [docs/design.md](docs/design.md) describes what's built; update it with the code.
 - Start CI and releases by hand as [docs/ci.md](docs/ci.md) lists; nothing runs on push.
-- Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`.
 - Scratch runs of Couch get their own `COUCH_DATA_DIR` and `COUCH_PORT` and are stopped by PID; the owner's installed Couch and its data (`<platform data dir>/quest.avoid.couch`) stay as they are.
 - Debug the installed app from `<data dir>/logs/couch.log` (previous run: `couch.1.log`), which holds Main's and Core's output.
 - Model the desktop shell, releases and repo setup on [t3code](https://github.com/pingdotgg/t3code): read how it solves the problem before designing your own.

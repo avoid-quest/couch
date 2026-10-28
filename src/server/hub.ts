@@ -1,7 +1,7 @@
 import { createLocalRelay } from "./live-relay";
 import { parseLiveRelay } from "./live-ice";
 import { ADMIN_ONLY, LIVE_AUDIENCE_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
-import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
+import { createLanListener, httpOrigin, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
 import { systemLanNames } from "./lan-name";
 import { lanInterfacePriorities } from "./lan-interfaces";
@@ -44,6 +44,7 @@ import { createPassThrough } from "./pass-through";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
+import { upcomingQueue } from "../shared/queue";
 import { ControllerError, createDevices, settingField } from "./devices";
 import { createTvPairing } from "./tv-pairing";
 import type { DeviceIdentity } from "../shared/devices";
@@ -1414,12 +1415,7 @@ export async function createHub(options: HubOptions) {
   for (const id of store.playbackIds()) settle(createPlayback(id));
   const queueOf = (actor: PlaybackActor | undefined) => { const playback = lookedAt(actor?.deviceId ?? hostId()); return playback ? stateOf(playback) : idle(); };
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidate("playlists"), queue: playedBy => queueOf(playedBy).queue,
-    upNext: playedBy => {
-      const { queue, currentEntryId, queueCursorEntryId } = queueOf(playedBy);
-      const current = queue.findIndex(entry => entry.id === currentEntryId);
-      const cursor = current >= 0 ? current : queue.findIndex(entry => entry.id === queueCursorEntryId);
-      return queue.slice(cursor + 1);
-    },
+    upNext: playedBy => upcomingQueue(queueOf(playedBy)),
     loadQueue: (entries, mode, authorize, playedBy, title) => { const playback = mediaPlayback(playedBy, mode === "play"); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize ?? (() => {}), playedBy?.deviceId ?? hostId()), playedBy, undefined, title); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
@@ -1523,7 +1519,7 @@ export async function createHub(options: HubOptions) {
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
-    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
+    if (options.managedLan && !loopbackPeer(requestPeer(request)) && !store.remoteControlEnabled()) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
@@ -1678,7 +1674,7 @@ export async function createHub(options: HubOptions) {
   };
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
-    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance, tvModeChangeable: !!options.nativeTvMode && !tvAppliance, systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance, tvModeChangeable: !!options.nativeTvMode && !tvAppliance, systemAudio, airplay: airplay.availability(), updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": publicPairing(async (body, respond) => {
       if (!("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
       const previous = typeof body.id === "string" ? store.device(body.id) : null;

@@ -133,6 +133,12 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
   const uniqueName = (name: string, id = "") => {
     if (db.query("SELECT 1 FROM saved_playlists WHERE name_key = ? AND id != ?").get(name.toLowerCase(), id)) throw new PlaylistError("A playlist already has that name.", 409);
   };
+  const selectedQueue = (scope: unknown, playedBy?: PlaybackActor) => {
+    if (scope !== undefined && scope !== "upNext") throw new PlaylistError("Choose a valid queue scope.");
+    if (scope !== "upNext") return queue(playedBy);
+    if (!upNext) throw new PlaylistError("Up next is not available on this TV.", 503);
+    return upNext(playedBy);
+  };
 
   return {
     async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
@@ -152,11 +158,9 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
           authorize();
           const source = input.source === undefined ? undefined : playlistSource(input.source);
           fields(input, source ? ["source"] : ["name", "scope"]);
-          if (input.scope !== undefined && input.scope !== "upNext") throw new PlaylistError("Choose a valid queue scope.");
-          if (input.scope === "upNext" && !upNext) throw new PlaylistError("Up next is not available on this TV.", 503);
           // Resolve source lists before opening the write transaction so a vanished
           // playlist or a failed resolver leaves no partial save behind.
-          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: input.scope === "upNext" ? upNext!(playedBy) : queue(playedBy) };
+          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: selectedQueue(input.scope, playedBy) };
           if (source) authorize();
           const name = playlistName(resolution.name);
           const entries = capturePlaylistEntries(resolution.entries);
@@ -230,8 +234,8 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
               uniqueName(row.name, id);
               break;
             case "saveQueue":
-              fields(input, ["revision", "operation"]);
-              row.entries = JSON.stringify(capturePlaylistEntries(queue(playedBy)));
+              fields(input, ["revision", "operation", "scope"]);
+              row.entries = JSON.stringify(capturePlaylistEntries(selectedQueue(input.scope, playedBy)));
               break;
             case "remove": case "move": {
               fields(input, input.operation === "remove" ? ["revision", "operation", "entryId"] : ["revision", "operation", "entryId", "beforeEntryId"]);

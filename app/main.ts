@@ -301,8 +301,8 @@ const interfaceSize = () => interfaceSizes.find(value => value === Number(readTe
 // Centre the 14pt controls in the 56px header, which scales with the interface size.
 const controlsPosition = () => ({ x: 16, y: Math.round(28 * interfaceSize() - 7) });
 // Match t3code: #00000000 does not work correctly on Linux.
-// Native caption buttons keep their own compact height, independent of page zoom.
-const titleBarOverlay = { color: "#01000000", symbolColor: "#ffffff", height: 40 };
+// Omit height so native caption buttons keep the platform's size at any page zoom.
+const titleBarOverlay = { color: "#01000000", symbolColor: "#ffffff" };
 
 function createWindow() {
   window = new BrowserWindow({

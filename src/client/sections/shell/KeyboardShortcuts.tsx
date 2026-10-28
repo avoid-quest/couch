@@ -1,6 +1,7 @@
 import { livePlayback } from "@/session/playback-controls";
 import { deviceId } from "@/session/device-id";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
+import type { RefObject } from "react";
 import { useSessionGate } from "@/session/session-context";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { muted, playbackCapabilities } from "@/components/PlaybackTransport";
@@ -17,7 +18,7 @@ const help = [
   ["P / Q", "Player / Up next"], ["Esc", "Close panel or go back"], ["?", "Keyboard shortcuts"],
 ];
 
-export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function KeyboardShortcuts({ open, onOpenChange, openerRef }: { open: boolean; onOpenChange: (open: boolean) => void; openerRef: RefObject<HTMLElement | null> }) {
   const shell = useShell();
   const { state, connected, run, seekBy } = useSessionGate();
   const clock = usePlaybackClock();
@@ -54,9 +55,9 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
     { hotkey: ",", action: () => shell.changeSection("Settings") },
     { hotkey: "P", enabled: !!current, action: () => shell.openPlayer() },
     { hotkey: "Q", enabled: hasUpNext(state), action: () => shell.openPlayer("queue") },
-    { hotkey: "Shift+?", action: () => onOpenChange(true) },
+    { hotkey: "Shift+?", action: () => { openerRef.current = document.activeElement as HTMLElement; onOpenChange(true); } },
   ]);
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Shortcuts work in the player, and while browsing. Typing and open panels keep their own keys, and Space and the arrows leave a focused control alone.</DialogDescription></DialogHeader>
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="[--dialog-max-height:85dvh]" onCloseAutoFocus={event => { if (openerRef.current?.isConnected) { event.preventDefault(); openerRef.current.focus(); } }}><DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Shortcuts work in the player, and while browsing. Typing and open panels keep their own keys, and Space and the arrows leave a focused control alone.</DialogDescription></DialogHeader>
     <dl className="divide-y text-sm">{help.map(([keys, label]) => <div key={keys} className="flex items-center justify-between gap-6 py-2"><dt>{label}</dt><dd className="shrink-0"><kbd className="font-sans text-muted-foreground">{keys}</kbd></dd></div>)}</dl>
   </DialogContent></Dialog>;
 }

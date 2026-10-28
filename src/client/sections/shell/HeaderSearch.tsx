@@ -128,7 +128,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   // A link plays as itself, outside any scope.
   const labels = link ? [] : scopeLabels(scope);
   const tokens = useId();
-  return <form role="search" aria-label="Search" aria-busy={busy} data-search-open={open || undefined} className={cn("flex min-w-0 items-center gap-1", className)}
+  return <form role="search" aria-label="Search" aria-busy={busy} data-search-open={open || undefined} data-search-filled={!!(value || labels.length) || undefined} className={cn("flex min-w-0 items-center gap-1", className)}
     onSubmit={event => { event.preventDefault(); if (!composing.current) search(text, (event.nativeEvent as SubmitEvent).submitter ? "submit" : "enter"); }}
     onFocus={event => { if ((event.target as Node) === input.current && !open && !isTvPresentation()) show(); }}
     onBlur={event => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setOpen(false); }}>
@@ -138,11 +138,14 @@ export function HeaderSearch({ className }: { className?: string }) {
       <InputGroup className={cn("h-field rounded-full border-transparent bg-muted transition-colors dark:bg-muted has-[[data-slot=input-group-control]:focus-visible]:ring-0",
         open ? "border-foreground" : "has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0")}>
         <InputGroupAddon className={cn("min-w-0 shrink pl-3", !open && "group-has-[input:focus]/input-group:text-background/65")}>
-          <InputGroupButton type="submit" size="icon-sm" className="shrink-0 touch:size-11 [&_svg]:size-5!" aria-label="Search" title="Search">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupButton>
+          <InputGroupButton type="submit" size="icon-sm" className="shrink-0 max-sm:hidden touch:size-11 [&_svg]:size-5!" aria-label="Search" title="Search">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupButton>
+          {!value && !labels.length && <Search aria-hidden="true" className="hidden size-5 shrink-0 max-sm:block" />}
           {/* The scope's tokens: a press removes one (the keyboard's Backspace, the TV's own row in the palette). */}
-          {labels.map(label => <button key={label} type="button" tabIndex={-1} data-search-token aria-label={`Remove ${label}`} title={`Remove ${label}`} onPointerDown={event => event.preventDefault()}
-            onClick={() => { rescope(label === scope.source ? { kind: scope.kind, source: "All" } : { source: scope.source }); input.current?.focus(); }}
-            className={cn("min-w-0 max-w-32 truncate rounded-full bg-foreground/15 px-2.5 py-0.5 text-sm font-medium text-foreground", !open && "max-sm:hidden group-has-[input:focus]/input-group:bg-background/15 group-has-[input:focus]/input-group:text-background")}>{label}</button>)}
+          <div data-search-tokens className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none] empty:hidden">
+            {labels.map(label => <button key={label} type="button" tabIndex={-1} data-search-token aria-label={`Remove ${label}`} title={`Remove ${label}`} onPointerDown={event => event.preventDefault()}
+              onClick={() => { rescope(label === scope.source ? { kind: scope.kind, source: "All" } : { source: scope.source }); input.current?.focus(); }}
+              className={cn("min-w-8 max-w-32 truncate rounded-full bg-foreground/15 px-2.5 py-0.5 text-sm font-medium text-foreground", !open && "group-has-[input:focus]/input-group:bg-background/15 group-has-[input:focus]/input-group:text-background")}>{label}</button>)}
+          </div>
         </InputGroupAddon>
         <span id={tokens} hidden>{labels.length ? `In ${labels.join(", ")}` : ""}</span>
         <PaletteInput ref={input} open={open} id="media-search" data-remote-field="find" type="search" aria-label="Search or paste a link" aria-describedby={labels.length ? tokens : undefined} placeholder="Search" maxLength={4096} autoComplete="off"
@@ -180,7 +183,7 @@ export function HeaderSearch({ className }: { className?: string }) {
             }
           }} />
         {!value && !labels.length && <InputGroupAddon align="inline-end" className="hidden pr-4 pointer-fine:flex touch:hidden group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
-        {(value || labels.length > 0) && <InputGroupAddon align="inline-end" className={cn("pr-3", !open && "group-has-[input:focus]/input-group:text-background/65")}><InputGroupButton size="icon-sm" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
+        {(value || labels.length > 0) && <InputGroupAddon align="inline-end" className={cn("shrink-0 pr-3", !open && "group-has-[input:focus]/input-group:text-background/65")}><InputGroupButton size="icon-sm" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
       </InputGroup>
       {/* On a desktop, the field's own list: under it, its width and its left edge, on the menus' ground. On a phone and
           the TV, the whole screen under the header. A press keeps the field focused (a tap or a Safari click would blur
@@ -196,7 +199,7 @@ export function HeaderSearch({ className }: { className?: string }) {
       </CommandList>}
     </Command>
     {/* A phone has no Esc: Cancel closes the open palette. */}
-    {open && <Button type="button" variant="ghost" className="hidden shrink-0 touch:inline-flex tv:hidden" onPointerDown={event => event.preventDefault()} onClick={close}>Cancel</Button>}
+    {open && <Button type="button" variant="ghost" className="hidden shrink-0 px-1 touch:inline-flex tv:hidden" onPointerDown={event => event.preventDefault()} onClick={close}>Cancel</Button>}
   </form>;
 }
 
@@ -296,7 +299,7 @@ function Typed({ text, link, scope, labels, recents, connected, onSearch, onScop
           the header's field holds it. */}
       <CommandItem value="query" onSelect={onSearch} className="min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight">
         <Search aria-hidden="true" className="text-muted-foreground tv:size-6" /><span className="min-w-0 truncate">Search “{text.trim()}”</span>
-        {labels.length > 0 && <span className="shrink-0 font-normal text-muted-foreground">in {labels.join(", ")}</span>}
+        {labels.length > 0 && <span className="max-w-1/2 shrink-0 truncate font-normal text-muted-foreground">in {labels.join(", ")}</span>}
       </CommandItem>
     </CommandGroup>
     {found.scopes.length > 0 && <CommandGroup heading="Search in"><ScopeRows items={found.scopes} scope={scope} onScope={onScope} hint={found.scopes[0]} /></CommandGroup>}

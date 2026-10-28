@@ -2,7 +2,7 @@ import { useRadioClock } from "@/radio-clock";
 import { defaultStringifySearch, Link, Outlet, useLocation, useMatches, useRouter } from "@tanstack/react-router";
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ErrorInfo, type PropsWithChildren, type ReactNode, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { BookmarkIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
+import { BookmarkIcon, HouseIcon, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import { freshRadioProgramme, type RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -25,6 +25,7 @@ import { browsePaths, pathForSection, sectionForPath } from "../../../shared/pag
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
@@ -289,6 +290,7 @@ function PairingPage({ status }: { status: ReactNode }) {
 export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsOpener = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const { nativeHost, localHost, tvPresentation, credentials, state, details, pairingRequired, connected, run, error, setError } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
@@ -339,39 +341,37 @@ export function ShellChrome({ children }: PropsWithChildren) {
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. Unpaired there is none: the pairing page stands alone. */}
-          {paired && <header ref={header} hidden={onPlayer} className="app-header sticky top-0 z-30 shrink-0 bg-background motion-safe:transition-colors motion-safe:duration-200">
-            <div className="app-header-controls group/header drag-region window-controls-inset grid min-h-16 grid-cols-[auto_minmax(0,1fr)_minmax(16rem,30rem)] items-center has-[[data-live-sharing]]:grid-cols-[auto_minmax(0,1fr)_auto] gap-x-8 px-(--gutter) py-3 touch:flex touch:gap-x-3 tv:grid tv:gap-x-8 tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
+          {paired && <header ref={header} hidden={onPlayer} className="app-header drag-region @container/header sticky top-0 z-30 shrink-0 bg-background motion-safe:transition-colors motion-safe:duration-200">
+            <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
               {/* On a phone the open search takes the whole row. */}
-              <div className="flex min-w-0 items-center touch:group-has-[[data-search-open]]/header:hidden tv:group-has-[[data-search-open]]/header:flex">
+              <div className="app-header-couch flex min-w-0 items-center">
                 {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
-                {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+                {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} onShortcuts={section !== "Remote" ? opener => { shortcutsOpener.current = opener; setShortcutsOpen(true); } : undefined} />}
               </div>
               {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
-              <SectionTabs className="flex min-w-0 items-center gap-1 touch:hidden tv:flex tv:max-lg:col-span-2 tv:max-lg:row-start-2 tv:max-lg:justify-center" />
-              {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. On a
-                  phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
-              <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
-                <HeaderOffline />
-                {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && <UpdateCue />}
-                <ShareControl />
-                <HeaderSearch className="min-w-0 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:max-w-80 tv:has-[[data-search-token]]:max-w-96 tv:max-lg:min-w-44" />
-                {/* Only a keyboard can use its shortcuts. Remote's keys drive the TV, so there it keeps its place unseen and the field doesn't move. */}
-                {!tvPresentation && <Button variant="ghost" size="icon" className={cn("touch:hidden", section === "Remote" && "invisible")} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
-                <DigitalClock className="ml-3 hidden text-base text-muted-foreground tv:inline" />
-              </div>
+              <SectionTabs className="app-header-nav flex items-center gap-1 touch:hidden tv:flex" />
+              {/* Share keeps a compact entry slot. Its active capsule occupies its own grid row, so neither it nor
+                  variable status text can move or resize navigation and search. HeaderSearch stays mounted. */}
+              <ShareControl />
+              <HeaderSearch className="app-header-search w-full" />
+              {tvPresentation && <DigitalClock className="app-header-tools text-muted-foreground" />}
+            </div>
+            <div data-app-status className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 empty:hidden">
+              <HeaderOffline />
+              {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && <UpdateCue />}
             </div>
             {/* Notices are part of the measured header, above a Stage's artwork, with no space when empty. */}
             {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>}
           </header>}
-          <div className="app-page flex min-w-0 flex-1 flex-col" data-scroll-restoration-id="app-page">
+          <AppPage>
             {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
             {!paired ? <PairingPage status={status} /> : <>
-              {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
+              {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} openerRef={shortcutsOpener} />}
               {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. The page is its own layer,
                   so a Stage's room lies under its content and over the shell's black. */}
               <div className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}>{children}</div>
             </>}
-          </div>
+          </AppPage>
           {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
               the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
           {paired && <div ref={footer} className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}>
@@ -386,9 +386,17 @@ export function ShellChrome({ children }: PropsWithChildren) {
   );
 }
 
+export function AppPage({ children }: PropsWithChildren) {
+  const { nativeHost, tvPresentation } = useSessionGate();
+  const props = { className: "app-page flex min-w-0 flex-1 flex-col", "data-scroll-restoration-id": "app-page" };
+  return nativeHost && !tvPresentation && !/Mac/.test(navigator.platform)
+    ? <ScrollArea type="auto" className="app-page-scroll flex min-h-0 min-w-0 flex-1 flex-col" viewportProps={props}>{children}</ScrollArea>
+    : <div {...props}>{children}</div>;
+}
+
 /**
- * Offline, the header's right cluster says so before the search, as sharing does: a Spinner and "Reconnecting…" (the
- * Spinner alone on a phone). The tabs keep their place, and the hollow mark and the shell's status region say it too.
+ * Offline, the header's status row says so: a Spinner and "Reconnecting…" (the Spinner alone on a phone).
+ * Navigation and search keep their place; the hollow mark and the shell's status region say it too.
  */
 function HeaderOffline() {
   const { nativeHost, localHost, status } = useSessionGate();
@@ -422,7 +430,10 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
   return <nav data-app-nav aria-label="Main navigation" className={className}>
     {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("relative border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100", bar ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6" : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4")}>
-      <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
+      <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined} aria-label={name} title={name}>
+        <Icon aria-hidden="true" className={cn("size-5", !bar && "@min-[60rem]/header:hidden tv:hidden")} />
+        <span className={cn(!bar && "sr-only @min-[60rem]/header:not-sr-only tv:not-sr-only")}>{name}</span>
+      </Link>
     </Button>)}
   </nav>;
 }

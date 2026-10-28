@@ -25,6 +25,15 @@ export const savedCaption = (item: ForLaterItem) => { const caption = mediaCapti
 /** One meta line, one separator: its parts (a provider's own "Game · 1,204 viewers" among them) joined by commas. */
 export const metaLine = (...parts: (string | false | null | undefined)[]) => parts.flatMap(part => part ? part.split(" · ") : []).map(part => part.trim()).filter(Boolean).join(", ");
 
+/** Only these catalogues put type labels in subtitles; other sources put creator names there. */
+export function collectionSubtitle(subtitle: string | undefined, type: string | undefined, source: string) {
+  if (!type || !["StreamingCommunity", "AnimeUnity"].includes(source)) return subtitle;
+  return subtitle?.split(" · ").filter(part => {
+    const label = part.trim().toLowerCase();
+    return label !== type.toLowerCase();
+  }).join(" · ");
+}
+
 // A bare address says nothing on screen, nor does the label in front of it ("Listen to Miles Davis: https://…").
 const address = /(?:https?:\/\/|www\.)[^\s<>"]+/gi;
 const label = /(?:^|\s)(?:[^\s:]+\s+){0,3}[^\s:]+:\s*$/u;

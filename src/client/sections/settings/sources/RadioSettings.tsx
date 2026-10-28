@@ -52,14 +52,14 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
     <div className="flex min-w-0 flex-col gap-8" data-radio-settings>
       <SettingsSection aria-label="Radio playlists">
         {available && page.isPending && <SettingsRowsSkeleton />}
-        {page.data && <SettingsRow data-avoid-radio label="avoid radio" description={<>{["Built in", builtIn?.updatedAt && `${builtIn.stationCount} stations`, builtIn?.updatedAt && updated(builtIn.updatedAt)].filter(Boolean).join(", ")}{builtIn?.error && <span className="block text-destructive">{builtIn.error}</span>}</>}>
+        {page.data && <SettingsRow data-avoid-radio label="avoid radio" description={<>{["Built in", builtIn?.updatedAt && `${builtIn.stationCount} ${builtIn.stationCount === 1 ? "station" : "stations"}`, builtIn?.updatedAt && updated(builtIn.updatedAt)].filter(Boolean).join(", ")}{builtIn?.error && <span className="block text-destructive">{builtIn.error}</span>}</>}>
           <Button variant="outline" disabled={!canWrite} onClick={() => update("avoid?refresh=true", "GET")}>Update stations</Button>
         </SettingsRow>}
         {sources.filter(source => source.id !== avoidRadioPlaylistId).map(source => (
           <SettingsRow key={source.id} data-radio-source-id={source.id} label={<span className="break-words">{source.name}</span>} description={<>
             <span className="block break-all">{source.url}</span>
             {(source.guideUrl || source.discoveredGuideUrl) && <span className="block break-all">Guide: {source.guideUrl || source.discoveredGuideUrl}</span>}
-            <span className="block">{source.updatedAt ? `${source.stationCount} stations, ${updated(source.updatedAt)}` : updated(null)}</span>
+            <span className="block">{source.updatedAt ? `${source.stationCount} ${source.stationCount === 1 ? "station" : "stations"}, ${updated(source.updatedAt)}` : updated(null)}</span>
             {source.error && <span className="block text-destructive">{source.error}{source.updatedAt && " Showing the last stations."}</span>}
           </>}>
             <Button variant="outline" disabled={!canWrite} onClick={() => update(`playlists/${encodeURIComponent(source.id)}/refresh`, "POST")}>Update stations</Button>

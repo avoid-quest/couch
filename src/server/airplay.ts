@@ -5,7 +5,7 @@ import { accessSync, constants } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import type { Readable } from "node:stream";
-import type { AirPlayState } from "../shared/airplay";
+import type { AirPlayAvailability, AirPlayState } from "../shared/airplay";
 import { createAudioIngress, createFramer, payloadType, type RtpPacket } from "./airplay-audio";
 
 export type AirPlaySessions = {
@@ -220,6 +220,7 @@ export function createAirPlay(options: {
 
   if (enabled) void reconcile();
   return {
+    availability: (): AirPlayAvailability => !supported ? "unsupported" : unavailable() ? "unavailable" : "available",
     state,
     /** An admitted sender is connected, playing or paused. */
     active: () => !!session,

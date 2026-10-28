@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -36,16 +36,17 @@ function Row({ label, htmlFor, description, children }: { label: string; htmlFor
  * this computer's sound and the picture's quality, then Start sharing, which starts the capture and plays it on the
  * chosen devices. A Dialog on desktop, a bottom Sheet on phones and the TV.
  */
-export function ShareDialog({ open, onOpenChange, tv }: { open: boolean; onOpenChange: (open: boolean) => void; tv: boolean }) {
+export function ShareDialog({ open, onOpenChange, tv, openerRef }: { open: boolean; onOpenChange: (open: boolean) => void; tv: boolean; openerRef: RefObject<HTMLButtonElement | null> }) {
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  const restoreFocus = (event: Event) => { if (openerRef.current?.isConnected) { event.preventDefault(); openerRef.current.focus(); } };
   const title = "Share this device";
   // Its choices reset each time it opens, and capture is asked for only from the device in hand.
   const body = open && <ShareForm onDone={() => onOpenChange(false)} />;
   if (desktop && !tv) return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent data-tv-local-only aria-describedby={undefined} className="gap-0 sm:max-w-2xl"><DialogTitle className="mb-5 font-display text-heading">{title}</DialogTitle>{body}</DialogContent>
+    <DialogContent data-tv-local-only aria-describedby={undefined} onCloseAutoFocus={restoreFocus} className="gap-0 sm:max-w-2xl"><DialogTitle className="mb-5 font-display text-heading">{title}</DialogTitle>{body}</DialogContent>
   </Dialog>;
   return <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent data-tv-local-only side="bottom" aria-describedby={undefined} className="max-h-[90dvh] items-center overflow-y-auto px-(--gutter) pt-6 pb-8">
+    <SheetContent data-tv-local-only side="bottom" aria-describedby={undefined} onCloseAutoFocus={restoreFocus} className="max-h-[90dvh] items-center overflow-y-auto px-(--gutter) pt-6 pb-8">
       <div className="grid w-full max-w-2xl"><SheetTitle className="mb-5 font-display text-heading">{title}</SheetTitle>{body}</div>
     </SheetContent>
   </Sheet>;
@@ -229,7 +230,7 @@ function Pictures({ sources, listing, value, onValueChange, disabled, kind }: { 
   return <ToggleGroup type="single" aria-label={label} spacing={0} value={value} disabled={disabled} onValueChange={next => { if (next) onValueChange(next); }}
     className="grid max-h-80 w-full grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-x-3 gap-y-4 overflow-y-auto rounded-none p-1">
     {sources.map(source => <ToggleGroupItem key={source.id} value={source.id} title={source.name}
-      className="group/picture h-auto min-w-0 flex-col items-stretch justify-start gap-1.5 rounded-md p-0 text-left font-normal whitespace-normal focus-visible:bg-transparent focus-visible:text-foreground data-[state=on]:bg-transparent">
+      className="group/picture h-auto touch:h-auto min-w-0 flex-col items-stretch justify-start gap-1.5 rounded-md p-0 text-left font-normal whitespace-normal focus-visible:bg-transparent focus-visible:text-foreground data-[state=on]:bg-transparent">
       <span className={cn("grid aspect-video place-items-center overflow-hidden rounded-md bg-muted outline-2 outline-offset-2 outline-transparent group-focus-visible/picture:outline-foreground", source.id === value && "outline-foreground")}>
         {source.thumbnail && <img src={source.thumbnail} alt="" className="size-full object-contain" />}
       </span>

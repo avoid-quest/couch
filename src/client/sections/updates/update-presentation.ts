@@ -2,6 +2,14 @@ import type { SessionState } from "../../../shared/protocol";
 import type { SettingsPage } from "../../../shared/settings-pages";
 import { couchApp } from "../../session/native-context";
 import type { UpdateState } from "../../../shared/updates";
+import type { HelperUpdate } from "../../../shared/helper-updates";
+
+/** Older hosts send command banners; keep Core's raw versions for compatibility checks and diagnosis. */
+export function mediaToolVersion({ name, version }: Pick<HelperUpdate, "name" | "version">) {
+  const value = version?.trim();
+  const banner = name === "ffmpeg" ? /^ffmpeg version\s+(\S+)/ : name === "mpv" ? /^mpv\s+(\S+)/ : null;
+  return value ? banner?.exec(value)?.[1] ?? value : null;
+}
 
 export const updateStatuses: Record<UpdateState["status"], string> = { idle: "Not checked yet", checking: "Checking…", "up-to-date": "Up to date", downloading: "Downloading…", ready: "Update ready", installing: "Installing…", error: "Update failed" };
 export const updateBusy = (state?: UpdateState) => !!state && ["checking", "downloading", "installing"].includes(state.status);

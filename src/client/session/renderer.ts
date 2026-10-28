@@ -49,6 +49,7 @@ let unfollow: (() => void) | null = null;
 let ptsOffset: number | undefined;
 let report: ((state: PlayerState) => void) | undefined;
 let reportedAt = 0;
+let reported = "";
 const blockedListeners = new Set<(blocked: boolean) => void>();
 
 // Chromium plays YouTube's VP9 (#644 ticket 1); other engines get H.264.
@@ -91,7 +92,15 @@ const state = (): PlayerState => ({
   ...following ? { timeline: !canMapClock() ? { mapping: "unavailable" as const, error: "This browser cannot align this picture with the shared sound. Try another browser or device." }
     : sourcePts() && ptsOffset === undefined ? undefined : { mapping: sourcePts() ? "hls" as const : "media" as const } } : {},
 });
-const send = () => { reportedAt = performance.now(); report?.(state()); };
+const send = (positionChanged = false) => {
+  if (!report) return;
+  const current = state(), next = JSON.stringify({ ...current, position: undefined });
+  // Chromium queues each subtitle mode change. Position alone reports on ticks and seeks.
+  if (next === reported && !positionChanged) return;
+  reported = next;
+  reportedAt = performance.now();
+  report(current);
+};
 // Synced sound's player waits for a tap too (#644 ticket 10); this unlocks it.
 let unlockSound: (() => void) | null = null;
 const notify = () => { for (const listener of blockedListeners) listener(blocked || !!unlockSound); };
@@ -148,19 +157,19 @@ const observeElements = () => {
       if (event === "pause" || event === "ended") suspendCompression();
       else if (event === "playing") resumeCompression();
       if (event !== "durationchange" && event !== "resize") follow(event !== "ratechange");
-      send();
+      send(event === "seeked");
     });
   }
   on(video, "canplay", () => { ready = true; send(); });
   for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"]) on(video, event, buffered);
-  on(video, "timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
+  on(video, "timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(true); });
   on(video, "error", () => {
     if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
     else if (isPlaylist(loading)) void playlist(loading, false);
     else sourceFailed();
   });
   on(audio, "error", () => fail(audio.error?.message || "This media couldn't play here."));
-  on(video.textTracks, "change", send);
+  on(video.textTracks, "change", () => send());
 };
 observeElements();
 
@@ -264,7 +273,7 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
   engine = "hls";
   updateMapping();
   // A sliding live window is not a finite, zero-based movie timeline.
-  const decoder = hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true,
+  const decoder = hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true, enableCEA708Captions: !command.subtitles?.length,
     ...following ? { maxLiveSyncPlaybackRate: 1 } : {} });
   const active = () => current === generation && attempt === decoderGeneration && hls === decoder;
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
@@ -466,7 +475,7 @@ export function play(command: PlaybackCommand) {
     case "subtitleDelay": subtitleDelay = command.delay; shiftCues(); break;
     case "stop": reset(); break;
   }
-  send();
+  send(command.type === "seek");
 }
 
 function addTrack(source: string, label: string, language = "", show = false) {
@@ -481,6 +490,7 @@ function addTrack(source: string, label: string, language = "", show = false) {
 export function connectRenderer(listener: (state: PlayerState) => void) {
   if (!holder.isConnected) document.body.append(holder);
   report = listener;
+  reported = "";
   send();
   return () => { report = undefined; reset(); };
 }
