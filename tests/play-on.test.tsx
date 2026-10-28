@@ -30,3 +30,15 @@ test("Play on keeps a shared source's publisher selectable, so choosing it opens
   expect(played).toEqual(["mac"]);
   expect(items.find(item => text(item.props.children).includes("Phone"))?.props.disabled).toBeFalsy();
 });
+
+test("Live Play on offers only listening devices, excluding its publisher and picture-only outputs", () => {
+  const screen = { id: "screen", name: "Picture only", online: true, volume: 50, muted: false, sharing: { video: true, audio: false } };
+  devices.push(screen);
+  try {
+    const played: string[] = [];
+    const items = rows(PlayOnGroup({ onPlay: id => played.push(id), sharingDeviceId: "mac", liveAudio: true }));
+    expect(items.map(item => text(item.props.children))).toEqual(["Phone This device"]);
+    items[0]!.props.onSelect!();
+    expect(played).toEqual([here]);
+  } finally { devices.pop(); }
+});

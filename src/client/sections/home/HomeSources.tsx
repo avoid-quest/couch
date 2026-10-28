@@ -73,7 +73,7 @@ export function SharedSources({ hits }: { hits: SearchHit[] }) {
   return <section aria-label="Shared sources" className="grid min-w-0 gap-stack">
     <ShelfHeading title="Shared sources" />
     <ul data-nav-row aria-label="Shared sources" className="flex flex-wrap gap-2">
-      {hits.map((hit, index) => <SourceChip key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={hit.primary.label === "Join" ? `Join ${hit.title}` : on(`${hit.primary.label} ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== hit.primary.label)} />)}
+      {hits.map((hit, index) => <SourceChip key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={hit.primary.label === "Play" ? on(`Play ${hit.title}`) : `${hit.primary.label} ${hit.title}`} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== hit.primary.label)} />)}
     </ul>
   </section>;
 }
@@ -123,8 +123,8 @@ function SourceChip({ title, meta, failing = false, href, onClick, menu = [], ..
   const body = <><span className={cn(failing && "text-muted-foreground")}>{title}</span>{(failing || meta) && <span className="font-normal text-muted-foreground">{failing ? "Couldn't load" : meta}</span>}</>;
   // A label replaces the chip's words, so it says the failure too.
   const label = props["aria-label"] && failing ? `${props["aria-label"]}, couldn't load` : props["aria-label"];
-  return <li {...options.item} className={cn("relative flex", options.item.className)}>
-    <Button variant="secondary" {...options.target} {...props} aria-label={label} asChild={!!href} className={cn("text-body font-normal", options.shown.length && "pr-10")} onClick={(event: MouseEvent<HTMLElement>) => {
+  return <li {...options.item} className={cn("relative flex min-w-0 max-w-full", options.item.className)}>
+    <Button variant="secondary" {...options.target} {...props} aria-label={label} asChild={!!href} className={cn("h-auto min-h-control min-w-0 max-w-full flex-wrap text-body font-normal whitespace-normal [overflow-wrap:anywhere]", options.shown.length && "pr-10")} onClick={(event: MouseEvent<HTMLElement>) => {
       if (href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
       event.preventDefault();
       onClick();

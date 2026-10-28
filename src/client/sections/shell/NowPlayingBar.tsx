@@ -112,7 +112,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   // The player's words, less the title shown right above them and the plain states the transport already shows.
   // The status line says where it reconnects.
   const { label, quiet } = playbackStatus(state, connected);
-  const status = quiet ? "" : label;
+  const status = quiet || livePlayback(state) ? "" : label;
   const at = playsOn(state);
   const title = programme?.title || current.title;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;

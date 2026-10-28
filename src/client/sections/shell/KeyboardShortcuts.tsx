@@ -33,7 +33,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
   const subtitles = player?.tracks?.filter(track => track.kind === "subtitle") ?? [];
   const own = livePlayback(state) ? state?.devices?.find(device => device.id === deviceId()) : undefined;
   const volumeTarget = livePlayback(state) ? { deviceId: deviceId() } : {};
-  const canVolume = available && (livePlayback(state) ? !!own?.online : audioReady);
+  const canVolume = livePlayback(state) ? connected && !!own?.online : available && audioReady;
   const volume = (delta: number) => void run({ type: "volume", ...volumeTarget, volume: Math.max(0, Math.min(100, (own?.volume ?? player?.volume ?? 0) + delta)) });
   useCouchHotkeys([
     { hotkey: "K", action: pause, enabled: canPause },

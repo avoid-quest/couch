@@ -6,13 +6,13 @@ import { playOnTargets } from "@/session/where-it-plays";
 import { playbackControls } from "@/session/playback-controls";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
-export function usePlayOn() {
+export function usePlayOn(sharingDeviceId?: string, liveAudio = false) {
   const session = useOptionalSessionGate();
   const state = session?.state;
   const here = deviceId();
   const target = state?.controlling && state.controlling !== here ? state.devices?.find(device => device.id === state.controlling) : undefined;
   return {
-    devices: playOnTargets(state, here),
+    devices: playOnTargets(state, here).filter(device => !liveAudio || device.id !== sharingDeviceId && (device.id === here || device.sharing?.audio)),
     here,
     queueAllowed: playbackControls(state).queue,
     /** A Play label that names the controlled Device when Play goes elsewhere: "Play on Studio". */
@@ -30,17 +30,17 @@ export function usePlayOn() {
 export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}` : "";
 
 // sharingDeviceId: a shared source's publisher. It never plays its own capture: choosing it opens Where it plays.
-function Devices({ onPlay, disabled, sharingDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
-  const { devices, here } = usePlayOn();
+function Devices({ onPlay, disabled, sharingDeviceId, liveAudio }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; liveAudio?: boolean }) {
+  const { devices, here } = usePlayOn(sharingDeviceId, liveAudio);
   return devices.map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
     <span className="w-full break-words">{device.name}</span>{(device.id === here || device.id === sharingDeviceId) && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">{[device.id === here && "This device", device.id === sharingDeviceId && "Sharing this source"].filter(Boolean).join(", ")}</span>}
   </DropdownMenuItem>);
 }
 
 /** "Play on" inside an item's menu; nothing when only this Device is online. */
-export function PlayOnGroup({ onPlay, disabled, sharingDeviceId, separated = true }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; separated?: boolean }) {
-  if (!usePlayOn().devices.length) return null;
-  return <>{separated && <DropdownMenuSeparator />}<DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} /></DropdownMenuGroup></>;
+export function PlayOnGroup({ onPlay, disabled, sharingDeviceId, separated = true, liveAudio }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; separated?: boolean; liveAudio?: boolean }) {
+  if (!usePlayOn(sharingDeviceId, liveAudio).devices.length) return null;
+  return <>{separated && <DropdownMenuSeparator />}<DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} liveAudio={liveAudio} /></DropdownMenuGroup></>;
 }
 
 /** "Play on" beside a row's inline verbs. */

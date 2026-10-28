@@ -115,7 +115,7 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, cl
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { available, transportReady, pausable, stoppable, nextReady, hasNext, programme } = playbackCapabilities(state, connected);
-  if (livePlayback(state)) return participation ? <LiveParticipation state={state} connected={connected} run={run} pageFirst={pageFirst} className={className} /> : null;
+  if (livePlayback(state)) return participation ? <LiveParticipation key={state.playback} state={state} connected={connected} run={run} pageFirst={pageFirst} className={className} /> : null;
   const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current, failed = (player.status === "error" || player.status === "loading" && state.radioRetry?.retryAt != null) && !!current;
   const pause = playing || !pausable;
@@ -144,20 +144,20 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
   const receiving = controls.leave;
   const publisher = source?.deviceId === deviceId();
   const output = state.outputs?.find(output => output.deviceId === deviceId());
-  const error = output?.error || state.player.error;
+  const error = receiving ? output?.error || state.player.error : null;
   if (!source || publisher) return null;
-  const label = receiving ? "Leave" : failed ? "Try joining again" : "Join";
+  const label = receiving ? "Leave" : "Join";
   return <div data-live-participation className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
-    <Button data-page-first={pageFirst || undefined} disabled={!connected || pending || receiving && !state.player.playbackId} onClick={async () => {
+    <Button data-page-first={pageFirst || undefined} aria-busy={pending || undefined} aria-disabled={pending || undefined} className="aria-disabled:opacity-50" disabled={!connected || receiving && !state.player.playbackId} onClick={async () => {
       if (busy.current || receiving && !state.player.playbackId) return;
       busy.current = true; setPending(true); setFailed(false);
       try { setFailed(!await run(receiving ? { type: "leave", playbackId: state.player.playbackId! } : { type: "playLive", sourceId: source.id, deviceId: deviceId() })); }
       catch { setFailed(true); }
       finally { busy.current = false; setPending(false); }
     }}>{pending ? receiving ? "Leaving…" : "Joining…" : label}</Button>
-    {receiving && !error && <span role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{!connected ? "Reconnecting…" : (state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…")}</span>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {failed && <p role="alert" className="text-sm text-destructive">Couldn't {receiving ? "leave" : "join"}. Check this device's connection and audio output, then try again.</p>}
+    <span role="status" className={cn("min-w-0 text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]", pending && "sr-only")}>{pending ? receiving ? "Leaving…" : "Joining…" : receiving && !error ? !connected ? "Reconnecting…" : (state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…") : ""}</span>
+    {error && <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">{error}</p>}
+    {failed && <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">Couldn't {receiving ? "leave" : "join"}. Try again.</p>}
   </div>;
 }
 
@@ -208,6 +208,8 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
   const trigger = useRef<HTMLButtonElement>(null);
   // Controlled, so it places itself as it opens (toolPanel).
   const [open, setOpen] = useState(false);
+  const sourceId = state.playbacks?.find(playback => playback.id === state.playback)?.liveSourceId;
+  if (state.liveSources?.some(source => source.id === sourceId && source.intent === "live" && source.deviceId === deviceId())) return null;
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
     {open && <PopoverContent {...toolPanel(trigger.current)} aria-label="Volume controls" className="w-72"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>}
