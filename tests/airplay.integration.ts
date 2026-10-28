@@ -123,7 +123,7 @@ async function fixture(t: TestContext, { executable = true, uxplay: replacement,
   const controllerId = Identity.generate().peerId, controllerToken = store.pair(controllerId, "Controller");
   store.close();
   const hostToken = "h".repeat(64);
-  const hub = await createHub({ databasePath, hostToken, native, hostname: "127.0.0.1", port: 0, advertisedUrls: [], ...executable ? { airplayExecutable: uxplay } : {} });
+  const hub = await createHub({ databasePath, hostToken, native, hostname: "127.0.0.1", port: Number(process.env.COUCH_TEST_AIRPLAY_PORT ?? 0), advertisedUrls: [], ...executable ? { airplayExecutable: uxplay } : {} });
   const sockets: WebSocket[] = [];
   t.after(async () => {
     for (const socket of sockets) socket.terminate();
@@ -177,6 +177,36 @@ const closed = (fake: Fake, socket: number, type = "RAOP") => {
   fake.send({ log: `removing connection type ${type} socket ${socket} conn 0x${socket}` });
   fake.send({ log: `Connection closed on socket ${socket}` });
 };
+
+test("public AirPlay discovery exposes capability while settings stay admin-only across role changes", { skip: !linux }, async t => {
+  const { hub, hostToken, request, airplay, receiver: admin, controller, fakes } = await fixture(t);
+  const discovery = async (token?: string) => {
+    const response = token ? await request("/api/connection", { token }) : await fetch(`${hub.origin}/api/connection`, { headers: { Origin: hub.origin } });
+    assert.equal(response.status, 200);
+    const details = await response.json() as Record<string, unknown>;
+    assert.equal(details.airplay, "available");
+    for (const field of ["enabled", "status", "code", "sender", "error"]) assert.equal(field in details, false);
+    return details;
+  };
+  const original = await discovery();
+  for (const token of [hostToken, admin.token, controller.token, "unpaired"]) assert.deepEqual(await discovery(token), original);
+  const initial = await airplay();
+  assert.equal(JSON.stringify(original).includes(initial.code), false);
+  assert.equal((await request("/api/settings/airplay", { token: admin.token })).status, 200);
+  const refused = async (token: string, status: number) => {
+    for (const [path, body] of [["/api/settings/airplay", undefined], ["/api/settings/airplay", { enabled: true }], ["/api/settings/airplay/code", {}]] as const)
+      assert.equal((await request(path, { token, body })).status, status);
+  };
+  await refused("unpaired", 401);
+  await refused(controller.token, 403);
+  assert.equal((await request(`/api/devices/${admin.id}/role`, { body: { role: "controller" } })).status, 200);
+  await refused(admin.token, 403);
+  assert.deepEqual(await discovery(admin.token), original);
+  assert.equal((await airplay()).code, initial.code, "refused code renewals don't change it");
+  assert.equal(fakes.length, 0, "refused enable requests never start a receiver");
+  assert.equal((await request(`/api/devices/${admin.id}/role`, { body: { role: "administrator" } })).status, 200);
+  assert.equal((await request("/api/settings/airplay", { token: admin.token })).status, 200);
+});
 
 test("AirPlay stays off until an admin turns it on, and runs UxPlay only in Couch's own data", { skip: !linux }, async t => {
   const { request, airplay, fakes, next, directory, controller } = await fixture(t);
@@ -264,6 +294,11 @@ test("a connection is not admission: only a sender's decoded sound publishes and
   assert.deepEqual({ ...source, id: undefined }, { id: undefined, deviceId: "airplay", name: "AirPlay · Kitchen iPhone", kind: "airplay", audio: true, video: false });
   assert.equal((await airplay()).status, "receiving");
   assert.equal((await airplay()).sender, "Kitchen iPhone");
+  const publicDetails = await (await fetch(`${hub.origin}/api/connection`)).json() as Record<string, unknown>;
+  assert.equal(publicDetails.airplay, "available", "receiving doesn't change public capability");
+  for (const field of ["enabled", "status", "code", "sender", "error"]) assert.equal(field in publicDetails, false);
+  assert.equal(JSON.stringify(publicDetails).includes("Kitchen iPhone"), false);
+  assert.equal(JSON.stringify(publicDetails).includes((await airplay()).code), false);
   assert.ok(["loading", "playing"].includes(await player()), "an admitted sender holds off unattended updates");
   assert.equal(host.state.playbacks?.length, 1, "the sender starts one playback on the host");
 
@@ -632,12 +667,18 @@ test("a missing runtime says what to install instead of restarting, and a new co
 });
 
 test("AirPlay explains where it can't run", async t => {
-  const darwin = createAirPlay({ executable: "/nonexistent", directory: "/nonexistent", enabled: true, network: () => true, name: () => "Couch", identity: () => ({ code: "1234", deviceId: "02:00:00:00:00:01" }), sessions: { started() {}, audio() {}, ended() {} }, changed() {}, platform: "darwin" });
-  assert.equal(darwin.state().status, "unsupported");
-  assert.match(darwin.state().error!, /Linux/);
-  await darwin.close();
+  for (const platform of ["darwin", "win32"] as const) {
+    let identityReads = 0;
+    const receiver = createAirPlay({ executable: "/nonexistent", directory: "/nonexistent", enabled: true, network: () => true, name: () => "Couch", identity: () => { identityReads++; return { code: "1234", deviceId: "02:00:00:00:00:01" }; }, sessions: { started() {}, audio() {}, ended() {} }, changed() {}, platform });
+    assert.equal(receiver.availability(), "unsupported");
+    assert.equal(identityReads, 0, "public capability doesn't read privileged identity");
+    assert.equal(receiver.state().status, "unsupported");
+    assert.match(receiver.state().error!, /Linux/);
+    await receiver.close();
+  }
   const { request, airplay } = await fixture(t, { executable: false });
   if (process.platform === "linux") {
+    assert.equal((await (await request("/api/connection", { token: "unpaired" })).json() as { airplay: string }).airplay, "unavailable");
     assert.equal((await airplay()).status, "unavailable");
     const refused = await request("/api/settings/airplay", { body: { enabled: true } });
     assert.equal(refused.status, 409);

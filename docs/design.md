@@ -534,6 +534,8 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Remote](design/remote.md): the Remote section and Type on TV.
 - [Settings](design/settings.md): its pages and section nav. Network sharing
   chooses Ethernet before Wi-Fi automatically, without requiring network flags.
+  AirPlay's admin controls, including open confirmations and retries, wait for
+  the Couch to reconnect.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).
