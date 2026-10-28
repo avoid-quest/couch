@@ -130,7 +130,8 @@ media. `PlaybackThumbnail` uses Video.js 10.2.0's standalone `Thumbnail` with
 supplied images or sprite coordinates. It selects one covering cue, memoizes the
 image presentation and leaves Video.js responsible for cropping and resize
 observation. Moving within that cue updates only its timestamp/position, without
-re-rendering the thumbnail. `PlaybackSeekBar` uses Video.js's generic `Slider.Root`,
+re-rendering the thumbnail. Viewport resizing refreshes its CSS constraints even
+when the selected cue is unchanged. `PlaybackSeekBar` uses Video.js's generic `Slider.Root`,
 `Track`, `Fill`, `Thumb`, `Preview` and `Value`, styled with Couch's existing tokens. Its public change and
 commit callbacks keep a smooth local draft and authorize just one seek on release;
 lost capture alone cannot commit. Keyboard targets remain cumulative until blur,
@@ -148,19 +149,24 @@ or receiver is created. Couch commands, observed playback position, renderers an
 Sendspin picture follower keep their existing ownership.
 Non-seekable Live has no timeline or previews.
 
-Core reuses the existing yt-dlp extraction (`mhtml` storyboard formats),
-preferring 160px tiles. `/api/playback-preview` checks pairing, current playback
-identity and output consent for metadata and each image. URLs and playback headers
-stay in Core; image reads use its public-network fetcher. Source changes cancel
-obsolete reads. Metadata is bounded to 4,000 frames / 128 sheets; images to 2 MiB,
-four concurrent downloads and a shared 16 MiB cache. A controller keeps four
-successfully decoded images and releases their object URLs when the source
-changes. Hidden previews cancel pending image reads and retry timers; source
-changes also cancel metadata reads. Network,
-503 and decode failures retry at most twice while requested; later hover can
-retry a failed or missing image. Missing metadata is fresh for 30 seconds, and
-reconnection invalidates it through the session query client. Expired
-or unavailable assets never delay playback or trigger another media extraction.
+Core reuses existing extraction and player-page responses. YouTube and Twitch
+supply storyboard grids; RaiPlay, StreamingCommunity and AnimeUnity supply
+WebVTT cues. [Provider previews](../provider-previews.md) records discovery,
+coverage and limits. Declared manifests load only when an authorized controller
+requests previews. `/api/playback-preview` checks pairing, current playback and
+output consent for metadata and each image. Provider URLs and playback headers
+stay in Core; preview reads use its public-network fetcher.
+
+Metadata is bounded to 4,000 frames / 128 images. Manifest reads have a 512 KiB
+limit; images have a 2 MiB compressed / four-million-pixel limit, four concurrent
+downloads and a shared 16 MiB cache. A controller keeps four successfully decoded
+images and releases their object URLs when the source changes. Hidden previews
+cancel pending image reads and retry timers; source changes also cancel metadata
+reads. Image network, 503 and decode failures retry at most twice while requested;
+later hover can retry a failed or missing image. Missing metadata is fresh for
+30 seconds, and reconnection invalidates it through the session query client.
+Expired or unavailable assets never delay playback or trigger another media
+extraction. Failed quality changes retain the current source's preview.
 
 The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the

@@ -336,10 +336,11 @@ Evidence is in `.artifacts/pr-stack/reviews/duration-focus-detail` (failure) and
 `duration-active{,-reduced}` (passing runs). This diagnoses the keyboard-test
 failure; the earlier 135-second drag result remains unexplained.
 
-## YouTube timeline previews, 28 October 2026
+## Initial YouTube timeline previews, 28 October 2026
 
 Video.js 10.2.0 supplies standalone thumbnail selection and sprite cropping;
-Couch retains its shadcn slider and authoritative seek commands. The provider
+This initial measurement retained the shadcn slider and Couch seek commands;
+the later Slider and provider results below supersede its built-state description. The provider
 sample was Khruangbin's NPR Tiny Desk concert (`vWLJeqLPfSU`): yt-dlp 2026.10.26
 returned six 5×5 storyboard sheets of 160×90 tiles, 140 intervals over 693 seconds.
 Core reused the playback extraction. A controller with no local media fetched
@@ -379,7 +380,8 @@ The client accepts Core's compact grid or timed-cue metadata for any source.
 It selects only the covering cue (Video.js 10.2.0 does not enforce `endTime`),
 then memoizes the small `Thumbnail.Root` / `Thumbnail.Image` presentation with
 stable inputs. Its resize observer and image load/error handlers remain owned
-by Video.js. The slider, transport and clocks are unchanged. The root package
+by Video.js. This measurement predates the Slider migration below; transport
+and clocks remain unchanged. The root package
 export is the documented public Thumbnail entry; no player/store or media engine
 is imported. npm still reported 10.2.0 as stable on this run. This follows
 [Video.js Thumbnail](https://videojs.org/docs/framework/react/reference/components/thumbnail),
@@ -480,3 +482,39 @@ Language Select selection/cancellation and player popover focus restoration pass
 with trusted keyboard input on desktop and TV presentation; the TV regression
 also covers nested queue menus. Matching desktop, phone, TV, fullscreen and bar
 screenshots, raw measurements and harnesses are in `/tmp/couch-videojs-timeline/`.
+
+
+## Integrated validation and assets, 28 October 2026
+
+The final integrated UI passes preview/recovery, seek, transition, clock and all
+15 TV-focus cases, plus trusted mouse/touch and desktop/TV menu/Select checks.
+The resize regression grows a visible unchanged cue from 160×90 to 238×133 when
+resizing 390→1920px, retaining the same blob and one image download. The radio
+regression now requires real programme progress, holds its wall clock fixed and
+rechecks seeking/end labels after injected media-clock observations.
+
+Fresh production resolution succeeds for all nine website providers. The five
+preview-capable samples deliver 16 images totalling 3,634,492 bytes. Replaying
+those images in the production UI checks 50 cue positions, crops and fractional
+boundaries; four samples without declared previews check 28 timestamp fallbacks.
+All use a remote-controller fixture with zero local media and zero hover commands.
+See [provider coverage](provider-previews.md) for per-source evidence and limits.
+No decoded-video synchronization claim follows from these rendered crop checks.
+
+At main `ee4f5876`, the source-only layer's client assets total 2,773,352 raw /
+852,441 gzip bytes. With the integrated Slider and Thumbnail they total
+2,833,522 raw / 872,105 gzip: **+60,170 raw / +19,664 gzip bytes**. These are sums
+of emitted `dist/assets` JavaScript and CSS, gzip level 9, not initial-route
+transfer or source-map sizes. The image-size dependency stays in Core. This
+supersedes the initial total bundle delta; the +5.8 KB figure above isolates the
+later Slider migration alone.
+
+A disposable combination with Sendspin `3df745fa` builds and passes 90 affected
+unit tests and 35 integration cases, plus the dedicated preview-admission case.
+Explicit reconciliation retains pending source admission before preview binding,
+binds replacement group sources, and strips preview descriptors beside Sendspin's
+other private source fields. The extra case covers a pending picture-to-group
+resolution, admitted preview replacement, Direct collapse, renderer privacy and
+Stop. These test merges and Sendspin changes are absent from submitted branches.
+The combination proves software contracts with fixture extraction/codec input;
+it does not validate physical receiver timing, native capture or A/V latency.
