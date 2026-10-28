@@ -1814,9 +1814,12 @@ export async function createHub(options: HubOptions) {
         void airplay.refresh();
         // The listener queues that stop now, so a host enabling sharing again restarts it afterwards.
         if (!enabled && lan && !loopbackPeer(requestPeer(request))) void lan.setEnabled(false, new Promise<void>(resolve => afterResponse(request, resolve))).catch(error => console.error("Couch: couldn't stop the LAN listener.", error));
-        if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
-          sockets.delete(socket);
-          socket.close(4003, "Sharing is off. Your pairing is remembered.");
+        if (!enabled) {
+          for (const device of store.devices()) if (device.role !== "host") sendspin.drop(device.id);
+          for (const socket of sockets) if (!socket.data.trusted) {
+            sockets.delete(socket);
+            socket.close(4003, "Sharing is off. Your pairing is remembered.");
+          }
         }
         // Only remote devices lose access: what the host plays keeps playing, now as its own.
         if (!enabled) for (const playback of all()) {

@@ -28,7 +28,8 @@ Non-browser SDK clients can use the token-bearing `/api/audio/<token>/sendspin`
 base path. The upgrade binds the authenticated Device to `client/init.client_id`,
 checks host, origin and remote-control permission, and revocation closes the
 authenticated transport even during the Noise handshake. A peer whose messages
-throw closes alone; the shared worker continues.
+throw closes alone; the shared worker continues. Turning off network sharing
+also closes paired audio transports on the primary listener.
 
 ## Pipeline
 
