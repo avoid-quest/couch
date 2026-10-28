@@ -744,7 +744,20 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
           break;
         }
         case "videoQuality": return changeVideoQuality(action, authorize);
-        case "play": play(action.entryId, action.fromStart, "play", authorize, playedBy); break;
+        case "play": {
+          // Autoplay's visible picks are playable before they join the queue. Keep manual entries waiting,
+          // and continue the collection after the chosen pick, without resolving that collection again.
+          const pick = !state.queue.some(entry => entry.id === action.entryId) && state.autoplay?.enabled
+            ? state.autoplay.upcoming.find(entry => entry.id === action.entryId) : undefined;
+          if (pick && continuation) {
+            if (state.queue.length >= 500) throw new Error(QUEUE_FULL);
+            play(pick.id, action.fromStart, "play", authorize, playedBy, [], [...state.queue, pick], {
+              ...continuation, entries: continuation.entries.slice(continuation.entries.findIndex(entry => entry.id === pick.id) + 1),
+            });
+          }
+          else play(action.entryId, action.fromStart, "play", authorize, playedBy);
+          break;
+        }
         case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);

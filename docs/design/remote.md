@@ -19,7 +19,8 @@ Arrow keys work while the pad has focus. Info opens the TV's player with its
 Info shown; on the player it shows or hides Info ([Player](player.md#calm-and-info)).
 
 Remote picks the TV this device controls, else one that's on, else the one
-seen last. A TV that's off says so ("Living room TV is off."); "No TV
+seen last. If the selected TV is forgotten, Remote picks from the remaining
+TVs by the same rule. A TV that's off says so ("Living room TV is off."); "No TV
 connected" with Open Devices is only for a Couch without a TV. Core keeps
 whether each device last connected as a TV with its record, so a TV stays one
 while it's off and across restarts.

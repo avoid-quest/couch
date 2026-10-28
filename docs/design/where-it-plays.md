@@ -56,7 +56,9 @@ Offline: Garden, Anna's tablet
 - **Many devices:** past 8 rows the counts become a filter (shadcn
   `ToggleGroup`, one at a time, pressed again to clear) and a search field,
   "Find a device", appears. Both stay at the top while the list scrolls.
-  Filtering never reorders.
+  Filtering never reorders. No matches says "No devices match." with Clear
+  filters to reset both the search and the selected count, returning focus to
+  the search field.
 
 Rows keep their order while the panel is open: a device that joins or leaves
 stays where it was, and a new device is appended. The order is taken afresh
@@ -113,7 +115,9 @@ private output plays in the Playback, or such a publisher waits to return.
 reason ("Private", "Offline", "No picture", "No sound", "Sharing this
 source"). A private picture disables Picture for other devices, while its
 shared sound keeps its Sound and fader. This device keeps its own
-controls while viewing another Playback.
+controls while viewing another Playback. While reconnecting, the whole mixer
+keeps its rows but disables changes, including In sync, device channels,
+faders and Sync.
 
 ## Fader and Sync
 

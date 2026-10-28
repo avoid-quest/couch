@@ -132,7 +132,7 @@ function QueueDetails({ id }: { id: string }) {
   const action = useDetailAction();
   const item = state?.queue.find(entry => entry.id === id);
   const save = useForLaterToggle(item?.source.startsWith("web:") ? item.source.slice(4) : undefined, () => ({ kind: "queue", id }), action);
-  if (!item) return <><PageHeader breadcrumb={<ContentBreadcrumb />} title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
+  if (!item) return state ? <ItemNotFound /> : <><PageHeader breadcrumb={<ContentBreadcrumb />} title="Details" /><p className="text-sm text-muted-foreground">Connect to Couch to load this item.</p></>;
   const radio = isRadio(item);
   return <><DetailLayout context={<MediaContext creator={item.creator} />} title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
     play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} more={browserActions(queuePageUrl(item))} />
