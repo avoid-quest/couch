@@ -77,6 +77,10 @@ const check = (source: string) => {
       emit(event, data) { for (const listener of this.listeners.get(event) ?? []) listener(event, data); }
       loadSource(source) { this.source = source; }
       attachMedia(element) { this.media = element; }
+      broadcastCaptions() {
+        // hls.js's timeline controller creates CEA captions outside subtitleTracks.
+        if (this.config.enableCEA708Captions !== false) this.media.textTracks.push({ kind: "captions", label: "English", language: "en", mode: "showing" });
+      }
       destroy() { this.destroyed = true; }
     }
     mock.module("hls.js", () => ({ default: Hls }));
@@ -165,6 +169,25 @@ test("report deduplication preserves position ticks, controls, failures and new 
   const reconnected = [];
   connectRenderer(state => reconnected.push(state));
   assert.deepEqual(reconnected, [reports.at(-1)], "a new connection receives even an unchanged state");
+`));
+
+test("external subtitles remain the only visible captions and Off disables them all", () => check(`
+  for (const subtitles of ["off", "on"]) {
+    load({ subtitles: [{ source: "https://couch.example/english.vtt", title: "English", language: "en" }], preferences: { subtitles, subtitleLanguage: "en" } });
+    await flush();
+    const decoder = decoders.at(-1);
+    decoder.emit(Hls.Events.LEVEL_LOADED, {});
+    video.dispatchEvent(new Event("canplay"));
+    decoder.broadcastCaptions();
+    assert.equal(video.textTracks.filter(track => track.mode === "showing").length, subtitles === "off" ? 0 : 1, "in-band CEA captions must not bypass the chosen external subtitles");
+    play({ type: "track", playbackId: "playback", kind: "subtitle", index: -1 });
+    await flush();
+    assert.ok(video.textTracks.every(track => track.mode !== "showing"), "Subtitle Off leaves no captions showing");
+  }
+  load();
+  await flush();
+  decoders.at(-1).broadcastCaptions();
+  assert.ok(video.textTracks.some(track => track.kind === "captions"), "streams without external subtitles keep their in-band captions");
 `));
 
 test("blocked audio is replayed when the shell subscribes again after recovery", () => check(`

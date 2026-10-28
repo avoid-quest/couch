@@ -247,7 +247,8 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
     return;
   }
   // A sliding live window is not a finite, zero-based movie timeline.
-  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true });
+  // In-band CEA captions otherwise show beside external subtitles and bypass Off.
+  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true, enableCEA708Captions: !command.subtitles?.length });
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
   hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
