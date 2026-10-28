@@ -21,6 +21,7 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
   // loads: each group's current playback, so a worker failure reaches the item that was playing.
   const groups = new Map<string, (state: PlayerState) => void>(), loads = new Map<string, string>(), sources = new Map<string, { epoch: string; queued: number; error?: string }>();
   const connections = new Set<WebSocket | Socket>();
+  const devices = new Map<Socket, string>();
   const uploads = new Map<string, WebSocket>();
   let clients = new Set<string>(), delays = new Map<string, number>(), receivers = new Map<string, string>();
   let closed = false, failed = false;
@@ -85,6 +86,8 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
   const upgrade = (request: IncomingMessage, socket: Socket, head: Buffer, deviceId?: string) => {
     if (deviceId !== undefined && !options.admit(deviceId, loopbackPeer(request.socket.remoteAddress ?? ""))) { socket.destroy(); return; }
     socket.pause(); connections.add(socket);
+    if (deviceId !== undefined) devices.set(socket, deviceId);
+    socket.once("close", () => { connections.delete(socket); devices.delete(socket); });
     void ready.then(port => {
       if (closed || socket.destroyed) return;
       const upstream = connect(port, "127.0.0.1");
@@ -97,7 +100,7 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
         socket.pipe(upstream).pipe(socket); socket.resume();
       });
       upstream.on("error", () => socket.destroy()); socket.on("error", () => upstream.destroy());
-      socket.once("close", () => { clearTimeout(timeout); connections.delete(socket); upstream.destroy(); });
+      socket.once("close", () => { clearTimeout(timeout); upstream.destroy(); });
       upstream.once("close", () => socket.destroy());
     }).catch(() => socket.destroy());
   };
@@ -140,7 +143,11 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
     setDelay(id: string, delay: number) {
       post({ type: "setDelay", clientId: id, delay });
     },
-    drop: (id: string) => post({ type: "drop", clientId: id }),
+    drop(id: string) {
+      // Revoke the authenticated transport even before the SDK learns its identity.
+      for (const [socket, deviceId] of devices) if (deviceId === id) socket.destroy();
+      post({ type: "drop", clientId: id });
+    },
     close() {
       post({ type: "close" }); closed = true;
       for (const connection of connections) { if (connection instanceof WebSocket) connection.terminate(); else connection.destroy(); }

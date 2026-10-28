@@ -27,7 +27,8 @@ cookie for `/sendspin` (Secure on HTTPS), so the SDK's URL carries no token.
 Non-browser SDK clients can use the token-bearing `/api/audio/<token>/sendspin`
 base path. The upgrade binds the authenticated Device to `client/init.client_id`,
 checks host, origin and remote-control permission, and revocation closes the
-session. A peer whose messages throw closes alone; the shared worker continues.
+authenticated transport even during the Noise handshake. A peer whose messages
+throw closes alone; the shared worker continues.
 
 ## Pipeline
 
