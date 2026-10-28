@@ -1,7 +1,7 @@
 import { createLocalRelay } from "./live-relay";
 import { parseLiveRelay } from "./live-ice";
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
-import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
+import { createLanListener, httpOrigin, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
 import { systemLanNames } from "./lan-name";
 import { lanInterfacePriorities } from "./lan-interfaces";
@@ -1287,7 +1287,7 @@ export async function createHub(options: HubOptions) {
   const tvPairing = createTvPairing(store, () => invalidate("devices"));
 
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
-    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
+    if (options.managedLan && !loopbackPeer(requestPeer(request)) && !store.remoteControlEnabled()) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
