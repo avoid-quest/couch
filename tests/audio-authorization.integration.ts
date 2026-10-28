@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { test } from "node:test";
 import { WebSocket } from "ws";
 import { AudioCodec, beginClientHandshake, Identity, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
@@ -124,4 +126,67 @@ test("pairing a device again closes audio and publications authorized with its o
   await until(() => !player.isConnected);
   await until(() => f.publisher.socket.readyState === WebSocket.CLOSED);
   await until(() => !f.receiver.state.liveSources?.some(source => source.id === "old-token-publication"));
+});
+
+test("audio session cookies and both upgrade routes retain host, origin and token checks", { timeout: 10_000 }, async t => {
+  const f = await liveFixture(), identity = f.identities[1]!, sockets: WebSocket[] = [];
+  t.after(async () => { for (const socket of sockets) socket.terminate(); await f.close(); });
+  const authorize = (headers: Record<string, string> = {}) => fetch(`${f.hub.origin}/api/audio/session`, { method: "POST", headers: { Authorization: `Bearer ${identity.token}`, ...headers } });
+  const response = await authorize();
+  assert.equal(response.status, 204);
+  const cookie = response.headers.get("set-cookie")!;
+  assert.match(cookie, /; HttpOnly; SameSite=Strict; Path=\/sendspin$/);
+  assert.doesNotMatch(cookie, /Domain=|Max-Age=|Expires=/i, "the cookie is host-only and lasts for the browser session");
+  assert.equal((await authorize({ Origin: "https://evil.example" })).status, 403);
+  const wrongHost = await new Promise<number | undefined>((resolve, reject) => {
+    const request = httpRequest(`${f.hub.origin}/api/audio/session`, {
+      method: "POST", headers: { Host: "evil.example", Authorization: `Bearer ${identity.token}` },
+    }, response => { response.resume(); resolve(response.statusCode); });
+    request.on("error", reject); request.end();
+  });
+  assert.equal(wrongHost, 403);
+  assert.equal((await authorize({ Authorization: "Bearer invalid" })).status, 401);
+  const secureCookie = await new Promise<string>((resolve, reject) => {
+    const request = httpsRequest(`${f.hub.origin.replace("http:", "https:")}/api/audio/session`, {
+      method: "POST", rejectUnauthorized: false, headers: { Authorization: `Bearer ${identity.token}` },
+    }, response => { response.resume(); resolve(response.headers["set-cookie"]?.[0] ?? ""); });
+    request.on("error", reject); request.end();
+  });
+  assert.match(secureCookie, /; Secure$/);
+  const upgrade = (path: string, headers: Record<string, string> = {}) => new Promise<number>(resolve => {
+    const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}${path}`, { headers }); sockets.push(socket);
+    socket.once("open", () => resolve(101)); socket.on("error", () => resolve(0));
+    socket.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(response.statusCode!); });
+  });
+  assert.equal(await upgrade("/sendspin"), 401);
+  const headers = { Cookie: cookie.split(";")[0]! };
+  for (const path of ["/sendspin", `/api/audio/${identity.token}/sendspin`]) {
+    assert.equal(await upgrade(path, { ...headers, Origin: "https://evil.example" }), 403);
+    assert.equal(await upgrade(path, { ...headers, Host: "evil.example" }), 403);
+    assert.equal(await upgrade(path, headers), 101, "non-browser clients may omit Origin but still need their token");
+  }
+  assert.equal((await fetch(`${f.hub.origin}/api/devices/${identity.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${"h".repeat(64)}` } })).status, 200);
+  assert.equal(await upgrade("/sendspin", headers), 401, "revocation also invalidates a retained cookie");
+});
+
+test("plaintext hello cannot claim another device behind an authenticated token", { timeout: 10_000 }, async t => {
+  const f = await liveFixture(), identity = f.identities[1]!;
+  const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
+  socket.on("error", () => {});
+  t.after(async () => { socket.terminate(); await f.close(); });
+  await once(socket, "open");
+  const received: string[] = [];
+  socket.on("message", data => received.push(String(data)));
+  socket.send(JSON.stringify({ type: "client/hello", payload: { client_id: f.identities[0]!.id, version: 1, supported_roles: ["controller@v1"] } }));
+  await once(socket, "close");
+  assert.deepEqual(received, []);
+});
+
+test("pairing retains the twenty-attempt global throttle", { timeout: 10_000 }, async t => {
+  const f = await liveFixture(); t.after(() => f.close());
+  const body = { code: "wrong", id: Identity.generate().peerId, name: "Unpaired" };
+  for (let attempt = 0; attempt < 21; attempt++) {
+    const response = await fetch(`${f.hub.origin}/api/pair`, { method: "POST", headers: { Origin: f.hub.origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    assert.equal(response.status, attempt < 20 ? 401 : 429);
+  }
 });
