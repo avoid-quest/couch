@@ -20,7 +20,7 @@ test("storyboards are a source capability; YouTube and Twitch partial sheets ret
   for (const format of twitch.formats) for (const fragment of format.fragments) { fragment.url = fragment.url.replace("i.ytimg.com", "static-cdn.jtvnw.net"); fragment.duration = twitch.duration / format.fragments.length; }
   expect(storyboardPreview(twitch)?.metadata).toEqual(preview);
   const media = { ...fixture, url: "https://video.example/movie.mp4", protocol: "https", vcodec: "avc1" };
-  expect(parseMedia(media, "").preview?.metadata.images).toBe(6);
+  expect(parseMedia(media, "").preview?.metadata?.images).toBe(6);
   // Selecting sound from a video does not discard its programme previews.
   expect(parseMedia({ ...media, vcodec: "none" }, "").preview?.metadata).toEqual(preview);
   expect(parseMedia({ ...media, formats: [] }, "").preview).toBeUndefined();
@@ -88,7 +88,7 @@ test("image reads deduplicate and enforce byte, raster dimension, signature and 
   await playbackPreviewResponse(request("0"), async () => source(), paired, read);
   expect(calls).toBe(1);
   const large = Buffer.from(sheet); large.writeUInt32BE(8192, 16); large.writeUInt32BE(8192, 20);
-  for (const [type, bytes] of [["image/svg+xml", sheet], ["image/jpeg", new Uint8Array(previewImageLimit + 1)], ["image/png", large], ["image/jpeg", new TextEncoder().encode("NOT AN IMAGE")]] as const) {
+  for (const [type, bytes] of [["image/svg+xml", new TextEncoder().encode("<svg></svg>")], ["image/jpeg", new Uint8Array(previewImageLimit + 1)], ["image/png", large], ["image/jpeg", new TextEncoder().encode("NOT AN IMAGE")]] as const) {
     const read = createPreviewImages((async () => new Response(bytes, { headers: { "content-type": type } })) as typeof fetch);
     expect((await playbackPreviewResponse(request("0"), async () => source(), paired, read)).status).not.toBe(200);
   }

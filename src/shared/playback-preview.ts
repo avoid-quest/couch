@@ -8,6 +8,7 @@ export type PlaybackPreview = { duration: number; images: number } & (
 // One lookup for compact grids and provider-authored cues, including honest gaps.
 export function previewAt(preview: PlaybackPreview, time: number): PreviewFrame | null {
   if (!Number.isFinite(time)) return null;
+  if (preview.kind === "cues" && time > preview.duration) return null;
   const position = Math.max(0, Math.min(time, preview.duration - .001));
   if (preview.kind === "grid") {
     const frame = Math.min(preview.frames - 1, Math.floor(position / preview.interval));

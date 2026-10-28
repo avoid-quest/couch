@@ -8,6 +8,8 @@ import { PassThrough, Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
 import { connectPublic, isPublicAddress, lookupPublic, publicFetch, publicLookup, publicResponseContext, PublicNetworkError } from "../src/server/public-network";
 import { createPassThrough } from "../src/server/pass-through";
+import { createPreviewResolver, vttPreview } from "../src/server/preview-manifest";
+import { createPreviewImages, playbackPreviewResponse } from "../src/server/playback-preview";
 
 test("only public IPv4 and global IPv6 addresses pass", () => {
   for (const address of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2001:4860:4860::8888", "2606:4700:4700::1111"]) assert.equal(isPublicAddress(address), true, address);
@@ -190,6 +192,21 @@ test("public fetch preserves the original URL host and streams its response", as
   assert.equal((calls[0]?.options.headers as Record<string, string>).host, "media.public.test:8443");
   assert.equal(calls[0]?.options.lookup, publicLookup);
   assert.notEqual(calls[0]?.options.agent, https.globalAgent);
+});
+
+test("preview manifests and their image children retain DNS and redirect public-network guards", async t => {
+  for (const phase of ["manifest", "image"]) for (const destination of ["http://127.0.0.1/private", "http://169.254.169.254/private", "https://rebound.test/private"]) {
+    const calls = transport(t, call => call.url.pathname === "/preview.vtt" && phase === "image"
+      ? { body: "WEBVTT\n\n00:00.000 --> 00:01.000\nimage.jpg\n" }
+      : { status: 302, headers: { Location: destination } });
+    t.mock.method(dns, "lookup", (host: string, _options: dns.LookupOptions, callback: (error: null, rows: dns.LookupAddress[]) => void) => callback(null, [{ address: host === "rebound.test" ? "127.0.0.1" : "93.184.216.34", family: 4 }]));
+    const source = vttPreview("https://public.test/preview.vtt")!;
+    const request = new Request(`https://couch.test/api/playback-preview?playbackId=one${phase === "image" ? "&image=0" : ""}`);
+    const response = await playbackPreviewResponse(request, async () => source, () => {}, createPreviewImages(), createPreviewResolver());
+    assert.equal(response.status, 503);
+    assert.ok(calls.filter(call => call.response).every(call => call.url.hostname === "public.test"));
+    t.mock.restoreAll();
+  }
 });
 
 test("redirects cannot reach private literals, credentials or a rebound DNS answer", async t => {

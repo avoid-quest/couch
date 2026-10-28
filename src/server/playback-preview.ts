@@ -5,6 +5,7 @@ import { WEBP } from "image-size/types/webp";
 import { createArtworkCache } from "./artwork";
 import { boundedBytes, guideUrl, record } from "./iptv-feeds";
 import { publicFetch } from "./public-network";
+import { createPreviewResolver, type PreviewInput } from "./preview-manifest";
 
 export type PreviewSource = { metadata: PlaybackPreview; images: string[]; expiresAt?: number };
 export const previewImageLimit = 2 * 1024 * 1024;
@@ -23,9 +24,11 @@ export function storyboardPreview(info: Record<string, unknown>, now = Date.now(
     const { width, height, columns, rows, fps, fragments } = format;
     if (!positiveInteger(width) || width > 1024 || !positiveInteger(height) || height > 1024 || !positiveInteger(columns) || !positiveInteger(rows)) continue;
     const cells = columns * rows;
-    if (cells > 100 || width * height * cells > pixelLimit || typeof fps !== "number" || !Number.isFinite(fps) || fps <= 0) continue;
-    const frames = Math.round(duration * fps);
-    if (frames < 1 || frames > 4000 || Math.abs(duration * fps - frames) > .001 || !Array.isArray(fragments) || fragments.length !== Math.ceil(frames / cells) || fragments.length > 128 || Math.abs(width - 160) >= distance) continue;
+    if (cells > 4000 || width * columns > 8192 || height * rows > 8192 || width * height * cells > pixelLimit || typeof fps !== "number" || !Number.isFinite(fps) || fps <= 0) continue;
+    const frames = format.couch_frames ?? Math.round(duration * fps), interval = format.couch_interval ?? 1 / fps;
+    if (!positiveInteger(frames) || frames > 4000 || typeof interval !== "number" || !Number.isFinite(interval) || interval <= 0 || interval > 86400
+      || format.couch_frames === undefined && Math.abs(duration * fps - frames) > .001
+      || !Array.isArray(fragments) || fragments.length !== Math.ceil(frames / cells) || fragments.length > 128 || Math.abs(width - 160) >= distance) continue;
     try {
       let expiresAt: number | undefined;
       const images = fragments.map(fragment => {
@@ -41,7 +44,7 @@ export function storyboardPreview(info: Record<string, unknown>, now = Date.now(
         return url.href;
       });
       if (expiresAt !== undefined && expiresAt <= now) continue;
-      best = { metadata: { kind: "grid", width, height, columns, rows, interval: 1 / fps, duration, frames, images: images.length }, images, ...(expiresAt === undefined ? {} : { expiresAt }) };
+      best = { metadata: { kind: "grid", width, height, columns, rows, interval, duration: Math.min(duration, frames * interval), frames, images: images.length }, images, ...(expiresAt === undefined ? {} : { expiresAt }) };
       distance = Math.abs(width - 160);
       if (distance === 0) break;
     } catch { /* Invalid optional data never prevents playback. */ }
@@ -50,12 +53,12 @@ export function storyboardPreview(info: Record<string, unknown>, now = Date.now(
 }
 
 // Header inspection bounds decoded raster size without decoding it in Core.
-function dimensions(bytes: Uint8Array, type: string) {
-  const format = type === "image/png" ? PNG : type === "image/jpeg" ? JPG : type === "image/webp" ? WEBP : undefined;
+function dimensions(bytes: Uint8Array) {
   try {
-    if (!format?.validate(bytes)) return;
+    const [type, format] = bytes[0] === 0x89 && PNG.validate(bytes) ? ["image/png", PNG] : JPG.validate(bytes) ? ["image/jpeg", JPG] : WEBP.validate(bytes) ? ["image/webp", WEBP] : [];
+    if (!format) return;
     const size = format.calculate(Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, 64 * 1024)));
-    if (positiveInteger(size.width) && positiveInteger(size.height) && size.width <= 8192 && size.height <= 8192 && size.width * size.height <= pixelLimit) return size;
+    if (positiveInteger(size.width) && positiveInteger(size.height) && size.width <= 8192 && size.height <= 8192 && size.width * size.height <= pixelLimit) return { ...size, type: type! };
   } catch { /* Malformed or truncated image headers are optional failures. */ }
 }
 
@@ -70,23 +73,27 @@ export function createPreviewImages(fetcher: typeof fetch = publicFetch) {
     try {
       const signal = AbortSignal.any([cancellation, AbortSignal.timeout(5000)]);
       const response = await fetcher(url, { signal, headers: { accept: "image/jpeg, image/webp, image/png" } });
-      const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
       if (!response.ok) { await response.body?.cancel(); throw new Error("Preview image is unavailable."); }
-      if (!["image/jpeg", "image/webp", "image/png"].includes(type)) { await response.body?.cancel(); return null; }
       const bytes = await boundedBytes(response, previewImageLimit, signal);
-      return dimensions(bytes, type) ? { type, bytes } : null;
+      const size = dimensions(bytes);
+      return size ? { type: size.type, bytes } : null;
     } finally { running--; }
   }, signal);
 }
 const images = createPreviewImages();
+const resolvePreview = createPreviewResolver();
 
-export async function playbackPreviewResponse(request: Request, source: () => Promise<PreviewSource | undefined>, authorize: () => void, readImage = images): Promise<Response> {
+export async function playbackPreviewResponse(request: Request, source: () => Promise<PreviewInput | undefined>, authorize: () => void, readImage = images, resolve = resolvePreview): Promise<Response> {
   if (request.method !== "GET") return new Response(null, { status: 405, headers: { Allow: "GET" } });
   const headers = { "Cache-Control": "private, no-store" };
   const check = () => { request.signal.throwIfAborted(); authorize(); };
   try {
     check();
-    const preview = await source();
+    const supplied = await source();
+    check();
+    let preview;
+    try { preview = await resolve(supplied, request.signal); }
+    catch { check(); return new Response(null, { status: 503, headers: { ...headers, "Retry-After": "1" } }); }
     check();
     if (!preview || preview.expiresAt !== undefined && preview.expiresAt <= Date.now()) return new Response(null, { status: 204, headers });
     const image = new URL(request.url).searchParams.get("image");
@@ -97,12 +104,12 @@ export async function playbackPreviewResponse(request: Request, source: () => Pr
     catch { check(); return new Response(null, { status: 503, headers: { ...headers, "Retry-After": "1" } }); }
     check();
     if (!picture || preview.expiresAt !== undefined && preview.expiresAt <= Date.now()) return new Response(null, { status: 204, headers });
-    const size = dimensions(picture.bytes, picture.type), metadata = preview.metadata, index = Number(image);
+    const size = dimensions(picture.bytes), metadata = preview.metadata, index = Number(image);
     if (!size) return new Response(null, { status: 204, headers });
     const fits = metadata.kind === "grid"
       ? size.width >= metadata.width * metadata.columns && size.height >= metadata.height * Math.ceil(Math.min(metadata.columns * metadata.rows, metadata.frames - index * metadata.columns * metadata.rows) / metadata.columns)
       : metadata.cues.every(cue => cue.image !== index || !cue.coords || cue.coords.x + cue.width! <= size.width && cue.coords.y + cue.height! <= size.height);
     if (!fits) return new Response(null, { status: 204, headers });
-    return new Response(Buffer.from(picture.bytes), { headers: { ...headers, "Content-Type": picture.type, "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; default-src 'none'" } });
+    return new Response(Buffer.from(picture.bytes), { headers: { ...headers, "Content-Type": size.type, "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; default-src 'none'" } });
   } catch { return new Response(null, { status: 404, headers }); }
 }
