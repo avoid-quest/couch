@@ -38,7 +38,7 @@ export function ShareControl() {
     else if (watched.current && sharing) {
       watched.current = false;
       const id = sharing.source.id;
-      stillSharing(sharing.source.name, () => { if (liveSharing.current()?.source.id === id) void stop.run(); });
+      stillSharing(sharing.source.name, () => { if (liveSharing.current()?.source.id === id) void stop.run(); }, sharing.source.intent === "live");
     }
     if (!sharing) { watched.current = false; dismiss("sharing"); }
   }, [viewers.length, sharing?.source.id]);
@@ -52,10 +52,9 @@ export function ShareControl() {
 /** A button that opens the Share dialog: the header's, or Settings' while the header hides it. */
 export function ShareButton({ className, tv, children }: { className?: string; tv: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  return <>
-    <Button data-tv-local-only variant="secondary" className={className} aria-label="Share screen or sound" title="Share screen or sound" onClick={() => setOpen(true)}>{children}</Button>
-    <ShareDialog open={open} onOpenChange={setOpen} tv={tv} />
-  </>;
+  return <ShareDialog open={open} onOpenChange={setOpen} tv={tv} trigger={
+    <Button data-tv-local-only variant="secondary" className={className} aria-label="Share screen or sound" title="Share screen or sound">{children}</Button>
+  } />;
 }
 
 function useStop() {
@@ -87,7 +86,7 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
     <Preview sharing={sharing} className="h-7 shrink-0" />
     {/* The title from xl, as the header's status always was; narrower, the picture says it, and on touch Stop alone stays. */}
     <span role="status" aria-label={label} className="max-w-44 truncate max-xl:sr-only">{sharing.source.name}</span>
-    {viewers.length > 0 && <span className="flex items-center gap-1 text-meta text-muted-foreground tabular-nums touch:hidden tv:flex" aria-label={`${viewers.length} watching`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>}
+    {viewers.length > 0 && <span className="flex items-center gap-1 text-meta text-muted-foreground tabular-nums touch:hidden tv:flex" aria-label={`${viewers.length} ${sharing.source.intent === "live" ? "listening" : "watching"}`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>}
   </button>;
   const panel = <SharingPanel sharing={sharing} viewers={viewers} onClose={() => setOpen(false)} />;
   // Toasts' floating surface, without the bar's filter: the bar's glass is a page's one backdrop filter (design.md, Glass).
@@ -118,7 +117,7 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
  * Core's scheduled delivery names sync status; WebRTC names its selected candidate route.
  */
 function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveSharing; viewers: Viewer[]; onClose: () => void }) {
-  const { state, liveSharing, openWhereItPlays, setError } = useSessionGate();
+  const { state, connected, liveSharing, openWhereItPlays, setError } = useSessionGate();
   // Read again on each render: quality and mute change the capture, not the session's state.
   const sharing = liveSharing.current() ?? shown;
   const [routes, setRoutes] = useState<Record<string, LiveRoute>>({});
@@ -145,8 +144,8 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
         {!sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
         <p className="text-meta text-muted-foreground">Since {since}</p>
         {/* The Capture buffer control shows the request; the device's own size appears only when it differs. */}
-        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz · {sharing.captureFormat.channels} channels{sharing.captureFormat.native && sharing.captureFormat.native.reportedFrames !== sharing.captureFormat.native.requestedFrames
-          ? ` · device buffer ${sharing.captureFormat.native.reportedFrames} frames` : ""}</p>}
+        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz, {sharing.captureFormat.channels} channels{sharing.captureFormat.native && sharing.captureFormat.native.reportedFrames !== sharing.captureFormat.native.requestedFrames
+          ? `, device buffer ${sharing.captureFormat.native.reportedFrames} frames` : ""}</p>}
       </div>
     </div>
     {/* Live audio's host sees each listener as Core measures it, and sets the stream below. */}
@@ -166,12 +165,12 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
     </div>}
     {sharing.source.kind === "microphone" && <div className="flex items-center justify-between gap-4 border-t pt-3">
       <label htmlFor="live-mute" className="text-body">Mute audio input</label>
-      <Switch id="live-mute" checked={sharing.muted} onCheckedChange={muted => { liveSharing.setMuted(muted); refresh(count => count + 1); }} />
+      <Switch id="live-mute" checked={sharing.muted} disabled={!connected} onCheckedChange={muted => { liveSharing.setMuted(muted); refresh(count => count + 1); }} />
     </div>}
-    {sharing.source.intent === "live" && <LiveSettings sharing={sharing} />}
+    {sharing.source.intent === "live" && <LiveSettings sharing={sharing} onCaptureChange={() => refresh(count => count + 1)} />}
     {behind && <p className="text-meta text-muted-foreground">{sharing.relay
       ? "A device marked behind couldn't connect directly, even through the relay."
       : <>A device marked behind couldn't connect directly. A relay can fix that, in <Link to="/settings/couch/devices" className="text-foreground underline underline-offset-4" onClick={onClose}>Devices &amp; network</Link>.</>}</p>}
-    {viewing && <Button variant="ghost" className="-ml-2.5 justify-self-start" onClick={() => { onClose(); openWhereItPlays(); }}><SlidersVertical aria-hidden="true" />Where it plays</Button>}
+    {viewing && sharing.source.intent !== "live" && <Button variant="ghost" className="-ml-2.5 justify-self-start" onClick={() => { onClose(); openWhereItPlays(); }}><SlidersVertical aria-hidden="true" />Where it plays</Button>}
   </div>;
 }

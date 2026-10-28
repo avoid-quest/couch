@@ -29,7 +29,7 @@ Playback                     (✓ Relaxed) (Live)    local desktop Audio input
 Device                       [System default ▾]   relaxed Audio input
 Device                       [Choose an input ▾]  Live Audio input
                              Find audio inputs
-Playback buffer (ms)                     [250]    Live Audio input
+Playback buffer (ms)                     [200]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
@@ -80,6 +80,9 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 - **Start sharing** starts the capture, then plays it on the chosen devices in
   order: the first that takes it plays it, then each other joins the same
   playback. Closing the dialog while it starts cancels it, as Cancel does.
+  Live waits for its audio settings to load and finish saving. Invalid buffer
+  values prevent starting; settings failures appear inline. Closing returns
+  focus to Share.
 - **Disabled keeps its place:** a browser that can't capture a display (a
   phone's) keeps Screen, Window and System audio disabled, with today's reason
   under the chips.
@@ -127,13 +130,21 @@ Sheet on phones and the TV:
 ### Live audio
 
 A [Live audio](../live-audio.md) share lists listeners, each with a ⋯ **Remove**
-action. Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512
+action. Removing a listener leaves focus in the listener list; failures read in
+red and are announced. An empty list says **No listeners yet**. The capsule
+counts listeners; Live has no Where it plays link in its host panel.
+Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512
 or 1024 frames), the input's callback size, which restarts the input when
-changed. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
+changed. **Restarting audio input…** announces the wait, then the selected size
+and delivered format update together. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer (ms)** is
 the SDK's `minBufferMs`, initially 200 ms. A larger buffer applies to the running
 share at once; a smaller one applies when sharing restarts, which the panel says.
 There are no latency estimates, gap counters or listener polling.
+Settings retain their labelled controls while loading, report errors inline,
+and offer Try again after a failed read. Playback buffer accepts whole numbers
+from 0 to 5000, saved on blur or Enter; invalid edits show a reason. Controls
+wrap onto a second line on narrow screens and disable while disconnected.
 
 ## When it doesn't work
 
@@ -149,7 +160,7 @@ There are no latency estimates, gap counters or listener polling.
 - The last viewer leaves or goes offline while the capture still runs: one
   toast, "Still sharing {name}, on no screens", with Stop sharing, this
   device's own like the rest. It leaves once a viewer returns or the share
-  ends.
+  ends. Live audio says "Still sharing {name}, with no listeners".
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.

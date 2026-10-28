@@ -4,9 +4,9 @@ import { Check } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -15,7 +15,7 @@ import { deviceId } from "@/session/device-id";
 import { couchApp } from "@/session/native-context";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
-import { PlaybackBufferInput, useLiveAudioSettings } from "./LiveOperator";
+import { LiveSettingsStatus, PlaybackBufferInput, useLiveAudioSettings } from "./LiveOperator";
 import { qualityLabels, selectionOf, shareKinds, shareTargets, unavailable, type ShareKind } from "./share";
 import type { CaptureSource } from "../../../shared/capture";
 import type { LiveVideoQuality } from "../../../shared/live-input";
@@ -36,15 +36,17 @@ function Row({ label, htmlFor, description, children }: { label: string; htmlFor
  * this computer's sound and the picture's quality, then Start sharing, which starts the capture and plays it on the
  * chosen devices. A Dialog on desktop, a bottom Sheet on phones and the TV.
  */
-export function ShareDialog({ open, onOpenChange, tv }: { open: boolean; onOpenChange: (open: boolean) => void; tv: boolean }) {
+export function ShareDialog({ open, onOpenChange, tv, trigger }: { open: boolean; onOpenChange: (open: boolean) => void; tv: boolean; trigger?: ReactNode }) {
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
   const title = "Share this device";
   // Its choices reset each time it opens, and capture is asked for only from the device in hand.
   const body = open && <ShareForm onDone={() => onOpenChange(false)} />;
   if (desktop && !tv) return <Dialog open={open} onOpenChange={onOpenChange}>
+    {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
     <DialogContent data-tv-local-only aria-describedby={undefined} className="gap-0 sm:max-w-2xl"><DialogTitle className="mb-5 font-display text-heading">{title}</DialogTitle>{body}</DialogContent>
   </Dialog>;
   return <Sheet open={open} onOpenChange={onOpenChange}>
+    {trigger && <SheetTrigger asChild>{trigger}</SheetTrigger>}
     <SheetContent data-tv-local-only side="bottom" aria-describedby={undefined} className="max-h-[90dvh] items-center overflow-y-auto px-(--gutter) pt-6 pb-8">
       <div className="grid w-full max-w-2xl"><SheetTitle className="mb-5 font-display text-heading">{title}</SheetTitle>{body}</div>
     </SheetContent>
@@ -89,7 +91,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const starting = useRef(false);
   useEffect(() => () => { if (starting.current && !liveSharing.current()) void endLive().catch(() => {}); }, []);
   // The desktop app's System audio takes a screen's capture for its sound (selectionOf).
-  const ready = available && !reason && !elsewhere && (kind.intent !== "live" || !!audioDeviceId && audioDeviceId !== "default") && (!lists || !!(kind.pictures ? source : sources?.some(item => item.kind === "screen")));
+  const ready = available && !reason && !elsewhere && (kind.intent !== "live" || !!audioDeviceId && audioDeviceId !== "default" && !!live.settings && !live.save.isPending && !live.save.error) && (!lists || !!(kind.pictures ? source : sources?.some(item => item.kind === "screen")));
 
   const checkAccess = async (on = kind) => {
     const text = await couchApp?.captureAccess?.(on.capture).catch(() => null);
@@ -149,10 +151,10 @@ function ShareForm({ onDone }: { onDone: () => void }) {
 
   const access = blocked?.kind === kind.id && <Alert>
     <AlertDescription>{kind.pictures ? "Couch can't see your screens and windows. " : ""}{blocked.text}</AlertDescription>
-    {couchApp?.openCaptureSettings && <AlertAction><Button variant="outline" size="sm" onClick={() => void couchApp?.openCaptureSettings?.(kind.capture).catch(reason => setError(errorText(reason)))}>Open System Settings</Button></AlertAction>}
+    {couchApp?.openCaptureSettings && <AlertAction><Button type="button" variant="outline" size="sm" onClick={() => void couchApp?.openCaptureSettings?.(kind.capture).catch(reason => setError(errorText(reason)))}>Open System Settings</Button></AlertAction>}
   </Alert>;
 
-  return <div className="grid gap-4">
+  return <form className="grid min-w-0 gap-4" onSubmit={event => { event.preventDefault(); void share(); }}>
     <div className="grid gap-2">
       <ToggleGroup type="single" aria-label="What to share" spacing={2} className="w-full flex-wrap" value={kind.inputs ? "microphone" : kind.id} disabled={pending || listing}
         onValueChange={value => { const next = kinds.find(item => item.id === value); if (next) { setKind(next); setError(null); setSourceId(""); } }}>
@@ -172,22 +174,24 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         onValueChange={value => { setKind(shareKinds.find(item => item.inputs && (item.intent ?? "relaxed") === value)!); setError(null); }} />
     </Row>}
     {kind.inputs && <Row label="Device" htmlFor="live-audio-input">
-      <div className="grid justify-items-end gap-1">
-        <Select value={audioDeviceId} disabled={!available || !!reason} onValueChange={setAudioDeviceId}>
-          <SelectTrigger id="live-audio-input" className="w-56"><SelectValue placeholder="Choose an input" /></SelectTrigger>
-          <SelectContent data-tv-local-only>{kind.intent !== "live" && <SelectItem value="default">System default</SelectItem>}{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId}>{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
+      <div className="grid min-w-0 max-w-full justify-items-end gap-1">
+        <Select value={audioDeviceId} disabled={!available || !!reason || kind.intent === "live" && !inputs?.length} onValueChange={setAudioDeviceId}>
+          <SelectTrigger id="live-audio-input" className="w-56 max-w-full"><SelectValue placeholder="Choose an input" /></SelectTrigger>
+          <SelectContent data-tv-local-only position="popper" className="max-w-[calc(100vw-2rem)]">{kind.intent !== "live" && <SelectItem value="default">System default</SelectItem>}{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId} className="[overflow-wrap:anywhere]">{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
         </Select>
         {/* Browsers name inputs only once microphone access is allowed. */}
-        <Button variant="ghost" size="sm" className="-mr-3" disabled={!available || !!reason} onClick={() => void chooseInput()}>{listing ? <><Spinner />Finding inputs…</> : inputs ? "Refresh inputs" : "Find audio inputs"}</Button>
+        <Button type="button" variant="ghost" size="sm" className="-mr-3" disabled={!available || !!reason} onClick={() => void chooseInput()}>{inputs ? "Refresh inputs" : "Find audio inputs"}</Button>
+        <span role="status" className="text-meta text-muted-foreground empty:hidden">{listing ? "Finding inputs…" : ""}</span>
       </div>
     </Row>}
     {kind.intent === "live" && <Row label="Playback buffer (ms)" htmlFor="share-live-buffer" description="More rides out Wi-Fi and phone hiccups.">
-      <PlaybackBufferInput id="share-live-buffer" live={live} className="ml-auto" />
+      <PlaybackBufferInput id="share-live-buffer" live={live} disabled={pending} className="ml-auto" />
     </Row>}
+    {kind.intent === "live" && <LiveSettingsStatus live={live} />}
     {devices.length > 0 && <Row label="Play on">
       <ToggleGroup type="multiple" aria-label="Play on" spacing={2} className="flex-wrap justify-end" value={chosen.map(device => device.id)} disabled={pending} onValueChange={setTargets}>
-        {devices.map(device => <ToggleGroupItem key={device.id} value={device.id} className={chip} disabled={!takes(device)} title={takes(device) ? undefined : "Private"}>
-          {chosen.includes(device) && <Check aria-hidden="true" />}{device.name}
+        {devices.map(device => <ToggleGroupItem key={device.id} value={device.id} className={cn(chip, "h-auto min-h-control max-w-full whitespace-normal")} disabled={!takes(device)} title={takes(device) ? undefined : "Private"}>
+          {chosen.includes(device) && <Check aria-hidden="true" />}<span className="min-w-0 [overflow-wrap:anywhere]">{device.name}</span>
         </ToggleGroupItem>)}
       </ToggleGroup>
     </Row>}
@@ -203,10 +207,11 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {/* On a phone the Sheet's Close cancels, and Start sharing takes the thumb's whole reach. */}
     <div className="flex justify-end gap-2 pt-2">
-      {pending ? <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button> : <Button variant="ghost" className="max-sm:hidden" onClick={onDone}>Cancel</Button>}
-      <Button className="max-sm:flex-1" disabled={!ready} onClick={() => void share()}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
+      <Button type="button" variant="ghost" className={pending ? undefined : "max-sm:hidden"} onClick={onDone}>Cancel</Button>
+      <Button type="submit" className="max-sm:flex-1" disabled={!ready}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
     </div>
-  </div>;
+    <span role="status" className="sr-only">{pending ? "Starting sharing…" : ""}</span>
+  </form>;
 }
 
 /** The picture's quality: up to 30 fps, at most this resolution. */
