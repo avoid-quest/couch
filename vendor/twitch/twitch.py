@@ -17,11 +17,15 @@ class _CouchTwitchVodIE(TwitchVodIE, plugin_name='couch'):
         try:
             for fmt in super()._extract_storyboard(item_id, storyboard_json_url, duration):
                 for spec in self._couch_storyboards:
-                    if (isinstance(spec, dict) and isinstance(spec.get('images'), list)
-                            and spec['images'] and isinstance(spec['images'][0], str)
-                            and urljoin(storyboard_json_url, spec['images'][0]) == fmt.get('url')):
-                        fmt.update(couch_interval=spec.get('interval'), couch_frames=spec.get('count'))
-                        break
+                    if not (isinstance(spec, dict) and isinstance(spec.get('images'), list)
+                            and spec['images'] and isinstance(spec['images'][0], str)):
+                        continue
+                    try:
+                        if urljoin(storyboard_json_url, spec['images'][0]) == fmt.get('url'):
+                            fmt.update(couch_interval=spec.get('interval'), couch_frames=spec.get('count'))
+                            break
+                    except ValueError:
+                        pass  # Optional preview URLs must not reject playable formats.
                 yield fmt
         finally:
             self._couch_storyboard_url = None

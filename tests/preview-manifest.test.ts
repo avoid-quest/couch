@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createPreviewResolver, parsePreviewVtt, playerPreview, previewManifestLimit, vttPreview } from "../src/server/preview-manifest";
 import { playbackPreviewResponse, createPreviewImages, storyboardPreview } from "../src/server/playback-preview";
@@ -148,4 +148,44 @@ test("oversized manifest bodies cancel before retaining them", async () => {
     const read = createPreviewResolver((async () => new Response(new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(previewManifestLimit + 1)); }, cancel() { canceled = true; } }), { headers: declared ? { "content-length": String(previewManifestLimit + 1) } : {} })) as typeof fetch);
     await expect(read(vttPreview(base), signal())).rejects.toThrow("size limit"); expect(canceled).toBe(true);
   }
+});
+
+test("missing and malformed manifests recover after bounded freshness within the same source", async () => {
+  const now = spyOn(Date, "now").mockReturnValue(1000);
+  try {
+    for (const unavailable of [() => new Response(null, { status: 404 }), () => new Response(null, { status: 410 }), () => response("<html>Unavailable</html>")]) {
+      now.mockReturnValue(1000);
+      let calls = 0;
+      const resolve = createPreviewResolver((async () => ++calls === 1 ? unavailable() : response()) as typeof fetch);
+      const source = vttPreview(base)!;
+      const read = () => playbackPreviewResponse(request(), async () => source, () => {}, undefined, resolve);
+      expect((await read()).status).toBe(204);
+      now.mockReturnValue(30_999);
+      expect((await read()).status).toBe(204); expect(calls).toBe(1);
+      now.mockReturnValue(31_000);
+      expect((await read()).status).toBe(200); expect(calls).toBe(2);
+      now.mockReturnValue(100_000);
+      expect((await read()).status).toBe(200); expect(calls).toBe(2);
+    }
+  } finally { now.mockRestore(); }
+});
+
+test("header-valid corrupt image bytes expire so the same playback can recover repaired images", async () => {
+  const now = spyOn(Date, "now").mockReturnValue(1000);
+  try {
+    const valid = readFileSync(new URL("./fixtures/preview-sheet.png", import.meta.url));
+    const corrupt = valid.subarray(0, 33); // Dimensions survive; PNG image data is missing.
+    let calls = 0;
+    const images = createPreviewImages((async () => new Response(++calls === 1 ? corrupt : valid)) as typeof fetch);
+    const source = parsePreviewVtt("WEBVTT\n\n00:00.000 --> 00:05.000\nfirst.png\n", base)!;
+    const read = () => playbackPreviewResponse(new Request(`${request().url}&image=0`), async () => source, () => {}, images);
+    expect((await (await read()).arrayBuffer()).byteLength).toBe(33);
+    now.mockReturnValue(30_999);
+    expect((await (await read()).arrayBuffer()).byteLength).toBe(33); expect(calls).toBe(1);
+    now.mockReturnValue(31_000);
+    expect(new Uint8Array(await (await read()).arrayBuffer())).toEqual(new Uint8Array(valid)); expect(calls).toBe(2);
+    now.mockReturnValue(32_000);
+    expect((await playbackPreviewResponse(new Request(`${request().url}&image=0`), async () => source, () => { throw new Error("Revoked"); }, images)).status).toBe(404);
+    expect(calls).toBe(2);
+  } finally { now.mockRestore(); }
 });

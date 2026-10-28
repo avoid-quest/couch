@@ -30,7 +30,15 @@ class CouchTwitchTestIE(InfoExtractor):
                 assert all(f['fps'] == 200 / duration for f in formats), 'Keep upstream metadata intact'
                 assert formats[1]['fragments'][0]['url'] == 'https://images.example/storyboards/low.jpg'
                 assert extractor._couch_storyboards == []
-            assert calls == ['https://images.example/storyboards/spec.json'] * 2, 'Exactly one JSON request per extraction'
+            spec = [
+                {'count': 200, 'width': 160, 'height': 90, 'rows': 40, 'cols': 5, 'interval': 128, 'images': ['https://[invalid/image.jpg']},
+                {'count': 200, 'width': 110, 'height': 62, 'rows': 40, 'cols': 5, 'interval': 128, 'images': ['valid.jpg']},
+            ]
+            formats = list(extractor._extract_storyboard('fixture', 'https://images.example/storyboards/spec.json', 25593))
+            assert formats, 'Malformed optional preview URLs must not abort extraction'
+            assert any(f.get('couch_interval') == 128 for f in formats), 'Valid previews still survive'
+            assert extractor._couch_storyboards == []
+            assert calls == ['https://images.example/storyboards/spec.json'] * 3, 'Exactly one JSON request per extraction'
         finally:
             TwitchVodIE._download_json = original
         return {'id': 'test', 'title': 'Native Twitch timing retained', 'url': 'https://media.example/video.mp4'}

@@ -65,7 +65,9 @@ function dimensions(bytes: Uint8Array) {
 // Shared readers use one download; the last departing reader cancels it. Completed
 // images remain byte-bounded, and have no authority without a current source.
 export function createPreviewImages(fetcher: typeof fetch = publicFetch) {
-  const cache = createArtworkCache(16 * 1024 * 1024);
+  // Header validation cannot prove browser decoding. Bound freshness so a repaired
+  // upstream image can replace corrupt bytes on a later hover in the same source.
+  const cache = createArtworkCache(16 * 1024 * 1024, 30_000);
   let running = 0;
   return (url: string, signal: AbortSignal) => cache.read(url, async cancellation => {
     if (running >= 4) throw new Error("Preview downloads are busy.");

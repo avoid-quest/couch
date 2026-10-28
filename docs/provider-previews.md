@@ -64,8 +64,11 @@ Bounds:
   limits; reused bytes count toward the preview budget.
 - Image: four concurrent requests, five-second deadline, 2 MiB compressed,
   4,000,000 raster pixels and 8,192 pixels per axis. Every declared crop must fit.
-- Shared image cache: 16 MiB compressed bytes. Manifest results are weakly held
-  by the source; temporary failures are retryable, and saturation returns 503.
+- Shared image cache: 16 MiB compressed bytes, fresh for 30 seconds from fetch.
+  Header inspection bounds size but does not prove browser decoding; the short
+  freshness lets a later hover recover repaired upstream bytes. Successful
+  manifests are weakly held by the source; missing or malformed results are
+  fresh for 30 seconds. Temporary failures are retryable, and saturation returns 503.
 - Client: four decoded object URLs plus at most one pending image. Hide cancels
   image reads/retry timers; source replacement also cancels metadata. Image
   network/503/decode failures retry at most twice while visible. Later hover may

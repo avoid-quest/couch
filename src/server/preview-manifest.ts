@@ -76,10 +76,10 @@ export function parsePreviewVtt(text: string, base: string): PreviewSource | und
   } catch { return; }
 }
 
-// Successful/absent metadata belongs to this resolved source, never a URL shared
+// Successful metadata belongs to this resolved source, never a URL shared
 // across playbacks. Concurrent controllers share work; the last leaving cancels.
 export function createPreviewResolver(fetcher: typeof fetch = publicFetch) {
-  const completed = new WeakMap<PreviewManifest, PreviewSource | undefined>();
+  const completed = new WeakMap<PreviewManifest, { result: PreviewSource | undefined; expiresAt: number }>();
   const pending = new WeakMap<PreviewManifest, { promise: Promise<PreviewSource | undefined>; controller: AbortController; readers: number }>();
   let running = 0;
   const load = async (source: PreviewManifest, cancellation: AbortSignal) => {
@@ -129,12 +129,15 @@ export function createPreviewResolver(fetcher: typeof fetch = publicFetch) {
   return async (source: PreviewInput | undefined, signal: AbortSignal): Promise<PreviewSource | undefined> => {
     signal.throwIfAborted();
     if (!source || source.metadata) return source;
-    if (completed.has(source)) return completed.get(source);
+    const kept = completed.get(source);
+    if (kept && kept.expiresAt > Date.now()) return kept.result;
     let work = pending.get(source);
     if (!work) {
       const controller = new AbortController();
       const promise = load(source, controller.signal).then(result => {
-        controller.signal.throwIfAborted(); completed.set(source, result); return result;
+        controller.signal.throwIfAborted();
+        completed.set(source, { result, expiresAt: result ? Infinity : Date.now() + 30_000 });
+        return result;
       }).finally(() => { if (pending.get(source)?.controller === controller) pending.delete(source); });
       work = { promise, controller, readers: 0 };
       pending.set(source, work);
