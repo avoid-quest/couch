@@ -11,13 +11,17 @@ const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
 
 // Desktop windows have no title bar: reserve their native controls in the page.
 if (!process.argv.includes("--couch-tv-presentation")) {
+  let fullScreen = false;
   const controls = (shown: boolean) => {
+    // Chromium can still report a visible 1px overlay after the native buttons disappear.
+    shown &&= !fullScreen && !document.fullscreenElement;
     if (process.platform !== "darwin") document.documentElement.classList.toggle("wco", shown);
     else if (shown) document.documentElement.setAttribute("data-window-controls", "");
     else document.documentElement.removeAttribute("data-window-controls");
   };
   addEventListener("DOMContentLoaded", () => controls(true));
-  ipcRenderer.on("couch:full-screen", (_event, fullScreen: boolean) => controls(!fullScreen));
+  ipcRenderer.on("couch:full-screen", (_event, value: boolean) => { fullScreen = value; controls(!fullScreen); });
+  addEventListener("fullscreenchange", () => controls(!fullScreen));
   if (process.platform !== "darwin") addEventListener("DOMContentLoaded", () => {
     const root = document.documentElement;
     root.classList.add("electron", process.platform === "win32" ? "electron-windows" : "electron-linux");

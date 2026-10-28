@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -35,16 +35,17 @@ function Row({ label, htmlFor, description, children }: { label: string; htmlFor
  * this computer's sound and the picture's quality, then Start sharing, which starts the capture and plays it on the
  * chosen devices. A Dialog on desktop, a bottom Sheet on phones and the TV.
  */
-export function ShareDialog({ open, onOpenChange, tv }: { open: boolean; onOpenChange: (open: boolean) => void; tv: boolean }) {
+export function ShareDialog({ open, onOpenChange, tv, openerRef }: { open: boolean; onOpenChange: (open: boolean) => void; tv: boolean; openerRef: RefObject<HTMLButtonElement | null> }) {
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  const restoreFocus = (event: Event) => { if (openerRef.current?.isConnected) { event.preventDefault(); openerRef.current.focus(); } };
   const title = "Share this device";
   // Its choices reset each time it opens, and capture is asked for only from the device in hand.
   const body = open && <ShareForm onDone={() => onOpenChange(false)} />;
   if (desktop && !tv) return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent data-tv-local-only aria-describedby={undefined} className="gap-0 sm:max-w-2xl"><DialogTitle className="mb-5 font-display text-heading">{title}</DialogTitle>{body}</DialogContent>
+    <DialogContent data-tv-local-only aria-describedby={undefined} onCloseAutoFocus={restoreFocus} className="gap-0 sm:max-w-2xl"><DialogTitle className="mb-5 font-display text-heading">{title}</DialogTitle>{body}</DialogContent>
   </Dialog>;
   return <Sheet open={open} onOpenChange={onOpenChange}>
-    <SheetContent data-tv-local-only side="bottom" aria-describedby={undefined} className="max-h-[90dvh] items-center overflow-y-auto px-(--gutter) pt-6 pb-8">
+    <SheetContent data-tv-local-only side="bottom" aria-describedby={undefined} onCloseAutoFocus={restoreFocus} className="max-h-[90dvh] items-center overflow-y-auto px-(--gutter) pt-6 pb-8">
       <div className="grid w-full max-w-2xl"><SheetTitle className="mb-5 font-display text-heading">{title}</SheetTitle>{body}</div>
     </SheetContent>
   </Sheet>;
