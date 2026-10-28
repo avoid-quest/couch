@@ -108,3 +108,20 @@ test("an unfinished Noise handshake cannot hold an audio connection indefinitely
   })]);
   assert.equal(closed, true, "the deadline must cover the complete handshake, not just its first frame");
 });
+
+test("pairing a device again closes audio and publications authorized with its old token", { timeout: 10_000 }, async t => {
+  const f = await liveFixture(), identity = f.identities[0]!;
+  const player = new SendspinClient(identity.id, "Publisher", [Roles.PLAYER], { playerSupport: {
+    supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 65536, supported_commands: [],
+  } });
+  t.after(async () => { await player.disconnect(); await f.close(); });
+  await player.connect(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
+  await f.publish("old-token-publication", "microphone");
+  const paired = await fetch(`${f.hub.origin}/api/pair`, { method: "POST", headers: { Origin: f.hub.origin, "Content-Type": "application/json" },
+    body: JSON.stringify({ code: f.hub.pairingCode, id: identity.id, name: "Publisher" }) });
+  assert.equal(paired.status, 200);
+  assert.equal((await f.api("/api/devices/me")).status, 401, "the old bearer token is already invalid");
+  await until(() => !player.isConnected);
+  await until(() => f.publisher.socket.readyState === WebSocket.CLOSED);
+  await until(() => !f.receiver.state.liveSources?.some(source => source.id === "old-token-publication"));
+});

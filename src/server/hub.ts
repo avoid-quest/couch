@@ -1677,7 +1677,9 @@ export async function createHub(options: HubOptions) {
     "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance, tvModeChangeable: !!options.nativeTvMode && !tvAppliance, systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": publicPairing(async (body, respond) => {
       if (!("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
+      const previous = typeof body.id === "string" ? store.device(body.id) : null;
       const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
+      if (previous) retireDevice(previous.id, previous.name);
       invalidate("devices");
       return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
     }, () => {
