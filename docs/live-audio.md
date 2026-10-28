@@ -20,7 +20,9 @@ the standard `SENTINEL_RESOLVED` PSK, to each public `SendspinSession`.
 A browser's Device ID is the SDK client ID from
 `loadSendspinClientIdentity(storage)`; the control connection and
 `SendspinPlayer` share that identity and storage. An existing Couch token rebinds
-a changed ID through `identify`, keeping pairing and permissions. Pairing the
+a changed ID through `identify`, keeping pairing and permissions while retiring
+the paired device's old connections, audio transports, publications and outputs;
+trusted host windows keep their existing behavior. Pairing the
 same ID again retires work authorized with its replaced token.
 
 An authenticated `POST /api/audio/session` sets an HttpOnly, SameSite Strict
