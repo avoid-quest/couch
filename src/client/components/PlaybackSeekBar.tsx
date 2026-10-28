@@ -18,25 +18,25 @@ export function PlaybackSeekBar({ value, max, disabled, playbackId, buffered, pa
   const [draft, setDraft] = useState<number | null>(null);
   const target = useRef<number | null>(null);
   const pointer = useRef<number | null>(null);
-  const released = useRef(false);
+  const released = useRef<number | null>(null);
   const revision = useRef(0);
   const clamp = (position: number) => Math.max(0, Math.min(max, position));
   const current = clamp(draft ?? value);
   const update = (position: number | null) => { target.current = position; setDraft(position); };
   const cancel = () => {
     revision.current++;
-    released.current = false;
+    released.current = null;
     const id = pointer.current;
     pointer.current = null;
     update(null);
     if (id !== null && root.current?.hasPointerCapture(id)) root.current.releasePointerCapture(id);
   };
   useLayoutEffect(() => { if (disabled) cancel(); }, [disabled]);
-  useLayoutEffect(() => () => { revision.current++; pointer.current = null; released.current = false; }, []);
-  const commit = (position: number, keyboard = false) => {
+  useLayoutEffect(() => () => { revision.current++; pointer.current = null; released.current = null; }, []);
+  const commit = (position = released.current, keyboard = false) => {
     // Video.js also commits on lost capture/button loss. Those are cancellations in Couch.
-    if (disabled || !keyboard && !released.current) return;
-    released.current = false;
+    if (disabled || position === null) return;
+    released.current = null;
     pointer.current = null;
     const committed = ++revision.current;
     void onCommit(clamp(position)).then(
@@ -50,11 +50,11 @@ export function PlaybackSeekBar({ value, max, disabled, playbackId, buffered, pa
       min={0} max={1} step={1e-9} value={current / max} disabled={disabled}
       className="group/slider relative flex h-6 w-full cursor-pointer items-center touch:min-h-11 select-none data-disabled:cursor-default data-disabled:opacity-50"
       onValueChange={fraction => { if (!disabled && pointer.current !== null) update(clamp(fraction * max)); }}
-      onValueCommit={fraction => commit(fraction * max)}
+      onValueCommit={() => commit()}
       onPointerDownCapture={event => {
         if (disabled || event.button !== 0 || !event.isPrimary || pointer.current !== null) { event.preventDefault(); event.stopPropagation(); return; }
         revision.current++;
-        released.current = false;
+        released.current = null;
         pointer.current = event.pointerId;
       }}
       onPointerMoveCapture={event => {
@@ -64,14 +64,18 @@ export function PlaybackSeekBar({ value, max, disabled, playbackId, buffered, pa
       }}
       onPointerUpCapture={event => {
         if (disabled || event.pointerId !== pointer.current) { event.stopPropagation(); return; }
-        released.current = true;
+        // Preserve the displayed seconds even if duration changed during the drag.
+        released.current = clamp(target.current ?? value);
       }}
       onPointerCancel={cancel}
       onLostPointerCapture={() => { if (pointer.current !== null) cancel(); }}
       onBlur={cancel}
       onKeyDownCapture={event => {
         if (disabled || event.altKey || event.ctrlKey || event.metaKey) return;
-        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); return; }
+        if (event.key === "Escape") {
+          if (target.current !== null || pointer.current !== null) { event.preventDefault(); event.stopPropagation(); cancel(); }
+          return;
+        }
         if (event.key === "ArrowDown") {
           const play = event.currentTarget.closest(".player-page")?.querySelector<HTMLElement>("[data-play-button]:not(:disabled)");
           if (play) { event.preventDefault(); event.stopPropagation(); play.focus(); return; }

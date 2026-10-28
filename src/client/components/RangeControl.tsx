@@ -48,7 +48,10 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
     onValueChange={values => { if (!disabled && !canceled.current) setDraft(values[0]!); }}
     onKeyDownCapture={event => {
       if (disabled) return;
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancel(); return; }
+      if (event.key === "Escape") {
+        if (draft !== null || pointer.current !== null) { event.preventDefault(); event.stopPropagation(); cancel(); }
+        return;
+      }
       canceled.current = false;
       if (keyboardStep !== 1 && (event.key === less || event.key === more)) {
         event.preventDefault(); event.stopPropagation();

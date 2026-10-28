@@ -144,11 +144,17 @@ export async function runSeekInteractionRegression(input: (type: 'down' | 'move'
     const clicked = seeks().length;
     await input('down', .3); await input('up'); await wait();
     assert(seeks().length === clicked + 1, 'A click/tap did not commit exactly once');
-    const before = seeks().length;
-    await input('down', .2); await input('move', .8);
+    for (const [initial, duration] of [[693, 200.1254], [200.1254, 900]] as const) {
+      await fixture.audit.updateClock({ playbackId: 'p', position: 121, duration: initial });
+      const before = seeks().length;
+      await input('down', .2); await input('move', .8);
+      await fixture.audit.updateClock({ playbackId: 'p', position: 121, duration });
+      const displayed = Number(slider().getAttribute('aria-valuenow'));
+      assert(displayed > 0 && displayed <= duration, 'Duration change left the displayed draft outside its range');
+      await input('up'); await wait();
+      assert(seeks().length === before + 1 && seeks().at(-1)!.position === displayed, `Release did not commit the displayed draft exactly once after duration changed: ${JSON.stringify({ displayed, committed: seeks().at(-1)?.position, initial, duration, count: seeks().length - before })}`);
+    }
     await fixture.audit.updateClock({ playbackId: 'p', position: 121, duration: 200.1254 });
-    await input('up'); await wait();
-    assert(seeks().length === before + 1 && Math.abs(seeks().at(-1)!.position - 160.1) < 2, 'Release did not use the current duration exactly once');
     for (const edge of [-.1, 1.1]) {
       await input('down', .5); await input('move', edge); await input('up'); await wait();
       assert(seeks().at(-1)!.position === (edge < 0 ? 0 : 200.1254), 'Pointer endpoint escaped the duration');

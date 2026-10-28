@@ -164,8 +164,10 @@ downloads and a shared 16 MiB cache. A controller keeps four successfully decode
 images and releases their object URLs when the source changes. Hidden previews
 cancel pending image reads and retry timers; source changes also cancel metadata
 reads. Image network, 503 and decode failures retry at most twice while requested;
-later hover can retry a failed or missing image. Missing metadata is fresh for
-30 seconds, and reconnection invalidates it through the session query client.
+later hover can retry a failed or missing image. Core keeps image bytes fresh
+for 30 seconds so a repaired, previously undecodable image can recover without
+changing playback. Missing or malformed metadata is fresh for 30 seconds in Core
+and in the controller, and reconnection invalidates it through the session query client.
 Expired or unavailable assets never delay playback or trigger another media
 extraction. Failed quality changes retain the current source's preview.
 

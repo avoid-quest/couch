@@ -487,7 +487,7 @@ screenshots, raw measurements and harnesses are in `/tmp/couch-videojs-timeline/
 ## Integrated validation and assets, 28 October 2026
 
 The final integrated UI passes preview/recovery, seek, transition, clock and all
-15 TV-focus cases, plus trusted mouse/touch and desktop/TV menu/Select checks.
+16 TV-focus cases, plus trusted mouse/touch and desktop/TV menu/Select checks.
 The resize regression grows a visible unchanged cue from 160×90 to 238×133 when
 resizing 390→1920px, retaining the same blob and one image download. The radio
 regression now requires real programme progress, holds its wall clock fixed and
@@ -501,20 +501,26 @@ All use a remote-controller fixture with zero local media and zero hover command
 See [provider coverage](provider-previews.md) for per-source evidence and limits.
 No decoded-video synchronization claim follows from these rendered crop checks.
 
-At main `ee4f5876`, the source-only layer's client assets total 2,773,352 raw /
-852,441 gzip bytes. With the integrated Slider and Thumbnail they total
-2,833,522 raw / 872,105 gzip: **+60,170 raw / +19,664 gzip bytes**. These are sums
-of emitted `dist/assets` JavaScript and CSS, gzip level 9, not initial-route
+At main `ee4f5876`, the source-only layer's client assets total 2,773,351 raw /
+852,449 gzip bytes. With the integrated Slider and Thumbnail they total
+2,833,618 raw / 872,219 gzip: **+60,267 raw / +19,770 gzip bytes**. These are sums
+of emitted `dist/assets` JavaScript and CSS (Python gzip level 9, zlib 1.3.1), not initial-route
 transfer or source-map sizes. The image-size dependency stays in Core. This
 supersedes the initial total bundle delta; the +5.8 KB figure above isolates the
 later Slider migration alone.
 
-A disposable combination with Sendspin `3df745fa` builds and passes 90 affected
-unit tests and 35 integration cases, plus the dedicated preview-admission case.
-Explicit reconciliation retains pending source admission before preview binding,
-binds replacement group sources, and strips preview descriptors beside Sendspin's
-other private source fields. The extra case covers a pending picture-to-group
-resolution, admitted preview replacement, Direct collapse, renderer privacy and
-Stop. These test merges and Sendspin changes are absent from submitted branches.
-The combination proves software contracts with fixture extraction/codec input;
-it does not validate physical receiver timing, native capture or A/V latency.
+A fresh disposable combination with Sendspin `bf6c2279` builds and passes 54
+preview/source-preparation unit tests and 48 integration cases, including the
+preview-admission case, shared transport rights, Live audience and official SDK.
+This supersedes the earlier combined-tree snapshot. Explicit reconciliation
+retains pending source admission before preview binding, binds replacement group
+sources, and strips preview descriptors beside Sendspin's other private fields.
+HLS preview discovery moves to `createSourcePreparation` and reuses its completed
+manifest reads, preserving selected-channel classification without adding an
+admission fetch. Sendspin's worker/SDK implementation remains unchanged.
+
+The extra case covers pending picture-to-group resolution, admitted preview
+replacement, Direct collapse, renderer privacy and Stop. These test merges and
+Sendspin changes are absent from submitted branches. The combination proves
+software contracts with fixture extraction/codec input; it does not validate
+physical receiver timing, native capture or A/V latency.
