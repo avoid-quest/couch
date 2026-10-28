@@ -1,5 +1,5 @@
 export type LiveAudioSettings = { codec: "auto" | "pcm" | "opus"; minBufferMs: number };
-export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 200 };
+export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 150 };
 export const isLiveAudioSettings = (value: unknown): value is LiveAudioSettings => {
   const v = value as LiveAudioSettings;
   return !!v && ["auto", "pcm", "opus"].includes(v.codec) && Number.isInteger(v.minBufferMs) && v.minBufferMs >= 0 && v.minBufferMs <= 5000;
