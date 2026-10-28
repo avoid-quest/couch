@@ -326,7 +326,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
       for (const wire of current.wires) {
         const list = current.queues[wire], sent = current.sent[wire];
         while (sent[0] && sent[0].end <= now) sent.shift();
-        while (list[0] && current.base + list[0].offset - sendUs <= now) {
+        while (list[0] && (current.fixed || current.base + list[0].offset - sendUs <= now)) {
           const chunk = list.shift()!, at = current.base + chunk.offset;
           sent.push({ at, end: at + chunk.duration, data: chunk.data });
           current.released = Math.max(current.released, chunk.offset + chunk.duration);

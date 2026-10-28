@@ -9,6 +9,35 @@ import { createScheduledAudio } from "../src/server/scheduled-audio";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean) => { const deadline = Date.now() + 5000; while (!check()) { if (Date.now() > deadline) throw new Error("Expected audio state did not arrive"); await sleep(10); } };
 
+test("capture sends on arrival with the maximum playback buffer and output delay", { timeout: 10_000 }, async t => {
+  const frames: number[] = [], errors: string[] = [];
+  const audio = createScheduledAudio({ name: "Long lead", admit: () => true, changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });
+  const server = createServer(), sockets = new WebSocketServer({ server });
+  sockets.on("connection", (socket, request) => audio.accept(socket, request));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const player = new SendspinClient("receiver", "Receiver", [Roles.PLAYER], { playerSupport: {
+    supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 4 * 1024 * 1024, supported_commands: [],
+  } });
+  player.addAudioChunkListener(timestamp => frames.push(timestamp));
+  const group = audio.group("programme", state => { if (state.error) errors.push(state.error); });
+  t.after(async () => { group.close(); audio.close(); await player.disconnect(); sockets.close(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  await player.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}`);
+  await player.sendPlayerState({ min_buffer_ms: 5000, static_delay_ms: 5000 });
+  await until(() => audio.delay("receiver") === 5000);
+  audio.registerSource("capture");
+  group.members([{ deviceId: "receiver", level: 100 }]);
+  group.send({ type: "load", playbackId: "programme", source: "", liveSourceId: "capture", captureIntent: "live" });
+  const origin = serverNowUs();
+  for (let sequence = 0; sequence < 120; sequence++) assert.equal(audio.writeSource("capture", {
+    generation: "capture", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10_000,
+    sampleRate: 48000, channels: 2, pcm: new Float32Array(960),
+  }), true);
+  await until(() => errors.length > 0 || frames.length > 200);
+  assert.deepEqual(errors, [], "valid timing declarations must not overflow the capture queue");
+  assert.equal(frames[0], origin + 10_000_000);
+  assert.ok(frames.length > 200, "encoded capture is sent immediately even beyond media's eight-second horizon");
+});
+
 test("public SDK session dispatch isolates a malformed plaintext peer without patches or changing healthy playback", { timeout: 15_000 }, async t => {
   const errors: string[] = [], frames: number[] = [];
   const audio = createScheduledAudio({ name: "Isolation", admit: id => ["healthy", "bad"].includes(id), changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", sourceFailed: (_id, error) => errors.push(error) });
