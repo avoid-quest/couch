@@ -198,3 +198,23 @@ test("the host removes one Live listener, which is told why, while the others ke
     assert.equal((await host.command({ type: "removeLiveListener", playbackId, deviceId: f.receiver.id })).ok, false, "a removed device is no longer listening");
   } finally { await f.close(); }
 });
+
+test("a Live listener cannot change another device's level, even one that shares its speaker", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    const host = await f.connect(-1), other = await f.connect(2);
+    assert.equal((await host.command(publication)).ok, true);
+    await other.command({ type: "sharing", sharing: { audio: true, video: false } });
+    for (const listener of [f.receiver, other]) assert.equal((await listener.command({ type: "playLive", sourceId: "concert", deviceId: listener.id, picture: false, sound: true })).ok, true);
+    await until(() => f.receiver.state.outputs?.length === 2);
+    const level = () => f.receiver.state.devices!.find(device => device.id === other.id)!;
+    const before = level();
+    for (const action of [{ type: "volume", deviceId: other.id, volume: before.volume === 20 ? 30 : 20 }, { type: "mute", deviceId: other.id, muted: !before.muted }] as Action[]) {
+      const denied = await f.receiver.command(action);
+      assert.equal(denied.ok, false, `listener ${action.type} on another device must reject`);
+      assert.match(denied.error ?? "", /Live audio listeners/);
+    }
+    assert.deepEqual({ volume: level().volume, muted: level().muted }, { volume: before.volume, muted: before.muted });
+    assert.equal((await f.receiver.command({ type: "volume", deviceId: f.receiver.id, volume: 40 })).ok, true, "a listener still sets its own level");
+  } finally { await f.close(); }
+});

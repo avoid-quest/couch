@@ -2316,7 +2316,10 @@ export async function createHub(options: HubOptions) {
             }
           } else if (action.type === "volume" || action.type === "mute") {
             // Without a Device, the group changes only the speakers this device may control.
-            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : controlled(target, deviceId);
+            // In Live only the host changes another device's level; each listener keeps its own.
+            const lockedByLive = (id: string) => id !== deviceId && deviceId !== hostId() && (intentOf(lookedAt(deviceId)) === "live" || intentOf(memberOf(id)) === "live");
+            if (action.deviceId && lockedByLive(action.deviceId)) throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : controlled(target, deviceId).filter(id => !lockedByLive(id));
             if (target) requireAction(target, action, deviceId);
             const inSound = (id: string) => !!target?.outputs.some(output => output.deviceId === id && output.sound);
             if (action.type === "volume" && !action.deviceId) {
