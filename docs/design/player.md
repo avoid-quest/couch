@@ -35,6 +35,11 @@ use SDK commands without restarting the stream. Actual errors retain their
 reason. A listener the host removes returns to where it was, with a toast
 naming who removed it. Ordinary sharing retains its existing controls.
 Keyboard shortcuts and Media Session actions follow the same Core-provided rights.
+The host's optional title and Now playing line appear in the player and minimized
+bar, and in system media controls where supported. Beside Join/Leave,
+**Live · 1:02:13** counts from the Source's publication time, rather than when
+this receiver joined. Only that text ticks once a second; it is not a seekable
+timeline or a screen reader announcement on every tick.
 
 Audio delay appears only for the separate-audio Direct adapter that applies it.
 Scheduled hardware correction is a separate setting in Where it plays. A picture

@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Action, PlaybackControls } from "../src/shared/protocol";
@@ -30,6 +30,7 @@ const { hasUpNext, UpNextButton } = await import("../src/client/sections/now/Que
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 const { useItemMenu } = await import("../src/client/components/RowMenu");
+const { LiveClock } = await import("../src/client/components/LiveClock");
 
 function fixture(): ClientSessionState {
   const outputs = [{ deviceId: here, picture: false, sound: true }];
@@ -137,6 +138,14 @@ test("Live owns Media Session without a queued item, Stop leaves, and ordinary p
   for (const effect of effects.splice(0)) effect();
   expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "", album: "", artwork: [] });
   expect(mediaSession.playbackState).toBe("playing");
+  state.liveSources![0]!.metadata = { title: "Evening concert", description: "Piano · second set" };
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toMatchObject({ title: "Evening concert", artist: "Piano · second set", album: "", artwork: [] });
+  state.liveSources![0]!.metadata = {};
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "" });
   state = { ...fixture(), controls: undefined, playbacks: [], liveSources: [], player: { ...fixture().player, status: "paused" }, queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film", duration: 300 }, { id: "next", source: "web:https://example.com/next", title: "Next" }] };
   read(useMediaSession);
   for (const effect of effects.splice(0)) effect();
@@ -154,6 +163,38 @@ test("Live owns Media Session without a queued item, Stop leaves, and ordinary p
   expect(mediaSession.playbackState).toBe("none");
   expect(mediaSession.position).toBeUndefined();
   expect([...handlers.values()].every(value => value === null)).toBe(true);
+});
+
+test("Live discovery uses shared details and searches the title, line and original source", () => {
+  state = fixture();
+  state.liveSources![0]!.metadata = { title: "Evening concert", description: "Piano · second set" };
+  for (const query of ["evening", "second", "concert"]) {
+    const hits = read(() => useLiveSourceHits(query));
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ title: "Evening concert", meta: "Piano · second set" });
+  }
+});
+
+test("Live clocks start at publication time, stay cheap, and dispose their timer", () => {
+  const now = spyOn(Date, "now").mockReturnValue(10_000_000);
+  const interval = spyOn(globalThis, "setInterval").mockReturnValue(123 as never);
+  const clear = spyOn(globalThis, "clearInterval").mockImplementation(() => {});
+  try {
+    state = fixture(); state.liveSources![0]!.startedAt = 10_000_000 - 3_733_000;
+    effects.length = 0;
+    const first = renderToStaticMarkup(<LiveParticipation state={state} connected run={run} />);
+    expect(first).toContain("Live · 1:02:13");
+    expect(first).not.toContain('role="timer"'); // No once-per-second screen reader announcements.
+    const cleanups = effects.splice(0).map(effect => effect());
+    expect(interval).toHaveBeenCalledTimes(1);
+    expect(interval.mock.calls[0]![1]).toBe(1000);
+    for (const cleanup of cleanups) if (cleanup) cleanup();
+    expect(clear).toHaveBeenCalledWith(123);
+    now.mockReturnValue(10_005_000);
+    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
+    expect(renderToStaticMarkup(<LiveClock startedAt={10_006_000} />)).toContain("Live · 0:00");
+    expect(renderToStaticMarkup(<LiveClock />)).not.toContain("NaN");
+  } finally { now.mockRestore(); interval.mockRestore(); clear.mockRestore(); effects.length = 0; }
 });
 
 test("a receiver failure is actionable and disconnected audience controls cannot send", () => {

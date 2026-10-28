@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { LivePeer, LiveSignalMessage, LiveSource } from "../shared/live-input";
+import type { LiveMetadata, LivePeer, LiveSignalMessage, LiveSource } from "../shared/live-input";
 import type { Action, PlaybackCommand, ServerMessage } from "../shared/protocol";
 
 type Load = Extract<PlaybackCommand, { type: "load" }>;
@@ -10,6 +10,7 @@ type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; so
 // A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
 type Publication<Socket> = { source: LiveSource; startedAt: number; owner?: Socket; uploadToken?: string; relayed: Set<string>; uploadId?: string };
 type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; volume: number; relay?: string };
+const metadata = (value: LiveMetadata) => ({ title: value.title?.trim() || undefined, description: value.description?.trim() || undefined });
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
 export function createLiveInputs<Socket>(options: {
@@ -60,9 +61,20 @@ export function createLiveInputs<Socket>(options: {
       const deviceId = options.deviceOf(socket);
       const label = action.kind === "microphone" ? "Audio input" : action.kind === "system-audio" ? "System audio" : "Screen";
       const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video, ...(action.intent ? { intent: action.intent } : {}), ...(action.audioDelivery ? { audioDelivery: action.audioDelivery } : {}) };
+      source.startedAt = Date.now();
+      if (action.intent === "live") source.metadata = metadata(action.metadata ?? {});
       sources.set(source.id, { source, startedAt: performance.now(), owner: socket, uploadToken: action.uploadToken, relayed: new Set() });
       options.changed();
       return source;
+    },
+    updateMetadata(socket: Socket, sourceId: string, patch: LiveMetadata) {
+      const publication = sources.get(sourceId);
+      if (!publication) throw new Error("That live source has ended.");
+      if (publication.owner !== socket) throw new Error("Only the capturing window can edit this source.");
+      if (publication.source.intent !== "live") throw new Error("Only Live audio has shared details.");
+      publication.source.metadata = metadata({ ...publication.source.metadata, ...patch });
+      options.changed();
+      return publication.source;
     },
     // Core's own publication, ended only by Core.
     host(source: LiveSource) {

@@ -33,6 +33,10 @@ On macOS, desktop listeners request a smaller Chromium audio buffer for lower Li
 output latency; Linux and Windows keep their default buffer
 ([Timing](live-audio.md#timing)).
 Capture errors remain visible until sharing ends or restarts.
+Live shares have optional **Title** and **Now playing** fields in Share and the
+running panel. Receivers see that title and line, including in system media
+controls. **Live · 1:02:13** beside Join/Leave and in the host panel counts from
+the publication's start; only the clock label ticks, once a second.
 The sharing panel polls connection routes only for WebRTC shares; PCM shares
 use Core's listener state.
 Live's host panel keeps settings in place while loading, reports save failures

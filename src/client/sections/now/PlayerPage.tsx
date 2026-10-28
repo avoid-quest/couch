@@ -360,12 +360,13 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {info && trail}
           {/* Set whole in the display face, its size and width by its length, as the Stage's title. */}
           {title && <h1 data-length={titleLength(title)} style={titleFit(title)} className="display-title min-w-0 text-balance">{linkedTitle}</h1>}
+          {livePlayback(state) && current.subtitle && <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">{current.subtitle}</p>}
           {/* Where it plays leads the line under the title, as in the now-playing bar. */}
           <PlaysOnLine at={at}>{copyContext}</PlaysOnLine>
           {separateWindow && <p className="text-sm text-muted-foreground">In a separate window</p>}
           {radio && stationId && <RadioRecognition key={JSON.stringify([credentials.origin, credentials.token, state?.playback, player?.playbackId, current.id, stationId])} credentials={credentials} stationId={stationId} connected={connected} controls={recognitionControls} />}
           <div ref={infoRegion} id="player-info" hidden={!info} className="grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0">
-            {byline && <p className="text-sm text-pretty text-muted-foreground">{byline}</p>}
+            {byline && !livePlayback(state) && <p className="text-sm text-pretty text-muted-foreground">{byline}</p>}
             {radio && <><RadioProgress show={currentProgramme} /><Description text={currentProgramme?.description} /><PlayerNextProgramme guide={stationId ? radioGuides.data?.[stationId] : undefined} /></>}
             {!radio && <PlayerEndTime state={state} className="text-sm text-muted-foreground tabular-nums" />}
           </div>

@@ -3,8 +3,74 @@ import { test } from "node:test";
 import WebSocket from "ws";
 import { liveFixture, until } from "./live-input.fixture";
 import type { Action } from "../src/shared/protocol";
+import { SendspinCore, loadSendspinClientIdentity, type ServerStateMetadata } from "@sendspin/sendspin-js";
 
 const publication = { type: "publishLive", sourceId: "concert", uploadToken: "1".repeat(64), kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" } as const;
+
+test("host details reach Couch and the stock browser SDK through edits, reconnect and clearing", { timeout: 25_000 }, async () => {
+  const f = await liveFixture({ media: { ffmpeg: process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", recording: new Uint8Array() } });
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  const identity = f.identities[1]!;
+  identity.id = loadSendspinClientIdentity(storage).clientId;
+  const receiver = await f.connect(1), host = await f.connect(-1);
+  let metadata: ServerStateMetadata | undefined, chunks = 0, starts = 0, clears = 0;
+  const player = new SendspinCore({ suite: "aesgcm", storage, baseUrl: `${f.hub.origin}/api/audio/${identity.token}`, codecs: ["pcm"], minBufferMs: 150,
+    onStateChange: state => { metadata = state.serverState.metadata; } });
+  player.onAudioData = () => chunks++;
+  player.onStreamStart = () => starts++;
+  player.onStreamClear = () => clears++;
+  let capture: Awaited<ReturnType<typeof f.streamCapture>> | undefined;
+  try {
+    const before = Date.now();
+    assert.equal((await host.command({ ...publication, metadata: { title: " Evening concert ", description: " Piano · first set " } })).ok, true);
+    await until(() => !!receiver.state.liveSources?.length);
+    const source = receiver.state.liveSources![0]!;
+    assert.ok(source.startedAt! >= before && source.startedAt! <= Date.now());
+    assert.deepEqual(source.metadata, { title: "Evening concert", description: "Piano · first set" });
+    assert.equal((await receiver.command({ type: "playLive", sourceId: source.id, deviceId: identity.id })).ok, true);
+    await player.connect();
+    await until(() => metadata?.title === "Evening concert");
+    assert.equal(metadata!.artist, "Piano · first set", "the public secondary metadata field carries the host's line");
+    assert.equal(metadata!.progress?.track_duration, 0);
+    assert.equal(metadata!.progress?.playback_speed, 1000);
+    capture = await f.streamCapture(host, source.id, -1, (position, channel) => .2 * Math.sin(2 * Math.PI * 440 * position / 48000) * (channel ? -1 : 1));
+    await until(() => chunks > 20);
+    const playbackId = receiver.state.player.playbackId, streams = starts, resets = clears;
+    const edit = { type: "updateLiveMetadata", sourceId: source.id, metadata: { description: "Second set" } } as const;
+    assert.equal((await receiver.command(edit)).ok, false, "joining never grants metadata authority");
+    assert.equal((await host.command(edit)).ok, true);
+    await until(() => metadata?.artist === "Second set" && receiver.state.queue[0]?.subtitle === "Second set");
+    assert.equal(metadata!.title, "Evening concert", "patching the line keeps the title");
+    assert.equal(receiver.state.playbacks?.find(item => item.id === receiver.state.playback)?.title, "Evening concert");
+    assert.equal(receiver.state.player.playbackId, playbackId);
+    assert.equal(starts, streams); assert.equal(clears, resets);
+    assert.equal(receiver.state.liveSources![0]!.startedAt, source.startedAt);
+    const late = await f.connect(2);
+    assert.deepEqual(late.state.liveSources![0]!.metadata, { title: "Evening concert", description: "Second set" });
+    assert.equal(late.state.liveSources![0]!.startedAt, source.startedAt);
+    player.disconnect("user_request"); metadata = undefined;
+    await player.connect();
+    await until(() => metadata?.artist === "Second set" && !!player.trackProgress);
+    assert.ok(Math.abs(player.trackProgress!.positionMs - (Date.now() - source.startedAt!)) < 500, "SDK progress uses the publication clock, including time before Join");
+    assert.equal((await host.command({ ...edit, metadata: { title: "", description: " " } })).ok, true);
+    await until(() => metadata?.title === source.name && metadata?.artist == null && !receiver.state.queue[0]?.subtitle);
+    assert.equal(receiver.state.queue[0]!.title, source.name);
+    assert.equal((await receiver.command({ type: "leave", playbackId: receiver.state.player.playbackId! })).ok, true);
+    await until(() => metadata?.title == null && metadata?.progress == null);
+    await host.command({ ...edit, metadata: { title: "Encore" } });
+    await receiver.command({ type: "playLive", sourceId: source.id, deviceId: identity.id });
+    await until(() => metadata?.title === "Encore");
+    assert.equal(receiver.state.liveSources![0]!.startedAt, source.startedAt);
+    await host.command({ type: "endLive", sourceId: source.id });
+    await until(() => !receiver.state.liveSources?.length && metadata?.title == null);
+    assert.equal((await host.command(edit)).ok, false, "ended publications cannot be edited");
+    await host.command(publication);
+    await until(() => !!receiver.state.liveSources?.length);
+    assert.ok(receiver.state.liveSources![0]!.startedAt! > source.startedAt!);
+    assert.deepEqual(receiver.state.liveSources![0]!.metadata, {});
+  } finally { capture?.stop(); player.disconnect("user_request"); await f.close(); }
+});
 
 test("Live output correction requires an active Sendspin output before changing device levels", { timeout: 15_000 }, async () => {
   const f = await liveFixture();

@@ -20,7 +20,8 @@ import { CaptureBufferSelect, CaptureChannelsSelect, LiveSettingsStatus, Playbac
 import { nativeInputChannelMap, nativeInputChannelPreference } from "../../../shared/audio-settings";
 import { qualityLabels, selectionOf, shareKinds, shareTargets, unavailable, type ShareKind } from "./share";
 import type { CaptureSource } from "../../../shared/capture";
-import type { LiveVideoQuality } from "../../../shared/live-input";
+import type { LiveMetadata, LiveVideoQuality } from "../../../shared/live-input";
+import { LiveMetadataFields } from "./LiveMetadata";
 
 // A chip: a quiet capsule that steps up under the pointer, the chosen one checked (Search's kinds do the same).
 export const chip = "h-control flex-none gap-1.5 rounded-full bg-secondary px-3.5 font-normal hover:bg-fill-hover data-[state=on]:bg-secondary touch:h-11";
@@ -73,6 +74,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const [targets, setTargets] = useState<string[]>([]);
   const [sound, setSound] = useState(true);
   const [quality, setQuality] = useState<LiveVideoQuality>("1080p");
+  const [metadata, setMetadata] = useState<LiveMetadata>({});
   const [pending, setPending] = useState(false);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +142,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     try {
       starting.current = true;
       const started = await startLive({ ...selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, sound }),
+        ...(kind.intent === "live" ? { metadata } : {}),
         ...(inputChannels && inputChannels > 2 ? { nativeChannelMap: nativeInputChannelMap(channelPreference) } : {}) }).finally(() => { starting.current = false; });
       onDone();
       // Without a choice it waits in Home's Shared sources, as it always has.
@@ -189,6 +192,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         <span role="status" className="text-meta text-muted-foreground empty:hidden">{listing ? "Finding inputs…" : ""}</span>
       </div>
     </Row>}
+    {kind.intent === "live" && <LiveMetadataFields value={metadata} onChange={setMetadata} disabled={!available} />}
     {!!inputChannels && <Row label="Capture buffer" htmlFor="share-capture-buffer">
       <CaptureBufferSelect id="share-capture-buffer" value={nativeBuffer.value} disabled={!available} onValueChange={nativeBuffer.save} />
     </Row>}

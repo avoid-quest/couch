@@ -8,6 +8,7 @@ import { isRadio, freshRadioProgramme, radioNow } from "../../shared/radio";
 import { useSessionGate } from "./session-context";
 import { usePlaybackClock } from "./playback-clock";
 import { livePlayback } from "./playback-controls";
+import { liveTitle } from "../../shared/live-input";
 
 const actions = ["play", "pause", "stop", "nexttrack", "seekto", "seekbackward", "seekforward"] as const;
 
@@ -26,8 +27,8 @@ export function useMediaSession() {
   const guides = useQuery({ ...radioProgrammesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && !!stationId, refetchInterval: 60_000 });
   const now = useRadioClock(Object.values(guides.data ?? {}), state?.radioProgramme);
   const programme = (state?.radioProgramme?.playbackId === playbackId ? freshRadioProgramme(state?.radioProgramme, now) : null) ?? (stationId && playbackId ? radioNow(guides.data?.[stationId], stationId, now) : null);
-  const title = listening ? source?.name ?? "Couch Live" : programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "";
-  const artist = listening ? "" : programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "";
+  const title = listening ? source ? liveTitle(source) : "Couch Live" : programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "";
+  const artist = listening ? source?.metadata?.description ?? "" : programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "";
   const album = listening ? "" : programme?.album ?? current?.collection?.title ?? "";
   const artwork = listening ? null : programme?.artworkUrl ?? current?.thumbnail ?? null;
   const live = listening || !!current?.live || isRadio(current);

@@ -61,6 +61,12 @@ test("wire validation rejects live video/legacy ingestion and carries runtime in
   expect(() => parseCommand(envelope({ type: "leave" }))).toThrow();
 });
 
+test("Live details are bounded plain text; empty fields clear and malformed metadata rejects", () => {
+  const parse = (metadata: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "r", action: { type: "updateLiveMetadata", sourceId: "input", metadata } }));
+  for (const metadata of [{}, { title: "" }, { description: "Piano · first set" }, { title: "x".repeat(200), description: "" }]) expect(parse(metadata).action).toMatchObject({ metadata });
+  for (const metadata of [null, [], "title", { title: 2 }, { title: "x".repeat(201) }, { description: "x".repeat(201) }, { description: "one\ntwo" }, { title: "bad\u0000text" }, { startedAt: 0 }]) expect(() => parse(metadata)).toThrow();
+});
+
 test("picture mapping limitations are bounded runtime reports", () => {
   const report = { type: "player", state: { playbackId: "p", status: "playing", buffering: false, position: 1, duration: null, volume: 50, seekable: false, speed: 1, error: null, timeline: { mapping: "unavailable", error: "Native HLS has no PTS mapping." } } };
   expect(parsePlayer(JSON.stringify(report))?.timeline).toEqual(report.state.timeline);

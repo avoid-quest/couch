@@ -5,7 +5,7 @@ import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
 import type { DeviceSharing } from "./device-sharing";
-import type { LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
+import type { LiveMetadata, LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
 import type { CaptureKind } from "./capture";
 import type { CompressorSettings } from "./compressor";
 export type { VideoQuality } from "./providers";
@@ -108,7 +108,8 @@ export type SessionState = {
 };
 
 export type Action =
-  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: CaptureKind; audio: boolean; video: boolean; name?: string; intent?: "relaxed" | "live"; audioDelivery?: "pcm" }
+  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: CaptureKind; audio: boolean; video: boolean; name?: string; intent?: "relaxed" | "live"; audioDelivery?: "pcm"; metadata?: LiveMetadata }
+  | { type: "updateLiveMetadata"; sourceId: string; metadata: LiveMetadata }
   | { type: "endLive"; sourceId: string }
   | { type: "leave"; playbackId: string }
   // The host or an administrator removes a Live audio listener from a Playback (its PlaybackSummary id).

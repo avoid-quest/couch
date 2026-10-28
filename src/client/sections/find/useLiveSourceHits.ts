@@ -2,12 +2,13 @@ import { deviceId } from "@/session/device-id";
 import { useMemo } from "react";
 import { useSessionGate } from "@/session/session-context";
 import type { SearchHit } from "./SearchOnlineResults";
+import { liveTitle } from "../../../shared/live-input";
 
 /** Active device inputs use the same search rows and playback actions as other sources. */
 export function useLiveSourceHits(query: string): SearchHit[] {
   const { state, connected, run } = useSessionGate();
   return useMemo(() => (state?.liveSources ?? [])
-    .filter(source => source.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .filter(source => [source.name, source.metadata?.title, source.metadata?.description].some(text => text?.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
     .map(source => {
       // Play on the publisher, or while controlling it, waits in Where it plays to choose receivers.
       const live = source.intent === "live";
@@ -18,7 +19,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
       const label = source.video ? source.audio ? "Screen and audio" : "Screen without audio" : source.kind === "system-audio" ? "System audio" : source.kind === "airplay" ? "AirPlay" : "Audio input";
       const meta = live ? "Live audio" : label;
       return {
-        id: `live:${source.id}`, source: "Shared sources", title: source.name, meta: source.name.endsWith(` · ${meta}`) ? "" : meta, kind: "Live", live: true, video: source.video,
+        id: `live:${source.id}`, source: "Shared sources", title: liveTitle(source), meta: source.metadata?.description || (source.name.endsWith(` · ${meta}`) ? "" : meta), kind: "Live", live: true, video: source.video,
         primary: { label: primary, disabled, run: play },
         actions: [
           { label: primary, disabled, run: play },

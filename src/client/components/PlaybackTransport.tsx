@@ -13,6 +13,7 @@ import { RangeControl } from "./RangeControl";
 import { useDurationClock } from "./DurationBar";
 import { useBufferedEnd } from "@/session/buffered";
 import { livePlayback, playbackControls } from "@/session/playback-controls";
+import { LiveClock } from "./LiveClock";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
@@ -148,6 +149,7 @@ export function LiveParticipation({ state, connected, run, pageFirst, className 
   if (!source || publisher) return null;
   const label = receiving ? "Leave" : "Join";
   return <div data-live-participation className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
+    <span className="text-sm text-muted-foreground"><LiveClock startedAt={source.startedAt} /></span>
     <Button data-page-first={pageFirst || undefined} aria-busy={pending || undefined} aria-disabled={pending || undefined} className="aria-disabled:opacity-50" disabled={!connected || receiving && !state.player.playbackId} onClick={async () => {
       if (busy.current || receiving && !state.player.playbackId) return;
       busy.current = true; setPending(true); setFailed(false);

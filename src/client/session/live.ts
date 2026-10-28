@@ -347,14 +347,14 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         if (closed || attempt !== generation) { await audioFrames?.cancel().catch(() => {}); throw new Error("Capture was canceled."); }
         if (selection.intent === "live" && !audioFrames && !nativeAudioId) throw new Error("Live audio needs timestamped stereo capture on the Couch computer.");
         const label = selection.kind === "microphone" ? "Audio input" : selection.kind === "system-audio" ? "System audio" : "Screen";
-        const source: LiveSource = { id: sourceId, deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!nativeAudioId || !!audioTracks.length, video: !!videoTracks.length, intent: selection.intent, ...(audioFrames || nativeAudioId ? { audioDelivery: "pcm" as const } : {}) };
+        const source: LiveSource = { id: sourceId, deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!nativeAudioId || !!audioTracks.length, video: !!videoTracks.length, intent: selection.intent, ...(selection.intent === "live" ? { metadata: selection.metadata } : {}), ...(audioFrames || nativeAudioId ? { audioDelivery: "pcm" as const } : {}) };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
         const current: Publication = { captureFormat, nativeAudioId, nativeMuted: false, source, capture, audioFrames, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, quality, preview: new MediaStream(videoTracks), surface: selection.surface, since: Date.now() };
         publication = current;
         preparingNativeId = undefined;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
-        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: selection.kind, name: source.name, audio: source.audio, video: source.video, intent: source.intent, audioDelivery: source.audioDelivery });
+        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: selection.kind, name: source.name, audio: source.audio, video: source.video, intent: source.intent, audioDelivery: source.audioDelivery, metadata: source.metadata });
         if (closed || attempt !== generation || publication !== current) throw new Error("Capture was canceled.");
         current.published = true;
         options.published(source);
@@ -417,7 +417,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       return routes;
     },
     observe(sources: LiveSource[]) {
-      if (publication?.published && !sources.some(source => source.id === publication!.source.id)) {
+      const source = sources.find(source => source.id === publication?.source.id);
+      if (source && publication) publication.source = source;
+      if (publication?.published && !source) {
         // State and upload errors use different sockets. Whichever arrives first
         // must retire capture and tell the publisher why sharing disappeared.
         if (!starting) options.failed(new Error("Couch stopped this live input. Start sharing again."));

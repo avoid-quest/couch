@@ -51,6 +51,32 @@ An upload rejected by ingest or silent for five seconds fails its source:
 encoding stops, its listeners' streams end, and the error stays visible until
 sharing ends or restarts. Other sources continue.
 
+## Shared metadata
+
+Core assigns each publication `startedAt` (Unix milliseconds) and keeps optional
+`metadata: { title, description }` on its `LiveSource`. The capturing connection
+alone can patch those details; bounded single-line strings are trimmed, and an
+empty field clears it. These are runtime publication details, retained across
+capture generations and listener reconnects, and discarded when sharing ends.
+Couch state projects the title/line into discovery and playback presentation.
+The UI's isolated one-second clock measures elapsed time from `startedAt`.
+
+Core also sends the same details with the Node SDK's public `sendMetadata()` to
+the Source's Sendspin group members, on join, edits and reconnection. The title
+maps to `title` (falling back to the device/input name); the line maps to `artist`,
+the protocol's secondary display field. `progress` carries elapsed publication
+milliseconds, duration 0 (unlimited) and speed 1000. Edits retain the original
+clock and never restart capture or audio. Leaving/ending clears the metadata.
+
+The [Sendspin metadata specification](https://www.sendspin-audio.com/spec/#metadata-messages)
+and [browser SDK's public state callback](https://github.com/sendspin/sendspin-js#example)
+support these fields; neither exposes a generic description or publication-start
+field. This mapping benefits any Sendspin metadata player without custom wire
+extensions or SDK changes. Couch retains its own descriptive metadata object
+for future fields, and its Media Session owner reads the same Couch state for
+OS title/artist display; elapsed time does not become a seek bar. No Snapcast
+integration is added.
+
 ## Timing
 
 A relaxed share keeps at least one second of lead. A Live share's lead is the
@@ -206,6 +232,9 @@ opposite channel polarities. `audio-isolation.integration.ts` covers a malformed
 browser SDK core through Noise/AES-GCM, token binding, decoding, buffer changes,
 reconnect, a concurrent Opus receiver and Leave. Capture checks cover input
 formats, source generations, timestamp mapping and Opus pre-skip.
+`live-audience.integration.ts` also verifies host metadata through Couch state
+and the stock browser SDK, edits without stream restarts, late discovery,
+reconnect, clearing, Leave and a fresh publication clock.
 
 `live-lifecycle.integration.ts` covers input changes during playback, same-identity
 takeover, PCM ↔ Opus switches, Stop during Join, buffer changes across restarts,

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { LiveSharing } from "../src/client/session/live";
 import type { Viewer } from "../src/client/sections/share/share";
 import type { LiveAudioSettings } from "../src/shared/audio-settings";
+import { spawnSync } from "node:child_process";
 
 // Product components with only their session, storage and request boundaries replaced.
 let connected = true;
@@ -22,6 +23,7 @@ const save = { isPending: false, error: null as Error | null, variables: { codec
 const realQuery = await import("@tanstack/react-query");
 mock.module("@tanstack/react-query", () => ({ ...realQuery, useQuery: () => query, useMutation: () => save, useQueryClient: () => ({ setQueryData() {} }) }));
 const { CaptureBufferSelect, CaptureChannelsSelect, LiveListeners, LiveSettings, LiveSettingsStatus, PlaybackBufferInput } = await import("../src/client/sections/share/LiveOperator");
+const { LiveMetadataFields } = await import("../src/client/sections/share/LiveMetadata");
 const live = () => ({ settings: query.data, query, save, connected }) as unknown as Parameters<typeof PlaybackBufferInput>[0]["live"];
 const sharing = { captureFormat: { sampleRate: 48000, channels: 2, native: { requestedFrames: 128, reportedFrames: 128, inputChannels: 4, channelMap: [0, 1] } } } as LiveSharing;
 
@@ -163,4 +165,67 @@ test("listener failures are alerts and Remove addresses only the chosen listener
   elements(tree).find(item => item.props.onCloseAutoFocus)!.props.onCloseAutoFocus!({ preventDefault });
   expect(preventDefault).toHaveBeenCalledTimes(1);
   expect(renderToStaticMarkup(<LiveListeners viewers={[]} />)).toContain('<span role="status">No listeners yet.</span>');
+});
+
+test("Live details are optional labelled inputs that retain drafts and respect connection state", () => {
+  const changed = mock((_value: unknown) => {});
+  const value = { title: "Evening concert", description: "Piano · first set" };
+  const tree = read(() => LiveMetadataFields({ value, onChange: changed }));
+  const fields = elements(tree).filter(item => item.props.maxLength === 200);
+  expect(fields).toHaveLength(2);
+  const html = renderToStaticMarkup(tree);
+  expect(html).toContain(">Title</label>"); expect(html).toContain(">Now playing</label>");
+  expect(html).toContain('value="Evening concert"'); expect(html).toContain('placeholder="Optional"');
+  expect(html).not.toContain("required");
+  (fields[1]!.props.onChange as (event: unknown) => void)({ target: { value: "Second set" } });
+  expect(changed).toHaveBeenCalledWith({ ...value, description: "Second set" });
+  expect(renderToStaticMarkup(<LiveMetadataFields value={value} onChange={changed} disabled />)).toMatch(/<input[^>]*disabled=""/);
+  expect(renderToStaticMarkup(<LiveMetadataFields value={value} onChange={changed} readOnly />)).toMatch(/<input[^>]*readOnly=""/);
+});
+
+test("the host saves details once, retains failed drafts for retry and clears fields explicitly", () => {
+  // An isolated hook boundary lets the actual form handle edits and async results across renders.
+  const result = spawnSync(process.execPath, ["-e", `
+    import assert from "node:assert/strict";
+    import { mock } from "bun:test";
+    const react = await import("react");
+    let slots = [], cursor = 0, connected = true, settle, reject;
+    const sent = [];
+    mock.module("react", () => ({ ...react, useId: () => "details", useState: initial => {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+      return [slots[index], value => { slots[index] = value; }];
+    }, useRef: initial => { const index = cursor++; return slots[index] ??= { current: initial }; } }));
+    mock.module("./src/client/session/session-context.tsx", () => ({ errorText: reason => reason.message,
+      useSessionGate: () => ({ connected, command: action => { sent.push(action); return new Promise((resolve, fail) => { settle = resolve; reject = fail; }); } }) }));
+    const { LiveMetadataEditor, LiveMetadataFields } = await import("./src/client/sections/share/LiveMetadata.tsx");
+    const source = { id: "concert", metadata: { title: "Concert", description: "First set" } };
+    const nodes = node => Array.isArray(node) ? node.flatMap(nodes) : react.isValidElement(node) ? [node, ...nodes(node.props.children)] : [];
+    const render = () => { cursor = 0; return LiveMetadataEditor({ source }); };
+    const fields = tree => nodes(tree).find(node => node.type === LiveMetadataFields).props;
+    const submit = tree => tree.props.onSubmit({ preventDefault() {} });
+    let tree = render();
+    assert.equal(nodes(tree).find(node => node.props.type === "submit").props.disabled, true);
+    fields(tree).onChange({ title: "Evening concert", description: "Second set" });
+    tree = render();
+    const saving = submit(tree);
+    await submit(tree);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0], { type: "updateLiveMetadata", sourceId: "concert", metadata: { title: "Evening concert", description: "Second set" } });
+    assert.equal(fields(render()).readOnly, true);
+    reject(new Error("Connection lost.")); await saving;
+    tree = render();
+    assert.equal(nodes(tree).find(node => node.props.role === "alert").props.children, "Connection lost.");
+    assert.equal(fields(tree).value.description, "Second set");
+    const retry = submit(tree); settle(); await retry;
+    assert.equal(sent.length, 2);
+    connected = false;
+    tree = render(); assert.equal(fields(tree).disabled, true); await submit(tree); assert.equal(sent.length, 2);
+    connected = true;
+    fields(render()).onChange({ title: "", description: "" });
+    const clearing = submit(render()); settle(); await clearing;
+    assert.deepEqual(sent.at(-1).metadata, { title: "", description: "" });
+  `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
 });

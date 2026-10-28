@@ -33,6 +33,8 @@ Device                       [Choose an input ▾]  Live Audio input
                              Find audio inputs
 Capture buffer                   [128 frames ▾]   Native Live Audio input
 Input channels                  [1/2, Stereo ▾]   Native input with >2 channels
+Title                               [Optional]   Live Audio input
+Now playing                         [Optional]   Live Audio input
 Playback buffer (ms)                     [200]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
@@ -148,6 +150,15 @@ Sheet on phones and the TV:
 
 ### Live audio
 
+A Live share can have a **Title** and a **Now playing** line, each optional and
+up to 200 characters. Share sends them with the publication. The running panel
+keeps the same flat, labelled inputs and **Save details**; errors appear inline
+without discarding the draft. Only the capturing window can edit them. Clearing
+the title restores the device/input name; clearing the line removes it.
+The capsule, Home, Search and player use the title. The player and minimized bar
+show the line beneath it. The panel shows **Live · 1:02:13** from Core's share
+start time, unchanged by input restarts, joins or reconnects.
+
 A [Live audio](../live-audio.md) share lists listeners, each with a ⋯ **Remove**
 action. Removing a listener leaves focus in the listener list; failures read in
 red and are announced. An empty list says **No listeners yet**. The capsule
@@ -191,7 +202,8 @@ the control that started it.
   page's error, and the share keeps playing where it can.
 
 Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
-While joined, system media controls show the Live Source's name as playing;
+While joined, system media controls show the Live title (or Source name) and
+Now playing line where supported, as playing;
 Stop leaves this listener, with no play, pause, seek or next actions. Leaving
 restores ordinary playback's metadata and controls, or clears them when idle.
 **Tap to hear** unlocks sound. Leaving releases this listener without ending
