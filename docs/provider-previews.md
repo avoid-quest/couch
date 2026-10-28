@@ -21,6 +21,13 @@ frames or start another decoder.
   image URLs use the final manifest response URL. Cues may supply full images
   or pixel `xywh` crops, fractional boundaries and gaps. Overlapping cues and
   mapped transport clocks are rejected rather than assigned an invented offset.
+- Direct HTTP HLS and IPTV reuse manifest bytes already read for playback;
+  web/provider HLS keeps a lazy descriptor when no richer preview is available.
+  Only explicit `EXT-X-IMAGE-STREAM-INF` JPEG tracks qualify. The selected A/V
+  and image playlists must describe finite, continuous VOD starting at zero.
+  Whole-image and row-major tiled intervals retain fractional EXTINF timing,
+  clipping, last-tile hold and declared gaps. Live, sliding, EVENT,
+  discontinuous, encrypted or byte-range image tracks stay timestamp-only.
 
 The public `PlaybackPreview` union contains a compact grid or timed image cues,
 plus image indices. Core alone retains manifest URLs, image URLs and known
@@ -49,9 +56,12 @@ behind `.jpg` URLs.
 
 Bounds:
 
-- Manifest: four concurrent requests, five-second deadline, 512 KiB body,
-  20,000 lines, 8,192 characters per line, 4,000 cues/frames, 128 images and
-  one-day timeline.
+- Metadata: four concurrent resolutions, one five-second deadline, 512 KiB
+  aggregate manifest bytes, 20,000 lines per playlist, 8,192 characters per
+  line, 4,000 cues/frames, 128 images and a one-day timeline. HLS reads at most
+  three playlists (master, A/V, images), shares three redirects across them and
+  makes at most six HTTP attempts. Existing playback probes keep their own
+  limits; reused bytes count toward the preview budget.
 - Image: four concurrent requests, five-second deadline, 2 MiB compressed,
   4,000,000 raster pixels and 8,192 pixels per axis. Every declared crop must fit.
 - Shared image cache: 16 MiB compressed bytes. Manifest results are weakly held
@@ -95,7 +105,12 @@ boundaries. All nine source fixtures preserve controls/fallback and create no
 local media element. These are fresh extraction/delivery plus rendered cue
 checks, not proof of visual synchronization against decoded video, physical-TV
 performance, authenticated catalogs or every item in a provider's library.
-No guarantee is made for preview fields an upstream extractor never reports.
+Generic HLS coverage uses deterministic manifest fixtures through real direct,
+IPTV and web-source resolution/HTTP routes. Roku's published sample master
+returned 200 but both declared image children returned 404; no positive deployed
+HLS preview chain is claimed. Authenticated image tracks and Live/DVR timestamp
+mapping remain unsupported. No guarantee is made for preview fields an upstream
+extractor never reports.
 
 Deterministic fixtures and provenance are in `tests/fixtures/provider-preview-assets.md`.
 Node route tests cover no-receiver controllers, output consent, token replacement,
