@@ -151,7 +151,8 @@ Non-seekable Live has no timeline or previews.
 
 Core reuses existing extraction and player-page responses. YouTube and Twitch
 supply storyboard grids; RaiPlay, StreamingCommunity and AnimeUnity supply
-WebVTT cues. [Provider previews](../provider-previews.md) records discovery,
+WebVTT cues. Direct, web and IPTV HLS can use explicitly declared JPEG image
+tracks for finite, continuous VOD. [Provider previews](../provider-previews.md) records discovery,
 coverage and limits. Declared manifests load only when an authorized controller
 requests previews. `/api/playback-preview` checks pairing, current playback and
 output consent for metadata and each image. Provider URLs and playback headers
