@@ -3,7 +3,7 @@ import { stripCrossOriginHeaders } from "./public-network";
 import type { IncomingMessage } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
-import type { WebSocket } from "ws";
+import type { RawData, WebSocket } from "ws";
 import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, serverNowUs, SendspinSession, type SendspinSessionHooks } from "@sonn-audio/node-sendspin";
 import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
@@ -447,13 +447,15 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     accept(socket: WebSocket, request: IncomingMessage, deviceId?: string) {
       sockets.add(socket);
       let session: SendspinSession | undefined;
+      const pending: { data: RawData; binary: boolean; bytes: number }[] = [];
+      let pendingBytes = 0, drain: ReturnType<typeof setInterval> | undefined;
       const timer = setTimeout(() => socket.terminate(), 10_000);
       socket.once("close", () => {
-        clearTimeout(timer); sockets.delete(socket);
+        clearTimeout(timer); clearInterval(drain); pending.length = 0; sockets.delete(socket);
         if (session) { socketOf.delete(session); session.destroy(); }
       });
       socket.on("error", () => socket.terminate());
-      socket.on("message", (data, binary) => {
+      const dispatch = (data: RawData, binary: boolean) => {
         if (socket.readyState !== 1) return;
         try {
           if (!session) {
@@ -475,6 +477,22 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           console.warn("Couch: Sendspin session handler failed:", safePlaybackError(error instanceof Error ? error.message : String(error)));
           socket.terminate();
         }
+      };
+      socket.on("message", (data, binary) => {
+        if (socket.readyState !== 1) return;
+        if (socket.bufferedAmount <= backlogBytes && !pending.length) return dispatch(data, binary);
+        // Pause requests while replies cannot drain. Keep their order: dropping a Noise frame loses its nonce.
+        const bytes = Array.isArray(data) ? data.reduce((size, part) => size + part.length, 0) : data.byteLength;
+        if (pending.length >= 128 || pendingBytes + bytes > 256 * 1024) return socket.terminate();
+        pending.push({ data, binary, bytes }); pendingBytes += bytes;
+        socket.pause();
+        drain ??= setInterval(() => {
+          while (socket.readyState === 1 && socket.bufferedAmount <= backlogBytes && pending.length) {
+            const next = pending.shift()!; pendingBytes -= next.bytes;
+            dispatch(next.data, next.binary);
+          }
+          if (!pending.length) { clearInterval(drain); drain = undefined; socket.resume(); }
+        }, 25);
       });
     },
     group,

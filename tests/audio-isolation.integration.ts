@@ -10,6 +10,33 @@ import { createSendspin } from "../src/server/sendspin";
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean) => { const deadline = Date.now() + 5000; while (!check()) { if (Date.now() > deadline) throw new Error("Expected audio state did not arrive"); await sleep(10); } };
 
+test("Sendspin control replies stop when a peer stops reading", { timeout: 10_000 }, async t => {
+  const audio = createScheduledAudio({ name: "Control backlog", admit: () => true, changed() {} });
+  const server = createServer(), sockets = new WebSocketServer({ server });
+  let served: WebSocket | undefined;
+  sockets.on("connection", (socket, request) => { served = socket; audio.accept(socket, request, "receiver"); });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const peer = new WebSocket(`ws://127.0.0.1:${(server.address() as { port: number }).port}`);
+  t.after(async () => { peer.terminate(); audio.close(); sockets.close(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  await once(peer, "open");
+  const greeting = once(peer, "message");
+  peer.send(JSON.stringify({ type: "client/hello", payload: { client_id: "receiver", version: 1, supported_roles: ["controller@v1"] } }));
+  await greeting;
+  let writes = 0;
+  const send = served!.send.bind(served!);
+  served!.send = ((...args: Parameters<typeof send>) => { writes++; return send(...args); }) as typeof send;
+  // Reproduce socket backpressure without flooding the host's kernel buffers.
+  let stalled = true;
+  Object.defineProperty(served, "bufferedAmount", { configurable: true, get: () => stalled ? 1 << 20 : 0 });
+  peer.send(JSON.stringify({ type: "client/time", payload: { client_transmitted: "x".repeat(60_000) } }));
+  await sleep(100);
+  assert.equal(writes, 0, "control responses must not keep growing an already-stalled send queue");
+  assert.equal(peer.readyState, WebSocket.OPEN);
+  stalled = false;
+  const reply = await once(peer, "message");
+  assert.equal(JSON.parse(String(reply[0])).payload.client_transmitted.length, 60_000);
+});
+
 test("a non-finite player timing declaration cannot crash the shared audio worker", { timeout: 10_000 }, async t => {
   const errors: string[] = [], frames: number[] = [];
   const audio = createSendspin({ name: "Timing isolation", admit: () => true, changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });

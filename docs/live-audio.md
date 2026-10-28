@@ -61,6 +61,9 @@ input restarts (a new capture buffer restarts the input).
 A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction: a listener whose connection stops draining (a frozen tab, a dozing
 radio) gets nothing more until it drains, then resumes at audio that can still play.
+Control input pauses too while the send queue exceeds 64 KiB. Already received
+requests wait in order (at most 128 frames / 256 KiB) so recovery preserves the
+Noise sequence; exceeding that pending input limit closes only that connection.
 
 **Playback buffer (ms)** is one Couch-wide setting, 200 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
