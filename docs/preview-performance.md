@@ -361,9 +361,9 @@ separately above. Baseline is main at `ef61a4ae` (its client matches `02863ce4`)
 | Player hover: p95 frame / React commit | 16.8 / 0.5 ms | 16.8 / 0.7 ms |
 | Player drag: p95 frame / React commit | 16.8 / 3.0 ms | 16.8 / 3.9 ms |
 | Drag commits per phase | 126 | 126 |
-| Production JS + CSS, gzip sum | 848,285 bytes | 862,006 bytes |
+| Production JS + CSS, gzip sum | 848,285 bytes | 862,083 bytes |
 
-The production asset delta is 41,107 raw / 13,721 gzip bytes. Hover-only
+The production asset delta is 41,106 raw / 13,798 gzip bytes. Hover-only
 regressions still read zero chapters; touch hover and disabled timelines read
 zero track geometry. Trusted mouse/touch drags send zero seeks until release,
 one on release and none on cancellation; TV retains ten-second steps and Down
