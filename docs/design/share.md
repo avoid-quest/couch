@@ -169,6 +169,8 @@ Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
 **Tap to hear** unlocks sound. Leaving releases this listener without ending
 capture or interrupting other listeners. Actual source/output errors keep their
 reason; the SDK handles receiver timing and recovery.
+If enabling sound fails, its reason is shown and Tap to hear remains available
+to retry. A late failure after leaving cannot restore the prompt.
 
 ## Not yet
 
