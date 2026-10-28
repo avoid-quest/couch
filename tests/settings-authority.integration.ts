@@ -91,7 +91,7 @@ test("Live audio settings are the host's and admins': controllers can't read or 
     assert.equal((await f.post(path, "unpaired", { settings: { codec: "pcm", minBufferMs: 400 } })).status, 401);
     assert.equal((await f.post(path, f.controller, { settings: { codec: "pcm", minBufferMs: 400 } })).status, 403);
     assert.equal((await read(f.controller)).status, 403);
-    assert.equal((await read(f.admin).then(response => response.json())).minBufferMs, 200, "a refused change leaves the default");
+    assert.equal((await read(f.admin).then(response => response.json())).minBufferMs, 150, "a refused change leaves the default");
     for (const settings of [{ codec: "pcm", minBufferMs: -1 }, { codec: "pcm", minBufferMs: 5001 }, { codec: "flac", minBufferMs: 250 }, null])
       assert.equal((await f.post(path, f.admin, { settings })).status, 400);
     const saved = await f.post(path, f.admin, { settings: { codec: "pcm", minBufferMs: 400 } });

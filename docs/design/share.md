@@ -161,7 +161,7 @@ the wait, then the selected size or channels and delivered format update
 together. Mono is reported as Mono in the capture format. **Codec** offers
 Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer (ms)** is
-the SDK's `minBufferMs`, initially 200 ms. A larger buffer applies to the running
+the SDK's `minBufferMs`, initially 150 ms. A larger buffer applies to the running
 share at once; a smaller one applies when sharing restarts, which the panel says.
 There are no latency estimates, gap counters or listener polling.
 Settings retain their labelled controls while loading, report errors inline,
