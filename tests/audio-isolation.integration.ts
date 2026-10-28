@@ -116,6 +116,59 @@ test("a player's output delay does not keep already-played audio charged to its 
   assert.ok(frames.length > 180, `a healthy receiver stopped after ${frames.length} chunks despite playing 2 seconds before their timestamps`);
 });
 
+test("Live listeners retain independent buffer limits and output delays on a shared timeline", { timeout: 10_000 }, async t => {
+  const audio = createScheduledAudio({ name: "Buffer accounting", admit: () => true, changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });
+  const server = createServer(), sockets = new WebSocketServer({ server });
+  sockets.on("connection", (socket, request) => audio.accept(socket, request));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const group = audio.group("programme", () => {});
+  const players = [
+    { capacity: 1 << 20, delay: 0 },
+    { capacity: 40 * 1024, delay: 0 },
+    { capacity: 40 * 1024, delay: 30 },
+  ].map(({ capacity, delay }, i) => {
+    const frames: { at: number; data: Buffer }[] = [];
+    const client = new SendspinClient(`receiver-${i}`, `Receiver ${i}`, [Roles.PLAYER], { playerSupport: {
+      supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: capacity, supported_commands: [],
+    } });
+    let most = 0;
+    client.addAudioChunkListener((at, data) => {
+      frames.push({ at, data: Buffer.from(data) });
+      const now = serverNowUs() + delay * 1000;
+      most = Math.max(most, frames.reduce((bytes, frame) => bytes + (frame.at + 5000 > now ? frame.data.length + 13 : 0), 0));
+    });
+    return { client, frames, capacity, delay, get most() { return most; } };
+  });
+  let timer: ReturnType<typeof setInterval> | undefined;
+  t.after(async () => { clearInterval(timer); group.close(); audio.close(); await Promise.all(players.map(player => player.client.disconnect())); sockets.close(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  for (const [i, player] of players.entries()) {
+    await player.client.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}`);
+    await player.client.sendPlayerState({ min_buffer_ms: 200, static_delay_ms: player.delay });
+    await until(() => audio.delay(`receiver-${i}`) === player.delay);
+  }
+  audio.registerSource("capture");
+  group.members(players.map((_, i) => ({ deviceId: `receiver-${i}`, level: 100 })));
+  group.send({ type: "load", playbackId: "programme", source: "", liveSourceId: "capture", captureIntent: "live" });
+  let sequence = 0;
+  const origin = serverNowUs(), pcm = Float32Array.from({ length: 960 }, (_, i) => i % 2 ? -.5 : .25);
+  timer = setInterval(() => {
+    while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
+      assert.equal(audio.writeSource("capture", { generation: "capture", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10000,
+        sampleRate: 48000, channels: 2, pcm }), true);
+      sequence++;
+    }
+  }, 5);
+  await until(() => players.every(player => player.frames.length > 240));
+  const original = new Map(players[0]!.frames.map(frame => [frame.at, frame.data]));
+  for (const player of players) {
+    assert.ok(player.most <= player.capacity, `${player.most} held bytes exceeded ${player.capacity}`);
+    for (const [i, frame] of player.frames.entries()) {
+      assert.deepEqual(frame.data, original.get(frame.at), "every listener receives the same samples and timestamps");
+      if (i) assert.equal(frame.at - player.frames[i - 1]!.at, 5000, "buffer pressure must not skip playable chunks");
+    }
+  }
+});
+
 test("public SDK session dispatch isolates a malformed plaintext peer without patches or changing healthy playback", { timeout: 15_000 }, async t => {
   const errors: string[] = [], frames: number[] = [];
   const audio = createScheduledAudio({ name: "Isolation", admit: id => ["healthy", "bad"].includes(id), changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", sourceFailed: (_id, error) => errors.push(error) });

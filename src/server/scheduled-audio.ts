@@ -44,8 +44,11 @@ const wireFormat = (wire: Wire) => ({ codec: wire === "opus" ? AudioCodec.OPUS :
 // Outputs ask for Opus first (#644 Fan-out). Firefox's player offers only FLAC and PCM, so PCM is the second wire.
 const wireOf = (session: SendspinSession): Wire | undefined => {
   const current = session.getStreamFormat();
-  const formats = [{ codec: current.codec, sample_rate: current.sampleRate, channels: current.channels, bit_depth: current.bitDepth }, ...session.getPlayerSupportedFormats()];
-  for (const format of formats) {
+  if (current.sampleRate === 48_000 && current.channels === 2) {
+    if (current.codec === AudioCodec.OPUS) return "opus";
+    if (current.codec === AudioCodec.PCM && current.bitDepth === 16) return "pcm";
+  }
+  for (const format of session.getPlayerSupportedFormats()) {
     if (format.sample_rate !== 48_000 || format.channels !== 2) continue;
     if (format.codec === AudioCodec.OPUS) return "opus";
     if (format.codec === AudioCodec.PCM && format.bit_depth === 16) return "pcm";
@@ -331,9 +334,9 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         }
         // Output delay advances a player's playback, so its held bytes and missed deadlines
         // use that compensated time (Sendspin Player Buffer Accounting, including 13-byte headers).
-        each(session => {
-          const from = current.cursors.get(session);
-          if (wireOf(session) !== wire || from === undefined) return;
+        // Cursors already contain only this run's active members.
+        for (const [session, from] of current.cursors) {
+          if (wireOf(session) !== wire) continue;
           const capacity = session.getPlayerBufferCapacity() || 1024 * 1024, socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
           let held = 0;
@@ -345,7 +348,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
             held += chunk.data.length + 13;
             current.cursors.set(session, chunk.at);
           }
-        });
+        }
         if (current.pipes[wire]?.isPaused() && (!list.length || list.at(-1)!.offset - list[0]!.offset < aheadUs / 2)) current.pipes[wire]!.resume();
       }
       // Waiting for the source: the speakers have played everything they were sent.
