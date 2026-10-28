@@ -47,23 +47,6 @@ test("turning network sharing off closes an established paired audio session", {
   await until(() => !player.isConnected);
 });
 
-test("identity rebinding retires the old control connection and its publication", { timeout: 10_000 }, async t => {
-  const f = await liveFixture();
-  const identity = f.identities[0]!;
-  const audio = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
-  audio.on("error", () => {});
-  t.after(async () => { audio.terminate(); await f.close(); });
-  await once(audio, "open");
-  await f.publish("old-publication", "microphone");
-  f.identities[0]!.id = Identity.generate().peerId;
-  const replacement = await f.connect(0);
-  await until(() => replacement.state.devices?.some(device => device.id === replacement.id) === true);
-  assert.equal((await f.api("/api/devices/me").then(response => response.json())).device.id, replacement.id);
-  await until(() => f.publisher.socket.readyState === WebSocket.CLOSED);
-  await until(() => audio.readyState === WebSocket.CLOSED);
-  assert.equal(replacement.state.liveSources?.some(source => source.id === "old-publication"), false);
-});
-
 test("one paired device cannot accumulate unlimited audio connections", { timeout: 10_000 }, async t => {
   const f = await liveFixture(), identity = f.identities[1]!, sockets: WebSocket[] = [];
   t.after(async () => { for (const socket of sockets) socket.terminate(); await f.close(); });

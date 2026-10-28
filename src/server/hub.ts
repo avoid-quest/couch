@@ -1469,10 +1469,8 @@ export async function createHub(options: HubOptions) {
       else playback.session.command({ type: "enqueue", entry }, permitted, playedBy);
     },
   });
-  const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
-    if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
-    invalidate("devices");
-  }, onRevoke: async (id, name) => {
+  // Ends everything a Device's token authorized: its connections, audio, publications and outputs.
+  const retireDevice = (id: string, name?: string) => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
     for (const playback of all()) {
@@ -1486,6 +1484,12 @@ export async function createHub(options: HubOptions) {
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
     }
+  };
+  const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
+    if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
+    invalidate("devices");
+  }, onRevoke: async (id, name) => {
+    retireDevice(id, name);
     await localRelay.revoke();
   } });
   if (systemAudio) soundRouting = createSoundRouting({

@@ -20,9 +20,8 @@ the standard `SENTINEL_RESOLVED` PSK, to each public `SendspinSession`.
 A browser's Device ID is the SDK client ID from
 `loadSendspinClientIdentity(storage)`; the control connection and
 `SendspinPlayer` share that identity and storage. An existing Couch token rebinds
-a changed ID through `identify`, keeping pairing and permissions. Rebinding
-retires the old ID's connections, publications and output assignments.
-Pairing the same ID again also retires work authorized with its replaced token.
+a changed ID through `identify`, keeping pairing and permissions. Pairing the
+same ID again retires work authorized with its replaced token.
 
 An authenticated `POST /api/audio/session` sets an HttpOnly, SameSite Strict
 cookie for `/sendspin` (Secure on HTTPS), so the SDK's URL carries no token.
@@ -31,23 +30,25 @@ base path. The upgrade binds the authenticated Device to `client/init.client_id`
 checks host, origin and remote-control permission, and revocation closes the
 authenticated transport even during the Noise handshake. A peer whose messages
 throw closes alone; the shared worker continues. Turning off network sharing
-also closes paired audio transports on the primary listener.
-Each device may keep at most eight control connections and eight audio connections,
-including pending audio handshakes, to bound duplicate tabs and reconnects.
-An audio handshake must finish identification within ten seconds.
+also closes paired audio transports. Each device may keep at most eight control
+and eight audio connections, and an audio handshake must identify within ten
+seconds.
 
 ## Pipeline
 
 | Adapter | Input → output | Why Couch owns it |
 |---|---|---|
-| Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture: the Mac native helper for **Native** inputs, an isolated hidden capture page for other input IDs. |
+| Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture in an isolated hidden capture page. |
 | Upload | f32 frames → validated `CaptureAudioPacket` in its source epoch | Node 0.6.2 has `sendSourceAudioChunk` but no public source stream start/end to declare a format. Publication tokens, epochs and helper leases retire stale work. |
-| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample`, stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 160 kbps stereo VBR, 5 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 5 ms chunks, because each step holds audio until it is full. Core sends each chunk to listeners as it arrives. Gaps up to 40 ms are filled with silence so sample positions hold. |
+| Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample` (64-tap filter), stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 160 kbps stereo VBR, 5 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 5 ms chunks, because each step holds audio until it is full. Core sends each chunk to listeners as it arrives. Gaps up to 40 ms are filled with silence so sample positions hold. |
 | Capture-time mapping | Encoded offset + generation + measured capture blocks → source time in Core microseconds | The Node SDK's default timestamp is send time; it cannot recover capture time. A short block lookup, including Opus pre-skip, keeps long shares on the input's clock. |
 | Group scheduling | Source time + members + player timing → presentation timestamps per session | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, group, metadata and volume APIs. The SDK session does not choose an application timeline. |
 
 Core's audio worker (`build/audio-worker.mjs`) runs encoding and Sendspin
 sessions off Core's main thread.
+An upload rejected by ingest or silent for five seconds fails its source:
+encoding stops, its listeners' streams end, and the error stays visible until
+sharing ends or restarts. Other sources continue.
 
 ## Timing
 
@@ -57,12 +58,11 @@ at once when a member declares more, which moves later timestamps forward by
 the difference. It never shrinks while the input keeps running, so listeners never
 jump backwards or lose queued audio; a smaller buffer applies when sharing or the
 input restarts (a new capture buffer restarts the input).
-A listener leaving keeps the lead. There is no audience-size limit or slow-listener
+A listener leaving keeps the lead. There is no admission limit or slow-listener
 eviction: a listener whose connection stops draining (a frozen tab, a dozing
 radio) gets nothing more until it drains, then resumes at audio that can still play.
-Control input pauses too while the send queue exceeds 64 KiB. Already received
-requests wait in order (at most 128 frames / 256 KiB) so recovery preserves the
-Noise sequence; exceeding that pending input limit closes only that connection.
+Its incoming requests wait in order meanwhile (at most 128 frames / 256 KiB, or
+that connection closes).
 
 **Playback buffer (ms)** is one Couch-wide setting, 200 ms initially, set in the
 Share dialog when Live is chosen and in the running share's panel. Core sends it
@@ -107,6 +107,11 @@ reloading the page recovered it. The frozen listener received 6 s of stale audio
 from transport buffers on waking, against 60 s before Core stopped queueing for
 it.
 
+Resampling 44.1 kHz inputs with a 64-tap filter instead of FFmpeg's default 32
+puts images 92 dB down instead of 25 dB, with ripple under 0.001 dB, for 0.35 ms
+more delay; 48 kHz inputs are not resampled. PCM is not dithered: on quiet piano
+dither scored worse.
+
 Opus runs at 160 kbps instead of FFmpeg's implicit 96. On ViSQOL v3.1.0 (audio
 mode, nine music excerpts with transients, wide stereo and quiet piano), mean
 scores were:
@@ -141,12 +146,29 @@ directory:
 
 ```sh
 bun scripts/core.ts
-bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/audio-authorization.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts --target=node --root=tests --outdir="$(mktemp -d)"
+bun build tests/sendspin-sdk.integration.ts tests/capture-continuity.integration.ts tests/audio-isolation.integration.ts tests/audio-authorization.integration.ts tests/scheduled-capture.integration.ts tests/live-audience.integration.ts tests/live-delivery.integration.ts tests/live-lifecycle.integration.ts --target=node --outdir="$(mktemp -d)"
 COUCH_TEST_FFMPEG=/path/to/ffmpeg node --test <that directory>/*.js
 ```
 
 They use temporary databases, loopback ports and synthetic stereo signals with
-opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `audio-authorization.integration.ts` covers cookie and upgrade boundaries, revocation, identity changes, connection limits and handshake deadlines. `sendspin-sdk.integration.ts` drives the stock
+opposite channel polarities. `audio-isolation.integration.ts` covers a malformed peer and a listener that stops reading. `audio-authorization.integration.ts` covers cookie and upgrade boundaries, revocation, re-pairing, connection limits and handshake deadlines. `sendspin-sdk.integration.ts` drives the stock
 browser SDK core through Noise/AES-GCM, token binding, decoding, buffer changes,
 reconnect, a concurrent Opus receiver and Leave. Capture checks cover input
 formats, source generations, timestamp mapping and Opus pre-skip.
+
+`live-lifecycle.integration.ts` covers input changes during playback, same-identity
+takeover, PCM ↔ Opus switches, Stop during Join, buffer changes across restarts,
+concurrent shares, publisher crash, rejected and stalled uploads, and Core restart
+(which ends runtime-only shares and Joins; the SDK reconnects).
+
+`tests/live-audio.bench.ts` measures Core's capture-to-send delay and worker CPU
+with 1, 10 and 50 listeners per codec:
+
+```sh
+bun build tests/live-audio.bench.ts --target=node --outfile=/tmp/couch-live-bench.mjs
+COUCH_TEST_FFMPEG=/path/to/ffmpeg node /tmp/couch-live-bench.mjs
+```
+
+On 28 October (shared host, `nice -n 19`), 50 listeners used 260 ms of worker CPU
+per second for PCM and 272 ms for Opus, with delay p50 about 11 and 19 ms. Socket
+writes inside the SDK are the largest cost.
