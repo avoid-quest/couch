@@ -38,6 +38,38 @@ test("capture sends on arrival with the maximum playback buffer and output delay
   assert.ok(frames.length > 200, "encoded capture is sent immediately even beyond media's eight-second horizon");
 });
 
+test("a player's output delay does not keep already-played audio charged to its buffer", { timeout: 10_000 }, async t => {
+  const frames: number[] = [];
+  const audio = createScheduledAudio({ name: "Delayed output", admit: () => true, changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });
+  const server = createServer(), sockets = new WebSocketServer({ server });
+  sockets.on("connection", (socket, request) => audio.accept(socket, request));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const player = new SendspinClient("receiver", "Receiver", [Roles.PLAYER], { playerSupport: {
+    supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 64 * 1024, supported_commands: [],
+  } });
+  player.addAudioChunkListener(timestamp => frames.push(timestamp));
+  const group = audio.group("programme", () => {});
+  let timer: ReturnType<typeof setInterval> | undefined;
+  t.after(async () => { clearInterval(timer); group.close(); audio.close(); await player.disconnect(); sockets.close(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  await player.connect(`ws://127.0.0.1:${(server.address() as { port: number }).port}`);
+  await player.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 2000 });
+  await until(() => audio.delay("receiver") === 2000);
+  audio.registerSource("capture");
+  group.members([{ deviceId: "receiver", level: 100 }]);
+  group.send({ type: "load", playbackId: "programme", source: "", liveSourceId: "capture", captureIntent: "live" });
+  let sequence = 0;
+  const origin = serverNowUs();
+  timer = setInterval(() => {
+    while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
+      audio.writeSource("capture", { generation: "capture", sequence, samplePosition: sequence * 480, capturedAtUs: origin + sequence * 10000,
+        sampleRate: 48000, channels: 2, pcm: new Float32Array(960) });
+      sequence++;
+    }
+  }, 5);
+  await until(() => sequence >= 120);
+  assert.ok(frames.length > 180, `a healthy receiver stopped after ${frames.length} chunks despite playing 2 seconds before their timestamps`);
+});
+
 test("public SDK session dispatch isolates a malformed plaintext peer without patches or changing healthy playback", { timeout: 15_000 }, async t => {
   const errors: string[] = [], frames: number[] = [];
   const audio = createScheduledAudio({ name: "Isolation", admit: id => ["healthy", "bad"].includes(id), changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", sourceFailed: (_id, error) => errors.push(error) });
@@ -74,7 +106,7 @@ test("public SDK session dispatch isolates a malformed plaintext peer without pa
   assert.equal(healthy.isConnected, true);
 });
 
-test("a Live listener that stops reading holds no backlog in Core and resumes at audio that can still play", { timeout: 20_000 }, async t => {
+for (const delay of [0, 2000]) test(`a stalled Live listener resumes at playable audio with ${delay} ms output delay`, { timeout: 20_000 }, async t => {
   const frames: number[] = [], stalledFrames: number[] = [];
   const audio = createScheduledAudio({ name: "Stall", admit: id => ["healthy", "stalled"].includes(id), changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", sourceFailed() {} });
   const server = createServer(), sockets = new WebSocketServer({ server });
@@ -89,7 +121,8 @@ test("a Live listener that stops reading holds no backlog in Core and resumes at
   };
   const healthy = player("healthy", frames), stalled = player("stalled", stalledFrames);
   await healthy.connect(url); await stalled.connect(url);
-  await healthy.sendPlayerState({ min_buffer_ms: 150 }); await stalled.sendPlayerState({ min_buffer_ms: 150 });
+  await healthy.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: delay }); await stalled.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: delay });
+  await until(() => audio.delay("stalled") === delay);
   const stalledSocket = served.at(-1)!;
   audio.registerSource("capture");
   const group = audio.group("programme", () => {});
@@ -115,7 +148,7 @@ test("a Live listener that stops reading holds no backlog in Core and resumes at
   await sleep(4000);
   assert.ok(frames.length > before + 500, "the healthy listener keeps receiving while another stalls");
   assert.ok(writes < 10, `Core stops queueing audio for the stalled listener (${writes} writes)`);
-  const resumed = serverNowUs();
+  const resumed = serverNowUs() + delay * 1000;
   stalledFrames.length = 0;
   backlog = false; socket.resume();
   await until(() => stalledFrames.some(at => at > resumed));

@@ -331,15 +331,17 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           sent.push({ at, end: at + chunk.duration, data: chunk.data });
           current.released = Math.max(current.released, chunk.offset + chunk.duration);
         }
-        // Each speaker gets what fits its buffer_capacity: the bytes of chunks it holds that have not played,
-        // with their 13-byte headers (Sendspin Player Buffer Accounting).
+        // Output delay advances a player's playback, so its held bytes and missed deadlines
+        // use that compensated time (Sendspin Player Buffer Accounting, including 13-byte headers).
         each(session => {
           const from = current.cursors.get(session);
           if (wireOf(session) !== wire || from === undefined) return;
           const capacity = session.getPlayerBufferCapacity() || 1024 * 1024, socket = socketOf.get(session);
+          const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
           let held = 0;
           for (const chunk of sent) {
-            if (chunk.at <= from) { held += chunk.data.length + 13; continue; }
+            if (chunk.at <= from) { if (chunk.end - delay > now) held += chunk.data.length + 13; continue; }
+            if (chunk.at - delay <= now) continue;
             if (held + chunk.data.length + 13 > capacity || (socket?.bufferedAmount ?? 0) > backlogBytes) break;
             session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
             held += chunk.data.length + 13;
