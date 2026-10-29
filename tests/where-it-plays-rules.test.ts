@@ -304,7 +304,7 @@ describe("live inputs", () => {
       expect(row(state, "tv").sync).toBeUndefined();
       expect(counts(rows(state)).some(item => item.filter === "sync")).toBe(false);
       state.outputs![0]!.delayActive = true;
-      expect(row(state, "tv").sync).toEqual({ delay: 0, lip: false });
+      expect(row(state, "tv").sync).toEqual({ delay: 0 });
       expect(counts(rows(state)).find(item => item.filter === "sync")?.count).toBe(1);
     }
   });

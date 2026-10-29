@@ -225,9 +225,9 @@ function tvRow({ row, connected, run, playing = false }: { row: Row; connected: 
   </li>;
 }
 
-/** A TV row's Picture and Sound, which its OK opens, then Move here while it isn't in. Its sound is its Sound and fader's. */
+/** A TV row's Picture and Sound, which its OK opens, then Move here when permitted. Its sound is its Sound and fader's. */
 function channelItems({ row, connected, run }: { row: Row; connected: boolean; run: Props["run"] }) {
-  const { device, output, picture, sound, move } = row;
+  const { device, picture, sound } = row;
   return <>
     <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!connected || !picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
     <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!connected || !sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
