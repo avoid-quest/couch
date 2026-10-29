@@ -169,6 +169,8 @@ export type ServerMessage =
   | { type: "livePeers"; sourceId: string; peers: LivePeer[]; upload: boolean; uploadId?: string }
   | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
+  // Core's Unix time in milliseconds, once per connection: elapsed Live times count on it.
+  | { type: "time"; now: number }
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
   | { type: "text"; requestId: string; token: string; text: string; submit: boolean }

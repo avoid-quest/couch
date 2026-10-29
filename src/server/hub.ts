@@ -2008,6 +2008,7 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        send(socket, JSON.stringify({ type: "time", now: Date.now() } satisfies ServerMessage));
         send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
         store.saveDeviceTv(deviceOf(socket), socket.data.tv);
         log(`device online ${nameOf(deviceOf(socket))}`);

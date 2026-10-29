@@ -11,6 +11,7 @@ import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceId
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
+import { setCoreTime } from "../core-clock";
 import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
@@ -259,6 +260,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (previous?.player.playbackId !== message.playbackId) return;
           observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
+        } else if (message.type === "time") {
+          if (typeof message.now !== "number" || !Number.isFinite(message.now)) { connection.close(4002, "Invalid response"); return; }
+          setCoreTime(message.now);
         } else if (message.type === "updates" && couchApp?.update) {
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
           void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));

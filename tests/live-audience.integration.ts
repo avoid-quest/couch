@@ -13,7 +13,10 @@ test("host details reach Couch and the stock browser SDK through edits, reconnec
   const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
   const identity = f.identities[1]!;
   identity.id = loadSendspinClientIdentity(storage).clientId;
+  const connecting = Date.now();
   const receiver = await f.connect(1), host = await f.connect(-1);
+  const time = receiver.messages.find(message => message.type === "time");
+  assert.ok(time && time.now >= connecting && time.now <= Date.now(), "Core sends its clock, which elapsed Live times count on");
   let metadata: ServerStateMetadata | undefined, chunks = 0, starts = 0, clears = 0;
   const player = new SendspinCore({ suite: "aesgcm", storage, baseUrl: `${f.hub.origin}/api/audio/${identity.token}`, codecs: ["pcm"], minBufferMs: 150,
     onStateChange: state => { metadata = state.serverState.metadata; } });

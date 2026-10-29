@@ -31,6 +31,7 @@ const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 const { useItemMenu } = await import("../src/client/components/RowMenu");
 const { LiveClock } = await import("../src/client/components/LiveClock");
+const { setCoreTime } = await import("../src/client/core-clock");
 
 function fixture(): ClientSessionState {
   const outputs = [{ deviceId: here, picture: false, sound: true }];
@@ -195,7 +196,12 @@ test("Live clocks start at publication time, stay cheap, and dispose their timer
     expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
     expect(renderToStaticMarkup(<LiveClock startedAt={10_006_000} />)).toContain("Live · 0:00");
     expect(renderToStaticMarkup(<LiveClock />)).not.toContain("NaN");
-  } finally { now.mockRestore(); interval.mockRestore(); clear.mockRestore(); effects.length = 0; }
+    // A device whose own clock is an hour slow still counts from Core's publication time.
+    now.mockReturnValue(10_005_000 - 3_600_000); setCoreTime(10_005_000);
+    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
+    now.mockReturnValue(10_005_000 - 3_600_000 + 2_000);
+    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:20");
+  } finally { now.mockRestore(); setCoreTime(Date.now()); interval.mockRestore(); clear.mockRestore(); effects.length = 0; }
 });
 
 test("a receiver failure is actionable and disconnected audience controls cannot send", () => {

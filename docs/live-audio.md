@@ -59,7 +59,9 @@ alone can patch those details; bounded single-line strings are trimmed, and an
 empty field clears it. These are runtime publication details, retained across
 capture generations and listener reconnects, and discarded when sharing ends.
 Couch state projects the title/line into discovery and playback presentation.
-The UI's isolated one-second clock measures elapsed time from `startedAt`.
+The UI's isolated one-second clock measures elapsed time from `startedAt` on
+Core's clock: Core sends its time when each connection opens, and the client
+keeps the offset, so a device with a wrong clock still shows the right time.
 
 Core also sends the same details with the Node SDK's public `sendMetadata()` to
 the Source's Sendspin group members, on join, edits and reconnection. The title
