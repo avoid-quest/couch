@@ -157,14 +157,15 @@ The fader is the device's one volume; 0 takes its sound out.
 
 "Sync … ms earlier" (0–500 ms) plays a late speaker sooner (Sendspin's static
 delay). It applies while the device receives scheduled sound, including a
-single listener of relaxed timestamped capture or AirPlay. It reads **Lip sync** while another device shows the picture. A row
-shows its line only while it isn't 0; **Sync…** (or **Lip sync…**) in "…"
+single listener of relaxed timestamped capture or AirPlay, and lines its sound
+up with the picture too where another device shows one. A row shows its line
+only while it isn't 0; **Sync…** in "…"
 reveals it and moves focus to its slider; Back or Esc there, or closing the
 panel, hides a line still at 0.
 
 ## The "…" menu
 
-It holds only **Sync…** (or **Lip sync…**), so a row shows "…" only while Sync
+It holds only **Sync…**, so a row shows "…" only while Sync
 applies. A row has no Mute: its Sound and fader are its sound, the Volume mutes.
 
 ## Volume

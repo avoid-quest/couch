@@ -615,7 +615,7 @@ test("Move here goes direct, and sync adjustment keeps its value but applies onl
     await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delayActive === true);
     assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delay, 80);
     const synced = Mixer({ state: f.publisher.state, connected: true, run: async () => true });
-    assert.ok(control(synced, "Receiver sync") ?? control(synced, "Receiver lip sync"));
+    assert.ok(control(synced, "Receiver sync"));
   } finally { await f.close(); }
 });
 
@@ -644,7 +644,7 @@ test("a saved sync adjustment shows on a Direct output after Core restarts, with
     assert.equal(receiver.load()!.follow, undefined);
     // Sync shows only while the device plays in sync with others.
     const alone = Mixer({ state: receiver.state, connected: true, run: async () => true });
-    assert.equal(control(alone, "Receiver sync") ?? control(alone, "Receiver lip sync"), undefined, "no operative control while it cannot apply");
+    assert.equal(control(alone, "Receiver sync"), undefined, "no operative control while it cannot apply");
   } finally { await f.close(); }
 });
 

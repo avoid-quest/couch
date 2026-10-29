@@ -368,7 +368,7 @@ window.runTvNavigationRegression = async () => {
       const first = () => rows()[0]!;
       first().focus(); await key("Enter");
       await until(() => !!item("Sound"));
-      const sync = item("Sync…") ?? item("Lip sync…");
+      const sync = item("Sync…");
       assert(sync, "No Sync… while the sound plays on both devices");
       sync!.click();
       const line = () => first().closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");

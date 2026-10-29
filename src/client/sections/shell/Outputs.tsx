@@ -166,7 +166,6 @@ const deviceName = (row: Row, playing: boolean) => {
   return <span data-output-name className="flex items-baseline gap-2 text-base [overflow-wrap:anywhere]">{row.device.name}{level && <Level moving={level === "moving"} className="text-xs" />}</span>;
 };
 const statusLine = (row: Row) => row.status && <span id={`where-it-plays-${row.device.id}`} data-output-status className={cn("text-sm [overflow-wrap:anywhere]", row.failed ? "text-destructive" : "text-muted-foreground")}>{row.status}</span>;
-const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
 
 /**
  * A device's row, the same at every scale: its name and any exception, its Picture and Sound toggles, its fader and
@@ -190,10 +189,10 @@ function deviceRow({ row, connected, run, fader = true, playing = false }: { row
       <span className="w-[3ch] shrink-0 text-right tabular-nums">{Math.round(level.value)}</span>
     </div>}
     {!output && move && <Button variant="ghost" aria-label={`Move here: ${device.name}`} title={move.reason} disabled={!connected || !move.enabled} onClick={() => void run({ type: "solo", deviceId: device.id })} className="col-start-4 row-start-1 -mr-2.5 justify-self-end sm:mr-0 sm:justify-self-start">Move here</Button>}
-    {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} disabled={!connected} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+    {row.sync && <Delay id={device.id} label={`${device.name} sync`} delay={row.sync.delay} disabled={!connected} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
     {output && row.sync && <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-4 row-start-1 -mr-2.5 size-11 justify-self-end sm:col-start-5" aria-label={`Options for ${device.name}`} title="Options" disabled={!connected}><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <Options id={device.id} sync={`${syncLabel(row)}…`} />
+      <Options id={device.id} sync="Sync…" />
     </DropdownMenu>}
   </li>;
 }
@@ -220,9 +219,9 @@ function tvRow({ row, connected, run, playing = false }: { row: Row; connected: 
         {/* OK opens its options, as a tile's held OK does; the "…" says so without being a stop of its own. */}
         <Ellipsis aria-hidden="true" className="size-5 text-muted-foreground" />
       </div></DropdownMenuTrigger>
-      <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{channelItems({ row, connected, run })}</Options>
+      <Options id={device.id} sync={row.sync && "Sync…"}>{channelItems({ row, connected, run })}</Options>
     </DropdownMenu>
-    {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} disabled={!connected} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+    {row.sync && <Delay id={device.id} label={`${device.name} sync`} delay={row.sync.delay} disabled={!connected} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
   </li>;
 }
 
@@ -276,10 +275,10 @@ export function PlaysOnLine({ at, children }: { at: ReturnType<typeof playsOn>; 
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:
-// Sendspin's static delay, 0–500 ms. "Lip sync" while another device shows the picture. It applies only while the
+// Sendspin's static delay, 0–500 ms, to the picture too where another device shows one. It applies only while the
 // device plays in sync, and few people touch it, so a row shows it only while it isn't 0, or once "…" revealed it.
 // Its slider is horizontal and outside a Volume, so on the TV Left/Right move it at once, as a row's level.
-function Delay({ id, label, word, delay, disabled, onCommit }: { id: string; label: string; word: string; delay: number; disabled: boolean; onCommit: (delay: number) => void }) {
+function Delay({ id, label, delay, disabled, onCommit }: { id: string; label: string; delay: number; disabled: boolean; onCommit: (delay: number) => void }) {
   const revealed = useContext(RevealedSync);
   const [draft, setDraft] = useState<number | null>(null);
   useEffect(() => { if (disabled) setDraft(null); }, [disabled]);
@@ -303,7 +302,7 @@ function Delay({ id, label, word, delay, disabled, onCommit }: { id: string; lab
   }, [hides, id]);
   if (!delay && !shown) return null;
   return <div data-sync-line={id} className="col-span-full flex min-h-11 min-w-0 items-center gap-3 pb-1">
-    <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{word} {value} ms earlier</span>
+    <span className="shrink-0 text-sm text-muted-foreground tabular-nums">Sync {value} ms earlier</span>
     <Slider aria-label={label} aria-valuetext={`${value} milliseconds earlier`} value={[value]} min={0} max={500} step={10} disabled={disabled} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => { if (!disabled) onCommit(next!); }} onBlur={() => setDraft(null)} />
   </div>;
 }

@@ -52,8 +52,8 @@ export type Row = {
   level: Control & { value: number; sound: boolean };
   /** Move here (Core's solo): it alone keeps the playback. Absent where it would change nothing. */
   move?: Control;
-  /** Sync … ms earlier, only while its sound plays in sync with other devices; Lip sync while another device shows the picture. */
-  sync?: { delay: number; lip: boolean };
+  /** Sync … ms earlier, only while its sound plays in sync with other devices. */
+  sync?: { delay: number };
 };
 export type Picker = {
   /** A shared source waiting for receivers: "Choose where {title} plays". */
@@ -123,7 +123,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
       picture, sound,
       level: { value: soundOn ? device.volume : 0, sound: soundOn, ...control(soundReason) },
       move: alone ? undefined : control(lock || sharing || (!audio && !video || privateOutput && !mine || privately.some(item => item.deviceId !== device.id)) && "Private"),
-      sync: audio && current?.sound && current.delayActive ? { delay: current.delay ?? 0, lip: !audioOnly && outputs.some(item => item.deviceId !== device.id && item.picture) } : undefined,
+      sync: audio && current?.sound && current.delayActive ? { delay: current.delay ?? 0 } : undefined,
     };
   });
   return {
