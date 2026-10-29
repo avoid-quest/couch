@@ -61,7 +61,7 @@ export function LiveSettingsStatus({ live }: { live: ReturnType<typeof useLiveAu
   return <p role="status" className="text-meta text-muted-foreground empty:hidden">{!connected ? "Reconnect to change audio settings." : !query.data ? "Loading audio settings…" : save.isPending ? "Saving audio settings…" : ""}</p>;
 }
 
-/** Each listener's Sendspin minimum buffer, saved on blur or Enter. Invalid edits stay visibly unsaved. */
+/** The floor for every listener's Sendspin buffer. Invalid edits stay visibly unsaved. */
 export function PlaybackBufferInput({ id, live, className, disabled }: { id: string; live: ReturnType<typeof useLiveAudioSettings>; className?: string; disabled?: boolean }) {
   const { settings, save } = live;
   const [draft, setDraft] = useState<string | null>(null);
@@ -102,7 +102,7 @@ export function CaptureChannelsSelect({ id, channels, restarting, ...props }: Ca
 
 /** Public Sendspin options for the running share; playback timing/recovery stays upstream. */
 export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharing; onCaptureChange?: () => void }) {
-  const { liveSharing, setError } = useSessionGate();
+  const { liveSharing, setError, state } = useSessionGate();
   const live = useLiveAudioSettings();
   const { settings, save } = live;
   const nativeBuffer = useNativeInputBufferPreference();
@@ -110,6 +110,9 @@ export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharin
   const [restarting, setRestarting] = useState(false);
   const [opened, setOpened] = useState<"capture" | "channels" | "codec" | null>(null);
   const native = sharing.captureFormat?.native;
+  // Only the playback carrying the shared lead reports it; other playbacks of this source may come first.
+  const lead = state?.playbacks?.find(playback => playback.liveSourceId === sharing.source.id && playback.liveLead)?.liveLead;
+  const leadDevice = state?.devices?.find(device => device.id === lead?.deviceId);
   return <div className="grid gap-2 border-t pt-2">
     {native && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <label htmlFor="live-capture-buffer">Capture buffer</label>
@@ -137,11 +140,12 @@ export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharin
       </Select>
     </div>
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <label htmlFor="live-buffer">Playback buffer (ms)</label>
+      <label htmlFor="live-buffer">Playback buffer floor (ms)</label>
       <PlaybackBufferInput id="live-buffer" live={live} className="ml-auto" />
     </div>
     <LiveSettingsStatus live={live} />
+    {lead?.deviceId && <p className="text-meta text-muted-foreground [overflow-wrap:anywhere]">Shared lead: {lead.ms} ms · set by {leadDevice?.name ?? "a previous listener"}</p>}
     {/* Core keeps the largest lead a running share has used, so listeners never jump backwards mid-stream. */}
-    <p className="text-meta text-muted-foreground">A larger buffer applies now. A smaller one applies when sharing restarts.</p>
+    <p className="text-meta text-muted-foreground">0 removes the floor. To reduce the shared lead, restart sharing.</p>
   </div>;
 }

@@ -5,16 +5,18 @@ import type { LiveSharing } from "../src/client/session/live";
 import type { Viewer } from "../src/client/sections/share/share";
 import type { LiveAudioSettings } from "../src/shared/audio-settings";
 import { spawnSync } from "node:child_process";
+import type { SessionState } from "../src/shared/protocol";
 
 // Product components with only their session, storage and request boundaries replaced.
 let connected = true;
+let state: Pick<SessionState, "playbacks" | "devices"> | undefined;
 const run = mock(async (_action: unknown) => true);
 const restart = mock(async (_action: unknown) => {});
 const setError = mock((_error: string) => {});
 const preference = { save: mock((_value: string) => {}), error: undefined as string | undefined };
 const channelPreference = { save: mock((_value: string) => {}), error: undefined as string | undefined };
 mock.module("../src/client/session/session-context", () => ({
-  useSessionGate: () => ({ connected, run, credentials: { origin: "http://couch", token: "test" }, liveSharing: { setCaptureInput: restart }, setError }),
+  useSessionGate: () => ({ connected, state, run, credentials: { origin: "http://couch", token: "test" }, liveSharing: { setCaptureInput: restart }, setError }),
   errorText: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
 mock.module("../src/client/audio-settings", () => ({ useNativeInputBufferPreference: () => preference, useNativeInputChannelPreference: () => channelPreference }));
@@ -29,7 +31,7 @@ mock.module("@tanstack/react-query", () => ({ ...realQuery, useQuery: () => quer
 const { CaptureBufferSelect, CaptureChannelsSelect, LiveListeners, LiveSettings, LiveSettingsStatus, PlaybackBufferInput } = await import("../src/client/sections/share/LiveOperator");
 const { LiveMetadataFields } = await import("../src/client/sections/share/LiveMetadata");
 const live = () => ({ settings: query.data, query, save, connected }) as unknown as Parameters<typeof PlaybackBufferInput>[0]["live"];
-const sharing = { captureFormat: { sampleRate: 48000, channels: 2, native: { requestedFrames: 128, reportedFrames: 128, inputChannels: 4, channelMap: [0, 1] } } } as LiveSharing;
+const sharing = { source: { id: "concert" }, captureFormat: { sampleRate: 48000, channels: 2, native: { requestedFrames: 128, reportedFrames: 128, inputChannels: 4, channelMap: [0, 1] } } } as LiveSharing;
 
 type Props = { children?: ReactNode; id?: string; disabled?: boolean; value?: unknown; onBlur?: (event: unknown) => void; onKeyDown?: (event: unknown) => void; onValueChange?: (value: string) => void; onSelect?: () => void; onCloseAutoFocus?: (event: unknown) => void; onClick?: () => void; [key: string]: unknown };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
@@ -40,8 +42,24 @@ function read<T>(render: () => T): T {
 }
 
 beforeEach(() => {
+  state = undefined;
   connected = true; query.data = { codec: "auto", minBufferMs: 200 }; query.error = null; query.isFetching = false; save.isPending = false; save.error = null; preference.error = undefined; channelPreference.error = undefined;
   run.mockClear(); restart.mockReset(); restart.mockImplementation(async () => {}); setError.mockClear(); preference.save.mockClear(); channelPreference.save.mockClear(); save.mutate.mockClear(); query.refetch.mockClear();
+});
+
+test("the host sees Core's retained shared lead and its Receiver even after that Receiver leaves, whichever playback carries it", () => {
+  state = {
+    playbacks: [{ id: "live", title: "Concert", status: "playing", outputs: [], liveSourceId: "concert", liveLead: { ms: 240, deviceId: "phone" } }],
+    devices: [{ id: "phone", name: "Phone", online: false, volume: 100, muted: false }],
+  };
+  expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain("Shared lead: 240 ms · set by Phone");
+  state.devices = [];
+  expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain("Shared lead: 240 ms · set by a previous listener");
+  state.playbacks!.unshift({ id: "other", title: "Concert", status: "playing", outputs: [], liveSourceId: "concert" });
+  expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain("Shared lead: 240 ms");
+  state.playbacks!.shift();
+  state.playbacks![0]!.liveSourceId = "another-share";
+  expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).not.toContain("Shared lead:");
 });
 
 test("audio settings retain their labelled controls while loading and offer a fetch retry", () => {

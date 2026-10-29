@@ -204,7 +204,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
       <CaptureChannelsSelect id="share-capture-channels" channels={inputChannels} value={channelPreference} disabled={!available} onValueChange={nativeChannels.save} />
     </Row>}
     {!!inputChannels && (nativeBuffer.error || nativeChannels.error) && <Alert variant="destructive"><AlertDescription>{nativeBuffer.error || nativeChannels.error}</AlertDescription></Alert>}
-    {kind.intent === "live" && <Row label="Playback buffer (ms)" htmlFor="share-live-buffer" description="More rides out Wi-Fi and phone hiccups.">
+    {kind.intent === "live" && <Row label="Playback buffer floor (ms)" htmlFor="share-live-buffer" description="0 uses each listener's buffer.">
       <PlaybackBufferInput id="share-live-buffer" live={live} disabled={pending} className="ml-auto" />
     </Row>}
     {kind.intent === "live" && <LiveSettingsStatus live={live} />}

@@ -35,7 +35,7 @@ Capture buffer                   [128 frames ▾]   Native Live Audio input
 Input channels                  [1/2, Stereo ▾]   Native input with >2 channels
 Title                               [Optional]   Live Audio input
 Now playing                         [Optional]   Live Audio input
-Playback buffer (ms)                     [150]    Live Audio input
+Playback buffer floor (ms)               [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
@@ -69,10 +69,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   and each individual channel as Mono. The initial choice is 1/2; a saved
   choice unavailable on a different input also shows 1/2. Inputs with two or
   fewer channels keep their existing behavior and have no channel selector.
-- **Playback buffer (ms)**, for Live, is each listener's Sendspin buffer; more
-  rides out Wi-Fi and phone hiccups. Measured delay follows it closely but is a
-  separate observation ([Live audio](../live-audio.md#measured-behavior)). It is
-  the same Couch-wide setting as in the running share's panel.
+- **Playback buffer floor (ms)**, for Live, is the minimum every listener
+  declares; 0 removes the host floor. Each listener can request more for its
+  output latency, with a fixed allowance ([Live audio](../live-audio.md#timing)).
+  It is the same Couch-wide setting as in the running share's panel.
 - **Screens and windows** in the desktop app are small pictures with their
   names (`desktopCapturer` thumbnails, 320 × 200), for this computer's own
   Couch only: another Couch's page (Client mode) lists their names alone, as it
@@ -175,10 +175,15 @@ generation and input mute is preserved. **Restarting audio input…** announces
 the wait, then the selected size or channels and delivered format update
 together. Mono is reported as Mono in the capture format. **Codec** offers
 Automatic, PCM and Opus using the SDK's public `codecs`
-option; a change reconnects each listener's player. **Playback buffer (ms)** is
-the SDK's `minBufferMs`, initially 150 ms. A larger buffer applies to the running
-share at once; a smaller one applies when sharing restarts, which the panel says.
-There are no latency estimates, gap counters or listener polling.
+option; a change reconnects each listener's player. **Playback buffer floor
+(ms)** starts at 150 ms; 0 removes the host floor. A larger floor applies at once;
+restart sharing to reduce the shared lead. Listeners keep their largest
+declaration during a Join and raise it only in 25 ms steps, since each raise
+briefly gaps every listener. One muted line shows **Shared lead: 200 ms · set by
+Phone**, from Core's actual timeline including static delay. It retains the
+Receiver's name after Leave, or says **a previous listener** if that Device is
+gone. This is a scheduling lead, not an input-to-ear latency estimate. There are
+no gap counters or host polling of listeners.
 Settings retain their labelled controls while loading, report errors inline,
 and offer Try again after a failed read. Playback buffer accepts whole numbers
 from 0 to 5000, saved on blur or Enter; invalid edits show a reason. Controls

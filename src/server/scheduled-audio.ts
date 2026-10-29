@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
 import type { RawData, WebSocket } from "ws";
 import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, serverNowUs, SendspinSession, type SendspinSessionHooks } from "@sonn-audio/node-sendspin";
-import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { AudioSelection, LiveLead, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError, safePlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
@@ -30,7 +30,7 @@ type Chunk = { offset: number; duration: number; data: Buffer };
 // start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
 // sent: released chunks that have not played yet, at their play times, so a speaker that joins late gets them too.
 // cursors: the play time of the last chunk each speaker got.
-type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; captureLead?: number; timelineOnly?: boolean; start: number; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
+type Run = { child?: ChildProcess; dispose?: () => void; fixed?: boolean; captureLead?: LiveLead; timelineOnly?: boolean; start: number; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; sent: Record<Wire, { at: number; end: number; data: Buffer }[]>; cursors: Map<SendspinSession, number>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
 
 const leadUs = 1_000_000; // Buffered media and relaxed capture; Live uses player declarations.
 // Chunks go out this far ahead of their play time. Players schedule what they hold, so a page whose
@@ -101,11 +101,12 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     // Sendspin servers supply timestamps. For capture use the group's largest
     // declared buffer plus output delay, as the protocol specifies; no admission gate.
     const captureLead = () => {
-      const minimum = load?.captureIntent === "live" ? 0 : leadUs;
-      return Math.max(minimum, ...members.map(member => {
+      const minimum = load?.captureIntent === "live" ? 0 : leadUs / 1000;
+      return members.reduce<LiveLead>((lead, member) => {
         const timing = sessions.get(member.deviceId)?.getPlayerTiming();
-        return Math.max(minimum, (timing?.minBufferMs ?? 0) * 1000) + (timing?.staticDelayMs ?? 0) * 1000;
-      }));
+        const ms = Math.max(minimum, timing?.minBufferMs ?? 0) + (timing?.staticDelayMs ?? 0);
+        return ms > lead.ms ? { ms, deviceId: member.deviceId } : lead;
+      }, { ms: minimum });
     };
     let load: SyncedLoad | undefined;
     let input: ReturnType<typeof audioInput> | undefined;
@@ -121,7 +122,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     const report = () => {
       reportedAt = Date.now();
       const volume = members[0]?.level ?? 100;
-      observe(state = { ...state, volume, ...run?.base !== undefined && state.status !== "ended" ? { position: position() } : {} });
+      observe(state = { ...state, volume, liveLead: load?.captureIntent === "live" ? run?.captureLead : undefined, ...run?.base !== undefined && state.status !== "ended" ? { position: position() } : {} });
       for (const screen of screens) sessions.get(screen)?.sendMetadata(metadata());
     };
     // Where the sound is on the Sendspin clock (Sendspin metadata progress): pictures follow it.
@@ -206,10 +207,11 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
             if (event.type === "reset") {
               next.queues = { opus: [], pcm: [] }; next.sent = { opus: [], pcm: [] };
               next.cursors.clear(); next.base = undefined; next.released = 0; next.captureLead = captureLead();
-              each(session => session.sendStreamClear()); return;
+              each(session => session.sendStreamClear()); report(); return;
             }
-            next.captureLead = Math.max(next.captureLead ?? 0, captureLead());
-            const at = event.at + next.captureLead;
+            const lead = captureLead();
+            if (!next.captureLead || lead.ms > next.captureLead.ms) { next.captureLead = lead; report(); }
+            const at = event.at + next.captureLead.ms * 1000;
             if (next.base === undefined) {
               next.base = at;
               for (const member of members) begin(member.deviceId);

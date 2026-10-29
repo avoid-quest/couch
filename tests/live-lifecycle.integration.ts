@@ -34,6 +34,32 @@ async function fixture(t: TestContext) {
   return { ...f, get hub() { return f.hub; }, host, listener };
 }
 
+test("different Receiver buffers produce one shared Live lead and report the Receiver that set it", { timeout: 15_000 }, async t => {
+  const f = await fixture(t), other = await f.connect(2);
+  const fast = await f.listener(1, AudioCodec.PCM, 65), slow = await f.listener(2, AudioCodec.PCM, 150);
+  await slow.client.sendPlayerState({ static_delay_ms: 10 });
+  assert.equal((await f.host.command(publication)).ok, true);
+  for (const receiver of [f.receiver, other]) assert.equal((await receiver.command({ type: "playLive", sourceId: "concert", deviceId: receiver.id })).ok, true);
+  const input = await f.streamCapture(f.host, "concert", -1, signal);
+  await until(() => fast.frames.length > 20 && slow.frames.length > 20);
+  assert.equal(fast.frames[0]!.at, input.origin + 160_000);
+  assert.deepEqual(fast.frames.slice(0, 20), slow.frames.slice(0, 20), "every Receiver gets identical samples at identical timestamps");
+  const lead = () => f.host.state.playbacks?.find(playback => playback.liveSourceId === "concert")?.liveLead;
+  assert.deepEqual(lead(), { ms: 160, deviceId: other.id });
+
+  await fast.client.sendPlayerState({ min_buffer_ms: 205 });
+  await until(() => fast.frames.some((frame, i, frames) => i > 0 && frame.at - frames[i - 1]!.at === 50_000));
+  await until(() => lead()?.ms === 205);
+  assert.deepEqual(lead(), { ms: 205, deviceId: f.receiver.id });
+  await until(() => slow.frames.length >= fast.frames.length);
+  assert.deepEqual(fast.frames, slow.frames.slice(0, fast.frames.length), "raising either declaration moves the whole audience together");
+
+  assert.equal((await f.receiver.command({ type: "leave", playbackId: f.receiver.state.player.playbackId! })).ok, true);
+  const before = slow.frames.length;
+  await until(() => slow.frames.length > before + 20);
+  assert.deepEqual(lead(), { ms: 205, deviceId: f.receiver.id }, "leaving retains the lead and its attribution until the input restarts");
+});
+
 test("a new input generation clears queued audio and applies a lowered Live buffer without rejoining", { timeout: 15_000 }, async t => {
   const f = await fixture(t), player = await f.listener(1);
   assert.equal((await f.host.command(publication)).ok, true);

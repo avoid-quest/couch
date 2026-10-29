@@ -5,6 +5,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
+import { declareLiveBuffer, liveBufferReadings } from "./live-buffer";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID.
@@ -21,14 +22,33 @@ const dispose = (stopped: SendspinPlayer) => {
   stopped.disconnect("user_request");
   if (session) Object.assign(session, kept);
 };
-export function listen(on: boolean, watch: boolean, credentials: Credentials | null, name: string, live?: LiveAudioSettings) {
-  const next = JSON.stringify([credentials?.origin, credentials?.token, live?.codec]);
+let liveSettings: LiveAudioSettings | undefined;
+let bufferScope: string | undefined;
+let declaredBufferMs = 0;
+let latencyReadings: number[] = [];
+let bufferTimer: ReturnType<typeof setInterval> | undefined;
+// sample: add this second's output reading; otherwise only the host floor can raise the declaration.
+const updateBuffer = (created: SendspinPlayer, sample = false) => {
+  if (connected !== created || !liveSettings) return;
+  const latency = sample && hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced ? created.syncInfo.outputLatencyMs : NaN;
+  if (Number.isFinite(latency) && latency >= 0) latencyReadings = [...latencyReadings, latency].slice(-liveBufferReadings);
+  const next = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs, latencyReadings);
+  if (next === declaredBufferMs) return;
+  declaredBufferMs = next;
+  created.setMinBufferMs(next);
+};
+export function listen(on: boolean, watch: boolean, credentials: Credentials | null, name: string, live?: LiveAudioSettings & { sourceId?: string }) {
+  const scope = live && (on || watch) ? JSON.stringify([credentials?.origin, credentials?.token, live.sourceId]) : undefined;
+  if (scope !== bufferScope) { bufferScope = scope; latencyReadings = []; declaredBufferMs = live ? declareLiveBuffer(0, live.minBufferMs) : 0; }
+  liveSettings = live;
+  const next = JSON.stringify([credentials?.origin, credentials?.token, live?.codec, live?.sourceId]);
   if (!on && !watch || player && configuration !== next) {
     const current = player;
     player = connected = null;
     group = undefined;
     hearing = false;
     configuration = undefined;
+    clearInterval(bufferTimer);
     waitForTap(null);
     void current?.then(dispose).catch(() => {});
     if (!on && !watch) return;
@@ -40,24 +60,27 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = player ??= import("@sendspin/sendspin-js").then(async ({ SendspinPlayer }) => {
     await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
+    if (player === current && liveSettings) declaredBufferMs = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs);
     // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
     const created = new SendspinPlayer({ suite: "aesgcm", baseUrl: credentials.origin, clientName: name, storage,
       ...live?.codec && live.codec !== "auto" ? { codecs: live.codec === "opus" ? ["opus", "pcm"] : ["pcm"] } : {},
-      ...live ? { minBufferMs: live.minBufferMs } : {},
+      ...live ? { minBufferMs: declaredBufferMs } : {},
       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });
     if (player !== current) return created;
     connected = created;
+    if (live) bufferTimer = setInterval(() => updateBuffer(created, true), 1000);
     void created.connect().catch(() => {});
     return created;
   }).catch(reason => {
     if (player === current) {
       player = connected = null; group = undefined; hearing = false;
+      clearInterval(bufferTimer);
       failed("Couldn't start sound.", reason);
       waitForTap(() => { if (configuration === next) listen(on, watch, credentials, name, live); });
     }
     throw reason;
   });
-  void current.then(created => { if (player === current && live) created.setMinBufferMs(live.minBufferMs); }).catch(() => {});
+  void current.then(created => { if (player === current) updateBuffer(created); }).catch(() => {});
   if (!hear) return;
   void current.then(created => {
     if (player !== current || !hearing) return;

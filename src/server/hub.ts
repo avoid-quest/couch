@@ -1256,6 +1256,7 @@ export async function createHub(options: HubOptions) {
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
         const source = live.source(sourceOf(playback) ?? "");
         return { id: playback.id, title: source?.intent === "live" ? liveTitle(source) : (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: outputViews.get(playback)!, delivery: deliveryOf(playback), intent: intentOf(playback) ?? "relaxed",
+          ...state.player.liveLead ? { liveLead: state.player.liveLead } : {},
           ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: store.deviceTv(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
@@ -1289,7 +1290,8 @@ export async function createHub(options: HubOptions) {
       if (sentStates.get(socket) !== message) { sentStates.set(socket, message); send(socket, message); }
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
-      const liveSettings = intentOf(servedBy(deviceOf(socket))) === "live" ? store.liveAudioSettings() : undefined;
+      const serving = servedBy(deviceOf(socket));
+      const liveSettings = intentOf(serving) === "live" ? { ...store.liveAudioSettings(), sourceId: sourceOf(serving!)! } : undefined;
       const instruction = JSON.stringify({ type: "sendspin", listen, watch, ...liveSettings ? { live: liveSettings } : {} } satisfies ServerMessage);
       if (socket.data.sendspin !== instruction) { socket.data.sendspin = instruction; send(socket, instruction); }
     }
