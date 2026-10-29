@@ -353,6 +353,16 @@ test("Vixcloud resolution copies the public playlist protocol and retains episod
   assert.equal(calls[1]?.url, embed);
 });
 
+test("Vixcloud retains only its literal preview descriptor without reading it during playback", async () => {
+  for (const [literal, url] of [["'https://images.example/previews.vtt';", "https://images.example/previews.vtt"], ["'../previews.vtt'\n", "https://vixcloud.cc/previews.vtt"], ["'prefix' + expression;", undefined], ["'file:///etc/passwd';", undefined]] as const) {
+    const calls: Call[] = [];
+    const media = await resolveAnimeUnityLink(episode, undefined, playback(`${playerHtml}<script>window.thumbnailsUrl = ${literal}</script>`, manifest, calls));
+    assert.deepEqual(media.preview, url ? { kind: "vtt", url } : undefined);
+    assert.equal(calls.length, 3, "No preview manifest or extra player request during playback");
+    assert.equal(media.metadata.duration, 1440);
+  }
+});
+
 test("playback follows the Vixcloud domain published by AnimeUnity and pins the playlist to it", async () => {
   for (const host of ["vixcloud.co", "vixcloud.test"]) {
     const request = fixture(call => call.url.startsWith(transport) ? titleHtml().replaceAll("vixcloud.cc", host)

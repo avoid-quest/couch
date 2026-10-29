@@ -98,6 +98,9 @@ Play on and Queue. Live TV shows its filters once the guide answers; with no
 channels at all, an admin gets "No channels yet" with Add a playlist
 (Settings → Sources → Live TV) and anyone else one line, "No channels yet. An
 admin can add a playlist."; Radio's empty Playlists does the same.
+When filters find nothing, **Clear filters** clears the text and Genre or Group
+together, returns to page one and focuses the filter field. Radio keeps its
+chosen source. The field's own × clears only its text.
 
 Radio keeps a station's **tags** apart from its current show's **categories**.
 Categories come from XMLTV and fresh live enrichment; playlist group
@@ -175,9 +178,10 @@ the rules with Remove, under a "Hide a word" field.
 
 An item that is gone, or whose address names none, reads "Item not found"
 (a collection, "Collection not found")
-with Search (the header's field) and Back. A Details or collection page reads
-its own route's search (`useOwnSearch`), so while Play opens the player it
-stays itself (`tests/details-pending.browser.tsx`).
+with Search (the header's field) and Back. This includes an Up next item
+removed while its Details page is open. An item or collection page reads its
+own route's search (`useOwnSearch`), so while Play opens the player it stays
+itself (`tests/details-pending.browser.tsx`).
 
 Item pages (`/item`: History, For later, a station, an Up next entry) and
 collection pages (`/collection`: a source's home, a series, season, album,
@@ -260,8 +264,10 @@ section is never opened only to say so, and one known to be empty never shows
 loading rows. Every section's rows read alike: one meta
 line by the caption rules (Played adds what's left, "4:11 left") and a "…"
 holding the row's verbs (Played: Play or Resume, Play on, Queue, Open in
-browser); Details holds the rest. Lists shows Save as list at its top once
-Up next holds something or a list exists; with neither, only the Empty speaks.
+browser); Details holds the rest. For later and Played use real Details links,
+so modified clicks can open an item in another tab and its address can be
+copied. Lists shows Save as list at its top once Up next holds something or a
+list exists; with neither, only the Empty speaks.
 Save as list and Update from Up next require upcoming entries, excluding the
 current item and Played. Their count and saved items follow the current item,
 or the saved queue cursor after Stop; Autoplay's suggestions are not included.

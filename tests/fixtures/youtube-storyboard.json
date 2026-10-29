@@ -1,0 +1,43 @@
+{
+  "id": "vWLJeqLPfSU",
+  "extractor": "youtube",
+  "duration": 693,
+  "formats": [
+    {
+      "format_id": "sb1",
+      "format_note": "storyboard",
+      "protocol": "mhtml",
+      "width": 160,
+      "height": 90,
+      "fps": 0.20202020202020202,
+      "rows": 5,
+      "columns": 5,
+      "fragments": [
+        {
+          "url": "https://i.ytimg.com/sb/vWLJeqLPfSU/storyboard3_L2/M0.jpg?sigh=fixture",
+          "duration": 123.75000000000001
+        },
+        {
+          "url": "https://i.ytimg.com/sb/vWLJeqLPfSU/storyboard3_L2/M1.jpg?sigh=fixture",
+          "duration": 123.75000000000001
+        },
+        {
+          "url": "https://i.ytimg.com/sb/vWLJeqLPfSU/storyboard3_L2/M2.jpg?sigh=fixture",
+          "duration": 123.75000000000001
+        },
+        {
+          "url": "https://i.ytimg.com/sb/vWLJeqLPfSU/storyboard3_L2/M3.jpg?sigh=fixture",
+          "duration": 123.75000000000001
+        },
+        {
+          "url": "https://i.ytimg.com/sb/vWLJeqLPfSU/storyboard3_L2/M4.jpg?sigh=fixture",
+          "duration": 123.75000000000001
+        },
+        {
+          "url": "https://i.ytimg.com/sb/vWLJeqLPfSU/storyboard3_L2/M5.jpg?sigh=fixture",
+          "duration": 74.24999999999989
+        }
+      ]
+    }
+  ]
+}

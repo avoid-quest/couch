@@ -348,6 +348,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
    is on it. The hover time sits on the panel surface. */
 :is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
+[data-playback-seek][data-dragging]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; }
 .player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
 /* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
    tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
@@ -365,7 +366,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
 .bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
 :is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] { @apply motion-safe:transition-[scale]; }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] { scale: 0; }
-.player-video-controls [data-hover-time] { background: var(--player-surface); }
+.player-video-controls [data-timeline-preview] { background: var(--player-surface); }
 /* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"], .player-page[data-osd] :is(.player-queue, .player-next-up) { background: var(--player-surface); box-shadow: none; }
@@ -478,20 +479,7 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
 /* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
 html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }
 
-/* Ambient light (AmbientLight.tsx, docs/design.md): the one layer of gradient and soft edge in Couch, behind artwork
-   and only there. A backlight in the artwork's first colour hugs the picture (a ring around it, so nothing shows through
-   transparent art) and is gone --backlight out; a haze in its second colour, far darker, spreads three pictures wide. Both
-   are painted once and only cross-fade (opacity) when the artwork changes; the newest frame lies over the one it
-   replaces, which fades out only when nothing replaces it. Reduced motion swaps them at once. */
 @layer components {
-  .ambient-light { --backlight: 3rem; position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow-x: clip; }
-  .ambient-frame { position: absolute; inset: 0; animation: couch-fade-in .6s var(--ease-out) both; }
-  .ambient-frame:is([data-still], [data-leaving]) { animation: none; }
-  .ambient-frame[data-leaving]:last-child { animation: couch-fade-out .6s var(--ease-out) both; }
-  @media (prefers-reduced-motion: reduce) { .ambient-frame { animation: none !important; } .ambient-frame[data-leaving]:last-child { display: none; } }
-  .ambient-haze { position: absolute; left: calc(var(--light-x) + var(--light-w) / 2); top: calc(var(--light-y) + var(--light-h) / 2); width: calc(3 * max(var(--light-w), var(--light-h))); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, var(--light-b), color-mix(in srgb, var(--light-b) 55%, transparent) 50%, transparent); }
-  .ambient-backlight { position: absolute; left: calc(var(--light-x) - var(--backlight)); top: calc(var(--light-y) - var(--backlight)); width: calc(var(--light-w) + 2 * var(--backlight)); height: calc(var(--light-h) + 2 * var(--backlight)); padding: var(--backlight); background: radial-gradient(closest-side, var(--light-a) 55%, color-mix(in srgb, var(--light-a) 25%, transparent) 80%, transparent); mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude; }
-
   /* The level (Level.tsx): Couch's one loop. Three bars rise and fall while sound comes out, each at its own pace, as
      transforms, in steps; paused, buffering or loading they lie flat, as short thin bars, never three dots that read as a "…". Reduced motion holds them still at three heights. */
   .level { display: inline-flex; align-items: flex-end; gap: 20%; width: 1em; height: 1em; flex-shrink: 0; }

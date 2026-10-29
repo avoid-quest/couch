@@ -17,7 +17,7 @@ import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import type { MenuAction } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { FilterBar, FilterInput, FilterSelect } from "@/components/ContentFilters";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
@@ -91,7 +91,7 @@ export function LiveTvPage() {
   const actions = useChannelActions();
   // No channels at all, unfiltered: nothing to choose or filter yet.
   const none = !!guide.data && !updating && !guide.error && !total && !filter && !group;
-  const go = (next: LiveTvSearch, replace = false) => void navigate({ href: liveTvLocation({ page: requested, filter, group, ...next }), replace, resetScroll: false }).then(() => {
+  const go = (next: LiveTvSearch, replace = false) => navigate({ href: liveTvLocation({ page: requested, filter, group, ...next }), replace, resetScroll: false }).then(() => {
     if (replace) return;
     const heading = document.getElementById("live-tv-channels");
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
@@ -114,7 +114,9 @@ export function LiveTvPage() {
     })}</MediaList>}
     <BrowsePagination page={requested} pages={pages} previous={requested > 1 ? liveTvLocation({ page: requested - 1, filter, group }) : undefined} next={requested < pages ? liveTvLocation({ page: requested + 1, filter, group }) : undefined} disabled={!connected || guide.isFetching || updating} onSelectPage={page => go({ page })}
       onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ page: Number(new URL(href, location.origin).searchParams.get("page") ?? 1) }); }} />
-    {!none && guide.data && !updating && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No channels match. Try another name or group, or clear the filter.</EmptyDescription></EmptyHeader></Empty>}
+    {!none && guide.data && !updating && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No channels match. Try another name or group.</EmptyDescription></EmptyHeader>
+      {(filter || group) && <EmptyContent><Button variant="ghost" onClick={() => void go({ page: 1, filter: "", group: "" }, true).then(() => document.querySelector<HTMLInputElement>('input[aria-label="Filter channels"]')?.focus())}>Clear filters</Button></EmptyContent>}
+    </Empty>}
   </section>;
 }
 

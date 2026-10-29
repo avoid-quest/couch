@@ -96,10 +96,10 @@ It yields during fingerprinting so playback work can continue on Core's event
 loop. The provider response is bounded and only supported song metadata is
 returned to the UI.
 
-Run the focused checks with the pinned Bun/Node versions:
+Run the focused checks with the latest stable Bun and Node 24 or newer:
 
 ```sh
-bun test tests/shazam-signature.test.ts tests/song-recognition.test.ts
+bun run test tests/shazam-signature.test.ts tests/song-recognition.test.ts
 bun build tests/radio-recognition.integration.ts --target=node --outfile=build/radio-recognition.integration.mjs
 COUCH_TEST_FFMPEG="$(command -v ffmpeg)" node --test build/radio-recognition.integration.mjs
 bun run typecheck

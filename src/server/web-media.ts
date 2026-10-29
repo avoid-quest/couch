@@ -16,11 +16,14 @@ import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 import { logMediaResolution } from "./media-diagnostics";
 import type { SelectedChannels } from "./source-preparation";
+import { storyboardPreview } from "./playback-preview";
+import { vttPreview, type PreviewInput } from "./preview-manifest";
+import { hlsPreview } from "./hls-preview";
 
 export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; hls?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { preview?: PreviewInput; publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; hls?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -118,7 +121,10 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     }
   }
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.every(stream => String(stream.protocol).startsWith("m3u8")) ? { hls: true } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  const video = selected.find(stream => stream.vcodec !== "none");
+  const hls = video && String(video.protocol).startsWith("m3u8") ? hlsPreview(video.manifest_url ?? source, undefined, typeof video.manifest_url === "string" && video.manifest_url !== video.url ? { url: String(video.url) } : undefined) : undefined;
+  const preview = info.is_live === true || info.live_status === "is_live" ? undefined : storyboardPreview(info) ?? vttPreview(info.couch_preview_vtt) ?? hls;
+  return { source, ...(preview ? { preview } : {}), ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.every(stream => String(stream.protocol).startsWith("m3u8")) ? { hls: true } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
@@ -171,7 +177,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
-    const direct = isMovies123Host(host) ? await resolveMovies123Link(source, signal, publicFetch, subtitleLanguage)
+    const direct: (Awaited<ReturnType<typeof resolveMovies123Link>> & { preview?: PreviewInput }) | undefined = isMovies123Host(host) ? await resolveMovies123Link(source, signal, publicFetch, subtitleLanguage)
       : isAnimeSaturnHost(host) ? await resolveAnimeSaturnLink(source, signal)
       : isAnimeUnityHost(host) ? await resolveAnimeUnityLink(source, signal) : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
@@ -205,6 +211,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       media.publicNetwork = true;
       if (direct) {
         media.metadata = { ...media.metadata, ...direct.metadata };
+        media.preview = media.metadata.live ? undefined : direct.preview ?? media.preview;
         if (direct.subtitles?.length) media.subtitles = direct.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
       }
       try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }

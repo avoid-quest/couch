@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ListMusic, X } from "lucide-react";
+import { ChevronDown, ListMusic, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
@@ -177,7 +177,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       {autoplayUpcoming.length > 0 && <><h3 className={cn("text-sm text-muted-foreground", upNext.length > 0 && "pt-4")}>Then from {autoplay!.contextTitle}</h3>
         <ul aria-label="Autoplay" className="m-0 list-none divide-y border-y p-0">{autoplayUpcoming.map(entry => {
           const { time, length } = board(entry);
-          return <QueueRow key={entry.id} entry={entry} meta={length ?? undefined} time={time} quiet />;
+          return <QueueRow key={entry.id} entry={entry} meta={length ?? undefined} time={time} quiet disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} />;
         })}</ul></>}
       {autoplayFinding && <p className="text-sm text-muted-foreground">Finding the next item…</p>}
     </div> : <p className="text-sm text-muted-foreground">Nothing queued.</p>}
@@ -196,9 +196,9 @@ function QueueRow({ entry, meta, time, onPlay, disabled, verbs, quiet = false }:
   const actions = useQueueActions(verbs);
   const options = useItemMenu(verbs ? actions : browserActions(queuePageUrl(entry)));
   meta = metaLine(entry.subtitle, meta);
-  const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className={cn("line-clamp-2 text-base font-medium break-words", quiet && "text-muted-foreground")}>{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
+  const content = <><span aria-hidden="true" className="relative size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />{onPlay && <span className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 touch:opacity-100"><Play className="size-5 fill-current" /></span>}</span><span className="grid min-w-0 flex-1 gap-0.5"><span className={cn("line-clamp-2 text-base font-medium break-words", quiet && "text-muted-foreground")}>{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time title={`Estimated start ${time}`} className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 flex-wrap items-center gap-2 py-3", options.item.className)}>
-    {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}${time ? ` at ${time}` : ""}`} disabled={disabled} onClick={onPlay} className="text-foreground h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
+    {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="group text-foreground h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
     <ItemMenu menu={options} title={entry.title} />
     <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 pl-15 text-sm"><ContentLink href={queueItemLocation(entry)}>Details</ContentLink><MediaContext collection={entry.collection} creator={entry.creator} radio={entry.source.startsWith("radio:") ? {id: entry.source.slice(6), title: entry.title} : undefined} /></div>
   </li>;
