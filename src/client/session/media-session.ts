@@ -35,18 +35,17 @@ export function useMediaSession() {
   const position = clock.playbackId === playbackId ? clock.position : 0;
   const duration = live ? null : clock.playbackId === playbackId ? clock.duration ?? current?.duration ?? null : current?.duration ?? null;
   const { transportReady, pausable, seekable, nextReady, hasNext, stoppable } = playbackCapabilities(state, connected);
-  // Live can't pause, so Pause leaves too: unhandled, Android's notification pauses the SDK's silent
-  // keep-alive element instead, while the sound plays on and Couch still reports Listening.
-  const leave = connected && !!playbackId;
-  const allowed = listening ? { play: false, pause: leave, stop: leave, nexttrack: false, seekto: false, seekbackward: false, seekforward: false }
+  // Live listeners get no media commands. Unhandled, Android's notification Pause would pause the SDK's
+  // silent keep-alive element while the sound plays on, so Play, Pause and Stop are handled and do nothing.
+  const inert = listening ? new Set<MediaSessionAction>(["play", "pause", "stop"]) : new Set<MediaSessionAction>();
+  const allowed = listening ? { play: false, pause: false, stop: false, nexttrack: false, seekto: false, seekbackward: false, seekforward: false }
     : { play: transportReady && pausable, pause: transportReady && pausable, stop: stoppable, nexttrack: nextReady && hasNext,
     seekto: transportReady && seekable, seekbackward: transportReady && seekable, seekforward: transportReady && seekable };
 
   const act = useEffectEvent((action: MediaSessionAction, details: MediaSessionActionDetails) => {
     if (!playbackId || !allowed[action as keyof typeof allowed]) return;
     const seek = (to: number) => ({ type: "seek", playbackId, position: Math.max(0, Math.min(duration ?? Infinity, to)) }) satisfies Action;
-    const command: Action | null = listening ? { type: "leave", playbackId }
-      : action === "play" || action === "pause" ? { type: "pause", playbackId, paused: action === "pause" }
+    const command: Action | null = action === "play" || action === "pause" ? { type: "pause", playbackId, paused: action === "pause" }
       : action === "stop" ? { type: "stop", playbackId }
       : action === "nexttrack" ? { type: "next", playbackId }
       : action === "seekto" && Number.isFinite(details.seekTime) ? seek(details.seekTime!)
@@ -54,9 +53,9 @@ export function useMediaSession() {
       : action === "seekforward" ? seek(position + (details.seekOffset ?? 10)) : null;
     if (command) void run(command);
   });
-  const handlers = actions.map(action => allowed[action]).join();
+  const handlers = actions.map(action => allowed[action] || inert.has(action) && "inert").join();
   useEffect(() => {
-    for (const action of actions) navigator.mediaSession?.setActionHandler(action, allowed[action] ? details => act(action, details) : null);
+    for (const action of actions) navigator.mediaSession?.setActionHandler(action, allowed[action] ? details => act(action, details) : inert.has(action) ? () => {} : null);
     return () => { for (const action of actions) navigator.mediaSession?.setActionHandler(action, null); };
   }, [handlers]);
   useEffect(() => {
