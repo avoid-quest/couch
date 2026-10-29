@@ -39,7 +39,7 @@ seconds.
 
 | Adapter | Input → output | Why Couch owns it |
 |---|---|---|
-| Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture in an isolated hidden capture page. |
+| Acquisition | Selected device or system track → timestamped interleaved f32 PCM with format, generation and sample position | The browser SDK has no capture API. Main owns Live capture: the Mac native helper for **Native** inputs, an isolated hidden capture page for other input IDs. |
 | Upload | f32 frames → validated `CaptureAudioPacket` in its source epoch | Node 0.6.2 has `sendSourceAudioChunk` but no public source stream start/end to declare a format. Publication tokens, epochs and helper leases retire stale work. |
 | Conversion and encoding | f32 at the acquired rate/channels → 48 kHz stereo PCM16 and Opus packets | One FFmpeg process per source: `aresample` (64-tap filter), stereo layout, `pcm_s16le` and `libopus` (low-delay mode, 160 kbps stereo VBR, 5 ms frames) with the Ogg wrapper removed. FFmpeg reads 5 ms of capture at a time and PCM leaves in 5 ms chunks, because each step holds audio until it is full. Core sends each chunk to listeners as it arrives. Gaps up to 40 ms are filled with silence so sample positions hold. |
 | Capture-time mapping | Encoded offset + generation + measured capture blocks → source time in Core microseconds | The Node SDK's default timestamp is send time; it cannot recover capture time. A short block lookup, including Opus pre-skip, keeps long shares on the input's clock. |

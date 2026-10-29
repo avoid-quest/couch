@@ -10,9 +10,10 @@ export function useLiveSourceHits(query: string): SearchHit[] {
     .filter(source => source.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .map(source => {
       // Play on the publisher, or while controlling it, waits in Where it plays to choose receivers.
-      const disabled = !connected;
       const live = source.intent === "live";
-      const primary = live ? "Join" : "Play";
+      const publisher = live && source.deviceId === deviceId();
+      const disabled = !connected || publisher;
+      const primary = publisher ? "Sharing" : live ? "Join" : "Play";
       const play = () => { void run({ type: "playLive", sourceId: source.id, ...live ? { deviceId: deviceId() } : {} }); };
       const label = source.video ? source.audio ? "Screen and audio" : "Screen without audio" : source.kind === "system-audio" ? "System audio" : source.kind === "airplay" ? "AirPlay" : "Audio input";
       const meta = live ? "Live audio" : label;
@@ -21,7 +22,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
         primary: { label: primary, disabled, run: play },
         actions: [
           { label: primary, disabled, run: play },
-          { label: "Play on", disabled: !connected, sharingDeviceId: source.deviceId, playOn: deviceId => { void run({ type: "playLive", sourceId: source.id, deviceId }); } },
+          { label: "Play on", disabled: !connected, sharingDeviceId: source.deviceId, liveAudio: live, playOn: deviceId => { void run({ type: "playLive", sourceId: source.id, deviceId }); } },
           ...live ? [] : [{ label: "Play next", disabled: !connected, run: () => { void run({ type: "playLive", sourceId: source.id, playNow: false, placement: "next" }); } },
           { label: "Queue", disabled: !connected, run: () => { void run({ type: "playLive", sourceId: source.id, playNow: false }); } }],
         ],

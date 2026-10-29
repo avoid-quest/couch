@@ -199,8 +199,15 @@ them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
 Live device publications belong to the authenticated Device session and end
-with its sharing owner. Display and audio capture run in the publishing window;
-inputs exist only while that capture is active.
+with its sharing owner. Ordinary display/audio capture stays in the publishing
+window. For Live audio, Main owns capture independently of that window's event
+loop: native Mac inputs use the bundled PortAudio/CoreAudio helper, while
+explicit browser input IDs use an isolated hidden capture page with a restricted
+preload. Native capture uses the selected UID, optional exact device-rate request,
+callback-buffer request and same-process readback. Permission is granted before
+opening the input. Main stops owned capture on cancel, navigation, renderer loss,
+window close and quit, and waits for retirement before another preparation.
+Inputs exist only while their capture is active.
 Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
 element. Core grants signaling only between the exact publishing and receiving
 connections. ICE configuration, including optional authenticated TURN, is returned
@@ -248,9 +255,11 @@ speaker on a wire gets the same chunk with the same timestamp; each applies its 
 volume and its own delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
 the Playback is; when the outputs are back on one Device, it plays directly again.
 
-Timestamped audio enters the publication-scoped upload with the local HTTP
-Origin, owner token, upload key and generation checked by Core. Bounded
-queues, sequence/sample validation and source
+Timestamped native/browser audio enters the publication-scoped upload with the
+local HTTP Origin, owner token, upload key and generation checked by Core.
+The native helper receives no credentials: Main brackets Core clock exchanges
+with the helper's clock, and keeps the PortAudio ADC-time estimate in each PCM
+packet. Bounded native/pipe/socket queues, sequence/sample validation and source
 format conversion preserve the source mapping. Both Live and relaxed audio-only
 capture use Sendspin without MediaRecorder/AAC/HLS. FFmpeg supplies PCM/Opus;
 presentation timestamps retain measured capture-block times.
@@ -276,7 +285,8 @@ Direct receivers are not aligned with each other.
 
 Live audio sources use the same Sendspin groups as other scheduled audio.
 The [capability contract](audio-video-use-cases.md) separates acquisition from
-delivery and control.
+delivery and control. The current Mac-only native helper remains wired to local
+desktop Live publication; this coupling is an implementation limit.
 Couch establishes an authenticated HttpOnly `/sendspin` cookie, binds the SDK's
 encrypted `client/init` to that Device, and leaves reconnect, decoding, buffering
 and correction to the unmodified SDKs. One FFmpeg process per captured source

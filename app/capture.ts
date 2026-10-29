@@ -70,6 +70,13 @@ export function createCapture(contents: () => WebContents | null, address: () =>
   };
   return {
     clear,
+    /** Transfers the current local owner's microphone grant to its owned native session. */
+    consumeMicrophone() {
+      const grant = prepared();
+      if (!grant || grant.selection.kind !== "microphone" || grant.frame !== owner() || grant.origin !== localOrigin)
+        throw new Error("No current local microphone preparation for native capture.");
+      revoke();
+    },
     // Main delegates only the current owner’s temporary microphone grant to its exact capture frame.
     delegateMicrophone(target: WebContents) {
       const grant = prepared();

@@ -60,7 +60,7 @@ export const notice = (text: string) => show("notice", text, { duration: long })
  * Once the last device stops watching, the capture still runs: say so once, with Stop sharing. Like every sharing
  * control it stays this device's own; sonner takes no data attributes, so navigation.ts reads its class instead.
  */
-export const stillSharing = (title: string, stop: () => void) =>
-  show("sharing", `Still sharing ${title}, on no screens`, { duration: long, className: "tv-local-only", action: { label: "Stop sharing", onClick: stop } });
+export const stillSharing = (title: string, stop: () => void, live = false) =>
+  show("sharing", `Still sharing ${title}, ${live ? "with no listeners" : "on no screens"}`, { duration: long, className: "tv-local-only", action: { label: "Stop sharing", onClick: stop } });
 export const waitingForTap = (hear: () => void) =>
   show("tap-to-hear", "Sound is waiting for a tap", { duration: Infinity, action: { label: "Tap to hear", onClick: hear } });

@@ -56,9 +56,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   stereo. Live listeners find the
   source in Home or Search, **Join**, adjust their own volume, and **Leave**;
   leaving does not stop sharing or affect another listener.
-- **Live input selection** opens the chosen input in an isolated hidden browser
-  capture page. This is an explicit input choice; a failed input never switches
-  devices.
+- **Live input selection** includes devices marked Native on Mac builds with the
+  capture helper. Other input IDs use an isolated hidden browser capture page.
+  This is an explicit input choice; a failed native input never switches devices.
+  Main requests microphone permission before opening the selected native input.
 - **Playback buffer (ms)**, for Live, is each listener's Sendspin buffer; more
   rides out Wi-Fi and phone hiccups. Measured delay follows it closely but is a
   separate observation ([Live audio](../live-audio.md#measured-behavior)). It is
@@ -87,6 +88,8 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 - **Start sharing** starts the capture, then plays it on the chosen devices in
   order: the first that takes it plays it, then each other joins the same
   playback. Closing the dialog while it starts cancels it, as Cancel does.
+  Live waits for its audio settings to load and finish saving. Invalid buffer
+  values prevent starting; settings failures appear inline.
   Dismissing the Dialog or Sheet returns keyboard focus to its Share button while that button remains mounted.
 - **Disabled keeps its place:** a browser that can't capture a display (a
   phone's) keeps Screen, Window and System audio disabled, with today's reason
@@ -130,8 +133,10 @@ Sheet on phones and the TV:
   it plays' would (online, unmuted, above zero).
 - **Picture**, changed live through `applyConstraints` on the captured track,
   without restarting it; **Mute audio input** turns the input's track off
-  (`track.enabled`), keeping the capture and its connections.
-- Live sharing reports the delivered rate and channels.
+  (`track.enabled`), keeping the capture and its connections. Native input mute
+  sends zero samples while preserving the source clock.
+- Live sharing reports the delivered rate and channels, and a native input's
+  device buffer when it differs from the requested **Capture buffer**.
 - One line about the relay only when a device is Behind: with no relay, that a
   relay can fix it, linking Devices & network; with one, that it couldn't
   connect even through it.
@@ -141,11 +146,23 @@ Sheet on phones and the TV:
 ### Live audio
 
 A [Live audio](../live-audio.md) share lists listeners, each with a ⋯ **Remove**
-action. Input mute remains. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
+action. Removing a listener leaves focus in the listener list; failures read in
+red and are announced. An empty list says **No listeners yet**. The capsule
+counts listeners; Live has no Where it plays link in its host panel.
+Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512
+or 1024 frames), the input's callback size, which restarts the input when
+changed. **Restarting audio input…** announces the wait, then the selected size
+and delivered format update together. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer (ms)** is
 the SDK's `minBufferMs`, initially 150 ms. A larger buffer applies to the running
 share at once; a smaller one applies when sharing restarts, which the panel says.
 There are no latency estimates, gap counters or listener polling.
+Settings retain their labelled controls while loading, report errors inline,
+and offer Try again after a failed read. Playback buffer accepts whole numbers
+from 0 to 5000, saved on blur or Enter; invalid edits show a reason. Controls
+wrap onto a second line on narrow screens and disable while disconnected.
+Saving or restarting prevents another edit while keeping keyboard focus on
+the control that started it.
 
 ## When it doesn't work
 
@@ -161,7 +178,7 @@ There are no latency estimates, gap counters or listener polling.
 - The last viewer leaves or goes offline while the capture still runs: one
   toast, "Still sharing {name}, on no screens", with Stop sharing, this
   device's own like the rest. It leaves once a viewer returns or the share
-  ends.
+  ends. Live audio says "Still sharing {name}, with no listeners".
 - A Play on device that can't take what was captured (Linux captures no system
   audio, so a speakers-only device takes nothing): Core's refusal shows as the
   page's error, and the share keeps playing where it can.
@@ -170,6 +187,8 @@ Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
 **Tap to hear** unlocks sound. Leaving releases this listener without ending
 capture or interrupting other listeners. Actual source/output errors keep their
 reason; the SDK handles receiver timing and recovery.
+If enabling sound fails, its reason is shown and Tap to hear remains available
+to retry. A late failure after leaving cannot restore the prompt.
 
 ## Not yet
 

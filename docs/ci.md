@@ -103,6 +103,43 @@ host admitted by the relay's subnet policy (for example, a /32 is ineligible).
 They log interface eligibility and the TCP client source to diagnose runner
 network differences. A skipped test is not relay runtime validation.
 
+## Bundled Mac capture input
+
+The `afterPack` hook also builds `scripts/build-live-audio.ts` before signing.
+It verifies the PortAudio archive for commit
+`1ca0eeedb678c3cca80f3306c474d69a7a4b5278` against SHA-256
+`2602de95236428dcf1329e66f1adb1b603b12d16f8d368e11f909a84ba1ccd83`.
+CMake builds unmodified static PortAudio/CoreAudio for each target with
+`CMAKE_OSX_ARCHITECTURES=arm64|x86_64` and a macOS 13 deployment target,
+matching the existing QuickJS cross-build. The capture compilation uses that
+same architecture and floor. Apple Silicon's app floor remains macOS 14.
+
+`Resources/live-audio` contains `couch-capture`, `PortAudio-LICENSE.txt`,
+`NOTICE.txt` and `build-info.json` (source, queue and pre-app-signing binary
+hashes, target architecture, deployment target and native-smoke result).
+The builder verifies both library/helper slices with `lipo`, helper deployment
+with `otool`, system-only dynamic dependencies and an ad-hoc signature.
+It runs permission-free `--list` only for the host's native architecture.
+The Mac Package job verifies each helper again after electron-builder signs
+both app bundles with Couch's release identity. Keep the single dual-arch
+invocation and combined Mac update feed.
+
+Linux and Windows skip this native helper and retain browser input capture.
+No PortAudio or native playback dependency is needed on those package runners.
+Development on Mac: `bun scripts/build-live-audio.ts`; logs remain under
+`.artifacts/portaudio`. Run `bun test tests/package-hooks.test.ts` for the Node
+hook loader, non-Mac no-op and combined update-feed checks. Capture lifecycle
+and authorization use `tests/native-live-authority.test.ts`,
+`tests/capture.test.ts` and Node `tests/native-capture.integration.ts`.
+Sendspin source checks are listed in [Live audio](live-audio.md).
+
+For the C queue test, use the verified extracted PortAudio source's `include`
+and `src/common` directories, compile `native/live-audio/capture-queue.test.c`
+with `src/common/pa_ringbuffer.c` using `cc -std=c11 -O2 -Wall -Wextra -Werror`
+and `-lm`, then execute it. Neither it nor discovery tests microphone consent
+attribution, device audio, physical timing or Intel Ventura execution. Those
+remain separate packaged-app checks; on Linux the hook is a no-op.
+
 ## Bundled AirPlay receiver
 
 On Linux, the same `afterPack` hook builds the pinned UxPlay with CMake
@@ -136,7 +173,7 @@ runtime instead of downloading them. It updates with Couch; manual helper
 checks keep it. A compatible `qjs` on PATH can still take precedence.
 
 After packaging, the Mac job verifies both app bundles with
-`codesign --verify --deep --strict` and each bundled QuickJS executable with
+`codesign --verify --deep --strict` and each bundled QuickJS and capture executable with
 `codesign --verify --strict`. Its explicit `mac/*.app` and `mac-arm64/*.app`
 patterns also fail if either architecture is missing.
 

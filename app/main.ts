@@ -70,7 +70,8 @@ const save = (next: Choice) => {
 
 let window: BrowserWindow | null = null;
 const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin, localOrigin);
-const liveAudio = createLiveAudio(() => window?.webContents ?? null, capture, localOrigin, () => core?.token);
+const liveAudio = createLiveAudio(() => window?.webContents ?? null, capture, localOrigin, () => core?.token,
+  process.platform === "darwin" ? join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "live-audio", "couch-capture") : undefined);
 let tray: Tray | null = null;
 let quitting = false;
 let updating = false;
@@ -380,6 +381,7 @@ handle("mode", () => choice);
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
 handle("live-audio", (_event, action) => liveAudio.action(action));
+handle("native-audio-inputs", () => liveAudio.inputs());
 handle("capture-access", (_event, kind) => capture.access(kind));
 handle("capture-settings", (_event, kind) => capture.openSettings(kind));
 // Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.

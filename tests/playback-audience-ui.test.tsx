@@ -23,13 +23,14 @@ mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
 let hotkeys: { hotkey: string; enabled?: boolean; action: () => unknown }[] = [];
 mock.module("../src/client/useCouchHotkeys", () => ({ useCouchHotkeys: (keys: typeof hotkeys) => { hotkeys = keys; } }));
 mock.module("../src/client/sections/shell/shell-context", () => ({ useShell: () => ({ section: "Now", changeSection() {}, openPlayer() {}, focusSearch() {} }) }));
-const { PlaybackTransport, PlaybackVolume, LiveParticipation } = await import("../src/client/components/PlaybackTransport");
+const { PlaybackTransport, PlaybackVolume, LiveParticipation, VolumeButton } = await import("../src/client/components/PlaybackTransport");
 const { PlaybackMenu } = await import("../src/client/components/PlaybackSettings");
 const { KeyboardShortcuts } = await import("../src/client/sections/shell/KeyboardShortcuts");
 const { hasUpNext, UpNextButton } = await import("../src/client/sections/now/QueuePanel");
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 const { useItemMenu } = await import("../src/client/components/RowMenu");
+const { listeningLive } = await import("../src/client/session/playback-controls");
 
 function fixture(): ClientSessionState {
   const outputs = [{ deviceId: here, picture: false, sound: true }];
@@ -155,6 +156,42 @@ test("reconnect and Join remain local", async () => {
   const tree = read(() => LiveParticipation({ state, connected: true, run }));
   await buttons(tree)[0]!.props.onClick!();
   expect(sent).toEqual([{ type: "playLive", sourceId: "source", deviceId: here }]);
+});
+
+test("a device that has not joined never inherits another listener's error", () => {
+  const state = fixture();
+  state.controls = { ...audience, leave: false };
+  state.outputs = [{ deviceId: "tv", picture: false, sound: true, error: "TV speakers disconnected." }];
+  state.player = { ...state.player, status: "error", error: "TV speakers disconnected." };
+  const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
+  expect(html).toContain(">Join</button>");
+  expect(html).not.toContain("TV speakers disconnected.");
+});
+
+test("only a Live listener's playback status lines stay quiet; its publisher keeps them for errors", () => {
+  const listener = fixture();
+  expect(listeningLive(listener)).toBe(true);
+  const publisher = fixture();
+  publisher.liveSources![0]!.deviceId = here;
+  publisher.controls = { ...audience, leave: false };
+  expect(listeningLive(publisher)).toBe(false);
+});
+
+test("the publisher does not offer to join or adjust reception of its own capture", () => {
+  state = fixture();
+  state.liveSources![0]!.deviceId = here;
+  state.controls = { ...audience, leave: false };
+  expect(read(() => useLiveSourceHits(""))[0]!.primary).toMatchObject({ label: "Sharing", disabled: true });
+  expect(read(() => LiveParticipation({ state, connected: true, run }))).toBeNull();
+  expect(read(() => VolumeButton({ state, connected: true, run }))).toBeNull();
+});
+
+test("own-volume keys stay available when the viewed Live output is unavailable", () => {
+  state = fixture();
+  state.player = { ...state.player, status: "unavailable" };
+  read(() => KeyboardShortcuts({ open: false, onOpenChange() {} }));
+  expect(hotkeys.find(item => item.hotkey === "M")!.enabled).toBe(true);
+  expect(hotkeys.find(item => item.hotkey === "ArrowUp")!.enabled).toBe(true);
 });
 
 

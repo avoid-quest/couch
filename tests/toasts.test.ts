@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { toast, type ToastT } from "sonner";
 import { ApiError } from "../src/client/api/client";
-import { dismiss, dismissAll, dismissPlaybackFeedback, failed, notice, playingOn, queued, undoable, waitingForTap } from "../src/client/toasts";
+import { dismiss, dismissAll, dismissPlaybackFeedback, failed, notice, playingOn, queued, stillSharing, undoable, waitingForTap } from "../src/client/toasts";
 
 // sonner defers a dismissal's notice to a frame; there is no Toaster here to hear it.
 globalThis.requestAnimationFrame ??= callback => setTimeout(callback, 0) as unknown as number;
@@ -15,6 +15,16 @@ const press = (id: string | number) => {
   const action = toast.getToasts().find(each => each.id === id)?.action;
   if (action && typeof action === "object" && "onClick" in action) action.onClick({} as never);
 };
+
+test("Live's empty-audience notice names listeners and keeps Stop sharing", () => {
+  dismissAll();
+  let stopped = false;
+  const id = stillSharing("Studio · Live audio", () => { stopped = true; }, true);
+  expect(shown()).toEqual([{ id, title: "Still sharing Studio · Live audio, with no listeners", type: undefined, duration: 6_000, action: "Stop sharing" }]);
+  press(id);
+  expect(stopped).toBe(true);
+  dismissAll();
+});
 
 test("each kind fixes its duration and one action, and a repeat replaces the one showing", () => {
   toast.dismiss();

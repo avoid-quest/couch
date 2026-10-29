@@ -15,7 +15,9 @@ sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
 The [use-case and capability contract](audio-video-use-cases.md) separates source,
-acquisition environment and playback behavior.
+acquisition environment and playback behavior. Native capture is currently
+Mac-only and wired to local desktop Live publication; that coupling is an
+implementation limit, not a product rule.
 
 Share separates **Screen**, **Window**, **System audio** and **Audio input** from
 playback behavior. Audio input offers **Relaxed / Live** on the Couch computer;
@@ -28,6 +30,9 @@ The host chooses Live's playback buffer and codec when sharing
 Capture errors remain visible until sharing ends or restarts.
 The sharing panel polls connection routes only for WebRTC shares; PCM shares
 use Core's listener state.
+Live's host panel keeps settings in place while loading, reports save failures
+inline, and announces capture restarts. Buffer edits validate before sharing
+starts; closing Share returns keyboard focus to its opener.
 
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset

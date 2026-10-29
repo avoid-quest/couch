@@ -68,3 +68,42 @@ test("leaving cancels an offered bootstrap retry", async () => {
   retry(); await settle();
   expect(players.length).toBe(count);
 });
+
+test("a rejected Tap to hear keeps its retry and reports the output failure", async () => {
+  const original = FixturePlayer.prototype.unlock;
+  const error = new Error("The audio output is unavailable.");
+  FixturePlayer.prototype.unlock = async () => { throw error; };
+  try {
+    listen(true, false, credentials, "Fixture"); await settle();
+    await new Promise(resolve => setTimeout(resolve, 510));
+    const retry = taps.at(-1) as () => void;
+    expect(typeof retry).toBe("function");
+    retry();
+    // renderer.hear clears the offered gesture synchronously; the rejected attempt must restore it.
+    taps.push(null);
+    await settle();
+    expect(typeof taps.at(-1)).toBe("function");
+    expect(failures.at(-1)?.[1]).toBe(error);
+    expect(failures.at(-1)?.[0]).toContain(error.message);
+    FixturePlayer.prototype.unlock = original;
+    (taps.at(-1) as () => void)(); await settle();
+    expect(taps.at(-1)).toBeNull();
+  } finally { FixturePlayer.prototype.unlock = original; }
+});
+
+test("leaving while Tap to hear is pending cannot restore its prompt or report a stale failure", async () => {
+  const original = FixturePlayer.prototype.unlock;
+  FixturePlayer.prototype.unlock = async () => { throw new Error("Needs a gesture."); };
+  try {
+    listen(true, false, credentials, "Fixture"); await settle();
+    await new Promise(resolve => setTimeout(resolve, 510));
+    const pending = Promise.withResolvers<void>();
+    FixturePlayer.prototype.unlock = () => pending.promise;
+    (taps.at(-1) as () => void)();
+    listen(false, false, credentials, "Fixture");
+    const before = failures.length;
+    pending.reject(new Error("Old output failed.")); await settle();
+    expect(taps.at(-1)).toBeNull();
+    expect(failures.length).toBe(before);
+  } finally { FixturePlayer.prototype.unlock = original; }
+});

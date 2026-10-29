@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { build } from "../package.json";
+import { buildLiveAudio } from "../scripts/build-live-audio";
 
 // electron-builder loads afterPack with Node, whose loader, unlike Bun's, needs each import's extension.
 test("Node loads the afterPack hook as electron-builder does", () => {
@@ -12,6 +13,16 @@ test("Node loads the afterPack hook as electron-builder does", () => {
   const result = Bun.spawnSync(["node", "-e", script], { stderr: "pipe" });
   expect(result.stderr.toString()).toBe("");
   expect(result.exitCode).toBe(0);
+});
+
+test("native capture packaging is a no-op outside macOS, including with a foreign target architecture", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-capture-package-"));
+  try {
+    for (const platform of ["linux", "win32"]) {
+      await buildLiveAudio(platform, "x64", join(directory, platform));
+      await expect(readFile(join(directory, platform, "couch-capture"))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 // Contract with the builder/updater: a single Mac build must keep both

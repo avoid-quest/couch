@@ -202,7 +202,9 @@ pairing: [Shell](shell.md#first-run-and-pairing).
 On the host desktop, **Live audio capture sample rate** offers Automatic,
 44.1 kHz and 48 kHz for the next Live share. Browser capture uses an ideal
 48 kHz request for Automatic and verifies an explicit rate against the first
-real frame.
+real frame. Mac inputs marked **Native** keep their current device rate on
+Automatic; an explicit rate changes the device rate, which can affect other
+apps using it. The capture helper changes no system default device.
 
 Live audio's codec and playback buffer are not here: they belong to sharing
 ([Share](share.md#live-audio)).

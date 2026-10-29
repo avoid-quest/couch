@@ -57,7 +57,15 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
     // A browser that wants a gesture before it plays sound asks for a tap on its own screen (#644).
     let unlocked = false;
     void created.unlock().then(() => { if (player !== current || !hearing) return; unlocked = true; waitForTap(null); }, () => {});
-    setTimeout(() => { if (!unlocked && player === current && hearing) waitForTap(() => void created.unlock().then(() => { if (player === current && hearing) { waitForTap(null); } }, () => {})); }, 500);
+    const retry = () => {
+      if (player !== current || !hearing) return;
+      void created.unlock().then(() => { if (player === current && hearing) waitForTap(null); }, reason => {
+        if (player !== current || !hearing) return;
+        failed(reason instanceof Error ? `Couldn't enable sound: ${reason.message}` : "Couldn't enable sound. Check this device's audio output and try again.", reason);
+        waitForTap(retry);
+      });
+    };
+    setTimeout(() => { if (!unlocked && player === current && hearing) waitForTap(retry); }, 500);
   }).catch(() => {});
 }
 

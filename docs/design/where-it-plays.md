@@ -139,6 +139,16 @@ Source and output failures retain their reasons. Live sound uses Sendspin
 and applies the player's persisted output delay. Receiver scheduling,
 clock correction and reconnection belong to the upstream player; there are no
 custom warming, behind-by or measured-latency rows.
+The listener's connection or error appears once beside Join/Leave; generic
+programme errors and mixer remedies stay out of Live's player. On a narrow
+phone the mini-player keeps the title and volume on its first line, with
+Join/Leave and wrapping status below. A device that has not joined does not
+inherit another listener's output error.
+The publisher's own source says **Sharing** instead of offering Join, and it
+has no listening-volume button. Live's Play on menu lists listening devices
+only, excluding the publisher and devices that share only a screen. Long
+shared-source names wrap within Home's chips.
+Join/Leave announce pending commands and retain keyboard focus while they run.
 
 ## Fader and Sync
 

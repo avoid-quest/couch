@@ -3,15 +3,16 @@ import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { startHold } from "@/hold";
+import { deviceId } from "@/session/device-id";
 import { PlayOnGroup, usePlayOn } from "./PlayOn";
 
 /** One verb in a menu. playOn makes it "Play on", a group of the online Devices; node is its own item, such as a link. */
-export type MenuAction = { label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; sharingDeviceId?: string };
+export type MenuAction = { label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; sharingDeviceId?: string; liveAudio?: boolean };
 
 // Play on's devices are a labelled group, set apart from the verbs on either side.
 function Items({ actions, on, select }: { actions: MenuAction[]; on: (label: string) => string; select: (run?: () => void) => void }) {
   return actions.map((action, index) => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem>
-    : action.playOn ? <Fragment key={action.label}><PlayOnGroup separated={index > 0} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} />{index < actions.length - 1 && <DropdownMenuSeparator />}</Fragment>
+    : action.playOn ? <Fragment key={action.label}><PlayOnGroup separated={index > 0} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} liveAudio={action.liveAudio} />{index < actions.length - 1 && <DropdownMenuSeparator />}</Fragment>
     : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={() => select(action.run)}>{action.label === "Play" || action.label === "Resume" ? on(action.label) : action.label}</DropdownMenuItem>);
 }
 
@@ -27,7 +28,7 @@ type ItemProps = Pick<HTMLAttributes<HTMLElement>, "className" | "onContextMenu"
 export function useItemMenu(actions: MenuAction[]) {
   const { devices, on, queueAllowed } = usePlayOn();
   // Play on waits for a second online Device, so it alone never makes a menu.
-  const shown = actions.filter(action => (queueAllowed !== false || action.label !== "Queue" && action.label !== "Play next") && (!action.playOn || devices.length > 0));
+  const shown = actions.filter(action => (queueAllowed !== false || action.label !== "Queue" && action.label !== "Play next") && (!action.playOn || devices.some(device => !action.liveAudio || device.id !== action.sharingDeviceId && (device.id === deviceId() || device.sharing?.audio))));
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const press = useRef<{ release: () => boolean; x: number; y: number } | null>(null);

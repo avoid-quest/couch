@@ -450,6 +450,13 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
 .player-control-row:has(> [data-live-participation]) { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
 .player-control-row > [data-live-participation] { grid-column: 1; justify-self: start; gap: .5rem; }
 .player-control-row:has(> [data-live-participation]) > [data-player-tools] { grid-column: 2; }
+/* Live's status can be a full error sentence. Keep it out of the bar's intrinsic-width transport column. */
+[data-now-playing]:has(> [data-live-participation]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+@media (width < 40rem) {
+  [data-now-playing]:has(> [data-live-participation]) { grid-template-columns: minmax(0, 1fr) auto; }
+  [data-now-playing]:has(> [data-live-participation]) > [data-live-participation] { grid-row: 2; grid-column: 1 / -1; }
+  [data-now-playing]:has(> [data-live-participation]) > [data-bar-tools] { grid-row: 1; grid-column: 2; }
+}
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }

@@ -593,6 +593,13 @@ test("choosing an audio input translates permission errors and releases desktop 
   assert.ok(captures[0].getTracks().every(track => track.stopped));
 `, desktop));
 
+test("native inputs stay listed when the browser's microphone probe fails", () => check(`
+  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
+  assert.deepEqual(await session.audioInputs(true), [{ deviceId: "native:umc", label: "UMC · Native" }]);
+  assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
+  await assert.rejects(session.audioInputs(), /Audio input access wasn't allowed/, "without native inputs the browser's refusal stands");
+`, desktop.replace("{", "{ async nativeAudioInputs() { return [{ uid: 'umc', name: 'UMC', channels: 4, nominalRate: 48000, ownerHalBufferFrames: 512 }]; },")));
+
 test("closing while audio input permission is pending releases the eventual capture", () => check(`
   let finish;
   navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { finish = resolve; });
