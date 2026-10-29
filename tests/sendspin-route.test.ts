@@ -107,3 +107,21 @@ test("leaving while Tap to hear is pending cannot restore its prompt or report a
     expect(failures.length).toBe(before);
   } finally { FixturePlayer.prototype.unlock = original; }
 });
+
+test("a codec change keeps the Media Session that Couch set when the SDK's disconnect clears it", async () => {
+  const mediaSession = { metadata: null as unknown, playbackState: "none" };
+  const original = FixturePlayer.prototype.disconnect;
+  // The SDK's disconnect() resets Media Session for its own page.
+  FixturePlayer.prototype.disconnect = function () { this.disconnected = true; mediaSession.metadata = null; mediaSession.playbackState = "none"; };
+  Object.defineProperty(navigator, "mediaSession", { configurable: true, value: mediaSession });
+  try {
+    listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 }); await settle();
+    const first = players.at(-1)!;
+    const metadata = { title: "Concert" };
+    Object.assign(mediaSession, { metadata, playbackState: "playing" });
+    listen(true, false, credentials, "Fixture", { codec: "opus", minBufferMs: 250 }); await settle();
+    expect(first.disconnected).toBe(true);
+    expect(players.at(-1)).not.toBe(first);
+    expect(mediaSession).toEqual({ metadata, playbackState: "playing" });
+  } finally { FixturePlayer.prototype.disconnect = original; delete (navigator as { mediaSession?: unknown }).mediaSession; }
+});
