@@ -203,9 +203,9 @@ describe("fader and Sync", () => {
     expect(soleSound(rows(session({ devices: [device("tv", { sharing: { audio: false, video: false } })], outputs: [sound("tv")] })))).toBeNull();
   });
 
-  test("Sync shows only while the device's sound plays in sync with others, Lip sync while another shows the picture", () => {
-    expect(row(session({ outputs: [sound("tv", { delay: 80, delayActive: true }), sound("kitchen")] }), "tv").sync).toEqual({ delay: 80, lip: false });
-    expect(row(session({ outputs: [sound("tv", { delay: 80, delayActive: true }), both("kitchen")] }), "tv").sync).toEqual({ delay: 80, lip: true });
+  test("Sync shows only while the device's sound plays in sync with others, whoever shows the picture", () => {
+    expect(row(session({ outputs: [sound("tv", { delay: 80, delayActive: true }), sound("kitchen")] }), "tv").sync).toEqual({ delay: 80 });
+    expect(row(session({ outputs: [sound("tv", { delay: 80, delayActive: true }), both("kitchen")] }), "tv").sync).toEqual({ delay: 80 });
     expect(row(session({ outputs: [both("tv", { delay: 80 })] }), "tv").sync).toBeUndefined();
     expect(row(session({ outputs: [picture("tv", { delayActive: true })] }), "tv").sync).toBeUndefined();
   });
@@ -304,7 +304,7 @@ describe("live inputs", () => {
       expect(row(state, "tv").sync).toBeUndefined();
       expect(counts(rows(state)).some(item => item.filter === "sync")).toBe(false);
       state.outputs![0]!.delayActive = true;
-      expect(row(state, "tv").sync).toEqual({ delay: 0, lip: false });
+      expect(row(state, "tv").sync).toEqual({ delay: 0 });
       expect(counts(rows(state)).find(item => item.filter === "sync")?.count).toBe(1);
     }
   });

@@ -147,7 +147,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const autoHide = connected && playing && !artworkStage && !sharing;
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
-  useEffect(() => { if (queueOpen) queueClose.current?.focus(); }, [queueOpen]);
+  // Back from a row's Details returns to its opener; else Up next opens on Close.
+  useEffect(() => { if (queueOpen && !restoreDetailFocus(location.state.detailFocus)) queueClose.current?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   // Unattended playback starts on the picture so automatic focus cannot pin the bands open.
   // A TV already driven by keys keeps its transport entry point.
@@ -373,9 +374,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>
       {/* Up next is summoned from its button: over a picture, and over the room beside artwork, a panel at the right above
           the band, as Netflix's episodes panel; on phones it takes the artwork's place. It closes from its heading row,
-          and what plays now heads the list only where the player's own title is off screen (a phone's Up next). */}
+          and what plays now heads the list where the player's own title is off screen: beside artwork, where the copy steps aside
+          under it (wide) or it takes the artwork's place (phones). */}
       {queueOpen && <aside data-player-queue aria-label="Up next" className={cn("player-queue", (osd || queueBeside) && "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90")} style={osd || queueBeside ? { transformOrigin: queueOrigin } : undefined}>
-        <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen ? closeQueue : undefined} closeRef={queueClose} />
+        <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage} onClose={queueOpen ? closeQueue : undefined} closeRef={queueClose} />
       </aside>}
     </div>
     {osd && state && !queueOpen && !panel && <NextUp state={state} run={run} />}

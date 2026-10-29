@@ -1,6 +1,6 @@
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext } from "@/components/MediaContext";
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
@@ -12,7 +12,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
-import { artShape, historyShape, majorityShape, savedShape, type ArtShape } from "@/art-shape";
+import { historyShape, majorityShape, savedShape, type ArtShape } from "@/art-shape";
 import { historyCaption, mediaCaption, metaLine, savedCaption } from "@/media-caption";
 import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
@@ -24,7 +24,7 @@ import { forLaterQuery, loadForLater } from "@/api/for-later";
 import { apiSend } from "@/api/client";
 import type { MenuAction } from "@/components/RowMenu";
 import { failed } from "@/toasts";
-import { QueuePanel } from "@/sections/now/QueuePanel";
+import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
 import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
@@ -54,7 +54,6 @@ export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean
 const shelfLength = 12;
 const boardLength = 4;
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
-const entryShape = (entry: QueueEntry): ArtShape => isRadio(entry) ? "square" : artShape(sourceLabel(entry.source), entry.collection ? "episode" : "media");
 const recentCaption = (item: HistoryItem) => { const caption = mediaCaption(item); return { title: caption.title, meta: metaLine(caption.lead, item.creator?.title ?? caption.subtitle) }; };
 // Continue says how much is left where Played recently says how long it is; the line on the artwork shows how far it got.
 const continueCaption = (item: HistoryItem) => { const caption = mediaCaption(item); return { title: caption.title, meta: metaLine(caption.lead, item.duration ? `${formatRuntime(Math.max(0, item.duration - item.position))} left` : null) }; };
@@ -161,7 +160,7 @@ export function HomePage() {
   // station without its show reads Radio, as the player does, never its stream's host.
   const status = playbackStatus(state, connected);
   const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
-  const playingMeta = metaLine(playing?.lead, playing?.subtitle, ...radioShowLabels(show), radioHost(show), current && !isRadio(current) && sourceLabel(current.source), !livePlayback(state) && !status.quiet && status.label);
+  const playingMeta = metaLine(playing?.lead, current && mediaSubtitle({ ...current, subtitle: playing?.subtitle }), ...radioShowLabels(show), radioHost(show), current && !isRadio(current) && sourceLabel(current.source), !livePlayback(state) && !status.quiet && status.label);
   const heroCaption = hero?.kind === "continue" ? { ...historyCaption(hero.item), ...hero.item.creator ? { meta: mediaCaption(hero.item).lead } : {} } : undefined;
 
   const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<PlaysOnLine at={at}><MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} /></PlaysOnLine>} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}

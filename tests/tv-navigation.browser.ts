@@ -362,13 +362,13 @@ window.runTvNavigationRegression = async () => {
       device().focus(); await key("Enter");
       await until(() => !!item("Picture") && !!item("Sound"));
       assert(!item("Mute"), "A row's options offer Mute; its Sound and level are its sound, and the Volume mutes");
-      assert(!item("Move here"), "A row's options offer Move here");
+      assert(!item("Move here") || !sound(), "A row already playing this offers Move here");
       if (!sound()) { added = true; item("Sound")!.click(); await until(sound); await wait(1500); }
       else await key("Escape");
       const first = () => rows()[0]!;
       first().focus(); await key("Enter");
       await until(() => !!item("Sound"));
-      const sync = item("Sync…") ?? item("Lip sync…");
+      const sync = item("Sync…");
       assert(sync, "No Sync… while the sound plays on both devices");
       sync!.click();
       const line = () => first().closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");

@@ -24,14 +24,14 @@ import { useSessionGate } from "@/session/session-context";
 import { failed } from "@/toasts";
 import type { GuideChannel, GuideRow } from "../../../shared/iptv";
 import { searchError } from "@/sections/find/SearchOnlineResults";
+import { formatClock } from "@/time-format";
 
 type LiveTvSearch = { page?: number; filter?: string; group?: string };
 const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) => `/live-tv${defaultStringifySearch({ group: group || undefined, page: page > 1 ? page : undefined, filter: filter || undefined })}`;
 // Guide groups are display text without control characters, so this can't name one.
 const allGroups = "\u0000";
-const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 /** What's on a channel now and next, then its group where the list mixes them. */
-export const channelMeta = (channel: GuideRow, group = "") => [channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(", ");
+export const channelMeta = (channel: GuideRow, group = "") => [channel.now?.title, channel.next && `${formatClock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(", ");
 
 /** A channel has no page: its press plays it, and its menu holds Play on and Queue. */
 export function useChannelActions() {

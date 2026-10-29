@@ -5,8 +5,11 @@ export function formatDuration(seconds: number) {
   return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : minutes}:${String(value % 60).padStart(2, "0")}`;
 }
 
+/** A clock time as Couch says it everywhere, 24-hour ("18:05"). */
+export const formatClock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+
 export function formatEndTime(seconds: number, now = Date.now()) {
-  return new Date(now + Math.max(0, seconds) * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return formatClock(now + Math.max(0, seconds) * 1000);
 }
 
 /** When a device was last seen, as people say it: just now, 10 min ago, 3 hours ago, yesterday, Tuesday, Oct 3. */

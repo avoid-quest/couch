@@ -77,8 +77,9 @@ The same at every scale: the device's name, with the
 (moving while sound comes out of it, flat while paused, muted, behind, failing
 or offline), then its **Picture** and
 **Sound** toggles (`Monitor`/`MonitorOff`, `Volume2`/`VolumeOff`), its level
-fader and number while its sound is on, and "…". On phones the fader takes a
-second line under the name. A device is in the Playback while either channel
+fader and number while its sound is on, and "…". The name keeps at least
+10rem before the fader shrinks (to 5rem), so a device's name stays on one line
+where it can. On phones the fader takes a second line under the name. A device is in the Playback while either channel
 is on. While it is the only device sounding (and its fader would move), the
 Volume above is its level, so its row has no fader of its own and the panel
 doesn't say the same number twice (`soleSound`). The TV's rows keep theirs,
@@ -156,14 +157,15 @@ The fader is the device's one volume; 0 takes its sound out.
 
 "Sync … ms earlier" (0–500 ms) plays a late speaker sooner (Sendspin's static
 delay). It applies while the device receives scheduled sound, including a
-single listener of relaxed timestamped capture or AirPlay. It reads **Lip sync** while another device shows the picture. A row
-shows its line only while it isn't 0; **Sync…** (or **Lip sync…**) in "…"
+single listener of relaxed timestamped capture or AirPlay, and lines its sound
+up with the picture too where another device shows one. A row shows its line
+only while it isn't 0; **Sync…** in "…"
 reveals it and moves focus to its slider; Back or Esc there, or closing the
 panel, hides a line still at 0.
 
 ## The "…" menu
 
-It holds only **Sync…** (or **Lip sync…**), so a row shows "…" only while Sync
+It holds only **Sync…**, so a row shows "…" only while Sync
 applies. A row has no Mute: its Sound and fader are its sound, the Volume mutes.
 
 ## Volume
@@ -201,7 +203,8 @@ dismissal.
 
 Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
 between rows, Left and Right change its level by 5 at once, with no OK to
-take the arrows. OK opens its options: Picture, Sound, **Move here** where
+take the arrows. A muted "…" ends the row, no stop of its own. OK opens its
+options: Picture, Sound, **Move here** where
 permitted (including a playing row when other outputs would leave), and Sync….
 Back closes the panel with focus back on its button. It opens on the first row.
 A revealed Sync line is a stop of its own whose slider Left and Right move directly.

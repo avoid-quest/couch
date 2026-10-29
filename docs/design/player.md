@@ -79,6 +79,8 @@ menu, are one family wherever they open, from the band or the now-playing bar:
   with a shadow ([Up next](#up-next))
 - one place: 8px above the band (or the bar), ending at the gutter, the
   tools' right edge, whichever tool opened them (`toolPanel`)
+- one ceiling: in the player they stop below the top line (`--player-top`), as
+  Up next does, so the end time and Back stay in view; a longer list scrolls
 - each grows from the button that opened it
 
 Where it plays' first line doesn't stick over its rows with a second surface:
@@ -123,7 +125,8 @@ band.
 
 The timeline row:
 - Position, a thin line, and the time remaining.
-- The unplayed part is translucent white.
+- The unplayed part is translucent white (25%), over a picture and over the
+  room beside artwork alike.
 - As on YouTube, a lighter segment ahead of the playhead shows what this
   device has already loaded (35% white, here and on the now-playing bar's
   line). It shows only while this device plays media that seeks.
@@ -319,22 +322,28 @@ with "Nothing queued" as its tooltip, in the band and the bar.
 Beside artwork it is never parked on screen: the artwork has the room, and Up
 next is summoned from its button as a panel over the room at the right above
 the band (28rem, `rounded-lg`, translucent black glass with a shadow), growing
-from its button; a click on the room closes it. It lies over Info, which stays
-as it was beneath it. On phones it takes the artwork's place.
+from its button; a click on the room closes it. The copy beside the artwork
+steps aside while it is open, so the panel never cuts the title in two; Info
+stays as it was beneath it. On phones it takes the artwork's place.
 
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
 - A click on the picture while Up next is open closes it, without pausing.
-- **Playing** heads the list only where the player's title is off screen.
+- **Playing** heads the list where the player's title is off screen: beside
+  artwork, where the copy steps aside under Up next or Up next takes the
+  artwork's place.
 - **Upcoming rows** are board lines:
   - The title is heavy. The start time is light, at the same size, at the
     row's end.
   - The meta line has the length, and "added by {device}" when another
     device queued it.
-  - A row is one target that plays it immediately. A Play glyph appears over
-    its whole thumbnail on hover or keyboard focus, and stays visible on touch.
+  - A row is one target that plays it immediately. Its thumbnail takes the
+    list's majority shape, as on Home's Up next; a picture of another shape is
+    contained in that frame, never cropped (a letterboxed YouTube frame fills it). A Play glyph appears over the whole thumbnail on hover or
+    keyboard focus, and stays visible on touch.
     Start times are estimates, not scheduled actions. Its "…" holds Details, Play next,
-    ordering, Save for later, Open in browser and Remove.
+    ordering, Save for later, Open in browser and Remove, then where it leads
+    ("Go to NPR Music"), as a tile's menu does; nothing hangs under the row.
   - Removing a row keeps focus on the adjacent row.
 - A status line counts the rows and says when they end ("2 to play, until
   17:05"), with **Save as list**.

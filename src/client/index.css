@@ -350,7 +350,7 @@ html.electron, .electron body { height: 100%; overflow: hidden; }
 :is(.player-timeline, .bar-timeline) [data-slot="slider-track"] { @apply motion-safe:transition-[height]; }
 @media (hover: hover) { :is(.player-timeline, .bar-timeline):is(:hover, :has(:active)) [data-slot="slider"]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; } }
 [data-playback-seek][data-dragging]:not([data-disabled]) [data-slot="slider-track"] { height: .375rem; }
-.player-video-controls [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
+.player-timeline [data-slot="slider-track"] { background: rgb(255 255 255 / 25%); }
 /* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
    tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
    before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
@@ -427,6 +427,8 @@ html:has([data-slot="popover-content"]) .player-next-up { visibility: hidden; }
   /* The artwork has the room; Up next, summoned from its button, is a panel over the room at the right above the band,
      as it is over a picture. */
   .player-page[data-artwork-stage][data-queue-open] .player-queue { display: flex; position: absolute; z-index: 30; right: 0; bottom: 0; width: min(28rem, 100%); max-height: 100%; padding: .25rem .75rem .75rem; border-radius: var(--radius-lg); background: rgb(12 12 12 / 82%); -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 70%); }
+  /* The copy steps aside under it, so the panel never cuts its title in two. */
+  .player-page[data-artwork-stage][data-queue-open] [data-player-audio-copy] { visibility: hidden; }
 }
 @media (max-width: 959px) {
   /* On phones audio's Up next replaces the artwork. */
