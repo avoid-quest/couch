@@ -114,6 +114,13 @@ increase (25 ms or more) once, then plays the same amount further behind the
 input. Coarse, rare raises trade a few milliseconds of under-buffering for fewer
 such gaps; the host floor avoids them where outputs are known to be slow.
 
+Sync after a raise is only as good as the browser's own output-latency report.
+On the rig (29 Oct, v3 timing), a Linux receiver slowed with PulseAudio to about
+200 ms raised the lead 150 → 250 ms 5 s after joining and then stayed within
+1.3 ms of the Redmi (p95 5.6 ms); with Chrome's buffer forced to 8192 frames it
+raised the lead to 775 ms but played about 90 ms off, because Chrome
+under-reported that buffer. Couch cannot correct a misreported output delay.
+
 The **35 ms allowance is fixed**, not measured jitter. SDK 5.0.0's public
 `SendspinPlayer` has no arrival/queue statistics or late/dropped chunk counters.
 `syncInfo` exposes output latency, sync error and resync count; `timeSyncInfo`
