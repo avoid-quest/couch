@@ -115,7 +115,7 @@ test("the real playback menu keeps split audio delay and omits unsupported muxed
   expect(delayRows(menu(.3, false))).toHaveLength(0);
 });
 
-test("Live owns Media Session without a queued item, Stop leaves, and ordinary playback is restored", () => {
+test("Live owns Media Session without a queued item, its controls do nothing, and ordinary playback is restored", () => {
   const handlers = new Map<string, MediaSessionActionHandler | null>();
   const mediaSession = { metadata: null as MediaMetadata | null, playbackState: "none", position: undefined as MediaPositionState | undefined,
     setActionHandler: (action: string, callback: MediaSessionActionHandler | null) => handlers.set(action, callback),
@@ -129,11 +129,11 @@ test("Live owns Media Session without a queued item, Stop leaves, and ordinary p
   expect(mediaSession.metadata?.title).toBe("Concert");
   expect(mediaSession.playbackState).toBe("playing");
   expect(mediaSession.position).toBeUndefined();
-  for (const action of ["play", "nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
-  // Without its own handler, Android's notification Pause would pause the SDK's silent keep-alive element.
-  handlers.get("pause")!({ action: "pause" });
-  handlers.get("stop")!({ action: "stop" });
-  expect(sent).toEqual([{ type: "leave", playbackId: "load-generation" }, { type: "leave", playbackId: "load-generation" }]);
+  for (const action of ["nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
+  // Listeners get no media commands. Unhandled, Android's notification Pause would pause the SDK's silent
+  // keep-alive element, so Play, Pause and Stop are handled and do nothing.
+  for (const action of ["play", "pause", "stop"] as const) handlers.get(action)!({ action });
+  expect(sent).toEqual([]);
   // Ordinary player updates cannot clear Live or supply stale programme metadata.
   state = { ...state, player: { ...state.player, status: "idle", nowPlaying: { title: "Old programme", artist: "Old artist" } } };
   read(useMediaSession);
