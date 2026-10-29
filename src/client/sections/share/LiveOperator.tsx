@@ -38,12 +38,16 @@ export function useLiveAudioSettings(enabled = true) {
   return { settings: query.data, save };
 }
 
-/** Each listener's Sendspin minimum buffer, saved on blur. */
+/** Each listener's Sendspin minimum buffer, saved on blur; an invalid entry returns to the saved value. */
 export function PlaybackBufferInput({ id, live, className }: { id: string; live: ReturnType<typeof useLiveAudioSettings>; className?: string }) {
   const { settings, save } = live;
   if (!settings) return null;
   return <Input key={settings.minBufferMs} id={id} className={cn("w-44", className)} type="number" min={0} max={5000} step={1} defaultValue={settings.minBufferMs} disabled={save.isPending}
-    onBlur={event => { const minBufferMs = event.currentTarget.valueAsNumber; if (event.currentTarget.validity.valid && Number.isInteger(minBufferMs) && minBufferMs !== settings.minBufferMs) save.mutate({ ...settings, minBufferMs }); }} />;
+    onBlur={event => {
+      const input = event.currentTarget, minBufferMs = input.valueAsNumber;
+      if (!input.validity.valid || !Number.isInteger(minBufferMs)) input.value = String(settings.minBufferMs);
+      else if (minBufferMs !== settings.minBufferMs) save.mutate({ ...settings, minBufferMs });
+    }} />;
 }
 
 /** Public Sendspin options for the running share; playback timing/recovery stays upstream. */
