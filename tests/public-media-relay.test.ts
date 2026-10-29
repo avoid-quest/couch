@@ -55,8 +55,23 @@ test("public video and audio use protected relay even with permissive CORS and n
   const media = await f.relay.prepare("playing", { source: video, audioSource: audio, publicNetwork: true, mpv: true }, {}, target, signal());
   destination(media.source, "bytes", video);
   destination(media.audioSource!, "bytes", audio);
-  expect(f.requests.map(request => request.url).sort()).toEqual([audio, video]);
+  expect(f.requests).toHaveLength(0);
   expect(rawRequest).not.toHaveBeenCalled();
+});
+
+test("resolved public media prepares Core and Device routes without waiting for upstream", async () => {
+  let requests = 0;
+  const request = async () => { requests++; throw new Error("Delivery has not started yet"); };
+  const relay = createPassThrough(() => true, request as typeof fetch);
+  const media = { source: "https://media.example/video", hls: true, publicNetwork: true };
+  try {
+    for (const destination of [{ origin: "http://127.0.0.1:3800", userAgent: "Couch" }, target]) {
+      const prepared = await relay.prepare("playing", media, {}, destination, signal());
+      expect(prepared.hls).toBe(true);
+      expect(new URL(prepared.source).pathname).toContain("/playlist/");
+    }
+    expect(requests).toBe(0);
+  } finally { await relay.close(); }
 });
 
 test("public media cannot fall back to a raw URL when no protected destination is available", async () => {
@@ -200,17 +215,11 @@ test("a redirected playlist resolves children at its effective URL without grant
 });
 
 for (const audioOrigin of ["https://media.example", "https://audio.example", "http://media.example", "https://media.example:444"]) {
-  test(`separate audio probes and playback keep source credentials bound when audio uses ${audioOrigin}`, async () => {
+  test(`separate audio playback keeps source credentials bound when audio uses ${audioOrigin}`, async () => {
     const f = fixture();
     const video = "https://media.example/video.mp4", audio = `${audioOrigin}/audio.m4a`;
-    for (const url of [video, audio]) {
-      let requests = 0;
-      f.replies.set(url, () => response(url, "bytes", { status: ++requests === 1 ? 401 : 200, headers: { "Content-Type": "video/mp4" } }));
-    }
     const media = await f.relay.prepare("playing", { source: video, audioSource: audio, publicNetwork: true }, providerHeaders, target, signal());
-    const fallback = f.requests.filter(request => request.headers.has("referer"));
-    expect(fallback).toHaveLength(2);
-    for (const request of fallback) sourceHeaders(request.headers, new URL(request.url).origin === new URL(video).origin);
+    expect(f.requests).toHaveLength(0);
     expect((await f.serve(media.source)).status).toBe(200);
     sourceHeaders(f.requests.at(-1)!.headers, true);
     expect((await f.serve(media.audioSource!)).status).toBe(200);

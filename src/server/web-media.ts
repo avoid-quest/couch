@@ -124,7 +124,7 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
   const video = selected.find(stream => stream.vcodec !== "none");
   const hls = video && String(video.protocol).startsWith("m3u8") ? hlsPreview(video.manifest_url ?? source, undefined, typeof video.manifest_url === "string" && video.manifest_url !== video.url ? { url: String(video.url) } : undefined) : undefined;
   const preview = info.is_live === true || info.live_status === "is_live" ? undefined : storyboardPreview(info) ?? vttPreview(info.couch_preview_vtt) ?? hls;
-  return { source, ...(preview ? { preview } : {}), ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.every(stream => String(stream.protocol).startsWith("m3u8")) ? { hls: true } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  return { source, ...(String((video ?? selected[0]!).protocol).startsWith("m3u8") ? { hls: true } : {}), ...(preview ? { preview } : {}), ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };

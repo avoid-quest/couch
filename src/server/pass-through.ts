@@ -10,7 +10,7 @@ import type { WebMediaSource } from "./web-media";
 // uses the protected relay; other URL media is probed for the destination's access.
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
-type Media = { source: string; audioSource?: string; audioManifest?: import("./source-preparation").AudioManifest; credentialOrigin?: string; hlsSelection?: WebMediaSource["hlsSelection"]; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
+type Media = { source: string; audioSource?: string; audioManifest?: import("./source-preparation").AudioManifest; credentialOrigin?: string; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
 // refused: the last error status the source answered, which a browser reports as an unsupported format.
 type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; audioCors?: boolean; audioManifest?: import("./source-preparation").AudioManifest; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; hlsSelection?: Media["hlsSelection"]; logged: Set<string> };
 type Kind = "playlist" | "bytes";
@@ -63,8 +63,8 @@ const relayHeaders = (relay: Relay, url: string) => {
 // CORS, so they also need the source to share it. A source Core can't fetch either stays
 // direct, so the Device reports the source's own error. An HTTPS page can't load http://
 // media at all (mixed content), so Core relays those whenever it can fetch them (#644 ticket 8).
-async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSignal, request: typeof fetch = fetch) {
-  const ask = (headers: Record<string, string>) => request(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) })
+async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSignal) {
+  const ask = (headers: Record<string, string>) => fetch(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) })
     .then(async response => { await response.body?.cancel().catch(() => {}); return response; }, () => null);
   const mixed = relay.target.origin.startsWith("https:") && url.startsWith("http:");
   const response = await ask(mixed ? relayHeaders(relay, url) : { origin: relay.target.origin, "user-agent": relay.target.userAgent });
@@ -156,7 +156,11 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // a separate audio URL or redirected playlist cannot expand that trust.
       const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.credentialOrigin ?? media.source).origin, target, headers, publicNetwork: media.publicNetwork, audioCors, audioManifest: media.audioManifest, createdAt: Date.now(), source: media.source, audioSource: media.audioSource, hlsSelection: media.hlsSelection, logged: new Set() };
       const route = async (url: string) => {
-        const answer = await probe(url, relay, !!media.mpegts || audioCors, signal, relay.publicNetwork ? publicRequest : fetch);
+        // Public media always uses the protected relay. Its extractor already
+        // knows the transport; discarded CORS probes only delay the first frame.
+        const answer = relay.publicNetwork
+          ? { direct: false, playlist: !!(url === media.source && (media.hls || media.hlsSelection)) || playlistType(null, url) }
+          : await probe(url, relay, !!media.mpegts || audioCors, signal);
         // Web Audio needs readable audio, including every HLS child; a native media element alone does not.
         return { url: answer.direct && !relay.publicNetwork && !(audioCors && answer.playlist) ? url : link(relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
       };

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import https from "node:https";
+import { syncBuiltinESMExports } from "node:module";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { helper, startHelpers } from "../src/server/helpers";
@@ -27,6 +29,13 @@ async function fixture(t: TestContext, mode = "success", delay = 50) {
   const timers: ReturnType<typeof setInterval>[] = [], interval = globalThis.setInterval;
   t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const timer = interval(...args); timers.push(timer); return timer; });
   t.mock.method(globalThis, "fetch", async () => { throw new Error("Offline fixture"); });
+  let upstreamRequests = 0;
+  const request = https.request;
+  t.mock.method(https, "request", (...args: Parameters<typeof https.request>) => {
+    if (String(args[0]).startsWith("https://example.com/")) { upstreamRequests++; throw new Error("The receiver has not requested media yet"); }
+    return request(...args);
+  });
+  syncBuiltinESMExports();
   for (const [name, version] of [["qjs", "0.17.0"], ["ffmpeg", "ffmpeg version 9.0.2"]]) {
     writeFileSync(join(bin, name!), `#!/bin/sh\necho '${version}'\n`, { mode: 0o755 });
   }
@@ -64,6 +73,7 @@ else {
     await close();
     for (const timer of timers) clearInterval(timer);
     await updateStatus(helpers, () => {});
+    t.mock.restoreAll(); syncBuiltinESMExports();
     for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     rmSync(directory, { recursive: true, force: true });
   });
@@ -71,6 +81,7 @@ else {
   return {
     close,
     get state() { return state!; },
+    get upstreamRequests() { return upstreamRequests; },
     hold: () => writeFileSync(gate, ""),
     release: () => rmSync(gate, { force: true }),
     runs: (): { inspect: boolean; url: string }[] => existsSync(runsFile) ? readFileSync(runsFile, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [],
@@ -96,6 +107,7 @@ for (const intake of ["enqueueWeb", "enqueueProvider"] as const) test(`${intake}
   assert.equal(entry.thumbnail, "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg");
   assert.deepEqual(entry.creator, { title: "Channel", url: "https://www.youtube.com/@fixture" });
   assert.deepEqual(f.runs(), [{ inspect: false, url }]);
+  assert.equal(f.upstreamRequests, 0, "Core dispatches the resolved media without discarded delivery probes");
 });
 
 test("a queued link is inspected immediately without starting playback", options, async t => {
