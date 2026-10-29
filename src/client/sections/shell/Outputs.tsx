@@ -81,7 +81,7 @@ function Panel({ state, connected, run, className, label }: Props & { className?
     <PopoverTrigger asChild>{trigger}</PopoverTrigger>
     {/* The rows scroll under the first line, so the panel keeps one surface rather than a sticky line painted over it. */}
     {open && <PopoverContent {...toolPanel(button.current)} aria-label="Where it plays" onOpenAutoFocus={focusFirst}
-      className="max-h-[min(40rem,calc(var(--radix-popover-content-available-height)-1rem))] w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-hidden p-3"><SyncScope>{body()}</SyncScope></PopoverContent>}
+      className="max-h-[min(40rem,calc(var(--radix-popover-content-available-height)-var(--player-top,0px)-1rem))] w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-hidden p-3"><SyncScope>{body()}</SyncScope></PopoverContent>}
   </Popover>;
   return <Sheet open={open} onOpenChange={change}>
     <SheetTrigger asChild>{trigger}</SheetTrigger>

@@ -79,6 +79,8 @@ menu, are one family wherever they open, from the band or the now-playing bar:
   with a shadow ([Up next](#up-next))
 - one place: 8px above the band (or the bar), ending at the gutter, the
   tools' right edge, whichever tool opened them (`toolPanel`)
+- one ceiling: in the player they stop below the top line (`--player-top`), as
+  Up next does, so the end time and Back stay in view; a longer list scrolls
 - each grows from the button that opened it
 
 Where it plays' first line doesn't stick over its rows with a second surface:

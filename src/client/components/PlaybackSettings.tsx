@@ -237,7 +237,7 @@ export function PlaybackMenu({ details, tracks: showTracks = true, trigger, ...p
   : null;
   // The Back row stays while a long list (subtitle languages, chapters) scrolls under it.
   return <PopoverContent ref={content} data-player-menu {...toolPanel(trigger)} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
-    className="max-h-[calc(var(--radix-popover-content-available-height)-1rem)] w-72 gap-0 overflow-hidden p-0"
+    className="max-h-[calc(var(--radix-popover-content-available-height)-var(--player-top,0px)-1rem)] w-72 gap-0 overflow-hidden p-0"
     // Back in a submenu returns to the menu, as on YouTube and a TV's own menus; Back on the menu closes it.
     onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}
     // It opens on the menu again, however it closed; focus still returns to the gear.
