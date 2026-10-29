@@ -41,6 +41,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   let qualityResolution: AbortController | null = null;
   let audioOnly = false;
   let audioSelection: AudioSelection | undefined;
+  let pendingAudioSelection = false;
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
@@ -218,6 +219,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       loaded = command;
     }
     try { sendPlayer(command); } catch (error) {
+      pendingAudioSelection = false;
       playIntent++;
       cancelContinuation();
       cancelRadioRetry();
@@ -347,6 +349,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const playbackId = crypto.randomUUID();
     subtitleWarning = null;
     audioSelection = undefined;
+    pendingAudioSelection = false;
     addedSubtitles = [];
     const profileId = state.activeProfile.id;
     const preferences = { ...state.preferences!.profile };
@@ -805,6 +808,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
           if (action.kind === "audio") {
             const track = state.player.tracks!.find(track => track.kind === "audio" && track.index === action.index)!;
             audioSelection = { index: track.index, language: track.language, label: track.label };
+            pendingAudioSelection = true;
           }
           break;
         case "seek":
@@ -838,9 +842,12 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       }
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const audio = player.tracks?.filter(track => track.kind === "audio") ?? [], selected = audio.find(track => track.selected);
-      // A pending renderer/decoder can report generic audio0 before resolving its
-      // real identity. It must not replace explicit intent or profile preference.
-      if (selected && (audio.length > 1 || selected.index > 0 || selected.language || selected.label && selected.label !== "Audio")) audioSelection = { index: selected.index, language: selected.language, label: selected.label };
+      // Reports already in flight may still select the old track. Only a
+      // matching identity confirms the command; a failed player releases it.
+      if (["error", "unavailable", "idle", "ended"].includes(player.status) || selected && audioSelection
+        && (audioSelection.language || audioSelection.label !== "Audio" ? selected.language === audioSelection.language && selected.label === audioSelection.label : selected.index === audioSelection.index)) pendingAudioSelection = false;
+      // Generic audio0 does not establish a rendition's identity.
+      if (!pendingAudioSelection && selected && (audio.length > 1 || selected.index > 0 || selected.language || selected.label && selected.label !== "Audio")) audioSelection = { index: selected.index, language: selected.language, label: selected.label };
       const wasUnavailable = state.player.status === "unavailable";
       // A player can report EOF after an interrupted HTTP range response. An early
       // VOD end only starts the same private expiry confirmation, never a blind retry.
