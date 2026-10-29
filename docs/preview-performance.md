@@ -335,3 +335,194 @@ All five suites pass in normal and reduced-motion runs with that correction.
 Evidence is in `.artifacts/pr-stack/reviews/duration-focus-detail` (failure) and
 `duration-active{,-reduced}` (passing runs). This diagnoses the keyboard-test
 failure; the earlier 135-second drag result remains unexplained.
+
+## Initial YouTube timeline previews, 28 October 2026
+
+Video.js 10.2.0 supplies standalone thumbnail selection and sprite cropping;
+This initial measurement retained the shadcn slider and Couch seek commands;
+the later Slider and provider results below supersede its built-state description. The provider
+sample was Khruangbin's NPR Tiny Desk concert (`vWLJeqLPfSU`): yt-dlp 2026.10.26
+returned six 5×5 storyboard sheets of 160×90 tiles, 140 intervals over 693 seconds.
+Core reused the playback extraction. A controller with no local media fetched
+88 bytes of metadata and one 77,226–77,518-byte WebP sheet per visited interval
+sheet. Moving within a cached sheet adds no request. Entering the bar after
+unmounting the player fetches its sheet again; Core shares cached upstream bytes.
+Other providers and missing storyboards retain timestamps.
+
+Sequential before/after runs used matching production route fixtures in headless
+Chromium on Linux, with 120 pointer moves per phase and 250 ms clock/buffer
+updates. They measure development React work and frame scheduling, with the
+same timestamp-only fallback on both trees; real-image delivery was checked
+separately above. Baseline is main at `ef61a4ae` (its client matches `02863ce4`).
+
+| Workload | Before | After |
+| --- | --- | --- |
+| Bar hover: p95 frame / React commit | 16.8 / 0.5 ms | 16.8 / 0.7 ms |
+| Bar drag: p95 frame / React commit | 16.8 / 4.4 ms | 16.7 / 4.8 ms |
+| Player hover: p95 frame / React commit | 16.8 / 0.5 ms | 16.8 / 0.7 ms |
+| Player drag: p95 frame / React commit | 16.8 / 3.0 ms | 16.8 / 3.9 ms |
+| Drag commits per phase | 126 | 126 |
+| Production JS + CSS, gzip sum | 848,285 bytes | 862,083 bytes |
+
+The production asset delta is 41,106 raw / 13,798 gzip bytes. Hover-only
+regressions still read zero chapters; touch hover and disabled timelines read
+zero track geometry. Trusted mouse/touch drags send zero seeks until release,
+one on release and none on cancellation; TV retains ten-second steps and Down
+to Play. These are interaction improvements, not a measured decoding or seek
+latency improvement. No physical TV, mobile GPU or cross-device latency claim
+is made. The existing Live-radio Home/Up-next clock assertion fails on both
+baseline and changed trees; the earlier clock-isolation assertions pass.
+
+
+## Provider-independent preview refinement, 28 October 2026
+
+The client accepts Core's compact grid or timed-cue metadata for any source.
+It selects only the covering cue (Video.js 10.2.0 does not enforce `endTime`),
+then memoizes the small `Thumbnail.Root` / `Thumbnail.Image` presentation with
+stable inputs. Its resize observer and image load/error handlers remain owned
+by Video.js. This measurement predates the Slider migration below; transport
+and clocks remain unchanged. The root package
+export is the documented public Thumbnail entry; no player/store or media engine
+is imported. npm still reported 10.2.0 as stable on this run. This follows
+[Video.js Thumbnail](https://videojs.org/docs/framework/react/reference/components/thumbnail),
+[React memo](https://react.dev/reference/react/memo) (local state, stable props,
+measured boundaries) and [effect cleanup](https://react.dev/reference/react/useEffect)
+(cancel obsolete work and mirror acquired resource lifetimes).
+
+Three alternating runs compared the original preview components from `c5357ee8`
+against the refinement in the same current shell. Each phase sent 120 pointer
+moves through the production route fixture in headless Chromium, at 1440×900,
+with the same captured 43,112-byte YouTube WebP. The baseline modules were
+substituted by the scratch Vite harness; no installed app was changed.
+
+| Measurement | Previous preview | Refined preview |
+| --- | --- | --- |
+| Style reads, 120 moves within one cue (each run) | 119 | 0 |
+| React render time, same-cue phases summed | 432.4 ms | 252.3 ms |
+| Style reads, 120 moves crossing cues (each run) | 120 | 25 |
+| React render time, crossing-cue phases summed | 449.3 ms | 270.6 ms |
+| Same-cue p95 React commit, run range | 1.4–1.7 ms | 0.8–1.2 ms |
+| Same-cue p95 frame scheduling, run range | 17.2–17.3 ms | 17.3–17.4 ms |
+| Additional image requests / loads / object URLs in either phase | 0 / 0 / 0 | 0 / 0 / 0 |
+
+Measured render work fell 41.7% within a cue and 39.8% across cues; overall
+frame scheduling did not improve. The timestamp still renders on pointer
+updates (119/120 commits), and track geometry remains 120 reads. This is
+development React and no media element, not a production/decoder/hardware
+latency or memory benchmark. One image URL was created and revoked per run.
+The shared Core cache avoids repeat upstream downloads; each remounted
+player/bar still obtains its own image URL. No global credential-independent
+cache was introduced. Raw evidence: scratch `client-implementation/measurements.json`.
+
+Browser regressions now cover transient HTTP and missing-image re-hover,
+corrupt-image decode recovery, bounded active retry and cancellation, arbitrary
+provider URLs, fractional cues and gaps, and duration-shrink draft clamping.
+Trusted mouse/touch/TV interactions and 14 TV focus cases passed. Investigation
+of the previously failing Live-radio assertion found that it rejected the
+intentional wall-clock programme progress (`RadioProgress`). The corrected
+regression preserves that feature and passes: no seek control or Up-next end
+time, no media-derived end time, and media clock updates do not move programme
+progress. Matching before/after desktop, phone, TV, fullscreen and bar captures
+use the same real provider image bytes, await decode and two animation frames,
+and demonstrate the unchanged layout. They replay captured assets and do not
+prove fresh provider extraction or A/V playback.
+
+## Video.js seek interaction, 28 October 2026
+
+`PlaybackSeekBar` replaces only the playback timeline with the documented
+Video.js 10.2.0 generic Slider parts. Its shared `useSlider` machinery caches drag
+geometry and separates change from commit. Couch guards commit with a matching
+pointer release, since this Video.js version also calls commit on lost capture.
+The standalone Thumbnail retains the previous cue memoization and recovery.
+The [Slider reference](https://videojs.org/docs/framework/react/reference/components/slider),
+[TimeSlider reference](https://videojs.org/docs/framework/react/reference/components/time-slider)
+and published 10.2.0 implementation were checked. TimeSlider's media-store seek
+during drag does not match Couch's command contract. The
+[shadcn guide](https://videojs.org/docs/guides/installation/shadcn) and registry
+describe optional editable skins; the primitives require no Base UI migration.
+
+Three alternating baseline/changed runs used `595d588c`'s components in the same
+1440×900 Linux headless Chromium development fixture. Trusted mouse input made
+120 moves per hover/drag phase with 250ms clock and buffer observations, on the
+bar and player. A separate 120-move preview workload reused the same captured
+43,112-byte image as the prior refinement. Results are accumulated React Profiler
+time across the three runs, not input latency or production CPU:
+
+| Measurement | Refined shadcn timeline | Video.js timeline |
+| --- | --- | --- |
+| Bar drag render time | 1,176.2ms | 689.2ms |
+| Player drag render time | 1,252.2ms | 734.3ms |
+| Geometry reads per drag | 122 | 3 |
+| Bar / player hover render time, timestamp only | 315.0 / 295.4ms | 268.4 / 213.5ms |
+| Same-cue preview render time | 225.6ms | 237.4ms |
+| Crossing-cue preview render time | 264.5ms | 353.8ms |
+| Thumbnail style reads, same / crossing cue (each run) | 0 / 25 | 0 / 25 |
+| Additional preview requests / loads / object URLs in either phase | 0 / 0 / 0 | 0 / 0 / 0 |
+
+Drag render work fell about 41%; crossing-cue render work rose about 34% with the
+additional Slider parts/subscriptions (p95 1.3–1.4ms → 2.7ms). This tradeoff keeps
+the previous same-cue crop optimization and improves dragging, without claiming
+an across-the-board speedup. Layout counts remained roughly 124–141 per phase;
+fewer explicit geometry reads do not mean fewer browser layouts. Most p95 frame
+intervals were 16.7–16.8ms; one changed bar drag reached 33.3ms. Neither tree met
+a strict frame budget in every sample. No decoding, physical phone/TV GPU,
+distributed-clock or seek acknowledgement latency was measured.
+
+The production JS/CSS asset sum changed from 2,815,233 to 2,833,353 raw bytes and
+866,374 to 872,177 gzip bytes: +18,120 raw / +5,803 gzip. The frozen dependency
+versions are unchanged.
+
+Trusted mouse and touch regressions cover click/tap, release, cancellation,
+lost capture, Escape, disconnect, source replacement, unmount, shrinking/fractional
+duration and exact endpoints. Trusted keys cover ten-second cumulative edits
+across clock ticks, Home/End, Page Up/Down and Down to Play. The touch target
+measured 44px; the desktop target 27px at this viewport. The visible line and
+transport layout remain unchanged. The fixtures create no media element.
+Language Select selection/cancellation and player popover focus restoration pass
+with trusted keyboard input on desktop and TV presentation; the TV regression
+also covers nested queue menus. Matching desktop, phone, TV, fullscreen and bar
+screenshots, raw measurements and harnesses are in `/tmp/couch-videojs-timeline/`.
+
+
+## Integrated validation and assets, 28 October 2026
+
+The final integrated UI passes preview/recovery, seek, transition, clock and all
+16 TV-focus cases, plus trusted mouse/touch and desktop/TV menu/Select checks.
+The resize regression grows a visible unchanged cue from 160×90 to 238×133 when
+resizing 390→1920px, retaining the same blob and one image download. Trusted pointer release also matches the displayed draft when duration shrinks
+or grows during a held drag; idle Escape/TV Back reaches normal navigation after
+an active edit is canceled. The radio
+regression now requires real programme progress, holds its wall clock fixed and
+rechecks seeking/end labels after injected media-clock observations.
+
+Fresh production resolution succeeds for all nine website providers. The five
+preview-capable samples deliver 16 images totalling 3,634,492 bytes. Replaying
+those images in the production UI checks 50 cue positions, crops and fractional
+boundaries; four samples without declared previews check 28 timestamp fallbacks.
+All use a remote-controller fixture with zero local media and zero hover commands.
+See [provider coverage](provider-previews.md) for per-source evidence and limits.
+No decoded-video synchronization claim follows from these rendered crop checks.
+
+At main `ee4f5876`, the source-only layer's client assets total 2,773,351 raw /
+852,449 gzip bytes. With the integrated Slider and Thumbnail they total
+2,833,618 raw / 872,302 gzip: **+60,267 raw / +19,853 gzip bytes**. These are sums
+of emitted `dist/assets` JavaScript and CSS (Python gzip level 9, zlib 1.3.1), not initial-route
+transfer or source-map sizes. The image-size dependency stays in Core. This
+supersedes the initial total bundle delta; the +5.8 KB figure above isolates the
+later Slider migration alone.
+
+A fresh disposable combination with Sendspin `bf6c2279` builds and passes 56
+preview/source-preparation unit tests and 48 integration cases, including the
+preview-admission case, shared transport rights, Live audience and official SDK.
+This supersedes the earlier combined-tree snapshot. Explicit reconciliation
+retains pending source admission before preview binding, binds replacement group
+sources, and strips preview descriptors beside Sendspin's other private fields.
+HLS preview discovery moves to `createSourcePreparation` and reuses its completed
+manifest reads, preserving selected-channel classification without adding an
+admission fetch. Sendspin's worker/SDK implementation remains unchanged.
+
+The extra case covers pending picture-to-group resolution, admitted preview
+replacement, Direct collapse, renderer privacy and Stop. These test merges and
+Sendspin changes are absent from submitted branches. The combination proves
+software contracts with fixture extraction/codec input; it does not validate
+physical receiver timing, native capture or A/V latency.

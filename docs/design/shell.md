@@ -279,7 +279,9 @@ nothing changes side as it grows into the band
   corners, none for live media: a white 18% track whose played part glows
   softly. Its hit area is a .5rem padding centred on that edge; under the
   pointer (the hand) the line thickens to .375rem and shows its handle, and the time under the pointer
-  (`text-meta`, `rounded-sm`) sits .5rem above the line's centre.
+  (`text-meta`, `rounded-sm`) sits .5rem above the line's centre. Available YouTube
+  storyboard scenes appear above that time, as in the player; touch dragging and
+  keyboard seeking show the same draft preview ([Player](player.md)).
 - Phones (below `sm`, the band's own phone breakpoint) keep Play/Pause and
   Open player, at fullscreen's x: a minimized player needs no mixer, and the
   player has it.
