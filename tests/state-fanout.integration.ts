@@ -13,14 +13,15 @@ async function fixture(t: TestContext) {
   process.chdir(directory);
   process.env.COUCH_DATA_DIR = directory;
   process.env.COUCH_PORT = "0";
-  const f = await liveFixture();
+  let f: Awaited<ReturnType<typeof liveFixture>> | undefined;
   t.after(async () => {
-    try { await f.close(); } finally {
+    try { await f?.close(); } finally {
       process.chdir(cwd);
       for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
       rmSync(directory, { recursive: true, force: true });
     }
   });
+  f = await liveFixture();
   const first = f.receiver, second = await f.connect(2, "&audio=1&video=1");
   assert.equal((await first.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
   await f.publish("event", "microphone");

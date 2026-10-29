@@ -335,11 +335,10 @@ test("incoming AirPlay automatically delivers the sender's sound through schedul
   fake.send({ tone: { frequency: 440 } });
   await until(() => !!device.state.liveSources?.length);
   const source = device.state.liveSources![0]!;
-  await until(() => !!scheduled(host), 5_000);
-  assert.notEqual(scheduled(host)?.status, "paused");
+  await until(() => scheduled(host)?.status === "playing", 5_000);
   assert.equal((await device.command({ type: "playLive", sourceId: source.id, deviceId: receiver.id })).ok, true);
   const chunks = await hear();
-  await until(() => !!scheduled(device));
+  await until(() => scheduled(device)?.status === "playing");
   assert.equal(source.audioDelivery, "pcm");
   assert.equal(device.load()?.hls, undefined, "audio-only AirPlay never loads an HLS receiver");
   await until(() => Buffer.concat(chunks).length >= 48000 * 4 * 2);
@@ -424,8 +423,7 @@ test("native AirPlay survives unavailable audio without taking outputs, and a la
   await ready(again, airplay);
   sender(again, 32, "Alice");
   again.send({ tone: { frequency: 440 } });
-  await until(() => !!scheduled(host));
-  assert.notEqual(scheduled(host)?.status, "paused");
+  await until(() => scheduled(host)?.status === "playing");
   assert.equal(host.state.playbacks?.filter(playback => playback.liveSourceId).length, 1, "reconnect starts exactly one fresh playback");
 });
 
@@ -445,8 +443,7 @@ test("incoming AirPlay takes only the host output, regardless of its selected de
   await ready(fake, airplay);
   sender(fake, 31, "Alice");
   fake.send({ tone: { frequency: 440 } });
-  await until(() => !!scheduled(host), 5_000);
-  assert.notEqual(scheduled(host)?.status, "paused");
+  await until(() => scheduled(host)?.status === "playing", 5_000);
   assert.equal(host.state.playbacks?.filter(playback => playback.liveSourceId).length, 1);
   const saved = openStore(databasePath, true);
   try { assert.ok(saved.playback(previousPlayback).queue.some(entry => entry.id === "host-item"), "the previous host queue stays"); } finally { saved.close(); }
@@ -471,7 +468,7 @@ test("a sender's source ends with its own connection whatever else is connected,
   await until(() => !!device.state.liveSources?.length);
   const alice = device.state.liveSources![0]!;
   assert.equal((await device.command({ type: "playLive", sourceId: alice.id, deviceId: receiver.id })).ok, true);
-  await until(() => !!scheduled(device), 30_000);
+  await until(() => scheduled(device)?.status === "playing", 30_000);
   const loads = () => device.messages.filter(message => message.type === "player" && message.command.type === "load").length;
   const loaded = loads();
 
@@ -496,8 +493,7 @@ test("a sender's source ends with its own connection whatever else is connected,
   assert.notEqual(bob.id, alice.id);
   assert.equal(bob.name, "AirPlay · Bob");
   assert.equal((await airplay()).sender, "Bob");
-  await until(() => scheduled(host)?.liveSourceId === bob.id, 5_000);
-  assert.notEqual(scheduled(host)?.status, "paused");
+  await until(() => scheduled(host)?.liveSourceId === bob.id && scheduled(host)?.status === "playing", 5_000);
   assert.equal(host.state.playbacks?.length, 1, "Alice leaves no stale playback");
   await new Promise(resolve => setTimeout(resolve, 1_500));
   assert.equal(loads(), loaded, "Bob's sound never reaches the playback Alice's source had");
@@ -519,7 +515,7 @@ test("a sender's source ends with its own connection whatever else is connected,
   assert.equal(device.state.liveSources!.length, 1);
   const reconnected = device.state.liveSources![0]!;
   assert.notEqual(reconnected.id, bob.id);
-  await until(() => scheduled(host)?.liveSourceId === reconnected.id, 5_000);
+  await until(() => scheduled(host)?.liveSourceId === reconnected.id && scheduled(host)?.status === "playing", 5_000);
   await new Promise(resolve => setTimeout(resolve, 300));
   assert.equal(host.state.playbacks?.length, 1);
   for (const source of [alice, bob, reconnected]) {
@@ -584,7 +580,7 @@ test("a device that stops sharing its speakers leaves AirPlay waiting, and AirPl
   assert.equal((await other.command({ type: "playLive", sourceId, deviceId: receiver.id })).ok, false, "only with the receiver's consent");
   assert.equal((await device.command({ type: "sharing", sharing: { audio: true, video: false } })).ok, true);
   assert.equal((await other.command({ type: "playLive", sourceId, deviceId: receiver.id })).ok, true);
-  await until(() => !!scheduled(device), 30_000);
+  await until(() => scheduled(device)?.status === "playing", 30_000);
   const revoked = await device.command({ type: "sharing", sharing: { audio: false, video: false } });
   assert.equal(revoked.ok, true, JSON.stringify(revoked));
   await until(() => device.messages.some(message => message.type === "sendspin" && !message.listen));
@@ -720,7 +716,7 @@ exec ${gstLaunch} -q ${pipeline}
   await until(() => !!device.state.liveSources?.length, 15_000);
   assert.equal((await airplay()).sender, "GStreamer");
   assert.equal((await device.command({ type: "playLive", sourceId: device.state.liveSources![0]!.id, deviceId: receiver.id })).ok, true);
-  await until(() => !!scheduled(device), 30_000);
+  await until(() => scheduled(device)?.status === "playing", 30_000);
   const chunks = await hear();
   await until(() => Buffer.concat(chunks).length >= 48000 * 4 * 2);
   const decoded = Buffer.concat(chunks).subarray(-48000 * 4);
