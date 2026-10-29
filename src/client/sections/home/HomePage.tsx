@@ -144,7 +144,7 @@ export function HomePage() {
   const onAirPending = favorites.isPending || builtIn.isPending;
   const continuingUrls = new Set(hasRow("continue") ? unfinished.map(item => item.url).filter(Boolean) : []);
   const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
-  const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live && !continuingUrls.has(item.url) && item.url !== currentUrl) ?? [], item => item.id, hero !== undefined && !later.isPending);
+  const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live && !continuingUrls.has(item.url) && (!currentUrl || item.url !== currentUrl)) ?? [], item => item.id, hero !== undefined && !later.isPending);
   const stationMeta = (station: RadioStation) => metaLine(showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode));
   const filled: Partial<Record<HomeRowId, boolean>> = { upNext: !!upcoming.length, continue: !!continued.length, later: !!savedMedia.length, recent: !!recent.length };
   // The sources: shared inputs, Live TV while a source has channels, and what's saved from each source with a home.

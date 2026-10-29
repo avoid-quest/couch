@@ -324,8 +324,10 @@ by its picture's width, so every row shares one height and fills the column
 while posters, squares and frames keep their shapes; the last row keeps its
 size; on a phone frames span the column and posters come two across. Up and
 Down move between its lines (`data-nav-row`). Details opens from the tile; Play, Queue, ordering and Remove stay in
-its menu, and its caption and menu follow the picture's edges. Original order
-is preserved. Missing posters keep the same silhouette.
+its menu, and its caption and menu follow the picture's edges. Its meta line
+names the creator, then the source ("Blender Studio, YouTube, 8 min"), so
+same-titled items from different sources stay apart; Home's shelves leave the
+source out. Original order is preserved. Missing posters keep the same silhouette.
 Removing an item focuses the next item's primary link. Other Saved tabs retain
 their lists.
 

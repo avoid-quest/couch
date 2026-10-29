@@ -9,6 +9,7 @@ import { metaLine, mediaCaption } from "@/media-caption";
 import { formatRuntime } from "@/time-format";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { savedShape } from "@/art-shape";
+import { savedSourceLabel } from "@/saved-source";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -91,7 +92,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
         return <SavedItem key={item.id} item={item}><MediaTile natural data-saved-details={item.id} source={item.url} related={{ collection: item.collection, creator: item.creator }}
           thumbnail={item.thumbnail} shape={shape} own={savedShape(item)}
           title={caption.title}
-          meta={metaLine(caption.lead, item.creator?.title ?? caption.subtitle, !item.live && item.duration != null && formatRuntime(item.duration))}
+          meta={metaLine(caption.lead, item.creator?.title ?? caption.subtitle, savedSourceLabel(item), !item.live && item.duration != null && formatRuntime(item.duration))}
           aria-label={`Details ${caption.title}`} href={itemLocation("saved", item.id)} onClick={inspect}
           menu={[
             { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
