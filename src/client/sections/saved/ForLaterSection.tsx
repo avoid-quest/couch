@@ -91,7 +91,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
           artFit="contain" shape={shape} own={savedShape(item)}
           title={caption.title}
           meta={metaLine(caption.meta, !item.live && item.duration != null && formatDuration(item.duration))}
-          primary={{ label: "Details", onClick: inspect }}
+          primary={{ label: "Details", href: itemLocation("saved", item.id), onClick: inspect }}
           menu={[
             { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
             { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },

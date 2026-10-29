@@ -69,13 +69,14 @@ a dedicated TV, see the [download page](https://couch.avoid.quest/download).
 ## Develop
 
 Couch uses React for the TV and browser remote, Core on Node for the shared queue
-and SQLite storage, and Electron for the app.
+and SQLite storage, and Electron for the app. Use the latest stable Bun and Node 24 or newer.
 
 ```sh
 bun install --frozen-lockfile
 bun run app       # Build and start the Electron app on .data
 bun run dev       # Browser UI and Core, with Vite hot reload
 bun run typecheck
+bun run test      # Tests with each file isolated from other files' mocks and globals
 bun run build     # Frontend assets and the Core and app bundles (build/)
 bun run package   # Installers with electron-builder (.artifacts/app)
 ```

@@ -32,7 +32,7 @@ import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOnLine, WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
-import { AmbientLight, roomStyle, useArtworkLight } from "@/components/AmbientLight";
+import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { titleFit, titleLength } from "@/components/Stage";
 import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
@@ -72,8 +72,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const root = useRef<HTMLElement>(null);
   const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
   const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
-  // What lights the letterbox around a playing picture (AmbientLight).
-  const stage = useRef<HTMLDivElement>(null);
   // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
   const tap = useRef<boolean | null>(null);
   // What the picture's last click asked for, so a double-click's second click can undo it.
@@ -111,11 +109,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // An mpv channel shows its picture in mpv's own window, so this one shows the artwork.
   const separate = !!playback?.hostOnly && showsPicture(state);
   const picture = showsPicture(state) && !separate;
-  const showPicture = useCallback((element: HTMLDivElement | null) => {
-    stage.current = element;
-    const leave = picture ? renderInto(element) : undefined;
-    return () => { stage.current = null; leave?.(); };
-  }, [picture]);
+  const showPicture = useCallback((element: HTMLDivElement | null) => picture ? renderInto(element) : undefined, [picture]);
   const artworkStage = audioOnly || !picture;
   const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending;
   useCouchHotkeys([{ hotkey: "F", enabled: canFullscreen, action: () => void fullscreen.toggle() }]);
@@ -210,6 +204,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.key === "Escape" || tvPresentation && event.key === "BrowserBack") {
+        // Let an active timeline edit cancel before Back hides or leaves the player.
+        if (event.target instanceof Element && event.target.closest('[data-playback-seek][data-seeking]')) return;
         if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="listbox"][data-state="open"], [role="menu"][data-state="open"], [data-slot="popover-content"][data-state="open"]')) return;
         // Back on a toast's action only leaves it (navigation.ts).
         if (event.target instanceof Element && event.target.closest("[data-sonner-toaster]")) return;
@@ -311,8 +307,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         takes focus when the player opens, and keys on it are shortcuts (useCouchHotkeys counts a tabindex of -1 as
         background). As on YouTube, a click on a video plays or pauses (on audio, a stray click leaves the music alone),
         a click while Up next is open only closes it, and a double-click toggles fullscreen; a tap shows or hides the controls. */}
-    {/* Windowed video lights its letterbox; fullscreen and TV keep black bars. Artwork stands in its room. */}
-    {current && osd && !fullscreen.fullscreen && !tvPresentation && <AmbientLight src={current.thumbnail} anchor={stage} className="[--backlight:8rem]" />}
+    {/* Video keeps black letterbox bars in every view. Artwork stands in its room. */}
     {current && artworkStage && <div aria-hidden="true" className="room" />}
     <div ref={showPicture} data-player-surface tabIndex={-1} role="group" aria-label={title ? `Player: ${title}` : "Player"} className="player-video absolute inset-0 outline-none"
       onPointerDown={event => { tap.current = event.pointerType === "touch" ? shown : null; }}

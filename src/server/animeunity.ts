@@ -5,6 +5,7 @@ import { animeUnityTitle } from "./providers/animeunity";
 import { ProviderError, readProviderText } from "./providers/http";
 import { ExtractionError } from "./yt-dlp";
 import type { WebMediaMetadata } from "./web-media";
+import { playerPreview, type PreviewManifest } from "./preview-manifest";
 
 const unavailable = () => new ExtractionError("AnimeUnity's direct stream is unavailable. Try again shortly or choose another source.");
 const changed = () => new ExtractionError("AnimeUnity changed its player response. Try another episode or source.");
@@ -46,7 +47,7 @@ function playlistTarget(html: string, embed: URL, id: number): URL {
   return url;
 }
 
-export async function resolveAnimeUnityLink(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
+export async function resolveAnimeUnityLink(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[]; preview?: PreviewManifest }> {
   signal?.throwIfAborted();
   const page = animeUnityPageUrl(value);
   if (!page) throw new ProviderError("Choose an AnimeUnity episode link.", 400);
@@ -73,7 +74,7 @@ export async function resolveAnimeUnityLink(value: string, signal?: AbortSignal,
     const manifest = await playerText(master.href, 512 * 1024, { ...headers, Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, text/plain" }, cancellation, request);
     if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) throw unavailable();
     cancellation.throwIfAborted();
-    return { url: master.href, headers, metadata, subtitles: [] };
+    return { url: master.href, headers, metadata, subtitles: [], preview: playerPreview(html, embed.href) };
   } catch (error) {
     signal?.throwIfAborted();
     if (deadline.aborted || error instanceof DOMException && error.name === "TimeoutError") throw new ExtractionError("AnimeUnity took too long to prepare this episode. Try again shortly.");

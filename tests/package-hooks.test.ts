@@ -25,7 +25,7 @@ test("native capture packaging is a no-op outside macOS, including with a foreig
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-// Contract with the pinned builder/updater: a single Mac build must keep both
+// Contract with the builder/updater: a single Mac build must keep both
 // DMGs and both updater ZIPs in one feed, on production and preview alike.
 test("Mac update metadata merges architectures and the updater selects the matching zip", async () => {
   const require = createRequire(Bun.resolveSync("electron-builder/package.json", import.meta.dir));

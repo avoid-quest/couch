@@ -19,7 +19,7 @@ export async function buildRelay(platform: string, arch: string, destination: st
   try {
     await exec("go", ["build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w", "-o", executable, "."], options);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Packaging Couch's live relay requires Go 1.27.2 on PATH. Ordinary frontend/Core builds do not require Go.");
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Packaging Couch's live relay requires Go on PATH. Ordinary frontend/Core builds do not require Go.");
     throw error;
   }
   // Include the licenses of the modules actually linked, plus the Go runtime.

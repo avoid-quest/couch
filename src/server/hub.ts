@@ -35,6 +35,8 @@ import { createCatalog, type Viewing } from "./catalog";
 import { createProviderMetadata, providerMetadata } from "./provider-metadata";
 import { playbackMediaId, ViewingError } from "./progress";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
+import { playbackPreviewResponse } from "./playback-preview";
+import { hlsPreview } from "./hls-preview";
 import { logMediaDiagnostic, mediaAddress } from "./media-diagnostics";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
@@ -223,6 +225,7 @@ export async function createHub(options: HubOptions) {
     resolved?: { playbackId: string; vp9: boolean; output?: { picture: boolean; sound: boolean }; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     pending?: { resolved: NonNullable<Playback["resolved"]>; media?: NonNullable<Playback["media"]>; generation?: number; moving?: symbol; tab: Socket<SocketData> | null | undefined };
     groupPreparation?: { group: NonNullable<Playback["synced"]>; generation?: number; loaded: NonNullable<Playback["loaded"]>; transport: TransportIntent };
+    preview?: { resolved: NonNullable<Playback["resolved"]>; controller: AbortController };
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
     undoable?: ReturnType<typeof setTimeout>;
     // Its shared source had no receiving output: the first output chosen in Where it plays starts it. Each
@@ -332,7 +335,10 @@ export async function createHub(options: HubOptions) {
   // A Playback's mix: its outputs and the publisher's output held while its own capture plays there.
   const mixOf = (playback: Playback) => playback.held ? [...playback.outputs, playback.held] : playback.outputs;
   const memberOf = (deviceId: string) => servedBy(deviceId) ?? all().find(playback => playback.held?.deviceId === deviceId);
-  const holding = (entryId: string) => all().find(playback => stateOf(playback).queue.some(entry => entry.id === entryId));
+  const holding = (entryId: string, includeAutoplay = false) => all().find(playback => {
+    const state = stateOf(playback);
+    return state.queue.some(entry => entry.id === entryId) || includeAutoplay && state.autoplay?.enabled && state.autoplay.upcoming.some(entry => entry.id === entryId);
+  });
   const playing = (playbackId: string) => all().find(playback => stateOf(playback).player.playbackId === playbackId);
   // The output Device each controller chose (Play on, or following its mix) while Core runs.
   const targets = new Map<string, string>();
@@ -513,6 +519,12 @@ export async function createHub(options: HubOptions) {
       playback.media = playback.pending.media;
       playback.pending = undefined;
     }
+    // Resolution may time out or fail while the old stream keeps playing. Only a load replaces its preview.
+    if (command.type === "load" && playback.resolved?.playbackId === command.playbackId && playback.preview?.resolved !== playback.resolved) {
+      playback.preview?.controller.abort();
+      playback.preview = { resolved: playback.resolved, controller: new AbortController() };
+    }
+    if (command.type === "stop") { playback.preview?.controller.abort(); playback.preview = undefined; }
     const sourceId = sourceOf(playback);
     if (command.type === "load") command = { ...command, compressor: sourceId ? undefined : playback.compressor };
     if (command.type === "stop" || command.type === "load" && (!sourceId || grouped(playback))) live.closePlayback(playback.id);
@@ -889,7 +901,7 @@ export async function createHub(options: HubOptions) {
     const prepareMedia = async (resolved: MediaSource & { headers?: Record<string, string> }, pending: NonNullable<Playback["pending"]>, signal: AbortSignal) => {
       signal.throwIfAborted();
       const { playbackId } = pending.resolved;
-      const { headers = {}, ...media } = resolved;
+      const { headers = {}, preview: _preview, ...media } = resolved;
       const tab = pending.tab;
       if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       const entry = stateOf(playback).queue.find(item => item.id === stateOf(playback).currentEntryId);
@@ -903,7 +915,12 @@ export async function createHub(options: HubOptions) {
       const selected = entry?.liveSourceId ? media : await preparation.select({ ...media, headers }, output);
       // Classify raw URLs from the selected rendition. resolveEntry keeps their
       // original URL, so selection runs once and picture can be restored later.
-      if (!isLiveMedia && entry && /^https?:/.test(entry.source)) isLiveMedia = await preparation.live(selected.source, selected).catch(() => false);
+      // A finite HLS source keeps the image previews declared in the bytes read here.
+      let preview: ReturnType<typeof hlsPreview>;
+      if (!isLiveMedia && entry && /^https?:/.test(entry.source)) isLiveMedia = await preparation.live(selected.source, selected, (master, media) => {
+        preview = hlsPreview(master.url, master.lines.join("\n"), { url: media.url, text: media.lines.join("\n") });
+      }).catch(() => false);
+      if (!isLiveMedia && preview) resolved.preview ??= preview;
       const prepared = entry?.liveSourceId ? media : await passThrough.prepare(playbackId, selected, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal, playback.compressor.enabled);
       const groupSound = grouped(playback) && playback.outputs.some(output => output.sound) && media.hasAudio !== false;
       const coreSelected = groupSound && !entry?.liveSourceId ? await preparation.select({ ...media, headers }, { picture: false, sound: true }) : media;
@@ -1278,6 +1295,9 @@ export async function createHub(options: HubOptions) {
   };
   const publish = (playback: Playback, state: SessionState, clock?: PlaybackClock) => {
     playback.state = state;
+    if (playback.preview && (playback.preview.resolved.playbackId !== state.player.playbackId || !active(state.player.status))) {
+      playback.preview.controller.abort(); playback.preview = undefined;
+    }
     radioProgramme?.observe(state, playback.id);
     sound?.interrupt();
     if (!clock) { broadcast(); queueMicrotask(() => settle(playback)); return; }
@@ -1948,6 +1968,17 @@ export async function createHub(options: HubOptions) {
       if (!websocket && ["/api/radio/recognize", "/api/radio/recognitions"].includes(url.pathname)) return cors(request, await radioRecognition.handle(request, authorize, playedBy!));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket && /^\/api\/hidden(?:\/|$)/.test(url.pathname)) return cors(request, await hidden.handle(request, authorize));
+      if (!websocket && url.pathname === "/api/playback-preview") {
+        const playbackId = url.searchParams.get("playbackId") ?? "";
+        const playback = playing(playbackId);
+        const preview = playback?.preview;
+        const reading = new Request(request, { signal: AbortSignal.any([request.signal, shutdown.signal, ...(preview ? [preview.controller.signal] : [])]) });
+        return cors(request, await playbackPreviewResponse(reading, async () => (await preview?.resolved.media)?.preview, () => {
+          authorize();
+          if (!playback || !playback.outputs.length || playing(playbackId) !== playback || preview !== playback.preview || preview?.resolved.playbackId !== playbackId) throw new ControllerError("Playback changed.", 404);
+          requirePlayback(playback, playedBy?.deviceId ?? hostId());
+        }));
+      }
       if (!websocket && url.pathname === "/api/artwork") return cors(request, await artworkResponse(request, authorize));
       if (!websocket && url.pathname === "/api/subtitles") return cors(request, await subtitles.handle(request, () => {
         authorize();
@@ -2138,7 +2169,7 @@ export async function createHub(options: HubOptions) {
             if (!tvSocket(guardedTarget)) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             if ((action.type === "volume" || action.type === "mute" || action.type === "navigate" || action.type === "text") && action.deviceId && action.deviceId !== guardedTarget) throw new Error("This command addresses another TV. Select it before using Remote.");
             if ("playbackId" in action && action.playbackId && servedBy(guardedTarget) !== playing(action.playbackId)) throw new Error("The TV's playing item changed. Try again.");
-            if ("entryId" in action && servedBy(guardedTarget) !== holding(action.entryId)) throw new Error("The TV's queue changed. Try again.");
+            if ("entryId" in action && servedBy(guardedTarget) !== holding(action.entryId, action.type === "play")) throw new Error("The TV's queue changed. Try again.");
           }
           let playback: Playback | undefined;
           let removed: string | undefined;
@@ -2355,7 +2386,7 @@ export async function createHub(options: HubOptions) {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on the selected Device's.
             if (remoteTarget && action.type !== "enqueue" && !servedBy(remoteTarget)) throw new Error("The TV's queue or playing item changed. Try again.");
-            playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;
+            playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId, action.type === "play") : undefined;
             playback ??= action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
             // Queue entries can outlive their TV assignment. Recheck the resolved Playback at
             // dispatch (and async authorization), even for an older client without an envelope guard.
