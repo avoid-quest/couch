@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AudioCodec, Identity, Roles, SendspinClient } from '@sonn-audio/node-sendspin';
@@ -24,6 +24,10 @@ for (const choice of cases) test(choice.name, { timeout: 15000 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), 'couch-language-'));
   for (const [language, frequency] of [['en', 440], ['it', 880]] as const) execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `sine=frequency=${frequency}:sample_rate=48000`, '-t', '6', '-ac', '2', '-c:a', 'aac', '-f', 'adts', join(directory, `${language}.aac`)]);
   if (choice.muxed) execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000', '-t', '6', '-map', '0:a', '-map', '1:a', '-c:a', 'pcm_s16le', '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=ita', join(directory, 'movie.mka')]);
+  const decoder = join(directory, 'decode'), launches = join(directory, 'launches');
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+  writeFileSync(decoder, `#!/bin/sh\nprintf '%s|%s\\n' "$$" "$*" >> ${quote(launches)}\nexec ${quote(ffmpeg)} "$@"\n`, { mode: 0o755 });
+  const startedDecoders = () => readFileSync(launches, 'utf8').trim().split('\n');
   const requested: string[] = [];
   const master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English",LANGUAGE="en",DEFAULT=YES,URI="en.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="Italian",LANGUAGE="it",DEFAULT=NO,URI="it.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="a",CODECS="avc1.640028,mp4a.40.2"\npicture.m3u8\n';
   let audioMaster = '';
@@ -35,7 +39,7 @@ for (const choice of cases) test(choice.name, { timeout: 15000 }, async t => {
     else response.writeHead(404).end();
   });
   const identity = Identity.generate(), states: PlayerState[] = [], chunks: Buffer[] = [];
-  const core = createSendspin({ name: 'Language fixture', admit: id => id === identity.peerId, changed() {}, ffmpeg: async () => ffmpeg });
+  const core = createSendspin({ name: 'Language fixture', admit: id => id === identity.peerId, changed() {}, ffmpeg: async () => decoder });
   server.on('upgrade', (request, socket, head) => core.upgrade(request, socket as import('node:net').Socket, head));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -71,6 +75,11 @@ for (const choice of cases) test(choice.name, { timeout: 15000 }, async t => {
   }
   // Explicit seek restarts decoding but keeps this load's selected input.
   if (choice.live) return; // Broadcasts do not offer a source seek timeline.
+  const beforeSeek = startedDecoders();
   chunks.length = 0; group.send({ type: 'seek', playbackId: 'language', position: 1 });
   await until(() => chunks.length >= 8, 'no PCM after seek'); assertLanguage();
+  const afterSeek = startedDecoders();
+  assert.equal(afterSeek.length, beforeSeek.length + 1, 'seek starts exactly one new decoder');
+  assert.notEqual(afterSeek.at(-1)!.split('|')[0], beforeSeek.at(-1)!.split('|')[0], 'the previous decoder was replaced');
+  assert.match(afterSeek.at(-1)!, / -ss 1 -i /, 'the new decoder seeks in source time');
 });

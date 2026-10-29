@@ -41,3 +41,37 @@ test("PCM upload belongs to one authenticated current publication request", { ti
     assert.equal(stale.status, 403);
   } finally { for (const upload of uploads) upload.terminate(); await fixture.close(); }
 });
+
+test("PCM upload rejects an out-of-window timestamp through the authenticated socket", { timeout: 15_000 }, async () => {
+  const fixture = await liveFixture();
+  let socket: WebSocket | undefined;
+  try {
+    const host = await fixture.connect(-1);
+    assert.equal((await host.command({ type: "publishLive", sourceId: "old-audio", uploadToken: fixture.uploadToken, kind: "microphone", audio: true, video: false, intent: "live", audioDelivery: "pcm" })).ok, true);
+    await until(() => host.messages.some(message => message.type === "livePeers" && message.sourceId === "old-audio" && message.upload));
+    const demand = host.messages.findLast(message => message.type === "livePeers" && message.sourceId === "old-audio");
+    assert.ok(demand?.type === "livePeers" && demand.uploadId);
+    const url = new URL(fixture.uploadUrl("old-audio", fixture.uploadToken, -1));
+    url.searchParams.set("uploadId", demand.uploadId);
+    socket = new WebSocket(url, { headers: { Origin: fixture.hub.origin } });
+    await once(socket, "open");
+    const clock = once(socket, "message");
+    socket.send(JSON.stringify({ type: "clock", clientUs: 0 }));
+    const [clockReply] = await clock;
+    const serverUs = JSON.parse(String(clockReply)).serverUs as number;
+    const errors: string[] = [];
+    socket.on("message", data => { const message = JSON.parse(String(data)); if (message.type === "error") errors.push(message.error); });
+    const closed = once(socket, "close");
+    socket.send(JSON.stringify({ type: "start", generation: "fixture", offsetUs: 0, rttUs: 1 }));
+    const packet = Buffer.alloc(44);
+    packet.writeUInt32LE(0x31414343, 0); packet.writeUInt8(1, 4); packet.writeUInt8(1, 5);
+    packet.writeUInt16LE(40, 6); packet.writeUInt32LE(48_000, 8); packet.writeUInt32LE(1, 32);
+    packet.writeBigInt64LE(BigInt(serverUs + 5_000_000), 24);
+    // A valid frame five seconds ahead of the measured Core clock is rejected.
+    socket.send(packet);
+    const [code, reason] = await closed;
+    assert.equal(code, 1008);
+    assert.match(String(reason), /outside the upload window/);
+    assert.deepEqual(errors, ["The capture timestamp is outside the upload window."]);
+  } finally { socket?.terminate(); await fixture.close(); }
+});
