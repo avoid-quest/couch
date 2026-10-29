@@ -1,0 +1,29 @@
+[
+  {
+    "count": 200,
+    "width": 160,
+    "rows": 40,
+    "images": [
+      "2911384262-low-0.jpg"
+    ],
+    "interval": 128,
+    "quality": "low",
+    "cols": 5,
+    "height": 90
+  },
+  {
+    "count": 200,
+    "width": 220,
+    "rows": 10,
+    "images": [
+      "2911384262-high-0.jpg",
+      "2911384262-high-1.jpg",
+      "2911384262-high-2.jpg",
+      "2911384262-high-3.jpg"
+    ],
+    "interval": 128,
+    "quality": "high",
+    "cols": 5,
+    "height": 124
+  }
+]

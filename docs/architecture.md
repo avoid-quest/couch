@@ -313,7 +313,8 @@ other output. Each run starts `couch.log` afresh and keeps the previous run's as
 `couch.1.log`. A run that fills 5 MB moves it to `couch.log.1` and continues, so
 the newest 5–10 MB of each run survive, late failures included (the previous
 run's earlier file is `couch.1.log.1`). Every file begins with a header naming
-the Couch version, run ID and process ID.
+the Couch version, run ID and process ID. Writes finish and close before rotation,
+so Windows can rename both files.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core

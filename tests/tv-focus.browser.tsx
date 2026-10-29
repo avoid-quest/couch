@@ -126,6 +126,35 @@ export async function runTvFocusRegression() {
       await remote('down');
       assert(document.activeElement?.textContent === 'Try again', "Down left content before its second recovery action");
     });
+    await check("Language Select opens, moves and cancels back to its trigger", async () => {
+      await audit.go('/settings/couch/playback');
+      const trigger = control('[role="combobox"][aria-label="More audio language options"]');
+      trigger.focus(); await remote('select');
+      assert(document.activeElement?.closest('[role="listbox"]'), "Language Select did not take focus");
+      const first = document.activeElement;
+      await remote('down');
+      assert(document.activeElement !== first && document.activeElement?.matches('[role="option"]'), "Language Select did not move to another option");
+      await remote('back');
+      assert(document.activeElement === trigger && trigger.getAttribute('aria-expanded') === 'false', "Language Select Back lost its opener");
+    });
+    await check("Timeline Back cancels an edit once and otherwise reaches navigation", async () => {
+      for (const edited of [false, true]) {
+        await audit.go('/', { player: 'playing' });
+        await audit.go('/radio', { player: 'playing' });
+        await audit.updateClock({ playbackId: 'p', position: 120, duration: 900 });
+        const slider = control('[role="slider"][aria-label="Playback position"]');
+        slider.focus();
+        if (edited) {
+          await remote('right');
+          assert(slider.getAttribute('aria-valuenow') === '130', "Timeline did not keep the keyboard draft");
+          await remote('back');
+          assert(audit.router.state.location.pathname === '/radio' && slider.getAttribute('aria-valuenow') === '120', "First Back did not cancel only the edit");
+        }
+        await remote('back');
+        assert(audit.router.state.location.pathname === '/', "Idle timeline trapped Back navigation");
+      }
+      await audit.updateClock({ playbackId: null, position: 0, duration: null });
+    });
     await check("Player panels and nested queue menus restore their own openers", async () => {
       await audit.go('/now', { player: 'paused', video: true });
       for (const label of ['Volume', 'Playback', 'Up next']) {

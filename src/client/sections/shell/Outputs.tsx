@@ -114,7 +114,7 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
     const sharing = state.devices?.find(device => device.id === output.deviceId)?.sharing;
     return output.deviceId === deviceId() || (!output.picture || sharing?.video) && (!output.sound || sharing?.audio);
   });
-  const row = (item: Row) => tv ? tvRow({ row: item, run, playing: sounds }) : deviceRow({ row: item, run, fader: item.device.id !== sole, playing: sounds });
+  const row = (item: Row) => tv ? tvRow({ row: item, connected, run, playing: sounds }) : deviceRow({ row: item, connected, run, fader: item.device.id !== sole, playing: sounds });
   return <>
     {/* The first line, and with the counts and search, what stays put while a long list scrolls: in a Sheet it sticks
         over the rows on the Sheet's own ground; a Popover scrolls only its rows, under it. */}
@@ -124,7 +124,7 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
         {/* Close, or the "…" column's room, so the numbers line up. */}
         {close ?? <span aria-hidden="true" className="w-11 shrink-0 max-sm:hidden" />}
       </div>
-      {inSync !== undefined && <div data-nav-row className="flex min-h-11 items-center justify-between gap-4"><Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">In sync</Label><Switch id="where-it-plays-in-sync" checked={inSync} onCheckedChange={on => void run({ type: "inSync", inSync: on })} /></div>}
+      {inSync !== undefined && <div data-nav-row className="flex min-h-11 items-center justify-between gap-4"><Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">In sync</Label><Switch id="where-it-plays-in-sync" checked={inSync} disabled={!connected} onCheckedChange={on => void run({ type: "inSync", inSync: on })} /></div>}
       {summary.length > 0 && (many
         ? <ToggleGroup data-nav-row type="single" aria-label="Show" spacing={1} value={offered ?? ""} onValueChange={next => onFilter?.(next ? next as Filter : null)} className="-ml-2 max-w-full flex-wrap">
           {summary.map(item => <ToggleGroupItem key={item.filter} value={item.filter} className="rounded-none border-b-2 border-transparent px-2 font-normal text-muted-foreground data-[state=on]:border-foreground data-[state=on]:bg-transparent data-[state=on]:text-foreground">{item.label} <span className="tabular-nums">{item.count}</span></ToggleGroupItem>)}
@@ -139,6 +139,13 @@ export function Mixer({ state, connected, run, tv = false, order, filter = null,
       {playing.length > 0 && <ul aria-label="Playing" className="grid">{playing.map(row)}</ul>}
       {rest.length > 0 && <ul aria-label="Not playing" className={cn("grid", playing.length > 0 && "mt-2 border-t pt-2")}>{rest.map(row)}</ul>}
       {offline.length > 0 && <p className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">Offline: {offlineNames(offline)}</p>}
+      {many && !playing.length && !rest.length && !offline.length && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
+        <p role="status" className="text-sm text-muted-foreground">No devices match.</p>
+        <Button variant="ghost" size="sm" onClick={event => {
+          onFilter?.(null); onQuery?.("");
+          event.currentTarget.closest('[data-slot="popover-content"], [data-slot="sheet-content"]')?.querySelector<HTMLInputElement>('input[aria-label="Find a device"]')?.focus();
+        }}>Clear filters</Button>
+      </div>}
     </div>
   </>;
 }
@@ -159,10 +166,10 @@ const syncLabel = (row: Row) => row.sync?.lip ? "Lip sync" : "Sync";
  * number while its sound is on and another device's sounds too (Move here instead while it isn't in), and "…" while Sync applies. On phones the fader takes a second line.
  * Called rather than rendered, so tests can walk its controls without a DOM.
  */
-function deviceRow({ row, run, fader = true, playing = false }: { row: Row; run: Props["run"]; fader?: boolean; playing?: boolean }) {
+function deviceRow({ row, connected, run, fader = true, playing = false }: { row: Row; connected: boolean; run: Props["run"]; fader?: boolean; playing?: boolean }) {
   const { device, output, picture, sound, level, move } = row;
   const toggle = (channel: typeof picture, label: string, on: ReactNode, off: ReactNode, name: string) =>
-    <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
+    <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!connected || !channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
       className="size-11 data-[state=off]:text-muted-foreground data-[state=on]:bg-transparent">{channel.on ? on : off}</Toggle>;
   return <li key={device.id} data-nav-row data-device={device.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto_5.5rem] items-center gap-x-1 py-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_11rem_2.75rem]">
     <span className="grid min-w-0 py-1">
@@ -172,13 +179,13 @@ function deviceRow({ row, run, fader = true, playing = false }: { row: Row; run:
     {toggle(picture, "picture", <Monitor aria-hidden="true" />, <MonitorOff aria-hidden="true" />, "Picture")}
     {toggle(sound, "sound", <Volume2 aria-hidden="true" />, <VolumeOff aria-hidden="true" />, "Sound")}
     {output && level.sound && fader && <div data-volume className="col-span-full row-start-2 flex min-h-11 min-w-0 items-center gap-3 sm:col-span-1 sm:col-start-4 sm:row-start-1">
-      <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} onCommit={value => send(run, row, { type: "output", deviceId: device.id, level: value })} />
+      <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!connected || !level.enabled} onCommit={value => send(run, row, { type: "output", deviceId: device.id, level: value })} />
       <span className="w-[3ch] shrink-0 text-right tabular-nums">{Math.round(level.value)}</span>
     </div>}
-    {!output && move && <Button variant="ghost" aria-label={`Move here: ${device.name}`} title={move.reason} disabled={!move.enabled} onClick={() => void run({ type: "solo", deviceId: device.id })} className="col-start-4 row-start-1 -mr-2.5 justify-self-end sm:mr-0 sm:justify-self-start">Move here</Button>}
-    {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+    {!output && move && <Button variant="ghost" aria-label={`Move here: ${device.name}`} title={move.reason} disabled={!connected || !move.enabled} onClick={() => void run({ type: "solo", deviceId: device.id })} className="col-start-4 row-start-1 -mr-2.5 justify-self-end sm:mr-0 sm:justify-self-start">Move here</Button>}
+    {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} disabled={!connected} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
     {output && row.sync && <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-4 row-start-1 -mr-2.5 size-11 justify-self-end sm:col-start-5" aria-label={`Options for ${device.name}`} title="Options"><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-4 row-start-1 -mr-2.5 size-11 justify-self-end sm:col-start-5" aria-label={`Options for ${device.name}`} title="Options" disabled={!connected}><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
       <Options id={device.id} sync={`${syncLabel(row)}…`} />
     </DropdownMenu>}
   </li>;
@@ -188,34 +195,34 @@ function deviceRow({ row, run, fader = true, playing = false }: { row: Row; run:
  * On a TV a row is one focus stop: Left and Right move its level by 5 at once (no OK to take the arrows), OK opens
  * its options with Picture and Sound, and Back closes the panel. Called rather than rendered, as deviceRow is.
  */
-function tvRow({ row, run, playing = false }: { row: Row; run: Props["run"]; playing?: boolean }) {
+function tvRow({ row, connected, run, playing = false }: { row: Row; connected: boolean; run: Props["run"]; playing?: boolean }) {
   const { device, picture, sound, level } = row;
-  const step = (by: number) => { if (level.enabled && level.sound) void send(run, row, { type: "output", deviceId: device.id, level: Math.max(0, Math.min(100, level.value + by)) }); };
+  const step = (by: number) => { if (connected && level.enabled && level.sound) void send(run, row, { type: "output", deviceId: device.id, level: Math.max(0, Math.min(100, level.value + by)) }); };
   return <li key={device.id} data-nav-row data-device={device.id} className="grid">
     <DropdownMenu>
       {/* A horizontal slider outside a Volume, so Left/Right reach it and Up/Down move on (navigation.ts). */}
-      <DropdownMenuTrigger asChild><div data-device-row role="slider" tabIndex={0} aria-label={device.name} aria-describedby={row.status ? `where-it-plays-${device.id}` : undefined}
+      <DropdownMenuTrigger asChild disabled={!connected}><div data-device-row role="slider" tabIndex={connected ? 0 : -1} aria-disabled={!connected} aria-label={device.name} aria-describedby={row.status ? `where-it-plays-${device.id}` : undefined}
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={level.value} aria-valuetext={level.sound ? `${Math.round(level.value)} percent` : "No sound"}
         onKeyDown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); step(event.key === "ArrowLeft" ? -5 : 5); } }}
-        className="-mx-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)_3ch] items-center gap-x-3 px-2.5 py-2 outline-none">
+        className="-mx-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)_3ch] items-center gap-x-3 px-2.5 py-2 outline-none aria-disabled:opacity-50">
         <span className="grid min-w-0">{deviceName(row, playing)}{statusLine(row)}</span>
         {picture.on ? <Monitor aria-hidden="true" className="size-5" /> : <MonitorOff aria-hidden="true" className="size-5 opacity-50" />}
         {sound.on ? <Volume2 aria-hidden="true" className="size-5" /> : <VolumeOff aria-hidden="true" className="size-5 opacity-50" />}
         {level.sound ? <Progress value={level.value} aria-hidden="true" className="bg-current/20 [&_[data-slot=progress-indicator]]:bg-current" /> : <span />}
         <span className="text-right tabular-nums">{level.sound ? Math.round(level.value) : ""}</span>
       </div></DropdownMenuTrigger>
-      <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{channelItems({ row, run })}</Options>
+      <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{channelItems({ row, connected, run })}</Options>
     </DropdownMenu>
-    {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+    {row.sync && <Delay id={device.id} label={`${device.name} ${syncLabel(row).toLowerCase()}`} word={syncLabel(row)} delay={row.sync.delay} disabled={!connected} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
   </li>;
 }
 
 /** A TV row's Picture and Sound, which its OK opens. Its sound is its Sound and fader's. */
-function channelItems({ row, run }: { row: Row; run: Props["run"] }) {
+function channelItems({ row, connected, run }: { row: Row; connected: boolean; run: Props["run"] }) {
   const { device, picture, sound } = row;
   return <>
-    <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
-    <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
+    <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!connected || !picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
+    <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!connected || !sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
   </>;
 }
 
@@ -262,9 +269,10 @@ export function PlaysOnLine({ at, children }: { at: ReturnType<typeof playsOn>; 
 // Sendspin's static delay, 0–500 ms. "Lip sync" while another device shows the picture. It applies only while the
 // device plays in sync, and few people touch it, so a row shows it only while it isn't 0, or once "…" revealed it.
 // Its slider is horizontal and outside a Volume, so on the TV Left/Right move it at once, as a row's level.
-function Delay({ id, label, word, delay, onCommit }: { id: string; label: string; word: string; delay: number; onCommit: (delay: number) => void }) {
+function Delay({ id, label, word, delay, disabled, onCommit }: { id: string; label: string; word: string; delay: number; disabled: boolean; onCommit: (delay: number) => void }) {
   const revealed = useContext(RevealedSync);
   const [draft, setDraft] = useState<number | null>(null);
+  useEffect(() => { if (disabled) setDraft(null); }, [disabled]);
   const value = draft ?? delay;
   // A line taken to 0 while its slider is in use stays until focus leaves it, as a revealed one would.
   const shown = revealed.id === id || draft !== null;
@@ -286,6 +294,6 @@ function Delay({ id, label, word, delay, onCommit }: { id: string; label: string
   if (!delay && !shown) return null;
   return <div data-sync-line={id} className="col-span-full flex min-h-11 min-w-0 items-center gap-3 pb-1">
     <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{word} {value} ms earlier</span>
-    <Slider aria-label={label} aria-valuetext={`${value} milliseconds earlier`} value={[value]} min={0} max={500} step={10} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => onCommit(next!)} onBlur={() => setDraft(null)} />
+    <Slider aria-label={label} aria-valuetext={`${value} milliseconds earlier`} value={[value]} min={0} max={500} step={10} disabled={disabled} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => { if (!disabled) onCommit(next!); }} onBlur={() => setDraft(null)} />
   </div>;
 }

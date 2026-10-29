@@ -2,7 +2,8 @@ import { radioLabels } from "../../../shared/radio";
 import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { offline } from "@/copy";
 import { useSessionGate } from "@/session/session-context";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Button } from "@/components/ui/button";
 import { useCallback, useState } from "react";
 import { FilterBar, FilterChoice, FilterInput, FilterSelect } from "@/components/ContentFilters";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -57,7 +58,9 @@ export function RadioPage() {
       onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); goToPage(Number(new URL(href, location.origin).searchParams.get("page") ?? 1)); }} />
     {summary && <SourceProblems summaries={[[source, summary]]} />}
     {summary && !summary.loading && !summary.error && !hits.length && (!filter && !genre && source === "Radio playlists" ? <NoPlaylists what="radio playlists" settings="/settings/couch/sources/radio" />
-      : <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || genre ? "No stations match. Try another name or genre, or clear the filter." : "No stations are available right now. Try another source."}</EmptyDescription></EmptyHeader></Empty>)}
+      : <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || genre ? "No stations match. Try another name or genre." : "No stations are available right now. Try another source."}</EmptyDescription></EmptyHeader>
+        {(filter || genre) && <EmptyContent><Button variant="ghost" onClick={() => void navigate({ href: radioBrowseLocation(source), replace: true, resetScroll: false }).then(() => document.querySelector<HTMLInputElement>('input[aria-label="Filter stations"]')?.focus())}>Clear filters</Button></EmptyContent>}
+      </Empty>)}
     <SearchRadioResults origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} browse source={source} query="" onResults={report} />
   </section>;
 }

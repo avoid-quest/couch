@@ -39,13 +39,10 @@ Over a picture, these surfaces are one translucent black,
 darker so that subtitles behind a panel don't fight its text. There is no
 blur, no shadow and no hairline.
 
-In a window, the bars around a contained picture are lit by the item's artwork, as
-YouTube's ambient mode lights its player ([Room](../design.md#room)): its
-first colour glows 8rem out of the picture's edges, over a dark haze of its
-second. The light lies
-behind the video element, so it shows only in the bars, and it is painted
-once: nothing reads or redraws the picture while it plays. Fullscreen video and
-the always-fullscreen TV presentation keep these bars black.
+Video keeps black letterbox bars in a window, fullscreen and the TV presentation.
+The playing item's artwork never colors the margins or control bands. The neutral
+control scrims still keep text legible over bright footage; audio and browsing
+keep their artwork-lit rooms ([Room](../design.md#room)).
 
 The four panels the tools open, Volume, Where it plays, Up next and the gear's
 menu, are one family wherever they open, from the band or the now-playing bar:
@@ -109,10 +106,69 @@ The timeline row:
 - As on YouTube, the line thickens under a pointer and while it is dragged,
   here, beside artwork and on the now-playing bar alike. Over a picture, and
   on the bar, its thumb shows only while a pointer or focus is on it.
-- A hovering pointer reads the time under it, on the panel surface. Its preview
-  updates independently of the slider, chapters and playback labels; touch and
-  disabled timelines do no hover work. Dragging previews locally and sends one
-  seek on release. Keyboard seeking keeps its ten-second steps across clock updates.
+- Hover reads the time under the pointer; dragging (including touch) and keyboard
+  seeking show the draft time. Available provider storyboards or timed image cues add a small scene
+  preview above it, inside the timeline's edges. The picture and controls never
+  move. These are provider intervals, not exact frames; missing or unreadable
+  images and cue gaps leave the timestamp alone. Preview lookup retains fractional
+  cue timing; the label still rounds to seconds. A duration change clamps the
+  preview, thumb and committed target to the same range.
+- Preview pointer updates leave the track, chapter cues and playback labels alone;
+  touch without a drag and disabled timelines do no hover work. Dragging stays
+  local and sends one Couch seek on release. Cancellation, Escape, lost pointer
+  capture, a changed source or lost permission discard the draft. Escape cancels an
+  active edit before leaving the player. Keyboard seeking keeps its ten-second
+  steps across clock updates; Home/End go to the endpoints, Page Up/Down move a
+  minute, and Down returns focus to Play. The invisible target is 1.5rem tall
+  with a 44px minimum on touch, while the visible line keeps its thin profile.
+
+The same previews work in the now-playing bar and on a controller without local
+media. `PlaybackThumbnail` uses Video.js 10.2.0's standalone `Thumbnail` with
+supplied images or sprite coordinates. It selects one covering cue, memoizes the
+image presentation and leaves Video.js responsible for cropping and resize
+observation. Moving within that cue updates only its timestamp/position, without
+re-rendering the thumbnail. Viewport resizing refreshes its CSS constraints even
+when the selected cue is unchanged. `PlaybackSeekBar` uses Video.js's generic `Slider.Root`,
+`Track`, `Fill`, `Thumb`, `Preview` and `Value`, styled with Couch's existing tokens. Its public change and
+commit callbacks keep a smooth local draft and authorize just one seek on release;
+lost capture alone cannot commit. Keyboard targets remain cumulative until blur,
+Escape or rejection. Late replies cannot clear a newer edit. Buffer and chapter
+cues use Couch observations. Volume and device faders keep their shadcn slider.
+
+The slider operates on a unit interval so fractional durations reach both
+endpoints; its ARIA values, spoken time, labels and commands use seconds. `Value`'s
+public render prop supplies pointer time to the on-demand preview cache. The
+standalone `Thumbnail` preserves cue memoization: `Slider.Thumbnail` subscribes to
+every pointer value and would repeat cropping work inside the same cue.
+`TimeSlider` binds to a local player store and seeks during drag, so it is not
+appropriate for Couch's shared transport. No Video.js player store, media element
+or receiver is created. Couch commands, observed playback position, renderers and
+Sendspin picture follower keep their existing ownership. The
+[full Video.js component audit](../videojs-components-review.md) records which
+other public primitives fit these boundaries and which need a separate experiment.
+Non-seekable Live has no timeline or previews.
+
+Core reuses existing extraction and player-page responses. YouTube and Twitch
+supply storyboard grids; RaiPlay, StreamingCommunity and AnimeUnity supply
+WebVTT cues. Direct, web and IPTV HLS can use explicitly declared JPEG image
+tracks for finite, continuous VOD. [Provider previews](../provider-previews.md) records discovery,
+coverage and limits. Declared manifests load only when an authorized controller
+requests previews. `/api/playback-preview` checks pairing, current playback and
+output consent for metadata and each image. Provider URLs and playback headers
+stay in Core; preview reads use its public-network fetcher.
+
+Metadata is bounded to 4,000 frames / 128 images. Manifest reads have a 512 KiB
+limit; images have a 2 MiB compressed / four-million-pixel limit, four concurrent
+downloads and a shared 16 MiB cache. A controller keeps four successfully decoded
+images and releases their object URLs when the source changes. Hidden previews
+cancel pending image reads and retry timers; source changes also cancel metadata
+reads. Image network, 503 and decode failures retry at most twice while requested;
+later hover can retry a failed or missing image. Core keeps image bytes fresh
+for 30 seconds so a repaired, previously undecodable image can recover without
+changing playback. Missing or malformed metadata is fresh for 30 seconds in Core
+and in the controller, and reconnection invalidates it through the session query client.
+Expired or unavailable assets never delay playback or trigger another media
+extraction. Failed quality changes retain the current source's preview.
 
 The control row:
 - Play/Pause, Stop and Next in the middle. They stay centred so the
@@ -251,7 +307,9 @@ as it was beneath it. On phones it takes the artwork's place.
     row's end.
   - The meta line has the length, and "added by {device}" when another
     device queued it.
-  - A row is one target that plays it. Its "…" holds Details, Play next,
+  - A row is one target that plays it immediately. A Play glyph appears over
+    its whole thumbnail on hover or keyboard focus, and stays visible on touch.
+    Start times are estimates, not scheduled actions. Its "…" holds Details, Play next,
     ordering, Save for later, Open in browser and Remove.
   - Removing a row keeps focus on the adjacent row.
 - A status line counts the rows and says when they end ("2 to play, until
@@ -259,7 +317,12 @@ as it was beneath it. On phones it takes the artwork's place.
 - **Autoplay** continues only the current series, album or playlist, after the
   queued rows:
   - "Then from {context}", then up to ten of its upcoming entries as quieter,
-    display-only rows. Their start times continue the board.
+    playable rows. Their start times continue the board. Selecting one starts it
+    immediately, keeps manually queued entries waiting, then continues the
+    collection after that selection. At the 500-entry limit, the oldest played
+    entry can make room; the current item and waiting entries are retained.
+    Disconnected or unavailable playback
+    disables every Play target.
   - Or "Finding the next item…".
   - The Autoplay switch shows in the heading row only while something can
     continue, as YouTube's autoplay switch does. Settings → Playback always

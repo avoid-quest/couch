@@ -112,7 +112,7 @@ test("with shared requests off, a waiting source opens only in the window that p
   expect(mount("p:here:2", "p:here:1")).toBe(true);
 });
 
-type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: () => void; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => Promise<boolean> };
+type Props = { children?: ReactNode; id?: string; label?: string; value?: string; "aria-label"?: string; pressed?: boolean; disabled?: boolean; onClick?: (event?: { currentTarget: { closest: (selector: string) => Element | null } }) => void; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => Promise<boolean> };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" || typeof node === "number" ? String(node) : "";
 const inSync = { deviceId: "tv", picture: true, sound: true, delay: 80, delayActive: true };
@@ -217,4 +217,41 @@ test("a filter or search whose control has gone no longer filters the list", () 
   expect(rows({ query: "speaker 1" })).toBe(8);
   const crowded = { ...state, devices: many.map(device => ({ ...device, online: true })) } as ClientSessionState;
   expect(elements(Mixer({ state: crowded, connected: true, run: async () => true, filter: "behind" })).filter(item => item.type === "li").length).toBe(10);
+});
+
+test("a device search with no matches explains the empty list and can clear both filters", () => {
+  const many = Array.from({ length: 10 }, (_, index) => ({ id: `d${index}`, name: `Speaker ${index}`, online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }));
+  const outputs = [{ deviceId: "d4", picture: false, sound: true }];
+  const state = { ...waiting(0), devices: many, outputs, playbacks: [{ id: "p", status: "playing", outputs }], liveSources: [] } as unknown as ClientSessionState;
+  const filter = mock(), query = mock();
+  const tree = Mixer({ state, connected: true, run: async () => true, filter: "sound", query: "kitchen", onFilter: filter, onQuery: query });
+  expect(text(tree)).toContain("No devices match.");
+  elements(tree).find(item => text(item.props.children) === "Clear filters" && item.props.onClick)!.props.onClick!({ currentTarget: { closest: () => null } });
+  expect(filter).toHaveBeenCalledWith(null);
+  expect(query).toHaveBeenCalledWith("");
+});
+
+test("reconnecting keeps device controls in place but disables every mixer change", () => {
+  const phone = { id: "phone", name: "Phone", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } };
+  const kitchen = { ...phone, id: "kitchen", name: "Kitchen" };
+  const outputs = [inSync, { deviceId: "phone", picture: false, sound: true }];
+  const state = { ...waiting(0), devices: [...devices, phone, kitchen], outputs, player: { status: "playing", volume: 50 }, playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs, liveSourceId: "s", inSync: true }] } as unknown as ClientSessionState;
+  for (const tv of [false, true]) {
+    const run = mock(async () => true);
+    const tree = Mixer({ state, connected: false, tv, run });
+    const all = elements(tree);
+    const labelled = (label: string) => all.find(item => item.props.label === label || item.props["aria-label"] === label)!;
+    for (const label of ["TV picture", "TV sound", "TV sync", "Phone picture", "Phone sound", "Kitchen picture", "Kitchen sound"]) expect(labelled(label).props.disabled).toBe(true);
+    expect(all.find(item => item.props.id === "where-it-plays-in-sync")!.props.disabled).toBe(true);
+    if (!tv) for (const label of ["TV volume", "Phone volume", "Move here: Kitchen", "Options for TV"]) expect(labelled(label).props.disabled).toBe(true);
+    else {
+      const slider = all.find(item => item.props["aria-label"] === "TV" && "onKeyDown" in item.props)!;
+      const { onKeyDown } = slider.props as unknown as { onKeyDown: (event: { key: string; preventDefault: () => void }) => void };
+      for (const key of ["ArrowLeft", "ArrowRight"]) onKeyDown({ key, preventDefault: () => {} });
+    }
+    expect(run).not.toHaveBeenCalled();
+    const html = renderToStaticMarkup(<>{tree}</>);
+    expect(html).toContain("TV");
+    expect(html).toContain("Kitchen");
+  }
 });
