@@ -45,8 +45,11 @@ export function useLiveAudioSettings(enabled = true) {
   const { credentials, connected } = useSessionGate();
   const client = useQueryClient();
   const query = useQuery({ ...liveAudioSettingsQuery(credentials!), enabled: enabled && !!credentials });
-  const save = useMutation({ mutationFn: (settings: LiveAudioSettings) => apiSend<LiveAudioSettings>(credentials!, "/api/settings/live-audio", { settings }),
-    onSuccess: value => client.setQueryData(liveAudioSettingsQuery(credentials!).queryKey, value) });
+  // Saves carry only the changed field and merge it into the settings current when sent, so Try again can't
+  // write back another admin's later change.
+  const key = liveAudioSettingsQuery(credentials!).queryKey;
+  const save = useMutation({ mutationFn: (change: Partial<LiveAudioSettings>) => apiSend<LiveAudioSettings>(credentials!, "/api/settings/live-audio", { settings: { ...client.getQueryData<LiveAudioSettings>(key)!, ...change } }),
+    onSuccess: value => client.setQueryData(key, value) });
   return { settings: query.data, save, query, connected };
 }
 
@@ -69,7 +72,7 @@ export function PlaybackBufferInput({ id, live, className, disabled }: { id: str
     const minBufferMs = input.valueAsNumber;
     const valid = input.validity.valid && Number.isInteger(minBufferMs) && minBufferMs >= 0 && minBufferMs <= 5000;
     setInvalid(!valid);
-    if (valid && minBufferMs !== settings.minBufferMs) save.mutate({ ...settings, minBufferMs });
+    if (valid && minBufferMs !== settings.minBufferMs) save.mutate({ minBufferMs });
     else if (valid) setDraft(null);
   };
   return <div className={cn("grid w-44 max-w-full gap-1", className)}>
@@ -105,7 +108,7 @@ export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharin
     {nativeBuffer.error && <Alert variant="destructive"><AlertDescription>{nativeBuffer.error}</AlertDescription></Alert>}
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <label htmlFor="live-codec">Codec</label>
-      <Select open={opened === "codec"} onOpenChange={open => setOpened(open && !save.isPending ? "codec" : null)} value={settings?.codec ?? ""} disabled={!live.connected || !settings} onValueChange={codec => { if (settings && !save.isPending) save.mutate({ ...settings, codec: codec as LiveAudioSettings["codec"] }); }}>
+      <Select open={opened === "codec"} onOpenChange={open => setOpened(open && !save.isPending ? "codec" : null)} value={settings?.codec ?? ""} disabled={!live.connected || !settings} onValueChange={codec => { if (settings && !save.isPending) save.mutate({ codec: codec as LiveAudioSettings["codec"] }); }}>
         <SelectTrigger id="live-codec" aria-disabled={save.isPending || undefined} className="ml-auto w-44 aria-disabled:opacity-50"><SelectValue placeholder="Loading…" /></SelectTrigger>
         <SelectContent data-tv-local-only><SelectItem value="auto">Automatic</SelectItem><SelectItem value="pcm">PCM</SelectItem><SelectItem value="opus">Opus</SelectItem></SelectContent>
       </Select>

@@ -12,7 +12,7 @@ exact name. Ambiguous names or a mismatching opened UID fail. Automatic retains
 the current 44.1/48 kHz device rate. An explicit rate request checks supported
 rates/writability and waits for notification/readback; it may affect other apps
 using the device. No system default device changes. Callback requests of
-128/256/512/1024 frames (default 256), delivered blocks and same-process HAL
+128/256/512/1024 frames (Couch requests 128; 256 when unspecified), delivered blocks and same-process HAL
 buffer readback are distinct facts. Share shows requested and reported sizes;
 neither is presented as the raw hardware callback period.
 
