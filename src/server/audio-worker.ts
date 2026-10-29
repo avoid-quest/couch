@@ -6,6 +6,7 @@ import { acceptCaptureUpload } from "./capture-ingest";
 import type { CaptureAudioPacket } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
 import type { PlaybackCommand } from "../shared/protocol";
+import type { LiveSource } from "../shared/live-input";
 
 const port = parentPort!;
 const pending = new Map<number, (value: unknown) => void>();
@@ -61,7 +62,7 @@ server.on("upgrade", (req, socket, head) => {
     });
   });
 });
-port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; packet?: CaptureAudioPacket; clientId?: string; delay?: number }) => {
+port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; packet?: CaptureAudioPacket; clientId?: string; delay?: number; details?: LiveSource }) => {
   if (message.type === "reply") { pending.get(message.id!)?.(message.value); pending.delete(message.id!); return; }
   if (message.type === "group") {
     let group = groups.get(message.group!);
@@ -74,8 +75,9 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
   } else if (message.type === "register") {
     const { sourceId, epoch } = message as { sourceId: string; epoch: string };
     registrations.set(sourceId, epoch);
-    engine.registerSource(sourceId);
+    engine.registerSource(sourceId, message.details);
   }
+  else if (message.type === "sourceMetadata" && registrations.has(message.sourceId!) && registrations.get(message.sourceId!) === message.epoch) engine.updateSource(message.details!);
   else if (message.type === "write" && registrations.get(message.sourceId!) === message.epoch) { engine.writeSource(message.sourceId!, message.packet!); port.postMessage({ type: "written", sourceId: message.sourceId, epoch: message.epoch, bytes: message.packet!.pcm.byteLength }); }
   else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); engine.endSource(message.sourceId!); }
   else if (message.type === "drop") engine.drop(message.clientId!);

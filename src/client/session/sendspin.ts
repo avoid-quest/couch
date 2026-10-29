@@ -14,6 +14,13 @@ let connected: SendspinPlayer | null = null;
 let group: string | undefined;
 let hearing = false;
 let configuration: string | undefined;
+// The SDK's disconnect() clears Media Session, which useMediaSession owns and won't rewrite
+// while its inputs are unchanged (a codec change replaces the player mid-Live): keep what it set.
+const dispose = (stopped: SendspinPlayer) => {
+  const session = navigator.mediaSession, kept = session && { metadata: session.metadata, playbackState: session.playbackState };
+  stopped.disconnect("user_request");
+  if (session) Object.assign(session, kept);
+};
 export function listen(on: boolean, watch: boolean, credentials: Credentials | null, name: string, live?: LiveAudioSettings) {
   const next = JSON.stringify([credentials?.origin, credentials?.token, live?.codec]);
   if (!on && !watch || player && configuration !== next) {
@@ -23,7 +30,7 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
     hearing = false;
     configuration = undefined;
     waitForTap(null);
-    void current?.then(stopped => stopped.disconnect("user_request")).catch(() => {});
+    void current?.then(dispose).catch(() => {});
     if (!on && !watch) return;
   }
   if (!credentials) return;

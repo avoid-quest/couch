@@ -14,6 +14,7 @@ import { opusDuration, oggPackets } from "./audio-packets";
 import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
 import type { CaptureAudioPacket } from "./capture-audio";
 import { compressorFilter } from "../shared/compressor";
+import { liveTitle, type LiveSource } from "../shared/live-input";
 
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
@@ -37,6 +38,7 @@ const leadUs = 1_000_000; // Buffered media and relaxed capture; Live uses playe
 const sendUs = 8_000_000;
 const aheadUs = 8_000_000; // Decoded audio that may wait in Core before FFmpeg is held back.
 const pcmBytes = 19_200; // 100 ms of 48 kHz 16-bit stereo.
+const emptyMetadata = { title: null, artist: null, album_artist: null, album: null, artwork_url: null, year: null, track: null, progress: null };
 // A speaker whose socket holds more than this unsent has stopped reading (a frozen tab, a dozing radio).
 // It gets nothing more until it drains; what it missed expires from sent, so it resumes at audio that can still play.
 const backlogBytes = 64 * 1024;
@@ -61,11 +63,11 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
-  const sources = new Map<string, ReturnType<typeof createScheduledCapture>>();
+  const sources = new Map<string, { capture: ReturnType<typeof createScheduledCapture>; details?: LiveSource }>();
   const sessions = new Map<string, SendspinSession>();
   const identified = new Set<SendspinSession>();
   const delays = new Map<string, number>();
-  const groups = new Set<{ joined: (clientId: string) => void; formatChanged: (session: SendspinSession) => void }>();
+  const groups = new Set<{ joined: (clientId: string) => void; formatChanged: (session: SendspinSession) => void; sourceChanged: (id: string) => void }>();
   const select = (clientId: string) => {
     const candidates = [...identified].filter(session => session.getClientId() === clientId);
     const next = candidates.at(-1), previous = sessions.get(clientId);
@@ -120,17 +122,23 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
       reportedAt = Date.now();
       const volume = members[0]?.level ?? 100;
       observe(state = { ...state, volume, ...run?.base !== undefined && state.status !== "ended" ? { position: position() } : {} });
-      for (const screen of screens) sessions.get(screen)?.sendMetadata({ progress: timeline() });
+      for (const screen of screens) sessions.get(screen)?.sendMetadata(metadata());
     };
     // Where the sound is on the Sendspin clock (Sendspin metadata progress): pictures follow it.
     // None until a live source has given its first timestamp.
     const timeline = () => !load || (run ? !run.anchored : load.live && !load.radio && !state.position) ? null
       : { track_progress: Math.round(position() * 1000), track_duration: Math.round((state.duration ?? 0) * 1000), playback_speed: state.status === "playing" ? Math.round((run?.speed ?? 1) * 1000) : 0 };
+    const metadata = () => {
+      const source = sources.get(load?.liveSourceId ?? "")?.details;
+      return source?.intent === "live" ? { ...emptyMetadata, title: liveTitle(source), artist: source.metadata?.description ?? null,
+        progress: source.startedAt === undefined ? null : { track_progress: Math.max(0, Date.now() - source.startedAt), track_duration: 0, playback_speed: 1000 } }
+        : { ...emptyMetadata, progress: timeline() };
+    };
     // A screen learns its group, so it never follows another Playback's clock.
     const watch = (clientId: string) => {
       const session = sessions.get(clientId);
       session?.sendGroupUpdate(run?.base !== undefined ? PlaybackStateType.PLAYING : PlaybackStateType.STOPPED, id, options.name);
-      session?.sendMetadata({ progress: timeline() });
+      session?.sendMetadata(metadata());
     };
     const position = () => {
       if (!run || run.base === undefined) return state.position;
@@ -151,6 +159,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
       if (!run.wires.has(wire)) { void restart(); return; }
       session.sendStreamStart(wireFormat(wire));
       session.sendGroupUpdate(PlaybackStateType.PLAYING, id, options.name);
+      session.sendMetadata(metadata());
       run.cursors.set(session, serverNowUs());
     };
     const each = (action: (session: SendspinSession) => void) => { for (const member of members) { const session = listening(member.deviceId); if (session) action(session); } };
@@ -188,7 +197,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           report(); return;
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
-          const source = sources.get(current.liveSourceId)!;
+          const source = sources.get(current.liveSourceId)!.capture;
           const next: Run = { fixed: true, captureLead: captureLead(), start: 0, anchored: true, speed: 1, wires: new Set(["opus", "pcm"]), queues: { opus: [], pcm: [] }, sent: { opus: [], pcm: [] }, cursors: new Map(), pipes: {}, released: 0, timer: setInterval(() => tick(next), 50) };
           run = next;
           next.dispose = source.subscribe(event => {
@@ -371,6 +380,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     };
 
     const synced = {
+      sourceChanged(sourceId: string) { if (load?.liveSourceId === sourceId) each(session => session.sendMetadata(metadata())); },
       // A picture-only timeline has no decoder to learn an unlisted VOD's length; its screens report it.
       duration(playbackId: string, seconds: number) {
         if (load?.playbackId !== playbackId || state.duration !== null || !(seconds > 0) || !Number.isFinite(seconds)) return;
@@ -388,6 +398,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         members = next;
         for (const member of before) if (!next.some(item => item.deviceId === member.deviceId)) {
           clearReceiverError(member.deviceId);
+          sessions.get(member.deviceId)?.sendMetadata(emptyMetadata);
           for (const session of run?.cursors.keys() ?? []) if (session.getClientId() === member.deviceId) {
             run!.cursors.delete(session); session.sendStreamEnd(); session.sendGroupUpdate(PlaybackStateType.STOPPED, id, options.name);
           }
@@ -397,6 +408,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           select(member.deviceId);
           const session = sessions.get(member.deviceId), old = before.find(item => item.deviceId === member.deviceId);
           if (session && old?.level !== member.level) session.sendServerCommand({ player: { command: PlayerCommand.VOLUME, volume: member.level } });
+          if (session && !old) session.sendMetadata(metadata());
           begin(member.deviceId);
         }
         options.changed();
@@ -409,6 +421,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         const member = members.find(item => item.deviceId === clientId);
         if (!member) return;
         sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.VOLUME, volume: member.level } });
+        sessions.get(clientId)?.sendMetadata(metadata());
         begin(clientId);
       },
       send(command: SyncedLoad | PlaybackCommand) {
@@ -417,6 +430,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           case "load":
             halt();
             load = command;
+            each(session => session.sendMetadata(metadata()));
             input = undefined;
             state = { ...idle(), playbackId: command.playbackId, status: command.paused ? "paused" : "loading", position: command.startPosition ?? 0, speed: command.preferences?.speed ?? 1,
               tracks: load.hasAudio === false ? [] : [{ id: `audio-${load.audioSelection?.index ?? load.audioTrack ?? 0}`, index: load.audioSelection?.index ?? load.audioTrack ?? 0, kind: "audio", label: load.audioSelection?.label ?? "Audio", language: load.audioSelection?.language ?? "", selected: true }] };
@@ -432,10 +446,10 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
             load = { ...load, compressor: command.settings };
             if (state.status === "playing" || state.status === "loading") void restart();
             break;
-          case "stop": halt(true); load = undefined; state = idle(); report(); break;
+          case "stop": halt(true); load = undefined; each(session => session.sendMetadata(emptyMetadata)); state = idle(); report(); break;
         }
       },
-      close() { halt(true); groups.delete(synced); for (const member of members) clearReceiverError(member.deviceId); },
+      close() { halt(true); each(session => session.sendMetadata(emptyMetadata)); groups.delete(synced); for (const member of members) clearReceiverError(member.deviceId); },
     };
     groups.add(synced);
     return synced;
@@ -500,13 +514,19 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
     drop(clientId: string) { for (const [session, socket] of socketOf) if (session.getClientId() === clientId) socket.terminate(); },
     status: () => ({ clients: [...sessions.keys()], delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]) }),
-    registerSource(id: string) {
+    registerSource(id: string, details?: LiveSource) {
       if (sources.has(id)) return;
-      sources.set(id, createScheduledCapture(options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }));
+      sources.set(id, { details, capture: createScheduledCapture(options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }) });
     },
-    writeSource(id: string, packet: CaptureAudioPacket) { return sources.get(id)?.write(packet) ?? false; },
-    failSource(id: string, error: string) { sources.get(id)?.fail(error); },
-    endSource(id: string) { sources.get(id)?.close(); sources.delete(id); },
-    close() { for (const source of sources.values()) source.close(); sources.clear(); for (const socket of sockets) socket.terminate(); },
+    updateSource(details: LiveSource) {
+      const source = sources.get(details.id);
+      if (!source) return;
+      source.details = details;
+      for (const group of groups) group.sourceChanged(details.id);
+    },
+    writeSource(id: string, packet: CaptureAudioPacket) { return sources.get(id)?.capture.write(packet) ?? false; },
+    failSource(id: string, error: string) { sources.get(id)?.capture.fail(error); },
+    endSource(id: string) { sources.get(id)?.capture.close(); sources.delete(id); },
+    close() { for (const source of sources.values()) source.capture.close(); sources.clear(); for (const socket of sockets) socket.terminate(); },
   };
 }

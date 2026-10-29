@@ -9,6 +9,7 @@ import { safePlaybackError } from "./playback-log";
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const liveMetadata = (value: unknown) => object(value) && Object.entries(value).every(([key, text]) => ["title", "description"].includes(key) && typeof text === "string" && text.length <= 200 && !/[\u0000-\u001f\u007f]/.test(text));
 const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123", "animesaturn", "animeunity"]);
 const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) => value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
@@ -45,9 +46,11 @@ function validAction(value: unknown): value is Action {
       && (value.intent === undefined || value.intent === "relaxed" || value.intent === "live")
       && (value.audioDelivery === undefined || value.audioDelivery === "pcm" && value.audio === true && value.video === false)
       && (value.intent !== "live" || value.audioDelivery === "pcm" && value.audio === true && value.video === false)
+      && (value.metadata === undefined || value.intent === "live" && liveMetadata(value.metadata))
       && (value.kind === "screen" ? value.video === true : value.audio === true && value.video === false)
       && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
     case "endLive": return id(value.sourceId);
+    case "updateLiveMetadata": return id(value.sourceId) && liveMetadata(value.metadata);
     case "leave": return id(value.playbackId);
     case "removeLiveListener": return id(value.playbackId) && id(value.deviceId);
     case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow })

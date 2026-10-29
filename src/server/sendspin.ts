@@ -11,6 +11,7 @@ import { loopbackPeer } from "./lan-listener";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 import type { CaptureAudioPacket } from "./capture-audio";
 import type { Member, SyncedLoad } from "./scheduled-audio";
+import type { LiveSource } from "../shared/live-input";
 export type { Member, SyncedLoad } from "./scheduled-audio";
 
 /** Core owns authority/lifetimes. The worker owns clocks, encoding and Sendspin sessions. */
@@ -121,7 +122,8 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
         close() { groups.delete(id); loads.delete(id); call("close"); },
       };
     },
-    registerSource(id: string) { if (!sources.has(id)) { const epoch = randomUUID(); sources.set(id, { epoch, queued: 0 }); post({ type: "register", sourceId: id, epoch }); } },
+    registerSource(id: string, details?: LiveSource) { if (!sources.has(id)) { const epoch = randomUUID(); sources.set(id, { epoch, queued: 0 }); post({ type: "register", sourceId: id, epoch, details }); } },
+    updateSource(details: LiveSource) { post({ type: "sourceMetadata", sourceId: details.id, epoch: sources.get(details.id)?.epoch, details }); },
     writeSource(id: string, packet: CaptureAudioPacket) {
       const source = sources.get(id);
       if (!source || source.error || closed || failed) return false;

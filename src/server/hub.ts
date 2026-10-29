@@ -23,7 +23,7 @@ import { openStore } from "./store";
 import { parseCommand, parseLiveFailed, parseLiveSignal, parseLiveUploadFailed, parsePlayer } from "./validation";
 import { createLiveInputs } from "./live-input";
 import { createAirPlay } from "./airplay";
-import { AIRPLAY_PUBLISHER } from "../shared/live-input";
+import { AIRPLAY_PUBLISHER, liveTitle } from "../shared/live-input";
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
@@ -1254,7 +1254,8 @@ export async function createHub(options: HubOptions) {
         const state = stateOf(playback);
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
-        return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: outputViews.get(playback)!, delivery: deliveryOf(playback), intent: intentOf(playback) ?? "relaxed",
+        const source = live.source(sourceOf(playback) ?? "");
+        return { id: playback.id, title: source?.intent === "live" ? liveTitle(source) : (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: outputViews.get(playback)!, delivery: deliveryOf(playback), intent: intentOf(playback) ?? "relaxed",
           ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: store.deviceTv(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
@@ -1276,13 +1277,20 @@ export async function createHub(options: HubOptions) {
       // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
       // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
       const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => levelAt(playback, id)))), actions = capabilities(playback, deviceOf(socket)), view = `${playback?.id}:${device}:${volume}:${JSON.stringify(actions)}`;
-      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, compressor: playback?.compressor, controls: actions, outputs: playback ? outputViews.get(playback) : [] } } satisfies ServerMessage)); }
+      if (!views.has(view)) {
+        const state = playback ? stateOf(playback) : idle();
+        const queue = state.queue.map(entry => {
+          const source = live.source(entry.liveSourceId ?? "");
+          return source?.intent === "live" ? { ...entry, title: liveTitle(source), subtitle: source.metadata?.description } : entry;
+        });
+        views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, queue, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, compressor: playback?.compressor, controls: actions, outputs: playback ? outputViews.get(playback) : [] } } satisfies ServerMessage));
+      }
       const message = views.get(view)!;
       if (sentStates.get(socket) !== message) { sentStates.set(socket, message); send(socket, message); }
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
-      const live = intentOf(servedBy(deviceOf(socket))) === "live" ? store.liveAudioSettings() : undefined;
-      const instruction = JSON.stringify({ type: "sendspin", listen, watch, ...live ? { live } : {} } satisfies ServerMessage);
+      const liveSettings = intentOf(servedBy(deviceOf(socket))) === "live" ? store.liveAudioSettings() : undefined;
+      const instruction = JSON.stringify({ type: "sendspin", listen, watch, ...liveSettings ? { live: liveSettings } : {} } satisfies ServerMessage);
       if (socket.data.sendspin !== instruction) { socket.data.sendspin = instruction; send(socket, instruction); }
     }
   };
@@ -2032,6 +2040,7 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        send(socket, JSON.stringify({ type: "time", now: Date.now() } satisfies ServerMessage));
         send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
         store.saveDeviceTv(deviceOf(socket), socket.data.tv);
         log(`device online ${nameOf(deviceOf(socket))}`);
@@ -2180,7 +2189,10 @@ export async function createHub(options: HubOptions) {
             // Nothing is encoded yet: receivers connect to the publisher, and Core asks for an upload only when it buffers.
             if (action.intent === "live" && !socket.data.trusted) throw new ControllerError("Live audio capture starts on the Couch computer in the desktop app.", 403);
             const source = live.publish(socket, action);
-            if (source.audioDelivery === "pcm") { sendspin.registerSource(source.id); live.upload(source.id, true); }
+            if (source.audioDelivery === "pcm") { sendspin.registerSource(source.id, source); live.upload(source.id, true); }
+          } else if (action.type === "updateLiveMetadata") {
+            const source = live.updateMetadata(socket, action.sourceId, action.metadata);
+            sendspin.updateSource(source);
           } else if (action.type === "removeLiveListener") {
             // The host or an administrator removes a Live audio listener: its stream closes with the reason, and it leaves.
             authorize();

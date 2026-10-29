@@ -589,6 +589,21 @@ test("native channel choices reach Main and a restart updates the reported captu
   liveAudio: async action => { liveActions.push(action); if (action.op === "prepare" || action.op === "channels") return { sampleRate: 48000, channels: action.channelMap.length, native: { channelMap: action.channelMap, inputChannels: 4, requestedFrames: 128, reportedFrames: 128 } }; },
 }`));
 
+test("Live publication carries host details and keeps Core's clock across input changes", () => check(`
+  const metadata = { title: "Evening concert", description: "Piano · first set" };
+  const source = await session.start({ kind: "microphone", intent: "live", audioDeviceId: "native:umc", metadata });
+  assert.deepEqual(commands.find(action => action.type === "publishLive").metadata, metadata);
+  session.observe([{ ...source, startedAt: 123000, metadata: { ...metadata, description: "Second set" } }]);
+  assert.equal(session.sharing().source.startedAt, 123000);
+  assert.equal(session.sharing().source.metadata.description, "Second set");
+  await session.setCaptureInput({ op: "buffer", bufferFrames: 512 });
+  assert.equal(session.sharing().source.startedAt, 123000);
+  assert.equal(commands.filter(action => action.type === "publishLive").length, 1);
+`, `{
+  ...${desktop},
+  liveAudio: async action => { liveActions.push(action); return { sampleRate: 48000, channels: 2 }; },
+}`));
+
 test("a refused or closed capture prompt says what happened in Couch's words", () => check(`
   navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException("Permission denied", "NotAllowedError"); };
   await assert.rejects(session.start({ kind: "screen" }), /Screen capture wasn't allowed\\. Choose a screen or window/);

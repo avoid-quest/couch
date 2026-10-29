@@ -16,6 +16,9 @@ import { LiveListeners, LiveSettings } from "./LiveOperator";
 import { QualitySelect, ShareDialog } from "./ShareDialog";
 import { shareKindOf, viewerLine, viewersOf, type Viewer } from "./share";
 import { useShowShare } from "./show-share";
+import { liveTitle } from "../../../shared/live-input";
+import { LiveClock } from "@/components/LiveClock";
+import { LiveMetadataEditor } from "./LiveMetadata";
 
 /**
  * The header's Share (docs/design/share.md): a button that opens the Share dialog on a device that can capture, and,
@@ -85,11 +88,11 @@ function Preview({ sharing, className }: { sharing: LiveSharing; className?: str
 function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers: Viewer[]; stop: ReturnType<typeof useStop>; tv: boolean }) {
   const [open, setOpen] = useState(false);
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
-  const label = `Sharing ${sharing.source.name}`;
+  const label = `Sharing ${liveTitle(sharing.source)}`;
   const trigger = <button type="button" aria-label={`${label}, show sharing controls`} title={label}
     className="flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1 text-sm text-foreground/80 outline-none hover:text-foreground aria-expanded:text-foreground">
     <Preview sharing={sharing} className="h-7 shrink-0" />
-    <span role="status" aria-label={label} className="min-w-0 max-w-80 truncate">{sharing.source.name}</span>
+    <span role="status" aria-label={label} className="min-w-0 max-w-80 truncate">{liveTitle(sharing.source)}</span>
     {viewers.length > 0 && <span className="flex shrink-0 items-center gap-1 text-meta text-muted-foreground tabular-nums" aria-label={`${viewers.length} ${sharing.source.intent === "live" ? "listening" : "watching"}`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>}
   </button>;
   const panel = <SharingPanel sharing={sharing} viewers={viewers} onClose={() => setOpen(false)} />;
@@ -142,15 +145,16 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
     <div className="flex items-center gap-3">
       <Preview sharing={sharing} className={sharing.stream.getVideoTracks().length ? "w-36 shrink-0" : "size-12 shrink-0"} />
       <div className="grid min-w-0 gap-0.5">
-        <p className="text-title font-medium break-words">{sharing.source.name}</p>
+        <p className="text-title font-medium break-words">{liveTitle(sharing.source)}</p>
         {/* The name already ends in a screen's kind ("Studio Mac · Screen"): say it again only to add to it. */}
-        {!sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
-        <p className="text-meta text-muted-foreground">Since {since}</p>
+        {sharing.source.intent !== "live" && !sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
+        <p className="text-meta text-muted-foreground">{sharing.source.intent === "live" ? <LiveClock startedAt={sharing.source.startedAt} /> : `Since ${since}`}</p>
         {/* The Capture buffer control shows the request; the device's own size appears only when it differs. */}
         {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz, {sharing.captureFormat.channels === 1 ? "Mono" : `${sharing.captureFormat.channels} channels`}{sharing.captureFormat.native && sharing.captureFormat.native.reportedFrames !== sharing.captureFormat.native.requestedFrames
           ? `, device buffer ${sharing.captureFormat.native.reportedFrames} frames` : ""}</p>}
       </div>
     </div>
+    {sharing.source.intent === "live" && <LiveMetadataEditor key={sharing.source.id} source={sharing.source} />}
     {/* Live audio's host sees each listener as Core measures it, and sets the stream below. */}
     {sharing.source.intent === "live" ? <LiveListeners viewers={viewers} /> : <ul aria-label="Watching" className="grid">
       {viewers.map(viewer => <li key={viewer.device.id} className="flex items-center gap-3 border-t py-2.5">

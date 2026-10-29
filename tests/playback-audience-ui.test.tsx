@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Action, PlaybackControls } from "../src/shared/protocol";
@@ -30,6 +30,8 @@ const { hasUpNext, UpNextButton } = await import("../src/client/sections/now/Que
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 const { useItemMenu } = await import("../src/client/components/RowMenu");
+const { LiveClock } = await import("../src/client/components/LiveClock");
+const { setCoreTime } = await import("../src/client/core-clock");
 const { listeningLive } = await import("../src/client/session/playback-controls");
 
 function fixture(): ClientSessionState {
@@ -114,18 +116,93 @@ test("the real playback menu keeps split audio delay and omits unsupported muxed
   expect(delayRows(menu(.3, false))).toHaveLength(0);
 });
 
-test("Media Session installs no shared programme handlers for a live audience, and restores ordinary controls", () => {
-  const handlers = new Map<string, unknown>();
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaSession: { setActionHandler: (action: string, callback: unknown) => handlers.set(action, callback), setPositionState() {} } } });
-  Object.assign(globalThis, { MediaMetadata: class {} });
-  effects.length = 0; state = fixture();
+test("Live owns Media Session without a queued item, its controls do nothing, and ordinary playback is restored", () => {
+  const handlers = new Map<string, MediaSessionActionHandler | null>();
+  const mediaSession = { metadata: null as MediaMetadata | null, playbackState: "none", position: undefined as MediaPositionState | undefined,
+    setActionHandler: (action: string, callback: MediaSessionActionHandler | null) => handlers.set(action, callback),
+    setPositionState(position?: MediaPositionState) { this.position = position; } };
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaSession } });
+  Object.assign(globalThis, { MediaMetadata: class { constructor(metadata: MediaMetadataInit) { Object.assign(this, metadata); } } });
+  effects.length = 0; sent.length = 0;
+  state = { ...fixture(), queue: [], currentEntryId: null };
   read(useMediaSession);
   for (const effect of effects.splice(0)) effect();
-  expect([...handlers.values()].every(value => value === null)).toBe(true);
-  state = { ...fixture(), controls: undefined, playbacks: [], liveSources: [], queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film" }, { id: "next", source: "web:https://example.com/next", title: "Next" }] };
+  expect(mediaSession.metadata?.title).toBe("Concert");
+  expect(mediaSession.playbackState).toBe("playing");
+  expect(mediaSession.position).toBeUndefined();
+  for (const action of ["nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
+  // Listeners get no media commands. Unhandled, Android's notification Pause would pause the SDK's silent
+  // keep-alive element, so Play, Pause and Stop are handled and do nothing.
+  for (const action of ["play", "pause", "stop"] as const) handlers.get(action)!({ action });
+  expect(sent).toEqual([]);
+  // Ordinary player updates cannot clear Live or supply stale programme metadata.
+  state = { ...state, player: { ...state.player, status: "idle", nowPlaying: { title: "Old programme", artist: "Old artist" } } };
   read(useMediaSession);
   for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "", album: "", artwork: [] });
+  expect(mediaSession.playbackState).toBe("playing");
+  state.liveSources![0]!.metadata = { title: "Evening concert", description: "Piano · second set" };
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toMatchObject({ title: "Evening concert", artist: "Piano · second set", album: "", artwork: [] });
+  state.liveSources![0]!.metadata = {};
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "" });
+  state = { ...fixture(), controls: undefined, playbacks: [], liveSources: [], player: { ...fixture().player, status: "paused" }, queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film", duration: 300 }, { id: "next", source: "web:https://example.com/next", title: "Next" }] };
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata?.title).toBe("Film");
+  expect(mediaSession.playbackState).toBe("paused");
+  expect(mediaSession.position).toEqual({ duration: 300, position: 0, playbackRate: 1.25 });
   for (const action of ["play", "pause", "stop", "nexttrack", "seekto"]) expect(typeof handlers.get(action)).toBe("function");
+  handlers.get("stop")!({ action: "stop" });
+  expect(sent.at(-1)).toEqual({ type: "stop", playbackId: "load-generation" });
+  // A remaining source and audience do not claim this device after it leaves.
+  state = { ...fixture(), controls: { ...audience, leave: false }, outputs: [], queue: [], currentEntryId: null, player: { ...fixture().player, playbackId: null, status: "idle" } };
+  read(useMediaSession);
+  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.metadata).toBeNull();
+  expect(mediaSession.playbackState).toBe("none");
+  expect(mediaSession.position).toBeUndefined();
+  expect([...handlers.values()].every(value => value === null)).toBe(true);
+});
+
+test("Live discovery uses shared details and searches the title, line and original source", () => {
+  state = fixture();
+  state.liveSources![0]!.metadata = { title: "Evening concert", description: "Piano · second set" };
+  for (const query of ["evening", "second", "concert"]) {
+    const hits = read(() => useLiveSourceHits(query));
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ title: "Evening concert", meta: "Piano · second set" });
+  }
+});
+
+test("Live clocks start at publication time, stay cheap, and dispose their timer", () => {
+  const now = spyOn(Date, "now").mockReturnValue(10_000_000);
+  const interval = spyOn(globalThis, "setInterval").mockReturnValue(123 as never);
+  const clear = spyOn(globalThis, "clearInterval").mockImplementation(() => {});
+  try {
+    state = fixture(); state.liveSources![0]!.startedAt = 10_000_000 - 3_733_000;
+    effects.length = 0;
+    const first = renderToStaticMarkup(<LiveParticipation state={state} connected run={run} />);
+    expect(first).toContain("Live · 1:02:13");
+    expect(first).not.toContain('role="timer"'); // No once-per-second screen reader announcements.
+    const cleanups = effects.splice(0).map(effect => effect());
+    expect(interval).toHaveBeenCalledTimes(1);
+    expect(interval.mock.calls[0]![1]).toBe(1000);
+    for (const cleanup of cleanups) if (cleanup) cleanup();
+    expect(clear).toHaveBeenCalledWith(123);
+    now.mockReturnValue(10_005_000);
+    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
+    expect(renderToStaticMarkup(<LiveClock startedAt={10_006_000} />)).toContain("Live · 0:00");
+    expect(renderToStaticMarkup(<LiveClock />)).not.toContain("NaN");
+    // A device whose own clock is an hour slow still counts from Core's publication time.
+    now.mockReturnValue(10_005_000 - 3_600_000); setCoreTime(10_005_000);
+    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
+    now.mockReturnValue(10_005_000 - 3_600_000 + 2_000);
+    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:20");
+  } finally { now.mockRestore(); setCoreTime(Date.now()); interval.mockRestore(); clear.mockRestore(); effects.length = 0; }
 });
 
 test("a receiver failure is actionable and disconnected audience controls cannot send", () => {
