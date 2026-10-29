@@ -1,5 +1,11 @@
 # Settings
 
+Playback settings show only actions Core and the current adapter support.
+Live audio has no programme speed, content delay or queue settings. Audio delay
+is available only for Direct separate-audio playback; output synchronization
+correction remains distinct. Share's input choice is **Audio input**, with
+**Live** playback additionally available on the Couch computer.
+
 ## Pages
 
 Two owners (`src/shared/settings-pages.ts`): what changes only the device in
@@ -7,7 +13,7 @@ hand, and the Couch everyone shares, its hardware included:
 
 | Page | Owner | Path | Holds |
 | --- | --- | --- | --- |
-| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Show Share in the header, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
+| General | This device | `/settings/device` | name, text size, Keep screen awake, online video quality, Show Share in the header, advanced Live audio preferences, Connection (which Couch it shows), what it lets other devices use, Quit Couch (app) |
 | Home | This device | `/settings/device/home` | Home's sections, one list |
 | Updates | This device | `/settings/device/updates` | this app's updates and logs, only for a non-admin in the desktop app |
 | Devices & network | Couch | `/settings/couch/devices` | pairing, devices and roles (the Couch's name is its host's row), Share on network, HTTP, network address, live relay |
@@ -189,3 +195,14 @@ network is on.
 This device owns its name, which is also the name of a Couch it hosts; an
 admin renames another host from its row in Devices & network. First run and
 pairing: [Shell](shell.md#first-run-and-pairing).
+
+
+## Advanced audio
+
+On the host desktop, **Live audio capture sample rate** offers Automatic,
+44.1 kHz and 48 kHz for the next Live share. Browser capture uses an ideal
+48 kHz request for Automatic and verifies an explicit rate against the first
+real frame.
+
+Live audio's codec and playback buffer are not here: they belong to sharing
+([Share](share.md#live-audio)).

@@ -4,7 +4,7 @@ import { useDurationClock } from "./components/DurationBar";
 
 /** Progress ticks slowly; metadata changes at each known broadcast/freshness boundary. */
 export function useRadioClock(guides: RadioGuide[] = [], programme?: RadioProgrammeDetails | null) {
-  const progressNow = useDurationClock();
+  const progressNow = useDurationClock(!!programme || guides.length > 0);
   const [boundaryNow, tick] = useState(Date.now);
   const now = Date.now();
   let next = Infinity, previous = -Infinity;

@@ -1,3 +1,4 @@
+import type { LiveAudioSettings } from "../../shared/audio-settings";
 import type { LiveRelaySettings, LocalRelayState } from "../../shared/live-relay";
 import type { AirPlayState } from "../../shared/airplay";
 import { queryOptions } from "@tanstack/react-query";
@@ -67,6 +68,9 @@ export const displayQuery = (credentials: ApiCredentials) =>
     refetchInterval: query => query.state.data?.preview ? 1_000 : false,
     retry: false,
   });
+
+export const liveAudioSettingsQuery = (credentials: ApiCredentials) =>
+  queryOptions({ queryKey: ["settings", "live-audio"], queryFn: ({ signal }) => apiJson<LiveAudioSettings>(credentials, "/api/settings/live-audio", { signal }) });
 
 export const startupQuery = (credentials: ApiCredentials) =>
   queryOptions({

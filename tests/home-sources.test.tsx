@@ -8,11 +8,12 @@ const gate = () => ({ connected: true, videoQualityPreference: { quality: "auto"
 mock.module("../src/client/session/session-context", () => ({ useSessionGate: gate, useOptionalSessionGate: gate }));
 mock.module("../src/client/sections/shell/shell-context", () => ({ useShell: () => ({ credentials: { origin: "http://localhost", token: "test" }, available: true }) }));
 let favorites: ProviderItem[] = [];
+let controlledName: string | null = null;
 let failedQueries: { queryKey: unknown[]; state: { status: string; dataUpdatedAt: number; errorUpdatedAt: number } }[] = [];
 mock.module("@tanstack/react-query", () => ({ queryOptions: (options: unknown) => options, infiniteQueryOptions: (options: unknown) => options, notifyManager: { batchCalls: (callback: unknown) => callback },
   useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.join("/") === "providers/favorites" ? { favorites } : { sources: [] } }),
   useQueryClient: () => ({ getQueryCache: () => ({ findAll: () => failedQueries, subscribe: () => () => {} }) }) }));
-mock.module("../src/client/components/PlayOn", () => ({ PlayOnGroup: () => null, usePlayOn: () => ({ devices: [], on: (label: string) => label }) }));
+mock.module("../src/client/components/PlayOn", () => ({ PlayOnGroup: () => null, usePlayOn: () => ({ devices: [], on: (label: string) => controlledName ? `${label} on ${controlledName}` : label }) }));
 mock.module("../src/client/detail-navigation", () => ({
   collectionLocation: ({ provider }: { provider: string }) => `/collection?provider=${provider}`,
   itemLocation: (kind: string, id: string) => `/item?kind=${kind}&id=${id}`,
@@ -111,4 +112,15 @@ test("screen and sound share the leading row, with the first taking page entry",
   expect(first(html).length).toBeGreaterThan(0);
   expect(html.indexOf('aria-label="Play Studio · Screen"')).toBeLessThan(html.indexOf('aria-label="Play Laptop · System audio"'));
   expect(html).toContain('aria-label="Options for Laptop · System audio"');
+});
+
+test("concert Join names local participation even when ordinary Play controls another device", () => {
+  controlledName = "TV";
+  liveSources = [{ ...source("concert", "Concert", "microphone"), intent: "live" }, source("studio", "Studio · Screen")];
+  try {
+    const html = view();
+    expect(html).toContain('aria-label="Join Concert"');
+    expect(html).not.toContain('aria-label="Join Concert on TV"');
+    expect(html).toContain('aria-label="Play Studio · Screen on TV"');
+  } finally { controlledName = null; }
 });

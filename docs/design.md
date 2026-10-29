@@ -14,6 +14,21 @@ one serves, and **Where it plays**, a Playback's Devices with their picture and
 sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
+The [use-case and capability contract](audio-video-use-cases.md) separates source,
+acquisition environment and playback behavior.
+
+Share separates **Screen**, **Window**, **System audio** and **Audio input** from
+playback behavior. Audio input offers **Relaxed / Live** on the Couch computer;
+browser input sharing keeps relaxed playback. A live audience gets **Join/Leave**
+and its own volume; programme and queue controls remain with ordinary playback.
+The host chooses Live's playback buffer and codec when sharing
+([Share](design/share.md#live-audio)). Listeners use the unmodified
+[Sendspin browser player](live-audio.md); the player shows **Waiting for audio…**,
+**Listening**, reconnect status or the actual source/output error.
+Capture errors remain visible until sharing ends or restarts.
+The sharing panel polls connection routes only for WebRTC shares; PCM shares
+use Core's listener state.
+
 The mixer's **Compressor** belongs to the Playback and runs before device volume.
 It is off by default. **Advanced** opens six draft controls with Apply and Reset
 to default; see [Where it plays](design/where-it-plays.md#compressor).

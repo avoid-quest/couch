@@ -65,10 +65,10 @@ export function RemotePage() {
         </div>
         {current && <MediaContext creator={current.creator} collection={current.collection} radio={current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} />}
         {state && credentials && <>
-          <PlaybackTransport state={state} connected={ready} run={send} />
+          <PlaybackTransport state={state} connected={ready} run={send} participation={false} />
           {current && <PlaybackTimeline state={state} connected={ready} run={send} />}
         </>}
-        {volumeState && <PlaybackVolume state={volumeState} connected={ready && target.sharing?.audio === true} run={action => send(action.type === "volume" || action.type === "mute" ? { ...action, deviceId: target.id } : action)} />}
+        {volumeState && <PlaybackVolume targetDeviceId={target.id} state={volumeState} connected={ready && target.sharing?.audio === true} run={action => send(action.type === "volume" || action.type === "mute" ? { ...action, deviceId: target.id } : action)} />}
       </section>
       <RemoteText key={target.id} field={ready ? state?.textField ?? null : null} connected={ready} send={(token, text, submit) => send({ type: "text", deviceId: target.id, token, text, submit })} />
     </>}

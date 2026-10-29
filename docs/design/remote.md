@@ -9,7 +9,9 @@ a TV. One column, phone first: the TV (a Select when there are several;
 TVs that are off or private can't be controlled), the pad, Back, Home and Info,
 what plays with the shared transport, timeline, Volume and Up next, then Type
 on TV. It controls a TV without joining or moving its outputs. The
-now-playing bar hides here.
+now-playing bar hides here. For Live audio, programme transport and Up next are
+absent. Remote's explicit volume still addresses the selected TV under its output
+consent; ordinary player volume and Join/Leave address the listener's own device.
 
 The pad is a ring of four arrows around a round OK, each target at least 64px;
 the catalog has no direction pad, so it is clipped `Button`s. Each press sends

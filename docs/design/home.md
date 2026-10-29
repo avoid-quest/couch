@@ -87,6 +87,8 @@ shape. Without a hero, a remote starts on the board's first row.
 
 - **Shared sources**, while devices share screen or sound: a line of chips;
   pressing one plays it, its menu holds Play on, Play next and Queue.
+  Live audio sources say **Join** and have no programme queue actions; leaving
+  is in their player. The publisher stays a publisher and never monitors itself.
 - **Radio**: one shelf of up to twelve stations, yours first (those this
   device played lately, then the saved ones), then Couch's built-in ones, each
   with its current show and its categories (else the station's tags), never the hero's station. A tile plays; its menu

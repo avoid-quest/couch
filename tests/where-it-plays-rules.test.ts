@@ -4,6 +4,7 @@ import { playsOn } from "../src/client/session/device-id";
 import type { ClientSessionState } from "../src/client/session/session";
 import { arrange, chooserFor, chooserRequest, counts, crowded, offlineNames, orderOf, picker, playingOn, playOnTargets, reopens, rowLevel, soleSound, soundActions } from "../src/client/session/where-it-plays";
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
+import type { LiveSource } from "../src/shared/live-input";
 
 // One rule per test, in the order of docs/design/where-it-plays.md (src/client/session/where-it-plays.ts). "here" is this device; every other device
 // shares its speakers and screen unless a test says otherwise.
@@ -287,13 +288,25 @@ describe("the panel", () => {
 });
 
 describe("live inputs", () => {
-  const live = (outputs: Output[], film: Partial<PlaybackSummary> = {}, source = screen) => session({ devices: [device("mac"), device("tv"), device("kitchen")], outputs, film: { liveSourceId: "s", ...film }, liveSources: [source] });
+  const live = (outputs: Output[], film: Partial<PlaybackSummary> = {}, source: LiveSource = screen) => session({ devices: [device("mac"), device("tv"), device("kitchen")], outputs, film: { liveSourceId: "s", ...film }, liveSources: [source] });
 
   test("In sync applies once the source plays on several devices, and while it is on", () => {
     expect(picker(live([both("tv")]), { here }).inSync).toBeUndefined();
     expect(picker(live([both("tv"), sound("kitchen")]), { here }).inSync).toBe(false);
     expect(picker(live([both("tv")], { inSync: true }), { here }).inSync).toBe(true);
     expect(picker(session({ outputs: [both("tv"), sound("kitchen")] }), { here }).inSync).toBeUndefined();
+  });
+
+  test("PCM Audio input and AirPlay are already scheduled and never offer an In sync switch", () => {
+    for (const kind of ["microphone", "airplay"] as const) for (const outputs of [[sound("tv")], [sound("tv"), sound("kitchen")]]) {
+      const state = live(outputs, { delivery: "scheduled", inSync: true, audioOnly: true }, { ...screen, kind, video: false, audioDelivery: "pcm" });
+      expect(picker(state, { here }).inSync).toBeUndefined();
+      expect(row(state, "tv").sync).toBeUndefined();
+      expect(counts(rows(state)).some(item => item.filter === "sync")).toBe(false);
+      state.outputs![0]!.delayActive = true;
+      expect(row(state, "tv").sync).toEqual({ delay: 0, lip: false });
+      expect(counts(rows(state)).find(item => item.filter === "sync")?.count).toBe(1);
+    }
   });
 
   test("a source without sound offers Picture, and its Sound and faders say it has no sound", () => {

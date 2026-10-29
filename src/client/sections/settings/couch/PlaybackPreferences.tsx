@@ -1,3 +1,5 @@
+import { playbackControls } from "@/session/playback-controls";
+import type { PlaybackControls } from "../../../../shared/protocol";
 import { useMutation } from "@tanstack/react-query";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { SettingsRow } from "@/components/SettingsRow";
@@ -11,12 +13,14 @@ import { playbackSpeeds } from "../../../../shared/playback-default";
 
 const languages = [{ value: "", label: "Original" }, { value: "it", label: "Italiano" }, { value: "en", label: "English" }];
 
-export function PlaybackPreferences({ profile, preferences, connected, onCommand }: {
+export function PlaybackPreferences({ profile, preferences, connected, onCommand, controls: rights }: {
+  controls?: PlaybackControls;
   profile: WatchingProfile;
   preferences: Preferences;
   connected: boolean;
   onCommand: (action: Action) => Promise<boolean>;
 }) {
+  const controls = playbackControls({ controls: rights });
   const save = useMutation({
     mutationFn: async (patch: Partial<ProfilePlaybackPreferences>) => {
       if (!await onCommand({ type: "preferences", profileId: profile.id, preferences: patch })) throw new Error("Couldn't save. Try again.");
@@ -42,15 +46,15 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
   );
   const speeds = [...new Set([...playbackSpeeds, values.speed])].sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value}×` }));
   return <>
-    <SettingsRow label="Autoplay" htmlFor="playback-autoplay" description="Continue the current series, album or playlist after your queued items.">
+    {controls.queue && <SettingsRow label="Autoplay" htmlFor="playback-autoplay" description="Continue the current series, album or playlist after your queued items.">
       <Switch id="playback-autoplay" checked={values.autoplay !== false} disabled={disabled} onCheckedChange={autoplay => apply({ autoplay })} />
-    </SettingsRow>
-    {language("Audio language", values.audioLanguage, languages, audioLanguage => ({ audioLanguage }))}
-    {language("Subtitles", values.subtitles === "off" ? "off" : values.subtitleLanguage, [{ value: "off", label: "Off" }, ...languages],
+    </SettingsRow>}
+    {controls.programme && language("Audio language", values.audioLanguage, languages, audioLanguage => ({ audioLanguage }))}
+    {controls.programme && language("Subtitles", values.subtitles === "off" ? "off" : values.subtitleLanguage, [{ value: "off", label: "Off" }, ...languages],
       code => code === "off" ? { subtitles: "off" } : { subtitles: "auto", subtitleLanguage: code })}
-    <SettingsRow label="Speed">
+    {controls.speed && <SettingsRow label="Speed">
       <ChoiceGroup label="Speed" value={String(values.speed)} options={speeds} disabled={disabled} onValueChange={value => apply({ speed: Number(value) })} />
-    </SettingsRow>
+    </SettingsRow>}
     {save.error && <Alert variant="destructive"><AlertDescription>{save.error.message}</AlertDescription></Alert>}
   </>;
 }

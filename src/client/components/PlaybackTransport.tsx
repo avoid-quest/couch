@@ -13,6 +13,7 @@ import { RangeControl } from "./RangeControl";
 import { PlaybackSeekBar } from "./PlaybackSeekBar";
 import { useDurationClock } from "./DurationBar";
 import { useBufferedEnd } from "@/session/buffered";
+import { livePlayback, playbackControls } from "@/session/playback-controls";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
@@ -20,6 +21,7 @@ type Props = { state: ClientSessionState; connected: boolean; run: (action: Acti
 const transportInk = "text-foreground active:text-foreground [&_svg]:opacity-80 motion-safe:[&_svg]:transition-opacity motion-safe:[&_svg]:duration-150 hover:[&_svg]:opacity-100 active:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-100 focus-visible:[&_svg]:duration-0";
 
 export function playbackCapabilities(state: ClientSessionState | null, connected: boolean) {
+  const controls = playbackControls(state);
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   const live = current?.live || isRadio(current);
@@ -29,14 +31,15 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     available,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
     // Stop clears whatever is current: loading or playing, paused, finished or failed.
-    stoppable: available && !!current && !!player && ["loading", "playing", "paused", "ended", "error"].includes(player.status),
+    stoppable: controls.programme && available && !!current && !!player && ["loading", "playing", "paused", "ended", "error"].includes(player.status),
     audioReady: !state?.systemAudio || state.systemAudio.volume !== null,
     // A stall mid-watch (a seek, too) reports "loading" with buffering: the item has started, as in Core's session.
     transportReady: available && !!player?.playbackId && (["playing", "paused"].includes(player.status) || player.status === "loading" && player.buffering === true),
-    nextReady: available && !!player?.playbackId && ["loading", "playing", "paused", "ended", "error"].includes(player.status),
-    seekable: !!player?.seekable,
+    nextReady: controls.programme && controls.queue && available && !!player?.playbackId && ["loading", "playing", "paused", "ended", "error"].includes(player.status),
+    seekable: controls.seek && !!player?.seekable,
     // Paused live media resumes, so it offers Play rather than a disabled Pause.
-    pausable: !live || !!player?.seekable || player?.status === "paused",
+    pausable: controls.programme && (!live || !!player?.seekable || player?.status === "paused"),
+    programme: controls.programme,
     hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.upcoming.length || !!state.autoplay.pending)),
   };
 }
@@ -66,7 +69,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   const buffered = useBufferedEnd(player.playbackId);
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
-  if (!current) return null;
+  if (!current || !playbackControls(state).seek) return null;
   const live = current.live || isRadio(current);
   const length = playbackClock.duration || current.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
@@ -95,15 +98,16 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
  * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones.
  */
-export function PlaybackTransport({ state, connected, run, pageFirst = false, className, moreClassName }: Props & { pageFirst?: boolean; className?: string; moreClassName?: string }) {
+export function PlaybackTransport({ state, connected, run, pageFirst = false, className, moreClassName, participation = true }: Props & { pageFirst?: boolean; className?: string; moreClassName?: string; participation?: boolean }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
-  const { available, transportReady, pausable, stoppable, nextReady, hasNext } = playbackCapabilities(state, connected);
+  const { available, transportReady, pausable, stoppable, nextReady, hasNext, programme } = playbackCapabilities(state, connected);
+  if (livePlayback(state)) return participation ? <LiveParticipation state={state} connected={connected} run={run} pageFirst={pageFirst} className={className} /> : null;
   const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current, failed = (player.status === "error" || player.status === "loading" && state.radioRetry?.retryAt != null) && !!current;
   const pause = playing || !pausable;
   const label = ended ? "Replay" : failed ? "Try again" : pause ? "Pause" : "Play";
-  const enabled = [ended || failed ? available : transportReady && pausable, stoppable, nextReady && hasNext];
+  const enabled = [ended || failed ? available && programme : transportReady && pausable, stoppable, nextReady && hasNext];
   const first = (slot: number) => pageFirst && enabled.indexOf(true) === slot || undefined;
   return <div className={cn("flex shrink-0 items-center gap-0.5", className)} role="group" aria-label="Playback controls">
     <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" className={transportInk} aria-label={label} title={label} disabled={!enabled[0]}
@@ -116,11 +120,40 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, cl
   </div>;
 }
 
+/** Audience membership is local; leaving never pauses or stops the source. */
+export function LiveParticipation({ state, connected, run, pageFirst, className }: Props & { pageFirst?: boolean; className?: string }) {
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const busy = useRef(false);
+  const controls = playbackControls(state);
+  const playback = state.playbacks?.find(item => item.id === state.playback);
+  const source = state.liveSources?.find(item => item.id === playback?.liveSourceId);
+  const receiving = controls.leave;
+  const publisher = source?.deviceId === deviceId();
+  const output = state.outputs?.find(output => output.deviceId === deviceId());
+  const error = output?.error || state.player.error;
+  if (!source || publisher) return null;
+  const label = receiving ? "Leave" : failed ? "Try joining again" : "Join";
+  return <div data-live-participation className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
+    <Button data-page-first={pageFirst || undefined} disabled={!connected || pending || receiving && !state.player.playbackId} onClick={async () => {
+      if (busy.current || receiving && !state.player.playbackId) return;
+      busy.current = true; setPending(true); setFailed(false);
+      try { setFailed(!await run(receiving ? { type: "leave", playbackId: state.player.playbackId! } : { type: "playLive", sourceId: source.id, deviceId: deviceId() })); }
+      catch { setFailed(true); }
+      finally { busy.current = false; setPending(false); }
+    }}>{pending ? receiving ? "Leaving…" : "Joining…" : label}</Button>
+    {receiving && !error && <span role="status" className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">{!connected ? "Reconnecting…" : (state.player.status === "playing" && !state.player.buffering ? "Listening" : "Waiting for audio…")}</span>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {failed && <p role="alert" className="text-sm text-destructive">Couldn't {receiving ? "leave" : "join"}. Check this device's connection and audio output, then try again.</p>}
+  </div>;
+}
+
 /**
  * Whether the controlled Devices are muted: every one in the controlled Playback's sound, else the controlled Device.
  * Like Core's Volume, it reads only the sound this device may control while there is any, since that is what Mute moves.
  */
 export function muted(state: ClientSessionState | null | undefined) {
+  if (livePlayback(state)) return state?.devices?.find(device => device.id === deviceId())?.muted ?? false;
   const sounding = new Set(state?.outputs?.filter(output => output.sound).map(output => output.deviceId));
   if (!sounding.size) sounding.add(state?.controlling ?? deviceId());
   const devices = state?.devices?.filter(device => sounding.has(device.id)) ?? [], moved = devices.filter(device => device.id === deviceId() || device.sharing?.audio === true);
@@ -129,14 +162,18 @@ export function muted(state: ClientSessionState | null | undefined) {
 }
 
 /** The controlled Devices' volume: the loudest one this device may control, as Core reports it; moving it scales those. */
-export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className }: Props & { showSlider?: boolean; showValue?: boolean; className?: string }) {
+export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className, targetDeviceId }: Props & { showSlider?: boolean; showValue?: boolean; className?: string; targetDeviceId?: string }) {
   const { available, audioReady } = playbackCapabilities(state, connected);
-  const silent = muted(state);
+  const target = targetDeviceId ?? (livePlayback(state) ? deviceId() : undefined);
+  const device = state.devices?.find(item => item.id === target);
+  const silent = device?.muted ?? muted(state);
+  const level = device?.volume ?? state.player.volume;
+  const ready = target ? connected && !!device?.online : available && audioReady;
   return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} data-volume role="group" aria-label="Volume">
-    <Button variant="ghost" size="icon-lg" aria-label={silent ? "Unmute" : "Mute"} title={silent ? "Unmute" : "Mute"} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !silent })}>{silent ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button>
-    {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady} onCommit={volume => run({ type: "volume", volume })} />}
+    <Button variant="ghost" size="icon-lg" aria-label={silent ? "Unmute" : "Mute"} title={silent ? "Unmute" : "Mute"} disabled={!ready} onClick={() => void run({ type: "mute", muted: !silent, ...target ? { deviceId: target } : {} })}>{silent ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button>
+    {showSlider && <RangeControl label={livePlayback(state) && !targetDeviceId ? "Your volume" : "Volume"} value={level} max={100} disabled={!ready} onCommit={volume => run({ type: "volume", volume, ...target ? { deviceId: target } : {} })} />}
     {/* Its number reads like each device fader's, with no "%". */}
-    {showValue && <span className="w-[3ch] shrink-0 text-right tabular-nums">{state.systemAudio?.volume === null ? "—" : Math.round(state.player.volume)}</span>}
+    {showValue && <span className="w-[3ch] shrink-0 text-right tabular-nums">{!target && state.systemAudio?.volume === null ? "—" : Math.round(level)}</span>}
   </div>;
 }
 

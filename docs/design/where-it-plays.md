@@ -5,6 +5,8 @@ picture and sound, on one device or dozens. Its rules live in one module
 without React,
 [`src/client/session/where-it-plays.ts`](../../src/client/session/where-it-plays.ts),
 with a unit test per rule in `tests/where-it-plays-rules.test.ts`.
+Core remains the authority for delivery, consent and programme controls; the
+picker presents its permitted actions.
 
 Rows are devices, one each (a device serves one Playback at a time); the host
 is a device like the others, and its hardware (a display, a sound card, a
@@ -90,12 +92,15 @@ out). Turning off a device's last channel takes it out: each channel it plays
 here goes, so each needs its consent. A device busy elsewhere moves here.
 This device needs no consent.
 
-**Move here** (Core's `solo`): the Playback plays only on that device, with
-its picture when it has one. A device not playing this shows it where the
-level would be; a device already playing it never offers it. It isn't offered for the only
-output, where it would change nothing, unless a publisher held out for its
-own capture would return after it. It is unavailable while another device's
-private output plays in the Playback, or such a publisher waits to return.
+**Move here** (Core's `solo`) transfers this Playback **and its queue exclusively**
+to the row's destination, retaining position, pause state and speed where the
+source supports them. Other outputs leave that Playback. On pointer layouts a
+device outside the Playback shows the button where its fader would be; a playing
+row's “…” keeps only Sync. On the TV, OK exposes Move here for any row where the
+move changes the output set, including a device already in the Playback. The
+sole output has no move unless a held publisher would otherwise return. Another
+device's private output, including a held publisher's, can block the exclusive
+move. Core rechecks consent and generation after asynchronous preparation.
 
 **What it says,** under the name, only when it matters:
 
@@ -120,13 +125,28 @@ keeps its rows but disables changes, including In sync, device channels,
 faders and Sync. Sync discards its local edit when disabled and shows the
 received delay again.
 
+## Live audio
+
+A Live audio audience sees its own volume and **Join/Leave** instead of the shared
+mixer, compressor or programme controls. A failed listener shows its own error;
+leaving never pauses other listeners or ends the source. Core rejects audience
+queue, seek, Next, Stop and shared-pause commands through socket, REST and legacy
+entry points. The publisher owns capture and **Stop sharing**; selecting or
+joining its source grants reception only. Local device controls and a permitted
+remote output remain separate from programme authority. Relaxed sources keep
+collaborative controls.
+Source and output failures retain their reasons. Live sound uses Sendspin
+and applies the player's persisted output delay. Receiver scheduling,
+clock correction and reconnection belong to the upstream player; there are no
+custom warming, behind-by or measured-latency rows.
+
 ## Fader and Sync
 
 The fader is the device's one volume; 0 takes its sound out.
 
 "Sync … ms earlier" (0–500 ms) plays a late speaker sooner (Sendspin's static
-delay). It applies only while the device's sound plays in sync with other
-devices. It reads **Lip sync** while another device shows the picture. A row
+delay). It applies while the device receives scheduled sound, including a
+single listener of relaxed timestamped capture or AirPlay. It reads **Lip sync** while another device shows the picture. A row
 shows its line only while it isn't 0; **Sync…** (or **Lip sync…**) in "…"
 reveals it and moves focus to its slider; Back or Esc there, or closing the
 panel, hides a line still at 0.
@@ -149,10 +169,13 @@ time it moves.
 
 ## In sync
 
-A live input plays directly on each device unless In sync is on
+A relaxed captured screen, or an audio publisher without timestamped capture,
+plays directly on each device unless In sync is on
 ([ADR 0001](../adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).
 Its switch sits under the Volume while the source plays on several devices,
-or while it is on.
+or while it is on. Timestamped audio inputs and AirPlay always use scheduled
+sound, including a single listener, so they have no In sync switch. Ordinary
+picture-only groups retain a shared timeline without generating silent audio.
 
 ## The chooser
 
@@ -168,9 +191,10 @@ dismissal.
 
 Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
 between rows, Left and Right change its level by 5 at once, with no OK to
-take the arrows. OK opens its options: Picture, Sound and Sync…. Back closes the panel with focus back on its button. It opens on the
-first row. A revealed Sync line is a stop of its own whose slider Left and
-Right move directly.
+take the arrows. OK opens its options: Picture, Sound, **Move here** where
+permitted (including a playing row when other outputs would leave), and Sync….
+Back closes the panel with focus back on its button. It opens on the first row.
+A revealed Sync line is a stop of its own whose slider Left and Right move directly.
 
 ## Play on
 
@@ -180,6 +204,20 @@ with only one eligible online target; the primary Play says "Play on
 {name}" while you control another device, and a "Playing on {name}" toast
 confirms it. The now-playing bar, the player's summary and Home's hero say
 "on {name}" (+N) whenever the controlled Playback plays anywhere but only here.
+
+Ordinary **Play** retains the selected output mix. Explicit **Play on** starts the
+chosen item on that destination and separates it from other listeners, whose
+Playback and queue continue. It does not transfer the group's queue. **Move here**
+transfers the existing Playback exclusively; Picture/Sound toggles add or remove
+channels in the existing Playback. The controller can stay separate from all
+receivers.
+
+For a captured source already playing in an accessible Playback, Play/Play on
+joins that Playback; it does not make an independent capture. Choosing its
+publisher opens the chooser because the publisher never monitors its own capture.
+Joining Live audio retains its source authority and timestamped scheduled delivery even
+with one listener. Core chooses delivery from intent and channel assignments;
+a TV picture and a separate speaker share a timeline even with only one speaker.
 
 Its target rows in menus: [Browse](browse.md#play-on-in-menus).
 

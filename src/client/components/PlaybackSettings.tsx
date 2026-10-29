@@ -1,3 +1,5 @@
+import { playbackControls } from "@/session/playback-controls";
+import type { PlaybackControls } from "../../shared/protocol";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -17,6 +19,7 @@ import { supportsCurrentVideoQuality } from "../../shared/video-quality";
 import { videoQualityChoice, videoQualityLabels, videoQualityOptions } from "@/video-quality";
 
 export type PlaybackSettingsProps = {
+  controls?: PlaybackControls;
   entry?: QueueEntry;
   player: ClientPlayerState;
   ready: boolean;
@@ -178,6 +181,7 @@ const row = "h-11 w-full justify-start gap-3 rounded-none px-3 font-normal";
  */
 export function PlaybackMenu({ details, tracks: showTracks = true, trigger, ...props }: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; trigger: HTMLElement | null }) {
   const { entry, player, credentials, connected } = props;
+  const controls = playbackControls({ controls: props.controls });
   const playbackClock = usePlaybackClock();
   const { disabled, idle, command, saveDefault, messages } = usePlaybackCommands(props);
   const [view, setView] = useState<View | null>(null);
@@ -201,34 +205,35 @@ export function PlaybackMenu({ details, tracks: showTracks = true, trigger, ...p
   const speeds = [...new Set([...playbackSpeeds, player.speed ?? 1])].sort((a, b) => a - b);
   // Audio is a choice only with more than one track, as YouTube's Audio track row.
   const rows: { view: View; value: string }[] = [
-    ...(showTracks ? [{ view: "subtitles" as const, value: subtitle ? trackLabel(subtitle, "Subtitle") : "Off" }] : []),
-    ...(showTracks && audio.length > 1 ? [{ view: "audio" as const, value: audioTrack ? trackLabel(audioTrack, "Audio") : "" }] : []),
-    ...(player.seekable && !entry?.live ? [{ view: "speed" as const, value: speedLabel(player.speed ?? 1) }] : []),
-    ...(qualityAvailable ? [{ view: "quality" as const, value: videoQualityLabels[entry?.quality ?? "auto"] }] : []),
-    ...(chapters.length > 0 && player.seekable ? [{ view: "chapters" as const, value: chapters[chapterIndex]?.title || (chapterIndex >= 0 ? `Chapter ${chapterIndex + 1}` : "") }] : []),
-    ...(player.audioDelay !== undefined ? [{ view: "audioDelay" as const, value: seconds(player.audioDelay ?? 0) }] : []),
+    ...(controls.programme && showTracks ? [{ view: "subtitles" as const, value: subtitle ? trackLabel(subtitle, "Subtitle") : "Off" }] : []),
+    ...(controls.programme && showTracks && audio.length > 1 ? [{ view: "audio" as const, value: audioTrack ? trackLabel(audioTrack, "Audio") : "" }] : []),
+    ...(controls.speed && player.seekable && !entry?.live ? [{ view: "speed" as const, value: speedLabel(player.speed ?? 1) }] : []),
+    ...(controls.programme && qualityAvailable ? [{ view: "quality" as const, value: videoQualityLabels[entry?.quality ?? "auto"] }] : []),
+    ...(controls.seek && chapters.length > 0 && player.seekable ? [{ view: "chapters" as const, value: chapters[chapterIndex]?.title || (chapterIndex >= 0 ? `Chapter ${chapterIndex + 1}` : "") }] : []),
+    ...(controls.audioDelay && player.audioDelay !== undefined ? [{ view: "audioDelay" as const, value: seconds(player.audioDelay ?? 0) }] : []),
   ];
-  const body = view === "subtitles" ? <>
+  const permittedView = view && rows.some(row => row.view === view) ? view : null;
+  const body = permittedView === "subtitles" ? <>
     {subtitles.length ? <ChoiceGroup label="Subtitles" orientation="vertical" disabled={disabled} value={String(subtitle?.index ?? -1)} onValueChange={value => select("subtitle", Number(value))}
       options={[{ value: "-1", label: "Off" }, ...subtitles.map(track => ({ value: String(track.index), label: <span className="truncate">{trackLabel(track, "Subtitle")}</span> }))]} /> : <p className="py-2 text-muted-foreground">None in this video</p>}
     {subtitles.length > 0 && saveDefault("subtitles", "subtitles")}
     <div className="-mx-3 grid gap-2 border-t px-3 pt-2">
       <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
-      <Stepper label="Subtitle delay" value={seconds(player.subtitleDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "subtitleDelay", playbackId, delay: Math.round(((player.subtitleDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
+      {controls.subtitleDelay && <Stepper label="Subtitle delay" value={seconds(player.subtitleDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "subtitleDelay", playbackId, delay: Math.round(((player.subtitleDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />}
     </div>
-  </> : view === "audio" ? <>
+  </> : permittedView === "audio" ? <>
     <ChoiceGroup label="Audio" orientation="vertical" disabled={disabled} value={String(audioTrack?.index ?? "")} onValueChange={value => select("audio", Number(value))}
       options={audio.map(track => ({ value: String(track.index), label: <span className="truncate">{trackLabel(track, "Audio")}</span> }))} />
     {saveDefault("audio", "audio language")}
-  </> : view === "speed" ? <>
+  </> : permittedView === "speed" ? <>
     <ChoiceGroup label="Speed" orientation="vertical" disabled={idle} value={String(player.speed ?? 1)} onValueChange={value => command(playbackId => ({ type: "speed", playbackId, speed: Number(value) }))}
       options={speeds.map(speed => ({ value: String(speed), label: speedLabel(speed) }))} />
     {saveDefault("speed", "speed")}
-  </> : view === "quality" ? <ChoiceGroup label="Quality" orientation="vertical" disabled={idle || !qualityAvailable} value={videoQualityChoice(entry?.quality ?? "auto")} onValueChange={quality => command(playbackId => ({ type: "videoQuality", playbackId, quality }))}
+  </> : permittedView === "quality" ? <ChoiceGroup label="Quality" orientation="vertical" disabled={idle || !qualityAvailable} value={videoQualityChoice(entry?.quality ?? "auto")} onValueChange={quality => command(playbackId => ({ type: "videoQuality", playbackId, quality }))}
     options={videoQualityOptions} />
-  : view === "chapters" ? <ChoiceGroup label="Chapters" orientation="vertical" disabled={idle} value={String(chapterIndex)} onValueChange={value => { const chapter = chapters[Number(value)]; if (chapter) command(playbackId => ({ type: "seek", playbackId, position: chapter.position })); }}
+  : permittedView === "chapters" ? <ChoiceGroup label="Chapters" orientation="vertical" disabled={idle} value={String(chapterIndex)} onValueChange={value => { const chapter = chapters[Number(value)]; if (chapter) command(playbackId => ({ type: "seek", playbackId, position: chapter.position })); }}
     options={chapters.map((chapter, index) => ({ value: String(index), label: <span className="truncate">{chapter.title || `Chapter ${index + 1}`}</span>, count: clock(chapter.position) }))} />
-  : view === "audioDelay" ? <Stepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "audioDelay", playbackId, delay: Math.round(((player.audioDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
+  : permittedView === "audioDelay" ? <Stepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => command(playbackId => ({ type: "audioDelay", playbackId, delay: Math.round(((player.audioDelay ?? 0) + direction * 0.1) * 10) / 10 }))} />
   : null;
   // The Back row stays while a long list (subtitle languages, chapters) scrolls under it.
   return <PopoverContent ref={content} data-player-menu {...toolPanel(trigger)} collisionPadding={16} aria-label={view ? viewTitles[view] : "Playback"}
@@ -237,8 +242,8 @@ export function PlaybackMenu({ details, tracks: showTracks = true, trigger, ...p
     onEscapeKeyDown={event => { if (view) { event.preventDefault(); setView(null); } }}
     // It opens on the menu again, however it closed; focus still returns to the gear.
     onCloseAutoFocus={() => { opener.current = null; setView(null); }}>
-    {view ? <>
-      <div className="flex shrink-0 items-center gap-1 border-b px-1 py-1"><Button variant="ghost" size="icon" aria-label="Back to Playback" title="Back to Playback" onClick={() => setView(null)}><ChevronLeft aria-hidden="true" /></Button><h2 className="text-sm font-medium">{viewTitles[view]}</h2></div>
+    {permittedView ? <>
+      <div className="flex shrink-0 items-center gap-1 border-b px-1 py-1"><Button variant="ghost" size="icon" aria-label="Back to Playback" title="Back to Playback" onClick={() => setView(null)}><ChevronLeft aria-hidden="true" /></Button><h2 className="text-sm font-medium">{viewTitles[permittedView]}</h2></div>
       <div data-view-body className="grid min-h-0 gap-2 overflow-y-auto overscroll-contain px-3 py-2">{body}{messages}</div>
     </> : <div className="min-h-0 overflow-y-auto py-1">
       {rows.map(item => <Button key={item.view} data-view={item.view} variant="ghost" className={row} onClick={() => { opener.current = item.view; setView(item.view); }}>

@@ -22,6 +22,25 @@ YouTube's web player was observed in October 2026. The other sources are:
 The table at the end of this page sums up which reference each pattern
 follows.
 
+## Live audio
+
+For a publication started as **Live audio**, the transport is **Join/Leave** and
+the volume belongs to this device. Up next, shared pause/Stop/Next, seeking,
+speed and programme settings are absent. Leaving uses this receiver even while
+it is looking at another device's playback. The publisher ends capture with
+**Stop sharing** in the header. The existing **Tap to hear** prompt unlocks
+Sendspin playback. Status is **Waiting for audio…**, **Listening**, or
+**Reconnecting…** while the Couch control connection returns. Volume and mute
+use SDK commands without restarting the stream. Actual errors retain their
+reason. A listener the host removes returns to where it was, with a toast
+naming who removed it. Ordinary sharing retains its existing controls.
+Keyboard shortcuts and Media Session actions follow the same Core-provided rights.
+
+Audio delay appears only for the separate-audio Direct adapter that applies it.
+Scheduled hardware correction is a separate setting in Where it plays. A picture
+adapter without source timestamp mapping reports that limitation; its video
+remains usable, without a claim of synchronized presentation.
+
 ## The picture
 
 A video fills the window and never shrinks, moves or resizes. All four
@@ -543,3 +562,5 @@ band, the now-playing bar, Home's hero and Remote (`PlaybackTransport`).
 | Next card near the end | Prime Video's "Next up"; Netflix's Next Episode |
 | Buffering as a centred spinner | YouTube; Apple's HIG |
 | Translucent panel surface | YouTube's gear menu (60%) |
+
+Details keeps Queue and Queue all disabled while Core denies queue control, including for Live listeners. Initial focus passes those disabled verbs and reaches the next available action.

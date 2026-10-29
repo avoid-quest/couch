@@ -13,7 +13,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FilterInput } from "@/components/ContentFilters";
 import { RangeControl } from "@/components/RangeControl";
 import { CompressorControls } from "@/components/CompressorControls";
-import { PlaybackVolume, toolPanel } from "@/components/PlaybackTransport";
+import { LiveParticipation, PlaybackVolume, toolPanel } from "@/components/PlaybackTransport";
+import { livePlayback } from "@/session/playback-controls";
 import { cn } from "@/lib/utils";
 import { Level } from "@/components/Level";
 import { sounding } from "@/playback-status";
@@ -102,6 +103,12 @@ type MixerProps = Props & { tv?: boolean; order?: Order; filter?: Filter | null;
  * rows, the playback's devices first and the rest after a hairline, offline ones folded into one line.
  */
 export function Mixer({ state, connected, run, tv = false, order, filter = null, query = "", onFilter, onQuery, close }: MixerProps) {
+  if (livePlayback(state)) {
+    return <div className="grid gap-3">
+      <div data-nav-row className="flex items-center gap-2"><PlaybackVolume state={state} connected={connected} run={run} />{close}</div>
+      <LiveParticipation state={state} connected={connected} run={run} />
+    </div>;
+  }
   const { choose, inSync, rows } = picker(state, { here: deviceId() });
   // The filter and search apply only while their controls show: a device going offline or a count clearing drops them.
   const summary = counts(rows), many = arrange(rows, order).listed > crowded;
@@ -223,6 +230,7 @@ function channelItems({ row, connected, run }: { row: Row; connected: boolean; r
   return <>
     <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!connected || !picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
     <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!connected || !sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>
+    {row.move && <><DropdownMenuSeparator /><DropdownMenuItem aria-label={`Move here: ${device.name}`} disabled={!connected || !row.move.enabled} onSelect={() => void run({ type: "solo", deviceId: device.id })}>Move here<Why {...row.move} /></DropdownMenuItem></>}
   </>;
 }
 

@@ -29,12 +29,12 @@ export function useMediaSession() {
   const live = !!current?.live || isRadio(current);
   const position = clock.playbackId === playbackId ? clock.position : 0;
   const duration = live ? null : clock.playbackId === playbackId ? clock.duration ?? current?.duration ?? null : current?.duration ?? null;
-  const { transportReady, pausable, seekable, nextReady, hasNext } = playbackCapabilities(state, connected);
-  const allowed = { play: transportReady && pausable, pause: transportReady && pausable, stop: !!playbackId, nexttrack: nextReady && hasNext,
+  const { transportReady, pausable, seekable, nextReady, hasNext, stoppable } = playbackCapabilities(state, connected);
+  const allowed = { play: transportReady && pausable, pause: transportReady && pausable, stop: stoppable, nexttrack: nextReady && hasNext,
     seekto: transportReady && seekable, seekbackward: transportReady && seekable, seekforward: transportReady && seekable };
 
   const act = useEffectEvent((action: MediaSessionAction, details: MediaSessionActionDetails) => {
-    if (!playbackId) return;
+    if (!playbackId || !allowed[action as keyof typeof allowed]) return;
     const seek = (to: number) => ({ type: "seek", playbackId, position: Math.max(0, Math.min(duration ?? Infinity, to)) }) satisfies Action;
     const command: Action | null = action === "play" || action === "pause" ? { type: "pause", playbackId, paused: action === "pause" }
       : action === "stop" ? { type: "stop", playbackId }

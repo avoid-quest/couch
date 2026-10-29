@@ -28,7 +28,10 @@ export function createCapture(contents: () => WebContents | null, address: () =>
   const origin = () => originOf(address());
   let sources: CaptureSource[] = [];
   // `issued` is "asking" while the owner decides on a display request, then true once it is granted.
-  let pending: { frame: WebFrameMain; origin: string; selection: { kind: CaptureKind; audio: boolean }; source?: CaptureSource; expires: number; issued: boolean | "asking" } | null = null;
+  type Grant = { frame: WebFrameMain; origin: string; selection: { kind: CaptureKind; audio: boolean }; source?: CaptureSource; expires: number; issued: boolean | "asking" };
+  let pending: Grant | null = null;
+  let delegated: { target: WebContents; frame: WebFrameMain; url: string; grant: Grant; cleanup: () => void } | null = null;
+  const clearDelegated = () => { const old = delegated; delegated = null; old?.cleanup(); };
   let generation = 0;
   let asking: AbortController | null = null;
   const trusted = (requester: WebContents | null, requestingOrigin: string, mainFrame: boolean) => !!origin() && !!requester && requester === contents()
@@ -46,7 +49,7 @@ export function createCapture(contents: () => WebContents | null, address: () =>
     return major > 14 || major === 14 && minor >= 2;
   })();
   // Cancelling, replacing, navigating or closing also closes an open prompt.
-  const revoke = () => { generation++; pending = null; asking?.abort(); asking = null; };
+  const revoke = () => { clearDelegated(); generation++; pending = null; asking?.abort(); asking = null; };
   const clear = () => { revoke(); sources = []; };
   const ask = async (message: string, detail: string) => {
     const { signal } = asking = new AbortController();
@@ -59,8 +62,27 @@ export function createCapture(contents: () => WebContents | null, address: () =>
     } finally { if (asking?.signal === signal) asking = null; }
   };
 
+  const targetedMicrophone = (requester: WebContents | null, url: string, mainFrame: boolean) => {
+    const lease = delegated;
+    return !!lease && requester === lease.target && mainFrame && !lease.target.isDestroyed()
+      && !lease.frame.detached && lease.target.mainFrame === lease.frame && lease.frame.url === lease.url
+      && originOf(url) === lease.grant.origin && prepared() === lease.grant;
+  };
   return {
     clear,
+    // Main delegates only the current owner’s temporary microphone grant to its exact capture frame.
+    delegateMicrophone(target: WebContents) {
+      const grant = prepared();
+      if (!grant || grant.selection.kind !== "microphone" || grant.frame !== owner() || target === contents()
+        || target.isDestroyed() || originOf(target.mainFrame.url) !== grant.origin) throw new Error("No current microphone preparation for that helper.");
+      clearDelegated();
+      const navigation = (_event: unknown, _url: string, _inPlace: boolean, mainFrame: boolean) => { if (mainFrame) clearDelegated(); };
+      const destroyed = () => clearDelegated();
+      target.on("did-start-navigation", navigation);
+      target.once("destroyed", destroyed);
+      delegated = { target, frame: target.mainFrame, url: target.mainFrame.url, grant,
+        cleanup: () => { target.removeListener("did-start-navigation", navigation); target.removeListener("destroyed", destroyed); } };
+    },
     // What the owner still has to allow in the system's settings for this kind; null when nothing.
     access(kind: unknown): string | null {
       owner();
@@ -123,7 +145,7 @@ export function createCapture(contents: () => WebContents | null, address: () =>
           && details.mediaTypes?.length === 1 && details.mediaTypes[0] === "audio";
         // Electron 44 requests display capture as media with no microphone/camera mediaTypes.
         const display = permission === "media" && grant && !grant.issued && grant.selection.kind !== "microphone" && "mediaTypes" in details && details.mediaTypes?.length === 0;
-        allow(permission === "fullscreen" || local && (permission === "display-capture" && !!grant && !grant.issued || microphone || !!display));
+        allow(permission === "fullscreen" || local && (permission === "display-capture" && !!grant && !grant.issued || microphone || !!display) || microphone && targetedMicrophone(requester, details.requestingUrl, details.isMainFrame));
       });
       session.defaultSession.setPermissionCheckHandler((requester, permission, requestingOrigin, details) => {
         const grant = prepared();
@@ -131,7 +153,8 @@ export function createCapture(contents: () => WebContents | null, address: () =>
         return permission === "fullscreen" || trusted(requester, requestingOrigin, details.isMainFrame)
           && (permission === "display-capture" && !!grant && !grant.issued
             || permission === "media" && (details.mediaType === "audio" && grant?.selection.kind === "microphone"
-              || details.mediaType === undefined && grant?.issued === true && grant.selection.kind !== "microphone"));
+              || details.mediaType === undefined && grant?.issued === true && grant.selection.kind !== "microphone"))
+          || permission === "media" && details.mediaType === "audio" && targetedMicrophone(requester, requestingOrigin, details.isMainFrame);
       });
       session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
         // Electron denies with null, which its types omit; an empty answer also throws.

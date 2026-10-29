@@ -5,6 +5,7 @@ import { soundClock } from "./sendspin";
 import { localDeviceName } from "./device-id";
 import { bufferedEnd, setBuffered } from "./buffered";
 import { createCompressor } from "./compressor";
+import { setPictureMapping } from "./picture-mapping";
 import type { CompressorSettings } from "../../shared/compressor";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
@@ -27,10 +28,14 @@ holder.hidden = true;
 holder.append(video, audio);
 
 let playbackId: string | null = null;
+let generation = 0;
+let decoderGeneration = 0;
+let followGeneration = 0;
 let loading: Extract<PlaybackCommand, { type: "load" }> | null = null;
 let mediaStream: MediaStream | null = null;
 let hls: Hls | null = null;
 let mpegts: Mpegts.Player | null = null;
+let engine: "native" | "hls-pending" | "hls" | "mpegts" = "native";
 let ready = false;
 let stalled = false;
 let failure: string | null = null;
@@ -59,8 +64,8 @@ const preferredSubtitle = (command: NonNullable<typeof loading>) => command.subt
 const tracks = (): MediaTrack[] => {
   if (!playbackId || !ready) return [];
   const captured = mediaStream?.getTracks().map((track, index): MediaTrack => ({ id: track.id || `${track.kind}-${index}`, index, kind: track.kind as "audio" | "video", label: track.label || (track.kind === "audio" ? "Audio" : "Video"), language: "", selected: true }));
-  const picture: MediaTrack[] = video.videoWidth ? [{ id: "video", index: 0, kind: "video", label: "Video", language: "", selected: true }] : [];
-  const sound: MediaTrack[] = hls?.audioTracks.length ? hls.audioTracks.map((track, index) => ({ id: `audio-${index}`, index, kind: "audio", label: track.name, language: track.lang ?? "", selected: index === hls!.audioTrack }))
+  const picture: MediaTrack[] = video.videoWidth && loading?.output?.picture !== false ? [{ id: "video", index: 0, kind: "video", label: "Video", language: "", selected: true }] : [];
+  const sound: MediaTrack[] = loading?.output?.sound === false || following ? [] : hls?.audioTracks.length ? hls.audioTracks.map((track, index) => ({ id: `audio-${index}`, index, kind: "audio", label: track.name, language: track.lang ?? "", selected: index === hls!.audioTrack }))
     : [{ id: "audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }];
   const embedded = hls?.subtitleTracks ?? [];
   const subtitles: MediaTrack[] = [
@@ -78,10 +83,14 @@ const state = (): PlayerState => ({
   volume: Math.round(volume * 100),
   seekable: Number.isFinite(video.duration) && !mpegts && !mediaStream,
   error: failure,
-  speed: mediaStream ? 1 : video.playbackRate,
+  // Clock corrections are renderer work, never a new programme speed.
+  speed: mediaStream ? 1 : video.defaultPlaybackRate,
   tracks: tracks(),
-  audioDelay: mediaStream ? undefined : audioDelay,
+  // Content delay is implemented by the separate audio element only.
+  audioDelay: split() && !following && !mediaStream ? audioDelay : undefined,
   subtitleDelay,
+  ...following ? { timeline: !canMapClock() ? { mapping: "unavailable" as const, error: "This browser cannot align this picture with the shared sound. Try another browser or device." }
+    : sourcePts() && ptsOffset === undefined ? undefined : { mapping: sourcePts() ? "hls" as const : "media" as const } } : {},
 });
 const send = (positionChanged = false) => {
   if (!report) return;
@@ -106,10 +115,10 @@ export function waitForTap(unlock: (() => void) | null) {
 }
 // A browser that wants a gesture before sound plays the picture muted and asks for a tap.
 const start = (element: HTMLMediaElement) => {
-  const id = playbackId, source = loading, stream = mediaStream;
+  const current = generation;
   resumeCompression();
   return element.play().catch((error: unknown) => {
-    if (playbackId !== id || loading !== source || mediaStream !== stream || !(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
+    if (generation !== current || !(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
     setBlocked(true);
     if (element === video && !video.muted) { video.muted = true; void video.play().catch(() => {}); }
   });
@@ -168,8 +177,8 @@ observeElements();
 const fixedVolume = (() => { video.volume = 0.5; const fixed = video.volume !== 0.5; video.volume = 1; return fixed; })();
 const apply = () => {
   const silent = fixedVolume && volume === 0;
-  video.muted = split() || blocked || !!following || silent;
-  audio.muted = !!following || silent;
+  video.muted = split() || blocked || !!following || loading?.output?.sound === false || silent;
+  audio.muted = blocked || !!following || loading?.output?.sound === false || silent;
   video.volume = audio.volume = processing ? 1 : volume;
   processing?.graph.volume(blocked || following ? 0 : volume);
 };
@@ -198,7 +207,7 @@ const prepareCompression = (settings: CompressorSettings) => {
     try {
       context = new AudioContext();
       const graph = createCompressor(context, settings);
-      const source = context.createMediaElementSource(loading?.audioSource ? audio : video);
+      const source = context.createMediaElementSource(split() ? audio : video);
       source.connect(graph.input); graph.output.connect(context.destination);
       processing = { context, graph, source };
     } catch { void context?.close().catch(() => {}); fail("This browser couldn't start the compressor. Turn it off and try again."); return; }
@@ -207,77 +216,105 @@ const prepareCompression = (settings: CompressorSettings) => {
   if (!video.paused) resumeCompression();
   else if (ready || loading?.paused) suspendCompression();
 };
-// The sound's clock on this video's timeline: a live clock is the source's timestamps (#643's
-// RaiPlay stall), which hls.js maps to its own timeline. mpegts.js hides them, so a channel's
-// picture starts where the sound is and follows its speed from there, unanchored.
+// Source timestamps need a real mapping. Native HLS and MPEG-TS do not expose one;
+// an offset guessed from when the receiver joined would misrepresent synchronization.
 const clock = () => {
   const sample = following && soundClock(following.group);
-  if (!sample || !following!.pts) return sample;
-  if (ptsOffset === undefined && mpegts) ptsOffset = sample.position - video.currentTime;
+  if (!sample || !following) return null;
+  if (!canMapClock()) return { speed: sample.speed };
+  if (!sourcePts()) return sample;
   return ptsOffset === undefined ? null : { ...sample, position: sample.position - ptsOffset };
 };
 const setFollow = (follow: Follow | null) => {
+  followGeneration++;
   unfollow?.();
   unfollow = null;
+  // The measured offset belongs to the loaded stream: keep it when a Direct picture starts following its own group.
+  if (follow?.timeline && follow.timeline.generation !== playbackId) ptsOffset = undefined;
   following = follow;
   if (follow) suspendCompression();
   else if (loading?.compressor) prepareCompression(loading.compressor);
   apply();
   if (!follow) { video.playbackRate = video.defaultPlaybackRate; return; }
-  const current = playbackId;
+  const current = generation, revision = ++followGeneration;
   void import("./picture-clock").then(({ followClock }) => {
-    if (following === follow && playbackId === current) unfollow = followClock(video, clock);
+    if (following === follow && generation === current && revision === followGeneration) unfollow = followClock(video, clock, () => { void start(video); });
   });
 };
 // Only hls.js tells where the source's timestamps start; engines without MSE keep native HLS.
-const mapsTimestamps = (command: NonNullable<typeof loading>) => !!command.follow?.pts && !command.mpegts && ("MediaSource" in window || "ManagedMediaSource" in window);
+const mapsTimestamps = (command: NonNullable<typeof loading>) => (command.follow?.timeline?.kind === "source-pts" || !!command.follow?.pts) && !command.mpegts && ("MediaSource" in window || "ManagedMediaSource" in window);
+const sourcePts = () => (following?.timeline?.kind ?? (following?.pts ? "source-pts" : "position")) === "source-pts";
+// Pending hls.js support is distinct from an actually selected native fallback.
+const canMapClock = () => !following || following.timeline?.mapping !== "unavailable" && engine !== "mpegts"
+  && (!sourcePts() || engine === "hls-pending" || engine === "hls");
+const updateMapping = () => setPictureMapping(playbackId && following ? { playbackId, unavailable: !canMapClock() } : null);
 // An HLS EVENT playlist starts at its first segment; hls.js would start it at the live edge.
-const begin = (command: NonNullable<typeof loading>) => command.startPosition || (command.eventStart ? 0 : undefined);
+const begin = (command: NonNullable<typeof loading>) => command.startPosition ?? (command.eventStart ? 0 : undefined);
 // Prefer the same HLS engine and live timeline even when a browser also advertises native HLS.
 const playlist = async (command: NonNullable<typeof loading>, nativeFallback = true) => {
+  const current = generation, attempt = ++decoderGeneration;
+  engine = "hls-pending";
+  try {
   const { default: Hls } = await import("hls.js");
-  if (command !== loading) return;
+  if (command !== loading || current !== generation || attempt !== decoderGeneration) return;
   if (!Hls.isSupported()) {
     if (!nativeFallback) return sourceFailed();
     if (!video.canPlayType("application/vnd.apple.mpegurl")) return unsupported();
+    engine = "native";
+    ptsOffset = undefined;
+    updateMapping();
     video.src = command.source;
     const at = begin(command);
     if (at !== undefined) video.currentTime = at;
     if (!command.paused && !following) void start(video);
+    send();
     return;
   }
+  engine = "hls";
+  updateMapping();
   // A sliding live window is not a finite, zero-based movie timeline.
-  // In-band CEA captions otherwise show beside external subtitles and bypass Off.
-  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true, enableCEA708Captions: !command.subtitles?.length });
+  const decoder = hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true, enableCEA708Captions: !command.subtitles?.length,
+    ...following ? { maxLiveSyncPlaybackRate: 1 } : {} });
+  const active = () => current === generation && attempt === decoderGeneration && hls === decoder;
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
-  hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
-  hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
-  for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, () => send());
+  hls.on(Hls.Events.ERROR, (_event, data) => { if (active() && data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
+  hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => {
+    if (active() && data.id === "main" && Number.isFinite(data.initPTS) && data.timescale > 0) { ptsOffset = data.initPTS / data.timescale; updateMapping(); send(); }
+  });
+  for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, () => { if (active()) send(); });
   // Tracks follow the profile's language preferences.
   const { audioLanguage = "" } = command.preferences ?? {};
   // Tracks chosen on another Device come with the item (#644 ticket 9). hls.js lists a
   // level's audio and subtitle tracks only once it starts loading that level.
   hls.once(Hls.Events.LEVEL_LOADED, () => {
-    const audioTrack = command.audioTrack ?? hls!.audioTracks.findIndex(track => matchesLanguage(track.lang, audioLanguage));
-    if (audioTrack >= 0 && audioTrack < hls!.audioTracks.length) hls!.audioTrack = audioTrack;
+    if (!active()) return;
+    const audioTrack = command.audioTrack ?? decoder.audioTracks.findIndex(track => matchesLanguage(track.lang, audioLanguage));
+    if (audioTrack >= 0 && audioTrack < decoder.audioTracks.length) decoder.audioTrack = audioTrack;
     selectSubtitle(preferredSubtitle(command));
   });
   hls.subtitleTrack = -1;
   hls.loadSource(command.source);
   hls.attachMedia(video);
   if (!command.paused && !following) void start(video);
+  } catch (error) { if (current === generation && attempt === decoderGeneration) fail(error instanceof Error ? error.message : "This stream could not start. Try another device."); }
 };
 const transportStream = async (command: NonNullable<typeof loading>) => {
+  const current = generation, attempt = ++decoderGeneration;
+  engine = "mpegts";
+  try {
   const { default: Mpegts } = await import("mpegts.js");
-  if (command !== loading) return;
+  if (command !== loading || current !== generation || attempt !== decoderGeneration) return;
   if (!Mpegts.getFeatureList().mseLivePlayback) return fail("This browser can't play MPEG-TS channels.");
-  mpegts = Mpegts.createPlayer({ type: "mpegts", isLive: true, url: command.source }, { enableStashBuffer: false, liveBufferLatencyChasing: true });
-  mpegts.on(Mpegts.Events.ERROR, (type: string, detail: string) => { if (type === Mpegts.ErrorTypes.MEDIA_ERROR) unsupported(); else fail(`The channel failed (${detail}).`); });
+  const decoder = mpegts = Mpegts.createPlayer({ type: "mpegts", isLive: true, url: command.source }, { enableStashBuffer: false, liveBufferLatencyChasing: !following });
+  mpegts.on(Mpegts.Events.ERROR, (type: string, detail: string) => { if (current !== generation || attempt !== decoderGeneration || mpegts !== decoder) return; if (type === Mpegts.ErrorTypes.MEDIA_ERROR) unsupported(); else fail(`The channel failed (${detail}).`); });
   mpegts.attachMediaElement(video);
   mpegts.load();
   if (!command.paused && !following) void start(video);
+  } catch (error) { if (current === generation && attempt === decoderGeneration) fail(error instanceof Error ? error.message : "This channel could not start. Try another device."); }
 };
 const reset = () => {
+  generation++;
+  decoderGeneration++;
   // With hls.js attached, Chromium keeps drawing a cue whose track is removed while showing.
   for (const track of Array.from(video.textTracks)) track.mode = "disabled";
   playbackId = null;
@@ -289,14 +326,18 @@ const reset = () => {
   hls = null;
   mpegts?.destroy();
   mpegts = null;
+  engine = "native";
   ready = false;
   stalled = false;
   failure = null;
   subtitleDelay = 0;
+  audioDelay = 0;
+  setBuffered(null);
+  setPictureMapping(null);
   setBlocked(false);
   if (processing) mediaEvents.abort();
   for (const track of video.querySelectorAll("track")) track.remove();
-  for (const element of [video, audio]) { element.srcObject = null; element.removeAttribute("src"); element.load(); }
+  for (const element of [video, audio]) { element.pause(); element.srcObject = null; element.removeAttribute("src"); element.crossOrigin = null; element.load(); }
   if (processing) {
     processing.source.disconnect();
     processing.graph.close();
@@ -318,6 +359,7 @@ const reset = () => {
 export function attachStream(command: Extract<PlaybackCommand, { type: "load" }>, stream: MediaStream) {
   reset();
   playbackId = command.playbackId;
+  loading = { ...command, output: command.output ?? command.liveOutput };
   mediaStream = stream;
   volume = (command.liveOutput?.volume ?? volume * 100) / 100;
   video.defaultPlaybackRate = video.playbackRate = 1;
@@ -366,20 +408,27 @@ export function play(command: PlaybackCommand) {
     case "load":
       reset();
       playbackId = command.playbackId;
+      if (command.output && !command.output.picture && !command.output.sound) break;
+      // The primary element can render audio. Selecting the separate rendition here
+      // avoids even opening the video's URL for sound-only playback.
+      command = { ...command,
+        ...command.output?.picture === false && command.output.sound && command.audioSource ? { source: command.audioSource, audioSource: undefined, hls: /\.m3u8(?:\?|$)/i.test(command.audioSource), mpegts: false } : {},
+        ...command.follow || command.output?.sound === false ? { audioSource: undefined } : {},
+      };
       loading = command;
-      if (command.compressor && !command.follow && !command.liveSourceId) prepareCompression(command.compressor);
       if (command.follow) setFollow(command.follow);
       apply();
-      if (command.mpegts) { void transportStream(command); break; }
       // hls.js attaches once it has loaded; the subtitles, delays and speed below apply to it too.
-      const useHls = mapsTimestamps(command) || isPlaylist(command) && new URL(command.source, location.href).origin === location.origin;
+      const useHls = !command.mpegts && (mapsTimestamps(command) || isPlaylist(command) && new URL(command.source, location.href).origin === location.origin);
       if (useHls) void playlist(command);
+      if (command.mpegts) void transportStream(command);
       for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
         if (!source) continue;
         // The app allows googlevideo in CORS mode (app/main.ts); browsers fetch it without CORS.
         element.crossOrigin = command.compressor?.enabled && !command.liveSourceId || window.couchApp && new URL(source).hostname.endsWith(".googlevideo.com") ? "anonymous" : null;
-        if (element !== video || !useHls) element.src = source;
+        if (element !== video || !useHls && !command.mpegts) element.src = source;
       }
+      if (command.compressor && !command.follow && !command.liveSourceId) prepareCompression(command.compressor);
       apply();
       for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
       selectSubtitle(preferredSubtitle(command));
@@ -389,17 +438,21 @@ export function play(command: PlaybackCommand) {
       // Attaching hls.js or mpegts.js resets the rate to the default one, so set both.
       video.defaultPlaybackRate = video.playbackRate = command.preferences?.speed ?? 1;
       audioDelay = command.preferences?.audioDelay ?? 0;
-      if (!useHls && !command.paused && !following) void start(video);
+      updateMapping();
+      if (!useHls && !command.mpegts && !command.paused && !following) void start(video);
       break;
     case "follow":
       if (loading && command.compressor) loading.compressor = command.compressor;
       setFollow(command.follow);
+      // Scheduled audio owns all sound while this element follows picture.
+      if (command.follow) { audio.pause(); audio.removeAttribute("src"); audio.load(); }
       // A live clock needs hls.js's timestamps; a picture playing natively switches to it.
       if (loading && !hls && !mpegts && mapsTimestamps({ ...loading, follow: command.follow ?? undefined })) {
         for (const element of [video, audio]) { element.removeAttribute("src"); element.load(); }
         ready = false;
         void playlist(loading);
       }
+      updateMapping();
       break;
     case "compressor":
       if (!mediaStream && loading && !loading.liveSourceId) {

@@ -3,18 +3,45 @@ import { spawnSync } from "node:child_process";
 
 // Load the real renderer in a fresh browser-shaped environment for each case.
 // Mock only the browser and decoder boundaries, not the renderer's engine choice.
-const check = (source: string) => {
+const check = (source: string, realPictureClock = false) => {
   const result = spawnSync(process.execPath, ["-e", `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
-    mock.module("./src/client/session/sendspin.ts", () => ({ soundClock: () => null }));
+    mock.module("./src/client/session/sendspin.ts", () => ({ soundClock: () => clockSample }));
     mock.module("./src/client/session/device-id.ts", () => ({ localDeviceName: () => "Receiver" }));
-    mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: () => () => {} }));
+    const clockTimers = new Set(), timingUpdates = [], timingAttachments = [];
+    const tickPicture = () => { for (const tick of clockTimers) tick(); };
+    if (${realPictureClock}) {
+      globalThis.setInterval = tick => { clockTimers.add(tick); return tick; };
+      globalThis.clearInterval = tick => { clockTimers.delete(tick); };
+      mock.module("timing-object", () => ({ TimingObject: class { update(sample) { timingUpdates.push(sample); return Promise.resolve(); } } }));
+      mock.module("timingsrc", () => ({ setTimingsrc: (element, timing) => { const attachment = { element, timing }; timingAttachments.push(attachment); return () => { attachment.closed = true; }; } }));
+      const { followClock } = await import("./src/client/session/picture-clock.ts");
+      mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: (element, read, start) => {
+        pictureRead = read;
+        const stop = followClock(element, read, start);
+        return () => { stop(); pictureRead = undefined; };
+      } }));
+    } else mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: (_video, read) => { pictureRead = read; return () => { pictureRead = undefined; }; } }));
+    const contexts = [], graphs = [];
+    mock.module("./src/client/session/compressor.ts", () => ({ createCompressor: () => {
+      const graph = { input: {}, output: { connect() {} }, set() {}, volume(value) { this.level = value; }, close() { this.closed = true; } };
+      graphs.push(graph); return graph;
+    } }));
+    globalThis.AudioContext = class {
+      state = "suspended"; destination = {};
+      constructor() { contexts.push(this); }
+      createMediaElementSource(element) { return this.source = { element, connect() {}, disconnect() { this.disconnected = true; } }; }
+      resume() { this.state = "running"; return Promise.resolve(); }
+      suspend() { this.state = "suspended"; return Promise.resolve(); }
+      close() { this.state = "closed"; return Promise.resolve(); }
+    };
     let mse = true, nativeHls = "probably";
-    const decoders = [], media = [], reports = [];
+    const decoders = [], transports = [], media = [], reports = [];
+    let clockSample = null, pictureRead;
     class Element extends EventTarget {
       style = {}; dataset = {}; children = []; attributes = new Map();
-      currentTime = 0; duration = Infinity; volume = 1; paused = true; playbackRate = 1; defaultPlaybackRate = 1;
+      currentTime = 0; duration = Infinity; volume = 1; paused = true; playbackRate = 1; defaultPlaybackRate = 1; readyState = 0;
       buffered = { length: 0 };
       textTrackEvents = new EventTarget();
       textTracks = Object.assign([], { addEventListener: (...args) => this.textTrackEvents.addEventListener(...args) });
@@ -44,6 +71,7 @@ const check = (source: string) => {
         this.parent.children.splice(this.parent.children.indexOf(this), 1);
         if (this.track) this.parent.textTracks.splice(this.parent.textTracks.indexOf(this.track), 1);
       }
+      replaceWith(next) { const parent = this.parent; parent.children.splice(parent.children.indexOf(this), 1, next); next.parent = parent; }
       querySelectorAll(tag) { return this.children.filter(child => child.tagName === tag); }
       set src(value) { this.attributes.set("src", value); }
       get src() { return this.attributes.get("src") ?? ""; }
@@ -58,6 +86,7 @@ const check = (source: string) => {
     globalThis.location = { href: "https://couch.example/now", origin: "https://couch.example" };
     globalThis.addEventListener = () => {};
     globalThis.MediaError = { MEDIA_ERR_SRC_NOT_SUPPORTED: 4 };
+    globalThis.HTMLMediaElement = { HAVE_METADATA: 1 };
     globalThis.MediaStream = class {
       constructor(tracks = []) { this.tracks = tracks; }
       getTracks() { return this.tracks; }
@@ -84,6 +113,13 @@ const check = (source: string) => {
       destroy() { this.destroyed = true; }
     }
     mock.module("hls.js", () => ({ default: Hls }));
+    mock.module("mpegts.js", () => ({ default: {
+      getFeatureList: () => ({ mseLivePlayback: true }), Events: { ERROR: "error" }, ErrorTypes: { MEDIA_ERROR: "media" },
+      createPlayer(input, config) {
+        const player = { input, config, on(_event, callback) { this.error = callback; }, attachMediaElement(element) { this.media = element; }, load() {}, destroy() { this.destroyed = true; } };
+        transports.push(player); return player;
+      },
+    } }));
     const { play, connectRenderer, attachStream, streamChanged } = await import("./src/client/session/renderer.ts");
     const disconnect = connectRenderer(state => reports.push(state));
     const [video, audio] = media;
@@ -403,3 +439,223 @@ test("compressor settings received while HLS imports do not discard the current 
   assert.equal(decoders.length, 1);
   assert.equal(decoders[0].media, video);
 `));
+
+test("replacing compressed split audio disposes its graph and restores native media elements", () => check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", compressor: { enabled: true, threshold: -24, ratio: 4, attack: 10, release: 250, knee: 9, gain: 0 } });
+  await flush();
+  assert.equal(contexts[0].source.element, audio, "compression processes the selected audio rendition");
+  play({ type: "volume", playbackId: "playback", volume: 40 });
+  assert.equal(graphs[0].level, .4);
+  load({ playbackId: "replacement", source: "https://couch.example/next.mp4" });
+  await flush();
+  assert.equal(contexts[0].state, "closed");
+  assert.equal(contexts[0].source.disconnected, true);
+  assert.equal(graphs[0].closed, true);
+  assert.equal(video.src, ""); assert.equal(audio.src, "");
+  assert.equal(media[2].src, "https://couch.example/next.mp4");
+  assert.equal(media[2].crossOrigin, null, "native output no longer needs compressor CORS");
+  assert.equal(media[2].volume, .4);
+  video.error = { code: 3, message: "stale compressed element" };
+  video.dispatchEvent(new Event("error"));
+  assert.equal(reports.at(-1).error, null);
+  assert.equal(reports.at(-1).playbackId, "replacement");
+`));
+
+
+test("sound-only selects the audio rendition without opening video and restores picture on a reload", () => check(`
+  const options = { playbackId: "same", source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", startPosition: 42, paused: true, preferences: { speed: 1.5, audioDelay: .2 } };
+  load({ ...options, output: { picture: false, sound: true } });
+  await flush();
+  assert.equal(video.src, options.audioSource);
+  assert.equal(audio.src, "");
+  assert.equal(decoders.length, 0);
+  assert.equal(video.currentTime, 42);
+  assert.equal(video.playbackRate, 1.5);
+  assert.equal(video.muted, false);
+  video.dispatchEvent(new Event("canplay"));
+  assert.equal(reports.at(-1).tracks.some(track => track.kind === "video"), false);
+  load({ ...options, output: { picture: true, sound: true } });
+  assert.equal(video.src, options.source);
+  assert.equal(audio.src, options.audioSource);
+  assert.equal(video.currentTime, 42);
+  assert.equal(reports.at(-1).playbackId, "same");
+`));
+
+test("muted scheduled pictures do not load a redundant audio rendition", () => check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", follow: { group: "g", pts: false }, output: { picture: true, sound: false }, preferences: { speed: 1.25 } });
+  await flush();
+  assert.equal(video.src, "https://couch.example/movie.mp4");
+  assert.equal(audio.src, "");
+  assert.equal(video.muted, true);
+  video.playbackRate = 1.29;
+  video.dispatchEvent(new Event("timeupdate"));
+  play({ type: "volume", playbackId: "playback", volume: 50 });
+  assert.equal(reports.at(-1).speed, 1.25, "corrective rate must never become programme speed");
+`));
+
+test("HLS reports measured source PTS mapping and destroyed callbacks cannot alter replacement", () => check(`
+  video.readyState = HTMLMediaElement.HAVE_METADATA;
+  clockSample = { position: 112, speed: 1 };
+  load({ paused: true, follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "one" } } });
+  await flush();
+  tickPicture();
+  assert.equal(timingAttachments.length, 0, "mapped following waits for measured PTS");
+  const first = decoders.at(-1);
+  first.emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 9000000, timescale: 90000 });
+  tickPicture();
+  assert.deepEqual(pictureRead(), { position: 12, speed: 1 });
+  assert.deepEqual(timingUpdates.at(-1), { position: 12, velocity: 1 });
+  assert.equal(timingAttachments.length, 1, "measured mapping retains full position synchronization");
+  assert.equal(reports.at(-1).timeline.mapping, "hls");
+  load({ source: "https://couch.example/movie.mp4" });
+  assert.equal(first.destroyed, true);
+  assert.equal(timingAttachments[0].closed, true);
+  assert.equal(clockTimers.size, 0);
+  first.emit(Hls.Events.ERROR, { fatal: true, details: "old error" });
+  first.emit(Hls.Events.LEVEL_LOADED, {});
+  assert.equal(reports.at(-1).error, null);
+  assert.equal(video.src, "https://couch.example/movie.mp4");
+`, true));
+
+test("a playing HLS picture that starts following its own group keeps its measured source PTS", () => check(`
+  video.readyState = HTMLMediaElement.HAVE_METADATA;
+  clockSample = { position: 112, speed: 1 };
+  load();
+  await flush();
+  decoders.at(-1).emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 9000000, timescale: 90000 });
+  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "playback" } } });
+  await flush();
+  tickPicture();
+  assert.deepEqual(pictureRead(), { position: 12, speed: 1 }, "no reload: the decoder will not measure again");
+  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "other" } } });
+  await flush();
+  assert.equal(pictureRead(), null, "a follow for another load has no mapping");
+`, true));
+
+test("native HLS and MPEG-TS expose missing source mapping without fabricating a join offset", () => check(`
+  mse = false;
+  delete window.MediaSource;
+  video.readyState = HTMLMediaElement.HAVE_METADATA;
+  clockSample = { position: 999, speed: 1 };
+  const follow = { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "unavailable", generation: "one" } };
+  load({ follow });
+  await flush();
+  tickPicture();
+  assert.deepEqual(pictureRead(), { speed: 1 });
+  assert.equal(reports.at(-1).timeline.mapping, "unavailable");
+  assert.match(reports.at(-1).timeline.error, /cannot align/);
+  assert.equal(video.paused, false, "unmapped relaxed picture remains viewable");
+  clockSample = { position: 999, speed: 0 };
+  load({ source: "https://couch.example/channel.ts", mpegts: true, follow, paused: true, preferences: { speed: 1.5, audioDelay: .3 }, subtitles: [{ source: "/captions.vtt", title: "Captions" }] });
+  await flush();
+  tickPicture();
+  assert.equal(transports.length, 1);
+  assert.equal(transports[0].media, video);
+  assert.equal(video.playbackRate, 1.5);
+  assert.equal(video.paused, true);
+  assert.deepEqual(pictureRead(), { speed: 0 });
+  play({ type: "stop", playbackId: "playback" });
+  assert.equal(transports[0].destroyed, true);
+  transports[0].error("network", "late failure");
+  assert.equal(reports.at(-1).status, "idle");
+  assert.equal(reports.at(-1).error, null);
+`, true));
+
+test("switching to scheduled picture stops separate audio and stopping cancels pending MPEG-TS", () => check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
+  audio.paused = false;
+  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: false } });
+  assert.equal(audio.paused, true);
+  assert.equal(audio.src, "");
+  assert.equal(video.muted, true);
+  load({ mpegts: true, source: "https://couch.example/channel.ts" });
+  play({ type: "stop", playbackId: "playback" });
+  await flush();
+  assert.equal(transports.length, 0);
+  assert.equal(video.src, "");
+  assert.equal(audio.src, "");
+`));
+
+test("native HLS fallback stays playable and reports unavailable PTS mapping even with an MSE symbol", () => check(`
+  mse = false;
+  video.readyState = HTMLMediaElement.HAVE_METADATA;
+  assert.ok(window.MediaSource, "the symbol exists even though hls.js rejects this platform");
+  clockSample = { position: 112, speed: 1 };
+  load({ follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "one" } } });
+  await flush();
+  tickPicture();
+  assert.equal(decoders.length, 0);
+  assert.equal(video.src, "https://couch.example/stream.m3u8");
+  assert.equal(video.paused, false);
+  assert.equal(video.muted, true);
+  assert.deepEqual(pictureRead(), { speed: 1 });
+  assert.equal(reports.at(-1).timeline.mapping, "unavailable");
+  assert.match(reports.at(-1).timeline.error, /cannot align/);
+`, true));
+
+test("content audio delay is reported and applied only by the split-audio adapter", () => check(`
+  load({ source: "https://couch.example/movie.mp4", paused: true, preferences: { audioDelay: .3 } });
+  assert.equal(reports.at(-1).audioDelay, undefined, "muxed native media has no content-delay adapter");
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", paused: true, preferences: { audioDelay: .3 } });
+  video.currentTime = 10;
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("seeked"));
+  assert.equal(reports.at(-1).audioDelay, .3);
+  assert.equal(audio.currentTime, 9.7);
+  play({ type: "audioDelay", playbackId: "playback", delay: .5 });
+  assert.equal(audio.currentTime, 9.5);
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", output: { picture: false, sound: true } });
+  assert.equal(reports.at(-1).audioDelay, undefined, "selected sound-only rendition needs no A/V content delay");
+`));
+
+for (const mpegts of [false, true]) test(`${mpegts ? "MPEG-TS" : "native HLS"} Core-paused picture follows running group transport without mapped seeks`, () => check(`
+  mse = false;
+  assert.ok(window.MediaSource, "native fallback must work even with an unsupported MSE implementation");
+  clockSample = { position: 999, speed: 1.5 };
+  // Core's screenLoad always sends paused:true; the programme clock owns transport.
+  load({ ${mpegts ? 'source: "https://couch.example/channel.ts", mpegts: true,' : ''}
+    paused: true, output: { picture: true, sound: false }, preferences: { speed: 1.25 },
+    follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: ${mpegts ? '"unavailable"' : '"hls"'}, generation: "one" } } });
+  await flush();
+  tickPicture();
+  assert.equal(video.paused, true, "wait for decoder metadata before applying the group transport");
+  video.currentTime = 17;
+  video.readyState = HTMLMediaElement.HAVE_METADATA;
+  video.dispatchEvent(new Event("canplay"));
+  tickPicture();
+  video.dispatchEvent(new Event("playing"));
+  assert.equal(video.paused, false, "initial join must start the already-running programme despite load.paused");
+  assert.equal(video.playbackRate, 1.5);
+  assert.equal(reports.at(-1).speed, 1.5);
+  assert.equal(reports.at(-1).timeline.mapping, "unavailable");
+  assert.match(reports.at(-1).timeline.error, /cannot align/);
+  assert.equal(video.muted, true);
+  assert.equal(video.currentTime, 17, "an unmapped clock cannot reposition the picture");
+  assert.equal(timingAttachments.length, 0, "do not attach the position synchronizer without a mapping");
+  assert.equal(timingUpdates.length, 0);
+
+  clockSample = { position: 2000, speed: 0 };
+  tickPicture();
+  video.dispatchEvent(new Event("pause"));
+  assert.equal(video.paused, true, "later group pause reaches the fallback picture");
+  assert.equal(reports.at(-1).speed, 1.5, "pause is not a new programme rate of zero");
+  clockSample = { position: 5000, speed: .75 };
+  tickPicture();
+  video.dispatchEvent(new Event("playing"));
+  assert.equal(video.paused, false, "later group resume reaches the fallback picture");
+  assert.equal(video.playbackRate, .75);
+  assert.equal(reports.at(-1).speed, .75);
+  assert.equal(video.currentTime, 17, "resume does not invent a PTS offset or seek");
+
+  clockSample = null;
+  tickPicture();
+  assert.equal(video.paused, true, "clock loss waits rather than running without group transport");
+  clockSample = { position: 6000, speed: 1 };
+  tickPicture();
+  assert.equal(video.paused, false);
+  load({ playbackId: "replacement", source: "https://couch.example/movie.mp4", paused: true });
+  await flush();
+  tickPicture();
+  assert.equal(video.paused, true, "disposed group following cannot start a replacement load");
+  assert.equal(clockTimers.size, 0);
+`, true));

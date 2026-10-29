@@ -16,6 +16,7 @@ import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
 import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
+import { createLiveAudio } from "./live-audio";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
 
@@ -69,6 +70,7 @@ const save = (next: Choice) => {
 
 let window: BrowserWindow | null = null;
 const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin, localOrigin);
+const liveAudio = createLiveAudio(() => window?.webContents ?? null, capture, localOrigin, () => core?.token);
 let tray: Tray | null = null;
 let quitting = false;
 let updating = false;
@@ -332,6 +334,7 @@ function createWindow() {
     // Couch keeps hosting in the background; the tray, dock or a second launch shows it again.
     event.preventDefault();
     // Closing still ends this window's sharing, and any capture it is starting, as unloading would.
+    void liveAudio.stop();
     void capture.prepare(null).catch(() => {});
     window?.webContents.send("couch:window-closed");
     if (process.platform === "linux") window?.minimize(); else window?.hide();
@@ -376,6 +379,7 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
 handle("mode", () => choice);
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
+handle("live-audio", (_event, action) => liveAudio.action(action));
 handle("capture-access", (_event, kind) => capture.access(kind));
 handle("capture-settings", (_event, kind) => capture.openSettings(kind));
 // Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.
@@ -460,6 +464,7 @@ handle("interface-size", (_event, size) => {
 async function quit() {
   if (quitting) return;
   quitting = true;
+  await liveAudio.stop();
   saveBounds();
   await stopCore();
   stopped = true;

@@ -207,14 +207,16 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
-        live.current = createLiveSession({ iceServers, send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, command: action => command(action), upload: (sourceId, key) => {
+        const uploadUrl = (sourceId: string, key: string, uploadId?: string) => {
           const upload = new URL("/api/live/upload", origin);
           upload.protocol = upload.protocol === "https:" ? "wss:" : "ws:";
           upload.searchParams.set("sourceId", sourceId);
           upload.searchParams.set("token", credentials.token);
           upload.searchParams.set("key", key);
-          return new WebSocket(upload);
-        }, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) { publishing = !!source; setLocalLiveSourceId(source?.id ?? null); reportPlayback(); } } });
+          if (uploadId) upload.searchParams.set("uploadId", uploadId);
+          return upload.href;
+        };
+        live.current = createLiveSession({ iceServers, send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, command: action => command(action), upload: (sourceId, key) => new WebSocket(uploadUrl(sourceId, key)), uploadUrl, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) { publishing = !!source; setLocalLiveSourceId(source?.id ?? null); reportPlayback(); } } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -232,7 +234,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (previous && (previous.controlling !== message.state.controlling || previous.playback !== null && previous.playback !== message.state.playback || previous.currentEntryId !== message.state.currentEntryId)) dismissPlaybackFeedback(message.state.controlling);
           // This notice precedes the snapshot that closes the receiver. React may batch the two states.
           const activity = message.state.activity;
-          if (activity?.kind === "sharing-stopped" && activity.id !== previous?.activity?.id && activity.actor.deviceId !== deviceId()) notice(activity.text);
+          if (activity && activity.id !== previous?.activity?.id && (activity.kind === "sharing-stopped" && activity.actor.deviceId !== deviceId() || activity.kind === "listener-removed" && activity.target === deviceId())) notice(activity.text);
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;

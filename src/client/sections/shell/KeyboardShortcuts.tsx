@@ -1,3 +1,5 @@
+import { livePlayback } from "@/session/playback-controls";
+import { deviceId } from "@/session/device-id";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import type { RefObject } from "react";
 import { useSessionGate } from "@/session/session-context";
@@ -22,16 +24,18 @@ export function KeyboardShortcuts({ open, onOpenChange, openerRef }: { open: boo
   const clock = usePlaybackClock();
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
-  const { available, transportReady, seekable, pausable, audioReady, nextReady, hasNext } = playbackCapabilities(state, connected);
-  const canPause = !!current && (player?.status === "ended" ? available : transportReady && pausable);
+  const { available, transportReady, seekable, pausable, audioReady, nextReady, hasNext, programme } = playbackCapabilities(state, connected);
+  const canPause = !!current && (player?.status === "ended" ? available && programme : transportReady && pausable);
   const pause = () => {
     if (player?.status === "ended" && current) void run({ type: "play", entryId: current.id, fromStart: true });
     else if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: player.status === "playing" });
   };
   const canSeek = transportReady && seekable;
   const subtitles = player?.tracks?.filter(track => track.kind === "subtitle") ?? [];
-  const canVolume = available && audioReady;
-  const volume = (delta: number) => void run({ type: "volume", volume: Math.max(0, Math.min(100, (player?.volume ?? 0) + delta)) });
+  const own = livePlayback(state) ? state?.devices?.find(device => device.id === deviceId()) : undefined;
+  const volumeTarget = livePlayback(state) ? { deviceId: deviceId() } : {};
+  const canVolume = available && (livePlayback(state) ? !!own?.online : audioReady);
+  const volume = (delta: number) => void run({ type: "volume", ...volumeTarget, volume: Math.max(0, Math.min(100, (own?.volume ?? player?.volume ?? 0) + delta)) });
   useCouchHotkeys([
     { hotkey: "K", action: pause, enabled: canPause },
     { hotkey: "Space", action: pause, enabled: canPause, backgroundOnly: true },
@@ -42,8 +46,8 @@ export function KeyboardShortcuts({ open, onOpenChange, openerRef }: { open: boo
     { hotkey: "ArrowUp", action: () => volume(5), enabled: canVolume && shell.section === "Now", backgroundOnly: true },
     { hotkey: "ArrowDown", action: () => volume(-5), enabled: canVolume && shell.section === "Now", backgroundOnly: true },
     ...(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] as const).map((hotkey, digit) => ({ hotkey, enabled: canSeek && clock.playbackId === player?.playbackId && !!clock.duration, action: () => { if (player?.playbackId && clock.duration) void run({ type: "seek", playbackId: player.playbackId, position: clock.duration * digit / 10 }); } })),
-    { hotkey: "M", enabled: canVolume, action: () => void run({ type: "mute", muted: !muted(state) }) },
-    { hotkey: "C", enabled: transportReady && subtitles.length > 0, action: () => { if (player?.playbackId) void run({ type: "track", playbackId: player.playbackId, kind: "subtitle", index: subtitles.some(track => track.selected) ? -1 : subtitles[0]!.index }); } },
+    { hotkey: "M", enabled: canVolume, action: () => void run({ type: "mute", ...volumeTarget, muted: !muted(state) }) },
+    { hotkey: "C", enabled: programme && transportReady && subtitles.length > 0, action: () => { if (player?.playbackId) void run({ type: "track", playbackId: player.playbackId, kind: "subtitle", index: subtitles.some(track => track.selected) ? -1 : subtitles[0]!.index }); } },
     { hotkey: "Shift+N", enabled: nextReady && hasNext, action: () => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); } },
     { hotkey: "H", action: () => shell.changeSection("Home") },
     { hotkey: "S", action: () => shell.changeSection("Saved") },
