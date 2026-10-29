@@ -332,9 +332,9 @@ Removing an item focuses the next item's primary link. Other Saved tabs retain
 their lists.
 
 Home's personal shelves and Saved size each picture by its own proportions,
-read by the artwork ratio hook (`useArtRatio`). A frame's 4:3 thumbnail is a
-16:9 frame between black bars (YouTube's `hqdefault`), so it shows at 16:9
-with its bars cropped, there and on the Stage. Related content
+read by the artwork ratio hook (`useArtRatio`). YouTube's 4:3 thumbnails
+(`hqdefault`) are its 16:9 frame between black bars, so they show at 16:9 with
+their bars cropped, there, on the Stage and in the player's Now playing. Related content
 on Details uses a linked artwork shelf, showing only the returned neighbours.
 
 **`MediaTile`**: a picture with a caption, never a box. One Button around

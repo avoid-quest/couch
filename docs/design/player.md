@@ -123,7 +123,8 @@ band.
 
 The timeline row:
 - Position, a thin line, and the time remaining.
-- The unplayed part is translucent white.
+- The unplayed part is translucent white (25%), over a picture and over the
+  room beside artwork alike.
 - As on YouTube, a lighter segment ahead of the playhead shows what this
   device has already loaded (35% white, here and on the now-playing bar's
   line). It shows only while this device plays media that seeks.
@@ -319,8 +320,9 @@ with "Nothing queued" as its tooltip, in the band and the bar.
 Beside artwork it is never parked on screen: the artwork has the room, and Up
 next is summoned from its button as a panel over the room at the right above
 the band (28rem, `rounded-lg`, translucent black glass with a shadow), growing
-from its button; a click on the room closes it. It lies over Info, which stays
-as it was beneath it. On phones it takes the artwork's place.
+from its button; a click on the room closes it. The copy beside the artwork
+steps aside while it is open, so the panel never cuts the title in two; Info
+stays as it was beneath it. On phones it takes the artwork's place.
 
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
@@ -331,10 +333,13 @@ as it was beneath it. On phones it takes the artwork's place.
     row's end.
   - The meta line has the length, and "added by {device}" when another
     device queued it.
-  - A row is one target that plays it immediately. A Play glyph appears over
-    its whole thumbnail on hover or keyboard focus, and stays visible on touch.
+  - A row is one target that plays it immediately. Its thumbnail takes the
+    list's majority shape, a row of another shape contained in that frame, as on
+    Home's Up next. A Play glyph appears over the whole thumbnail on hover or
+    keyboard focus, and stays visible on touch.
     Start times are estimates, not scheduled actions. Its "…" holds Details, Play next,
-    ordering, Save for later, Open in browser and Remove.
+    ordering, Save for later, Open in browser and Remove, then where it leads
+    ("Go to NPR Music"), as a tile's menu does; nothing hangs under the row.
   - Removing a row keeps focus on the adjacent row.
 - A status line counts the rows and says when they end ("2 to play, until
   17:05"), with **Save as list**.

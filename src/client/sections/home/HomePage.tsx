@@ -12,7 +12,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
-import { artShape, historyShape, majorityShape, savedShape, type ArtShape } from "@/art-shape";
+import { historyShape, majorityShape, savedShape, type ArtShape } from "@/art-shape";
 import { historyCaption, mediaCaption, metaLine, savedCaption } from "@/media-caption";
 import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
@@ -24,7 +24,7 @@ import { forLaterQuery, loadForLater } from "@/api/for-later";
 import { apiSend } from "@/api/client";
 import type { MenuAction } from "@/components/RowMenu";
 import { failed } from "@/toasts";
-import { QueuePanel } from "@/sections/now/QueuePanel";
+import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
 import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
@@ -54,7 +54,6 @@ export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean
 const shelfLength = 12;
 const boardLength = 4;
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
-const entryShape = (entry: QueueEntry): ArtShape => isRadio(entry) ? "square" : artShape(sourceLabel(entry.source), entry.collection ? "episode" : "media");
 const recentCaption = (item: HistoryItem) => { const caption = mediaCaption(item); return { title: caption.title, meta: metaLine(caption.lead, item.creator?.title ?? caption.subtitle) }; };
 // Continue says how much is left where Played recently says how long it is; the line on the artwork shows how far it got.
 const continueCaption = (item: HistoryItem) => { const caption = mediaCaption(item); return { title: caption.title, meta: metaLine(caption.lead, item.duration ? `${formatRuntime(Math.max(0, item.duration - item.position))} left` : null) }; };
