@@ -94,9 +94,9 @@ export function createLiveStreams(options: { ffmpeg?: () => Promise<string>; fai
           // the legacy follower until its video PTS reaches the shared clock.
           // Ordinary picture-only groups use a timeline without any audio track.
           ...source.audio ? [] : ["-re", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"],
-          // MediaRecorder may advertise 1000 fps despite 30 fps capture. Bound
-          // the inferred output rate without duplicating lower-rate inputs.
-          ...source.video ? ["-map", "0:v:0", "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-fpsmax", "30", "-threads", "2", "-force_key_frames", "expr:gte(t,n_forced*1)", "-sc_threshold", "0"] : ["-vn"],
+          // MediaRecorder can advertise 1000 fps. Use its actual timestamps and
+          // variable-rate output so slower or idle screen frames aren't duplicated.
+          ...source.video ? ["-map", "0:v:0", "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-fps_mode", "vfr", "-enc_time_base", "demux", "-threads", "2", "-force_key_frames", "expr:gte(t,n_forced*1)", "-sc_threshold", "0"] : ["-vn"],
           "-map", source.audio ? "0:a:0" : "1:a:0", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "160k", "-sn", "-dn",
           ...source.audio ? [] : ["-shortest"],
           "-avoid_negative_ts", "disabled", "-f", "tee", outputs], { cwd: stream.directory, stdio: ["pipe", "pipe", "pipe"] });
