@@ -18,9 +18,9 @@ import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { CaptureBufferSelect, CaptureChannelsSelect, LiveSettingsStatus, PlaybackBufferInput, useLiveAudioSettings } from "./LiveOperator";
 import { nativeInputChannelMap, nativeInputChannelPreference } from "../../../shared/audio-settings";
-import { qualityLabels, selectionOf, shareKinds, shareTargets, unavailable, type ShareKind } from "./share";
+import { frameRateLabels, qualityLabels, selectionOf, shareKinds, shareTargets, unavailable, type ShareKind } from "./share";
 import type { CaptureSource } from "../../../shared/capture";
-import type { LiveMetadata, LiveVideoQuality } from "../../../shared/live-input";
+import { defaultLiveFrameRate, type LiveMetadata, type LiveVideoFrameRate, type LiveVideoQuality } from "../../../shared/live-input";
 import { LiveMetadataFields } from "./LiveMetadata";
 
 // A chip: a quiet capsule that steps up under the pointer, the chosen one checked (Search's kinds do the same).
@@ -75,6 +75,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const [sound, setSound] = useState(true);
   const [quality, setQuality] = useState<LiveVideoQuality>("1080p");
   const [metadata, setMetadata] = useState<LiveMetadata>({});
+  const [frameRate, setFrameRate] = useState<LiveVideoFrameRate>(defaultLiveFrameRate);
   const [pending, setPending] = useState(false);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +143,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setPending(true); setError(null);
     try {
       starting.current = true;
-      const started = await startLive({ ...selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, sound }),
+      const started = await startLive({ ...selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, frameRate, sound }),
         ...(kind.intent === "live" ? { metadata } : {}),
         ...(inputChannels && inputChannels > 2 ? { nativeChannelMap: nativeInputChannelMap(channelPreference) } : {}) }).finally(() => { starting.current = false; });
       onDone();
@@ -220,7 +221,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         <Switch id="live-include-audio" checked={sound} disabled={pending} onCheckedChange={setSound} />
       </Row>
       <Row label="Picture" htmlFor="live-video-quality">
-        <QualitySelect id="live-video-quality" value={quality} disabled={pending} onValueChange={setQuality} />
+        <PictureSelects id="live-video-quality" quality={quality} frameRate={frameRate} disabled={pending} onQuality={setQuality} onFrameRate={setFrameRate} />
       </Row>
     </>}
     {elsewhere && <Alert><AlertDescription>This device is already sharing {elsewhere.name} from another window. Stop sharing there first.</AlertDescription></Alert>}
@@ -234,12 +235,21 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   </form>;
 }
 
-/** The picture's quality: up to 30 fps, at most this resolution. */
-export function QualitySelect({ id, value, disabled, onValueChange }: { id?: string; value: LiveVideoQuality; disabled?: boolean; onValueChange: (value: LiveVideoQuality) => void }) {
-  return <Select value={value} disabled={disabled} onValueChange={value => onValueChange(value as LiveVideoQuality)}>
-    <SelectTrigger id={id} aria-label={id ? undefined : "Picture"} className="w-56"><SelectValue placeholder="Choose picture quality" /></SelectTrigger>
-    <SelectContent data-tv-local-only>{Object.entries(qualityLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
-  </Select>;
+/**
+ * The picture: its largest resolution, then the most frames a second it asks for, side by side; on a phone they take
+ * their own line under the label. The frame rate is a target; the screen and the encoder may deliver fewer.
+ */
+export function PictureSelects({ id, quality, frameRate, disabled, onQuality, onFrameRate }: { id?: string; quality: LiveVideoQuality; frameRate: LiveVideoFrameRate; disabled?: boolean; onQuality: (value: LiveVideoQuality) => void; onFrameRate: (value: LiveVideoFrameRate) => void }) {
+  return <div className="flex justify-end gap-2 max-sm:w-full">
+    <Select value={quality} disabled={disabled} onValueChange={value => onQuality(value as LiveVideoQuality)}>
+      <SelectTrigger id={id} aria-label={id ? undefined : "Picture"} className="w-48 max-sm:w-auto max-sm:flex-1"><SelectValue /></SelectTrigger>
+      <SelectContent data-tv-local-only>{Object.entries(qualityLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+    </Select>
+    <Select value={String(frameRate)} disabled={disabled} onValueChange={value => onFrameRate(Number(value) as LiveVideoFrameRate)}>
+      <SelectTrigger aria-label="Frame rate" className="w-28"><SelectValue /></SelectTrigger>
+      <SelectContent data-tv-local-only>{Object.entries(frameRateLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+    </Select>
+  </div>;
 }
 
 /**

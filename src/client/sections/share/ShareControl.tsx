@@ -13,7 +13,7 @@ import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { dismiss, stillSharing } from "@/toasts";
 import { LiveListeners, LiveSettings } from "./LiveOperator";
-import { QualitySelect, ShareDialog } from "./ShareDialog";
+import { PictureSelects, ShareDialog } from "./ShareDialog";
 import { shareKindOf, viewerLine, viewersOf, type Viewer } from "./share";
 import { useShowShare } from "./show-share";
 import { liveTitle } from "../../../shared/live-input";
@@ -170,7 +170,9 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
     </ul>}
     {sharing.source.kind === "screen" && <div className="flex items-center justify-between gap-4 border-t pt-3">
       <label className="text-body">Picture</label>
-      <QualitySelect value={sharing.quality} onValueChange={quality => void liveSharing.setQuality(quality).then(() => refresh(count => count + 1), reason => setError(errorText(reason)))} />
+      <PictureSelects quality={sharing.quality} frameRate={sharing.frameRate}
+        onQuality={quality => void liveSharing.setQuality(quality).then(() => refresh(count => count + 1), reason => setError(errorText(reason)))}
+        onFrameRate={rate => void liveSharing.setFrameRate(rate).then(() => refresh(count => count + 1), reason => setError(errorText(reason)))} />
     </div>}
     {sharing.source.kind === "microphone" && <div className="flex items-center justify-between gap-4 border-t pt-3">
       <label htmlFor="live-mute" className="text-body">Mute audio input</label>

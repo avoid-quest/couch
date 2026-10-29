@@ -38,7 +38,7 @@ Now playing                         [Optional]   Live Audio input
 Playback buffer floor (ms)               [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
-Picture                     [1080p, balanced ▾]   Screen and Window
+Picture          [1080p, balanced ▾] [60 FPS ▾]   Screen and Window
                               Cancel  [Start sharing]
 ```
 
@@ -100,6 +100,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   Live waits for its audio settings to load and finish saving. Invalid buffer
   values prevent starting; settings failures appear inline.
   Dismissing the Dialog or Sheet returns keyboard focus to its Share button while that button remains mounted.
+- **Picture** chooses the largest resolution and, beside it, the frame rate:
+  30, 60 or 120 FPS, 60 by default. It is a target, the most frames a second the
+  capture asks for; a 60 Hz screen or a busy encoder gives fewer. Sound only and
+  Microphone have no picture, so no Picture row.
 - **Disabled keeps its place:** a browser that can't capture a display (a
   phone's) keeps Screen, Window and System audio disabled, with today's reason
   under the chips.
@@ -141,8 +145,10 @@ Sheet on phones and the TV:
   play: {reason}" (in red) read as Where it plays says them, and a row whose
   sound plays shows the [level](../design.md#motion), moving only where Where
   it plays' would (online, unmuted, above zero).
-- **Picture**, changed live through `applyConstraints` on the captured track,
-  without restarting it; **Mute audio input** turns the input's track off
+- **Picture**, its resolution and frame rate (30, 60 or 120 FPS, 60 by default)
+  side by side, changed live through `applyConstraints` on the captured track,
+  without restarting it; the frame rate is the most the picture asks for, which a
+  screen or encoder may not reach; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections. Native input mute
   sends zero samples while preserving the source clock.
 - Live sharing reports the delivered rate and channels, and a native input's
