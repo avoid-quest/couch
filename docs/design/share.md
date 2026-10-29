@@ -33,7 +33,7 @@ Device                       [Choose an input ▾]  Live Audio input
                              Find audio inputs
 Capture buffer                   [128 frames ▾]   Native Live Audio input
 Input channels                  [1/2, Stereo ▾]   Native input with >2 channels
-Playback buffer (ms)                     [200]    Live Audio input
+Playback buffer (ms)                     [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
