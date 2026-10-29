@@ -8,9 +8,10 @@ import { supportsCurrentVideoQuality } from "../shared/video-quality";
 import type { WebMediaSource } from "./web-media";
 import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
+import { queueCursorIndex } from "../shared/queue";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"> & { title?: string };
-export type MediaSource = { audioManifest?: { url: string; text: string }; credentialOrigin?: string; liveSourceId?: string; publicNetwork?: boolean; audioOnly?: boolean; hasAudio?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { preview?: WebMediaSource["preview"]; audioManifest?: { url: string; text: string }; credentialOrigin?: string; liveSourceId?: string; publicNetwork?: boolean; audioOnly?: boolean; hasAudio?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
   prepareRecoveredSource?: (media: WebMediaSource, playbackId: string, signal: AbortSignal) => Promise<MediaSource>;
@@ -210,7 +211,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     if (command.type === "load") {
       // Prepared sources carry Core-only access and decoder metadata. Every load,
       // including recovery/handoff/reload, crosses the same renderer boundary.
-      const { headers: _headers, audioManifest: _audioManifest, audioSelection: _audioSelection, credentialOrigin: _credentialOrigin, publicNetwork: _publicNetwork, hasAudio: _hasAudio, ...wire } = command as typeof command & Pick<MediaSource, "audioManifest" | "credentialOrigin" | "publicNetwork" | "hasAudio"> & { headers?: Record<string, string>; audioSelection?: AudioSelection };
+      const { preview: _preview, headers: _headers, audioManifest: _audioManifest, audioSelection: _audioSelection, credentialOrigin: _credentialOrigin, publicNetwork: _publicNetwork, hasAudio: _hasAudio, ...wire } = command as typeof command & Pick<MediaSource, "preview" | "audioManifest" | "credentialOrigin" | "publicNetwork" | "hasAudio"> & { headers?: Record<string, string>; audioSelection?: AudioSelection };
       command = wire;
       const entry = state.queue.find(item => item.id === state.currentEntryId);
       if (entry?.live || isRadio(entry) || command.radio) command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
@@ -748,7 +749,22 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
           break;
         }
         case "videoQuality": return changeVideoQuality(action, authorize);
-        case "play": play(action.entryId, action.fromStart, "play", authorize, playedBy); break;
+        case "play": {
+          // Autoplay's visible picks are playable before they join the queue. Keep manual entries waiting,
+          // and continue the collection after the chosen pick, without resolving that collection again.
+          const pick = !state.queue.some(entry => entry.id === action.entryId) && state.autoplay?.enabled
+            ? state.autoplay.upcoming.find(entry => entry.id === action.entryId) : undefined;
+          if (pick && continuation) {
+            // At capacity, only played history may make room; the current item and waiting entries stay.
+            const queue = state.queue.length >= 500 && queueCursorIndex(state) > 0 ? state.queue.slice(1) : state.queue;
+            if (queue.length >= 500) throw new Error(QUEUE_FULL);
+            play(pick.id, action.fromStart, "play", authorize, playedBy, [], [...queue, pick], {
+              ...continuation, entries: continuation.entries.slice(continuation.entries.findIndex(entry => entry.id === pick.id) + 1),
+            });
+          }
+          else play(action.entryId, action.fromStart, "play", authorize, playedBy);
+          break;
+        }
         case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);

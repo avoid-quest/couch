@@ -25,7 +25,7 @@ permissions:
 jobs:
   preflight:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       channel: ${{ steps.resolve.outputs.channel }}
       version: ${{ steps.resolve.outputs.version }}
@@ -36,11 +36,12 @@ jobs:
       skip: ${{ steps.resolve.outputs.skip }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+      # Version resolution needs release tags, not every branch's history or old files.
+      - name: Fetch release tags
+        run: git fetch --filter=blob:none --depth=1 --no-tags origin '+refs/tags/v*:refs/tags/v*'
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: latest
       - id: resolve
         shell: bash
         env:

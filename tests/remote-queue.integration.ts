@@ -71,6 +71,42 @@ async function choose(f: Awaited<ReturnType<typeof fixture>>) {
 }
 const queueIds = (state: SessionState) => state.queue.map(entry => entry.id);
 
+for (const target of [undefined, tvId]) test(`Remote plays the selected TV's Autoplay picks without admitting queue edits or stale targets (${target ? "guarded" : "legacy"})`, async () => {
+  const f = await fixture();
+  const api = (path: string, body: unknown) => fetchLocal(`${f.hub.origin}/api/playlists${path}`, {
+    method: "POST", headers: { Authorization: `Bearer ${f.phoneToken}`, Origin: f.hub.origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  try {
+    await f.host.command({ type: "enqueue", entry: entry("other", f.source), playNow: true });
+    await choose(f);
+    const saved = await api("", { name: "TV collection" });
+    assert.equal(saved.status, 201);
+    const { playlist } = await saved.json() as { playlist: SavedPlaylist };
+    assert.equal((await api(`/${playlist.id}/load?on=${tvId}`, { mode: "play", revision: playlist.revision })).status, 200);
+    await until(() => f.phone.state.autoplay?.upcoming.length === 2);
+    const [first, second] = f.phone.state.autoplay!.upcoming;
+    assert.equal(f.phone.state.queue.some(item => item.id === second!.id), false);
+    for (const action of [{ type: "remove", entryId: first!.id }, { type: "move", entryId: first!.id, beforeEntryId: null }] as const) {
+      assert.equal((await f.phone.command(action, tvId)).ok, false, "Autoplay picks are not queue-edit targets");
+    }
+    await f.phone.command({ type: "control", deviceId: hostId });
+    assert.equal((await f.phone.command({ type: "play", entryId: second!.id }, tvId)).ok, false, "A stale target must still reject Play");
+    await f.phone.command({ type: "control", deviceId: tvId });
+    const profileId = f.phone.state.activeProfile.id;
+    await f.phone.command({ type: "preferences", profileId, preferences: { autoplay: false } });
+    assert.equal((await f.phone.command({ type: "play", entryId: second!.id }, target)).ok, false, "Disabled Autoplay must reject Play");
+    await f.phone.command({ type: "preferences", profileId, preferences: { autoplay: true } });
+    const result = await f.phone.command({ type: "play", entryId: second!.id }, target);
+    assert.equal(result.ok, true, result.error);
+    await until(() => f.phone.state.currentEntryId === second!.id && f.phone.state.player.status === "playing");
+    assert.equal(f.tv.state.currentEntryId, second!.id);
+    assert.equal(f.host.state.currentEntryId, "other");
+    assert.deepEqual(queueIds(f.host.state), ["other"]);
+    assert.deepEqual(f.phone.state.autoplay?.upcoming, []);
+    assert.equal((await f.phone.command({ type: "play", entryId: first!.id }, target)).ok, false, "A consumed suggestion must reject Play");
+  } finally { await f.close(); }
+});
+
 test("saved lists capture the caller's selected Up next and reject stale replacements after remote advance", async () => {
   const f = await fixture();
   const api = (token: string, path: string, body?: unknown) => fetchLocal(`${f.hub.origin}/api/playlists${path}`, {

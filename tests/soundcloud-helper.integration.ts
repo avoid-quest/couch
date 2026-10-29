@@ -41,6 +41,12 @@ test("SoundCloud keeps yt-dlp's client cache inside Couch and loads only its bun
   const other = JSON.parse(await runYtDlp(["--dump-single-json", "--", "https://example.com/track"])) as string[];
   assert.ok(other.includes("--no-cache-dir"));
   assert.ok(!other.includes("--plugin-dirs"));
+  const rai = JSON.parse(await runYtDlp(["--dump-single-json", "--", "https://www.raiplay.it/video/example.html"])) as string[];
+  assert.ok(rai.includes("--no-plugin-dirs"));
+  assert.ok(rai.includes("--plugin-dirs"), "RaiPlay must retain the declared timed-preview track");
+  assert.ok(rai.includes("--no-cache-dir"));
+  const raiPlugin = rai[rai.indexOf("--plugin-dirs") + 1]!;
+  assert.throws(() => readFileSync(join(raiPlugin, "bundled", "yt_dlp_plugins", "extractor", "raiplay.py")), /ENOENT/, "The RaiPlay override must be removed after extraction");
 });
 
 // Supply Couch's helper to exercise the real upstream extractor, with all network calls stubbed in Python.

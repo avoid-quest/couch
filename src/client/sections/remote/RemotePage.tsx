@@ -26,7 +26,7 @@ export function RemotePage() {
   const seen = useQuery({ ...devicesQuery(credentials ?? { origin: "", token: "" }), enabled: connected && !!credentials && tvs.length > 1 && !tvs.some(tv => tv.online) });
   const lastSeen = (id: string) => seen.data?.find(device => device.id === id)?.lastSeenAt ?? 0;
   const [chosen, setChosen] = useState<string | null>(null);
-  const targetId = chosen ?? tvs.find(tv => tv.id === state?.controlling)?.id ?? tvs.find(tv => tv.online)?.id ?? [...tvs].sort((a, b) => lastSeen(b.id) - lastSeen(a.id))[0]?.id;
+  const targetId = tvs.find(tv => tv.id === chosen)?.id ?? tvs.find(tv => tv.id === state?.controlling)?.id ?? tvs.find(tv => tv.online)?.id ?? [...tvs].sort((a, b) => lastSeen(b.id) - lastSeen(a.id))[0]?.id;
   const target = tvs.find(tv => tv.id === targetId);
   const allowed = !!target && (target.sharing?.audio === true || target.sharing?.video === true);
   const [binding, setBinding] = useState<string | null>(null);

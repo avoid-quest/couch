@@ -117,7 +117,6 @@ Each colour is set to a luminance, keeping its hue, so ink keeps 7:1 over it:
 | `room` (first) | .022 | the room under the copy: muted ink (`#bdbdbd`) keeps 7.8:1 or more, measured |
 | `deep` (second) | .01 | the room's second pool and its fall to black |
 | `a` (backlight) | .07 | the light pooled behind the picture, never behind copy; a hovered tile's glow |
-| `b` (haze) | .004 | the letterbox's haze around a playing video |
 | `tone` | .03 | the now-playing bar's glass |
 
 The **room** (`.room`) lies behind a Stage and the player's Now playing: the
@@ -129,11 +128,11 @@ colours are registered custom properties, so when the artwork changes they
 cross-fade over 600 ms; reduced motion swaps them at once. Everything is
 painted once: no blurred copy of the picture, nothing animated.
 
-Elsewhere the artwork lights its surroundings: a windowed video's letterbox is lit around
-the contained picture as YouTube's ambient mode (`AmbientLight`: a backlight
-hugging its edges and a haze three pictures wide, painted once, so a playing
-video costs nothing per frame). Fullscreen video and TV keep black letterbox bars. A hovered or focused tile or row glows
-under its picture in its first colour (`useItemLight`).
+Video keeps black letterbox bars in windowed, fullscreen and TV playback; no
+artwork light is painted behind its picture. Its control bands use neutral
+black scrims for legibility. Audio and browsing keep their artwork-lit rooms.
+A hovered or focused tile or row glows under its picture in its first colour
+(`useItemLight`).
 
 ## Glass
 
@@ -369,8 +368,7 @@ arrives, 600 ms for colour that follows what plays.
   layouts. Reduced motion presents them immediately. The measured navigation
   costs and frame budget are in [Preview performance](preview-performance.md).
 - When what plays changes, the room's colours and the bar's tone cross-fade
-  over 600 ms, as do a letterbox's light ([Room](#room)). Reduced motion swaps
-  them at once.
+  over 600 ms ([Room](#room)). Reduced motion swaps them at once.
 - Media lights up at once: its glow is a shadow, and nothing animates
   `box-shadow`; only the focus ring around it eases (150 ms).
 - No scroll entrances, staggers or scaling tiles (but the TV's lifted focus),
@@ -439,8 +437,15 @@ Shared building blocks in `src/client/components`:
   restoration; `useRelatedMenu` gives the same relationships as a tile's or a
   row's "Go to …" verbs.
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
-  ([Player](design/player.md)). The timeline's pointer preview owns its state;
-  pointer motion leaves the slider, chapter markers and playback labels alone.
+  ([Player](design/player.md)). The dedicated `PlaybackSeekBar` uses Video.js Slider
+  primitives with Couch styling. Pointer motion leaves the track, chapter cues
+  and playback labels alone.
+  `PlaybackThumbnail` uses standalone Video.js thumbnails for optional provider
+  grids and timed cues, including on remote controllers. The selected cue is
+  memoized; failed images can recover and cue gaps keep timestamps. Couch keeps
+  transport and clocks, with one seek on release and cumulative keyboard edits.
+  Touch drags and keyboard drafts share the preview. shadcn keeps volume, faders
+  and the surrounding menus.
 - `RadioRecognition`: the player's manual **Identify song** icon beside Info,
   cancellation and a dismissible, clickable `RadioRecognitionItem` below the
   station line, before Info's programme details. The shared item links directly

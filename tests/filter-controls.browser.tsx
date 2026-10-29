@@ -100,6 +100,12 @@ export async function runFilterControlsRegression() {
     assert(document.body.textContent?.includes("No stations match"), "Radio empty filter has no explanation");
     button("Clear filter").click(); await wait();
     assert(field("Filter stations").value === "" && document.activeElement === field("Filter stations") && !button("Clear filter"), "Clear station filter lost focus or value, or kept its button");
+    await audit.go('/radio?radioSource=Radio%20directory&genre=Missing&filter=missing&page=2');
+    const resetRadio = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === "Clear filters");
+    assert(resetRadio, "Empty radio results offer no way to clear combined filters");
+    resetRadio!.focus(); resetRadio!.click(); await wait();
+    assert(!audit.router.state.location.search.genre && !audit.router.state.location.search.filter && !audit.router.state.location.search.page && audit.router.state.location.search.radioSource === "Radio directory", "Radio reset did not clear genre, text and page while preserving its source");
+    assert(document.querySelector('[aria-label="Radio stations"]') && document.activeElement === field("Filter stations"), "Radio reset did not recover stations and a useful focus target");
 
     const collection = '/collection?provider=youtube&url=' + encodeURIComponent('https://www.youtube.com/playlist?list=PL1B627337ED6F55F0');
     const context = { title: "NPR Music", url: "https://www.youtube.com/@nprmusic" };
@@ -142,7 +148,13 @@ export async function runFilterControlsRegression() {
     button("Clear filter").click(); await wait(500);
     assert(field("Filter channels").value === "" && button("Group").textContent?.includes("Culture"), "Clearing text changed the selected group");
     assert(document.activeElement === field("Filter channels"), "Clearing text lost focus");
-    return { passed: true, checks: ["an empty search offers no filters", "only found kinds and sources are offered", "source selection preserves focus and cache", "radio source preserves text", "clear restores input focus", "a short collection has no Filter", "local filtering makes no reads", "Back restores collection filters", "Live TV debounces typing", "pending requests retain channels", "group and text filters compose"] };
+    type("Filter channels", "no match"); await wait(500);
+    const resetTv = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === "Clear filters");
+    assert(resetTv, "Empty Live TV results offer no way to clear combined filters");
+    resetTv!.focus(); resetTv!.click(); await wait(500);
+    assert(!audit.router.state.location.search.group && !audit.router.state.location.search.filter && !audit.router.state.location.search.page, "Live TV reset did not clear group, text and page");
+    assert(document.querySelector('[aria-label="Live TV channels"]') && document.activeElement === field("Filter channels"), "Live TV reset did not recover channels and a useful focus target");
+    return { passed: true, checks: ["an empty search offers no filters", "only found kinds and sources are offered", "source selection preserves focus and cache", "radio source preserves text", "clear restores input focus", "combined filter resets recover content and focus", "a short collection has no Filter", "local filtering makes no reads", "Back restores collection filters", "Live TV debounces typing", "pending requests retain channels", "group and text filters compose"] };
   } finally {
     releaseGuide?.();
     window.fetch = fixtureFetch;
