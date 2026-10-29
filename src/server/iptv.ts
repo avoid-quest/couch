@@ -8,6 +8,7 @@ import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl,
 import { ADMIN_ONLY } from "./messages";
 import { execFile } from "node:child_process";
 import { useHelper } from "./helpers";
+import { hlsPreview } from "./hls-preview";
 
 // Raw MPEG-TS plays through mpegts.js. Chromium has no MPEG-1/2 video, AC-3/E-AC-3 or
 // MP2 decoder, so those channels play in Core's own mpv (#644 ticket 1). ffmpeg reads the
@@ -180,9 +181,11 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       // must not wait for a body that may never finish before playback.
       if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal]), linux && hostOutput) };
       let eventStart = false, mpv = false, hostMpv = false;
+      let preview: ReturnType<typeof hlsPreview>;
       try {
         const media = await guideFetch(item.streamUrl, 512 * 1024, request, AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]));
         const text = Buffer.from(media.bytes).toString("utf8");
+        preview = hlsPreview(media.url, text);
         eventStart = liveHlsPlaylist(text, media.url) && /^#EXT-X-PLAYLIST-TYPE:EVENT\r?$/m.test(text);
         mpv = mpvPlaylist(text, linux && hostOutput);
         hostMpv = linux && mpvPlaylist(text, true);
@@ -190,7 +193,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       signal.throwIfAborted();
       shutdown.signal.throwIfAborted();
       if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
-      return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}), ...(mpv ? { mpv: true } : {}), ...(hostMpv ? { hostMpv: true } : {}) };
+      return { source: item.streamUrl, ...(preview ? { preview } : {}), ...(eventStart ? { eventStart: true } : {}), ...(mpv ? { mpv: true } : {}), ...(hostMpv ? { hostMpv: true } : {}) };
     },
     async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this device first.", 401); return value; };

@@ -3,7 +3,7 @@ import json
 import time
 from yt_dlp.utils.traversal import traverse_obj
 from yt_dlp.extractor.common import InfoExtractor
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 
 
 class StreamingCommunityIE(InfoExtractor):
@@ -112,6 +112,13 @@ class StreamingCommunityIE(InfoExtractor):
             r'<iframe[^>]+src\s*=\s*"([^"]+)', video_page_url, 'iframe url')
         iframe_page = self._download_webpage(iframe_url, self._get_title_id(info))
         self.to_screen("Got video iframe.")
+        preview = re.search(r'''window\.thumbnailsUrl\s*=\s*(['"])([^'"\\\r\n]{1,4096})\1\s*(?:;|\r?\n|<|$)''', iframe_page)
+        preview_url = None
+        if preview:
+            try:
+                preview_url = urljoin(iframe_url, preview.group(2))
+            except ValueError:
+                pass  # Malformed optional metadata must not prevent playback.
 
         master_playlist = self.js_object_to_dict(self.extract_js_object(iframe_page, "masterPlaylist"))
         can_play_fhd = self.extract_bool(iframe_page, "canPlayFHD")
@@ -148,6 +155,7 @@ class StreamingCommunityIE(InfoExtractor):
             'playable_in_embed': True,
             'formats': formats,
             'subtitles': subtitles,
+            'couch_preview_vtt': preview_url,
         }
 
         if traverse_obj(info, ('props', 'title', 'type')) == 'tv':
