@@ -196,6 +196,10 @@ This device owns its name, which is also the name of a Couch it hosts; an
 admin renames another host from its row in Devices & network. First run and
 pairing: [Shell](shell.md#first-run-and-pairing).
 
+Setting labels use medium weight above regular descriptions limited to 46ch
+with balanced wrapping. Rows have 1.25rem vertical padding and quiet dividers
+between settings; section headings and the final row have no enclosing rule.
+The navigation rail shares Saved's soft corners and semibold active item.
 
 ## Advanced audio
 

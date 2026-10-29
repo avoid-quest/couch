@@ -52,8 +52,8 @@ export function MediaArtwork({ thumbnail, title, collection = false, bare = fals
       <span className="absolute inset-0 flex text-white" style={{ background: `oklch(.3 .05 ${hue(title)})` }}>
         {collection ? <Folder className="m-auto size-[max(1rem,20cqi)] text-white/70" />
           : <>
-            <span className="mt-auto m-[7cqi] line-clamp-4 h-fit text-[max(.75rem,12cqi)] leading-[.98] font-semibold tracking-[-.03em] text-balance break-words @max-[8rem]:hidden in-[.rounded-full]:hidden">{title.replace(/([/?&])/g, "$1\u200b")}</span>
-            <span className="m-auto hidden text-[45cqi] leading-none font-semibold @max-[8rem]:block in-[.rounded-full]:block">{title.match(/[\p{L}\p{N}]/u)?.[0]?.toLocaleUpperCase()}</span>
+            <span className="mt-auto m-[7cqi] line-clamp-4 h-fit text-[max(.75rem,12cqi)] leading-[.98] font-semibold tracking-[-.03em] text-balance break-words @max-[5rem]:hidden in-[.rounded-full]:hidden">{title.replace(/([/?&])/g, "$1\u200b")}</span>
+            <span className="m-auto hidden text-[45cqi] leading-none font-semibold @max-[5rem]:block in-[.rounded-full]:block">{title.match(/[\p{L}\p{N}]/u)?.[0]?.toLocaleUpperCase()}</span>
           </>}
       </span>
     </span>;

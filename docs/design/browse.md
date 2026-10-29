@@ -218,7 +218,7 @@ starts: "Resume S1 E1" while one is part watched, else "Play S1 E2", the next
 unwatched episode of the season last played (the first season otherwise); a
 series of seasons reads that season's episodes for it, and until it can, Play
 plays the first season from its start ("Play S1 E1"). Seasons, episodes and
-nearby items follow as divided rows: an episode goes by its name ("Episodio
+nearby items follow below. Seasons and episodes are divided rows: an episode goes by its name ("Episodio
 1", "S1 E1, 36:00" on its meta line), and a link every row shares (its season,
 its channel) is left to the header and the trail; an album's tracks are a tracklist of
 number, title and time, with nothing the page already says (cover, artist,
@@ -318,19 +318,33 @@ place of its number. A row or tile knows it by its addresses (`source`: its
 page, or a station's `radio:` source and stream), matched against what the
 looked-at Playback plays.
 
+**`For later`** uses a responsive artwork grid, with at least 15rem per column
+(10rem for posters), with two equal columns on phones. It reuses `MediaTile`
+and its menu: Details opens from the tile; Play, Queue, ordering and Remove
+stay in the menu. Artwork stays whole at its natural ratio. Each tile fills its grid column,
+with its caption and menu following the visible picture’s edges. Rows align
+at the top; a poster can be taller than a landscape picture without cropping
+either. Original order is preserved. Missing posters keep the same silhouette.
+Removing an item focuses the next item's primary link. Other Saved tabs retain
+their lists.
+
+Home’s personal shelves optionally use natural image proportions, measured by
+the existing artwork ratio hook, with a shared 8–11rem height (10–14rem for all-poster shelves). Related content
+on Details uses a linked artwork shelf, showing only the returned neighbours.
+
 **`MediaTile`**: a picture with a caption, never a box. One Button around
 `MediaArtwork` at its shelf's shape (`--tile-art` sets the height: posters
 15rem, frames 9rem or half the column on a narrow phone, squares 10.5rem,
-circles 9rem; the picture `rounded-md`), then its title (`text-body`) and its
+circles 9rem; the picture `rounded-md`), then its medium-weight title (`text-body`) after a .75rem gap and its
 meta line (`text-meta`), both wrapped whole at the picture's width (a shelf's
 tiles keep their own heights, their captions starting level), and nothing else: no fill,
 outline or links. How far it got is a white line along the artwork's foot,
-with what's left in the meta line ("YouTube, 4:11 left"). Where it leads (`related`: its series, season, channel, station,
+with what's left in Home's meta line ("5 min left"). Where it leads (`related`: its series, season, channel, station,
 source) is the last verbs of its menu ("Go to Stanford"), and Details, where
 the press plays, the first. Hovered or focused, the picture lights up in its
 own colour and the meta line comes up to white; focus adds a white ring, which
 the TV thickens and lifts ([Hover](../design.md#tokens)). The "…" sits over the
-end of the title's first line; a pointer sees it over or inside the tile, touch
+artwork's upper corner; a pointer sees it over or inside the tile, touch
 always; on the TV it is always shown and no focus stop unless the press is
 disabled.
 
@@ -347,7 +361,9 @@ row (`data-nav-row`), never a Carousel, so spatial navigation and focus scroll
 work natively. The row runs out to the window's edges, so a long shelf runs off
 the right of the screen, and its padding holds a lit tile's glow and the TV's
 lifted tile. Its heading, `ShelfHeading` (`text-heading`), also heads Home's
-board lists. Search kinds and Home's sources use it too.
+board lists. Search kinds and Home's sources use it too. Overflowing shelves
+show Previous/Next buttons on fine-pointer screens, disabled at their edges;
+touch and TV retain swipe and focus scrolling. Paging respects reduced motion.
 
 **`MediaArtwork`** fills its frame when the art matches the frame's shape and
 is contained otherwise. Without any it is a cover set in type: a deep tone of
@@ -450,3 +466,8 @@ on an empty Vite fixture at `?tv=0` and `?tv=1`.
 Play on targets are a labelled group inside an item's menu, with wrapping
 device names, bounded to the viewport height. What Play on offers:
 [Where it plays](where-it-plays.md#play-on).
+
+Personal media captions use compact browsing durations (`13 min`, `2h 15m`);
+the playback timeline keeps exact elapsed and remaining clock times. A tile’s
+menu sits over its artwork’s upper corner, leaving the caption its full width.
+Missing artwork uses the title above 5rem wide and an initial below it.

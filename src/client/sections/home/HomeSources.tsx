@@ -107,7 +107,7 @@ export function SourcesLine() {
   const failing = useFailingSources();
   return <section aria-label="Sources" className="grid min-w-0 gap-stack">
     <ShelfHeading title="Sources" />
-    <ul data-nav-row aria-label="Sources" className="flex flex-wrap gap-2">
+    <ul data-nav-row aria-label="Sources" className="flex flex-wrap gap-2 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-2 max-md:[&>li]:shrink-0">
       {sourceHomes.map((provider, index) => <SourceChip data-page-first={index === 0 || undefined} key={provider} title={providerNames[provider]} failing={failing(provider)} aria-label={`Open ${providerNames[provider]}`} href={collectionLocation({ provider, url: "" })} onClick={() => details.open(collectionLocation({ provider, url: "" }))} />)}
       {searches.map(provider => <SourceChip key={provider} title={providerNames[provider]} failing={failing(provider)} aria-label={`Search ${providerNames[provider]}`} onClick={() => scopeSearch(providerNames[provider])} />)}
     </ul>

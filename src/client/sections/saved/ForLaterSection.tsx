@@ -2,12 +2,13 @@ import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "@/components/MediaArtwork";
-import { metaLine, savedCaption } from "@/media-caption";
-import { formatDuration } from "@/time-format";
+import { MediaTile } from "@/components/MediaTile";
+import { shapeRatio } from "@/components/Stage";
+import type { CSSProperties } from "react";
+import { metaLine, mediaCaption } from "@/media-caption";
+import { formatRuntime } from "@/time-format";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
-import { MediaList, MediaRow } from "@/components/MediaRow";
-import { majorityShape, savedShape } from "@/art-shape";
+import { savedShape } from "@/art-shape";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -62,7 +63,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   const section = useRef<HTMLElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const shape = majorityShape(items.map(savedShape));
+  const shapes = items.map(savedShape);
+  const shape = shapes.every(value => value === shapes[0]) ? shapes[0] ?? "video" : "square";
   const removing = useRemovalFocus(items.map(item => item.id), !pending, list, () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current);
   const act = (item: ForLaterItem, mode: Mode, index: number, deviceId?: string) => {
     if (!connected || pending) return;
@@ -79,19 +81,18 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
     {connected && !loading && !loadError && !items.length && <SavedEmpty title="Nothing saved for later" action={onFind && <Button onClick={onFind}>Search</Button>}>Choose Save on a film, video or track to find it here.</SavedEmpty>}
-    {!!items.length && <MediaList ref={list} aria-label="For later">
+    {!!items.length && <ul ref={list} aria-label="For later" className="saved-media-grid" style={{ "--frame-ratio": shapeRatio[shape], "--media-min": shape === "poster" ? "10rem" : "15rem" } as CSSProperties}>
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));
         const blocked = !connected || pending || reorder.isPending;
         const move = (offset: number) => { const next = order(index, offset); if (next && !blocked) reorder.mutate(next); };
-        const caption = savedCaption(item);
-        // One meta line and a "…", as Saved's other tabs; Details holds the description and the same verbs.
-        return <MediaRow key={item.id} data-saved-details={item.id} source={item.url}
-          art={<MediaArtwork thumbnail={item.thumbnail} title={item.title} />}
-          artFit="contain" shape={shape} own={savedShape(item)}
+        const caption = mediaCaption(item);
+        // Artwork leads a saved collection; the existing menu keeps its playback, ordering and removal verbs.
+        return <li key={item.id}><MediaTile natural data-saved-details={item.id} source={item.url} related={{ collection: item.collection, creator: item.creator }}
+          thumbnail={item.thumbnail} fit="contain" shape={shape} own={savedShape(item)}
           title={caption.title}
-          meta={metaLine(caption.meta, !item.live && item.duration != null && formatDuration(item.duration))}
-          primary={{ label: "Details", href: itemLocation("saved", item.id), onClick: inspect }}
+          meta={metaLine(caption.lead, item.creator?.title ?? caption.subtitle, !item.live && item.duration != null && formatRuntime(item.duration))}
+          aria-label={`Details ${caption.title}`} href={itemLocation("saved", item.id)} onClick={inspect}
           menu={[
             { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
             { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },
@@ -100,8 +101,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             { label: "Move up", disabled: blocked || !order(index, -1), run: () => move(-1) },
             { label: "Move down", disabled: blocked || !order(index, 1), run: () => move(1) },
             { label: "Remove", disabled: !connected || pending, run: () => act(item, "remove", index) },
-          ]} />;
+          ]} /></li>;
       })}
-    </MediaList>}
+    </ul>}
   </section>;
 }

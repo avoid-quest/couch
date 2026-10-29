@@ -23,3 +23,10 @@ export function formatSeen(at: number, now = Date.now()) {
   return days < 7 ? date.toLocaleDateString(undefined, { weekday: "long" })
     : date.toLocaleDateString(undefined, { month: "short", day: "numeric", ...date.getFullYear() === new Date(now).getFullYear() ? {} : { year: "numeric" } });
 }
+
+/** Browsing reads runtime in minutes; the playback timeline keeps exact seconds. */
+export function formatRuntime(seconds: number) {
+  const minutes = Math.max(0, Math.ceil(seconds / 60));
+  const hours = Math.floor(minutes / 60), rest = minutes % 60;
+  return hours ? `${hours}h${rest ? ` ${rest}m` : ""}` : `${minutes} min`;
+}

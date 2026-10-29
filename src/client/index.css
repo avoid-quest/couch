@@ -543,44 +543,99 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
    with its shadow (a mark, a logo on nothing, without one): a wide frame too, at 16:9, so a thumbnail's own lettering is
    part of the picture, never a ghost beside the title, and nothing ends in a hard edge. The copy sits at the bottom
    left in the room left of it and never lies over it. The room is dimmed so the header's ink keeps 7:1 over it. */
-.stage { --stage-h: min(39.375vw, 70vh); --object-h: calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem); --object-w: min(40vw, calc(var(--object-h) * var(--art-ratio))); position: relative; isolation: isolate; display: grid; align-content: end; min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 0; }
+.stage { --stage-h: min(34vw, 62svh); --object-h: max(12rem, calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem)); position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: end; align-content: end; gap: clamp(2rem, 5vw, 5rem); min-height: var(--stage-h); margin: calc(-2rem - var(--top-bar, 4rem)) calc(-1 * var(--gutter)) 0; padding: calc(var(--top-bar, 4rem) + 2rem) var(--gutter) 1.5rem; }
 .stage[data-stage="details"] { --stage-h: min(33vw, 60vh); --title-short: 4.5rem; --title-medium: 3.5rem; --title-long: 2.75rem; --title-xlong: 2.25rem; }
 /* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the
    next section); its light pools behind the picture. */
 .stage > .room { --room-x: 80%; mask-image: linear-gradient(#000 50%, transparent); }
-/* The picture: as tall as the stage allows under the header and no wider than 40vw, at the right of the copy, above the room's light. */
-.stage-picture { position: absolute; inset: calc(var(--top-bar, 4rem) + 1.5rem) calc(var(--gutter) + 3vw) auto auto; z-index: -2; display: flex; justify-content: flex-end; align-items: center; height: var(--object-h); }
-.stage-object { width: var(--object-w); height: auto; aspect-ratio: var(--art-ratio); object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
+/* Picture and copy share a baseline in normal flow, so long titles can grow the Stage without colliding. */
+.stage-picture { grid-area: 1 / 2; min-width: 0; display: flex; justify-content: center; align-items: end; }
+.stage-object { width: min(100%, calc(var(--object-h) * var(--art-ratio))); height: auto; aspect-ratio: var(--art-ratio); object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--object-shadow); }
 /* A picture that loads cold settles into its place as it fades in, once; one already shown is there at once. */
 @media (prefers-reduced-motion: no-preference) { .stage-object { transition: opacity .2s var(--ease-out), translate .45s var(--ease-out); } .stage-object:not([data-loaded]) { translate: 0 .75rem; } }
 .stage-picture[data-shape="round"] .stage-object { border-radius: 50%; object-fit: cover; }
 .stage[data-form="mark"] .stage-object { box-shadow: none; border-radius: 0; background: transparent; }
 /* A picture that didn't load leaves no box: the room stands alone, as it does without one. */
 .stage-picture:empty { display: none; }
-.stage-copy { position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; width: 100%; max-width: 46rem; padding-bottom: 2.5rem; container-type: inline-size; }
-/* Beside a picture the copy takes the room left of it, less a gap: a wide picture leaves less than a poster. */
-.stage:has(> [data-stage-picture] > *) .stage-copy { max-width: min(46rem, calc(100% - var(--object-w) - 3vw - 3rem)); }
+.stage-copy { grid-area: 1 / 1; position: relative; display: grid; align-content: end; justify-items: start; gap: 1rem; width: 100%; min-width: 0; container-type: inline-size; }
+/* Without artwork the title uses the room, without reserving an empty column. */
+.stage:not(:has(> [data-stage-picture] > *)) .stage-copy { grid-column: 1 / -1; max-width: 46rem; }
 /* A Details page with nothing under its stage (a single video, a track) is its stage: it fills the window above the
    bar and centres the copy and the picture in it, instead of standing over an empty page. Its skeleton keeps the
    regular height, since what loads may yet stand over a list. */
 @media (min-width: 48rem) {
   .stage[data-stage="details"]:not([data-loading]):not(:has(~ :not([hidden], .sr-only))) { --stage-h: calc(100svh - var(--bottom-bar, 0px) - 1rem); --object-h: min(calc(var(--stage-h) - var(--top-bar, 4rem) - 3.5rem), 34rem); align-content: center; }
-  .stage[data-stage="details"]:not([data-loading]):not(:has(~ :not([hidden], .sr-only))) .stage-picture { inset-block: 0; height: auto; margin-top: var(--top-bar, 4rem); }
 }
 /* Phones and narrow windows: the picture leads the column at the top, under the header, centred above the copy; a
    wide one spans the column. */
 @media (max-width: 47.99rem) {
-  .stage { min-height: 0; padding-top: 0; align-content: start; --title-short: 3rem; --title-medium: 2.375rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
+  .stage { grid-template-columns: minmax(0, 1fr); gap: 0; min-height: 0; padding-top: 0; padding-bottom: 0; align-content: start; --title-short: 3rem; --title-medium: 2.375rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
   .stage[data-stage="details"] { --title-short: 2.75rem; --title-medium: 2.25rem; --title-long: 1.875rem; --title-xlong: 1.625rem; }
-  .stage-picture { position: relative; inset: auto; height: auto; justify-content: center; margin-inline: calc(-1 * var(--gutter)); padding: calc(var(--top-bar, 4rem) + 1.25rem) var(--gutter) 0; }
+  .stage-picture { grid-area: 1 / 1; position: relative; height: auto; justify-content: center; margin-inline: calc(-1 * var(--gutter)); padding: calc(var(--top-bar, 4rem) + 1.25rem) var(--gutter) 0; }
   .stage-object { width: min(72vw, 22rem, calc(46vh * var(--art-ratio))); }
   .stage-picture[data-wide] .stage-object { width: 100%; }
   /* Without a picture the copy clears the header itself. */
   .stage:not(:has(> [data-stage-picture] > *)) { padding-top: calc(var(--top-bar, 4rem) + 1.25rem); }
   .stage > .room { --room-x: 50%; --room-y: 25%; }
-  .stage-copy, .stage:has(> [data-stage-picture] > *) .stage-copy { max-width: none; padding-bottom: 1.5rem; }
+  .stage-copy { grid-area: 2 / 1; max-width: none; padding-bottom: .5rem; }
   .stage:has(> [data-stage-picture] > *) .stage-copy { margin-top: 1.75rem; }
 }
 /* Over a stage, while the page is at its top, the header is see-through, its ink kept by the dimmed room; scrolled, black again. */
 html[data-stage-under-header] .app-header { background: transparent; }
 
+
+/* Saved media is a collection of covers. Each cell sizes the existing tile,
+   retaining its true shape, caption and menu without a second presentation. */
+.saved-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--media-min)), 1fr)); gap: 2rem 1.5rem; }
+.saved-media-grid > li { min-width: 0; container-type: inline-size; }
+.saved-media-grid [data-tile] { --tile-art: calc(100cqw / var(--frame-ratio)); width: 100%; }
+/* Navigation rows differ from pill actions: a quiet, softly squared selection. */
+[data-nav-rail] a { border-radius: var(--radius-md); min-height: 2.5rem; }
+[data-nav-rail] a[aria-current="page"] { font-weight: 600; }
+
+
+.saved-media-grid [data-media-tile] { width: 100%; }
+.saved-media-grid [data-natural] [data-tile-art] { width: 100%; height: auto; aspect-ratio: var(--tile-ratio); }
+.saved-media-grid [data-tile-art] img { object-position: center; }
+@media (max-width: 47.99rem) {
+  .saved-media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.75rem 1rem; }
+}
+/* Personal shelves use one full-width rhythm, in the chosen Home order. */
+.home-shelves { display: grid; align-items: start; gap: 2.5rem; min-width: 0; }
+.home-shelves [data-shelf-row] { margin-inline: -.75rem; padding-inline: .75rem; scroll-padding-inline: .75rem; }
+
+/* A missing poster keeps the same silhouette as its loaded neighbours in a mixed frame. */
+[data-tile-art][data-own="poster"] > span.media-artwork { width: min(100%, calc(var(--tile-art) * 2 / 3)); margin-inline: auto; border-radius: var(--radius-md); }
+
+/* Home keeps its feature compact and its shelves in one full-width rhythm. */
+[data-page="Home"] { gap: 2.5rem; }
+.stage[data-stage="home"] { --stage-h: min(24vw, 23rem); --object-h: min(11rem, 22vw); --title-short: 3rem; --title-medium: 2.75rem; --title-long: 2.5rem; --title-xlong: 2.25rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2.5rem; }
+[data-stage="home"] .stage-picture { grid-area: 1 / 1; }
+[data-stage="home"] .stage-object { width: min(30vw, calc(12rem * var(--art-ratio))); }
+[data-stage="home"] .stage-copy { grid-area: 1 / 2; max-width: 42rem; gap: .875rem; }
+[data-stage="home"] .stage-copy > [data-nav-row]:last-child { margin-top: .25rem; }
+[data-stage="home"] > .room { --room-x: 20%; }
+/* Whole pictures share a height; captions and progress share their visible edges. */
+.home-shelves [data-natural] { --tile-art: clamp(8rem, 12vw, 11rem); }
+.home-shelves [data-natural][data-tile-shape="poster"] { --tile-art: clamp(10rem, 16vw, 14rem); }
+[data-natural] [data-tile-art] { width: min(calc(100vw - 2 * var(--gutter)), calc(var(--tile-art) * var(--tile-ratio))); }
+[data-natural] [data-tile-art][data-own="poster"] > span.media-artwork { width: 100%; }
+@media (max-width: 47.99rem) {
+  .stage[data-stage="home"] { grid-template-columns: minmax(0, 1fr) 7.5rem; gap: .75rem 1rem; padding-top: calc(var(--top-bar, 4rem) + 1.25rem); align-items: start; --title-short: 1.75rem; --title-medium: 1.625rem; --title-long: 1.5rem; --title-xlong: 1.375rem; }
+  [data-stage="home"] .stage-picture { grid-area: 1 / 2 / 3 / 3; margin: 0; padding: 0; }
+  [data-stage="home"] .stage-object { width: min(100%, calc(7.5rem * var(--art-ratio))); }
+  [data-stage="home"] .stage-copy { display: contents; }
+  [data-stage="home"] .stage-copy > * { grid-column: 1 / -1; }
+  [data-stage="home"]:has(.stage-object) .stage-copy > :is(h2, [data-nav-row]:first-child) { grid-column: 1; }
+  [data-stage="home"] .stage-copy > :first-child { grid-row: 1; }
+  [data-stage="home"]:has(.stage-object) .home-hero-meta { grid-column: 1; grid-row: 2; }
+  [data-stage="home"] .home-hero-meta { margin-top: -.25rem; }
+  [data-stage="home"] .stage-copy > [data-nav-row]:last-child { margin-top: 0; }
+}
+
+@media (pointer: coarse) {
+  /* Keep a 44px hit target without painting a 44px disc over a small poster. */
+  [data-tile-menu] { background: transparent; backdrop-filter: none; }
+  [data-tile-menu]::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: rgb(0 0 0 / 65%); }
+  [data-tile-menu] svg { position: relative; }
+}

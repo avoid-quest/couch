@@ -271,7 +271,7 @@ function SearchSkeleton() {
 const hitSources = (hit: SearchHit) => [hit.url, ...hit.radio ? stationSources(hit.radio) : []];
 
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
-function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { hit: SearchHit; shape: ArtShape; showCollection?: boolean; pageFirst: boolean; className?: string }) {
+export function HitTile({ hit, shape, showCollection = true, pageFirst, className }: { hit: SearchHit; shape: ArtShape; showCollection?: boolean; pageFirst: boolean; className?: string }) {
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
   return <MediaTile related={hitRelated(hit)} className={className} data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} own={shapeOf(hit)} title={hit.title} meta={metaLine(hitMeta(hit, showCollection), hit.source)} thumbnail={hit.thumbnail} source={hitSources(hit)} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}

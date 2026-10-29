@@ -173,8 +173,8 @@ are shared with the bar and player, so revisiting artwork starts at its known
 shape without a second layout:
 
 - **Object**, any picture, a wide frame too (a video's 16:9): as tall as the
-  stage allows under the header (`--object-h`) and no wider than 40vw
-  (`--object-w`), `rounded-sm`, with its shadow (`--object-shadow`); a
+  stage allows under the header (`--object-h`) and no wider than its grid
+  column, `rounded-sm`, with its shadow (`--object-shadow`); a
   channel's avatar stays a square frame with a circular mask, even when its
   source is non-square or transparent. A picture that loads cold settles into place
   (.75rem, 450 ms) as it fades in. Never a backdrop: no fade can know where a
@@ -183,23 +183,25 @@ shape without a second layout:
 - **Mark**, a vector or a picture with see-through edges: whole, without a
   shadow or a corner, which would outline its box.
 
-The copy sits at the bottom left in the room left of the picture (at most
-46rem, less the picture's width and a gap): the trail, the title at display
-size ([Type](#type)), one muted meta line ending in its links, progress, the
+On Details, copy and picture sit in two fluid grid columns (1.05:1), sharing a bottom
+baseline with a 2–5rem gap. Both stay in normal flow so long titles and expanded
+synopses grow the Stage instead of colliding. The copy contains the trail,
+the title at display size ([Type](#type)), one muted meta line ending in its links, progress, the
 verbs, the synopsis. Nothing of it lies over the picture. The header is
 see-through while the page is at its top and black once it scrolls, including
 Windows/Linux desktop windows ([Shell](design/shell.md#header)).
 
-- **Heights.** Home `min(39.375vw, 70vh)`; Details `min(33vw, 60vh)`. A
+- **Heights.** Home `min(24vw, 23rem)`; Details `min(33vw, 60vh)`. A
   Details page with nothing under its stage fills the window above the bar
   and centres its copy and picture in it (from `md`); its skeleton keeps the
-  regular height. Below `md` the picture
-  leads the column at the top, centred above the copy (at most 72vw, 22rem or
+  regular height. Below `md`, Home has compact artwork beside the title and
+  metadata, with progress and actions below. On Details the picture leads the column at the top, centred above the copy (at most 72vw, 22rem or
   46vh tall); a wide one spans the column.
 - **7:1, measured.** The copy and the header sit only on the room, where it is
   at most luminance .022.
 - **Without artwork** (or when it doesn't load) the room stands alone, in its
-  graphite: the title is already set large, so no cover in type repeats it.
+  graphite: the title spans the columns, up to 46rem, so no empty artwork
+  column or cover in type repeats it.
 
 ## Brand mark
 
@@ -311,22 +313,26 @@ clipped. Its size is also capped so its longest word fits its column
 width measured on real titles, against the column's `cqi`), so a word never
 breaks; a longer all-caps word may.
 
-| Length | Weight, leading | Home | Details | Now playing | Phones (Home, Details, Now playing) |
+| Length | Weight, leading | Home | Details | Phone Home | Phone Details |
 | --- | --- | --- | --- | --- | --- |
-| up to 14 characters | 760, .94 | 5rem | 4.5rem | 5.5rem | 3rem, 2.75rem, 3.25rem |
-| up to 26 | 740, .96 | 4rem | 3.5rem | 4.25rem | 2.375rem, 2.25rem, 2.5rem |
-| up to 44 | 700, 1 | 3.125rem | 2.75rem | 3.25rem | 1.875rem, 1.875rem, 2rem |
-| longer | 680, 1.04 | 2.5rem | 2.25rem | 2.5rem | 1.625rem, 1.625rem, 1.625rem |
+| up to 14 characters | 760, .94 | 3rem | 4.5rem | 1.75rem | 2.75rem |
+| up to 26 | 740, .96 | 2.75rem | 3.5rem | 1.625rem | 2.25rem |
+| up to 44 | 700, 1 | 2.5rem | 2.75rem | 1.5rem | 1.875rem |
+| longer | 680, 1.04 | 2.25rem | 2.25rem | 1.375rem | 1.625rem |
+
+Now playing keeps its title beside the artwork in the display face. Its four
+length sizes are 5.5rem, 4.25rem, 3.25rem and 2.5rem; stacked on phones,
+3.25rem, 2.5rem, 2rem and 1.625rem, with the weights and leading above.
 
 | Role | Classes |
 | --- | --- |
 | Stage and Now playing title | `.display-title` (above), leading .94 to 1.04 |
-| The player's title over a video | `text-3xl` semibold, two lines, then the whole title on hover |
+| The player's title over a video | `text-3xl` semibold (`text-2xl` on phones), two lines, then the whole title on hover |
 | Page title (`PageHeader`) | `text-page font-semibold` in Mona Sans |
 | Heading of a shelf, a list or a section (`ShelfHeading`, `SettingsSection`) | `text-heading font-semibold` in Mona Sans |
 | Dialog and sheet title | `font-heading text-lg font-semibold` in Mona Sans |
 | The bar's title, the palette's query row | `text-title font-medium`; the bar's stays on one line with ellipsis, its full title in the tooltip and accessible name |
-| Item title (tiles, rows), settings label, the search palette's rows | `text-body`, wrapped whole |
+| Item title (tiles, rows), settings label | `text-body font-medium`, wrapped whole |
 | Up next's start times (a board line) | `text-base font-light tabular-nums` |
 | Controls | `text-sm` (the Stage's verbs `text-body`) |
 | Metadata | `text-meta text-muted-foreground`, wrapped whole |
@@ -334,7 +340,9 @@ breaks; a longer all-caps word may.
 
 The page gutter is `px-(--gutter)` (`clamp(1rem, 4vw, 3rem)`); the shell gives
 the one top offset (`pt-8`), and a page's sections are `gap-section` apart.
-Two-column pages (Saved, Settings) use a `12rem` rail and `gap-12`. Controls
+Two-column pages (Saved, Settings) use a `12rem` rail and `gap-12`. Rail links
+use soft .5rem corners, a 2.5rem minimum height, and semibold active text;
+actions keep their pill shape. Controls
 are capsules, `h-control text-sm`; `touch:` (phones and windows narrower than
 960px) raises them to 44px. Playback icon controls (transport, Volume, Where
 it plays, Up next, Playback, fullscreen, Open player, Back, a Sheet's Close)
