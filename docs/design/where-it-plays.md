@@ -202,7 +202,8 @@ dismissal.
 
 Each row is one focus stop (a horizontal `role="slider"`): Up and Down move
 between rows, Left and Right change its level by 5 at once, with no OK to
-take the arrows. OK opens its options: Picture, Sound, **Move here** where
+take the arrows. A muted "…" ends the row, no stop of its own. OK opens its
+options: Picture, Sound, **Move here** where
 permitted (including a playing row when other outputs would leave), and Sync….
 Back closes the panel with focus back on its button. It opens on the first row.
 A revealed Sync line is a stop of its own whose slider Left and Right move directly.

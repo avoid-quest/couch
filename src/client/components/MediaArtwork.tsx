@@ -59,6 +59,8 @@ export function MediaArtwork({ thumbnail, title, collection = false, bare = fals
     </span>;
 }
 
+// YouTube's 4:3 thumbnail sizes (default, hqdefault, sddefault and the numbered frames) letterbox its 16:9 frame.
+const letterboxed = /^https:\/\/i\d?\.ytimg\.com\/vi(?:_webp)?\/[^/]+\/(?:hq|sd)?(?:default|[0-3])\.(?:jpg|webp)(?:\?|$)/;
 const href = (src: string | undefined) => { try { return new URL(src ?? "").href; } catch { return ""; } };
 /**
  * The picture's own proportions (width over height), read from the image inside the element once it has loaded, so
@@ -70,7 +72,7 @@ export function useArtRatio(src: string | undefined, fallback: number) {
   const url = href(src);
   const natural = measured?.src === url ? measured.ratio : shown.get(url) ?? fallback;
   // YouTube's 4:3 thumbnails (hqdefault) are its 16:9 frame between black bars: they show at 16:9, their bars cropped.
-  const ratio = Math.abs(natural - 4 / 3) < .01 && /^https:\/\/i\d?\.ytimg\.com\//.test(url) ? 16 / 9 : natural;
+  const ratio = Math.abs(natural - 4 / 3) < .01 && letterboxed.test(url) ? 16 / 9 : natural;
   const ref = useCallback((element: HTMLElement | null) => {
     if (!element) return;
     const read = () => {

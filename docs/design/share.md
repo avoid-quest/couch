@@ -109,7 +109,8 @@ Picture                     [1080p, balanced ▾]   Screen and Window
 While sharing, the entry slot stays the same size and the **capsule** appears
 in its own row below primary navigation and search: a silent picture of what goes out
 (the capture's own video track; a white disc with its kind's glyph for sound),
-the share's name, how many devices watch, and **Stop**, its one place (accessible
+the share's name, how many devices watch (0 included, so a capture that
+reaches nobody says so), and **Stop**, its one place (accessible
 name: Stop sharing). The
 name is the one Home, the Stage and the now-playing bar show ("Studio Mac ·
 Screen"). It floats on the toasts' surface and shadow,

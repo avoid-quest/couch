@@ -211,12 +211,14 @@ function tvRow({ row, connected, run, playing = false }: { row: Row; connected: 
       <DropdownMenuTrigger asChild disabled={!connected}><div data-device-row role="slider" tabIndex={connected ? 0 : -1} aria-disabled={!connected} aria-label={device.name} aria-describedby={row.status ? `where-it-plays-${device.id}` : undefined}
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={level.value} aria-valuetext={level.sound ? `${Math.round(level.value)} percent` : "No sound"}
         onKeyDown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); step(event.key === "ArrowLeft" ? -5 : 5); } }}
-        className="-mx-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)_3ch] items-center gap-x-3 px-2.5 py-2 outline-none aria-disabled:opacity-50">
+        className="-mx-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)_3ch_auto] items-center gap-x-3 px-2.5 py-2 outline-none aria-disabled:opacity-50">
         <span className="grid min-w-0">{deviceName(row, playing)}{statusLine(row)}</span>
         {picture.on ? <Monitor aria-hidden="true" className="size-5" /> : <MonitorOff aria-hidden="true" className="size-5 opacity-50" />}
         {sound.on ? <Volume2 aria-hidden="true" className="size-5" /> : <VolumeOff aria-hidden="true" className="size-5 opacity-50" />}
         {level.sound ? <Progress value={level.value} aria-hidden="true" className="bg-current/20 [&_[data-slot=progress-indicator]]:bg-current" /> : <span />}
         <span className="text-right tabular-nums">{level.sound ? Math.round(level.value) : ""}</span>
+        {/* OK opens its options, as a tile's held OK does; the "…" says so without being a stop of its own. */}
+        <Ellipsis aria-hidden="true" className="size-5 text-muted-foreground" />
       </div></DropdownMenuTrigger>
       <Options id={device.id} sync={row.sync && `${syncLabel(row)}…`}>{channelItems({ row, connected, run })}</Options>
     </DropdownMenu>

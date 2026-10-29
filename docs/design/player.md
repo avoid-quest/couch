@@ -327,15 +327,17 @@ stays as it was beneath it. On phones it takes the artwork's place.
 - Its heading row stays while the list scrolls under it. The row holds the
   title, the Autoplay switch and Close.
 - A click on the picture while Up next is open closes it, without pausing.
-- **Playing** heads the list only where the player's title is off screen.
+- **Playing** heads the list where the player's title is off screen: beside
+  artwork, where the copy steps aside under Up next or Up next takes the
+  artwork's place.
 - **Upcoming rows** are board lines:
   - The title is heavy. The start time is light, at the same size, at the
     row's end.
   - The meta line has the length, and "added by {device}" when another
     device queued it.
   - A row is one target that plays it immediately. Its thumbnail takes the
-    list's majority shape, a row of another shape contained in that frame, as on
-    Home's Up next. A Play glyph appears over the whole thumbnail on hover or
+    list's majority shape, as on Home's Up next; a picture of another shape is
+    contained in that frame, never cropped (a letterboxed YouTube frame fills it). A Play glyph appears over the whole thumbnail on hover or
     keyboard focus, and stays visible on touch.
     Start times are estimates, not scheduled actions. Its "…" holds Details, Play next,
     ordering, Save for later, Open in browser and Remove, then where it leads

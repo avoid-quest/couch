@@ -94,7 +94,8 @@ function Capsule({ sharing, viewers, stop, tv }: { sharing: LiveSharing; viewers
     className="flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1 text-sm text-foreground/80 outline-none hover:text-foreground aria-expanded:text-foreground">
     <Preview sharing={sharing} className="h-7 shrink-0" />
     <span role="status" aria-label={label} className="min-w-0 max-w-80 truncate">{liveTitle(sharing.source)}</span>
-    {viewers.length > 0 && <span className="flex shrink-0 items-center gap-1 text-meta text-muted-foreground tabular-nums" aria-label={`${viewers.length} ${sharing.source.intent === "live" ? "listening" : "watching"}`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>}
+    {/* An empty audience reads 0 here too, not only in its toast. */}
+    <span className="flex shrink-0 items-center gap-1 text-meta text-muted-foreground tabular-nums" aria-label={`${viewers.length} ${sharing.source.intent === "live" ? "listening" : "watching"}`}><Users aria-hidden="true" className="size-3.5" />{viewers.length}</span>
   </button>;
   const panel = <SharingPanel sharing={sharing} viewers={viewers} onClose={() => setOpen(false)} />;
   // Toasts' floating surface, without the bar's filter: the bar's glass is a page's one backdrop filter (design.md, Glass).

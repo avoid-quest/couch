@@ -2,7 +2,7 @@ import { playbackControls } from "@/session/playback-controls";
 import { metaLine } from "@/media-caption";
 import { useRelatedMenu } from "@/components/MediaContext";
 import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
-import { artAspect, artShape, fillsFrame, majorityShape, type ArtShape } from "@/art-shape";
+import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
 import { sourceLabel } from "@/source-label";
 import { isRadio } from "../../../shared/radio";
 import { playbackStatus } from "@/playback-status";
@@ -13,7 +13,8 @@ import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "@/components/MediaArtwork";
+import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
+import { shapeRatio } from "@/components/Stage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -205,8 +206,11 @@ function QueueRow({ entry, shape, meta, time, onPlay, disabled, verbs, quiet = f
   const actions = useQueueActions(verbs);
   const related = useRelatedMenu({ collection: entry.collection, creator: entry.creator, radio: entry.source.startsWith("radio:") ? { id: entry.source.slice(6), title: entry.title } : undefined });
   const options = useItemMenu([...verbs ? actions : [{ label: "Details", run: () => details.open(queueItemLocation(entry)) }, ...browserActions(queuePageUrl(entry))], ...related]);
+  // The picture fills the list's frame only when it has that shape (a letterboxed frame counts, useArtRatio); else it is contained.
+  const [art, ratio] = useArtRatio(entry.thumbnail, shapeRatio[entryShape(entry)]);
+  const fills = Math.abs(Math.log(ratio / shapeRatio[shape])) < .1;
   meta = metaLine(entry.subtitle, meta);
-  const content = <><span aria-hidden="true" className={cn("relative h-12 shrink-0 overflow-hidden rounded-sm bg-muted [&_img]:size-full [&>*]:size-full", artAspect[shape], fillsFrame(entryShape(entry), shape) ? "[&_img]:object-cover" : "[&_img]:object-contain")}><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />{onPlay && <span className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 touch:opacity-100"><Play className="size-5 fill-current" /></span>}</span><span className="grid min-w-0 flex-1 gap-0.5"><span className={cn("line-clamp-2 text-base font-medium break-words", quiet && "text-muted-foreground")}>{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time title={`Estimated start ${time}`} className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
+  const content = <><span ref={art} aria-hidden="true" className={cn("relative h-12 shrink-0 overflow-hidden rounded-sm bg-muted [&_img]:size-full [&>*]:size-full", artAspect[shape], fills ? "[&_img]:object-cover" : "[&_img]:object-contain")}><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />{onPlay && <span className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 touch:opacity-100"><Play className="size-5 fill-current" /></span>}</span><span className="grid min-w-0 flex-1 gap-0.5"><span className={cn("line-clamp-2 text-base font-medium break-words", quiet && "text-muted-foreground")}>{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time title={`Estimated start ${time}`} className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 items-center gap-2 py-3", options.item.className)}>
     {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="group text-foreground h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
     <ItemMenu menu={options} title={entry.title} />
