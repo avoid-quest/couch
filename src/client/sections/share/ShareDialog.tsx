@@ -102,11 +102,12 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setBlocked(text ? { kind: on.id, text } : null);
   };
   const list = async () => {
-    if (!couchApp?.captureSources) return;
+    if (!couchApp?.captureSources || listing || pending) return;
     setListing(true); setError(null);
     try {
       const next = await couchApp.captureSources();
       setSources(next);
+      setSourceId(previous => next.some(source => source.id === previous) ? previous : "");
       if (!next.length) await checkAccess();
     } catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setListing(false); }
@@ -172,7 +173,10 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         : kind.description}</p>
       {kinds.some(item => unavailable(item, browser)) && <p className="text-meta text-muted-foreground">{reason ?? kinds.map(item => unavailable(item, browser)).find(Boolean)}</p>}
     </div>
-    {access || lists && kind.pictures && <Pictures sources={pictures} listing={listing} value={sourceId} onValueChange={setSourceId} disabled={pending} kind={kind} />}
+    {access || lists && kind.pictures && <Pictures sources={pictures} listing={listing} value={sourceId} onValueChange={setSourceId} disabled={!available} kind={kind} />}
+    {lists && <Button variant="ghost" size="sm" className="justify-self-end" disabled={!available} onClick={() => void list()}>
+      {listing && <Spinner aria-hidden="true" />}Refresh {kind.pictures === "window" ? "windows" : "screens"}
+    </Button>}
     {kind.inputs && localHost && <Row label="Playback" description={kind.intent === "live" ? "Listeners join and control their own volume." : "Shared listening with playback controls."}>
       <ChoiceGroup label="Audio input playback" value={kind.intent ?? "relaxed"} disabled={!available || !!reason}
         options={[{ value: "relaxed", label: "Relaxed" }, { value: "live", label: "Live" }]}

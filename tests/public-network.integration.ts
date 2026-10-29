@@ -8,6 +8,9 @@ import { PassThrough, Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
 import { connectPublic, isPublicAddress, lookupPublic, publicFetch, publicLookup, publicResponseContext, PublicNetworkError } from "../src/server/public-network";
 import { createPassThrough } from "../src/server/pass-through";
+import { createPreviewResolver, vttPreview } from "../src/server/preview-manifest";
+import { createPreviewImages, playbackPreviewResponse } from "../src/server/playback-preview";
+import { hlsPreview } from "../src/server/hls-preview";
 
 test("only public IPv4 and global IPv6 addresses pass", () => {
   for (const address of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2001:4860:4860::8888", "2606:4700:4700::1111"]) assert.equal(isPublicAddress(address), true, address);
@@ -190,6 +193,41 @@ test("public fetch preserves the original URL host and streams its response", as
   assert.equal((calls[0]?.options.headers as Record<string, string>).host, "media.public.test:8443");
   assert.equal(calls[0]?.options.lookup, publicLookup);
   assert.notEqual(calls[0]?.options.agent, https.globalAgent);
+});
+
+test("preview manifests and their image children retain DNS and redirect public-network guards", async t => {
+  for (const phase of ["manifest", "image"]) for (const destination of ["http://127.0.0.1/private", "http://169.254.169.254/private", "https://rebound.test/private"]) {
+    const calls = transport(t, call => call.url.pathname === "/preview.vtt" && phase === "image"
+      ? { body: "WEBVTT\n\n00:00.000 --> 00:01.000\nimage.jpg\n" }
+      : { status: 302, headers: { Location: destination } });
+    t.mock.method(dns, "lookup", (host: string, _options: dns.LookupOptions, callback: (error: null, rows: dns.LookupAddress[]) => void) => callback(null, [{ address: host === "rebound.test" ? "127.0.0.1" : "93.184.216.34", family: 4 }]));
+    const source = vttPreview("https://public.test/preview.vtt")!;
+    const request = new Request(`https://couch.test/api/playback-preview?playbackId=one${phase === "image" ? "&image=0" : ""}`);
+    const response = await playbackPreviewResponse(request, async () => source, () => {}, createPreviewImages(), createPreviewResolver());
+    assert.equal(response.status, 503);
+    assert.ok(calls.filter(call => call.response).every(call => call.url.hostname === "public.test"));
+    t.mock.restoreAll();
+  }
+});
+
+test("every HLS preview hop retains public DNS and redirect checks, without playback credentials", async t => {
+  for (const phase of ["master", "media", "playlist", "image"]) for (const destination of ["http://127.0.0.1/private", "http://169.254.169.254/private", "https://rebound.test/private"]) {
+    const calls = transport(t, call => {
+      const headers = call.options.headers as Record<string, string>;
+      assert.equal(headers["user-agent"], "Couch");
+      assert.equal(headers.authorization, undefined); assert.equal(headers.cookie, undefined);
+      if (call.url.pathname === "/master.m3u8" && phase !== "master") return { body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nmedia.m3u8\n#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=10,RESOLUTION=160x90,CODECS="jpeg",URI="images.m3u8"\n' };
+      if (call.url.pathname === "/media.m3u8" && phase !== "media") return { body: "#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nvideo.ts\n#EXT-X-ENDLIST\n" };
+      if (call.url.pathname === "/images.m3u8" && phase !== "playlist") return { body: "#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXT-X-IMAGES-ONLY\n#EXTINF:1,\nimage.jpg\n#EXT-X-ENDLIST\n" };
+      return { status: 302, headers: { Location: destination } };
+    });
+    t.mock.method(dns, "lookup", (host: string, _options: dns.LookupOptions, callback: (error: null, rows: dns.LookupAddress[]) => void) => callback(null, [{ address: host === "rebound.test" ? "127.0.0.1" : "93.184.216.34", family: 4 }]));
+    const request = new Request(`https://couch.test/api/playback-preview?playbackId=one${phase === "image" ? "&image=0" : ""}`);
+    const response = await playbackPreviewResponse(request, async () => hlsPreview("https://public.test/master.m3u8"), () => {}, createPreviewImages(), createPreviewResolver());
+    assert.equal(response.status, 503);
+    assert.ok(calls.filter(call => call.response).every(call => call.url.hostname === "public.test"));
+    t.mock.restoreAll();
+  }
 });
 
 test("redirects cannot reach private literals, credentials or a rebound DNS answer", async t => {

@@ -114,7 +114,8 @@ export async function audioInput(url: string, headers: Record<string, string>, s
 }
 
 type ClassificationContext = Pick<Media, "headers" | "publicNetwork" | "credentialOrigin" | "audioManifest">;
-async function liveHls(url: string, signal: AbortSignal, reads?: ManifestReads, context: ClassificationContext = {}) {
+type Inspected = (master: Playlist, media: Playlist) => void;
+async function liveHls(url: string, signal: AbortSignal, reads?: ManifestReads, context: ClassificationContext = {}, inspected?: Inspected) {
   signal.throwIfAborted();
   const read = (source: string) => {
     const headers = new Headers(context.headers);
@@ -124,8 +125,10 @@ async function liveHls(url: string, signal: AbortSignal, reads?: ManifestReads, 
   // Keep the original master in the read cache for later selection in this
   // load, but classify the selected audio stream without fetching any video.
   let media = context.audioManifest ? { url: context.audioManifest.url, lines: context.audioManifest.text.split(/\r?\n/).map(line => line.trim()) } : await read(url);
+  const master = media;
   const variant = media?.lines.find((_line, index) => index > 0 && media!.lines[index - 1]!.startsWith("#EXT-X-STREAM-INF:"));
   if (variant) media = await read(reference(variant, media!.url));
+  if (master && media) inspected?.(master, media);
   return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }
 
@@ -149,6 +152,6 @@ export function createSourcePreparation(signal: AbortSignal) {
   const reads: ManifestReads = new Map();
   return {
     select: <T extends Media>(media: T, output: SelectedChannels) => prepareSource(media, output, signal, reads),
-    live: (url: string, context?: ClassificationContext) => liveHls(url, signal, reads, context),
+    live: (url: string, context?: ClassificationContext, inspected?: Inspected) => liveHls(url, signal, reads, context, inspected),
   };
 }

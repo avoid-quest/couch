@@ -84,6 +84,10 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   Screen and Window offer **Include system audio** on desktop, explaining that
   it includes everything the computer plays. Browsers say **Include audio** and
   ask the person to enable it in the browser's picker when offered.
+  Refresh screens or Refresh windows reads the choices again without closing
+  Share, keeping a selected source while it is still available. The choices
+  and Start sharing wait during the read; a failed read keeps Refresh available
+  for retry. A disappeared window requires a new choice.
 - **Play on** lists every other online device that lets others use its screen
   or speakers, as chips. A device that can take nothing of this kind stays in
   place, disabled, and leaves the choice. Without a choice the share waits in
