@@ -102,8 +102,8 @@ Picture          [1080p, balanced ▾] [60 FPS ▾]   Screen and Window
   Dismissing the Dialog or Sheet returns keyboard focus to its Share button while that button remains mounted.
 - **Picture** chooses the largest resolution and, beside it, the frame rate:
   30, 60 or 120 FPS, 60 by default. It is a target, the most frames a second the
-  capture asks for; a 60 Hz screen or a busy encoder gives fewer. Sound only and
-  Microphone have no picture, so no Picture row.
+  capture asks for; a 60 Hz screen or a busy encoder gives fewer. System audio and
+  Audio input have no picture, so no Picture row.
 - **Disabled keeps its place:** a browser that can't capture a display (a
   phone's) keeps Screen, Window and System audio disabled, with today's reason
   under the chips.
