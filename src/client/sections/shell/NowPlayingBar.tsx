@@ -1,4 +1,4 @@
-import { livePlayback, playbackControls } from "@/session/playback-controls";
+import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
@@ -112,7 +112,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   // The player's words, less the title shown right above them and the plain states the transport already shows.
   // The status line says where it reconnects.
   const { label, quiet } = playbackStatus(state, connected);
-  const status = quiet || livePlayback(state) ? "" : label;
+  const status = quiet || listeningLive(state) ? "" : label;
   const at = playsOn(state);
   const title = programme?.title || current.title;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;

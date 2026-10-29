@@ -292,10 +292,14 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       try {
         await couchApp?.prepareCapture?.({ kind: "microphone" });
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
-        // Browsers expose input names only after microphone access is granted.
-        probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(reason => { throw captureError(reason, "microphone"); });
-        const inputs = await navigator.mediaDevices.enumerateDevices();
+        // Native inputs don't depend on the browser's microphone access, so a refused probe keeps them.
         const native = live ? await couchApp?.nativeAudioInputs?.() ?? [] : [];
+        let inputs: MediaDeviceInfo[] = [];
+        try {
+          // Browsers expose input names only after microphone access is granted.
+          probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(reason => { throw captureError(reason, "microphone"); });
+          inputs = await navigator.mediaDevices.enumerateDevices();
+        } catch (error) { if (!native.length) throw error; }
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
         return [...native.map(input => ({ deviceId: `native:${input.uid}`, label: `${input.name} · Native`, nativeChannels: input.channels })), ...inputs.filter(input => input.kind === "audioinput" && input.deviceId)];
       } finally {

@@ -32,6 +32,7 @@ const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveS
 const { useItemMenu } = await import("../src/client/components/RowMenu");
 const { LiveClock } = await import("../src/client/components/LiveClock");
 const { setCoreTime } = await import("../src/client/core-clock");
+const { listeningLive } = await import("../src/client/session/playback-controls");
 
 function fixture(): ClientSessionState {
   const outputs = [{ deviceId: here, picture: false, sound: true }];
@@ -242,6 +243,15 @@ test("a device that has not joined never inherits another listener's error", () 
   const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
   expect(html).toContain(">Join</button>");
   expect(html).not.toContain("TV speakers disconnected.");
+});
+
+test("only a Live listener's playback status lines stay quiet; its publisher keeps them for errors", () => {
+  const listener = fixture();
+  expect(listeningLive(listener)).toBe(true);
+  const publisher = fixture();
+  publisher.liveSources![0]!.deviceId = here;
+  publisher.controls = { ...audience, leave: false };
+  expect(listeningLive(publisher)).toBe(false);
 });
 
 test("the publisher does not offer to join or adjust reception of its own capture", () => {
