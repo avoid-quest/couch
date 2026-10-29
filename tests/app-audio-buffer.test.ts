@@ -25,7 +25,8 @@ function startup(platform: string) {
       if (name === "node:sqlite") return { DatabaseSync: class { constructor() { throw new Error("No database"); } } };
       if (name === "node:fs") return {
         readFileSync(path: string) {
-          if (path === "/test/package.json") return '{"identifier":"test.couch"}';
+          // Windows joins with backslashes.
+          if (path.replaceAll("\\", "/") === "/test/package.json") return '{"identifier":"test.couch"}';
           throw new Error("No saved state");
         },
         mkdirSync() {}, writeFileSync() {}, renameSync() {}, rmSync() {},
