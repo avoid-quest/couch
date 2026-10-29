@@ -206,7 +206,6 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
               for (const member of members) begin(member.deviceId);
             }
             next.queues[event.wire].push({ offset: at - next.base, duration: event.duration, data: event.data });
-            if (next.queues[event.wire].length > 200) fail("Captured audio exceeded its bounded queue.");
             tick(next); // Live audio goes out as it arrives; the timer only keeps status.
           });
           report(); return;

@@ -216,5 +216,11 @@ test("a Live listener cannot change another device's level, even one that shares
     }
     assert.deepEqual({ volume: level().volume, muted: level().muted }, { volume: before.volume, muted: before.muted });
     assert.equal((await f.receiver.command({ type: "volume", deviceId: f.receiver.id, volume: 40 })).ok, true, "a listener still sets its own level");
+    for (const action of [{ type: "output", deviceId: other.id, level: 0 }, { type: "output", deviceId: other.id, level: 20 }, { type: "output", deviceId: other.id, delay: 500 }] as Action[]) {
+      const denied = await f.receiver.command(action);
+      assert.equal(denied.ok, false, `listener fader ${JSON.stringify(action)} on another device must reject`);
+      assert.match(denied.error ?? "", /Live audio listeners/);
+    }
+    assert.equal(f.receiver.state.outputs?.length, 2, "the other listener stays in the audience");
   } finally { await f.close(); }
 });
