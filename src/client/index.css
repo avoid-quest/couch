@@ -193,9 +193,10 @@ body { min-width: 0; }
 [data-text-link]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) { box-shadow: -.25rem 0 0 .125rem var(--foreground), .25rem 0 0 .125rem var(--foreground); box-decoration-break: clone; }
 /* A shelf's tiles keep their own heights; their captions start level under artwork of one height. */
 [data-shelf-row] { align-items: start; }
-/* An item's "…" waits for the pointer or focus, so a shelf or a long list isn't a row or column of them; touch and the
-   TV always show it. It appears at once: a fade starts and ends an animation on every row a scroll passes under the
-   pointer. */
+/* An item's "…" waits for the pointer or focus, so a shelf or a long list isn't a row or column of them; touch always
+   shows it, and the TV on the focused tile, whose held OK opens it. It appears at once: a fade starts and ends an
+   animation on every row a scroll passes under the pointer. */
+.tv-presentation [data-tile]:not(:focus-within) [data-tile-menu]:not([aria-expanded="true"]) { opacity: 0; }
 @media (hover: hover) and (pointer: fine) {
   :is([data-tile-menu], [data-row-menu]):where(:not(.tv-presentation *)):not([aria-expanded="true"], :focus-visible) { opacity: 0; }
   [data-tile]:is(:hover, :focus-within) [data-tile-menu], [data-nav-row]:is(:hover, :focus-within) > * [data-row-menu] { opacity: 1; }
@@ -554,6 +555,8 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 /* A picture that loads cold settles into its place as it fades in, once; one already shown is there at once. */
 @media (prefers-reduced-motion: no-preference) { .stage-object { transition: opacity .2s var(--ease-out), translate .45s var(--ease-out); } .stage-object:not([data-loaded]) { translate: 0 .75rem; } }
 .stage-picture[data-shape="round"] .stage-object { border-radius: 50%; object-fit: cover; }
+/* A frame fills its 16:9, so a letterboxed thumbnail loses its bars (useArtRatio). */
+.stage-picture[data-shape="video"] .stage-object { object-fit: cover; }
 .stage[data-form="mark"] .stage-object { box-shadow: none; border-radius: 0; background: transparent; }
 /* A picture that didn't load leaves no box: the room stands alone, as it does without one. */
 .stage-picture:empty { display: none; }
@@ -584,22 +587,17 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 html[data-stage-under-header] .app-header { background: transparent; }
 
 
-/* Saved media is a collection of covers. Each cell sizes the existing tile,
-   retaining its true shape, caption and menu without a second presentation. */
-.saved-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--media-min)), 1fr)); gap: 2rem 1.5rem; }
-.saved-media-grid > li { min-width: 0; container-type: inline-size; }
-.saved-media-grid [data-tile] { --tile-art: calc(100cqw / var(--frame-ratio)); width: 100%; }
+/* Saved's media is Home's shelf tiles in justified rows: each grows by its picture's width (its shape's, `--tile-ratio`
+   on the item), so a row shares one height and fills the column, every picture whole. The last row keeps its size. */
+.saved-media-grid { --tile-art: clamp(8.5rem, 12.5vw, 11.5rem); display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2rem var(--spacing-item); }
+.saved-media-grid:has([data-tile-shape="poster"]) { --tile-art: clamp(11rem, 16vw, 15rem); }
+.saved-media-grid > li { flex: calc(var(--tile-ratio) * 1000) 1 calc(var(--tile-art) * var(--tile-ratio)); min-width: 0; }
+.saved-media-grid::after { content: ""; flex: 1e9 1 0; }
+.saved-media-grid :is([data-tile], [data-media-tile]) { width: 100%; }
+.saved-media-grid [data-natural] [data-tile-art] { width: 100%; height: auto; aspect-ratio: var(--tile-ratio); }
 /* Navigation rows differ from pill actions: a quiet, softly squared selection. */
 [data-nav-rail] a { border-radius: var(--radius-md); min-height: 2.5rem; }
 [data-nav-rail] a[aria-current="page"] { font-weight: 600; }
-
-
-.saved-media-grid [data-media-tile] { width: 100%; }
-.saved-media-grid [data-natural] [data-tile-art] { width: 100%; height: auto; aspect-ratio: var(--tile-ratio); }
-.saved-media-grid [data-tile-art] img { object-position: center; }
-@media (max-width: 47.99rem) {
-  .saved-media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.75rem 1rem; }
-}
 /* Personal shelves use one full-width rhythm, in the chosen Home order. */
 .home-shelves { display: grid; align-items: start; gap: 2.5rem; min-width: 0; }
 .home-shelves [data-shelf-row] { margin-inline: -.75rem; padding-inline: .75rem; scroll-padding-inline: .75rem; }
@@ -616,8 +614,8 @@ html[data-stage-under-header] .app-header { background: transparent; }
 [data-stage="home"] .stage-copy > [data-nav-row]:last-child { margin-top: .25rem; }
 [data-stage="home"] > .room { --room-x: 20%; }
 /* Whole pictures share a height; captions and progress share their visible edges. */
-.home-shelves [data-natural] { --tile-art: clamp(8rem, 12vw, 11rem); }
-.home-shelves [data-natural][data-tile-shape="poster"] { --tile-art: clamp(10rem, 16vw, 14rem); }
+.home-shelves [data-natural] { --tile-art: clamp(8.5rem, 12.5vw, 11.5rem); }
+.home-shelves [data-natural][data-tile-shape="poster"] { --tile-art: clamp(11rem, 16vw, 15rem); }
 [data-natural] [data-tile-art] { width: min(calc(100vw - 2 * var(--gutter)), calc(var(--tile-art) * var(--tile-ratio))); }
 [data-natural] [data-tile-art][data-own="poster"] > span.media-artwork { width: 100%; }
 @media (max-width: 47.99rem) {

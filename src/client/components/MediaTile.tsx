@@ -44,7 +44,7 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
   fit?: "contain";
   /** A station mark needs a neutral ground that keeps both dark and light ink visible. */
   logo?: boolean;
-  /** Home shelves align the frame and caption to the actual picture. */
+  /** Home's shelves and Saved size the frame to the picture itself (a letterboxed frame without its bars), so it fills it. */
   natural?: boolean;
   progress?: number;
   /** Not available now (an offline channel): the artwork dims. */
@@ -63,7 +63,7 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
   const [artRef, ratio] = useArtRatio(natural ? thumbnail : undefined, shapeRatio[own]);
   const body = <>
     <span data-tile-art data-own={own} className={cn("relative block h-(--tile-art) overflow-hidden rounded-md bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", own === "round" && shape !== "round" && "flex items-center", logo && mark?.clear !== false && "bg-neutral-500 [&>img]:bg-transparent [&>img]:p-3", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
-      <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && fillsFrame(own, shape) && "rounded-full", logo || fit === "contain" || !fillsFrame(own, shape) ? "object-contain" : "object-cover", own === "round" && shape !== "round" && roundInFrame)} />
+      <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && fillsFrame(own, shape) && "rounded-full", !natural && (logo || fit === "contain" || !fillsFrame(own, shape)) ? "object-contain" : "object-cover", own === "round" && shape !== "round" && roundInFrame)} />
       {progress != null && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-white/25"><span className="block h-full bg-white" style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }} /></span>}
       <ArtLevel level={level} className="size-8 text-base" />
     </span>

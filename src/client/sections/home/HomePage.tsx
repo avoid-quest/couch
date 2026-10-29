@@ -190,7 +190,7 @@ export function HomePage() {
   const lists: Partial<Record<HomeRowId, ReactNode>> = {
     continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played">
       {continued.slice(0, shelfLength).map((item, index) => <li key={item.mediaId} className="flex shrink-0">
-        <MediaTile natural fit="contain" data-history-details={item.mediaId} data-page-first={firstBoard === "continue" && index === 0 || undefined} related={{ collection: item.collection, creator: item.creator }} shape={continueShape} own={historyShape(item)} {...continueCaption(item)} source={item.url}
+        <MediaTile natural data-history-details={item.mediaId} data-page-first={firstBoard === "continue" && index === 0 || undefined} related={{ collection: item.collection, creator: item.creator }} shape={continueShape} own={historyShape(item)} {...continueCaption(item)} source={item.url}
           thumbnail={item.thumbnail} progress={item.duration ? item.position / item.duration : undefined}
           aria-label={`Resume ${item.title}`} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)} />
       </li>)}
@@ -200,14 +200,14 @@ export function HomePage() {
 
     later: !!savedMedia.length && <Shelf title="For later" href="/saved?tab=later">
       {savedMedia.slice(0, shelfLength).map((item, index) => <li key={item.id} className="flex shrink-0">
-        <MediaTile natural fit="contain" data-saved-details={item.id} data-page-first={firstBoard === "later" && index === 0 || undefined} related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} title={savedCaption(item).title} meta={metaLine(mediaCaption(item).lead, item.creator?.title ?? item.subtitle)} source={item.url}
+        <MediaTile natural data-saved-details={item.id} data-page-first={firstBoard === "later" && index === 0 || undefined} related={{ collection: item.collection, creator: item.creator }} shape={laterShape} own={savedShape(item)} title={savedCaption(item).title} meta={metaLine(mediaCaption(item).lead, item.creator?.title ?? item.subtitle)} source={item.url}
           thumbnail={item.thumbnail} aria-label={`Details ${item.title}`} href={itemLocation("saved", item.id)} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,
 
     recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played">
       {recent.slice(0, shelfLength).map((item, index) => <li key={item.mediaId} className="flex shrink-0">
-        <MediaTile natural fit="contain" data-history-details={item.mediaId} data-page-first={firstBoard === "recent" && index === 0 || undefined} related={{ collection: item.collection, creator: item.creator }} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} source={item.url}
+        <MediaTile natural data-history-details={item.mediaId} data-page-first={firstBoard === "recent" && index === 0 || undefined} related={{ collection: item.collection, creator: item.creator }} shape={recentShape} own={historyShape(item)} {...recentCaption(item)} source={item.url}
           thumbnail={item.thumbnail} aria-label={`Details ${item.title}`} href={itemLocation("history", item.mediaId)} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
       </li>)}
     </Shelf>,

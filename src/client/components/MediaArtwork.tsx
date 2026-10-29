@@ -68,12 +68,14 @@ const href = (src: string | undefined) => { try { return new URL(src ?? "").href
 export function useArtRatio(src: string | undefined, fallback: number) {
   const [measured, setMeasured] = useState<{ src: string; ratio: number }>();
   const url = href(src);
-  const ratio = measured?.src === url ? measured.ratio : shown.get(url) ?? fallback;
+  const natural = measured?.src === url ? measured.ratio : shown.get(url) ?? fallback;
+  // A frame's 4:3 thumbnail is a 16:9 frame between black bars (YouTube's hqdefault): it shows at 16:9, its bars cropped.
+  const ratio = fallback === 16 / 9 && Math.abs(natural - 4 / 3) < .01 ? fallback : natural;
   const ref = useCallback((element: HTMLElement | null) => {
     if (!element) return;
     const read = () => {
       const image = element.querySelector("img");
-      if (image?.src === url && image.complete && image.naturalWidth && image.naturalHeight && image.naturalWidth / image.naturalHeight !== ratio) {
+      if (image?.src === url && image.complete && image.naturalWidth && image.naturalHeight && image.naturalWidth / image.naturalHeight !== natural) {
         setMeasured({ src: image.src, ratio: image.naturalWidth / image.naturalHeight });
       }
     };
@@ -81,6 +83,6 @@ export function useArtRatio(src: string | undefined, fallback: number) {
     element.addEventListener("load", read, true);
     read();
     return () => element.removeEventListener("load", read, true);
-  }, [url, ratio]);
+  }, [url, natural]);
   return [ref, ratio] as const;
 }

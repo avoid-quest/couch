@@ -64,7 +64,8 @@ bar for thumb reach.
   thumbnail's own lettering is part of the picture, not a ghost beside the
   title, and nothing ends in a hard edge; a logo on nothing
   (a vector, see-through edges) is a **mark** that stands whole without one.
-  Nothing is cropped into a band, and white artwork stays white
+  Nothing is cropped into a band but a thumbnail's own black bars, and white
+  artwork stays white
   ([Stage](#stage)).
 - **The room takes the picture's colour** ([Room](#room)). Behind a Stage and
   the player's Now playing, the room is painted with two colours read from the

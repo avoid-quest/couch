@@ -62,7 +62,8 @@ doesn't take the focus.
 Continue, For later and Played recently use full-width `MediaTile` shelves,
 up to twelve items each. Every shelf uses the same spacing and captions,
 regardless of which neighbours Settings enables. Whole artwork shares an
-8–11rem height (10–14rem for all-poster shelves); each tile takes its picture's natural width, keeping the
+8.5–11.5rem height (11–15rem for all-poster shelves); each tile takes its picture's own width
+(a letterboxed frame at 16:9, [Rows and tiles](browse.md#rows-and-tiles)), keeping the
 caption and progress aligned with its edges. Continue resumes and carries
 progress at the artwork's foot, with rounded minutes or hours left in its
 caption. For later and Played recently open Details. Their menus keep

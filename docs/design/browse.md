@@ -318,18 +318,20 @@ place of its number. A row or tile knows it by its addresses (`source`: its
 page, or a station's `radio:` source and stream), matched against what the
 looked-at Playback plays.
 
-**`For later`** uses a responsive artwork grid, with at least 15rem per column
-(10rem for posters), with two equal columns on phones. It reuses `MediaTile`
-and its menu: Details opens from the tile; Play, Queue, ordering and Remove
-stay in the menu. Artwork stays whole at its natural ratio. Each tile fills its grid column,
-with its caption and menu following the visible picture’s edges. Rows align
-at the top; a poster can be taller than a landscape picture without cropping
-either. Original order is preserved. Missing posters keep the same silhouette.
+**`For later`** lays Home's shelf tiles out in justified rows: each tile starts
+at the shelves' height (8.5–11.5rem, 11–15rem when all are posters) and grows
+by its picture's width, so every row shares one height and fills the column
+while posters, squares and frames keep their shapes; the last row keeps its
+size. Details opens from the tile; Play, Queue, ordering and Remove stay in
+its menu, and its caption and menu follow the picture's edges. Original order
+is preserved. Missing posters keep the same silhouette.
 Removing an item focuses the next item's primary link. Other Saved tabs retain
 their lists.
 
-Home’s personal shelves optionally use natural image proportions, measured by
-the existing artwork ratio hook, with a shared 8–11rem height (10–14rem for all-poster shelves). Related content
+Home's personal shelves and Saved size each picture by its own proportions,
+read by the artwork ratio hook (`useArtRatio`). A frame's 4:3 thumbnail is a
+16:9 frame between black bars (YouTube's `hqdefault`), so it shows at 16:9
+with its bars cropped, there and on the Stage. Related content
 on Details uses a linked artwork shelf, showing only the returned neighbours.
 
 **`MediaTile`**: a picture with a caption, never a box. One Button around
@@ -345,8 +347,8 @@ the press plays, the first. Hovered or focused, the picture lights up in its
 own colour and the meta line comes up to white; focus adds a white ring, which
 the TV thickens and lifts ([Hover](../design.md#tokens)). The "…" sits over the
 artwork's upper corner; a pointer sees it over or inside the tile, touch
-always; on the TV it is always shown and no focus stop unless the press is
-disabled.
+always; on the TV it shows on the focused tile and is no focus stop unless the
+press is disabled.
 
 **Captions** read as one line of parts joined by commas ("YouTube, 10:34";
 a provider's own "Game · 1,204 viewers" becomes "Game, 1,204 viewers"). An

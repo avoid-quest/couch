@@ -1,10 +1,9 @@
 import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { MediaTile } from "@/components/MediaTile";
 import { shapeRatio } from "@/components/Stage";
-import type { CSSProperties } from "react";
 import { metaLine, mediaCaption } from "@/media-caption";
 import { formatRuntime } from "@/time-format";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -81,15 +80,15 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
     {connected && !loading && !loadError && !items.length && <SavedEmpty title="Nothing saved for later" action={onFind && <Button onClick={onFind}>Search</Button>}>Choose Save on a film, video or track to find it here.</SavedEmpty>}
-    {!!items.length && <ul ref={list} aria-label="For later" className="saved-media-grid" style={{ "--frame-ratio": shapeRatio[shape], "--media-min": shape === "poster" ? "10rem" : "15rem" } as CSSProperties}>
+    {!!items.length && <ul ref={list} aria-label="For later" className="saved-media-grid">
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));
         const blocked = !connected || pending || reorder.isPending;
         const move = (offset: number) => { const next = order(index, offset); if (next && !blocked) reorder.mutate(next); };
         const caption = mediaCaption(item);
         // Artwork leads a saved collection; the existing menu keeps its playback, ordering and removal verbs.
-        return <li key={item.id}><MediaTile natural data-saved-details={item.id} source={item.url} related={{ collection: item.collection, creator: item.creator }}
-          thumbnail={item.thumbnail} fit="contain" shape={shape} own={savedShape(item)}
+        return <li key={item.id} style={{ "--tile-ratio": shapeRatio[savedShape(item)] } as CSSProperties}><MediaTile natural data-saved-details={item.id} source={item.url} related={{ collection: item.collection, creator: item.creator }}
+          thumbnail={item.thumbnail} shape={shape} own={savedShape(item)}
           title={caption.title}
           meta={metaLine(caption.lead, item.creator?.title ?? caption.subtitle, !item.live && item.duration != null && formatRuntime(item.duration))}
           aria-label={`Details ${caption.title}`} href={itemLocation("saved", item.id)} onClick={inspect}
