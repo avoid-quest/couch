@@ -207,6 +207,7 @@ preload. Native capture uses the selected UID, optional exact device-rate reques
 callback-buffer request and same-process readback. Permission is granted before
 opening the input. Main stops owned capture on cancel, navigation, renderer loss,
 window close and quit, and waits for retirement before another preparation.
+Inputs exist only while their capture is active.
 Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
 element. Core grants signaling only between the exact publishing and receiving
 connections. ICE configuration, including optional authenticated TURN, is returned

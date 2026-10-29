@@ -13,8 +13,9 @@ test("receiver churn preserves a healthy live peer without repeating its volume"
   process.chdir(directory);
   process.env.COUCH_DATA_DIR = directory;
   process.env.COUCH_PORT = "0";
-  const f = await liveFixture();
+  let fixture: Awaited<ReturnType<typeof liveFixture>> | undefined;
   try {
+    const f = fixture = await liveFixture();
     await f.publish("event", "microphone");
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
     assert.equal((await f.receiver.command({ type: "playLive", sourceId: "event" })).ok, true);
@@ -32,7 +33,7 @@ test("receiver churn preserves a healthy live peer without repeating its volume"
       assert.equal(f.receiver.load()!.livePeerId, original);
     }
   } finally {
-    try { await f.close(); } finally {
+    try { await fixture?.close(); } finally {
       process.chdir(cwd);
       for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
       rmSync(directory, { recursive: true, force: true });

@@ -91,7 +91,8 @@ through the common capture normalizer and relaxed scheduled-audio worker
 (`src/server/scheduled-capture.ts`). Receivers get scheduled sound even when
 there is only one listener. AirPlay no longer creates an audio-only HLS stream;
 captured-video HLS remains a separate compatibility adapter. Pending audio and
-receiver queues are bounded, and source retirement stops the worker.
+receiver queues are bounded. Retiring a source ends only that source; the shared
+worker keeps running for other scheduled sources.
 
 A sender becomes a source only when its decoded sound arrives, which UxPlay
 produces only after the sender answered its password challenge, never from a TCP
