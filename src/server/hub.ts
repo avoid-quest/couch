@@ -731,7 +731,7 @@ export async function createHub(options: HubOptions) {
     const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(30_000)]);
     const resolved = cachedResolution(playback, playbackId, output, tab) ?? { playbackId, vp9: tab.data.vp9, output: { picture: output.picture, sound: output.sound }, media: resolveEntry(entry, playbackId, signal, tab, playback, output) };
     const { headers = {}, ...media } = await resolved.media;
-    const selected = await prepareSource({ ...media, headers }, output, signal);
+    const selected = await prepareSource({ ...media, headers }, output, signal, undefined, sourceSelection(playback));
     const prepared = await passThrough.prepare(playbackId, selected, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal, audioCors);
     return { prepared, resolved, media: { playbackId, source: media.source, audioSource: media.audioSource, headers, publicNetwork: media.publicNetwork, live: !!media.metadata?.live || !!entry.live, audioOnly: media.audioOnly, hasAudio: media.hasAudio, duration: media.metadata?.duration ?? entry.duration ?? state.player.duration ?? undefined } };
   };
@@ -748,6 +748,7 @@ export async function createHub(options: HubOptions) {
     const audioSelection = playback.session.audioSelection();
     return audioSelection ? { audioSelection, audioTrack: audioSelection.index } : {};
   };
+  const sourceSelection = (playback: Playback) => ({ ...groupSelection(playback), audioLanguage: stateOf(playback).preferences?.profile.audioLanguage });
   // Direct capture uses the same player and output ownership with a low-latency media transport. A receiver
   // that couldn't connect directly plays Core's buffered stream instead, once it is ready; the others are unaffected.
   const routeLive = (playback: Playback, sourceId: string) => {
@@ -781,7 +782,7 @@ export async function createHub(options: HubOptions) {
     const resolved = cachedResolution(playback, playbackId, output) ?? { playbackId, vp9: tab?.data.vp9 ?? true, output: { ...output }, media: resolveEntry(entry, playbackId, signal, tab, playback, output) };
     const { headers = {}, ...media } = await resolved.media;
     const sound = output.sound && media.hasAudio !== false;
-    const selected = sound ? await prepareSource({ ...media, headers }, { picture: false, sound: true }, signal) : media;
+    const selected = sound ? await prepareSource({ ...media, headers }, { picture: false, sound: true }, signal, undefined, sourceSelection(playback)) : media;
     const relay = sound && (media.publicNetwork || !!selected.audioManifest);
     const core = relay ? await passThrough.prepare(playbackId, selected, headers, { origin: await passThrough.coreOrigin(), userAgent: "Couch" }, signal) : selected;
     return { resolved, media: { playbackId, source: core.source, audioSource: core.audioSource, headers: relay ? {} : headers, publicNetwork: media.publicNetwork, live: !!media.metadata?.live || playback.media?.playbackId === playbackId && !!playback.media.live, audioOnly: media.audioOnly, hasAudio: media.hasAudio, duration: media.metadata?.duration ?? state.player.duration ?? undefined } };
@@ -912,7 +913,7 @@ export async function createHub(options: HubOptions) {
       const preparation = createSourcePreparation(signal);
       // Select channels before probing or relaying any bytes. Direct has no Core
       // decoder; keep the original resolution for a later group/picture change.
-      const selected = entry?.liveSourceId ? media : await preparation.select({ ...media, headers }, output);
+      const selected = entry?.liveSourceId ? media : await preparation.select({ ...media, headers }, output, sourceSelection(playback));
       // Classify raw URLs from the selected rendition. resolveEntry keeps their
       // original URL, so selection runs once and picture can be restored later.
       // A finite HLS source keeps the image previews declared in the bytes read here.
@@ -923,7 +924,7 @@ export async function createHub(options: HubOptions) {
       if (!isLiveMedia && preview) resolved.preview ??= preview;
       const prepared = entry?.liveSourceId ? media : await passThrough.prepare(playbackId, selected, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal, playback.compressor.enabled);
       const groupSound = grouped(playback) && playback.outputs.some(output => output.sound) && media.hasAudio !== false;
-      const coreSelected = groupSound && !entry?.liveSourceId ? await preparation.select({ ...media, headers }, { picture: false, sound: true }) : media;
+      const coreSelected = groupSound && !entry?.liveSourceId ? await preparation.select({ ...media, headers }, { picture: false, sound: true }, sourceSelection(playback)) : media;
       const coreRelay = groupSound && (media.publicNetwork || !!coreSelected.audioManifest);
       const core = coreRelay ? await passThrough.prepare(playbackId, coreSelected, headers, { origin: await passThrough.coreOrigin(), userAgent: "Couch" }, signal) : coreSelected;
       const coreHeaders = coreRelay ? {} : headers;

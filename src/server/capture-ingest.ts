@@ -5,11 +5,13 @@ import { decodeCapturePacket, type CaptureAudioPacket } from "./capture-audio";
 /** Runs after Core authenticates origin, publication, owner and upload token. */
 export function acceptCaptureUpload(socket: WebSocket, write: (packet: CaptureAudioPacket) => boolean, failed: (error: string) => void) {
   let generation: string | undefined, offset: number | undefined, pings = 0, bytes = 0, windowAt = serverNowUs();
+  let stopped = false;
   let timer: ReturnType<typeof setTimeout>;
-  const fail = (error: string) => { clearTimeout(timer); failed(error); if (socket.readyState === 1) { socket.send(JSON.stringify({ type: "error", error })); socket.close(1008, error.slice(0, 120)); } };
+  const fail = (error: string) => { if (stopped) return; stopped = true; clearTimeout(timer); failed(error); if (socket.readyState === 1) { socket.send(JSON.stringify({ type: "error", error })); socket.close(1008, error.slice(0, 120)); } };
   const arm = () => { clearTimeout(timer); timer = setTimeout(() => fail("The timestamped capture stopped sending audio."), 5000); };
-  arm(); socket.once("close", () => clearTimeout(timer));
+  arm(); socket.once("close", () => { stopped = true; clearTimeout(timer); });
   socket.on("message", (data: RawData, binary: boolean) => {
+    if (stopped) return;
     try {
       const now = serverNowUs();
       if (now - windowAt > 1e6) { windowAt = now; bytes = 0; pings = 0; }
