@@ -47,7 +47,7 @@ beforeEach(() => {
   run.mockClear(); restart.mockReset(); restart.mockImplementation(async () => {}); setError.mockClear(); preference.save.mockClear(); channelPreference.save.mockClear(); save.mutate.mockClear(); query.refetch.mockClear();
 });
 
-test("the host sees Core's retained shared lead and its Receiver even after that Receiver leaves", () => {
+test("the host sees Core's retained shared lead and its Receiver even after that Receiver leaves, whichever playback carries it", () => {
   state = {
     playbacks: [{ id: "live", title: "Concert", status: "playing", outputs: [], liveSourceId: "concert", liveLead: { ms: 240, deviceId: "phone" } }],
     devices: [{ id: "phone", name: "Phone", online: false, volume: 100, muted: false }],
@@ -55,6 +55,9 @@ test("the host sees Core's retained shared lead and its Receiver even after that
   expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain("Shared lead: 240 ms · set by Phone");
   state.devices = [];
   expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain("Shared lead: 240 ms · set by a previous listener");
+  state.playbacks!.unshift({ id: "other", title: "Concert", status: "playing", outputs: [], liveSourceId: "concert" });
+  expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).toContain("Shared lead: 240 ms");
+  state.playbacks!.shift();
   state.playbacks![0]!.liveSourceId = "another-share";
   expect(renderToStaticMarkup(<LiveSettings sharing={sharing} />)).not.toContain("Shared lead:");
 });

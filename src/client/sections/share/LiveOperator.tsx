@@ -110,7 +110,8 @@ export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharin
   const [restarting, setRestarting] = useState(false);
   const [opened, setOpened] = useState<"capture" | "channels" | "codec" | null>(null);
   const native = sharing.captureFormat?.native;
-  const lead = state?.playbacks?.find(playback => playback.liveSourceId === sharing.source.id)?.liveLead;
+  // Only the playback carrying the shared lead reports it; other playbacks of this source may come first.
+  const lead = state?.playbacks?.find(playback => playback.liveSourceId === sharing.source.id && playback.liveLead)?.liveLead;
   const leadDevice = state?.devices?.find(device => device.id === lead?.deviceId);
   return <div className="grid gap-2 border-t pt-2">
     {native && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
