@@ -1,8 +1,9 @@
 import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, type CSSProperties } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { MediaTile } from "@/components/MediaTile";
+import { useArtRatio } from "@/components/MediaArtwork";
 import { shapeRatio } from "@/components/Stage";
 import { metaLine, mediaCaption } from "@/media-caption";
 import { formatRuntime } from "@/time-format";
@@ -80,14 +81,14 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
     {connected && !loading && !loadError && !items.length && <SavedEmpty title="Nothing saved for later" action={onFind && <Button onClick={onFind}>Search</Button>}>Choose Save on a film, video or track to find it here.</SavedEmpty>}
-    {!!items.length && <ul ref={list} aria-label="For later" className="saved-media-grid">
+    {!!items.length && <ul ref={list} data-nav-row aria-label="For later" className="saved-media-grid">
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));
         const blocked = !connected || pending || reorder.isPending;
         const move = (offset: number) => { const next = order(index, offset); if (next && !blocked) reorder.mutate(next); };
         const caption = mediaCaption(item);
         // Artwork leads a saved collection; the existing menu keeps its playback, ordering and removal verbs.
-        return <li key={item.id} style={{ "--tile-ratio": shapeRatio[savedShape(item)] } as CSSProperties}><MediaTile natural data-saved-details={item.id} source={item.url} related={{ collection: item.collection, creator: item.creator }}
+        return <SavedItem key={item.id} item={item}><MediaTile natural data-saved-details={item.id} source={item.url} related={{ collection: item.collection, creator: item.creator }}
           thumbnail={item.thumbnail} shape={shape} own={savedShape(item)}
           title={caption.title}
           meta={metaLine(caption.lead, item.creator?.title ?? caption.subtitle, !item.live && item.duration != null && formatRuntime(item.duration))}
@@ -100,8 +101,14 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             { label: "Move up", disabled: blocked || !order(index, -1), run: () => move(-1) },
             { label: "Move down", disabled: blocked || !order(index, 1), run: () => move(1) },
             { label: "Remove", disabled: !connected || pending, run: () => act(item, "remove", index) },
-          ]} /></li>;
+          ]} /></SavedItem>;
       })}
     </ul>}
   </section>;
+}
+
+/** A justified row's item grows by its picture's proportions, read as its tile reads them, so the row shares one height. */
+function SavedItem({ item, children }: { item: ForLaterItem; children: ReactNode }) {
+  const [ref, ratio] = useArtRatio(item.thumbnail, shapeRatio[savedShape(item)]);
+  return <li ref={ref} style={{ "--tile-ratio": ratio } as CSSProperties}>{children}</li>;
 }

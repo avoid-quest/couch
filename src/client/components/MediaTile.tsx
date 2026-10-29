@@ -84,7 +84,7 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
       {href && !disabled ? <a href={detailHref(href)}>{body}</a> : body}
     </Button>
     {/* A "…" can't sit inside the tile's button, so it lies over the artwork's upper corner. A pointer sees it while it is over the tile or focus is in it (index.css); touch always does. On the TV it
-        is always shown and no focus stop, so Up and Down still go shelf to shelf and a held OK opens the menu, unless
+        shows on the focused tile and is no focus stop, so Up and Down still go shelf to shelf and a held OK opens the menu, unless
         the press is disabled (nothing can play): then it is the tile's one stop, so its other verbs stay in reach. */}
     <ItemMenu data-tile-menu menu={options} title={title} tabIndex={isTvPresentation() && !disabled ? -1 : undefined}
       className="absolute top-1.5 right-1.5 size-8 bg-black/65 text-white backdrop-blur-sm hover:bg-black/85 hover:text-white touch:size-11" />

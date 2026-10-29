@@ -11,8 +11,8 @@ The feature keeps whole artwork on the left and its title, relationship,
 progress and actions together beside it. Its minimum height is `min(24vw,
 23rem)` including the header; artwork is capped at 12rem high. Titles step
 from 3rem to 2.25rem with length. A phone puts a 7.5rem-wide image beside the
-title, then progress and actions across the width. Resume fills the action
-row; From start remains on Details. The feature's
+title, then progress and actions across the width, where Resume fills the
+action row and From start stays in Details. The feature's
 item is the first of:
 
 1. **What you control, playing now.** Meta: the station or subtitle, its

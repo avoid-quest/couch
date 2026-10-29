@@ -587,12 +587,14 @@ html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; 
 html[data-stage-under-header] .app-header { background: transparent; }
 
 
-/* Saved's media is Home's shelf tiles in justified rows: each grows by its picture's width (its shape's, `--tile-ratio`
-   on the item), so a row shares one height and fills the column, every picture whole. The last row keeps its size. */
+/* Saved's media is Home's shelf tiles in justified rows: each grows by its picture's width (`--tile-ratio`,
+   measured on the item), so a row shares one height and fills the column, every picture whole. The last row keeps its size. */
 .saved-media-grid { --tile-art: clamp(8.5rem, 12.5vw, 11.5rem); display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2rem var(--spacing-item); }
 .saved-media-grid:has([data-tile-shape="poster"]) { --tile-art: clamp(11rem, 16vw, 15rem); }
 .saved-media-grid > li { flex: calc(var(--tile-ratio) * 1000) 1 calc(var(--tile-art) * var(--tile-ratio)); min-width: 0; }
 .saved-media-grid::after { content: ""; flex: 1e9 1 0; }
+/* A phone's frames span the column, and its posters come two across. */
+@media (max-width: 47.99rem) { .saved-media-grid, .saved-media-grid:has([data-tile-shape="poster"]) { --tile-art: calc((100vw - 2 * var(--gutter)) * 9 / 16); } }
 .saved-media-grid :is([data-tile], [data-media-tile]) { width: 100%; }
 .saved-media-grid [data-natural] [data-tile-art] { width: 100%; height: auto; aspect-ratio: var(--tile-ratio); }
 /* Navigation rows differ from pill actions: a quiet, softly squared selection. */
@@ -600,14 +602,13 @@ html[data-stage-under-header] .app-header { background: transparent; }
 [data-nav-rail] a[aria-current="page"] { font-weight: 600; }
 /* Personal shelves use one full-width rhythm, in the chosen Home order. */
 .home-shelves { display: grid; align-items: start; gap: 2.5rem; min-width: 0; }
-.home-shelves [data-shelf-row] { margin-inline: -.75rem; padding-inline: .75rem; scroll-padding-inline: .75rem; }
 
 /* A missing poster keeps the same silhouette as its loaded neighbours in a mixed frame. */
 [data-tile-art][data-own="poster"] > span.media-artwork { width: min(100%, calc(var(--tile-art) * 2 / 3)); margin-inline: auto; border-radius: var(--radius-md); }
 
 /* Home keeps its feature compact and its shelves in one full-width rhythm. */
 [data-page="Home"] { gap: 2.5rem; }
-.stage[data-stage="home"] { --stage-h: min(24vw, 23rem); --object-h: min(11rem, 22vw); --title-short: 3rem; --title-medium: 2.75rem; --title-long: 2.5rem; --title-xlong: 2.25rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2.5rem; }
+.stage[data-stage="home"] { --stage-h: min(24vw, 23rem); --title-short: 3rem; --title-medium: 2.75rem; --title-long: 2.5rem; --title-xlong: 2.25rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2.5rem; }
 [data-stage="home"] .stage-picture { grid-area: 1 / 1; }
 [data-stage="home"] .stage-object { width: min(30vw, calc(12rem * var(--art-ratio))); }
 [data-stage="home"] .stage-copy { grid-area: 1 / 2; max-width: 42rem; gap: .875rem; }

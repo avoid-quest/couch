@@ -322,7 +322,8 @@ looked-at Playback plays.
 at the shelves' height (8.5–11.5rem, 11–15rem when all are posters) and grows
 by its picture's width, so every row shares one height and fills the column
 while posters, squares and frames keep their shapes; the last row keeps its
-size. Details opens from the tile; Play, Queue, ordering and Remove stay in
+size; on a phone frames span the column and posters come two across. Up and
+Down move between its lines (`data-nav-row`). Details opens from the tile; Play, Queue, ordering and Remove stay in
 its menu, and its caption and menu follow the picture's edges. Original order
 is preserved. Missing posters keep the same silhouette.
 Removing an item focuses the next item's primary link. Other Saved tabs retain
@@ -372,7 +373,7 @@ is contained otherwise. Without any it is a cover set in type: a deep tone of
 its own, hashed from the title (OKLCH lightness .3, so white keeps 7:1, and an
 item keeps its tone everywhere), with the title large (semibold, 12% of the
 frame's width, four lines at most) at its bottom left, so a shelf of missing
-artwork isn't a row of grey squares; a frame under 8rem (a row's, the bar's or
+artwork isn't a row of grey squares; a frame under 5rem (a row's, the bar's or
 a suggestion's thumbnail) or a round one (a channel's) holds the title's first
 letter instead, since a circle would cut its words, and a collection a folder. An address that has loaded once in the page shows at once
 wherever it appears again (a tab switch, Back); only a first load fades in.
