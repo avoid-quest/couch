@@ -34,10 +34,15 @@ stale caches.
 Add a test only where a behaviour must stay locked, and run it with
 `bun run test <path>`.
 
+Live audio's correctness checks are listed in [Live audio](live-audio.md#checks).
+
 The update regressions run with `bun test tests/updates.test.ts` and
 `bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
 coverage runs with `bun test tests/browser-device-identity.test.ts`, and browser
 server switching with `bun test tests/browser-connections.test.ts`.
+
+Run Bun suites separately: module mocks in a combined process can interfere.
+Build Core and `build/audio-worker.mjs` together before Node audio integrations.
 
 An integration test, `tests/<name>.integration.ts`, runs on Core's Node runtime:
 

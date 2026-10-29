@@ -14,10 +14,13 @@ import { createSoundRouting } from "../src/server/sound-routing";
 function audioSession(t: TestContext) {
   let failure: "ENOENT" | "ECONNREFUSED" | "invalid" | null = "ENOENT";
   const subscribers: Array<EventEmitter & { stdout: PassThrough; kill: () => void }> = [];
-  const readdir = fs.readdirSync;
+  const readdir = fs.readdirSync, exists = fs.existsSync;
+  const calls = { queries: 0, subscriptions: 0 };
+  t.mock.method(fs, "existsSync", path => path === "/usr/bin/pactl" ? failure !== "ENOENT" : exists(path));
   t.mock.method(fs, "readdirSync", (path, ...args) => path === "/proc" ? [] : readdir(path, ...args));
   t.mock.timers.enable({ apis: ["setTimeout"] });
   t.mock.method(childProcess, "execFile", (_file, args, _options, callback) => {
+    calls.queries++;
     const failed = failure;
     queueMicrotask(() => {
       if (failed === "ENOENT" || failed === "ECONNREFUSED") return callback(Object.assign(new Error("private subprocess detail"), { code: failed }), "");
@@ -26,6 +29,7 @@ function audioSession(t: TestContext) {
     });
   });
   t.mock.method(childProcess, "spawn", () => {
+    calls.subscriptions++;
     const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), kill() { this.stdout.end(); } });
     subscribers.push(child);
     queueMicrotask(() => {
@@ -36,7 +40,7 @@ function audioSession(t: TestContext) {
   });
   syncBuiltinESMExports();
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
-  return { subscribers, set: (value: typeof failure) => { failure = value; } };
+  return { calls, subscribers, set: (value: typeof failure) => { failure = value; } };
 }
 
 const flush = async () => { for (let i = 0; i < 10; i++) await setImmediate(); };
@@ -74,7 +78,7 @@ test("a repaired audio session clears the startup failure without a server event
   await flush();
   t.mock.timers.tick(250);
   await flush();
-  assert.equal(session.subscribers.length, 2);
+  assert.equal(session.subscribers.length, 1);
   assert.equal(routing.state.error, null);
   assert.equal(routing.prepare(), "speakers");
 });
@@ -106,4 +110,22 @@ test("audio session loss interrupts playback and recovery preserves its saved ou
   t.mock.timers.tick(10_000);
   await flush();
   assert.equal(session.subscribers.length, 2, "closed routing resubscribed");
+});
+
+
+test("missing pactl retries availability without spawning and recovers after installation", async t => {
+  const session = audioSession(t);
+  const routing = createSoundRouting({ saved: () => "speakers", save: () => {}, active: () => false, lost: () => assert.fail("idle playback interrupted"), changed() {} });
+  t.after(() => routing.close());
+  for (let i = 0; i < 4; i++) { await flush(); t.mock.timers.tick(5_000); await flush(); t.mock.timers.tick(250); }
+  await flush();
+  assert.deepEqual(session.calls, { queries: 0, subscriptions: 0 }, "missing helper spawned on the audio bridge's event loop");
+  assert.match(routing.state.error!, /Install pulseaudio-utils/);
+  session.set(null); t.mock.timers.tick(5_000); await flush(); t.mock.timers.tick(250); await flush();
+  assert.equal(session.calls.subscriptions, 1);
+  assert.ok(session.calls.queries > 0);
+  assert.equal(routing.state.error, null);
+  const before = { ...session.calls }; routing.close(); t.mock.timers.tick(10_000); await flush();
+  assert.deepEqual(session.calls, before, "closed routing restarted a helper");
+  assert.equal(session.subscribers[0]!.stdout.writableEnded, true, "closed routing left its subscription running");
 });

@@ -1,20 +1,24 @@
 import { watch } from "node:fs";
 import { readFile } from "node:fs/promises";
 
-// Bundles Core with its dependencies into one ESM file that Node, and the
-// app's utilityProcess, run.
+// Bundles Core and its audio worker for Node and the app's utilityProcess.
 export const coreBundle = "build/core.mjs";
 
 // Unminified, so the installed app's log has readable stack traces.
 // A release build passes the identity of the dist it serves, so browsers loading
 // that dist see a matching build. Development builds carry none, like Vite's dev
-// server. The bundle is rewritten only when it changed, so `node --watch`
-// restarts Core only then.
+// server. Rewrite Core when either bundle changes so `node --watch` also
+// replaces the running audio worker after worker-only edits.
 export async function buildCore(identity?: string) {
-  const result = await Bun.build({ entrypoints: ["src/main.ts"], target: "node", format: "esm", ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
-  if (!result.success) throw new AggregateError(result.logs, "Core build failed");
-  const bundle = await result.outputs[0]!.text();
-  if (bundle !== await readFile(coreBundle, "utf8").catch(() => null)) await Bun.write(coreBundle, bundle);
+  let workerChanged = false;
+  for (const [entry, output] of [["src/server/audio-worker.ts", "build/audio-worker.mjs"], ["src/main.ts", coreBundle]] as const) {
+    const result = await Bun.build({ entrypoints: [entry], target: "node", format: "esm", ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
+    if (!result.success) throw new AggregateError(result.logs, `${entry} build failed`);
+    const bundle = await result.outputs[0]!.text();
+    const changed = bundle !== await readFile(output, "utf8").catch(() => null);
+    if (changed || output === coreBundle && workerChanged) await Bun.write(output, bundle);
+    if (output !== coreBundle) workerChanged = changed;
+  }
 }
 
 // Electron's main process (ESM) and the window's sandboxed preload (CommonJS).

@@ -14,6 +14,7 @@ import { compressorFilter, type CompressorSettings } from "../shared/compressor"
 export function createMpv(report: (state: PlayerState) => void) {
   const ipc = process.platform === "win32" ? `\\\\.\\pipe\\couch-mpv-${process.pid}` : join(tmpdir(), `couch-mpv-${process.pid}.sock`);
   let child: ChildProcess | null = null;
+  let generation = 0;
   let socket: Socket | null = null;
   let volume = 100;
   let compressor: CompressorSettings | undefined;
@@ -31,6 +32,7 @@ export function createMpv(report: (state: PlayerState) => void) {
   const status = () => compressorRejected ? "error" : !loaded || buffering ? "loading" : paused ? "paused" : "playing";
   const command = (...args: unknown[]) => socket?.write(`${JSON.stringify({ command: args })}\n`);
   const quit = () => {
+    generation++;
     const current = child;
     child = null; socket?.destroy(); socket = null;
     current?.kill();
@@ -73,21 +75,23 @@ export function createMpv(report: (state: PlayerState) => void) {
       switch (message.type) {
         case "load": {
           quit();
+          const attempt = generation;
           liveInput = !!message.liveSourceId;
           compressor = liveInput ? undefined : message.compressor;
           compressorRejected = false;
           loaded = false; paused = !!message.paused; buffering = false;
-          publish({ playbackId: message.playbackId, status: "loading", position: 0, duration: null, seekable: false, error: null, speed: 1 });
+          const speed = message.preferences?.speed ?? 1;
+          publish({ playbackId: message.playbackId, status: "loading", position: message.startPosition ?? 0, duration: null, seekable: false, error: null, speed });
           const { playbackId } = message;
           void helper("mpv").then(path => {
-            if (state.playbackId !== playbackId) return;
-            const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-config", "--no-terminal", "--no-input-default-bindings", "--force-window=immediate", "--fullscreen", "--keep-open=no", "--title=Couch", `--volume=${volume}`,
+            if (generation !== attempt || state.playbackId !== playbackId) return;
+            const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-config", "--no-terminal", "--no-input-default-bindings", ...message.output?.picture === false ? ["--vid=no", "--force-window=no"] : ["--force-window=immediate", "--fullscreen"], ...message.output?.sound === false ? ["--aid=no"] : [], "--keep-open=no", "--title=Couch", `--volume=${volume}`, `--speed=${speed}`,
               ...audioFilter() ? [`--af=${audioFilter()}`] : [], ...(message.paused ? ["--pause"] : []), ...(message.startPosition ? [`--start=${message.startPosition}`] : []), "--", message.source], { stdio: "ignore" });
             child = process;
             process.once("error", error => { if (child === process) publish({ status: "error", error: `mpv didn't start: ${error.message}` }); });
             process.once("exit", () => { if (child === process) { child = null; publish({ status: "error", error: "The mpv window was closed." }); } });
             attach(process, playbackId);
-          }, (error: Error) => { if (state.playbackId === playbackId) publish({ status: "error", error: error.message }); });
+          }, (error: Error) => { if (generation === attempt && state.playbackId === playbackId) publish({ status: "error", error: error.message }); });
           break;
         }
         case "pause": command("set_property", "pause", message.paused); break;

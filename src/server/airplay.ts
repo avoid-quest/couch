@@ -1,3 +1,5 @@
+import { serverNowUs } from "@sonn-audio/node-sendspin";
+import type { CaptureAudioPacket } from "./capture-audio";
 import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
@@ -9,8 +11,8 @@ import { createAudioIngress, createFramer, payloadType, type RtpPacket } from ".
 export type AirPlaySessions = {
   /** An admitted sender's sound has started: publish it as a source. */
   started: (id: string, sender: string) => void;
-  /** Continuous 44.1 kHz stereo S16BE on Core's clock, silence included. */
-  audio: (id: string, pcm: Buffer) => void;
+  /** RTP jitter-buffer output, timestamped on Core's clock; not the remote ADC clock. */
+  audio: (id: string, packet: CaptureAudioPacket) => void;
   ended: (id: string) => void;
 };
 
@@ -102,10 +104,19 @@ export function createAirPlay(options: {
   };
   const begin = () => {
     const id = crypto.randomUUID(), ingress = createAudioIngress();
+    let position = 0, sequence = 0, originUs: number | undefined;
     const current = session = { id, sender: sender || "AirPlay device", ingress, media: Date.now(), timer: setInterval(() => {
       const pcm = ingress.tick();
       if (session !== current) return;
-      if (pcm.length) options.sessions.audio(id, pcm);
+      if (pcm.length) {
+        originUs ??= serverNowUs() - pcm.length / 4 / 44_100 * 1e6;
+        for (let at = 0; at < pcm.length; at += 4096 * 4) {
+          const part = pcm.subarray(at, at + 4096 * 4), samples = new Float32Array(part.length / 2);
+          for (let i = 0; i < samples.length; i++) samples[i] = part.readInt16BE(i * 2) / 32768;
+          options.sessions.audio(id, { generation: id, sequence: sequence++, samplePosition: position, capturedAtUs: Math.round(originUs + position / 44_100 * 1e6), sampleRate: 44_100, channels: 2, pcm: samples });
+          position += samples.length / 2;
+        }
+      }
       // A sender that went quiet without UxPlay noticing has left.
       if (Date.now() - current.media > quietLimit) end();
     }, 20) };

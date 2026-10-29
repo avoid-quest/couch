@@ -57,7 +57,7 @@ bun build tests/youtube-playback.integration.ts --target=node --outfile=build/yo
 COUCH_TEST_YT_DLP=/absolute/path/to/yt-dlp node --test build/youtube-playback.integration.mjs
 ```
 
-Core stores protected loopback media for Synced playback. A media-only loopback
+Core prepares protected loopback media for relaxed scheduled playback through the common source-preparation and audio-worker path. A media-only loopback
 listener keeps native decoding independent of the UI listener’s bind address and
 TLS configuration; it closes with Core. FFmpeg also uses the
 restricted proxy and a media format allowlist; its only local exception is the

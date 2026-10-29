@@ -198,15 +198,17 @@ playlists go through Core and segments stay direct when the Device may read
 them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
-Live device inputs are captured in the publishing window and exist only while
-that capture is active. The authenticated Device session owns each publication.
+Live device publications belong to the authenticated Device session and end
+with its sharing owner. Display and audio capture run in the publishing window;
+inputs exist only while that capture is active.
 Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
 element. Core grants signaling only between the exact publishing and receiving
 connections. ICE configuration, including optional authenticated TURN, is returned
 only after pairing and never appears in public discovery.
-Every receiver of a live input plays it Direct, each with its own peer, unless the
-Playback is In sync ([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).
-Only while a Playback plays the source In sync, or to a receiver that couldn't connect
+Captured video and audio without timestamped PCM retain Direct WebRTC peers
+unless their Playback is In sync
+([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).
+Only while such a Playback plays the source In sync, or to a receiver that couldn't connect
 directly, does Core ask the publisher (`livePeers.upload`) for one MediaRecorder upload
 over a separate WebSocket using a publication-scoped upload token, and convert it into
 rolling HLS with FFmpeg (`src/server/live-stream.ts`); it stops both once nothing plays
@@ -227,14 +229,15 @@ On Linux, an admin can also turn on an AirPlay receiver ([Receive AirPlay](airpl
 Core runs the pinned UxPlay it ships as a separate process, only while that switch and
 Share on network are on, and reads the decoded sound of an admitted sender from a private
 pipe. Core owns that publication (`airplay`, never a Device): every receiver plays it
-through the same buffered HLS, and In sync, as a capture's fallback. It ends when the
+through relaxed scheduled PCM after rate normalization, without audio-only HLS. It ends when the
 sender leaves, and an admitted sender counts as playing for unattended updates.
 
+Core chooses Sendspin scheduled sound for Live audio, related relaxed outputs
+across Devices, and timestamped Audio input and AirPlay even with one listener. Its shared implementation lives in `scheduled-audio.ts`,
+with read-ahead URL decoding and capture-timestamped sending as separate sender policies.
 When a Playback has outputs on several Devices, its sound is Synced
-(`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
-`/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
-BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
-Sendspin key is their ID. The newest tab of every Device whose sound is in the mix
+(`src/server/sendspin.ts`). Core exposes `/sendspin` with unmodified Node SDK sessions, behind Couch token
+authorization. It binds the SDK's `client/init` (or a Node client's plaintext `client/hello`) to the token's stable Device ID. The newest tab of every Device whose sound is in the mix
 plays it with the official player (`@sendspin/sendspin-js`,
 `src/client/session/sendspin.ts`), and a browser that needs a gesture shows "Tap to
 hear". One FFmpeg per Playback reads the audio-only rendition (YouTube's separate
@@ -244,6 +247,13 @@ only and a 10 s read timeout, decodes once and encodes once per wire format: Opu
 speaker on a wire gets the same chunk with the same timestamp; each applies its Device's
 volume and its own delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
 the Playback is; when the outputs are back on one Device, it plays directly again.
+
+Timestamped audio enters the publication-scoped upload with the local HTTP
+Origin, owner token, upload key and generation checked by Core. Bounded
+queues, sequence/sample validation and source
+format conversion preserve the source mapping. Both Live and relaxed audio-only
+capture use Sendspin without MediaRecorder/AAC/HLS. FFmpeg supplies PCM/Opus;
+presentation timestamps retain measured capture-block times.
 
 Every Device showing the picture of a synced Playback fetches the video itself,
 resolved for its own engine and origin, and plays it muted. It connects to Sendspin
@@ -256,13 +266,23 @@ picture that joins the stream anywhere lines up with the sound. A screen's repor
 adds its picture and subtitle tracks to the Playback's only when it has a video
 track: a screen still loading, or a tab that just reconnected, has none yet.
 
-Captured inputs In sync use that same sound and picture clock. Encoding and the HLS and
+Captured video inputs In sync use that same sound and picture clock. Encoding and the HLS and
 Sendspin buffers add capture-to-output delay so devices can schedule shared
 playback. Clock agreement does not measure physical output alignment; test the
 actual speakers and screens, and use the existing per-device timing adjustment
 where their hardware introduces extra delay. Direct capture bypasses that buffered
 pipeline; each receiver's MediaStream keeps its own audio/video synchronization, but
 Direct receivers are not aligned with each other.
+
+Live audio sources use the same Sendspin groups as other scheduled audio.
+The [capability contract](audio-video-use-cases.md) separates acquisition from
+delivery and control.
+Couch establishes an authenticated HttpOnly `/sendspin` cookie, binds the SDK's
+encrypted `client/init` to that Device, and leaves reconnect, decoding, buffering
+and correction to the unmodified SDKs. One FFmpeg process per captured source
+converts to PCM and Opus; the sender maps encoded offsets to measured capture
+blocks and uses player-declared buffers and output delays. See
+[Live audio](live-audio.md) for the adapters and correctness checks.
 
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline

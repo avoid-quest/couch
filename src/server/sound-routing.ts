@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SavedSoundProfile, SoundInventory, SoundRouteState } from "../shared/sound";
 import { ControllerError } from "./devices";
-import { environment, pulseRouting, SoundError } from "./sound-pulse";
+import { environment, hasPulseTools, pulseRouting, SoundError } from "./sound-pulse";
 
 type Options = {
   saved: () => string | null;
@@ -18,6 +18,7 @@ type Options = {
 // processes ten times a second around the clock. PipeWire-Pulse understands
 // the PulseAudio event subscription protocol.
 function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => void } {
+  if (!hasPulseTools()) { queueMicrotask(onExit); return { stop() {} }; }
   const child = spawn("/usr/bin/pactl", ["subscribe"], { env: environment(), stdio: ["ignore", "pipe", "ignore"] });
   let exited = false;
   const exit = () => { if (!exited) { exited = true; onExit(); } };
