@@ -89,7 +89,7 @@ test("one continuous upload becomes bounded HLS with real audio and video before
   assert.equal(segment.status, 200);
   assert.equal(segment.headers.get("cache-control"), "no-store");
   const bytes = Buffer.from(await segment.arrayBuffer());
-  assert.equal(decodedFrames(bytes), 10, "Lower capture rates must not be raised to the 30 fps maximum");
+  assert.equal(decodedFrames(bytes), 10, "Lower capture rates must not be raised");
   const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes });
   assert.equal(decoded.status, 0, String(decoded.stderr));
   for (const rendition of ["audio", "video"] as const) {
@@ -130,17 +130,19 @@ test("audio-only input uses the same HLS path without a video track", { skip: !h
   assert.equal((await f.streams.response("audio", "stream.m3u8", "video")).status, 404);
 });
 
-test("misleading WebM frame-rate metadata cannot multiply captured frames", { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
+for (const rate of [10, 30, 60, 120]) test(`misleading WebM metadata preserves ${rate} captured frames per second`, { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
   const f = await fixture(t);
-  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", "30", "-c:a", "libopus", "-f", "webm", "pipe:1"]);
-  // A MediaRecorder WebM can advertise 1000 fps while delivering 30 timestamped
+  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", `testsrc2=size=160x90:rate=${rate}`, "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", String(rate), "-c:a", "libopus", "-f", "webm", "pipe:1"]);
+  // A MediaRecorder WebM can advertise 1000 fps while delivering fewer timestamped
   // frames per second. Change only the Matroska DefaultDuration element; every
   // packet and its audio/video timestamps remain those of the real recording.
-  const duration = recording.indexOf(Buffer.from("23e38384", "hex"));
+  const duration = recording.indexOf(Buffer.from("23e383", "hex"));
   assert.ok(duration > 0);
-  assert.equal(recording.readUInt32BE(duration + 4), 33_333_333);
-  recording.writeUInt32BE(1_000_000, duration + 4);
-  assert.equal(decodedFrames(recording), 120);
+  const size = recording[duration + 3]! & 0x7f;
+  assert.ok(size === 3 || size === 4);
+  assert.equal(recording.readUIntBE(duration + 4, size), Math.floor(1_000_000_000 / rate));
+  recording.writeUIntBE(1_000_000, duration + 4, size);
+  assert.equal(decodedFrames(recording), rate * 4);
   await f.streams.start("misleading-fps", { audio: true, video: true });
   const uploader = await f.upload("misleading-fps");
   for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
@@ -150,7 +152,7 @@ test("misleading WebM frame-rate metadata cannot multiply captured frames", { sk
   const seconds = Number(/#EXTINF:([\d.]+)/.exec(playlist)?.[1]);
   const segment = Buffer.from(await (await f.streams.response("misleading-fps", name)).arrayBuffer());
   const frames = decodedFrames(segment);
-  assert.ok(frames >= 29 && frames <= Math.ceil(seconds * 30) + 1, `${frames} encoded frames in a ${seconds}s HLS segment exceeds the capture rate`);
+  assert.ok(Math.abs(frames - seconds * rate) <= 1, `${frames} encoded frames in a ${seconds}s HLS segment must retain ${rate} fps without duplication`);
   const timing = spawnSync(ffmpeg, ["-hide_banner", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-vf", "showinfo", "-af", "ashowinfo", "-fps_mode", "passthrough", "-f", "null", "-"], { input: segment });
   assert.equal(timing.status, 0, String(timing.stderr));
   const output = String(timing.stderr);
@@ -158,8 +160,8 @@ test("misleading WebM frame-rate metadata cannot multiply captured frames", { sk
   const audioPts = [...output.matchAll(/Parsed_ashowinfo[^\n]+n:\d+\s+pts:\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
   assert.ok(videoPts.length > 1 && audioPts.length > 1, "Both encoded tracks must retain timestamps");
   assert.ok(Math.abs(videoPts[0]! - audioPts[0]!) < 0.05, "Picture and sound must start within 50 ms");
-  assert.ok(Math.abs(videoPts.at(-1)! - audioPts.at(-1)!) < 0.05, "Picture and sound must finish within 50 ms");
-  assert.ok(Math.abs(videoPts.at(-1)! - videoPts[0]! - (seconds - 1 / 30)) < 0.02, "The frame limit must preserve the one-second media timeline");
+  assert.ok(Math.abs(videoPts.at(-1)! - audioPts.at(-1)!) < 1 / rate + 0.025, "Picture and sound must finish within a video frame plus one AAC frame");
+  assert.ok(Math.abs(videoPts.at(-1)! - videoPts[0]! - (seconds - 1 / rate)) < 0.02, "The frame limit must preserve the one-second media timeline");
   t.diagnostic(`${frames} frames/${seconds}s; video PTS ${videoPts[0]}–${videoPts.at(-1)}, audio PTS ${audioPts[0]}–${audioPts.at(-1)}`);
 });
 

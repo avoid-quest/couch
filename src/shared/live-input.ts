@@ -8,8 +8,10 @@ export type LiveMetadata = { title?: string; description?: string };
 export type LiveSource = { id: string; deviceId: string; name: string; kind: CaptureKind | "airplay"; audio: boolean; video: boolean; intent?: "relaxed" | "live"; audioDelivery?: "pcm"; startedAt?: number; metadata?: LiveMetadata };
 export const liveTitle = (source: LiveSource) => source.metadata?.title || source.name;
 export type LiveVideoQuality = "720p" | "1080p" | "original";
+export type LiveVideoFrameRate = 30 | 60 | 120;
+export const defaultLiveFrameRate: LiveVideoFrameRate = 60;
 // surface: the browser picker's first offer (a screen or a window).
-export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; nativeChannelMap?: import("./capture").NativeChannelMap; videoQuality?: LiveVideoQuality; includeAudio?: boolean; surface?: "monitor" | "window"; intent?: "relaxed" | "live"; metadata?: LiveMetadata };
+export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; nativeChannelMap?: import("./capture").NativeChannelMap; videoQuality?: LiveVideoQuality; videoFrameRate?: LiveVideoFrameRate; includeAudio?: boolean; surface?: "monitor" | "window"; intent?: "relaxed" | "live"; metadata?: LiveMetadata };
 
 export type LivePeer = { peerId: string; deviceId: string; picture: boolean; sound: boolean };
 export type LiveSignal = { description?: { type: "offer" | "answer"; sdp: string }; candidate?: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null } | null };

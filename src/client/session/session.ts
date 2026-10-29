@@ -15,7 +15,7 @@ import { setCoreTime } from "../core-clock";
 import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
-import type { LiveSelection, LiveVideoQuality } from "../../shared/live-input";
+import type { LiveSelection, LiveVideoFrameRate, LiveVideoQuality } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
@@ -391,6 +391,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const liveSharing = useMemo(() => ({
     current: () => live.current?.sharing() ?? null,
     setQuality: (quality: LiveVideoQuality) => live.current?.setQuality(quality) ?? Promise.resolve(),
+    setFrameRate: (frameRate: LiveVideoFrameRate) => live.current?.setFrameRate(frameRate) ?? Promise.resolve(),
     setMuted: (muted: boolean) => live.current?.setMuted(muted),
     setCaptureInput: (action: Parameters<ReturnType<typeof createLiveSession>["setCaptureInput"]>[0]) => live.current?.setCaptureInput(action) ?? Promise.resolve(),
     routes: () => live.current?.routes() ?? Promise.resolve({}),

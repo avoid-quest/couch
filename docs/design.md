@@ -584,7 +584,9 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
   status.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.
 - [Share](design/share.md): sharing this device's screen or sound, the
-  capsule while it runs.
+  capsule while it runs. Picture capture accepts independent resolution and
+  30/60/120 FPS targets (60 by default); see [video measurements](video-performance.md)
+  for achieved rates and the limits of those targets.
 - [TV](design/tv.md): what the TV adds for its remote.
 - [Remote](design/remote.md): the Remote section and Type on TV.
 - [Settings](design/settings.md): its pages and section nav. Network sharing

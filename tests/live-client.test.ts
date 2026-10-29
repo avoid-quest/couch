@@ -69,7 +69,7 @@ const check = (source: string, couchApp = "undefined") => {
       getVideoTracks() { return this.tracks.filter(track => track.kind === "video"); }
       addTrack(track) { this.tracks.push(track); }
     };
-    const track = kind => ({ kind, stopped: false, stop() { this.stopped = true; }, addEventListener() {} });
+    const track = kind => ({ kind, stopped: false, async applyConstraints(value) { this.constraints = value; }, stop() { this.stopped = true; }, addEventListener() {} });
     const captureRequests = [], captures = [];
     const capture = async request => {
       captureRequests.push(request);
@@ -522,7 +522,7 @@ test("screen capture defaults to bounded video and unprocessed audio, with expli
   assert.equal(screen.video, true);
   assert.equal(captureRequests[0].video.width.max, 1920);
   assert.equal(captureRequests[0].video.height.max, 1080);
-  assert.equal(captureRequests[0].video.frameRate.max, 30);
+  assert.deepEqual(captureRequests[0].video.frameRate, { ideal: 60, max: 60 });
   assert.deepEqual(captureRequests[0].audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: false });
   await session.end();
   const picture = await session.start({ kind: "screen", videoQuality: "720p", includeAudio: false });
@@ -533,6 +533,49 @@ test("screen capture defaults to bounded video and unprocessed audio, with expli
   await session.start({ kind: "screen", videoQuality: "original" });
   assert.equal(captureRequests[2].video.width, undefined);
   assert.equal(captureRequests[2].video.height, undefined);
+`));
+
+test("screen frame rate is selectable and survives resolution changes without restarting capture", () => check(`
+  for (const frameRate of [30, 60, 120]) {
+    await session.start({ kind: "screen", videoFrameRate: frameRate });
+    assert.deepEqual(captureRequests.at(-1).video.frameRate, { ideal: frameRate, max: frameRate });
+    assert.equal(session.sharing().frameRate, frameRate);
+    await session.setQuality("720p");
+    assert.deepEqual(captures.at(-1).getVideoTracks()[0].constraints.frameRate, { ideal: frameRate, max: frameRate });
+    await session.setFrameRate(120);
+    assert.equal(session.sharing().frameRate, 120);
+    assert.equal(captures.at(-1).getVideoTracks()[0].constraints.height.max, 720);
+    assert.equal(captureRequests.length, [30, 60, 120].indexOf(frameRate) + 1, "changing rate must not open the picker again");
+    await session.end();
+  }
+`));
+
+test("picture edits serialize, recover from rejection and leave replacement captures alone", () => check(`
+  await session.start({ kind: "screen" });
+  const first = captures[0].getVideoTracks()[0];
+  const pending = Promise.withResolvers();
+  first.applyConstraints = async value => { await pending.promise; first.constraints = value; };
+  const quality = session.setQuality("720p"), rate = session.setFrameRate(120);
+  pending.resolve();
+  await Promise.all([quality, rate]);
+  assert.equal(first.constraints.height.max, 720);
+  assert.deepEqual(first.constraints.frameRate, { ideal: 120, max: 120 });
+  first.applyConstraints = async () => { throw new DOMException("constraint", "OverconstrainedError"); };
+  await assert.rejects(session.setFrameRate(60), /lower resolution or frame rate/);
+  assert.equal(session.sharing().frameRate, 120);
+  first.applyConstraints = async value => { first.constraints = value; };
+  await session.setFrameRate(30);
+  assert.equal(session.sharing().frameRate, 30);
+  const stale = session.setQuality("original");
+  await session.end();
+  await session.start({ kind: "screen" });
+  await stale;
+  assert.equal(session.sharing().quality, "1080p");
+  assert.equal(session.sharing().frameRate, 60);
+  await session.end();
+  await session.start({ kind: "system-audio" });
+  await session.setFrameRate(120);
+  assert.equal(captureRequests.at(-1).video.frameRate.max, 1);
 `));
 
 test("the desktop app is told which source to prepare and whether its sound is included", () => check(`
