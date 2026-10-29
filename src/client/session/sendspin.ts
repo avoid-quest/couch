@@ -5,7 +5,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import { declareLiveBuffer } from "./live-buffer";
+import { declareLiveBuffer, liveBufferReadings } from "./live-buffer";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID.
@@ -25,18 +25,21 @@ const dispose = (stopped: SendspinPlayer) => {
 let liveSettings: LiveAudioSettings | undefined;
 let bufferScope: string | undefined;
 let declaredBufferMs = 0;
+let latencyReadings: number[] = [];
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
-const updateBuffer = (created: SendspinPlayer) => {
+// sample: add this second's output reading; otherwise only the host floor can raise the declaration.
+const updateBuffer = (created: SendspinPlayer, sample = false) => {
   if (connected !== created || !liveSettings) return;
-  const latency = hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced ? created.syncInfo.outputLatencyMs : undefined;
-  const next = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs, latency);
+  const latency = sample && hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced ? created.syncInfo.outputLatencyMs : NaN;
+  if (Number.isFinite(latency) && latency >= 0) latencyReadings = [...latencyReadings, latency].slice(-liveBufferReadings);
+  const next = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs, latencyReadings);
   if (next === declaredBufferMs) return;
   declaredBufferMs = next;
   created.setMinBufferMs(next);
 };
 export function listen(on: boolean, watch: boolean, credentials: Credentials | null, name: string, live?: LiveAudioSettings & { sourceId?: string }) {
   const scope = live && (on || watch) ? JSON.stringify([credentials?.origin, credentials?.token, live.sourceId]) : undefined;
-  if (scope !== bufferScope) { bufferScope = scope; declaredBufferMs = live ? declareLiveBuffer(0, live.minBufferMs) : 0; }
+  if (scope !== bufferScope) { bufferScope = scope; latencyReadings = []; declaredBufferMs = live ? declareLiveBuffer(0, live.minBufferMs) : 0; }
   liveSettings = live;
   const next = JSON.stringify([credentials?.origin, credentials?.token, live?.codec, live?.sourceId]);
   if (!on && !watch || player && configuration !== next) {
@@ -65,7 +68,7 @@ export function listen(on: boolean, watch: boolean, credentials: Credentials | n
       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });
     if (player !== current) return created;
     connected = created;
-    if (live) bufferTimer = setInterval(() => updateBuffer(created), 1000);
+    if (live) bufferTimer = setInterval(() => updateBuffer(created, true), 1000);
     void created.connect().catch(() => {});
     return created;
   }).catch(reason => {

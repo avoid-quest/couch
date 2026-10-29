@@ -94,16 +94,25 @@ Its incoming requests wait in order meanwhile.
 
 **Playback buffer floor (ms)** is one Couch-wide setting, 150 ms initially, set in
 the Share dialog and the running share's panel; 0 removes the host floor. Each
-Receiver declares `ceil(max(previous declaration, host floor, output latency +
-35 ms) / 5) * 5`, capped at Core's existing 5000 ms declaration limit, through
-the SDK's public `minBufferMs`/`setMinBufferMs`. Until a reading is available it
-declares the floor, rounded up. Once per second while connected, playing and
-clock-synchronized, it reads the public `syncInfo.outputLatencyMs`. Invalid
-readings leave the previous declaration and floor intact. The SDK's reading can
-include platform estimates; it is not an acoustic measurement. A 27 ms output still
-declares 150 ms at the default floor; a 118 ms output declares 155 ms. With a zero
-floor, 27/42 ms outputs declare 65/80 ms. These are scheduling requests, not
-measured input-to-ear latency or continuity guarantees.
+Receiver declares the floor when its player starts, through the SDK's public
+`minBufferMs`/`setMinBufferMs`. Once per second while connected, playing and
+clock-synchronized, it reads the public `syncInfo.outputLatencyMs` (SDK 5.0.0
+smooths output latency only internally; this reading is raw). Its need is the
+median of its last five valid readings plus a 35 ms allowance. Once five
+readings exist, it raises only when that need exceeds its declaration by more
+than 25 ms, to the next whole 25 ms step, capped at Core's 5000 ms declaration
+limit. A single spike or a few milliseconds of drift never moves it. The SDK's
+reading can include platform estimates; it is not an acoustic measurement. At
+the default floor, outputs up to 140 ms keep 150 ms; a steady 201 ms output
+(Bluetooth, say) raises it to 250 ms after about five seconds. With a zero floor
+a 27 ms output declares 75 ms. These are scheduling requests, not measured
+input-to-ear latency or continuity guarantees.
+
+An increase is audible on **every** Receiver, not only the one that raised it:
+later audio is timestamped that much later, so each listener hears a gap of the
+increase (25 ms or more) once, then plays the same amount further behind the
+input. Coarse, rare raises trade a few milliseconds of under-buffering for fewer
+such gaps; the host floor avoids them where outputs are known to be slow.
 
 The **35 ms allowance is fixed**, not measured jitter. SDK 5.0.0's public
 `SendspinPlayer` has no arrival/queue statistics or late/dropped chunk counters.
@@ -115,8 +124,9 @@ does not access SDK internals, intercept its transport or parse console logs.
 The allowance needs rig validation, especially on weak Wi-Fi and sleeping phones;
 the host floor remains available for those conditions.
 
-Declarations never decrease during a Join, including a codec change or SDK
-reconnect. Leave/Join or a new Source starts a fresh declaration; the shared lead
+Declarations and their readings persist through a Join, including a codec change
+or SDK reconnect, and never decrease. Leave/Join or a new Source starts again
+from the floor; the shared lead
 still retains its high-water mark until sharing or the input restarts. An input
 restart resets Core's lead to the current declarations, but does not reset the
 browser's declaration: the public player does not expose input generations.

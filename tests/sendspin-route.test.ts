@@ -1,4 +1,4 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 
 const players: FixturePlayer[] = [];
 const authenticated: unknown[][] = [];
@@ -51,28 +51,42 @@ test("clock-only watch reuses the player; public buffer changes keep the connect
   expect(players.at(-1)!.options.codecs).toEqual(["opus", "pcm"]);
 });
 
-test("Live declarations use public output latency, respect the floor and retain increases across codec changes", async () => {
+// Each tick of the player's one-second sampling interval, without waiting for real seconds.
+async function sampling(run: () => Promise<void>) {
+  const interval = spyOn(globalThis, "setInterval");
+  let tick: () => void;
+  try { await run(); tick = interval.mock.calls.at(-1)![0] as () => void; } finally { interval.mockRestore(); }
+  return (ticks: number) => { for (let i = 0; i < ticks; i++) tick(); };
+}
+
+test("a Receiver declares the host floor at stream start and raises once, coarsely, from five smoothed readings", async () => {
   const settings = { codec: "pcm", minBufferMs: 150, sourceId: "concert" } as const;
-  listen(true, false, credentials, "Fixture", settings); await settle();
+  const tick = await sampling(async () => { listen(true, false, credentials, "Fixture", settings); await settle(); });
   const player = players.at(-1)!;
   expect(player.options.minBufferMs).toBe(150);
   player.syncInfo.outputLatencyMs = 118;
-  listen(true, false, credentials, "Fixture", settings); await settle();
-  expect(player.buffers.at(-1)).toBe(155);
-  player.syncInfo.outputLatencyMs = 27;
+  tick(10);
+  expect(player.buffers).toEqual([]);
+  player.syncInfo.outputLatencyMs = 201;
+  tick(2);
+  expect(player.buffers).toEqual([]);
+  tick(1);
+  expect(player.buffers).toEqual([250]);
+  tick(10);
+  expect(player.buffers).toEqual([250]);
   listen(true, false, credentials, "Fixture", { ...settings, minBufferMs: 0 }); await settle();
-  expect(player.buffers.at(-1)).toBe(155);
+  expect(player.buffers).toEqual([250]);
   listen(true, false, credentials, "Fixture", { ...settings, codec: "opus", minBufferMs: 0 }); await settle();
-  expect(players.at(-1)!.options.minBufferMs).toBe(155);
+  expect(players.at(-1)!.options.minBufferMs).toBe(250);
 });
 
-test("a new Live source or a new Join gets a fresh declaration", async () => {
+test("a new Live source or a new Join starts again from the host floor", async () => {
   const settings = { codec: "pcm", minBufferMs: 150, sourceId: "first" } as const;
-  listen(true, false, credentials, "Fixture", settings); await settle();
+  const tick = await sampling(async () => { listen(true, false, credentials, "Fixture", settings); await settle(); });
   const first = players.at(-1)!;
   first.syncInfo.outputLatencyMs = 201;
-  listen(true, false, credentials, "Fixture", settings); await settle();
-  expect(first.buffers.at(-1)).toBe(240);
+  tick(5);
+  expect(first.buffers).toEqual([250]);
   listen(true, false, credentials, "Fixture", { ...settings, sourceId: "second" }); await settle();
   expect(first.disconnected).toBe(true);
   expect(players.at(-1)!.options.minBufferMs).toBe(150);
@@ -81,20 +95,20 @@ test("a new Live source or a new Join gets a fresh declaration", async () => {
   expect(players.at(-1)!.options.minBufferMs).toBe(150);
 });
 
-test("Live output changes are sampled while playing and sampling stops on Leave", async () => {
-  listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150, sourceId: "concert" }); await settle();
+test("output readings count only while playing in sync, and sampling stops on Leave", async () => {
+  const tick = await sampling(async () => { listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150, sourceId: "concert" }); await settle(); });
   const player = players.at(-1)!;
   player.syncInfo.outputLatencyMs = 201;
   player.timeSyncInfo.synced = false;
-  await new Promise(resolve => setTimeout(resolve, 1050));
+  tick(10);
   expect(player.buffers).toEqual([]);
   player.timeSyncInfo.synced = true;
-  await new Promise(resolve => setTimeout(resolve, 1050));
-  expect(player.buffers).toEqual([240]);
+  tick(5);
+  expect(player.buffers).toEqual([250]);
   listen(false, false, credentials, "Fixture"); await settle();
   player.syncInfo.outputLatencyMs = 450;
-  await new Promise(resolve => setTimeout(resolve, 1050));
-  expect(player.buffers).toEqual([240]);
+  tick(10);
+  expect(player.buffers).toEqual([250]);
 });
 
 test("a failed audio bootstrap is visible and its retry creates a fresh player", async () => {

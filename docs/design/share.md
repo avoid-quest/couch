@@ -174,7 +174,8 @@ Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer floor
 (ms)** starts at 150 ms; 0 removes the host floor. A larger floor applies at once;
 restart sharing to reduce the shared lead. Listeners keep their largest
-declaration during a Join. One muted line shows **Shared lead: 155 ms · set by
+declaration during a Join and raise it only in 25 ms steps, since each raise
+briefly gaps every listener. One muted line shows **Shared lead: 200 ms · set by
 Phone**, from Core's actual timeline including static delay. It retains the
 Receiver's name after Leave, or says **a previous listener** if that Device is
 gone. This is a scheduling lead, not an input-to-ear latency estimate. There are
