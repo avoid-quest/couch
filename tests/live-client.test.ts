@@ -571,6 +571,24 @@ test("choosing an audio input releases its permission probe and captures the sel
   await assert.rejects(session.audioInputs(), /Stop sharing/);
 `));
 
+test("native channel choices reach Main and a restart updates the reported capture format", () => check(`
+  const inputs = await session.audioInputs(true);
+  assert.equal(inputs.find(input => input.deviceId === "native:umc").nativeChannels, 4);
+  await session.start({ kind: "microphone", intent: "live", audioDeviceId: "native:umc", nativeChannelMap: [1] });
+  assert.deepEqual(liveActions.find(action => action.op === "prepare").channelMap, [1]);
+  assert.equal(session.sharing().captureFormat.channels, 1);
+  await session.setCaptureInput({ op: "channels", channelMap: [2, 3] });
+  assert.equal(liveActions.at(-1).op, "channels");
+  assert.deepEqual(liveActions.at(-1).channelMap, [2, 3]);
+  assert.equal(session.sharing().captureFormat.channels, 2);
+  assert.deepEqual(session.sharing().captureFormat.native.channelMap, [2, 3]);
+  assert.equal(captureRequests.length, 1, "only input discovery uses browser capture");
+`, `{
+  ...${desktop},
+  nativeAudioInputs: async () => [{ uid: "umc", name: "UMC", channels: 4 }],
+  liveAudio: async action => { liveActions.push(action); if (action.op === "prepare" || action.op === "channels") return { sampleRate: 48000, channels: action.channelMap.length, native: { channelMap: action.channelMap, inputChannels: 4, requestedFrames: 128, reportedFrames: 128 } }; },
+}`));
+
 test("a refused or closed capture prompt says what happened in Couch's words", () => check(`
   navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException("Permission denied", "NotAllowedError"); };
   await assert.rejects(session.start({ kind: "screen" }), /Screen capture wasn't allowed\\. Choose a screen or window/);
@@ -595,7 +613,7 @@ test("choosing an audio input translates permission errors and releases desktop 
 
 test("native inputs stay listed when the browser's microphone probe fails", () => check(`
   navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
-  assert.deepEqual(await session.audioInputs(true), [{ deviceId: "native:umc", label: "UMC · Native" }]);
+  assert.deepEqual(await session.audioInputs(true), [{ deviceId: "native:umc", label: "UMC · Native", nativeChannels: 4 }]);
   assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
   await assert.rejects(session.audioInputs(), /Audio input access wasn't allowed/, "without native inputs the browser's refusal stands");
 `, desktop.replace("{", "{ async nativeAudioInputs() { return [{ uid: 'umc', name: 'UMC', channels: 4, nominalRate: 48000, ownerHalBufferFrames: 512 }]; },")));

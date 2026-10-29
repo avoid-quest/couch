@@ -7,8 +7,16 @@ local origin, owner token, publication, key and upload generation. The helper
 receives no credentials and performs no networking. Cancel, navigation, renderer
 loss, Close and quit stop the owned producer; a replacement waits for retirement.
 
-PortAudio's CoreAudio backend opens a real stereo input selected by its UID and
-exact name. Ambiguous names or a mismatching opened UID fail. Automatic retains
+PortAudio's CoreAudio backend opens an input selected by its UID and exact name.
+Inputs with more than two channels can capture an adjacent stereo pair or one
+channel as mono; other devices retain their existing stereo behavior. Main and
+the helper validate the selection against the device. `PaMacCore_SetupStreamInfo`
+then `PaMacCore_SetupChannelMap` maps only the chosen channels, before
+`Pa_OpenStream`; the callback receives one or two channels, not the whole device.
+The `ready` event reports the zero-based `channelMap`, verified by Main before
+upload. CLI `--channels 3,4` selects pair 3/4; `--channels 2` selects channel 2
+as mono; omission keeps 1/2. The map storage lives until stream closure.
+Ambiguous names or a mismatching opened UID fail. Automatic retains
 the current 44.1/48 kHz device rate. An explicit rate request checks supported
 rates/writability and waits for notification/readback; it may affect other apps
 using the device. No system default device changes. Callback requests of
@@ -16,7 +24,7 @@ using the device. No system default device changes. Callback requests of
 buffer readback are distinct facts. Share shows requested and reported sizes;
 neither is presented as the raw hardware callback period.
 
-The callback copies stereo float32 and PortAudio's ADC-time estimate into 256
+The callback copies mono or stereo float32 and PortAudio's ADC-time estimate into 256
 preallocated SPSC slots (about 0.7 s at 128 frames), and stdout's socket buffer
 holds about another 2.6 s, so a briefly busy Mac or desktop window delays audio
 instead of ending the share. It performs no allocation, I/O, lock or wait. Overflow,
@@ -30,10 +38,10 @@ PCM header plus samples; stderr carries bounded JSON status. stdin accepts
 and sample position, and maps the helper clock to Core using the minimum of five
 bracketed clock exchanges. Each replacement upload starts a fresh generation at
 sample zero. Explicit mute writes zero samples without changing the clock.
-Core streams Live itself as timestamped 128-frame PCM or 2.5 ms Opus.
-Browser Workers and AudioWorklets follow the shared, measured lead; a slow
-listener keeps playing behind. Sendspin serves relaxed Audio input, AirPlay and
-In sync. See [Live audio](../../docs/live-audio.md) for timing and measured limits.
+Core converts either input format to stereo PCM16 and 5 ms/160 kbps Opus for
+the Sendspin receivers. Changing channels or capture buffer retires the old
+helper and begins a new generation while retaining input mute. See
+[Live audio](../../docs/live-audio.md) for timing and measured limits.
 
 Other desktop inputs use the retained hidden browser capture producer:
 `src/client/capture-audio.html` → `session/native-audio.ts`. Its preload exposes
@@ -63,11 +71,12 @@ The implementation follows [PortAudio's CoreAudio API](https://www.portaudio.com
 [Apple's device properties](https://developer.apple.com/documentation/coreaudio/kaudiodevicepropertybufferframesize)
 and [t3code's target-resource staging](https://github.com/pingdotgg/t3code/blob/main/scripts/build-desktop-artifact.ts).
 
-C queue tests cover exact samples/timestamps, wrap, bounded overflow, driver xruns
-and invalid input. Node integrations cover real Core ingest/Hub authorization,
+C queue tests cover mono/stereo samples and frame positions, wrap, bounded
+overflow, driver xruns and invalid input. Node integrations cover real Core ingest/Hub authorization,
 Origin, revoked publications, split/coalesced pipe reads, native clock mapping,
-ordered generations, mute and cancellation. Authority tests cover permission
-before spawn and exact hidden-frame grants. These fixtures do not prove device
+ordered generations, mono ingest, channel/buffer restarts, map mismatch, mute and
+cancellation. Authority tests reject unavailable/malformed maps before permission
+or restart and cover exact hidden-frame grants. These fixtures do not prove device
 capture, microphone permission attribution in the signed package, Intel Ventura
 runtime, 44.1 kHz hardware changes or physical browser-output fidelity. Historical
 native-audience experiments remain recovery evidence, not current support claims.

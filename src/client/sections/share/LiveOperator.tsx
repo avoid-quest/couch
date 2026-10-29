@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { liveAudioSettingsQuery } from "@/api/settings";
-import { useNativeInputBufferPreference } from "@/audio-settings";
+import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { LiveSharing } from "@/session/live";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { nativeInputBufferFrames, nativeInputBufferOptions, type LiveAudioSettings, type NativeInputBufferPreference } from "../../../shared/audio-settings";
+import { nativeInputBufferFrames, nativeInputBufferOptions, nativeInputChannelMap, nativeInputChannelOptions, type LiveAudioSettings, type NativeInputBufferPreference } from "../../../shared/audio-settings";
 import { viewerLine, type Viewer } from "./share";
 
 export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
@@ -84,28 +84,51 @@ export function PlaybackBufferInput({ id, live, className, disabled }: { id: str
   </div>;
 }
 
+type CaptureSelectProps = Pick<ComponentProps<typeof Select>, "value" | "disabled" | "open" | "onOpenChange" | "onValueChange"> & { id: string; restarting?: boolean };
+
+export function CaptureBufferSelect({ id, restarting, ...props }: CaptureSelectProps) {
+  return <Select {...props}>
+    <SelectTrigger id={id} aria-disabled={restarting || undefined} className="ml-auto w-44 max-w-full aria-disabled:opacity-50"><SelectValue /></SelectTrigger>
+    <SelectContent data-tv-local-only>{nativeInputBufferOptions.map(value => <SelectItem key={value} value={value}>{value} frames</SelectItem>)}</SelectContent>
+  </Select>;
+}
+
+export function CaptureChannelsSelect({ id, channels, restarting, ...props }: CaptureSelectProps & { channels: number }) {
+  return <Select {...props}>
+    <SelectTrigger id={id} aria-disabled={restarting || undefined} className="ml-auto w-44 max-w-full aria-disabled:opacity-50"><SelectValue /></SelectTrigger>
+    <SelectContent data-tv-local-only>{nativeInputChannelOptions(channels).map(value => <SelectItem key={value} value={value}>{value}, {value.includes("/") ? "Stereo" : "Mono"}</SelectItem>)}</SelectContent>
+  </Select>;
+}
+
 /** Public Sendspin options for the running share; playback timing/recovery stays upstream. */
 export function LiveSettings({ sharing, onCaptureChange }: { sharing: LiveSharing; onCaptureChange?: () => void }) {
   const { liveSharing, setError } = useSessionGate();
   const live = useLiveAudioSettings();
   const { settings, save } = live;
   const nativeBuffer = useNativeInputBufferPreference();
+  const nativeChannels = useNativeInputChannelPreference();
   const [restarting, setRestarting] = useState(false);
-  const [opened, setOpened] = useState<"capture" | "codec" | null>(null);
+  const [opened, setOpened] = useState<"capture" | "channels" | "codec" | null>(null);
   const native = sharing.captureFormat?.native;
   return <div className="grid gap-2 border-t pt-2">
     {native && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <label htmlFor="live-capture-buffer">Capture buffer</label>
-      <Select open={opened === "capture"} onOpenChange={open => setOpened(open && !restarting ? "capture" : null)} value={String(native.requestedFrames)} disabled={!live.connected} onValueChange={value => {
+      <CaptureBufferSelect id="live-capture-buffer" open={opened === "capture"} onOpenChange={open => setOpened(open && !restarting ? "capture" : null)} value={String(native.requestedFrames)} disabled={!live.connected} restarting={restarting} onValueChange={value => {
         if (restarting) return;
         nativeBuffer.save(value); setRestarting(true);
-        void liveSharing.setCaptureBuffer(nativeInputBufferFrames(value as NativeInputBufferPreference)).then(onCaptureChange).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
-      }}><SelectTrigger id="live-capture-buffer" aria-disabled={restarting || undefined} className="ml-auto w-44 aria-disabled:opacity-50"><SelectValue /></SelectTrigger>
-        <SelectContent data-tv-local-only>{nativeInputBufferOptions.map(value => <SelectItem key={value} value={value}>{value} frames</SelectItem>)}</SelectContent>
-      </Select>
+        void liveSharing.setCaptureInput({ op: "buffer", bufferFrames: nativeInputBufferFrames(value as NativeInputBufferPreference) }).then(onCaptureChange).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
+      }} />
+    </div>}
+    {native && (native.inputChannels ?? 0) > 2 && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <label htmlFor="live-capture-channels">Input channels</label>
+      <CaptureChannelsSelect id="live-capture-channels" open={opened === "channels"} onOpenChange={open => setOpened(open && !restarting ? "channels" : null)} channels={native.inputChannels!} value={native.channelMap?.map(channel => channel + 1).join("/") ?? "1/2"} disabled={!live.connected} restarting={restarting} onValueChange={value => {
+        if (restarting) return;
+        nativeChannels.save(value); setRestarting(true);
+        void liveSharing.setCaptureInput({ op: "channels", channelMap: nativeInputChannelMap(value) }).then(onCaptureChange).catch(reason => setError(errorText(reason))).finally(() => setRestarting(false));
+      }} />
     </div>}
     <p role="status" className="text-meta text-muted-foreground empty:hidden">{restarting ? "Restarting audio input…" : ""}</p>
-    {nativeBuffer.error && <Alert variant="destructive"><AlertDescription>{nativeBuffer.error}</AlertDescription></Alert>}
+    {(nativeBuffer.error || nativeChannels.error) && <Alert variant="destructive"><AlertDescription>{nativeBuffer.error || nativeChannels.error}</AlertDescription></Alert>}
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <label htmlFor="live-codec">Codec</label>
       <Select open={opened === "codec"} onOpenChange={open => setOpened(open && !save.isPending ? "codec" : null)} value={settings?.codec ?? ""} disabled={!live.connected || !settings} onValueChange={codec => { if (settings && !save.isPending) save.mutate({ codec: codec as LiveAudioSettings["codec"] }); }}>

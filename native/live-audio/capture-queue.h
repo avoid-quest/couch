@@ -19,7 +19,7 @@ typedef struct {
     PaUtilRingBuffer ring;
     CapturePacket slots[CAPTURE_QUEUE_SIZE];
     atomic_int error;
-    uint32_t rate, sequence, previousFrames, minFrames, maxFrames;
+    uint32_t rate, channels, sequence, previousFrames, minFrames, maxFrames;
     uint64_t position;
     double previousAdcTime;
     double observedAdcTime, observedDeltaFrames;
@@ -31,11 +31,11 @@ typedef struct {
 static void capture_le(unsigned char *to, uint64_t value, unsigned bytes) {
     for (unsigned i = 0; i < bytes; i++) to[i] = (unsigned char)(value >> (i * 8));
 }
-static int capture_queue_init(CaptureQueue *q, uint32_t rate) {
+static int capture_queue_init(CaptureQueue *q, uint32_t rate, unsigned channels) {
     memset(q, 0, sizeof(*q));
     atomic_init(&q->error, CAPTURE_OK);
-    q->rate = rate;
-    return atomic_is_lock_free(&q->error) &&
+    q->rate = rate; q->channels = channels;
+    return (channels == 1 || channels == 2) && atomic_is_lock_free(&q->error) &&
         PaUtil_InitializeRingBuffer(&q->ring, sizeof(CapturePacket), CAPTURE_QUEUE_SIZE, q->slots) == 0;
 }
 static int capture_failed(CaptureQueue *q, enum CaptureError reason) {
@@ -65,7 +65,7 @@ static int capture_callback(const void *input, void *output, unsigned long frame
     if (q->sequence && fabs(q->observedDeltaFrames) > 2) q->timestampDeviationCount++;
     if (fabs(q->observedDeltaFrames) > q->maxTimestampDeviationFrames) q->maxTimestampDeviationFrames = fabs(q->observedDeltaFrames);
     const float *pcm = input;
-    for (unsigned long i = 0; i < frames * 2; i++)
+    for (unsigned long i = 0; i < frames * q->channels; i++)
         if (!isfinite(pcm[i])) return capture_failed(q, CAPTURE_NONFINITE);
     void *first, *second;
     ring_buffer_size_t n1, n2;
@@ -74,13 +74,13 @@ static int capture_callback(const void *input, void *output, unsigned long frame
     CapturePacket *packet = first;
     unsigned char *wire = packet->wire;
     memset(wire, 0, 40);
-    capture_le(wire, 0x31414343, 4); wire[4] = 2; wire[5] = 1;
+    capture_le(wire, 0x31414343, 4); wire[4] = (unsigned char)q->channels; wire[5] = 1;
     capture_le(wire + 6, 40, 2); capture_le(wire + 8, q->rate, 4);
     capture_le(wire + 12, q->sequence, 4); capture_le(wire + 16, q->position, 8);
     capture_le(wire + 24, (uint64_t)llround(time->inputBufferAdcTime * 1e6), 8);
     capture_le(wire + 32, frames, 4);
-    memcpy(wire + 40, input, frames * 8); /* Supported targets are little endian IEEE float32. */
-    packet->bytes = 40 + (uint32_t)frames * 8;
+    memcpy(wire + 40, input, frames * q->channels * 4); /* Supported targets are little endian IEEE float32. */
+    packet->bytes = 40 + (uint32_t)frames * q->channels * 4;
     q->previousAdcTime = time->inputBufferAdcTime; q->previousFrames = (uint32_t)frames;
     q->position += frames;
     if (!q->sequence || frames < q->minFrames) q->minFrames = (uint32_t)frames;

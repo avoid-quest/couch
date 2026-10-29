@@ -147,7 +147,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
         {!sharing.source.name.endsWith(` · ${what}`) && <p className="text-meta text-muted-foreground">{what}</p>}
         <p className="text-meta text-muted-foreground">Since {since}</p>
         {/* The Capture buffer control shows the request; the device's own size appears only when it differs. */}
-        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz, {sharing.captureFormat.channels} channels{sharing.captureFormat.native && sharing.captureFormat.native.reportedFrames !== sharing.captureFormat.native.requestedFrames
+        {sharing.source.intent === "live" && sharing.captureFormat && <p className="text-meta text-muted-foreground">Capture: {sharing.captureFormat.sampleRate / 1000} kHz, {sharing.captureFormat.channels === 1 ? "Mono" : `${sharing.captureFormat.channels} channels`}{sharing.captureFormat.native && sharing.captureFormat.native.reportedFrames !== sharing.captureFormat.native.requestedFrames
           ? `, device buffer ${sharing.captureFormat.native.reportedFrames} frames` : ""}</p>}
       </div>
     </div>

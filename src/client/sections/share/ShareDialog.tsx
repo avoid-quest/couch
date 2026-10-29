@@ -13,9 +13,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { couchApp } from "@/session/native-context";
+import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
-import { LiveSettingsStatus, PlaybackBufferInput, useLiveAudioSettings } from "./LiveOperator";
+import { CaptureBufferSelect, CaptureChannelsSelect, LiveSettingsStatus, PlaybackBufferInput, useLiveAudioSettings } from "./LiveOperator";
+import { nativeInputChannelMap, nativeInputChannelPreference } from "../../../shared/audio-settings";
 import { qualityLabels, selectionOf, shareKinds, shareTargets, unavailable, type ShareKind } from "./share";
 import type { CaptureSource } from "../../../shared/capture";
 import type { LiveVideoQuality } from "../../../shared/live-input";
@@ -64,6 +66,9 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const [sourceId, setSourceId] = useState("");
   const [inputs, setInputs] = useState<import("../../../shared/capture").AudioInput[] | null>(null);
   const [audioDeviceId, setAudioDeviceId] = useState("default");
+  const nativeBuffer = useNativeInputBufferPreference(), nativeChannels = useNativeInputChannelPreference();
+  const inputChannels = kind.intent === "live" ? inputs?.find(input => input.deviceId === audioDeviceId)?.nativeChannels : undefined;
+  const channelPreference = nativeInputChannelPreference(nativeChannels.value, inputChannels ?? 2);
   useEffect(() => { setInputs(null); setAudioDeviceId(kind.intent === "live" ? "" : "default"); }, [kind.id]);
   const [targets, setTargets] = useState<string[]>([]);
   const [sound, setSound] = useState(true);
@@ -135,7 +140,8 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setPending(true); setError(null);
     try {
       starting.current = true;
-      const started = await startLive(selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, sound })).finally(() => { starting.current = false; });
+      const started = await startLive({ ...selectionOf(kind, { source, sources: sources ?? undefined, audioDeviceId, quality, sound }),
+        ...(inputChannels && inputChannels > 2 ? { nativeChannelMap: nativeInputChannelMap(channelPreference) } : {}) }).finally(() => { starting.current = false; });
       onDone();
       // Without a choice it waits in Home's Shared sources, as it always has.
       if (!chosen.length) { void navigate({ to: "/" }); return; }
@@ -187,6 +193,13 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         <span role="status" className="text-meta text-muted-foreground empty:hidden">{listing ? "Finding inputs…" : ""}</span>
       </div>
     </Row>}
+    {!!inputChannels && <Row label="Capture buffer" htmlFor="share-capture-buffer">
+      <CaptureBufferSelect id="share-capture-buffer" value={nativeBuffer.value} disabled={!available} onValueChange={nativeBuffer.save} />
+    </Row>}
+    {!!inputChannels && inputChannels > 2 && <Row label="Input channels" htmlFor="share-capture-channels">
+      <CaptureChannelsSelect id="share-capture-channels" channels={inputChannels} value={channelPreference} disabled={!available} onValueChange={nativeChannels.save} />
+    </Row>}
+    {!!inputChannels && (nativeBuffer.error || nativeChannels.error) && <Alert variant="destructive"><AlertDescription>{nativeBuffer.error || nativeChannels.error}</AlertDescription></Alert>}
     {kind.intent === "live" && <Row label="Playback buffer (ms)" htmlFor="share-live-buffer" description="More rides out Wi-Fi and phone hiccups.">
       <PlaybackBufferInput id="share-live-buffer" live={live} disabled={pending} className="ml-auto" />
     </Row>}

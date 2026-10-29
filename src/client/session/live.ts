@@ -1,4 +1,4 @@
-import type { AudioCaptureFormat, NativeBufferFrames } from "../../shared/capture";
+import type { AudioCaptureFormat, LiveAudioAction } from "../../shared/capture";
 import { readCaptureRatePreference, readNativeInputBufferPreference } from "../audio-settings";
 import { captureSampleRate, liveCaptureConstraints, nativeInputBufferFrames } from "../../shared/audio-settings";
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
@@ -301,7 +301,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
           inputs = await navigator.mediaDevices.enumerateDevices();
         } catch (error) { if (!native.length) throw error; }
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
-        return [...native.map(input => ({ deviceId: `native:${input.uid}`, label: `${input.name} · Native` })), ...inputs.filter(input => input.kind === "audioinput" && input.deviceId)];
+        return [...native.map(input => ({ deviceId: `native:${input.uid}`, label: `${input.name} · Native`, nativeChannels: input.channels })), ...inputs.filter(input => input.kind === "audioinput" && input.deviceId)];
       } finally {
         if (probe) stopTracks(probe);
         if (!closed) await couchApp?.prepareCapture?.(null).catch(() => {});
@@ -325,7 +325,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
           if (!selection.audioDeviceId) throw new Error("Choose an audio input before starting Live audio.");
           preparingNativeId = nativeAudioId;
           captureFormat = await couchApp!.liveAudio!({ op: "prepare", id: nativeAudioId, deviceId: selection.audioDeviceId, sampleRate: requestedRate,
-            ...(selection.audioDeviceId.startsWith("native:") ? { bufferFrames: nativeInputBufferFrames(readNativeInputBufferPreference()) } : {}) });
+            ...(selection.audioDeviceId.startsWith("native:") ? { bufferFrames: nativeInputBufferFrames(readNativeInputBufferPreference()), channelMap: selection.nativeChannelMap } : {}) });
           if (requestedRate !== undefined && captureFormat?.sampleRate !== requestedRate) throw new Error("The desktop app did not verify the requested capture rate. Choose Automatic or update Couch.");
         } else if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId, audio: sound });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
@@ -387,12 +387,12 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       await track.applyConstraints(pictureConstraints(quality));
       current.quality = quality;
     },
-    /** Restarts a native input with a new callback buffer; its listeners start a new session. */
-    async setCaptureBuffer(bufferFrames: NativeBufferFrames) {
+    /** Restarts a native input with new stream settings; its listeners start a new session. */
+    async setCaptureInput(action: Omit<Extract<LiveAudioAction, { op: "buffer" }>, "id"> | Omit<Extract<LiveAudioAction, { op: "channels" }>, "id">) {
       const current = publication;
       if (!current?.nativeAudioId) return;
       try {
-        const format = await couchApp!.liveAudio!({ op: "buffer", id: current.nativeAudioId, bufferFrames });
+        const format = await couchApp!.liveAudio!({ ...action, id: current.nativeAudioId });
         if (format && publication === current) current.captureFormat = format;
       } catch (error) {
         // A half-restarted input has no audio to send: end the share and say why.

@@ -31,6 +31,8 @@ Playback                     (✓ Relaxed) (Live)    local desktop Audio input
 Device                       [System default ▾]   relaxed Audio input
 Device                       [Choose an input ▾]  Live Audio input
                              Find audio inputs
+Capture buffer                   [128 frames ▾]   Native Live Audio input
+Input channels                  [1/2, Stereo ▾]   Native input with >2 channels
 Playback buffer (ms)                     [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
@@ -51,15 +53,20 @@ Picture                     [1080p, balanced ▾]   Screen and Window
   controls and System default as an input choice. Live listeners control their
   own listening; it requires an explicit input, so its selector starts empty,
   omits System default and keeps Start sharing disabled until a device is selected.
-  Live requires an actual stereo input and timestamped capture;
-  unsupported capture fails with a reason. No duplicate mono is advertised as
-  stereo. Live listeners find the
+  Live requires timestamped capture; browser inputs require actual stereo.
+  Native inputs with more than two channels also offer individual mono inputs.
+  Unsupported capture fails with a reason. Live listeners find the
   source in Home or Search, **Join**, adjust their own volume, and **Leave**;
   leaving does not stop sharing or affect another listener.
 - **Live input selection** includes devices marked Native on Mac builds with the
   capture helper. Other input IDs use an isolated hidden browser capture page.
   This is an explicit input choice; a failed native input never switches devices.
   Main requests microphone permission before opening the selected native input.
+- **Capture buffer** and **Input channels** are remembered on this desktop.
+  Native inputs with more than two channels offer stereo pairs (1/2, 3/4, …)
+  and each individual channel as Mono. The initial choice is 1/2; a saved
+  choice unavailable on a different input also shows 1/2. Inputs with two or
+  fewer channels keep their existing behavior and have no channel selector.
 - **Playback buffer (ms)**, for Live, is each listener's Sendspin buffer; more
   rides out Wi-Fi and phone hiccups. Measured delay follows it closely but is a
   separate observation ([Live audio](../live-audio.md#measured-behavior)). It is
@@ -150,9 +157,13 @@ action. Removing a listener leaves focus in the listener list; failures read in
 red and are announced. An empty list says **No listeners yet**. The capsule
 counts listeners; Live has no Where it plays link in its host panel.
 Input mute remains. Native inputs keep **Capture buffer** (128, 256, 512
-or 1024 frames), the input's callback size, which restarts the input when
-changed. **Restarting audio input…** announces the wait, then the selected size
-and delivered format update together. **Codec** offers Automatic, PCM and Opus using the SDK's public `codecs`
+or 1024 frames), the input's callback size. **Input channels** has the same
+stereo pairs and mono choices as the Share dialog on inputs with more than two
+channels. Either change restarts capture; listeners resume in a fresh audio
+generation and input mute is preserved. **Restarting audio input…** announces
+the wait, then the selected size or channels and delivered format update
+together. Mono is reported as Mono in the capture format. **Codec** offers
+Automatic, PCM and Opus using the SDK's public `codecs`
 option; a change reconnects each listener's player. **Playback buffer (ms)** is
 the SDK's `minBufferMs`, initially 150 ms. A larger buffer applies to the running
 share at once; a smaller one applies when sharing restarts, which the panel says.

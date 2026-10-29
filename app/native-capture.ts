@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
+import type { NativeChannelMap } from "../src/shared/capture";
 
 // capture-queue.h's CaptureError codes, in the words a sharer sees. The log keeps the helper's raw event.
 const captureErrors: Record<number, string> = {
@@ -14,7 +15,8 @@ const captureErrors: Record<number, string> = {
 
 export type NativeCaptureFormat = {
   sampleRate: 44100 | 48000;
-  channels: 2;
+  channels: 1 | 2;
+  channelMap: NativeChannelMap;
   requestedCallbackFrames: import("../src/shared/capture").NativeBufferFrames;
   ownerHalBufferFrames: number;
   nominalRate: number;
@@ -25,12 +27,13 @@ export type NativeCaptureFormat = {
  * The helper never receives credentials.
  */
 export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams,
-  requested: Pick<NativeCaptureFormat, "sampleRate" | "requestedCallbackFrames">,
+  requested: Pick<NativeCaptureFormat, "sampleRate" | "requestedCallbackFrames"> & { channelMap?: NativeChannelMap },
   failed: (error: Error) => void,
   observed: (event: Record<string, unknown>) => void = () => {}, signal?: AbortSignal) {
   let stopped = false, accepting = false, uploadAttempted = false, muted = false, socket: WebSocket | undefined;
   let control = "", nextNonce = 0, sequence = 0, position = 0;
   let pending: Buffer = Buffer.alloc(0);
+  const channelMap = requested.channelMap ?? [0, 1], channels = channelMap.length;
   let stopTimer: ReturnType<typeof setTimeout> | undefined, killTimer: ReturnType<typeof setTimeout> | undefined;
   const waiters = new Map<string, { resolve(value: Record<string, unknown>): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   const closed = new Promise<void>(resolve => child.once("close", () => resolve()));
@@ -88,7 +91,7 @@ export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams
         const event = JSON.parse(line) as Record<string, unknown>;
         observed(event);
         if (stopped) continue;
-        if (event.event === "end") throw new Error(event.reason === "capture" && captureErrors[Number(event.captureError)] || "The audio input stopped.");
+        if (event.event === "end") throw new Error(event.reason === "channels" ? "Those input channels are unavailable. Refresh inputs and choose an available channel or stereo pair." : event.reason === "capture" && captureErrors[Number(event.captureError)] || "The audio input stopped.");
         const key = event.event === "clock" ? `clock:${event.nonce}` : String(event.event);
         const entry = waiters.get(key);
         if (!entry) throw new Error("Unexpected native capture response.");
@@ -104,8 +107,8 @@ export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams
       if (pending.length + chunk.length > 262_144) throw new Error("The native capture reader cannot keep up.");
       pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
       while (pending.length >= 40) {
-        const frames = pending.readUInt32LE(32), bytes = 40 + frames * 8;
-        if (pending.readUInt32LE(0) !== 0x31414343 || pending[4] !== 2 || pending[5] !== 1 ||
+        const frames = pending.readUInt32LE(32), bytes = 40 + frames * channels * 4;
+        if (pending.readUInt32LE(0) !== 0x31414343 || pending[4] !== channels || pending[5] !== 1 ||
           pending.readUInt16LE(6) !== 40 || pending.readUInt32LE(8) !== requested.sampleRate ||
           frames < 1 || frames > 4096 || pending.readUInt32LE(36) !== 0) throw new Error("Invalid native PCM format.");
         if (pending.length < bytes) break;
@@ -121,11 +124,13 @@ export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams
   });
   try {
     const event = await ready;
-    if (event.sampleRate !== requested.sampleRate || event.channels !== 2 || event.format !== "f32le" ||
+    if (event.sampleRate !== requested.sampleRate || event.channels !== channels || event.format !== "f32le" ||
       event.requestedCallbackFrames !== requested.requestedCallbackFrames || event.nominalRate !== requested.sampleRate ||
       typeof event.ownerHalBufferFrames !== "number" || !Number.isInteger(event.ownerHalBufferFrames) || event.ownerHalBufferFrames < 1 ||
       typeof event.reportedInputLatencyMs !== "number" || !Number.isFinite(event.reportedInputLatencyMs) || event.reportedInputLatencyMs < 0)
       throw new Error("The native input did not prepare the requested format.");
+    if (!Array.isArray(event.channelMap) || event.channelMap.length !== channels || event.channelMap.some((channel, index) => channel !== channelMap[index]))
+      throw new Error("The native input did not select the requested channels. Update Couch and choose the input again.");
     const format = event as unknown as NativeCaptureFormat;
     const clock = async () => {
       const nonce = nextNonce++, reply = wait(`clock:${nonce}`);
