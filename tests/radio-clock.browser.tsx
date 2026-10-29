@@ -1,3 +1,4 @@
+// On an empty Vite page, import this module and call runRadioClockSubscriptionRegression().
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { useRadioClock } from "../src/client/radio-clock";

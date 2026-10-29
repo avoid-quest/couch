@@ -31,7 +31,7 @@ Playback                     (✓ Relaxed) (Live)    local desktop Audio input
 Device                       [System default ▾]   relaxed Audio input
 Device                       [Choose an input ▾]  Live Audio input
                              Find audio inputs
-Playback buffer (ms)                     [200]    Live Audio input
+Playback buffer (ms)                     [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
 Picture                     [1080p, balanced ▾]   Screen and Window
