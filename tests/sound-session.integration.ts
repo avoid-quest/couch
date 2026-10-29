@@ -127,4 +127,5 @@ test("missing pactl retries availability without spawning and recovers after ins
   assert.equal(routing.state.error, null);
   const before = { ...session.calls }; routing.close(); t.mock.timers.tick(10_000); await flush();
   assert.deepEqual(session.calls, before, "closed routing restarted a helper");
+  assert.equal(session.subscribers[0]!.stdout.writableEnded, true, "closed routing left its subscription running");
 });
