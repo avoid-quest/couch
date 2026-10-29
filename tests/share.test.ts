@@ -14,6 +14,7 @@ describe("what to share", () => {
     expect(selectionOf(kind("window"), { source: screens[0], quality: "720p", sound: false })).toEqual({ kind: "screen", sourceId: "window:1", videoQuality: "720p", videoFrameRate: 60, includeAudio: false, surface: "window" });
     expect(selectionOf(kind("screen"), { quality: "1080p", sound: true })).toEqual({ kind: "screen", videoQuality: "1080p", videoFrameRate: 60, includeAudio: true, surface: "monitor" });
     expect(selectionOf(kind("screen"), { quality: "original", frameRate: 120, sound: true })).toEqual({ kind: "screen", videoQuality: "original", videoFrameRate: 120, includeAudio: true, surface: "monitor" });
+    expect(selectionOf(kind("screen"), { quality: "1080p", frameRate: 30, sound: true })).toEqual({ kind: "screen", videoQuality: "1080p", videoFrameRate: 30, includeAudio: true, surface: "monitor" });
     expect(selectionOf(kind("microphone"), { audioDeviceId: "usb", quality: "1080p", sound: true })).toEqual({ kind: "microphone", audioDeviceId: "usb" });
     expect(selectionOf(kind("microphone"), { audioDeviceId: "default", quality: "1080p", sound: true })).toEqual({ kind: "microphone" });
   });
