@@ -254,6 +254,12 @@ another channel's ID or a legacy custom slug stays as chosen. Search uses a
 verified canonical channel reference when provided. A device removed while
 Details loads cannot repair Saved; another paired reader can reuse that metadata.
 Playlist Queue all retains each occurrence's list and position.
+RaiPlay programme Queue/Save expansion reads each season's full episode JSON
+once, independently of the 24-item browsing pages. The 500-episode limit
+applies across all seasons, with duplicate episodes counted once.
+Move up and Move down stop at the ends of For later and, in Channels & stations,
+at each store's boundary. Rendering those controls only checks the adjacent
+position; a new order is constructed when a move is chosen.
 A rail on wide screens (white ink on a
 `secondary` capsule for the current entry; a pointer only brings another
 entry's ink up; no heading; counts only when not zero) and a Select on phones

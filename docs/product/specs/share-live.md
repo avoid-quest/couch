@@ -36,14 +36,19 @@ the person sharing stays in control of what's shared and when it stops.
 
 ## Today and limits
 
-Available in the latest preview: screen, window, this computer's sound,
-microphone or audio input; picture up to 1080p30 by default. Limits: system
+In published preview.5: screen, window, this computer's sound,
+microphone or audio input; picture up to 1080p30 by default. Current main adds
+independent resolution and 30/60/120 FPS targets, with 60 as the default.
+These are requested ceilings, not measured delivery rates; see the
+[video measurements](../../video-performance.md) and
+[current audit](../../release-audit-2026-10-29.md). Limits: system
 sound needs macOS 14.2+ or Windows, not Linux; it's the whole computer's mix,
 not one app's; the sharer's upload grows with each viewer; viewers aren't
 aligned with each other. A viewer that can't connect directly plays a few
 seconds behind until sharing restarts. **In sync** aligns viewers at the cost of
-a few seconds. Adding a speaker-only viewer to a running microphone share
-currently fails (known defect).
+a few seconds. Current-main integration coverage verifies adding a speaker-only
+viewer to a running relaxed microphone share without requesting its private
+screen; physical capture and phone/browser qualification remain separate.
 
 ## Scope
 

@@ -168,11 +168,12 @@ export async function streamingCommunityWatchContext(value: string, signal?: Abo
   const name = translated(title ?? {}, "name", 200) || clean(title?.name, 200);
   if (page.component !== "Titles/Watch" || id !== Number(match[1]) || !/^[\w-]+$/.test(slug) || !name) throw changed();
   const canonical = titleUrl(id!, slug, url.origin);
-  if (!url.search) return { title: name, titleUrl: canonical };
+  // A series watch link can omit ?e=; the page still names its selected episode.
   const episode = object(page.props.episode) ? page.props.episode : undefined;
   const episodeId = integer(episode?.id);
+  if (!url.search && !episodeId) return { title: name, titleUrl: canonical };
   const season = object(episode?.season) ? integer(episode.season.number) : undefined;
-  if (episodeId !== Number(url.searchParams.get("e")) || !season) throw changed();
+  if (!episodeId || url.search && episodeId !== Number(url.searchParams.get("e")) || !season) throw changed();
   return { title: name, titleUrl: canonical, seasonUrl: `${canonical}/season-${season}`, episodeId };
 }
 

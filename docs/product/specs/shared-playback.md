@@ -28,8 +28,9 @@ want them.
 ## Requirements
 
 - Joining takes a QR scan or six digits, in the phone's browser, no install.
-- Everyone joined sees the same Up next and the same now-playing state.
-- Any joined device can play, queue, skip, pause and change volume; admin-only
+- Everyone joined to a playback sees its Up next and now-playing state.
+- Joined devices can control shared media playback; private outputs retain
+  their owner's control. Admin-only
   settings are visible but read-only to others.
 - Each device chooses for itself whether others may use its screen or speakers.
 - Several playbacks can run at once, each with its own Up next and devices.

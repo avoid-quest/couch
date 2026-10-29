@@ -2,7 +2,7 @@
 // Production UI and the actual renderer/DSP; no installed Couch or Core is started.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, release } from "node:os";
-import { extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve, sep } from "node:path";
 import { build, mergeConfig } from "vite";
 import electron from "electron";
 import config from "../vite.config";
@@ -23,10 +23,10 @@ const rate = 48000, frames = rate * 8, bytes = Buffer.alloc(44 + frames * 4);
 bytes.write("RIFF"); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write("WAVEfmt ", 8); bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(2, 22); bytes.writeUInt32LE(rate, 24); bytes.writeUInt32LE(rate * 4, 28); bytes.writeUInt16LE(4, 32); bytes.writeUInt16LE(16, 34); bytes.write("data", 36); bytes.writeUInt32LE(frames * 4, 40);
 for (let i = 0; i < frames; i++) for (let channel = 0; channel < 2; channel++) bytes.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 997 * i / rate) * (Math.floor(i / rate) % 2 ? .8 : .04) * 32767 / (channel + 1)), 44 + i * 4 + channel * 2);
 writeFileSync(join(outDir, "tone.wav"), bytes);
-const page = entry.split("/").at(-1)!;
+const page = basename(entry);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const pathname = decodeURIComponent(new URL(request.url).pathname), path = resolve(outDir, "." + (pathname === "/" ? "/" + page : pathname));
-  if (!path.startsWith(outDir + "/")) return new Response(null, { status: 404 });
+  if (!path.startsWith(outDir + sep)) return new Response(null, { status: 404 });
   const file = Bun.file(path); return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
 } });
 console.log(`Fixture: http://127.0.0.1:${server.port}`);

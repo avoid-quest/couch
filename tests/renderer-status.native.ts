@@ -33,19 +33,20 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 const read = () => JSON.parse(readFileSync(${JSON.stringify(statusPath)}, 'utf8'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-// The kernel's identity of this process, which Main must record as its own.
-const stat = readFileSync('/proc/self/stat', 'utf8');
-const kernel = { bootId: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(), processStart: Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]) };
+// Linux exposes the process identity used by TV diagnosis; other platforms omit it.
+const stat = process.platform === 'linux' ? readFileSync('/proc/self/stat', 'utf8') : null;
+const kernel = stat ? { bootId: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(), processStart: Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]) } : {};
 const evidence = { mainPid: process.pid, kernel, starting: null, ready: null, second: null, gates: {}, unmounted: null, failed: null, iframeTried: false };
 const record = () => writeFileSync(${JSON.stringify(join(directory, "native-events.json"))}, JSON.stringify(evidence, null, 2));
-// HTML whose script throws before any app mounts, with a cross-origin frame that tries to acknowledge.
-createServer((request, response) => {
-  response.setHeader('Content-Type', 'text/html');
-  if (request.url === '/child') response.end("<script>try { (window.couchApp ?? parent.couchApp).shellReady(); } catch {} fetch('/tried')</script>");
-  else if (request.url === '/tried') { evidence.iframeTried = true; response.end(); }
-  else response.end('<div id="root"></div><iframe src="http://localhost:${fixture}/child"></iframe><script>throw new Error("mount failed")</script>');
-}).listen(${fixture}, '127.0.0.1');
 app.on('browser-window-created', async (_event, window) => {
+  // Only the primary instance creates this listener; a second launch must reach Main's lock.
+  // Its broken HTML and cross-origin frame cannot acknowledge that the app mounted.
+  createServer((request, response) => {
+    response.setHeader('Content-Type', 'text/html');
+    if (request.url === '/child') response.end("<script>try { (window.couchApp ?? parent.couchApp).shellReady(); } catch {} fetch('/tried')</script>");
+    else if (request.url === '/tried') { evidence.iframeTried = true; response.end(); }
+    else response.end('<div id="root"></div><iframe src="http://localhost:${fixture}/child"></iframe><script>throw new Error("mount failed")</script>');
+  }).listen(${fixture}, '127.0.0.1');
   const until = async (state, limit = 20_000) => { const deadline = Date.now() + limit; while (read().state !== state) { if (Date.now() > deadline) return read(); await sleep(50); } return read(); };
   // Reloads Couch's page with Main's answers replaced, and reads the status once that
   // navigation settles: ready, or loaded and given time to acknowledge.
@@ -109,7 +110,8 @@ assert.equal(events.starting.state, "starting");
 for (const state of [events.starting, events.ready, events.unmounted, events.failed]) {
   assert.equal(state.run, header[2], "Every status names the run in couch.log");
   assert.equal(state.pid, events.mainPid);
-  assert.deepEqual({ bootId: state.bootId, processStart: state.processStart }, events.kernel, "Every status names this process as the kernel does");
+  assert.equal(state.bootId, events.kernel.bootId, "Every status preserves the platform's boot identity");
+  assert.equal(state.processStart, events.kernel.processStart, "Every status preserves the platform's process identity");
   assert.equal(state.pid, Number(header[3]));
   assert.equal(state.version, header[1]);
   assert.equal(state.page, "local");

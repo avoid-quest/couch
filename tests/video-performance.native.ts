@@ -1,9 +1,9 @@
 // COUCH_PERF_MEDIA=/absolute/1080p60.mp4 bun tests/video-performance.native.ts .artifacts/video [--modes=playback,controls,live] [--fps=60] [--quality=1080p] [--seconds=10] [--rounds=3] [--assert-fps=55]
 // Use a real display to qualify hardware. xvfb-run measures software playback and capture only.
-// --screen captures the test display; otherwise prefer the generated-video window. Experimental --codec=h264, --hint=motion and --bare are benchmark-only.
+// --screen captures the test display; otherwise prefer the generated-video window. Experimental --codec=h264, --hint=motion, --bitrate=8000000, --jitter=50 and --bare are benchmark-only.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, release } from "node:os";
-import { extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve, sep } from "node:path";
 import { build, mergeConfig } from "vite";
 import electron from "electron";
 import config from "../vite.config";
@@ -18,6 +18,8 @@ const quality = process.argv.find(value => value.startsWith("--quality="))?.slic
 if (!["720p", "1080p", "original"].includes(quality)) throw new Error("Unknown capture quality");
 const codec = process.argv.find(value => value.startsWith("--codec="))?.slice(8);
 const hint = process.argv.find(value => value.startsWith("--hint="))?.slice(7);
+const bitrate = argument("bitrate", 0);
+const jitter = argument("jitter", 0);
 const modes = (process.argv.find(value => value.startsWith("--modes="))?.slice(8) ?? "playback,controls,live").split(",");
 if (modes.some(mode => !["playback", "controls", "live"].includes(mode))) throw new Error("Unknown video mode");
 const media = process.env.COUCH_PERF_MEDIA;
@@ -25,14 +27,14 @@ if (!media) throw new Error("Set COUCH_PERF_MEDIA to a local video fixture");
 const mediaFile = `/benchmark${extname(media)}`;
 mkdirSync(directory, { recursive: true });
 const entry = resolve(`src/client/__video-performance-${process.pid}.html`);
-writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)});</script></body></html>`);
+writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)}, ${bitrate}, ${jitter});</script></body></html>`);
 try { await build(mergeConfig(config({ command: "build", mode: "production" }), { build: { outDir, rollupOptions: { input: entry } }, logLevel: "error" })); }
 finally { rmSync(entry); }
 copyFileSync(media, join(outDir, mediaFile));
 writeFileSync(join(outDir, "source.html"), `<!doctype html><title>Couch benchmark source</title><style>html,body{margin:0;background:black}video{width:100vw;height:100vh;object-fit:fill}</style><video src="${mediaFile}" muted autoplay loop></video>`);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const path = resolve(outDir, "." + decodeURIComponent(new URL(request.url).pathname));
-  if (!path.startsWith(outDir + "/")) return new Response(null, { status: 404 });
+  if (!path.startsWith(outDir + sep)) return new Response(null, { status: 404 });
   const file = Bun.file(path); return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
 } });
 const origin = `http://127.0.0.1:${server.port}`;
@@ -52,10 +54,10 @@ app.whenReady().then(async () => {
   const evaluate = script => window.webContents.executeJavaScript(script, true);
   const result = { revision: ${JSON.stringify(process.env.COUCH_PERF_REVISION ?? Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim())}, versions: process.versions,
     hardware: ${JSON.stringify({ cpu: cpus()[0]?.model, logicalCores: cpus().length, os: release(), platform: process.platform })},
-    display: screen.getPrimaryDisplay(), media: ${JSON.stringify(media)}, requestedFps: ${frameRate}, quality: ${JSON.stringify(quality)}, codec: ${JSON.stringify(codec)}, hint: ${JSON.stringify(hint)}, bare: ${process.argv.includes("--bare")}, seconds: ${seconds}, warmup: ${warmup}, rounds: ${rounds}, samples: [], mediaProperties: {} };
+    display: screen.getPrimaryDisplay(), media: ${JSON.stringify(media)}, requestedFps: ${frameRate}, quality: ${JSON.stringify(quality)}, codec: ${JSON.stringify(codec)}, hint: ${JSON.stringify(hint)}, bitrate: ${bitrate}, jitter: ${jitter}, bare: ${process.argv.includes("--bare")}, seconds: ${seconds}, warmup: ${warmup}, rounds: ${rounds}, samples: [], mediaProperties: {} };
   let source, code = 0;
   try {
-    await window.loadURL(${JSON.stringify(origin + "/" + entry.split("/").at(-1))});
+    await window.loadURL(${JSON.stringify(origin + "/" + basename(entry))});
     window.webContents.debugger.attach('1.3');
     window.webContents.debugger.on('message', (_event, method, params) => {
       if (method === 'Media.playerPropertiesChanged') {
@@ -75,10 +77,10 @@ app.whenReady().then(async () => {
           const sources = await desktopCapturer.getSources({ types: ${JSON.stringify(process.argv.includes("--screen") ? ["screen"] : ["window", "screen"])}, thumbnailSize: { width: 0, height: 0 } });
           const selected = sources.find(item => item.id === source.getMediaSourceId()) ?? sources.find(item => item.id.startsWith('screen:'));
           if (!selected) throw new Error('No desktop capture source');
-          result.captureSource = { id: selected.id, name: selected.name, window: selected.id === source.getMediaSourceId() };
+          result.captureSource = { id: selected.id, name: selected.name, window: selected.id === source.getMediaSourceId(), bounds: source.getBounds(), contentBounds: source.getContentBounds(), visible: source.isVisible(), minimized: source.isMinimized() };
           window.webContents.session.setDisplayMediaRequestHandler((_request, callback) => callback({ video: selected }));
         }
-        await window.loadURL(${JSON.stringify(origin + "/" + entry.split("/").at(-1))});
+        await window.loadURL(${JSON.stringify(origin + "/" + basename(entry))});
         window.focus();
         await evaluate('window.prepareVideo(' + JSON.stringify(mode) + ').then(fixture => { window.fixture = fixture; })');
         if (${process.argv.includes("--bare")}) await evaluate("(() => { const parent = document.createElement('div'); parent.style.cssText = 'position:fixed;inset:0;background:black'; document.body.append(parent); parent.append(document.querySelector('.player-video video')); document.getElementById('fixture').style.display = 'none'; })()");

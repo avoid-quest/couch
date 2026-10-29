@@ -66,7 +66,7 @@ export async function runRadioGuidesRegression(keepMounted = false) {
     assert(copy().includes('Ambient') && !copy().includes('Jazz'), 'Player Info kept the previous show after the boundary');
     const result = {passed:true,viewport:[innerWidth,innerHeight],checks:['host search','global metadata search','genre filter','station tag filter','station tags','group exclusion','current and next metadata','broadcast progress','player calm and Info','expiry','Media Session boundary','Info boundary','overflow']};
     if (!keepMounted) audit.close();
-    return {...result,audit};
+    return keepMounted ? {...result,audit} : result;
   } catch (error) {audit.close();throw error;}
 }
 

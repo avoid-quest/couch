@@ -117,8 +117,8 @@ export async function runUpdateShellRegression() {
     assert(document.activeElement?.textContent === "Try again", "A remote cannot recover after the Couch was updated");
     await audit.updateSession(gate => ({ ...gate, status: "connected" }));
     const stage = document.querySelector<HTMLElement>('[data-stage="home"]')!;
-    const before = stage.getBoundingClientRect().top;
-    const height = document.querySelector(".app-header")!.getBoundingClientRect().height;
+    const controls = document.querySelector(".app-header-controls")!.getBoundingClientRect();
+    const search = document.querySelector(".app-header-search")!.getBoundingClientRect();
     await audit.ready();
     await audit.toolsUnavailable(true);
     const link = cue()!, box = link.getBoundingClientRect();
@@ -126,7 +126,11 @@ export async function runUpdateShellRegression() {
     await audit.current();
     assert(!cue(), "An older server's background tool read is presented as a failed update");
     await audit.ready(); await audit.toolsUnavailable(false);
-    assert(Math.abs(stage.getBoundingClientRect().top - before) < 1 && document.querySelector(".app-header")!.getBoundingClientRect().height === height, "Update availability shifts Home's artwork or header");
+    // Updates occupy the measured status row below the primary controls (design/shell.md).
+    const nextControls = document.querySelector(".app-header-controls")!.getBoundingClientRect();
+    const nextSearch = document.querySelector(".app-header-search")!.getBoundingClientRect();
+    assert(nextControls.top === controls.top && nextControls.height === controls.height && nextSearch.left === search.left && nextSearch.width === search.width, "Update availability shifts navigation or search");
+    assert(stage.querySelector("[data-stage-picture]")!.getBoundingClientRect().top >= document.querySelector(".app-header")!.getBoundingClientRect().bottom - 1, "Home artwork overlaps the update status row");
     // The cue is in the header's regular keyboard/remote order.
     const available = cue()!;
     available.focus(); applyTvNavigation("right"); await wait(); applyTvNavigation("left"); await wait();
@@ -198,6 +202,6 @@ export async function runUpdateShellRegression() {
     assert(JSON.parse(localStorage.getItem(audit.key)!).helpers === "failed", "Losing admin leaves an active update spinning indefinitely");
     assert(audit.requests.filter(request => request.includes("/install")).length === installs, "An update continued restarting apps after admin was revoked");
     assert(!document.querySelector('[data-settings-page="updates"], [data-settings-page="device-updates"]'), "A browser without admin still has an unusable Updates page");
-    return "Passed: one update destination and header cue, unchanged Home geometry, single-device action, clear availability, one check for tools/apps, timed success toasts, retired batch storage, visible failures and retry, role changes.";
+    return "Passed: one update destination and header cue, stable navigation/search and artwork below the status row, single-device action, clear availability, one check for tools/apps, timed success toasts, retired batch storage, visible failures and retry, role changes.";
   } finally { audit.close(); }
 }

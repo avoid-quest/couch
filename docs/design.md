@@ -491,8 +491,9 @@ its results hold, as it finds them).
 
 Available updates show a small **Update ready** link in the header, with a count
 for several devices. It opens the viewer's single [Updates page](design/settings.md#updates),
-where device status, release notes and actions live together. Nothing adds a banner
-or pushes Home's artwork down. Successful checks and updates finish with a brief
+where device status, release notes and actions live together. The link uses the
+measured status row below the primary controls; Home clears that row as it grows.
+Successful checks and updates finish with a brief
 toast and clear their saved results automatically; failures stay visible for retry.
 
 - **Toast** (sonner): errors, Undo, Queue confirmation and unexpected outcomes.
@@ -581,6 +582,9 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Home](design/home.md): the hero, your own rows and the sources.
 - [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
   rows and tiles, filters and pages, breadcrumbs.
+  Saved's ordering controls check adjacent positions without rebuilding each
+  possible order while rendering the list.
+  RaiPlay collection actions read complete seasons once; browsing remains paged.
   Captions remove confirmed type/category overlaps while keeping compound genres
   and creator names; channel Details preserves chosen Saved names and canonical identity.
 - [Player](design/player.md): the picture, scrims, the band, settings, Up next,
@@ -608,6 +612,8 @@ subtitle initialization keeps the connection stable even with 16 tracks.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).
+About describes one Up next per playback and distinguishes shared transport
+controls from private playback.
 Download uses flat rows per channel, with explicit **Mac (Apple Silicon)**
 (macOS 14+) and **Mac (Intel)** (macOS 13+) choices. Each row appears only when
 that channel has its installer; it carries the architecture, minimum OS and

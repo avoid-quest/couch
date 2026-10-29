@@ -113,8 +113,12 @@ directories for each run. The harness owns an ephemeral port, Electron profile,
 `COUCH_DATA_DIR` and `COUCH_PORT`, and kills only its own child on timeout.
 
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
-`--codec=h264`, `--hint=motion` and `--bare` reproduce the exploratory probes;
-they do not change production defaults. `--assert-fps=55` fails below 55 delivered
+`--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
+reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits
+per second and `--jitter` requests a video jitter-buffer target in milliseconds
+where the browser supports it. The [Windows audit](release-audit-2026-10-29.md)
+records their measured bandwidth/frame-rate and latency tradeoffs.
+They do not change production defaults. `--assert-fps=55` fails below 55 delivered
 FPS or above 1% dropped frames (`--max-dropped` overrides the latter). The local
 live software measurements correctly fail this gate. Run timing samples without
 concurrent builds/tests; keep the source, viewport, codec and encoded dimensions
@@ -138,7 +142,10 @@ integration tests and five native player regression checks pass. Against the
 original `73668e36` stream implementation, the new 10/60/120 FPS tests fail;
 the unchanged 30 FPS case passes.
 
-### Pending PR compatibility
+### Pre-merge compatibility experiment
+
+The following records the original branch experiment. Those PRs are now merged;
+current-main validation is recorded in the [2026-10-29 audit](release-audit-2026-10-29.md).
 
 The inspected heads were `improve-player` at `2eac7e6e` (#935/#939) and the audio
 stack through `sendspin/declared-buffer` at `dbc56104` (#918–#938). The FPS UI

@@ -132,6 +132,36 @@ function chooser(client: Client) {
   return { observe: () => { const request = chooserRequest(client.state); if (reopens(seen, request)) opened++; seen = request; return opened; } };
 }
 
+test("Where it plays adds shared speakers to a running relaxed microphone without requesting their private screen", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await f.publish("microphone", "microphone");
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "microphone", deviceId: f.receiver.id })).ok, true);
+    await until(() => !!f.receiver.load()?.livePeerId);
+    const firstPeer = f.receiver.load()!.livePeerId;
+    const other = await f.connect(2, "&audio=1&video=0");
+    await until(() => f.publisher.state.devices?.find(device => device.id === other.id)?.online === true);
+    const results: Awaited<ReturnType<Client["command"]>>[] = [];
+    const row = control(Mixer({ state: f.publisher.state, connected: true, run: async action => {
+      const result = await f.publisher.command(action);
+      results.push(result);
+      return result.ok;
+    } }), "Other sound");
+    assert.ok(row?.onPressedChange);
+    assert.equal(row.disabled, false);
+    row.onPressedChange(true);
+    await until(() => results.length > 0);
+    assert.equal(results[0]!.ok, true, results[0]!.error);
+    await until(() => !!other.load()?.livePeerId);
+    assert.equal(other.load()!.liveOutput!.picture, false);
+    assert.equal(other.load()!.liveOutput!.sound, true);
+    assert.equal(f.receiver.load()!.livePeerId, firstPeer, "the existing receiver keeps its connection");
+    assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, picture: true })).error, "Other is not sharing video.");
+    assert.deepEqual(consent(f.publisher, other.id), { audio: true, video: false });
+  } finally { await f.close(); }
+});
+
 test("Play on the publisher waits in Where it plays, opens it on each request, and both receiver entry points join one playback", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {

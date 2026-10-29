@@ -34,6 +34,18 @@ stale caches.
 Add a test only where a behaviour must stay locked, and run it with
 `bun run test <path>`.
 
+Production-renderer journey fixtures run with `bun tests/ui-journeys.native.ts
+.artifacts/ui-journeys` on a display (`xvfb-run -a` without one). They exercise
+search, navigation, Saved, collection caching, settings, pairing and radio with
+isolated fixture APIs, a fresh renderer per check and their own data directory.
+`--only=reorder` includes the saved-list render-work regression;
+`--width=390 --height=844` checks phone-sized layouts, and
+`--tv --width=1920 --height=1080 --only=tv` checks TV focus and reachability.
+The evidence directory holds `result.json`. These checks do not establish real
+provider availability, physical-device pairing or hardware playback performance.
+Run native focus suites serially: another Electron test window can take focus
+and invalidate remote-navigation assertions.
+
 Live audio's correctness checks are listed in [Live audio](live-audio.md#checks).
 
 The update regressions run with `bun test tests/updates.test.ts` and
@@ -66,6 +78,8 @@ their measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
 Main's window lifecycle has a native check, after `bun run build`, on a display
 (`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence
 directory>`. It reserves `COUCH_PORT` (default 42870) and the next two ports.
+It runs on Windows and Linux; the Linux process/boot identity is asserted only
+where `/proc` supplies it. Use an isolated evidence directory on each platform.
 
 ## Bundled live relay
 

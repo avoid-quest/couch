@@ -117,7 +117,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     const current = publication;
     if (!current || publishers.has(target.peerId)) return;
     let peer: Peer;
-    try { peer = makePeer(target.peerId); } catch { return; }
+    try { peer = makePeer(target.peerId); }
+    catch (reason) { options.send({ type: "liveFailed", peerId: target.peerId, error: errorOf(reason) }); return; }
     peer.deviceId = target.deviceId;
     publishers.set(target.peerId, peer);
     const active = () => publication === current && publishers.get(target.peerId) === peer;
@@ -281,7 +282,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       try {
         const peer = current.peer = makePeer(current.peerId);
         peer.connection.ontrack = event => {
-          if (receiver !== current) return;
+          if (receiver !== current) { event.track.stop(); return; }
           // Only the channels Core routed to this output play, whatever the publisher sends.
           const { picture, sound } = command.liveOutput!;
           if (!(event.track.kind === "video" ? picture : event.track.kind === "audio" && sound)) { event.track.stop(); return; }

@@ -13,7 +13,7 @@ const until = async (ready: () => boolean) => {
   while (!ready()) { if (performance.now() - started > 15_000) throw new Error("Video did not start"); await wait(25); }
 };
 
-export async function prepareVideo(mode: "playback" | "controls" | "live", media: string, frameRate: LiveVideoFrameRate, quality: LiveVideoQuality, codec?: string, hint?: string) {
+export async function prepareVideo(mode: "playback" | "controls" | "live", media: string, frameRate: LiveVideoFrameRate, quality: LiveVideoQuality, codec?: string, hint?: string, bitrate = 0, jitter = 0) {
   const audit = await mountUiAudit();
   const errors: string[] = [];
   const peers: RTCPeerConnection[] = [];
@@ -68,6 +68,12 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
     video.muted = true;
     video.loop = true;
     await until(() => video.readyState >= 3 && video.currentTime > 0 && !video.paused);
+    if (bitrate) for (const peer of peers) for (const sender of peer.getSenders()) if (sender.track?.kind === "video") {
+      const parameters = sender.getParameters();
+      parameters.encodings = parameters.encodings.map(encoding => ({ ...encoding, maxBitrate: bitrate }));
+      await sender.setParameters(parameters);
+    }
+    if (jitter) for (const peer of peers) for (const receiver of peer.getReceivers()) if (receiver.track.kind === "video" && "jitterBufferTarget" in receiver) receiver.jitterBufferTarget = jitter;
     const startupMs = performance.now() - started;
     await document.fonts.ready;
     // Real playback clock updates reach the production timeline while video keeps playing.
@@ -108,7 +114,8 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
           // Playback quality counts include dropped frames; callbacks are limited by display refresh.
           videoFps: (total - dropped) / seconds, presentedFps: firstPresented === undefined ? 0 : (lastPresented! - firstPresented) / seconds, callbacks,
           frameMs: summary(gaps), uiFps: gaps.length / seconds, over25ms: gaps.filter(gap => gap > 25).length,
-          decodeMs: summary(processing), captureToDisplayMs: summary(frameAge), longTasks: tasks, errors, beforeStats, afterStats };
+          decodeMs: summary(processing), captureToDisplayMs: summary(frameAge), longTasks: tasks, errors, beforeStats, afterStats,
+          jitterTargets: peers.flatMap(peer => peer.getReceivers().filter(receiver => receiver.track.kind === "video").map(receiver => ({ supported: "jitterBufferTarget" in receiver, target: receiver.jitterBufferTarget }))) };
         close(); return result;
       },
       close,

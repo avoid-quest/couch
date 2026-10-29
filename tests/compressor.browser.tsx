@@ -12,6 +12,10 @@ import { applyTvNavigation, useNavigation } from "../src/client/navigation";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
+const until = async (ready: () => boolean, message: string) => {
+  const deadline = performance.now() + 2000;
+  while (!ready()) { assert(performance.now() < deadline, message); await wait(10); }
+};
 const active = { ...defaultCompressor, enabled: true };
 const stress = { ...active, threshold: -60, ratio: 20, attack: 0.1, release: 1, knee: 18, gain: 12 };
 let settings: CompressorSettings = { ...active }, commands: Action[] = [], latest: PlayerState;
@@ -128,12 +132,19 @@ export async function runChecks() {
   play({ type: "compressor", playbackId: "audio", settings: defaultCompressor });
   play({ type: "compressor", playbackId: "audio", settings: active });
   assert(contexts.at(-1) === context && single === picture.querySelector("video"), "Toggling recreated the graph or media");
-  play({ type: "follow", playbackId: "audio", follow: { group: "fixture" } }); await wait(50);
+  play({ type: "follow", playbackId: "audio", follow: { group: "fixture" } });
+  // This fixture has no Sendspin clock, so picture playback waits for it.
+  await until(() => single.paused && context.state === "suspended", "Synced picture did not wait for its clock");
   assert(single.muted && context.state === "suspended", "Synced picture retained local processing");
-  play({ type: "follow", playbackId: "audio", follow: null, compressor: active }); await wait(50);
+  play({ type: "follow", playbackId: "audio", follow: null, compressor: active });
+  play({ type: "pause", playbackId: "audio", paused: false });
+  await until(() => context.state === "running", "Direct did not resume its graph");
   assert(!single.muted && context.state === "running", "Direct did not resume its graph");
   play({ type: "follow", playbackId: "audio", follow: { group: "fixture" } });
-  play({ type: "follow", playbackId: "audio", follow: null, compressor: active }); await wait(50);
+  play({ type: "follow", playbackId: "audio", follow: null, compressor: active });
+  play({ type: "pause", playbackId: "audio", paused: false });
+  await wait(50);
+  await until(() => context.state === "running", "A quick return to Direct left its graph suspended");
   assert(context.state === "running", "A quick return to Direct left its graph suspended");
   const split = await loaded({ compressor: active, audioSource: `${location.origin}/tone.wav` });
   assert(sources.at(-1)?.tagName === "AUDIO" && split.muted, "Split audio processed the wrong element");
