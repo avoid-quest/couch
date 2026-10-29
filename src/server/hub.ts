@@ -410,6 +410,8 @@ export async function createHub(options: HubOptions) {
     else requireProgramme(playback, actor);
   };
   const capabilities = (playback: Playback | undefined, actor: string) => playbackControls({ intent: playback && intentOf(playback), authorized: !playback || controls(playback, actor), receiving: !!playback?.outputs.some(output => output.deviceId === actor), scheduled: !!playback?.synced, mpv: mpvPlayback === playback, capture: !!playback && !!sourceOf(playback), seekable: !!playback && stateOf(playback).player.seekable, audioDelay: playback ? stateOf(playback).player.audioDelay : undefined });
+  // In Live only the host changes another device's level or place; each listener keeps its own.
+  const lockedByLive = (actor: string, id: string) => id !== actor && actor !== hostId() && (intentOf(lookedAt(actor)) === "live" || intentOf(memberOf(id)) === "live");
   const requireAction = (playback: Playback, action: Action, actor: string) => {
     if (action.type === "track" && (mpvPlayback === playback || playback.synced && action.kind === "audio")) throw new ControllerError("Track selection is unavailable on this output.", 409);
     if (!playbackActionAllowed(action, capabilities(playback, actor))) throw new ControllerError(intentOf(playback) === "live" ? LIVE_AUDIENCE_ONLY : "This control is unavailable for this playback.", 403);
@@ -2278,6 +2280,7 @@ export async function createHub(options: HubOptions) {
             const permitted = authorizePlayback(target, authorize, deviceId, action.type === "output");
             permitted();
             requireAction(target, action, deviceId);
+            if (action.type === "output" && lockedByLive(deviceId, action.deviceId)) throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
             if (action.type === "solo") {
               // Only this Device keeps the Playback: its picture, when it shows one, and its sound.
               requireControl(action.deviceId, deviceId);
@@ -2316,10 +2319,8 @@ export async function createHub(options: HubOptions) {
             }
           } else if (action.type === "volume" || action.type === "mute") {
             // Without a Device, the group changes only the speakers this device may control.
-            // In Live only the host changes another device's level; each listener keeps its own.
-            const lockedByLive = (id: string) => id !== deviceId && deviceId !== hostId() && (intentOf(lookedAt(deviceId)) === "live" || intentOf(memberOf(id)) === "live");
-            if (action.deviceId && lockedByLive(action.deviceId)) throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
-            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : controlled(target, deviceId).filter(id => !lockedByLive(id));
+            if (action.deviceId && lockedByLive(deviceId, action.deviceId)) throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : controlled(target, deviceId).filter(id => !lockedByLive(deviceId, id));
             if (target) requireAction(target, action, deviceId);
             const inSound = (id: string) => !!target?.outputs.some(output => output.deviceId === id && output.sound);
             if (action.type === "volume" && !action.deviceId) {
