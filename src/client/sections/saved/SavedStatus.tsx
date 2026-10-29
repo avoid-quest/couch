@@ -45,7 +45,7 @@ export function useRemovalFocus(ids: string[], ready: boolean, list: RefObject<H
     if (!target || !ready || ids.includes(target.id)) return;
     removed.current = null;
     const rows = list.current?.children;
-    (rows?.[Math.min(target.index, rows.length - 1)]?.querySelector<HTMLElement>("button:not(:disabled)") ?? fallback())?.focus();
+    (rows?.[Math.min(target.index, rows.length - 1)]?.querySelector<HTMLElement>("a[href], button:not(:disabled)") ?? fallback())?.focus();
   });
   return (id: string, index: number) => { removed.current = { id, index }; };
 }

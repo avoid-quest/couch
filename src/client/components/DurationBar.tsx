@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { formatDuration } from "@/time-format";
+import { formatDuration, formatRuntime } from "@/time-format";
 import { Progress } from "@/components/ui/progress";
 
 let now = Date.now();
@@ -33,7 +33,7 @@ export function DurationBar({ duration, position = 0, live = false }: { duration
 
 /** How far it got as a slim line beside how much is left (and, playing, when it ends): the Stage's progress, on Home
  * and on Details alike. It advances while it plays. */
-export function ProgressLine({ position, duration, label = `${formatDuration(Math.max(0, duration - position))} left` }: { position: number; duration: number; label?: string }) {
+export function ProgressLine({ position, duration, label = `${formatRuntime(Math.max(0, duration - position))} left` }: { position: number; duration: number; label?: string }) {
   return <div className="flex w-full max-w-md items-center gap-4 text-sm text-muted-foreground tabular-nums">
     <Progress className="h-0.5 flex-1 rounded-none bg-foreground/25" value={Math.min(100, Math.max(0, position / duration * 100))} aria-label={`Playback progress: ${label}`} />
     <span className="shrink-0">{label}</span>

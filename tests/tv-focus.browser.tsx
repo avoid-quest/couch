@@ -39,7 +39,7 @@ export async function runTvFocusRegression() {
       const after = link.getBoundingClientRect();
       assert(getComputedStyle(link).boxShadow.includes('rgb(255, 255, 255)'), "A focused text link has no room around its words");
       assert(before.left === after.left && before.width === after.width, "Focusing a text link moved it");
-      // Home's own rows are a board of lists; its shelves (Radio, the sources) hold tiles.
+      // Home's shelves hold tiles, with the same focus treatment as Saved.
       const tile = control('[data-page="Home"] [data-shelf-row] [data-media-tile]');
       tile.focus(); await wait(300);
       assert(getComputedStyle(tile.closest('[data-tile]')!).scale === '1.05', "A focused tile did not lift");
@@ -57,11 +57,11 @@ export async function runTvFocusRegression() {
       await remote('left');
       assert(document.activeElement === links[0], "Left did not reach the adjacent relationship");
     });
-    await check("A row's relationships are the last verbs in its menu, not links under it", async () => {
-      await audit.go('/');
-      const row = control('[aria-label="For later"] li[data-nav-row]');
+    await check("A Saved tile keeps relationships in its menu", async () => {
+      await audit.go('/saved?tab=later');
+      const row = control('[data-page="Saved"] [data-tile]');
       assert(!row.querySelector('[data-media-context]'), "A row still shows relationship links");
-      row.querySelector<HTMLElement>('[data-play]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      row.querySelector<HTMLElement>('[data-media-tile]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await wait();
       const items = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent ?? '');
       assert(items.some(item => item.startsWith('Go to ')), `The row's menu has no Go to: ${items.join(', ')}`);

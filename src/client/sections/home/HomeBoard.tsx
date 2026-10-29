@@ -15,7 +15,7 @@ export function Board({ children }: { children: ReactNode }) {
 export function BoardList({ title, href, time, loading = false, more, children }: { title: string; href?: string; time?: string; loading?: boolean; more?: ReactNode; children?: ReactNode }) {
   return <section aria-label={title} aria-busy={loading || undefined} className="grid min-w-0 content-start gap-2">
     <ShelfHeading title={title} href={href} time={time} loading={loading} />
-    {loading ? <MediaRowsSkeleton compact shape="video" count={3} label={`Loading ${title}…`} /> : <MediaList aria-label={title} className="border-t-0">{children}</MediaList>}
+    {loading ? <MediaRowsSkeleton compact shape="video" count={3} label={`Loading ${title}…`} /> : <MediaList aria-label={title} className="border-t-0 [&>li]:border-0 [&>li]:py-2.5">{children}</MediaList>}
     {more}
   </section>;
 }
