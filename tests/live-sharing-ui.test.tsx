@@ -18,9 +18,13 @@ mock.module("../src/client/session/session-context", () => ({
 }));
 mock.module("../src/client/audio-settings", () => ({ useNativeInputBufferPreference: () => preference, useNativeInputChannelPreference: () => channelPreference }));
 const query = { data: { codec: "auto", minBufferMs: 200 } as LiveAudioSettings | undefined, error: null as Error | null, isFetching: false, refetch: mock(async () => {}) };
-const save = { isPending: false, error: null as Error | null, variables: { codec: "auto", minBufferMs: 350 } as LiveAudioSettings, mutate: mock((_settings: LiveAudioSettings, _options?: unknown) => {}) };
+const save = { isPending: false, error: null as Error | null, variables: { minBufferMs: 350 } as Partial<LiveAudioSettings>, mutate: mock((_settings: Partial<LiveAudioSettings>, _options?: unknown) => {}) };
 const realQuery = await import("@tanstack/react-query");
-mock.module("@tanstack/react-query", () => ({ ...realQuery, useQuery: () => query, useMutation: () => save, useQueryClient: () => ({ setQueryData() {} }) }));
+let mutationOptions: { mutationFn: (change: Partial<LiveAudioSettings>) => Promise<unknown> } | undefined, cached: LiveAudioSettings | undefined;
+const sentBodies: unknown[] = [];
+const realClient = await import("../src/client/api/client");
+mock.module("../src/client/api/client", () => ({ ...realClient, apiSend: async (_credentials: unknown, _path: string, body: unknown) => { sentBodies.push(body); return body; } }));
+mock.module("@tanstack/react-query", () => ({ ...realQuery, useQuery: () => query, useMutation: (options: typeof mutationOptions) => { mutationOptions = options; return save; }, useQueryClient: () => ({ setQueryData() {}, getQueryData: () => cached }) }));
 const { CaptureBufferSelect, CaptureChannelsSelect, LiveListeners, LiveSettings, LiveSettingsStatus, PlaybackBufferInput } = await import("../src/client/sections/share/LiveOperator");
 const live = () => ({ settings: query.data, query, save, connected }) as unknown as Parameters<typeof PlaybackBufferInput>[0]["live"];
 const sharing = { captureFormat: { sampleRate: 48000, channels: 2, native: { requestedFrames: 128, reportedFrames: 128, inputChannels: 4, channelMap: [0, 1] } } } as LiveSharing;
@@ -68,6 +72,14 @@ test("settings saves and storage failures remain visible in the open share panel
   const channelError = renderToStaticMarkup(<LiveSettings sharing={sharing} />);
   expect(channelError).toContain('role="alert"');
   expect(channelError).toContain(channelPreference.error);
+});
+
+test("a settings save sends only its change, merged into the settings current when it is sent", async () => {
+  read(() => LiveSettings({ sharing }));
+  cached = { codec: "pcm", minBufferMs: 200 }; // another admin chose PCM after this save failed
+  sentBodies.length = 0;
+  await mutationOptions!.mutationFn({ minBufferMs: 300 });
+  expect(sentBodies).toEqual([{ settings: { codec: "pcm", minBufferMs: 300 } }]);
 });
 
 test.each([
@@ -118,11 +130,11 @@ test("playback buffer validates integers and commits the chosen value on blur or
   for (const value of [NaN, -1, 5001, 1.5]) input.props.onBlur!({ currentTarget: { valueAsNumber: value, validity: { valid: true } } });
   expect(save.mutate).not.toHaveBeenCalled();
   input.props.onBlur!({ currentTarget: { valueAsNumber: 350, validity: { valid: true } } });
-  expect(save.mutate.mock.calls[0]![0]).toEqual({ codec: "auto", minBufferMs: 350 });
+  expect(save.mutate.mock.calls[0]![0]).toEqual({ minBufferMs: 350 });
   const preventDefault = mock(() => {});
   input.props.onKeyDown!({ key: "Enter", preventDefault, currentTarget: { valueAsNumber: 400, validity: { valid: true } } });
   expect(preventDefault).toHaveBeenCalledTimes(1);
-  expect(save.mutate.mock.calls[1]![0]).toEqual({ codec: "auto", minBufferMs: 400 });
+  expect(save.mutate.mock.calls[1]![0]).toEqual({ minBufferMs: 400 });
 });
 
 test("saving keeps the active controls focusable while rejecting another edit", () => {

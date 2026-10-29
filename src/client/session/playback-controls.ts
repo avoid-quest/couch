@@ -7,6 +7,9 @@ export const livePlayback = (state: State) => {
 };
 
 // Core supplies actor-specific rights. Older sessions keep their ordinary controls.
+// A Live listener (not its publisher): Join/Leave shows its errors, so playback status lines stay quiet.
+export const listeningLive = (state: State) => livePlayback(state) && playbackControls(state).leave;
+
 export function playbackControls(state: Pick<ClientSessionState, "controls"> | null | undefined) {
   return state?.controls ?? { programme: true, queue: true, seek: true, speed: true, audioDelay: true, subtitleDelay: true, leave: false };
 }

@@ -1,5 +1,5 @@
 import { Description } from "@/components/DetailHeader";
-import { livePlayback, playbackControls } from "@/session/playback-controls";
+import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
@@ -70,7 +70,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const queueClose = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const root = useRef<HTMLElement>(null);
-  const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
+  // A Live listener's Join/Leave sits outside the transport group.
+  const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled), [data-live-participation] button:not(:disabled)');
   const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
   // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
   const tap = useRef<boolean | null>(null);
@@ -295,7 +296,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // short centred line with its one remedy); beside artwork it follows the title. Plain loading says nothing else.
   const remedy = connected && player?.status === "unavailable" && state?.playback ? <WhereItPlays state={state} connected={connected} run={run} label="Choose device" className="pointer-events-auto" />
     : player?.status === "error" && current && playbackControls(state).programme ? <Button variant="secondary" className="pointer-events-auto" disabled={!connected} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button> : null;
-  const statusView = current && !livePlayback(state) && !status.quiet && <div data-player-status className={osd ? "player-status" : "flex items-start gap-2 text-sm"}>
+  const statusView = current && !listeningLive(state) && !status.quiet && <div data-player-status className={osd ? "player-status" : "flex items-start gap-2 text-sm"}>
     {status.busy && <Spinner className={osd ? "size-8" : "mt-0.5 shrink-0"} role="presentation" aria-hidden="true" />}
     <div className={cn("min-w-0", osd && status.busy && !status.detail && "sr-only")}><p role="status" className="font-medium">{status.label}</p>{status.detail && <p aria-live={player?.status === "loading" && state?.radioRetry ? "off" : "polite"} className="max-w-prose break-words text-muted-foreground">{status.detail}</p>}</div>
     {remedy}
