@@ -300,3 +300,106 @@ for (const end of ['', '#EXT-X-ENDLIST\n']) test(`standalone HLS rendition maps 
   expect(result.audioStream).toBe(0);
   expect(result.audioSelection).toEqual(audioSelection);
 });
+
+for (const selection of [{ audioLanguage: 'it-IT' }, { audioTrack: 1, audioLanguage: 'en' }, { audioSelection: { index: 0, label: 'Italian', language: 'it' }, audioLanguage: 'en' }]) {
+  for (const selectedLive of [false, true]) test(`sound-only classification follows selected Italian (${JSON.stringify(selection)}, live=${selectedLive})`, async () => {
+    const source = 'https://media.example/master.m3u8';
+    request.mockImplementation(async url => manifest(String(url) === source ? master : `#EXTM3U\n#EXTINF:2,\naudio.aac\n${String(url).includes('/it.') === selectedLive ? '' : '#EXT-X-ENDLIST\n'}`));
+    const preparation = createSourcePreparation(signal());
+    const selected = await preparation.select({ source }, channels, selection);
+    expect(selected.audioManifest?.text).toContain('NAME="English"');
+    expect(selected.audioManifest?.text).toContain('NAME="Italian"');
+    expect(selected.audioSelection).toEqual({ index: 1, label: 'Italian', language: 'it' });
+    expect(await preparation.live(selected.source, selected)).toBe(selectedLive);
+    expect(request.mock.calls.map(call => String(call[0]))).toEqual([source, 'https://audio.example/it.m3u8']);
+  });
+}
+
+test('extensionless octet-stream HLS retains the preferred language and live classification', async () => {
+  const source = 'https://media.example/stream';
+  request.mockImplementation(async url => new Response(String(url) === source ? master : '#EXTM3U\n#EXTINF:2,\naudio.aac\n', { headers: { 'Content-Type': 'application/octet-stream' } }));
+  const preparation = createSourcePreparation(signal());
+  const selected = await preparation.select({ source, hls: true }, channels, { audioLanguage: 'it' });
+  expect(selected.hls).toBe(true);
+  expect(selected.audioSelection?.language).toBe('it');
+  expect(await preparation.live(selected.source, selected)).toBe(true);
+  expect(request.mock.calls.map(call => String(call[0]))).toEqual([source, 'https://audio.example/it.m3u8']);
+});
+
+test('ambiguous non-HLS responses stop after the first mismatching bytes', async () => {
+  let cancelled = false;
+  request.mockResolvedValue(new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode('not a playlist')); },
+    cancel() { cancelled = true; },
+  }), { headers: { 'Content-Type': 'application/octet-stream' } }));
+  const selected = await prepareSource({ source: 'https://media.example/stream' }, channels, signal());
+  expect(selected.hls).toBe(false);
+  await Promise.resolve();
+  expect(cancelled).toBe(true);
+});
+
+test('fragmented HLS signatures are recognized and aborting a stalled body cancels it', async () => {
+  request.mockResolvedValue(new Response(new ReadableStream({ start(controller) {
+    for (const part of ['#EXT', 'M3U', '\r', '\n#EXTINF:2,\naudio.aac\n']) controller.enqueue(new TextEncoder().encode(part));
+    controller.close();
+  } }), { headers: { 'Content-Type': 'application/octet-stream' } }));
+  expect(await createSourcePreparation(signal()).live('https://media.example/stream')).toBe(true);
+  const cancellation = new AbortController();
+  let cancelled = false;
+  request.mockResolvedValue(new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode('#EXTM3U\n')); },
+    cancel() { cancelled = true; },
+  }), { headers: { 'Content-Type': 'application/octet-stream' } }));
+  const preparing = prepareSource({ source: 'https://media.example/stream' }, channels, cancellation.signal);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  cancellation.abort();
+  await expect(preparing).rejects.toThrow();
+  expect(cancelled).toBe(true);
+});
+
+test('playlist sniffing retains its size limit and public destination guard', async () => {
+  let cancelled = false;
+  request.mockResolvedValue(new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode('#EXTM3U\n' + 'a'.repeat(2 * 1024 * 1024))); },
+    cancel() { cancelled = true; },
+  }), { headers: { 'Content-Type': 'application/octet-stream' } }));
+  await expect(prepareSource({ source: 'https://media.example/stream' }, channels, signal())).rejects.toThrow('size limit');
+  expect(cancelled).toBe(true);
+  request.mockClear();
+  expect((await prepareSource({ source: 'http://127.0.0.1/stream', publicNetwork: true }, channels, signal())).hls).toBe(false);
+  expect(request).not.toHaveBeenCalled();
+});
+
+test('source preparation retains known extensionless HLS hints and checked HLS audio', async () => {
+  request.mockResolvedValue(new Response('', { status: 503 }));
+  expect((await prepareSource({ source: 'https://media.example/stream', hls: true }, channels, signal())).hls).toBe(true);
+  request.mockClear();
+  const hlsSelection = { video: 'https://media.example/video', audio: 'https://media.example/audio' };
+  expect(await prepareSource({ source: 'https://media.example/master', hls: true, hlsSelection }, channels, signal())).toMatchObject({ source: hlsSelection.audio, hls: true });
+  expect(request).not.toHaveBeenCalled();
+});
+
+test('an extensionless separate audio source derives its own HLS semantics with scoped credentials', async () => {
+  for (const hls of [true, false]) {
+    request.mockResolvedValueOnce(new Response(hls ? '#EXTM3U\n#EXTINF:2,\naudio.aac\n' : 'encoded audio', { headers: { 'Content-Type': 'application/octet-stream' } }));
+    const media = { source: 'https://media.example/main', hls: true, audioSource: 'https://audio.example/stream', headers: { authorization: 'main-only' } };
+    const preparation = createSourcePreparation(signal());
+    const selected = await preparation.select(media, channels);
+    expect(selected.hls === true).toBe(hls);
+    expect(await preparation.live(selected.source, selected)).toBe(hls);
+    expect(new Headers(request.mock.calls.at(-1)![1]?.headers).has('authorization')).toBe(false);
+  }
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+test('a retained mixed in-band master is classified from the selected separate audio', async () => {
+  const source = 'https://media.example/master.m3u8';
+  request.mockImplementation(async url => manifest(String(url) === source ? master.replace(',URI="en.m3u8"', '')
+    : `#EXTM3U\n#EXTINF:2,\naudio.aac\n${String(url).includes('/it.') ? '' : '#EXT-X-ENDLIST\n'}`));
+  const preparation = createSourcePreparation(signal());
+  const selected = await preparation.select({ source }, channels, { audioLanguage: 'it' });
+  expect(selected.source).toBe(source);
+  expect(selected.audioManifest).toBeUndefined();
+  expect(await preparation.live(selected.source, selected)).toBe(true);
+  expect(request.mock.calls.map(call => String(call[0]))).toEqual([source, 'https://audio.example/it.m3u8']);
+});

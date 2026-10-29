@@ -199,11 +199,8 @@ them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
 Live device publications belong to the authenticated Device session and end
-with its sharing owner. Ordinary display/audio capture stays in the publishing
-window. For Live audio, Main owns capture independently of that window's event
-loop: the selected input opens in an isolated hidden capture page with a
-restricted preload, which receives the owner's temporary microphone grant. Main stops owned capture on cancel, navigation, renderer loss,
-window close and quit, and waits for retirement before another preparation.
+with its sharing owner. Display and audio capture run in the publishing window;
+inputs exist only while that capture is active.
 Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
 element. Core grants signaling only between the exact publishing and receiving
 connections. ICE configuration, including optional authenticated TURN, is returned
