@@ -204,8 +204,11 @@ the control that started it.
 Live audio uses [unmodified Sendspin](../live-audio.md) for browser reception.
 While joined, system media controls show the Live title (or Source name) and
 Now playing line where supported, as playing;
-Stop leaves this listener, with no play, pause, seek or next actions. Leaving
-restores ordinary playback's metadata and controls, or clears them when idle.
+Pause and Stop leave this listener, with no play, seek or next actions (an
+unhandled Pause would pause only the SDK's silent Android keep-alive element
+while the sound plays on). Leaving restores ordinary playback's metadata and
+controls, or clears them when idle. Replacing the SDK player for a codec change
+keeps them.
 **Tap to hear** unlocks sound. Leaving releases this listener without ending
 capture or interrupting other listeners. Actual source/output errors keep their
 reason; the SDK handles receiver timing and recovery.

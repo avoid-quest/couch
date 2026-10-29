@@ -128,10 +128,11 @@ test("Live owns Media Session without a queued item, Stop leaves, and ordinary p
   expect(mediaSession.metadata?.title).toBe("Concert");
   expect(mediaSession.playbackState).toBe("playing");
   expect(mediaSession.position).toBeUndefined();
-  for (const action of ["play", "pause", "nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
-  expect(typeof handlers.get("stop")).toBe("function");
+  for (const action of ["play", "nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
+  // Without its own handler, Android's notification Pause would pause the SDK's silent keep-alive element.
+  handlers.get("pause")!({ action: "pause" });
   handlers.get("stop")!({ action: "stop" });
-  expect(sent).toEqual([{ type: "leave", playbackId: "load-generation" }]);
+  expect(sent).toEqual([{ type: "leave", playbackId: "load-generation" }, { type: "leave", playbackId: "load-generation" }]);
   // Ordinary player updates cannot clear Live or supply stale programme metadata.
   state = { ...state, player: { ...state.player, status: "idle", nowPlaying: { title: "Old programme", artist: "Old artist" } } };
   read(useMediaSession);

@@ -35,15 +35,19 @@ export function useMediaSession() {
   const position = clock.playbackId === playbackId ? clock.position : 0;
   const duration = live ? null : clock.playbackId === playbackId ? clock.duration ?? current?.duration ?? null : current?.duration ?? null;
   const { transportReady, pausable, seekable, nextReady, hasNext, stoppable } = playbackCapabilities(state, connected);
-  const allowed = listening ? { play: false, pause: false, stop: connected && !!playbackId, nexttrack: false, seekto: false, seekbackward: false, seekforward: false }
+  // Live can't pause, so Pause leaves too: unhandled, Android's notification pauses the SDK's silent
+  // keep-alive element instead, while the sound plays on and Couch still reports Listening.
+  const leave = connected && !!playbackId;
+  const allowed = listening ? { play: false, pause: leave, stop: leave, nexttrack: false, seekto: false, seekbackward: false, seekforward: false }
     : { play: transportReady && pausable, pause: transportReady && pausable, stop: stoppable, nexttrack: nextReady && hasNext,
     seekto: transportReady && seekable, seekbackward: transportReady && seekable, seekforward: transportReady && seekable };
 
   const act = useEffectEvent((action: MediaSessionAction, details: MediaSessionActionDetails) => {
     if (!playbackId || !allowed[action as keyof typeof allowed]) return;
     const seek = (to: number) => ({ type: "seek", playbackId, position: Math.max(0, Math.min(duration ?? Infinity, to)) }) satisfies Action;
-    const command: Action | null = action === "play" || action === "pause" ? { type: "pause", playbackId, paused: action === "pause" }
-      : action === "stop" ? { type: listening ? "leave" : "stop", playbackId }
+    const command: Action | null = listening ? { type: "leave", playbackId }
+      : action === "play" || action === "pause" ? { type: "pause", playbackId, paused: action === "pause" }
+      : action === "stop" ? { type: "stop", playbackId }
       : action === "nexttrack" ? { type: "next", playbackId }
       : action === "seekto" && Number.isFinite(details.seekTime) ? seek(details.seekTime!)
       : action === "seekbackward" ? seek(position - (details.seekOffset ?? 10))
