@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import WebSocket from "ws";
+import { AudioCodec } from "@sonn-audio/node-sendspin";
 import { liveFixture, until } from "./live-input.fixture";
 import type { Action } from "../src/shared/protocol";
 import { SendspinCore, loadSendspinClientIdentity, type ServerStateMetadata } from "@sendspin/sendspin-js";
@@ -204,8 +205,9 @@ test("audience disconnect and newest-tab handover never pause healthy live recei
   } finally { await f.close(); }
 });
 
-test("capture failure reaches affected output errors while an independent programme continues", { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
+test("capture failure outranks a receiver's own output error and reaches affected outputs while an independent programme continues", { timeout: 15_000 }, async () => {
+  // Sendspin delivery needs the real encoder.
+  const f = await liveFixture({ media: { ffmpeg: process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", recording: new Uint8Array() } });
   let upload: WebSocket | undefined;
   try {
     const host = await f.connect(-1), other = await f.connect(2);
@@ -217,15 +219,14 @@ test("capture failure reaches affected output errors while an independent progra
     await host.command(publication);
     await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id });
     await until(() => f.receiver.state.controls?.leave === true);
-    const demand = host.messages.findLast(message => message.type === "livePeers" && message.upload);
-    assert.ok(demand?.type === "livePeers" && demand.uploadId);
-    upload = new WebSocket(`${f.uploadUrl("concert", publication.uploadToken, -1)}&uploadId=${demand.uploadId}`, { headers: { Origin: f.hub.origin } });
-    upload.on("error", () => {});
-    await new Promise<void>(resolve => upload!.once("open", resolve));
+    // The receiver's speaker takes no Live wire, which its output shows while the capture is healthy.
+    await f.speaker(1, AudioCodec.FLAC);
+    upload = (await f.streamCapture(host, "concert", -1)).upload;
+    await until(() => /neither 48 kHz/.test(f.receiver.state.outputs?.[0]?.error ?? ""));
+    // Renegotiating the clock fails the source.
     upload.send(JSON.stringify({ type: "start", generation: "bad-clock", offsetUs: 0, rttUs: 200_000 }));
-    await until(() => f.receiver.state.outputs?.some(output => !!output.error) === true);
+    await until(() => /capture clock/i.test(f.receiver.state.outputs?.[0]?.error ?? ""));
     assert.match(f.receiver.state.player.error ?? "", /capture clock/i);
-    assert.match(f.receiver.state.outputs?.[0]?.error ?? "", /capture clock/i);
     assert.equal(other.state.playback, independent);
     assert.equal(other.state.player.status, "playing");
     assert.equal(other.state.currentEntryId, "independent");
