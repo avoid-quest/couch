@@ -20,7 +20,12 @@ yt-dlp's own manifest fetches, rather than checking one copy of a manifest befor
 yt-dlp downloads another.
 
 Resolved web media always uses Core's protected relay, even when the upstream
-allows browser CORS. Every HLS variant, segment, key, map and rendition is rewritten
+allows browser CORS. Preparing its Core and Device routes does not make discarded
+CORS probes: the extractor's selected transport identifies HLS even when its URL
+has no extension. Actual delivery still uses the public-only request boundary and
+checks playlist MIME types and prefixes. Explicit direct/LAN sources retain their
+delivery probes. See [startup measurements](media-startup-performance.md).
+Every HLS variant, segment, key, map and rendition is rewritten
 through the same boundary. Playlist reloads and redirects remain protected.
 Stored media credentials are bound to the original media source's exact origin,
 including its scheme and port. Cross-origin children, separate audio sources and

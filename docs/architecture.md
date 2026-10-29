@@ -377,8 +377,14 @@ separate from installer availability, so a notes failure cannot block an update.
 
 ## Helpers
 
-Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
-YouTube's challenges) and ffmpeg (`src/server/helpers.ts`). Mac packages ship
+Core manages three helpers: yt-dlp, QuickJS-NG and ffmpeg (`src/server/helpers.ts`).
+For YouTube's JavaScript challenges, yt-dlp prefers Core's Node runtime with
+its upstream permission restrictions, retaining QuickJS-NG as fallback.
+Desktop Main passes its executable as `COUCH_NODE_PATH`; the extractor's
+children set `ELECTRON_RUN_AS_NODE=1`, so no separate Node installation is needed.
+Standalone Core uses `process.execPath`. Bun-only tools keep QuickJS unless
+given a Node path. See [media startup measurements](media-startup-performance.md).
+Mac packages ship
 QuickJS-NG 0.17.0, built from pinned upstream source for their actual CPU and
 macOS 13 rather than using upstream's macOS-26-only binaries
 ([build and signing](ci.md#bundled-mac-javascript-runtime)). Main passes its
