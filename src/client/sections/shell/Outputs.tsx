@@ -178,7 +178,7 @@ function deviceRow({ row, connected, run, fader = true, playing = false }: { row
   const toggle = (channel: typeof picture, label: string, on: ReactNode, off: ReactNode, name: string) =>
     <Toggle aria-label={`${device.name} ${label}`} title={channel.reason ?? name} pressed={channel.on} disabled={!connected || !channel.enabled} onPressedChange={() => void send(run, row, channel.action)}
       className="size-11 data-[state=off]:text-muted-foreground data-[state=on]:bg-transparent">{channel.on ? on : off}</Toggle>;
-  return <li key={device.id} data-nav-row data-device={device.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto_5.5rem] items-center gap-x-1 py-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_11rem_2.75rem]">
+  return <li key={device.id} data-nav-row data-device={device.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto_5.5rem] items-center gap-x-1 py-1 sm:grid-cols-[minmax(min(100%,10rem),1fr)_auto_auto_minmax(5rem,11rem)_2.75rem]">
     <span className="grid min-w-0 py-1">
       {deviceName(row, playing)}
       {statusLine(row)}
@@ -224,9 +224,9 @@ function tvRow({ row, connected, run, playing = false }: { row: Row; connected: 
   </li>;
 }
 
-/** A TV row's Picture and Sound, which its OK opens. Its sound is its Sound and fader's. */
+/** A TV row's Picture and Sound, which its OK opens, then Move here while it isn't in. Its sound is its Sound and fader's. */
 function channelItems({ row, connected, run }: { row: Row; connected: boolean; run: Props["run"] }) {
-  const { device, picture, sound } = row;
+  const { device, output, picture, sound, move } = row;
   return <>
     <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!connected || !picture.enabled} onCheckedChange={() => void send(run, row, picture.action)}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
     <DropdownMenuCheckboxItem aria-label={`${device.name} sound`} checked={sound.on} disabled={!connected || !sound.enabled} onCheckedChange={() => void send(run, row, sound.action)}>Sound<Why {...sound} /></DropdownMenuCheckboxItem>

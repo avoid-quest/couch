@@ -1,6 +1,6 @@
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext } from "@/components/MediaContext";
+import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
@@ -160,7 +160,7 @@ export function HomePage() {
   // station without its show reads Radio, as the player does, never its stream's host.
   const status = playbackStatus(state, connected);
   const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
-  const playingMeta = metaLine(playing?.lead, playing?.subtitle, ...radioShowLabels(show), radioHost(show), current && !isRadio(current) && sourceLabel(current.source), !livePlayback(state) && !status.quiet && status.label);
+  const playingMeta = metaLine(playing?.lead, current && mediaSubtitle({ ...current, subtitle: playing?.subtitle }), ...radioShowLabels(show), radioHost(show), current && !isRadio(current) && sourceLabel(current.source), !livePlayback(state) && !status.quiet && status.label);
   const heroCaption = hero?.kind === "continue" ? { ...historyCaption(hero.item), ...hero.item.creator ? { meta: mediaCaption(hero.item).lead } : {} } : undefined;
 
   const lead = !hero ? null : hero.kind === "playing" ? current && playing && <HomeHero context={<PlaysOnLine at={at}><MediaContext collection={current.collection} creator={current.creator} radio={isRadio(current) && current.source.startsWith("radio:") ? {id: current.source.slice(6), title: current.title} : undefined} /></PlaysOnLine>} thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={playing.title} meta={playingMeta}

@@ -19,6 +19,7 @@ import { useShowShare } from "./show-share";
 import { liveTitle } from "../../../shared/live-input";
 import { LiveClock } from "@/components/LiveClock";
 import { LiveMetadataEditor } from "./LiveMetadata";
+import { formatClock } from "@/time-format";
 
 /**
  * The header's Share (docs/design/share.md): a button that opens the Share dialog on a device that can capture, and,
@@ -138,7 +139,7 @@ function SharingPanel({ sharing: shown, viewers, onClose }: { sharing: LiveShari
   }, [liveSharing, sharing.source.audioDelivery]);
   const kind = shareKindOf(sharing.source.kind === "airplay" ? "screen" : sharing.source.kind, sharing.surface, sharing.source.intent);
   const what = kind.pictures && sharing.source.audio ? `${kind.label}, with this computer's sound` : kind.label;
-  const since = new Date(sharing.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const since = formatClock(sharing.since);
   const viewing = state?.playbacks?.find(playback => playback.id === state.playback)?.liveSourceId === sharing.source.id;
   const behind = viewers.some(viewer => viewer.behind && viewer.delivery !== "scheduled");
   return <div className="grid gap-4">

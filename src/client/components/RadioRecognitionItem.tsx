@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { RadioRecognitionEntry } from "../../shared/radio-recognition";
 import { searchLocation } from "@/search";
+import { formatClock } from "@/time-format";
 import { MediaArtwork } from "./MediaArtwork";
 import { Button } from "./ui/button";
 import { Item } from "./ui/item";
@@ -21,7 +22,7 @@ export function RadioRecognitionItem({ entry, history = false, onDismiss }: {
       {track?.artist && <span className="text-sm text-muted-foreground">{track.artist}</span>}
       {history && track?.album && <span className="text-sm text-muted-foreground">{track.album}</span>}
       {history && <span className="text-sm text-pretty text-muted-foreground">{entry.station.name}{entry.programme && `, ${entry.programme}`}</span>}
-      <span className="text-meta text-muted-foreground">{!history && "Identified at "}<time dateTime={time.toISOString()}>{history ? time.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></span>
+      <span className="text-meta text-muted-foreground">{!history && "Identified at "}<time dateTime={time.toISOString()}>{history ? time.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : formatClock(time.getTime())}</time></span>
       {history && <span className="text-meta text-muted-foreground">Requested by {entry.requestedBy.name}</span>}
     </span>
   </>;

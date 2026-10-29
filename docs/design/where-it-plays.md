@@ -77,8 +77,9 @@ The same at every scale: the device's name, with the
 (moving while sound comes out of it, flat while paused, muted, behind, failing
 or offline), then its **Picture** and
 **Sound** toggles (`Monitor`/`MonitorOff`, `Volume2`/`VolumeOff`), its level
-fader and number while its sound is on, and "…". On phones the fader takes a
-second line under the name. A device is in the Playback while either channel
+fader and number while its sound is on, and "…". The name keeps at least
+10rem before the fader shrinks (to 5rem), so a device's name stays on one line
+where it can. On phones the fader takes a second line under the name. A device is in the Playback while either channel
 is on. While it is the only device sounding (and its fader would move), the
 Volume above is its level, so its row has no fader of its own and the panel
 doesn't say the same number twice (`soleSound`). The TV's rows keep theirs,
