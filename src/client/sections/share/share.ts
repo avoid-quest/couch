@@ -2,7 +2,7 @@ import { AppWindow, Cable, Monitor, Volume2, type LucideIcon } from "lucide-reac
 import type { ClientSessionState } from "@/session/session";
 import type { LiveRoute } from "@/session/live-route";
 import type { CaptureKind, CaptureSource } from "../../../shared/capture";
-import type { LiveSelection, LiveVideoQuality } from "../../../shared/live-input";
+import { defaultLiveFrameRate, type LiveSelection, type LiveVideoFrameRate, type LiveVideoQuality } from "../../../shared/live-input";
 import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
 // Sources and their capture variants (docs/design/share.md). The dialog offers source choices first; Live is an
@@ -33,6 +33,8 @@ export const shareKindOf = (capture: CaptureKind, surface?: LiveSelection["surfa
   intent === "live" ? shareKinds.find(kind => kind.intent === "live")! : shareKinds.find(kind => !kind.intent && kind.capture === capture && (!kind.pictures || kind.pictures === (surface === "window" ? "window" : "screen"))) ?? shareKinds[0]!;
 
 export const qualityLabels: Record<LiveVideoQuality, string> = { "720p": "720p, less bandwidth", "1080p": "1080p, balanced", original: "Original resolution" };
+// The most frames a second the picture asks for; the screen and the encoder may give fewer.
+export const frameRateLabels: Record<LiveVideoFrameRate, string> = { 30: "30 FPS", 60: "60 FPS", 120: "120 FPS" };
 
 /** Why this browser can't share a kind, in today's words; nothing when it can. */
 export function unavailable(kind: ShareKind, browser: { media: boolean; display: boolean }) {
@@ -44,13 +46,13 @@ export function unavailable(kind: ShareKind, browser: { media: boolean; display:
  * The capture a choice asks for. In the desktop app a picture is the chosen screen or window, and System audio takes
  * the first screen's capture for its sound, keeping the picture private; a browser opens its own picker.
  */
-export function selectionOf(kind: ShareKind, choice: { source?: CaptureSource; sources?: CaptureSource[]; audioDeviceId?: string; quality: LiveVideoQuality; sound: boolean }): LiveSelection {
+export function selectionOf(kind: ShareKind, choice: { source?: CaptureSource; sources?: CaptureSource[]; audioDeviceId?: string; quality: LiveVideoQuality; frameRate?: LiveVideoFrameRate; sound: boolean }): LiveSelection {
   const source = kind.pictures ? choice.source : choice.sources?.find(item => item.kind === "screen");
   return {
     kind: kind.capture,
     ...kind.intent ? { intent: kind.intent } : {},
     ...kind.capture !== "microphone" && source ? { sourceId: source.id } : {},
-    ...kind.pictures ? { videoQuality: choice.quality, includeAudio: choice.sound, surface: kind.pictures === "screen" ? "monitor" as const : "window" as const } : {},
+    ...kind.pictures ? { videoQuality: choice.quality, videoFrameRate: choice.frameRate ?? defaultLiveFrameRate, includeAudio: choice.sound, surface: kind.pictures === "screen" ? "monitor" as const : "window" as const } : {},
     ...kind.inputs && choice.audioDeviceId && choice.audioDeviceId !== "default" ? { audioDeviceId: choice.audioDeviceId } : {},
   };
 }
