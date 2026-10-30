@@ -108,15 +108,15 @@ test("native receiving-host preflight preserves queues while a capture-only host
   const subscription = Object.assign(new EventEmitter(), { stdout: new PassThrough(), kill() { this.stdout.end(); } });
   const { execFile, spawn } = childProcess;
   const exists = fs.existsSync;
-  t.mock.method(fs, "existsSync", path => path === "/usr/bin/pactl" || exists(path));
-  t.mock.method(childProcess, "execFile", (file, args, options, callback) => {
+  t.mock.method(fs, "existsSync", (path: fs.PathLike) => path === "/usr/bin/pactl" || exists(path));
+  t.mock.method(childProcess, "execFile", (file: string, args: string[], options: childProcess.ExecFileOptionsWithStringEncoding, callback: (error: Error | null, stdout: string) => void) => {
     if (file !== "/usr/bin/pactl") return execFile(file, args, options, callback);
     queueMicrotask(() => {
       if (unavailable) return callback(Object.assign(new Error("Audio session unavailable"), { code: "ECONNREFUSED" }), "");
       callback(null, args[0] === "get-default-sink" ? "speakers" : JSON.stringify(args.includes("sinks") ? [{ index: 1, name: "speakers", volume: { left: { value: 32768 } } }] : []));
     });
   });
-  t.mock.method(childProcess, "spawn", (file, ...args) => file === "/usr/bin/pactl" ? subscription : spawn(file, ...args));
+  t.mock.method(childProcess, "spawn", (file: string, ...args: [string[], childProcess.SpawnOptions]) => file === "/usr/bin/pactl" ? subscription : spawn(file, ...args));
   syncBuiltinESMExports();
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
   const directory = mkdtempSync(join(tmpdir(), "couch-native-policy-")), databasePath = join(directory, "couch.sqlite");

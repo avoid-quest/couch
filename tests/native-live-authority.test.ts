@@ -97,3 +97,47 @@ test("native selection and uploads retain local owner, publication and token bou
   h.owner.emit("did-start-navigation", {}, "http://localhost:4100/", false, true);
   expect(h.signal()?.aborted).toBe(true); await h.live.stop();
 });
+
+test("same-document browsing keeps active capture and its local commands", async () => {
+  const h = harness();
+  try {
+    await h.live.action(selection);
+    h.owner.emit("did-start-navigation", {}, "http://localhost:4100/saved", true, true);
+    h.owner.mainFrame.url = "http://localhost:4100/saved";
+    expect(h.signal()?.aborted).toBe(false);
+    await h.live.action({ op: "mute", id: selection.id, muted: true });
+    await h.live.action({ op: "upload", id: selection.id, uploadId: "one", url: "ws://localhost:4100/api/live/upload?token=test-token&sourceId=publication&key=" + "a".repeat(64) + "&uploadId=one" });
+    expect(h.calls.commands).toBe(2);
+    expect(h.calls.stopped).toBe(0);
+  } finally { await h.live.stop(); }
+});
+
+test("same-document browsing during preparation retains the current document", async () => {
+  const h = harness(), ready = deferred<typeof format>(); h.prepare(() => ready.promise);
+  const preparation = h.live.action(selection); await h.entered.promise;
+  h.owner.emit("did-start-navigation", {}, "http://localhost:4100/settings", true, true);
+  h.owner.mainFrame.url = "http://localhost:4100/settings";
+  ready.resolve(format);
+  try { expect(await preparation).toEqual(format); expect(h.calls.stopped).toBe(0); }
+  finally { await h.live.stop(); }
+});
+
+for (const change of ["frame", "origin", "detached"] as const) test(`capture rejects ${change} replacement after preparation`, async () => {
+  const h = harness();
+  try {
+    await h.live.action(selection);
+    if (change === "frame") h.owner.mainFrame = { ...h.owner.mainFrame };
+    else if (change === "origin") h.owner.mainFrame.url = "https://other.example/saved";
+    else h.owner.mainFrame.detached = true;
+    await expect(h.live.action({ op: "mute", id: selection.id, muted: true })).rejects.toThrow("canceled");
+    expect(h.calls.commands).toBe(0);
+  } finally { await h.live.stop(); }
+});
+
+for (const event of ["destroyed", "render-process-gone"]) test(`${event} still retires capture`, async () => {
+  const h = harness();
+  await h.live.action(selection);
+  h.owner.emit(event);
+  expect(h.signal()?.aborted).toBe(true);
+  await h.live.stop(); expect(h.calls.stopped).toBe(1);
+});

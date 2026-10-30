@@ -58,7 +58,7 @@ const wireOf = (session: SendspinSession): Wire | undefined => {
 };
 const tempo = (speed: number) => speed < 0.5 ? `atempo=0.5,atempo=${speed / 0.5}` : speed > 2 ? `atempo=2,atempo=${speed / 2}` : `atempo=${speed}`;
 
-export function createScheduledAudio(options: { serverId?: string; privateKey?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
+export function createScheduledAudio(options: { serverId?: string; privateKey?: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg?: Ffmpeg; childStarted?: (child: ChildProcess) => void; sourceFailed?: (id: string, error: string) => void; logError?: (id: string, source: string | undefined, message: string) => void; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
   const security = { identity: options.privateKey ? Identity.fromPrivateB64u(options.privateKey) : Identity.generate(), pskProvider: () => SENTINEL_RESOLVED };
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
@@ -67,7 +67,12 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
   const sessions = new Map<string, SendspinSession>();
   const identified = new Set<SendspinSession>();
   const delays = new Map<string, number>();
-  const groups = new Set<{ joined: (clientId: string) => void; formatChanged: (session: SendspinSession) => void; sourceChanged: (id: string) => void }>();
+  const groups = new Set<{ joined: (clientId: string) => void; formatChanged: (session: SendspinSession) => void; sourceChanged: (id: string) => void; close: () => void }>();
+  const children = new Set<ChildProcess>();
+  const childStarted = (child: ChildProcess) => {
+    children.add(child); child.once("close", () => children.delete(child));
+    options.childStarted?.(child);
+  };
   const select = (clientId: string) => {
     const candidates = [...identified].filter(session => session.getClientId() === clientId);
     const next = candidates.at(-1), previous = sessions.get(clientId);
@@ -95,7 +100,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
   };
 
   // One Playback's speakers: its Sendspin group. It is the Playback's player while its outputs span Devices.
-  function group(id: string, observe: (state: PlayerState) => void) {
+  function group(id: string, observe: (state: PlayerState) => void, logError?: (source: string | undefined, error: string) => void) {
     let members: Member[] = [];
     let screens: string[] = [];
     // Sendspin servers supply timestamps. For capture use the group's largest
@@ -175,7 +180,8 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
       each(session => { if (end) { session.sendStreamEnd(); session.sendGroupUpdate(PlaybackStateType.STOPPED, id, options.name); } else session.sendStreamClear(); });
     };
     const fail = (message: string) => {
-      if (options.logError) options.logError(id, load?.audioSource ?? load?.source, message);
+      if (logError) logError(load?.audioSource ?? load?.source, message);
+      else if (options.logError) options.logError(id, load?.audioSource ?? load?.source, message);
       else logPlaybackError(id, "Synced", load?.audioSource ?? load?.source, message);
       halt(true); state = { ...state, status: "error", error: message }; report();
     };
@@ -248,6 +254,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
           "-filter_complex", graph,
           ...wires.has("opus") ? [...shape("opus"), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
           ...wires.has("pcm") ? [...shape("pcm"), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
+        childStarted(child);
         child.once("close", executable.release);
         ffmpeg = undefined; // The child owns the lease until its process and pipes close.
         if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
@@ -257,6 +264,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         const diagnostic = ffmpegErrorLog();
         let partial = "";
         child.stderr!.setEncoding("utf8").on("data", (text: string) => {
+          if (run !== next) return;
           diagnostic.write(text);
           const lines = (partial + text).split("\n");
           partial = lines.pop()!;
@@ -284,7 +292,7 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
         if (wires.has("opus")) {
           const pipe = next.pipes.opus = child.stdout!;
           let offset = 0;
-          pipe.on("data", oggPackets(packet => {
+          const packets = oggPackets(packet => {
             // OpusHead's pre-skip is the encoder's delay; timestamps drop it so every wire lines up.
             const magic = packet.toString("latin1", 0, 8);
             if (magic === "OpusHead") { offset = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
@@ -292,7 +300,12 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
             const duration = opusDuration(packet);
             queue("opus", pipe, { offset, duration, data: packet });
             offset += duration;
-          }));
+          });
+          pipe.on("data", (data: Buffer) => {
+            if (run !== next) return;
+            try { packets(data); }
+            catch (error) { fail(error instanceof Error ? error.message : "FFmpeg sent a broken Ogg stream."); }
+          });
         }
         if (wires.has("pcm")) {
           const pipe = next.pipes.pcm = child.stdio[3] as Readable;
@@ -515,10 +528,10 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     connected: (clientId: string) => sessions.has(clientId),
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
     drop(clientId: string) { for (const [session, socket] of socketOf) if (session.getClientId() === clientId) socket.terminate(); },
-    status: () => ({ clients: [...sessions.keys()], delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error]) }),
+    status: () => ({ clients: [...sessions.keys()], delays: [...delays], receivers: [...receiverErrors].map(([clientId, value]) => [clientId, value.error, value.group] as const) }),
     registerSource(id: string, details?: LiveSource) {
       if (sources.has(id)) return;
-      sources.set(id, { details, capture: createScheduledCapture(options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }) });
+      sources.set(id, { details, capture: createScheduledCapture(options.ffmpeg ?? (() => useHelper("ffmpeg")), error => { options.sourceFailed?.(id, error); options.changed(); }, childStarted) });
     },
     updateSource(details: LiveSource) {
       const source = sources.get(details.id);
@@ -529,6 +542,11 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     writeSource(id: string, packet: CaptureAudioPacket) { return sources.get(id)?.capture.write(packet) ?? false; },
     failSource(id: string, error: string) { sources.get(id)?.capture.fail(error); },
     endSource(id: string) { sources.get(id)?.capture.close(); sources.delete(id); },
-    close() { for (const source of sources.values()) source.capture.close(); sources.clear(); for (const socket of sockets) socket.terminate(); },
+    close() {
+      for (const group of groups) group.close();
+      for (const source of sources.values()) source.capture.close(); sources.clear();
+      for (const socket of sockets) socket.terminate();
+      return Promise.all([...children].map(child => new Promise<void>(resolve => child.once("close", () => resolve())))).then(() => {});
+    },
   };
 }

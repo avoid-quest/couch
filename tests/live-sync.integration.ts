@@ -38,7 +38,7 @@ test("a live input uses the same speaker delay setting as other grouped playback
   const f = await grouped();
   try {
     const result = await f.publisher.command({ type: "output", deviceId: f.receiver.id, delay: 80 });
-    assert.equal(result.ok, true, result.error);
+    assert.equal(result.ok, true, result.error ?? "");
     await until(() => f.delays.includes(80));
     await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delay === 80);
     await until(() => f.publisher.state.player.status === "playing");

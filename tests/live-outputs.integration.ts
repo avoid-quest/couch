@@ -17,7 +17,7 @@ async function liveFixture({ askEveryDevice = true, ...options }: { local?: bool
   // executable exists, and finish checks before a later fixture changes PATH.
   startHelpers(join(dirname(fixture.databasePath), "helpers"));
   const helpers = await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
-  assert.deepEqual(helpers[0], { status: "fulfilled", value: join(dirname(fixture.databasePath), "ffmpeg") }, "only this fixture's encoder is selected");
+  assert.deepEqual(helpers[0], { status: "fulfilled", value: fixture.executable }, "only this fixture's encoder is selected");
   if (askEveryDevice) {
     const host = await fixture.connect(-1);
     assert.equal((await host.command({ type: "askEveryDevice", enabled: true })).ok, true);
@@ -96,6 +96,11 @@ test("Play from Up next asks this window when private outputs cannot use the sou
     const entryId = f.receiver.state.queue.at(-1)!.id;
     const before = f.receiver.state, action = { type: "play", entryId } as const;
     assert.equal((await f.receiver.command(action)).ok, true);
+    const playbackId = f.receiver.state.player.playbackId;
+    assert.notEqual(playbackId, before.player.playbackId);
+    // Play acknowledges admission while source preparation is still loading;
+    // its load keeps the private picture and pauses this same generation to choose.
+    await until(() => f.receiver.state.currentEntryId === entryId && f.receiver.state.player.playbackId === playbackId && f.receiver.state.player.status === "paused");
     assert.equal(f.receiver.state.player.status, "paused");
     assert.equal(f.receiver.state.outputs?.length, 1, "the private picture stays for later video");
     assert.equal(chooserRequest(f.receiver.state), null);
@@ -152,7 +157,7 @@ test("Where it plays adds shared speakers to a running relaxed microphone withou
     assert.equal(row.disabled, false);
     row.onPressedChange(true);
     await until(() => results.length > 0);
-    assert.equal(results[0]!.ok, true, results[0]!.error);
+    assert.equal(results[0]!.ok, true, results[0]!.error ?? "");
     await until(() => !!other.load()?.livePeerId);
     assert.equal(other.load()!.liveOutput!.picture, false);
     assert.equal(other.load()!.liveOutput!.sound, true);
@@ -172,7 +177,7 @@ test("Play on the publisher waits in Where it plays, opens it on each request, a
     const sheet = chooser(f.publisher);
     assert.equal(sheet.observe(), 0);
     const self = await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id });
-    assert.equal(self.ok, true, self.error);
+    assert.equal(self.ok, true, self.error ?? "");
     await until(() => f.publisher.state.player.error === "Publisher is sharing this source. Choose where it plays.");
     assert.equal(sheet.observe(), 1, "the transition to waiting opens Where it plays");
     assert.equal(choosesHere({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id }, null, f.publisher.state), false, "Core's request opens it, not another of this window's");
@@ -262,7 +267,7 @@ test("Primary Play on a device busy with an ordinary item joins the source's pla
     await until(() => !!other.load());
     const movie = other.state.playback;
     const play = await other.command({ type: "playLive", sourceId: "screen" });
-    assert.equal(play.ok, true, play.error);
+    assert.equal(play.ok, true, play.error ?? "");
     await until(() => other.state.playback === first && direct(other.load()));
     assert.equal(sharedPlaybacks(other).length, 1, "Play and Play on reach the same playback");
     assert.deepEqual(receivers(other)?.sort(), [f.receiver.id, other.id].sort());
@@ -283,10 +288,10 @@ test("Queue and Play next add an active source to the queue without joining or i
     const load = f.receiver.load(), commands = f.receiver.messages.length;
     assert.equal((await f.receiver.command({ type: "enqueue", entry: ordinary(f, "after") })).ok, true);
     const queued = await f.receiver.command({ type: "playLive", sourceId: "screen", playNow: false });
-    assert.equal(queued.ok, true, queued.error);
+    assert.equal(queued.ok, true, queued.error ?? "");
     await until(() => f.receiver.state.queue.length === 3);
     const next = await f.receiver.command({ type: "playLive", sourceId: "screen", playNow: false, placement: "next" });
-    assert.equal(next.ok, true, next.error);
+    assert.equal(next.ok, true, next.error ?? "");
     await until(() => f.receiver.state.queue.length === 4);
     assert.deepEqual(titles(f.receiver), ["Publisher · Screen", "Publisher · Screen", "after", "Publisher · Screen"]);
     assert.equal(playingNow(f.receiver), "Publisher · Screen");
@@ -350,7 +355,7 @@ test("an outputless request to choose never makes the one receiving playback amb
     await until(() => sharedPlaybacks(f.publisher).some(playback => !playback.outputs.length && !!playback.choosing));
     const other = await f.connect(2);
     const join = await other.command({ type: "playLive", sourceId: "screen", deviceId: other.id });
-    assert.equal(join.ok, true, join.error);
+    assert.equal(join.ok, true, join.error ?? "");
     await until(() => other.state.playback === first && direct(other.load()));
     assert.deepEqual(receivers(other)?.sort(), [f.receiver.id, other.id].sort());
   } finally { await f.close(); }
@@ -394,7 +399,7 @@ test("Play inherits the publisher's mix without it, and the publisher keeps cont
     const playback = f.publisher.state.playback;
     await f.publish("screen");
     const play = await f.publisher.command({ type: "playLive", sourceId: "screen" });
-    assert.equal(play.ok, true, play.error);
+    assert.equal(play.ok, true, play.error ?? "");
     await until(() => direct(f.receiver.load()));
     assert.equal(f.publisher.state.playback, playback);
     assert.deepEqual(receivers(f.publisher), [f.receiver.id], "one receiver stays direct");
@@ -466,7 +471,7 @@ test("after a queued own source, the next ordinary item returns to the publisher
     await until(() => f.publisher.state.player.status === "paused" && !f.publisher.state.outputs?.length);
     assert.equal(sheet.observe(), 1, "Next into its own source opens Where it plays");
     const next = await f.publisher.command({ type: "next", playbackId: f.publisher.state.player.playbackId! });
-    assert.equal(next.ok, true, next.error);
+    assert.equal(next.ok, true, next.error ?? "");
     await until(() => playingNow(f.publisher) === "after" && receivers(f.publisher)?.join() === f.publisher.id);
     await until(() => f.publisher.load()?.source === `${f.hub.origin}/api/health` && f.publisher.state.player.status !== "unavailable");
     assert.equal(f.publisher.state.player.error ?? null, null);
@@ -520,7 +525,7 @@ test("in a publisher-and-receiver mix, the next ordinary item plays on both agai
     // return, so Move here still commits.
     assert.equal(control(Mixer({ state: publisher.state, connected: true, run: async () => true }), "Move here: Receiver"), undefined);
     const only = await publisher.command({ type: "solo", deviceId: f.receiver.id });
-    assert.equal(only.ok, true, only.error);
+    assert.equal(only.ok, true, only.error ?? "");
     assert.equal((await publisher.command({ type: "next", playbackId: publisher.state.player.playbackId! })).ok, true);
     // Playing an entry moves it after the current one, so the next ordinary item is now "last".
     await until(() => playingNow(publisher) === "last" && f.receiver.load()?.playbackId === publisher.state.player.playbackId);
@@ -540,7 +545,7 @@ test("a queued source in a publisher-and-receiver mix plays directly on the rece
     await f.publisher.command({ type: "output", deviceId: f.receiver.id, level: 50, picture: true });
     await f.publisher.command({ type: "playLive", sourceId: "screen", playNow: false });
     const next = await f.publisher.command({ type: "next", playbackId: f.publisher.state.player.playbackId! });
-    assert.equal(next.ok, true, next.error);
+    assert.equal(next.ok, true, next.error ?? "");
     await until(() => direct(f.receiver.load()));
     assert.deepEqual(receivers(f.publisher), [f.receiver.id]);
     // A second tab of the publisher (reconnection) still receives nothing.
@@ -594,7 +599,7 @@ test("This device joins from Where it plays without sharing, and Move here refus
     f.receiver.report({ position: 1 }); local.report({ position: 1 });
     await until(() => local.state.player.status === "playing" && local.state.player.position > 0);
     const mine = await local.command({ type: "solo", deviceId: local.id });
-    assert.equal(mine.ok, true, mine.error);
+    assert.equal(mine.ok, true, mine.error ?? "");
     await until(() => receivers(local)?.join() === local.id && direct(local.load()));
   } finally { await f.close(); }
 });
@@ -614,20 +619,20 @@ test("Move here goes direct, and sync adjustment keeps its value but applies onl
     await until(() => !!other.load()?.follow);
     await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delayActive === true);
     const set = await f.publisher.command({ type: "output", deviceId: f.receiver.id, delay: 80 });
-    assert.equal(set.ok, true, set.error);
+    assert.equal(set.ok, true, set.error ?? "");
     await until(() => delays.includes(80) && f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delay === 80);
     const preferences = f.publisher.state.preferences, volumes = [sound(f.publisher, f.receiver.id), sound(f.publisher, other.id)];
     f.receiver.report(); other.report();
     await until(() => f.publisher.state.player.status === "playing" && f.publisher.state.player.position > 0);
     // Move here moves the playback exclusively; each single receiver plays directly over WebRTC.
     const only = await f.publisher.command({ type: "solo", deviceId: other.id });
-    assert.equal(only.ok, true, only.error);
+    assert.equal(only.ok, true, only.error ?? "");
     await until(() => direct(other.load()));
     assert.deepEqual(receivers(f.publisher), [other.id]);
     other.report();
     await until(() => f.publisher.state.player.status === "playing");
     const back = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
-    assert.equal(back.ok, true, back.error);
+    assert.equal(back.ok, true, back.error ?? "");
     await until(() => direct(f.receiver.load()) && receivers(f.publisher)?.join() === f.receiver.id);
     // The saved delay still shows, without an operative control.
     const output = f.publisher.state.outputs![0]!;
@@ -783,7 +788,7 @@ test("unpairing a held publisher retires its output, and the remaining receiver 
     assert.equal(removal.status, 200);
     await until(() => !f.receiver.state.liveSources?.length);
     const play = await f.receiver.command({ type: "play", entryId: "after" });
-    assert.equal(play.ok, true, play.error);
+    assert.equal(play.ok, true, play.error ?? "");
     await until(() => playingNow(f.receiver) === "after" && f.receiver.load()?.source === `${f.hub.origin}/api/health`);
     await new Promise(resolve => setTimeout(resolve, 50));
     assert.equal(f.receiver.state.player.error ?? null, null);
@@ -800,7 +805,7 @@ test("a private receiver joining the publisher's waiting playback leaves the pub
     await until(() => !!f.publisher.state.playback);
     const waiting = f.publisher.state.playback;
     const joined = await f.receiver.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
-    assert.equal(joined.ok, true, joined.error);
+    assert.equal(joined.ok, true, joined.error ?? "");
     await until(() => direct(f.receiver.load()));
     f.receiver.report();
     await until(() => f.publisher.state.player.status === "playing");
@@ -809,7 +814,7 @@ test("a private receiver joining the publisher's waiting playback leaves the pub
     assert.equal(f.publisher.state.playback, waiting);
     assert.deepEqual(titles(f.publisher), ["Publisher · Screen"]);
     const pause = await f.publisher.command({ type: "pause", playbackId: f.publisher.state.player.playbackId!, paused: true });
-    assert.equal(pause.ok, true, pause.error);
+    assert.equal(pause.ok, true, pause.error ?? "");
     await until(() => lastCommand(f.receiver) === "pause");
     // The receiver's output stays its own, and its consent unchanged.
     assert.deepEqual(consent(f.publisher, f.receiver.id), { audio: false, video: false });
@@ -886,7 +891,7 @@ test("Move here rechecks every output it removes after the item resolves, and re
     assert.equal((await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
     await until(() => consent(f.publisher, f.receiver.id)?.audio === true);
     const moved = await f.publisher.command({ type: "solo", deviceId: f.publisher.id });
-    assert.equal(moved.ok, true, moved.error);
+    assert.equal(moved.ok, true, moved.error ?? "");
     await until(() => receivers(f.publisher)?.join() === f.publisher.id);
   } finally {
     server.closeAllConnections();
@@ -942,7 +947,7 @@ test("Move here counts a held publisher: refused and not offered while it is pri
     await f.publisher.command({ type: "sharing", sharing: { audio: true, video: true } });
     await until(() => consent(local, f.publisher.id)?.video === true);
     const only = await local.command({ type: "solo", deviceId: local.id });
-    assert.equal(only.ok, true, only.error);
+    assert.equal(only.ok, true, only.error ?? "");
     assert.equal((await local.command({ type: "next", playbackId: local.state.player.playbackId! })).ok, true);
     await until(() => playingNow(local) === "last");
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -1006,7 +1011,7 @@ test("Play on the publisher again shows the playback it established, keeping its
     const load = f.receiver.load(), { playbackId } = f.receiver.state.player;
     const action = { type: "playLive", sourceId: "screen", deviceId: f.publisher.id } as const, before = f.publisher.state;
     const repeat = await f.publisher.command(action);
-    assert.equal(repeat.ok, true, repeat.error);
+    assert.equal(repeat.ok, true, repeat.error ?? "");
     await new Promise(resolve => setTimeout(resolve, 50));
     assert.equal(f.publisher.state.playback, playback);
     assert.equal(sharedPlaybacks(f.publisher).length, 1, "no outputless playback is forked");
@@ -1017,7 +1022,7 @@ test("Play on the publisher again shows the playback it established, keeping its
     assert.equal(chooserRequest(f.receiver.state), null);
     assert.equal(f.receiver.state.player.status, "playing");
     const pause = await f.publisher.command({ type: "pause", playbackId: playbackId!, paused: true });
-    assert.equal(pause.ok, true, pause.error);
+    assert.equal(pause.ok, true, pause.error ?? "");
     // Primary Play while viewing it is the same request.
     const primary = { type: "playLive", sourceId: "screen" } as const, viewing = f.publisher.state;
     assert.equal((await f.publisher.command(primary)).ok, true);
@@ -1046,7 +1051,7 @@ test("ordinary Play while holding a playback keeps its mix; Play on the publishe
     await until(() => playingNow(f.receiver) === "Publisher · Screen" && receivers(f.publisher)?.join() === f.receiver.id);
     const playback = f.publisher.state.playback;
     const play = await f.publisher.command({ type: "enqueue", entry: ordinary(f, "movie"), playNow: true });
-    assert.equal(play.ok, true, play.error);
+    assert.equal(play.ok, true, play.error ?? "");
     await until(() => playingNow(f.publisher) === "movie" && receivers(f.publisher)?.length === 2);
     assert.equal(f.publisher.state.playback, playback, "the selected mix keeps its playback");
     assert.deepEqual(receivers(f.publisher)?.sort(), [f.publisher.id, f.receiver.id].sort(), "the publisher returns to it");
@@ -1073,7 +1078,7 @@ for (const entry of ["find", "picker"] as const) test(`an established publisher 
     assert.match((await outsider.command({ type: "playLive", sourceId: "screen", deviceId: outsider.id })).error!, /playing privately on Receiver/);
     const other = await f.connect(2, "&audio=1&video=1");
     const join = entry === "find" ? await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: other.id }) : await f.publisher.command({ type: "output", deviceId: other.id, picture: true, level: 50 });
-    assert.equal(join.ok, true, join.error);
+    assert.equal(join.ok, true, join.error ?? "");
     await until(() => direct(other.load()) && receivers(f.publisher)?.length === 2);
     assert.equal(f.publisher.state.playback, playback);
     assert.equal(other.state.playback, playback);
@@ -1128,7 +1133,7 @@ test("primary Play of another publisher's source keeps the held publisher in the
       assert.deepEqual({ outputs: receivers(f.publisher), held: held() }, { outputs: [f.receiver.id], held: f.publisher.id });
       // Primary Play of the receiver's capture: the selected mix moves with it, so each publisher swaps places.
       const play = await f.publisher.command({ type: "playLive", sourceId: "receiver-screen" });
-      assert.equal(play.ok, true, play.error);
+      assert.equal(play.ok, true, play.error ?? "");
       await until(() => playingNow(f.publisher) === "Receiver · Screen" && direct(f.publisher.load()) && f.publisher.load()?.liveSourceId === "receiver-screen");
       assert.equal(f.publisher.state.playback, playback);
       assert.deepEqual({ outputs: receivers(f.publisher), held: held() }, { outputs: [f.publisher.id], held: f.receiver.id });
@@ -1181,7 +1186,7 @@ for (const [count, entry, retired] of [[2, "primary"], [2, "next"], [3, "primary
         assert.deepEqual(mix(), { outputs: all.filter(id => id !== f.publisher.id), held: f.publisher.id });
         if (entry === "next") assert.equal((await f.publisher.command({ type: "playLive", sourceId: "receiver-screen", playNow: false })).ok, true);
         const transition = await f.publisher.command(entry === "primary" ? { type: "playLive", sourceId: "receiver-screen" } : { type: "next", playbackId: f.publisher.state.player.playbackId! });
-        assert.equal(transition.ok, true, transition.error);
+        assert.equal(transition.ok, true, transition.error ?? "");
         await until(() => playingNow(f.publisher) === "Receiver · Screen" && f.publisher.state.playbacks?.find(item => item.id === playback)?.liveSourceId === "receiver-screen");
         await new Promise(resolve => setTimeout(resolve, 50));
         assert.equal(f.publisher.state.playback, playback);
@@ -1273,7 +1278,7 @@ for (const count of [2, 3] as const) {
         assert.equal(f.heard(0), 0);
         // With room in Up next, the same Play moves the mix.
         const play = await f.publisher.command({ type: "playLive", sourceId: "receiver-screen" });
-        assert.equal(play.ok, true, play.error);
+        assert.equal(play.ok, true, play.error ?? "");
         await until(() => playingNow(f.publisher) === "Receiver · Screen" && f.publisher.state.playbacks?.find(item => item.id === before.playback)?.liveSourceId === "receiver-screen");
         await new Promise(resolve => setTimeout(resolve, 50));
         const { playback, playing, outputs, held, chooser } = snapshot();
@@ -1486,7 +1491,7 @@ test("private outputs a live source cannot use keep it waiting in Where it plays
     await until(() => receivers(f.receiver)?.length === 2);
     const playback = f.receiver.state.playback, sheet = chooser(f.receiver);
     const withdrawal = await other.command({ type: "sharing", sharing: { audio: false, video: true } });
-    assert.equal(withdrawal.ok, true, withdrawal.error);
+    assert.equal(withdrawal.ok, true, withdrawal.error ?? "");
     await until(() => f.receiver.state.player.status === "paused");
     const waiting = { status: "paused", error: "Other is not sharing an output this source uses. Choose where it plays." };
     assert.deepEqual({ status: f.receiver.state.player.status, error: f.receiver.state.player.error }, waiting);

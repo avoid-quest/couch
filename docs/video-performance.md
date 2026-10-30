@@ -5,6 +5,11 @@ Measured on 29 October 2026 against main `73668e36` and the capture API in
 there is no JavaScript pixel loop to move onto WebGPU. Live pictures normally
 use WebRTC; buffered HLS is a separate compatibility/synchronization path.
 
+The opening measurements are the historical software baseline. Later Windows
+and [native Mac results](release-audit-2026-10-29.md#native-macos-follow-up)
+retain their separate environments and failures; none establishes a passing
+cross-platform 60 FPS sharing release gate.
+
 ## Retained changes
 
 - Screen/window capture accepts independent resolution and **30, 60 or 120 FPS**
@@ -112,6 +117,15 @@ Do not describe that as a GPU or physical-display test. Use separate evidence
 directories for each run. The harness owns an ephemeral port, Electron profile,
 `COUCH_DATA_DIR` and `COUCH_PORT`, and kills only its own child on timeout.
 
+This harness qualifies a fixed 1920×1080 video fixture. Live `720p` samples must
+retain 1280×720; the other modes must retain 1920×1080 throughout capture,
+encoding and decoding. `--screen` requires a controlled 1920×1080 test display,
+and `--quality=original` still uses the generated 1920×1080 source. An arbitrary
+desktop size or aspect ratio is outside this fixture contract. A dimension
+mismatch is reported explicitly and fails qualification even if FPS passes;
+it is not, by itself, evidence of a Couch playback defect. The harness records
+the required dimensions alongside the observed sample without relaxing the gate.
+
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
 `--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
 reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits
@@ -161,6 +175,35 @@ another performance improvement. No open PR was merged or rewritten for this
 check. The eventual merged revision still needs its own CI and hardware run.
 
 ## GPU and the upcoming Live video mode
+
+The [29 October Mac audit](release-audit-2026-10-29.md#native-macos-follow-up)
+records native macOS measurements at actual 1920×1080. Three serial
+eight-second samples sustain about 60 FPS with zero drops for local playback
+and controls, using VideoToolbox decode. Default VP8 sharing requested at 60 FPS
+captures about 58, encodes about 34 and presents 33–34 FPS: it fails the
+55 FPS / 1% drop gate. H.264/VideoToolbox and 8 Mbit/s VP8 pass the initial Mac
+diagnostic samples. The 30 October follow-up reproduces bitrate-driven sender
+omission, but later bitrate-only samples fail with 4.33% and 4.61% steady
+presentation drops, including with separate publisher/receiver renderers.
+Actual Main/Core sharing with generated sound also reproduces the default FPS
+failure. These experiments remain benchmark-only; no production policy changed.
+Fresh Mac 720p60 and 1080p30 controls pass, while Windows/WSL failures remain
+open. See the [audit follow-up](release-audit-2026-10-29.md#playback-and-sharing-performance)
+for per-sample results and remaining limits. 120 FPS capture is untested.
+
+Optional benchmark `--diagnostics` adds bounded sender-parameter, per-peer
+counter, frame-timing and dimension observations, including a pre-warmup
+snapshot. `--bitrate-at-offer` tests diagnostic video parameters before
+negotiation. Both are test controls, not product settings. Keep uninstrumented
+controls, retain every failed sample and distinguish cumulative startup drops,
+warmup deltas and steady drops. Neither composition callbacks nor browser frame
+timestamps establish physical display latency.
+
+`video-performance.native.ts` sizes the generated source in physical pixels
+using the display scale factor and requires its exact window ID. On scaled displays,
+1920×1080 **points** can be clamped by macOS and produce a smaller, distorted
+encoded picture; that initial run is retained but does not qualify 1080p.
+Always inspect actual captured/encoded dimensions and warmup/steady drops.
 
 1. Keep native `<video>` and WebRTC as the ordinary playback/capture paths.
    Hardware video decoding/encoding and GPU composition are separate from

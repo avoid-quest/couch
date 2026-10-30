@@ -141,6 +141,11 @@ painted once: no blurred copy of the picture, nothing animated.
 Video keeps black letterbox bars in windowed, fullscreen and TV playback; no
 artwork light is painted behind its picture. Its control bands use neutral
 black scrims for legibility. Audio and browsing keep their artwork-lit rooms.
+On macOS, the player completes native window entry before entering document
+fullscreen and restores the previous native mode on exit. Its button and shortcut
+stay pending until the native animation finishes; playback sheets remain available.
+An older remote Couch page in Client mode still uses its own fullscreen code;
+the native-first ordering requires the updated page as well as the app.
 A hovered or focused tile or row glows under its picture in its first colour
 (`useItemLight`).
 
@@ -512,6 +517,9 @@ toast and clear their saved results automatically; failures stay visible for ret
   key returns. The TV ignores pointer hover on them.
 - A refused media request shows its HTTP status. **Try again** requests a fresh
   stream; a 403 alone does not claim that the video requires age verification or sign-in.
+  A failed synchronized encoder stops only its Playback or Source. If the shared
+  audio worker stops, current and later scheduled playback and source attempts
+  report an error until Core restarts.
   YouTube stays loading until its selected formats pass a downloadability check,
   including after **Try again**. Website playback uses the faster bundled Node
   runtime where available and starts delivery without discarded relay probes;

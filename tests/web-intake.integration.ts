@@ -1,4 +1,5 @@
 import { test, type TestContext } from "node:test";
+import { executableName, nodeExecutables } from "./executable.fixture";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +16,7 @@ import type { Action, ServerMessage, SessionState } from "../src/shared/protocol
 // renderer are fixtures. Each run owns its database, helper directory and loopback port.
 const hostId = "h".repeat(43), hostToken = "h".repeat(64);
 const video = (id: string) => `https://www.youtube.com/watch?v=${id}`;
-const options = { skip: process.platform === "win32", timeout: 15_000 };
+const options = { timeout: 15_000 };
 async function until(predicate: () => boolean, message: string) {
   const deadline = Date.now() + 5_000;
   while (!predicate()) { assert.ok(Date.now() < deadline, message); await new Promise(resolve => setTimeout(resolve, 10)); }
@@ -24,6 +25,7 @@ async function fixture(t: TestContext, mode = "success", delay = 50) {
   const directory = mkdtempSync(join(tmpdir(), "couch-web-intake-")), bin = join(directory, "bin"), helpers = join(directory, "helpers");
   const runsFile = join(directory, "runs"), gate = join(directory, "gate");
   const before = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE };
+  const fixtures = nodeExecutables(directory);
   mkdirSync(bin);
   process.env.PATH = bin; process.env.COUCH_DATA_DIR = directory;
   const timers: ReturnType<typeof setInterval>[] = [], interval = globalThis.setInterval;
@@ -37,9 +39,9 @@ async function fixture(t: TestContext, mode = "success", delay = 50) {
   });
   syncBuiltinESMExports();
   for (const [name, version] of [["qjs", "0.17.0"], ["ffmpeg", "ffmpeg version 9.0.2"]]) {
-    writeFileSync(join(bin, name!), `#!/bin/sh\necho '${version}'\n`, { mode: 0o755 });
+    writeFileSync(join(bin, executableName(name!)), `#!${process.execPath}\nconsole.log(${JSON.stringify(version)});\n`, { mode: 0o755 });
   }
-  writeFileSync(join(bin, "yt-dlp"), `#!${process.execPath}
+  writeFileSync(join(bin, executableName("yt-dlp")), `#!${process.execPath}
 const fs = process.getBuiltinModule("node:fs");
 if (process.argv.includes("--version")) console.log("2026.10.21");
 else {
@@ -75,6 +77,7 @@ else {
     await updateStatus(helpers, () => {});
     t.mock.restoreAll(); syncBuiltinESMExports();
     for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    await fixtures.close();
     rmSync(directory, { recursive: true, force: true });
   });
   await until(() => !!state, "Core published its state");

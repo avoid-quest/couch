@@ -4,7 +4,6 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Identity } from "@sonn-audio/node-sendspin";
 import { createSendspin, type SyncedLoad } from "../src/server/sendspin";
 import type { PlayerState } from "../src/shared/protocol";
 
@@ -20,11 +19,11 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   // Produce no media or physical audio; hold a real child open until Core halts it.
   writeFileSync(script, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
   const source = createServer((_request, response) => response.end("fixture input"));
-  await new Promise<void>(resolve => source.listen(42701, "127.0.0.1", resolve));
+  await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   const server = createSendspin({ name: "Test Couch", admit: () => false, changed: () => {}, ffmpeg: executable ?? (() => Promise.resolve(script)) });
   const group = server.group("a".repeat(36), state => states.push(state));
   group.members([{ deviceId: "unconnected", level: 100 }]);
-  const load: SyncedLoad = { type: "load", playbackId: "p".repeat(36), source: "http://127.0.0.1:42701/input?sig=synthetic-secret" };
+  const load: SyncedLoad = { type: "load", playbackId: "p".repeat(36), source: `http://127.0.0.1:${(source.address() as { port: number }).port}/input?sig=synthetic-secret` };
   t.after(async () => {
     group.close(); server.close();
     if (existsSync(marker)) await until(() => { try { process.kill(Number(readFileSync(marker, "utf8")), 0); return false; } catch { return true; } });
@@ -79,7 +78,7 @@ for (const [separator, chunked] of [["", false], ["\t", false], ["\u2028", false
   const f = await fixture(t);
   const username = "synthetic-private-user";
   const prefix = "Decoder input refused: ".padEnd(200 - (`http://${username}`).length - 1, "x") + " ";
-  const source = `http://${username}:synthetic-password@127.0.0.1:42701/movie${separator}/private?sig=synthetic-query`;
+  const source = `http://${username}:synthetic-password@${new URL(f.load.source).host}/movie${separator}/private?sig=synthetic-query`;
   writeFileSync(f.script, `#!${process.execPath}\nconst message = ${JSON.stringify(prefix)} + process.argv[process.argv.indexOf('-i') + 1];
     ${chunked ? `const cut = message.indexOf("\\n") + 1; process.stderr.write(message.slice(0, cut)); setTimeout(() => { process.stderr.write(message.slice(cut)); process.exitCode = 1; }, 25);` : `console.error(message); process.exitCode = 1;`}\n`, { mode: 0o755 });
   f.group.send({ ...f.load, source });

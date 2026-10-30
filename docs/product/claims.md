@@ -43,7 +43,7 @@ copy; do not equate "on main" with "in the latest preview".
 
 | Claim | Evidence | Public wording limits |
 | --- | --- | --- |
-| Screen/window sharing offers independent resolution and 30/60/120 FPS targets, default 60 | #941, #940; [video measurements](../video-performance.md) | Targets, not achieved frame rates. Both WSL software sharing and native Windows GPU sharing miss the sustained 60 FPS gate ([audit](../release-audit-2026-10-29.md)). Native Linux/Mac GPUs, multi-receiver load and 120 Hz chains remain unqualified |
+| Screen/window sharing offers independent resolution and 30/60/120 FPS targets, default 60 | #941, #940; [video measurements](../video-performance.md) | Targets, not achieved frame rates. Recorded WSL software, native Windows and native Mac default sharing miss the sustained 60 FPS gate ([audit](../release-audit-2026-10-29.md), [Mac follow-up](../release-audit-2026-10-29.md#native-macos-follow-up)). Native Linux GPU sharing, multiple physical receivers and 120 Hz chains remain unqualified |
 | External media avoids discarded preparation requests; YouTube can use the existing Node runtime | #944; [startup measurements](../media-startup-performance.md) | The controlled delay experiment and individual provider samples do not guarantee internet startup times or improvements for every source |
 | Playback delivery and controls are decided by Core | #918, #919; [delivery ADR](../adr/0002-playback-delivery-and-authority.md) | A private playback does not give every paired device transport control. Live audio mode is excluded from this audit; its existence on main is not venue or latency qualification |
 

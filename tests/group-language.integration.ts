@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { test, type TestContext } from "node:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { checkHelper, helper, startHelpers } from "../src/server/helpers";
 import { liveFixture, until } from "./live-input.fixture";
 import type { MediaTrack, PlaybackCommand } from "../src/shared/protocol";
@@ -31,7 +31,7 @@ async function fixture(t: TestContext, preference = "en", live = false) {
   const origin = `http://127.0.0.1:${(media.address() as { port: number }).port}`, source = `${origin}/master.m3u8`;
   const f = await liveFixture();
   t.after(() => f.close());
-  const binary = process.env.PATH!.split(delimiter)[0]!, executable = join(binary, "ffmpeg");
+  const executable = f.executable;
   // Substitute only the external codec process. The real worker selects its
   // source, supplies transport filters and sends the paced PCM to an SDK client.
   writeFileSync(executable, `#!${process.execPath}\n${[
@@ -52,13 +52,13 @@ async function fixture(t: TestContext, preference = "en", live = false) {
   const play = async (id = "programme") => {
     const previous = f.receiver.load();
     const reply = await f.receiver.command({ type: "enqueue", entry: { id, title: id, source }, playNow: true });
-    assert.equal(reply.ok, true, reply.error);
+    assert.equal(reply.ok, true, reply.error ?? "");
     await until(() => f.receiver.state.currentEntryId === id && f.receiver.state.player.playbackId !== null);
     return previous;
   };
   const joinGroup = async () => {
     const reply = await f.receiver.command({ type: "output", deviceId: other.id, picture: false, level: 80 });
-    assert.equal(reply.ok, true, reply.error);
+    assert.equal(reply.ok, true, reply.error ?? "");
     await until(() => f.receiver.state.playbacks?.find(playback => playback.id === f.receiver.state.playback)?.delivery === "scheduled");
   };
   return { ...f, other, origin, source, requests, play, joinGroup, invocations, decodedSource };

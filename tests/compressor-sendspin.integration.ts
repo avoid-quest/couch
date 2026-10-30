@@ -21,7 +21,7 @@ test("one compressed Sendspin mix feeds Opus and PCM, preserves timestamps, and 
   const directory = mkdtempSync(join(tmpdir(), "couch-compressor-sendspin-")), clients: SendspinClient[] = [];
   const keys = [Identity.generate(), Identity.generate(), Identity.generate()];
   const core = createSendspin({ name: "Compressor fixture", admit: id => keys.some(key => key.peerId === id), changed: () => {}, ffmpeg: async () => ffmpeg });
-  let state: PlayerState;
+  let state: PlayerState | undefined;
   const group = core.group("compressed", next => { state = next; });
   const server = createServer((_request, response) => { response.setHeader("Content-Type", "audio/wav"); response.end(readFileSync(join(directory, "tone.wav"))); });
   const sockets = new WebSocketServer({ server, path: "/sendspin" });
@@ -63,13 +63,16 @@ test("one compressed Sendspin mix feeds Opus and PCM, preserves timestamps, and 
   const late = await receiver(2, AudioCodec.PCM);
   group.members([{ deviceId: pcm.id, level: 100 }, { deviceId: opus.id, level: 37 }, { deviceId: late.id, level: 10 }]);
   await until(() => late.frames.length > 2);
+  // Separate sockets may deliver the late receiver's copy first. Compare only
+  // after every received timestamp has also arrived on the original socket.
+  await until(() => late.frames.every(frame => pcm.frames.some(original => original.timestamp === frame.timestamp)));
   const originals = new Map(pcm.frames.map(frame => [frame.timestamp, frame.bytes]));
   for (const frame of late.frames) assert.deepEqual(frame.bytes, originals.get(frame.timestamp), "A receiver's volume must not change the shared samples");
   const pausedClears = pcm.clears;
   group.send({ type: "pause", playbackId: "tone", paused: true });
-  await until(() => state.status === "paused" && pcm.clears > pausedClears);
+  await until(() => state?.status === "paused" && pcm.clears > pausedClears);
   group.send({ type: "compressor", playbackId: "tone", settings: { ...defaultCompressor, enabled: true, ratio: 1, gain: -6 } });
-  assert.equal(state.status, "paused");
+  assert.equal(state?.status, "paused");
   group.send({ type: "pause", playbackId: "tone", paused: false });
   await until(() => pcm.frames.length > 10);
   assert.ok(Math.abs(rms(0) - .8 / Math.sqrt(2) * 10 ** (-6 / 20)) < .003, "Paused settings were not applied on resume");
@@ -79,7 +82,7 @@ test("one compressed Sendspin mix feeds Opus and PCM, preserves timestamps, and 
   assert.ok(Math.abs(rms(0) - .8 / Math.sqrt(2)) < .003, "Disabling did not restore unprocessed samples");
   const liveClears = pcm.clears;
   group.send({ type: "load", playbackId: "live", source: `${origin}/tone.wav`, liveSourceId: "capture", compressor: { ...defaultCompressor, enabled: true, threshold: -60 } });
-  await until(() => pcm.clears > liveClears && pcm.frames.length > 10 && state.playbackId === "live");
+  await until(() => pcm.clears > liveClears && pcm.frames.length > 10 && state?.playbackId === "live");
   assert.ok(Math.abs(rms(0) - .8 / Math.sqrt(2)) < .003, "Buffered live sharing was compressed");
   t.diagnostic(`compressed PCM RMS ${compressedRms.toFixed(4)}; original 0.5657; mixed Opus/PCM and late receiver verified`);
 });

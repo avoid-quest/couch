@@ -98,6 +98,7 @@ const check = (source: string, realPictureClock = false) => {
       static isSupported() { return mse; }
       static Events = { ERROR: "error", INIT_PTS_FOUND: "pts", LEVEL_LOADED: "level", AUDIO_TRACKS_UPDATED: "audio-tracks", AUDIO_TRACK_SWITCHED: "audio-switch", SUBTITLE_TRACKS_UPDATED: "subtitle-tracks", SUBTITLE_TRACK_SWITCH: "subtitle-switch" };
       static ErrorDetails = {};
+      static ErrorTypes = { NETWORK_ERROR: "networkError" };
       audioTracks = []; subtitleTracks = [];
       listeners = new Map();
       constructor(config) { this.config = config; decoders.push(this); }
@@ -659,3 +660,18 @@ for (const mpegts of [false, true]) test(`${mpegts ? "MPEG-TS" : "native HLS"} C
   assert.equal(video.paused, true, "disposed group following cannot start a replacement load");
   assert.equal(clockTimers.size, 0);
 `, true));
+
+test("refused or unreachable HLS reports its HTTP status or an unavailable source instead of the decoder's error name", () => check(`
+  load();
+  await flush();
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: "networkError", details: "manifestLoadError", response: { code: 404, text: "Not Found" } });
+  assert.equal(reports.at(-1).error, "The media server refused this stream (HTTP 404).");
+  load();
+  await flush();
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: "networkError", details: "manifestLoadError" });
+  assert.equal(reports.at(-1).error, "This media couldn't load. The source may be unavailable or unsupported.", "a status hidden by CORS still reads as an unavailable source");
+  load();
+  await flush();
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, details: "manifestParsingError" });
+  assert.equal(reports.at(-1).error, "The stream failed (manifestParsingError).", "failures without an HTTP status keep their detail");
+`));

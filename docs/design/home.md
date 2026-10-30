@@ -36,6 +36,9 @@ that decides it (session, history, stations) so it never swaps under the
 focus, and the rows wait with it.
 When Play or Resume becomes the playing title, focus moves to that title if
 the removed verb lost it, and stays put if the user moved to another control.
+When Stop removes the focused playing title, focus returns to its replacement
+hero, waiting while it loads. A key, pointer, chosen control or navigation
+meanwhile cancels that recovery, as it does for the now-playing bar.
 
 ## Sections
 

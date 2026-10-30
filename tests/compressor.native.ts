@@ -37,11 +37,14 @@ const { app, BrowserWindow, contentTracing } = require('electron');
 const { writeFileSync } = require('node:fs');
 app.setPath('userData', ${JSON.stringify(join(directory, "data"))});
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// Match ordinary playback in app/main.ts, including the Mac output buffer.
+if (process.platform === 'darwin') app.commandLine.appendSwitch('audio-buffer-size', '128');
 app.whenReady().then(async () => {
   const window = new BrowserWindow({ width: 1280, height: 800, show: true, webPreferences: { backgroundThrottling: false } });
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const evaluate = text => window.webContents.executeJavaScript(text, true);
   const result = { versions: process.versions, hardware: ${JSON.stringify({ cpu: cpus()[0]?.model, logicalCores: cpus().length, os: release(), platform: process.platform })}, fixture: ${JSON.stringify(media ?? "48 kHz stereo PCM16 WAV, alternating quiet/loud 997 Hz, no Core or network relay")}, tv: ${tv}, warmup: ${warmup}, seconds: ${seconds}, rounds: ${rounds}, samples: [] };
+  result.audioBufferSize = app.commandLine.getSwitchValue('audio-buffer-size');
   let code = 0;
   try {
     await window.loadURL(${JSON.stringify(`http://127.0.0.1:${server.port}${tv ? "/?tv=1" : ""}`)});

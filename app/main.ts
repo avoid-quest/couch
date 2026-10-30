@@ -73,6 +73,7 @@ const save = (next: Choice) => {
 };
 
 let window: BrowserWindow | null = null;
+let playerFullscreen: ((enter: boolean) => Promise<void>) | null = null;
 const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin, localOrigin);
 const liveAudio = createLiveAudio(() => window?.webContents ?? null, capture, localOrigin, () => core?.token,
   process.platform === "darwin" ? join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "live-audio", "couch-capture") : undefined);
@@ -328,6 +329,35 @@ function createWindow() {
   window.once("ready-to-show", show);
   window.on("leave-full-screen", () => { if (tv) window?.setFullScreen(true); });
   if (!tv) {
+    if (process.platform === "darwin") {
+      const host = window;
+      let nativeFullscreen = false, restoreFullscreen: boolean | null = null;
+      const pending = (value: boolean) => host.webContents.send("couch:fullscreen-pending", value);
+      const change = (value: boolean) => {
+        if (nativeFullscreen === value && host.isFullScreen() === value) return Promise.resolve();
+        pending(true);
+        return new Promise<void>(resolve => {
+          if (value) host.once("enter-full-screen", () => resolve());
+          else host.once("leave-full-screen", () => resolve());
+          if (host.isFullScreen() !== value) host.setFullScreen(value);
+        });
+      };
+      playerFullscreen = async enter => {
+        if (enter) {
+          restoreFullscreen ??= host.isFullScreen();
+          await change(true);
+        } else if (restoreFullscreen !== null) {
+          const restore = restoreFullscreen;
+          restoreFullscreen = null;
+          await change(restore);
+        }
+      };
+      // HTML begins after native entry. Escape and older remote pages also exit here.
+      host.webContents.on("enter-html-full-screen", () => { void playerFullscreen?.(true); });
+      host.webContents.on("leave-html-full-screen", () => { void playerFullscreen?.(false); });
+      host.on("enter-full-screen", () => { nativeFullscreen = true; pending(false); });
+      host.on("leave-full-screen", () => { nativeFullscreen = false; pending(false); });
+    }
     // Fullscreen hides the window controls, so the header drops their space.
     const fullScreen = () => window?.webContents.send("couch:full-screen", window.isFullScreen());
     window.on("enter-full-screen", fullScreen);
@@ -348,7 +378,7 @@ function createWindow() {
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
   renderer?.watch(contents);
-  contents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => { if (mainFrame) capture.clear(); });
+  contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) capture.clear(); });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
   contents.on("console-message", details => {
@@ -383,6 +413,10 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
+handle("player-fullscreen", (_event, enter) => {
+  if (typeof enter !== "boolean" || !playerFullscreen) throw new Error("Player fullscreen is unavailable.");
+  return playerFullscreen(enter);
+});
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
 handle("live-audio", (_event, action) => liveAudio.action(action));

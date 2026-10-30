@@ -113,6 +113,11 @@ mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
 
+Core starts independent producer cancellation before awaiting buffered setup
+cleanup. Shutdown waits for its audio worker, owned children and late helper
+leases to retire. REST and WebSocket commands settle empty Playbacks they
+created when they finish; cleanup cannot retire another command's pending queue.
+
 Many Playbacks run at once (`src/server/session.ts`, one session each). A Playback
 is a queue, current item, position, pause state, speed and tracks, with its own
 outputs: each Device's `Output` `{ picture, sound }` in it. A Device's outputs
@@ -159,8 +164,9 @@ with the Playback's picture and sound, and `allSpeakers` is the All fader older
 clients offer: it changes only the Playback's trim, preserving output selection and Device
 levels and mute. A Device that joins reloads the item where it was with its pause
 state, speed, tracks and subtitle delay, and windows controlling a Device the
-Playback left follow it. An output that goes offline
-pauses its Playback until it returns, and a Playback ends when its queue does.
+Playback left follow it. Ordinary playback continues on its remaining online
+outputs; it pauses when none remain. Live audio keeps its source timeline.
+A Playback ends when its queue does.
 After Stop it keeps its queue for 10 s, so the controller's Undo can play the
 stopped item again.
 Each Playback keeps its Up next in the `playback` table.
@@ -205,8 +211,9 @@ loop: native Mac inputs use the bundled PortAudio/CoreAudio helper, while
 explicit browser input IDs use an isolated hidden capture page with a restricted
 preload. Native capture uses the selected UID, optional exact device-rate request,
 callback-buffer request and same-process readback. Permission is granted before
-opening the input. Main stops owned capture on cancel, navigation, renderer loss,
-window close and quit, and waits for retirement before another preparation.
+opening the input. Main stops owned capture on cancel, document replacement,
+renderer loss, window close and quit, and waits for retirement before another
+preparation. Same-document browsing retains the current capture owner.
 Inputs exist only while their capture is active.
 Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
 element. Core grants signaling only between the exact publishing and receiving
@@ -254,6 +261,19 @@ only and a 10 s read timeout, decodes once and encodes once per wire format: Opu
 speaker on a wire gets the same chunk with the same timestamp; each applies its Device's
 volume and its own delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
 the Playback is; when the outputs are back on one Device, it plays directly again.
+
+Internal group generations fence worker commands, state, output errors and logs
+while the public Sendspin group ID stays stable. Retired FFmpeg callbacks cannot
+change a replacement programme. A malformed encoder stream fails only its
+Playback or Source. If the shared audio worker stops, current and later scheduled
+loads and source registrations report an error until Core restarts. Core awaits
+the worker, owned encoders and helper leases before completing shutdown, with a
+bounded fallback for worker termination. An already pending helper selection is
+released when it resolves; it does not delay cancellation of unrelated producers.
+After an unexpected worker exit on POSIX, a killed encoder can remain a dead,
+unreaped process until Core exits. Shutdown accepts only a confirmed dead child;
+a running or unknown process still fails cleanup. Graceful shutdown reaps children
+before retiring the worker.
 
 Timestamped native/browser audio enters the publication-scoped upload with the
 local HTTP Origin, owner token, upload key and generation checked by Core.

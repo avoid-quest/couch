@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { executableName, nodeExecutables } from "./executable.fixture";
+import cp, { execFileSync } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
@@ -265,10 +267,20 @@ test("FFmpeg sampling caps audio, protects nested requests, and cleans up on can
   });
 });
 
-test("an oversized decoder output is killed and its resources are released", { skip: process.platform === "win32", timeout: 5000 }, async t => {
+test("an oversized decoder output is killed and its resources are released", { timeout: 5000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), "couch-recognition-test-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  const executable = join(directory, "oversized-decoder");
+  const fixtures = nodeExecutables(directory);
+  const spawn = cp.spawn;
+  let bytes = 0, terminated = false;
+  t.mock.method(cp, "spawn", (...args: Parameters<typeof spawn>) => {
+    const child = spawn(...args);
+    child.stdout?.on("data", (chunk: Buffer) => { bytes += chunk.length; });
+    child.once("close", code => { terminated = code !== 0; });
+    return child;
+  });
+  syncBuiltinESMExports();
+  t.after(async () => { t.mock.restoreAll(); await fixtures.close(); syncBuiltinESMExports(); await rm(directory, { recursive: true, force: true }); });
+  const executable = join(directory, executableName("oversized-decoder"));
   const started = join(directory, "started");
   await writeFile(executable, `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(started)}, "started"); process.stdout.write(Buffer.alloc(1024 * 1024)); setInterval(() => {}, 1000);\n`, { mode: 0o755 });
   let releases = 0, proxyUrl = "";
@@ -277,6 +289,9 @@ test("an oversized decoder output is killed and its resources are released", { s
     proxy: async signal => { const proxy = await createPublicMediaProxy(signal); proxyUrl = proxy.url; return proxy; },
   }), /reachable public radio stream/);
   assert.equal(await readFile(started, "utf8"), "started", "the fixture must run, rather than fail to launch");
+  assert.ok(bytes > 512 * 1024, "the real child must exceed the decoder output limit");
+  assert.equal(terminated, true, "the still-running oversized child must be terminated");
   assert.equal(releases, 1);
+  assert.deepEqual(fixtures.active(), [], "the oversized child must terminate before sampling rejects");
   await closedProxy(proxyUrl);
 });

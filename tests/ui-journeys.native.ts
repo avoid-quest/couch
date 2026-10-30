@@ -12,6 +12,7 @@ const suites: Record<string, [string, string[]]> = {
   field: ["search-field.browser", ["runSearchFieldRegression"]],
   saved: ["saved-lists.browser", ["runSavedListsRegression"]],
   reorder: ["saved-reorder.browser", ["runSavedReorderRegression", "runSavedRenderingRegression"]],
+  queue: ["player-queue.browser", ["runPlayerQueueRegression"]],
   bookmarks: ["save-for-later.browser", ["runSaveForLaterRegression"]],
   home: ["home-focus.browser", ["runHomeFocusRegression"]],
   cache: ["provider-cache.browser", ["runProviderCacheRegression"]],
@@ -59,17 +60,20 @@ app.setPath('userData', ${JSON.stringify(join(directory, "data"))});
 app.whenReady().then(async () => {
   const results = [];
   for (const name of ${JSON.stringify(checks)}) {
-    const window = new BrowserWindow({ width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)}, useContentSize: true, show: true, webPreferences: { backgroundThrottling: false, partition: name } });
+    // These fixtures exercise HTML fullscreen. player-fullscreen.native.ts tests
+    // native window transitions with the real Main/preload and production player.
+    const window = new BrowserWindow({ width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)}, useContentSize: true, show: true, webPreferences: { backgroundThrottling: false, disableHtmlFullscreenWindowResize: true, partition: name } });
     window.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (request, done) => done(new URL(request.url).origin === ${JSON.stringify(origin)} ? {} : request.resourceType === 'image' ? { redirectURL: ${JSON.stringify(origin + "/icons/pwa-512.png")} } : { cancel: true }));
     const timeout = setTimeout(() => window.destroy(), 180_000);
+    const viewport = window.getContentBounds();
     try {
       await window.loadURL(${JSON.stringify(`${origin}/${basename(entry)}${tv ? "?tv=1" : ""}`)});
       window.focus();
       const result = await window.webContents.executeJavaScript('window.checks[' + JSON.stringify(name) + ']()', true);
       const failures = Array.isArray(result) ? result.filter(check => check.passed === false || check.unreachable?.length || check.obscured?.length) : result?.checks?.filter?.(check => check?.passed === false);
-      if (result?.passed === false || failures?.length) throw new Error(JSON.stringify(result));
-      results.push({ name, passed: true, result });
-    } catch (error) { results.push({ name, passed: false, error: String(error) }); }
+      if (result?.passed === false || result?.failures?.length || failures?.length) throw new Error(JSON.stringify(result));
+      results.push({ name, viewport, passed: true, result });
+    } catch (error) { results.push({ name, viewport, passed: false, error: String(error) }); }
     finally { clearTimeout(timeout); if (!window.isDestroyed()) window.destroy(); }
     writeFileSync(${JSON.stringify(join(directory, "result.json"))}, JSON.stringify({ versions: process.versions, results }, null, 2));
     console.log(JSON.stringify(results.at(-1)));
