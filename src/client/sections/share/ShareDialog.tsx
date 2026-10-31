@@ -246,7 +246,7 @@ export function PictureSelects({ id, quality, frameRate, disabled, onQuality, on
       <SelectContent data-tv-local-only>{Object.entries(qualityLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
     </Select>
     <Select value={String(frameRate)} disabled={disabled} onValueChange={value => onFrameRate(Number(value) as LiveVideoFrameRate)}>
-      <SelectTrigger aria-label="Frame rate" className="w-28"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label="Frame rate" title="Frame rate target; your screen and encoder may deliver fewer frames." className="w-28"><SelectValue /></SelectTrigger>
       <SelectContent data-tv-local-only>{Object.entries(frameRateLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
     </Select>
   </div>;

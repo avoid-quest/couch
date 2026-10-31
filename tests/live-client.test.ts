@@ -533,7 +533,7 @@ test("screen capture defaults to bounded video and unprocessed audio, with expli
   assert.equal(screen.video, true);
   assert.equal(captureRequests[0].video.width.max, 1920);
   assert.equal(captureRequests[0].video.height.max, 1080);
-  assert.deepEqual(captureRequests[0].video.frameRate, { ideal: 60, max: 60 });
+  assert.deepEqual(captureRequests[0].video.frameRate, { ideal: 30, max: 30 });
   assert.deepEqual(captureRequests[0].audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: false });
   await session.end();
   const picture = await session.start({ kind: "screen", videoQuality: "720p", includeAudio: false });
@@ -582,7 +582,7 @@ test("picture edits serialize, recover from rejection and leave replacement capt
   await session.start({ kind: "screen" });
   await stale;
   assert.equal(session.sharing().quality, "1080p");
-  assert.equal(session.sharing().frameRate, 60);
+  assert.equal(session.sharing().frameRate, 30);
   await session.end();
   await session.start({ kind: "system-audio" });
   await session.setFrameRate(120);

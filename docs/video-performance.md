@@ -13,7 +13,7 @@ cross-platform 60 FPS sharing release gate.
 ## Retained changes
 
 - Screen/window capture accepts independent resolution and **30, 60 or 120 FPS**
-  targets. `defaultLiveFrameRate` is 60. Both constraints are applied before
+  targets. `defaultLiveFrameRate` is 30 following the [Windows qualification](release-audit-2026-10-29.md#windows-qualification-31-october-2026). Both constraints are applied before
   encoding, and edits during sharing retain the other setting without another
   picker or connection. Concurrent edits serialize; a failed constraint leaves
   the last successful settings intact. Sound-only capture remains at 1 FPS and
@@ -23,8 +23,8 @@ cross-platform 60 FPS sharing release gate.
   MediaRecorder advertises 1000 FPS. A genuine 10 FPS recording with that metadata
   previously produced 30 encoded frames per second; now it produces 10. Genuine
   60/120 FPS recordings previously produced 30; now they preserve 60/120.
-- The production renderer, codecs, bitrate selection, UI and GPU startup flags
-  are unchanged. The FPS selectors are a separate UI layer, PR #940.
+- In the original measurements, the production renderer, codecs, bitrate
+  selection, UI and GPU startup flags were unchanged. The FPS selectors are a separate UI layer, PR #940.
 
 ## Environment and limits
 
@@ -126,6 +126,8 @@ mismatch is reported explicitly and fails qualification even if FPS passes;
 it is not, by itself, evidence of a Couch playback defect. The harness records
 the required dimensions alongside the observed sample without relaxing the gate.
 
+`--sound` includes a generated tone over Windows loopback and asserts advancing
+audio bytes and nonzero decoded energy or PCM level in each steady sample.
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
 `--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
 reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits

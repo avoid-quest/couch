@@ -13,7 +13,7 @@ const until = async (ready: () => boolean) => {
   while (!ready()) { if (performance.now() - started > 15_000) throw new Error("Video did not start"); await wait(25); }
 };
 
-export async function prepareVideo(mode: "playback" | "controls" | "live", media: string, frameRate: LiveVideoFrameRate, quality: LiveVideoQuality, codec?: string, hint?: string, bitrate = 0, jitter = 0, diagnostics = false, bitrateAtOffer = false) {
+export async function prepareVideo(mode: "playback" | "controls" | "live", media: string, frameRate: LiveVideoFrameRate, quality: LiveVideoQuality, codec?: string, hint?: string, bitrate = 0, jitter = 0, diagnostics = false, bitrateAtOffer = false, sound = false) {
   const audit = await mountUiAudit();
   const errors: string[] = [];
   const peers: RTCPeerConnection[] = [];
@@ -75,14 +75,14 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
       receiver = createLiveSession({ ...options, send: message => {
         if (message.type === "liveSignal") queueMicrotask(() => publisher!.receive(message)); else errors.push(JSON.stringify(message));
       } });
-      const source = await publisher.start({ kind: "screen", includeAudio: false, videoQuality: quality, videoFrameRate: frameRate });
+      const source = await publisher.start({ kind: "screen", includeAudio: sound, videoQuality: quality, videoFrameRate: frameRate });
       if (hint) publisher.sharing()!.stream.getVideoTracks()[0]!.contentHint = hint;
-      receiver.play({ type: "load", playbackId: "p", source: "", liveSourceId: source.id, livePeerId: "benchmark", liveOutput: { picture: true, sound: false, volume: 0 } });
-      publisher.receive({ type: "livePeers", sourceId: source.id, upload: false, peers: [{ peerId: "benchmark", deviceId: "benchmark-receiver", picture: true, sound: false }] });
+      receiver.play({ type: "load", playbackId: "p", source: "", liveSourceId: source.id, livePeerId: "benchmark", liveOutput: { picture: true, sound, volume: sound ? 1 : 0 } });
+      publisher.receive({ type: "livePeers", sourceId: source.id, upload: false, peers: [{ peerId: "benchmark", deviceId: "benchmark-receiver", picture: true, sound }] });
     } else play({ type: "load", playbackId: "p", source: new URL(media, location.origin).href });
     video = document.querySelector<HTMLVideoElement>(".player-video video")!;
     if (!video) throw new Error("Production player did not mount its video");
-    video.muted = true;
+    video.muted = !sound;
     video.loop = true;
     await until(() => video.readyState >= 3 && video.currentTime > 0 && !video.paused);
     if (bitrate && !bitrateAtOffer) for (const peer of peers) for (const sender of peer.getSenders()) if (sender.track?.kind === "video") {
@@ -91,6 +91,19 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
       await sender.setParameters(parameters);
     }
     if (jitter) for (const peer of peers) for (const receiver of peer.getReceivers()) if (receiver.track.kind === "video" && "jitterBufferTarget" in receiver) receiver.jitterBufferTarget = jitter;
+    let audioContext: AudioContext | undefined, analyser: AnalyserNode | undefined;
+    if (sound && video.srcObject instanceof MediaStream) {
+      audioContext = new AudioContext();
+      analyser = audioContext.createAnalyser();
+      audioContext.createMediaStreamSource(video.srcObject).connect(analyser);
+      await audioContext.resume();
+    }
+    const audioRms = () => {
+      if (!analyser) return 0;
+      const samples = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(samples);
+      return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+    };
     const startupMs = performance.now() - started;
     await document.fonts.ready;
     // Real playback clock updates reach the production timeline while video keeps playing.
@@ -132,10 +145,16 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
       async begin() { beforeStats = await stats(); before = health(); sampling = true; return before; },
       async finish() {
         sampling = false;
-        const after = health(), afterStats = await stats();
+        const after = health(), afterStats = await stats(), decodedAudioRms = audioRms();
+        void audioContext?.close();
         const seconds = (after.time - before.time) / 1000;
+        if (sound) {
+          const advances = (type: string, key: string) => afterStats.some(stat => stat.kind === "audio" && stat.type === type && stat[key] > (beforeStats.find(previous => previous.id === stat.id)?.[key] ?? 0));
+          if (!publisher?.sharing()?.source.audio
+            || !advances("outbound-rtp", "bytesSent") || !advances("inbound-rtp", "bytesReceived") || !(advances("inbound-rtp", "totalAudioEnergy") || decodedAudioRms > 0)) errors.push("Sharing sound must remain live with advancing sent/received bytes and decoded audio energy");
+        }
         const total = after.totalFrames - before.totalFrames, dropped = after.droppedFrames - before.droppedFrames;
-        const result = { mode, startupMs, seconds, before, after, totalFrames: total, droppedFrames: dropped, droppedPercent: total ? dropped / total * 100 : null,
+        const result = { mode, startupMs, seconds, decodedAudioRms, before, after, totalFrames: total, droppedFrames: dropped, droppedPercent: total ? dropped / total * 100 : null,
           // Playback quality counts include dropped frames; callbacks are limited by display refresh.
           videoFps: (total - dropped) / seconds, presentedFps: firstPresented === undefined ? 0 : (lastPresented! - firstPresented) / seconds, callbacks,
           frameMs: summary(gaps), uiFps: gaps.length / seconds, over25ms: gaps.filter(gap => gap > 25).length,
