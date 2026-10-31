@@ -72,7 +72,7 @@ async function fixture() {
   const host = await connect(hostToken, hostId), actor = await connect(actorToken, actorId), other = await connect(otherToken, otherId);
   const play = async (peer: typeof actor, id: string, title: string) => {
     const result = await peer.command({ type: "enqueue", entry: { id: title.replaceAll(" ", "-"), title, source: `http://127.0.0.1:${address.port}/media` }, playNow: true, deviceId: id });
-    assert.equal(result.ok, true, result.error);
+    assert.equal(result.ok, true, result.error ?? "");
   };
   return { actorId, host, actor, other, play, close: async () => {
     for (const socket of sockets) socket.terminate();
@@ -91,7 +91,7 @@ test("output controls agree with Core for own moves and foreign private replacem
       let result: Promise<boolean> | undefined;
       const tree = Mixer({ state: f.actor.state, connected: true, run: command => {
         assert.deepEqual(command, action);
-        return result = f.actor.command(command).then(response => { assert.equal(response.ok, expected, response.error); return response.ok; });
+        return result = f.actor.command(command).then(response => { assert.equal(response.ok, expected, response.error ?? ""); return response.ok; });
       } });
       const props = control(tree, label); assert.ok(props, label);
       // Drive its actual handler even when disabled, then compare the affordance with Core's verdict. A disabled
@@ -127,7 +127,7 @@ test("output controls agree with Core for own moves and foreign private replacem
     // Its row plays now, so it offers no Move here; Core still moves the whole destination here.
     assert.equal(control(render(), "Move here: Actor"), undefined);
     const solo = await f.actor.command({ type: "solo", deviceId: f.actorId });
-    assert.equal(solo.ok, true, solo.error);
+    assert.equal(solo.ok, true, solo.error ?? "");
     assert.deepEqual(f.actor.state.outputs, [{ deviceId: f.actorId, picture: true, sound: true, local: true }]);
 
     await f.actor.command({ type: "sharing", sharing: { audio: false, video: false } });

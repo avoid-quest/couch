@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -25,7 +25,12 @@ export async function buildRelay(platform: string, arch: string, destination: st
   // Include the licenses of the modules actually linked, plus the Go runtime.
   const modules = (await exec("go", ["list", "-mod=readonly", "-deps", "-f", "{{with .Module}}{{if .Version}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}{{end}}", "."], options)).stdout;
   const goroot = (await exec("go", ["env", "GOROOT"], options)).stdout.trim();
-  const notices = [`Go runtime\n\n${await readFile(join(goroot, "LICENSE"), "utf8")}`];
+  const runtimeLicense = await readFile(join(goroot, "LICENSE"), "utf8").catch(error => {
+    // Homebrew puts Go in libexec and relocates its license to the formula prefix.
+    if (error.code !== "ENOENT" || basename(goroot) !== "libexec") throw error;
+    return readFile(join(goroot, "..", "LICENSE"), "utf8");
+  });
+  const notices = [`Go runtime\n\n${runtimeLicense}`];
   for (const entry of new Set(modules.split(/\r?\n/).filter(Boolean))) {
     const [name, version, directory] = entry.split("|");
     if (!name || !version || !directory) throw new Error("Could not identify a bundled relay dependency.");

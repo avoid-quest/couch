@@ -8,14 +8,16 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { helper, startHelpers } from "../src/server/helpers";
 import { liveFixture, until } from "./live-input.fixture";
+import { executableName, nodeExecutables } from "./executable.fixture";
 
 // Replace only the external extractor, retaining Hub, resolver selection, source
 // preparation, protected relay, Session and the actual scheduled worker.
 async function webFixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "couch-routing-extractor-"));
+  const executables = nodeExecutables(directory);
   const previousPath = process.env.PATH, spawn = cp.spawn;
   for (const [name, version] of [["yt-dlp", "2026.10.21"], ["qjs", "0.17.0"]]) {
-    writeFileSync(join(directory, name!), `#!${process.execPath}\nconsole.log(${JSON.stringify(version)});\n`, { mode: 0o755 });
+    writeFileSync(join(directory, executableName(name!)), `#!${process.execPath}\nconsole.log(${JSON.stringify(version)});\n`, { mode: 0o755 });
   }
   const selections: string[] = [];
   let holdNext = false, failHeld = false, failNext = false, release: (() => Promise<void>) | undefined;
@@ -51,7 +53,7 @@ async function webFixture(t: TestContext) {
   // This ordinary-media decoder fixture reports a finite, seekable duration.
   // liveFixture's default decoder deliberately has no duration for captures.
   const decodeLog = join(directory, "decodes.jsonl");
-  writeFileSync(join(process.env.PATH.split(delimiter)[0]!, "ffmpeg"), `#!${process.execPath}
+  writeFileSync(f.executable, `#!${process.execPath}
 const fs = require('node:fs');
 if (process.argv.includes('-version')) { console.log('ffmpeg version 7.0'); process.exit(0); }
 fs.appendFileSync(${JSON.stringify(decodeLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
@@ -63,10 +65,13 @@ process.stdin.resume();
   await Promise.all([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
   return { ...f, selections, decodes: () => existsSync(decodeLog) ? readFileSync(decodeLog, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line) as string[]) : [], failNext: () => { failNext = true; }, holdNext: (fail = false) => { holdNext = true; failHeld = fail; }, get held() { return !!release; }, release: () => release?.(), close: async () => {
     release?.();
-    await f.close();
+    const forcedPlayback = await f.close();
     t.mock.restoreAll(); syncBuiltinESMExports();
+    const forcedExtractor = await executables.close();
     process.env.PATH = previousPath;
     rmSync(directory, { recursive: true, force: true });
+    assert.deepEqual(forcedPlayback, { children: [], workers: [] }, "playback children and workers must stop before forced cleanup");
+    assert.deepEqual(forcedExtractor, { children: [], workers: [] }, "extractor fixture children must stop before forced cleanup");
   } };
 }
 
@@ -356,7 +361,7 @@ test("a stale Move here preserves source caches and the next joined group remain
     assert.deepEqual(f.receiver.state.queue.map(entry => entry.id), queue);
     await f.speaker(2);
     const joined = await f.receiver.command({ type: "output", deviceId: other.id, level: 80 });
-    assert.equal(joined.ok, true, joined.error);
+    assert.equal(joined.ok, true, joined.error ?? "");
     await until(() => f.heard(2) > 0);
     await until(() => f.receiver.state.controls?.seek === true);
     assert.equal(f.selections.length, resolutions + 1, "a rejected prospective load must not replace the active source cache");
@@ -393,14 +398,14 @@ test("a picture-only group re-resolves omitted audio when its first speaker join
     const resolutions = f.selections.length;
     await f.speaker(2);
     const joined = await f.receiver.command({ type: "output", deviceId: other.id, level: 80 });
-    assert.equal(joined.ok, true, joined.error);
+    assert.equal(joined.ok, true, joined.error ?? "");
     await until(() => f.selections.length > resolutions);
     assert.match(f.selections.at(-1)!, /bv\*/);
     await until(() => f.heard(2) > 0);
     assert.equal(f.receiver.state.player.playbackId, playbackId);
     assert.ok(f.receiver.state.player.position >= 13);
     const paused = await f.receiver.command({ type: "pause", playbackId, paused: true });
-    assert.equal(paused.ok, true, paused.error);
+    assert.equal(paused.ok, true, paused.error ?? "");
     await until(() => f.receiver.state.player.status === "paused");
   } finally { await f.close(); }
 });
@@ -426,7 +431,7 @@ for (const restored of ["sound", "picture"] as const) test(`restoring omitted ${
     await f.receiver.command({ type: "enqueue", entry: { id: "next", title: "Next", source: `${f.hub.origin}/api/health` } });
     const queue = f.receiver.state.queue.map(entry => entry.id), resolutions = f.selections.length;
     const result = await f.receiver.command({ type: "output", deviceId: f.receiver.id, ...restored === "sound" ? { level: 80 } : { picture: true } });
-    assert.equal(result.ok, true, result.error);
+    assert.equal(result.ok, true, result.error ?? "");
     const fresh = f.receiver.load()!;
     assert.equal(f.selections.length, resolutions + 1, "a resolver cannot restore a channel it was never asked for");
     assert.equal(upstream(fresh.source), "https://media.invalid/video-only.mp4");
@@ -511,7 +516,7 @@ for (const restored of ["sound", "picture"] as const) test(`failed omitted ${res
     const queue = f.receiver.state.queue.map(entry => entry.id);
     const attempts = f.selections.length;
     const retried = await f.receiver.command(action);
-    assert.equal(retried.ok, true, retried.error);
+    assert.equal(retried.ok, true, retried.error ?? "");
     assert.equal(f.selections.length, attempts + 1);
     const loaded = f.receiver.load()!;
     assert.equal(upstream(loaded.source), "https://media.invalid/video-only.mp4");
@@ -537,7 +542,7 @@ test("idle Core permits ordinary queue intake and playback defaults before the f
     assert.equal(f.receiver.state.controls?.leave, false);
     const defaults = await f.receiver.command({ type: "preferences", profileId: f.receiver.state.activeProfile.id,
       preferences: { autoplay: false, audioLanguage: "it", subtitleLanguage: "en", subtitles: "off", speed: 1.5 } });
-    assert.equal(defaults.ok, true, defaults.error);
+    assert.equal(defaults.ok, true, defaults.error ?? "");
     await until(() => f.receiver.state.preferences?.profile.speed === 1.5);
     assert.equal((await f.receiver.command({ type: "enqueue", entry: { id: "first", title: "First", source: `${f.hub.origin}/api/health` } })).ok, true);
     assert.equal(f.receiver.state.player.playbackId, null);

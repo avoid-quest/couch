@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { executableName, nodeExecutables } from "./executable.fixture";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,10 +13,11 @@ import { updateStatus } from "../src/server/helper-status";
 import type { PlaybackCommand, QueueEntry, ServerMessage, SessionState } from "../src/shared/protocol";
 
 // Actual REST -> Hub -> Session -> renderer load, using private SQLite and offline helpers.
-test("Core resumes alias history on the requested device with selected occurrence and quality", { skip: process.platform === "win32", timeout: 15_000 }, async t => {
+test("Core resumes alias history on the requested device with selected occurrence and quality", { timeout: 15_000 }, async t => {
   const directory = mkdtempSync(join(process.env.COUCH_DATA_DIR ?? tmpdir(), "history-selection-"));
   const bin = join(directory, "bin"), helpers = join(directory, "helpers"), databasePath = join(directory, "couch.sqlite");
   const before = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR };
+  const fixtures = nodeExecutables(directory);
   mkdirSync(bin);
   process.env.PATH = bin;
   process.env.COUCH_DATA_DIR = directory;
@@ -27,11 +29,11 @@ test("Core resumes alias history on the requested device with selected occurrenc
   const timers: ReturnType<typeof setInterval>[] = [], interval = globalThis.setInterval;
   t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const timer = interval(...args); timers.push(timer); return timer; });
   for (const [name, version] of [["qjs", "0.17.0"], ["ffmpeg", "ffmpeg version 9.0.2"]]) {
-    writeFileSync(join(bin, name!), `#!/bin/sh\necho '${version}'\n`, { mode: 0o755 });
+    writeFileSync(join(bin, executableName(name!)), `#!${process.execPath}\nconsole.log(${JSON.stringify(version)});\n`, { mode: 0o755 });
   }
   const url = "https://www.youtube.com/watch?v=abcdefghijk";
   const collection = { title: "Selected list", url: "https://www.youtube.com/playlist?list=PLselected123", index: 2 };
-  writeFileSync(join(bin, "yt-dlp"), `#!${process.execPath}
+  writeFileSync(join(bin, executableName("yt-dlp")), `#!${process.execPath}
 if (process.argv.includes("--version")) console.log("2026.10.21");
 else if (process.argv.includes("--flat-playlist")) console.log(JSON.stringify({title:"Selected list", entries:[0,1,2,3].map(index => ({id:index === 3 ? "other000002" : "abcdefghijk", title:"Occurrence " + index, url:index === 3 ? "https://www.youtube.com/watch?v=other000002" : ${JSON.stringify(url)}}))}));
 else console.log(JSON.stringify({title:"Video",url:"https://example.com/video.mp4",protocol:"https",duration:100}));
@@ -53,6 +55,7 @@ else console.log(JSON.stringify({title:"Video",url:"https://example.com/video.mp
     await updateStatus(helpers, () => {});
     for (const timer of timers) clearInterval(timer);
     for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    await fixtures.close();
     rmSync(directory, { recursive: true, force: true });
   });
   startHelpers(helpers);

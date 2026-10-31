@@ -99,8 +99,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },
             { label: "Queue", disabled: !connected || pending, run: () => act(item, "append", index) },
             ...browserActions(item.url),
-            { label: "Move up", disabled: blocked || !order(index, -1), run: () => move(-1) },
-            { label: "Move down", disabled: blocked || !order(index, 1), run: () => move(1) },
+            { label: "Move up", disabled: blocked || index === 0, run: () => move(-1) },
+            { label: "Move down", disabled: blocked || index === items.length - 1, run: () => move(1) },
             { label: "Remove", disabled: !connected || pending, run: () => act(item, "remove", index) },
           ]} /></SavedItem>;
       })}

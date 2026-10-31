@@ -4,8 +4,9 @@ import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { Play, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -31,6 +32,7 @@ import { useSessionGate } from "@/session/session-context";
 import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
 import { PlaysOnLine } from "@/sections/shell/Outputs";
+import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId, isRadio, radioHost, radioShowLabels, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
@@ -309,9 +311,15 @@ function UpNextRow({ entry, shape, meta, disabled, onPlay, verbs, pageFirst }: {
  * Stage has no verbs: its title is the one stop and opens the player, as its picture does under a pointer.
  */
 function HomeHero({ thumbnail, shape, title, meta, context, progress, open, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; open?: () => void; children?: ReactNode }) {
+  const router = useRouter();
+  // Stop from anywhere replaces the playing title: return its lost focus as the bar does.
+  const titleFocused = useRef(false);
+  useLayoutEffect(() => {
+    if (open) return () => { if (titleFocused.current) { titleFocused.current = false; returnLostFocus(router); } };
+  }, [!!open, router]);
   return <Stage data-home-hero size="home" label={title} thumbnail={thumbnail ?? ""} shape={shape} title={title} onPicture={open}>
     {open
-      ? <div data-nav-row className="w-full"><StageTitle as="h2" title={title}><button type="button" data-page-first aria-label={`Open player: ${title}`} className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]" onClick={open}>{title}</button></StageTitle></div>
+      ? <div data-nav-row className="w-full"><StageTitle as="h2" title={title}><button type="button" data-page-first aria-label={`Open player: ${title}`} className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]" onFocus={() => { titleFocused.current = true; }} onBlur={() => { titleFocused.current = false; }} onClick={open}>{title}</button></StageTitle></div>
       : <StageTitle as="h2" title={title} />}
     {/* The meta line and its links read as one block under the title. */}
     {(meta || context) && <div className="home-hero-meta flex flex-wrap items-baseline gap-x-2 gap-y-1">{meta && <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>}{context}</div>}

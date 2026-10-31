@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import WebSocket from "ws";
 import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { deviceId } from "../src/client/session/device-id";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
+import { executableName, nodeExecutables } from "./executable.fixture";
 
 export async function until(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
@@ -23,9 +24,12 @@ export async function liveFixture({ local = false, media, extraDevices = 0 }: { 
   globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(String(input)) ? fetchLocal(input, init) : Promise.resolve(new Response(""))) as typeof fetch;
   const directory = mkdtempSync(join(tmpdir(), "couch-live-input-")), databasePath = join(directory, "couch.sqlite");
   const previousPath = process.env.PATH;
-  const encoderLog = join(directory, "encoders");
-  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-  writeFileSync(join(directory, "ffmpeg"), media ? `#!/bin/sh\nif [ "$1" != "-version" ]; then printf '%s|%s|%s\\n' "$$" "$PWD" "$*" >> ${quote(encoderLog)}; fi\nexec ${quote(media.ffmpeg)} "$@"\n` : `#!${process.execPath}
+  const encoderLog = join(directory, "encoders"), executable = join(directory, executableName("ffmpeg"));
+  // Observe actual FFmpeg directly in real-media runs; no wrapper process or shell.
+  const realFfmpeg = media && (/[\\/]/.test(media.ffmpeg) ? resolve(media.ffmpeg) : (previousPath ?? "").split(delimiter).map(path => join(path, executableName(media.ffmpeg))).find(existsSync));
+  if (media) assert.ok(realFfmpeg, "the real media fixture requires FFmpeg");
+  const executables = nodeExecutables(directory, { workers: true, ...(media ? { native: { path: executable, target: realFfmpeg!, log: encoderLog } } : {}) });
+  writeFileSync(executable, `#!${process.execPath}
 const fs = require('node:fs');
 const path = require('node:path');
 if (process.argv.includes('-version')) { console.log('ffmpeg version 9.0.2'); process.exit(0); }
@@ -105,7 +109,7 @@ setInterval(() => {}, 1000);
           if (!media) { upload.send(Buffer.from("fixture capture")); return; }
           // Remux a finite real recording at capture speed, without another encode.
           // Small clusters exercise incremental MediaRecorder-style delivery before EOF.
-          const capture = spawn(media.ffmpeg, ["-hide_banner", "-loglevel", "error", "-re", "-i", "pipe:0", "-c", "copy", "-f", "webm", "-cluster_time_limit", "250", "pipe:1"]);
+          const capture = spawn(realFfmpeg!, ["-hide_banner", "-loglevel", "error", "-re", "-i", "pipe:0", "-c", "copy", "-f", "webm", "-cluster_time_limit", "250", "pipe:1"]);
           captures.push(capture);
           capture.stderr.resume();
           capture.stdin.on("error", () => {});
@@ -152,6 +156,7 @@ setInterval(() => {}, 1000);
   };
   return { get hub() { return hub; }, publisher, receiver, connect, identities, databasePath, uploadToken, uploadUrl, uploads, uploadStarts, answerUploads, streamCapture,
     capturePids: () => captures.map(capture => capture.pid!),
+    executable,
     encoders: () => media && existsSync(encoderLog) ? readFileSync(encoderLog, "utf8").trim().split("\n").map(line => { const [pid, cwd, args] = line.split("|"); return { pid: Number(pid), cwd: cwd!, args: args! }; }) : [],
     // Keep Core's database and address so SDK clients can exercise their own reconnection.
     restart: async () => {
@@ -191,8 +196,10 @@ setInterval(() => {}, 1000);
       await Promise.all(speakers.map(speaker => speaker.disconnect()));
       await hub.close();
       for (const socket of sockets) socket.terminate();
-      process.env.PATH = previousPath;
+      const forced = await executables.close();
+      if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
       globalThis.fetch = fetchLocal;
       rmSync(directory, { recursive: true, force: true });
+      return forced;
     } };
 }

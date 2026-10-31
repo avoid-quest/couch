@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { executableName, nodeExecutables } from "./executable.fixture";
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
@@ -24,9 +25,10 @@ for (const choice of cases) test(choice.name, { timeout: 15000 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), 'couch-language-'));
   for (const [language, frequency] of [['en', 440], ['it', 880]] as const) execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `sine=frequency=${frequency}:sample_rate=48000`, '-t', '6', '-ac', '2', '-c:a', 'aac', '-f', 'adts', join(directory, `${language}.aac`)]);
   if (choice.muxed) execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000', '-t', '6', '-map', '0:a', '-map', '1:a', '-c:a', 'pcm_s16le', '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=ita', join(directory, 'movie.mka')]);
-  const decoder = join(directory, 'decode'), launches = join(directory, 'launches');
-  const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
-  writeFileSync(decoder, `#!/bin/sh\nprintf '%s|%s\\n' "$$" "$*" >> ${quote(launches)}\nexec ${quote(ffmpeg)} "$@"\n`, { mode: 0o755 });
+  const decoder = join(directory, executableName('decode')), launches = join(directory, 'launches');
+  // The worker launches the real codec directly; this observer records its PID/arguments.
+  const codecs = nodeExecutables(directory, { workers: true, native: { path: decoder, target: ffmpeg, log: launches } });
+  writeFileSync(decoder, "fixture", { mode: 0o755 });
   const startedDecoders = () => readFileSync(launches, 'utf8').trim().split('\n');
   const requested: string[] = [];
   const master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English",LANGUAGE="en",DEFAULT=YES,URI="en.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="Italian",LANGUAGE="it",DEFAULT=NO,URI="it.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="a",CODECS="avc1.640028,mp4a.40.2"\npicture.m3u8\n';
@@ -48,7 +50,7 @@ for (const choice of cases) test(choice.name, { timeout: 15000 }, async t => {
   const client = new SendspinClient(identity.peerId, 'Software listener', [Roles.PLAYER], { playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [] } });
   client.addAudioChunkListener((_timestamp, data) => chunks.push(Buffer.from(data)));
   const group = core.group('language', state => states.push(state));
-  t.after(async () => { group.close(); core.close(); await client.disconnect(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });
+  t.after(async () => { group.close(); core.close(); await client.disconnect(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await codecs.close(); rmSync(directory, { recursive: true, force: true }); });
   await client.connect(origin.replace('http:', 'ws:'), { timeoutMs: 3000 });
   group.members([{ deviceId: identity.peerId, level: 100 }]);
   const load: SyncedLoad = { type: 'load', playbackId: 'language', source: `${origin}/${choice.muxed ? 'movie.mka' : choice.standalone ? 'it.m3u8' : 'audio-master.m3u8'}`, live: choice.live, audioSelection: choice.audioSelection, audioTrack: choice.audioTrack, preferences: { audioLanguage: choice.language, subtitleLanguage: '', subtitles: 'off', speed: 1, audioDelay: 0 } };

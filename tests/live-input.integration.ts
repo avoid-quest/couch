@@ -159,6 +159,7 @@ test("a screen's live link ends with its picture or its output, lasts through a 
     const [receiving, watching, hosting] = screens.map(client => client.load()!.source) as [string, string, string];
     for (const link of [receiving, watching, hosting]) assert.equal((await newest(link)).status, 200);
     const { playbackId } = f.receiver.state.player;
+    assert.ok(playbackId, "the playing screen has a current playback");
 
     // Picture off, sound kept: that screen's link ends; the others play on.
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, picture: false })).ok, true);
@@ -205,7 +206,7 @@ test("live playback uses ordinary controls and queue without persisting its ephe
     assert.equal((await f.publisher.command({ type: "speed", playbackId: load.playbackId, speed: 2 })).ok, false);
     assert.deepEqual(f.publisher.state.preferences, preferences, "unsupported Direct RTC controls must not change saved preferences");
     const result = await f.publisher.command({ type: "enqueue", entry: { id: "normal", title: "Normal", source: `${f.hub.origin}/api/health` } });
-    assert.equal(result.ok, true, result.error);
+    assert.equal(result.ok, true, result.error ?? "");
     assert.deepEqual(f.publisher.state.queue.map(entry => entry.id), [f.publisher.state.currentEntryId, "normal"]);
     const saved = openStore(f.databasePath, true);
     try { assert.deepEqual(saved.playbackIds().flatMap(id => saved.playback(id).queue).map(entry => entry.id), ["normal"]); }
@@ -231,7 +232,7 @@ test("a live input can queue next without interrupting the current item and play
     await f.publish("screen");
     const original = f.receiver.load()!, group = f.publisher.state.playback;
     const result = await f.publisher.command({ type: "playLive", sourceId: "screen", playNow: false, placement: "next" });
-    assert.equal(result.ok, true, result.error);
+    assert.equal(result.ok, true, result.error ?? "");
     const queued = f.publisher.state.queue.find(entry => entry.liveSourceId === "screen");
     assert.ok(queued);
     assert.deepEqual(f.publisher.state.queue.map(entry => entry.id), ["before", queued.id, "after"]);
@@ -288,7 +289,7 @@ test("grouped live pictures use the receiver's HTTPS origin and Move here never 
     assert.equal((await fetch(new URL(new URL(grouped.source).pathname, f.hub.origin))).status, 200);
     await until(() => f.publisher.state.player.playbackId === grouped.playbackId && f.publisher.state.player.status === "playing" && f.publisher.state.player.position > 0);
     const solo = await f.publisher.command({ type: "solo", deviceId: other.id });
-    assert.equal(solo.ok, true, solo.error);
+    assert.equal(solo.ok, true, solo.error ?? "");
     await until(() => !!other.load() && "livePeerId" in other.load()!);
     assert.equal(other.load()!.follow, undefined);
     assert.equal((await fetch(original.source)).status, 404);
@@ -330,7 +331,7 @@ test("a system-audio input uses the selected normal mix without its publisher, w
     const group = f.publisher.state.playback;
     await f.publish("system", "system-audio");
     const play = await f.publisher.command({ type: "playLive", sourceId: "system" });
-    assert.equal(play.ok, true, play.error);
+    assert.equal(play.ok, true, play.error ?? "");
     assert.equal(f.publisher.state.playback, group);
     assert.equal(f.publisher.state.queue.find(entry => entry.id === f.publisher.state.currentEntryId)?.liveSourceId, "system");
     assert.deepEqual(f.publisher.state.outputs?.map(({ deviceId, sound }) => ({ deviceId, sound })), [{ deviceId: f.receiver.id, sound: true }]);

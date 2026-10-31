@@ -1,9 +1,10 @@
 // COUCH_PERF_MEDIA=/absolute/1080p60.mp4 bun tests/video-performance.native.ts .artifacts/video [--modes=playback,controls,live] [--fps=60] [--quality=1080p] [--seconds=10] [--rounds=3] [--assert-fps=55]
 // Use a real display to qualify hardware. xvfb-run measures software playback and capture only.
-// --screen captures the test display; otherwise prefer the generated-video window. Experimental --codec=h264, --hint=motion and --bare are benchmark-only.
+// --screen requires a controlled 1920×1080 test display; otherwise require the generated-video window. Experimental --codec=h264, --hint=motion, --bitrate=8000000, --jitter=50 and --bare are benchmark-only.
+// --diagnostics adds bounded frame/stage probes; compare without it. --bitrate-at-offer applies the diagnostic bitrate before initial negotiation.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, release } from "node:os";
-import { extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve, sep } from "node:path";
 import { build, mergeConfig } from "vite";
 import electron from "electron";
 import config from "../vite.config";
@@ -18,6 +19,10 @@ const quality = process.argv.find(value => value.startsWith("--quality="))?.slic
 if (!["720p", "1080p", "original"].includes(quality)) throw new Error("Unknown capture quality");
 const codec = process.argv.find(value => value.startsWith("--codec="))?.slice(8);
 const hint = process.argv.find(value => value.startsWith("--hint="))?.slice(7);
+const bitrate = argument("bitrate", 0);
+const jitter = argument("jitter", 0);
+const sound = process.argv.includes("--sound");
+const diagnostics = process.argv.includes("--diagnostics"), bitrateAtOffer = process.argv.includes("--bitrate-at-offer");
 const modes = (process.argv.find(value => value.startsWith("--modes="))?.slice(8) ?? "playback,controls,live").split(",");
 if (modes.some(mode => !["playback", "controls", "live"].includes(mode))) throw new Error("Unknown video mode");
 const media = process.env.COUCH_PERF_MEDIA;
@@ -25,14 +30,21 @@ if (!media) throw new Error("Set COUCH_PERF_MEDIA to a local video fixture");
 const mediaFile = `/benchmark${extname(media)}`;
 mkdirSync(directory, { recursive: true });
 const entry = resolve(`src/client/__video-performance-${process.pid}.html`);
-writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)});</script></body></html>`);
+writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)}, ${bitrate}, ${jitter}, ${diagnostics}, ${bitrateAtOffer}, ${sound});</script></body></html>`);
 try { await build(mergeConfig(config({ command: "build", mode: "production" }), { build: { outDir, rollupOptions: { input: entry } }, logLevel: "error" })); }
 finally { rmSync(entry); }
 copyFileSync(media, join(outDir, mediaFile));
-writeFileSync(join(outDir, "source.html"), `<!doctype html><title>Couch benchmark source</title><style>html,body{margin:0;background:black}video{width:100vw;height:100vh;object-fit:fill}</style><video src="${mediaFile}" muted autoplay loop></video>`);
+writeFileSync(join(outDir, "source.html"), `<!doctype html><title>Couch benchmark source</title><style>html,body{margin:0;background:black}video{width:100vw;height:100vh;object-fit:fill}</style><video src="${mediaFile}" muted autoplay loop></video>${sound ? `<script>const audio = new AudioContext(), oscillator = audio.createOscillator(), gain = audio.createGain(); oscillator.frequency.value = 997; gain.gain.value = .2; oscillator.connect(gain).connect(audio.destination); oscillator.start();</script>` : ""}${diagnostics ? `<script>
+const video = document.querySelector('video'), timings = [], dimensions = new Set();
+let sampling = false, before, preWarmup;
+const health = () => { const q = video.getVideoPlaybackQuality(); return { time: performance.now(), width: video.videoWidth, height: video.videoHeight, totalFrames: q.totalVideoFrames, droppedFrames: q.droppedVideoFrames }; };
+const frame = (now, m) => { dimensions.add(m.width + 'x' + m.height); if (sampling && timings.length < 4096) timings.push({ now, presentationTime: m.presentationTime, expectedDisplayTime: m.expectedDisplayTime, mediaTime: m.mediaTime, presentedFrames: m.presentedFrames, width: m.width, height: m.height }); video.requestVideoFrameCallback(frame); };
+video.requestVideoFrameCallback(frame);
+window.sourceProbe = { prepare() { preWarmup = health(); }, begin() { before = health(); sampling = true; }, finish() { sampling = false; return { preWarmup, before, after: health(), timings, dimensions: [...dimensions], timingTruncated: timings.length === 4096 }; } };
+</script>` : ""}`);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const path = resolve(outDir, "." + decodeURIComponent(new URL(request.url).pathname));
-  if (!path.startsWith(outDir + "/")) return new Response(null, { status: 404 });
+  if (!path.startsWith(outDir + sep)) return new Response(null, { status: 404 });
   const file = Bun.file(path); return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
 } });
 const origin = `http://127.0.0.1:${server.port}`;
@@ -52,10 +64,11 @@ app.whenReady().then(async () => {
   const evaluate = script => window.webContents.executeJavaScript(script, true);
   const result = { revision: ${JSON.stringify(process.env.COUCH_PERF_REVISION ?? Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim())}, versions: process.versions,
     hardware: ${JSON.stringify({ cpu: cpus()[0]?.model, logicalCores: cpus().length, os: release(), platform: process.platform })},
-    display: screen.getPrimaryDisplay(), media: ${JSON.stringify(media)}, requestedFps: ${frameRate}, quality: ${JSON.stringify(quality)}, codec: ${JSON.stringify(codec)}, hint: ${JSON.stringify(hint)}, bare: ${process.argv.includes("--bare")}, seconds: ${seconds}, warmup: ${warmup}, rounds: ${rounds}, samples: [], mediaProperties: {} };
+    display: screen.getPrimaryDisplay(), media: ${JSON.stringify(media)}, requestedFps: ${frameRate}, quality: ${JSON.stringify(quality)}, codec: ${JSON.stringify(codec)}, hint: ${JSON.stringify(hint)}, bitrate: ${bitrate}, jitter: ${jitter}, diagnostics: ${diagnostics}, bitrateAtOffer: ${bitrateAtOffer}, sound: ${sound}, bare: ${process.argv.includes("--bare")}, seconds: ${seconds}, warmup: ${warmup}, rounds: ${rounds}, samples: [], mediaProperties: {} };
+  writeFileSync(${JSON.stringify(join(directory, "owned-pids.json"))}, JSON.stringify({ main: process.pid }));
   let source, code = 0;
   try {
-    await window.loadURL(${JSON.stringify(origin + "/" + entry.split("/").at(-1))});
+    await window.loadURL(${JSON.stringify(origin + "/" + basename(entry))});
     window.webContents.debugger.attach('1.3');
     window.webContents.debugger.on('message', (_event, method, params) => {
       if (method === 'Media.playerPropertiesChanged') {
@@ -70,20 +83,26 @@ app.whenReady().then(async () => {
       for (const mode of modes) {
         console.log('Preparing ' + mode);
         if (mode === 'live') {
-          source = new BrowserWindow({ width: 1920, height: 1080, x: 0, y: 0, frame: false, show: true, webPreferences: { backgroundThrottling: false } });
+          // Window bounds are DIPs; retain a 1920×1080 physical source on Retina displays.
+          const scale = screen.getPrimaryDisplay().scaleFactor;
+          source = new BrowserWindow({ width: Math.round(1920 / scale), height: Math.round(1080 / scale), x: 0, y: 0, frame: false, show: true, webPreferences: { backgroundThrottling: false } });
+          // Windows clamps initial bounds to the work area; reapply the fixture size.
+          if (process.platform === 'win32') source.setBounds({ x: 0, y: 0, width: Math.round(1920 / scale), height: Math.round(1080 / scale) });
           await source.loadURL(${JSON.stringify(origin + "/source.html")});
           const sources = await desktopCapturer.getSources({ types: ${JSON.stringify(process.argv.includes("--screen") ? ["screen"] : ["window", "screen"])}, thumbnailSize: { width: 0, height: 0 } });
-          const selected = sources.find(item => item.id === source.getMediaSourceId()) ?? sources.find(item => item.id.startsWith('screen:'));
-          if (!selected) throw new Error('No desktop capture source');
-          result.captureSource = { id: selected.id, name: selected.name, window: selected.id === source.getMediaSourceId() };
-          window.webContents.session.setDisplayMediaRequestHandler((_request, callback) => callback({ video: selected }));
+          const selected = sources.find(item => ${process.argv.includes("--screen") ? "item.id.startsWith('screen:')" : "item.id === source.getMediaSourceId()"});
+          if (!selected) throw new Error('Requested benchmark capture source was not found');
+          result.captureSource = { id: selected.id, name: selected.name, window: selected.id === source.getMediaSourceId(), bounds: source.getBounds(), contentBounds: source.getContentBounds(), visible: source.isVisible(), minimized: source.isMinimized() };
+          window.webContents.session.setDisplayMediaRequestHandler((_request, callback) => callback({ video: selected, ...${sound} ? { audio: "loopback" } : {} }));
         }
-        await window.loadURL(${JSON.stringify(origin + "/" + entry.split("/").at(-1))});
+        await window.loadURL(${JSON.stringify(origin + "/" + basename(entry))});
         window.focus();
         await evaluate('window.prepareVideo(' + JSON.stringify(mode) + ').then(fixture => { window.fixture = fixture; })');
+        if (${diagnostics} && source) await source.webContents.executeJavaScript('window.sourceProbe.prepare()');
         if (${process.argv.includes("--bare")}) await evaluate("(() => { const parent = document.createElement('div'); parent.style.cssText = 'position:fixed;inset:0;background:black'; document.body.append(parent); parent.append(document.querySelector('.player-video video')); document.getElementById('fixture').style.display = 'none'; })()");
         await wait(${warmup} * 1000);
         const timeline = mode === 'controls' ? await evaluate("(() => { document.querySelector('[data-player-surface]').dispatchEvent(new MouseEvent('mousemove', { bubbles: true })); const box = document.querySelector('.player-timeline').getBoundingClientRect(); return { x: box.x, y: box.y + box.height / 2, width: box.width }; })()") : null;
+        if (${diagnostics} && source) await source.webContents.executeJavaScript('window.sourceProbe.begin()');
         await evaluate('window.fixture.begin()');
         let before = new Map(app.getAppMetrics().map(item => [item.pid, item.cpu.cumulativeCPUUsage])), at = performance.now();
         const cpu = [];
@@ -98,12 +117,20 @@ app.whenReady().then(async () => {
           const now = performance.now(), metrics = app.getAppMetrics();
           cpu.push(metrics.map(item => ({ type: item.type, name: item.name, pid: item.pid, percent: before.has(item.pid) ? (item.cpu.cumulativeCPUUsage - before.get(item.pid)) * 100000 / (now - at) : null })));
           before = new Map(metrics.map(item => [item.pid, item.cpu.cumulativeCPUUsage])); at = now;
+          if (${diagnostics}) await evaluate('window.fixture.sample()');
         }
         const sample = { round, receiverPid: window.webContents.getOSProcessId(), sourcePid: source?.webContents.getOSProcessId(), ...await evaluate('window.fixture.finish()'), cpu };
+        if (${diagnostics} && source) sample.sourceCadence = await source.webContents.executeJavaScript('window.sourceProbe.finish()');
+        const expected = mode === 'live' && ${JSON.stringify(quality)} === '720p' ? [1280, 720] : [1920, 1080];
+        sample.expectedDimensions = expected;
+        const dimensionPairs = [[sample.before.width, sample.before.height], [sample.after.width, sample.after.height],
+          ...[...sample.beforeStats, ...sample.afterStats, ...(sample.stages ?? []).flatMap(stage => stage.stats)].filter(stat => stat.kind === 'video' && ['inbound-rtp', 'outbound-rtp', 'media-source'].includes(stat.type)).map(stat => [stat.frameWidth ?? stat.width, stat.frameHeight ?? stat.height])];
+        sample.invalidDimensions = dimensionPairs.some(pair => pair[0] !== expected[0] || pair[1] !== expected[1]) || (sample.dimensions ?? []).some(value => value !== expected.join('x'));
+        if (sample.invalidDimensions) sample.dimensionError = 'Benchmark fixture mismatch: captured, encoded and decoded picture must remain ' + expected.join('x') + '. This sample cannot qualify playback at that size.';
         result.samples.push(sample);
         console.log(JSON.stringify({ round, mode, videoFps: sample.videoFps, uiFps: sample.uiFps, frameMs: sample.frameMs, droppedPercent: sample.droppedPercent,
-          cpuPercent: cpu.reduce((sum, items) => sum + items.reduce((sum, item) => sum + (item.percent ?? 0), 0), 0) / cpu.length, capture: sample.after.capture, errors: sample.errors }));
-        if (sample.errors.length || sample.after.error || sample.after.paused || sample.totalFrames <= 0 || sample.droppedPercent > ${maxDropped} || (${assertFps} && sample.videoFps < ${assertFps})) code = 1;
+          cpuPercent: cpu.reduce((sum, items) => sum + items.reduce((sum, item) => sum + (item.percent ?? 0), 0), 0) / cpu.length, capture: sample.after.capture, dimensionError: sample.dimensionError, errors: sample.errors }));
+        if (sample.invalidDimensions || sample.errors.length || sample.after.error || sample.after.paused || sample.totalFrames <= 0 || sample.droppedPercent > ${maxDropped} || (${assertFps} && sample.videoFps < ${assertFps})) code = 1;
         writeFileSync(${JSON.stringify(join(directory, "result.json"))}, JSON.stringify(result, null, 2));
         if (source) { source.destroy(); source = undefined; }
       }
@@ -117,6 +144,7 @@ app.whenReady().then(async () => {
 const env = { ...process.env, COUCH_DATA_DIR: join(directory, "data"), COUCH_PORT: String(server.port) };
 delete env.ELECTRON_RUN_AS_NODE;
 const child = Bun.spawn([electron, probe], { env, stdout: "inherit", stderr: "inherit" });
+writeFileSync(join(directory, "launched-pid"), String(child.pid));
 const timeout = setTimeout(() => { console.error("Video benchmark timed out"); child.kill(); }, 60_000 + rounds * modes.length * (warmup + seconds + 20) * 1000);
 try { process.exitCode = await child.exited; console.log(`Evidence: ${join(directory, "result.json")}`); }
 finally { clearTimeout(timeout); server.stop(true); }

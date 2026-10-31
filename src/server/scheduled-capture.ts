@@ -20,7 +20,7 @@ function captureWaveHeader(sampleRate: number, channels: number) {
 }
 
 /** Native/browser float PCM -> standard Sendspin formats. FFmpeg owns sample conversion and encoding. */
-export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) => void) {
+export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) => void, childStarted?: (child: ChildProcess) => void) {
   const listeners = new Set<(event: Event) => void>();
   let child: ChildProcess | undefined, starting = false, closed = false, attempt = 0, error: string | undefined;
   let format: CaptureAudioPacket | undefined, nextSample = 0, sequence = -1;
@@ -57,6 +57,7 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
         "-filter_complex", "[0:a]aresample=48000:filter_size=64,aformat=channel_layouts=stereo,asplit=2[opus][pcm]",
         "-map", "[opus]", "-c:a", "libopus", "-application", "lowdelay", "-b:a", "160k", "-frame_duration", "5", "-f", "ogg", "-page_duration", "5000", "-flush_packets", "1", "pipe:1",
         "-map", "[pcm]", "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"], { stdio: ["pipe", "pipe", "pipe", "pipe"] });
+      childStarted?.(process);
       process.once("close", lease.release); lease = undefined;
       let opusOffset = 0, pcmOffset = 0, diagnostic = "", pcm: Buffer = Buffer.alloc(0);
       const output = (wire: "opus" | "pcm", offset: number, duration: number, data: Buffer) => {
@@ -67,14 +68,19 @@ export function createScheduledCapture(ffmpeg: Ffmpeg, failed: (error: string) =
         const through = Math.min(opusOffset, pcmOffset);
         while (anchors[1] && anchors[1].offset <= through) anchors.shift();
       };
-      process.stdout!.on("data", oggPackets(packet => {
+      const packets = oggPackets(packet => {
         if (child !== process) return;
         const magic = packet.toString("latin1", 0, 8);
         if (magic === "OpusHead") { opusOffset = -packet.readUInt16LE(10) / 48_000 * 1e6; return; }
         if (magic === "OpusTags") return;
         const duration = opusDuration(packet);
         output("opus", opusOffset, duration, packet); opusOffset += duration;
-      }));
+      });
+      process.stdout!.on("data", (data: Buffer) => {
+        if (child !== process) return;
+        try { packets(data); }
+        catch (error) { fail(error instanceof Error ? error.message : "The capture encoder sent a broken Ogg stream."); }
+      });
       (process.stdio[3] as Readable).on("data", (bytes: Buffer) => {
         if (child !== process) return;
         pcm = Buffer.concat([pcm, bytes]);

@@ -133,6 +133,7 @@ test("a receiver keeps only the channels Core routed to its output", () => check
   const stale = peers.at(-2), late = track("video");
   stale.ontrack({ track: late });
   assert.ok(attachments.every(item => !item.stream.getTracks().includes(late)));
+  assert.equal(late.stopped, true, "late tracks release their resources after playback is replaced");
   session.play({ type: "stop" });
   assert.ok(both.kept.every(item => item.stopped));
 `));
@@ -163,6 +164,16 @@ test("a publisher that can't negotiate a peer reports it instead of dropping it 
   assert.deepEqual(unreachable(), [{ type: "liveFailed", peerId: "remote", error: "No codec in common." }]);
   assert.equal(peers[0].connectionState, "closed");
   assert.equal(recorders.length, 0, "nothing records until Core asks");
+`));
+
+test("a publisher that cannot create a connection requests fallback without waiting for the receiver deadline", () => check(`
+  const source = await session.start({ kind: "screen" });
+  globalThis.RTCPeerConnection = class { constructor() { throw new DOMException("No connection resources available.", "UnknownError"); } };
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
+  await flush();
+  assert.deepEqual(unreachable(), [{ type: "liveFailed", peerId: "remote", error: "No connection resources available." }]);
+  assert.ok(captures[0].getTracks().every(track => !track.stopped), "other receivers can keep watching");
+  assert.equal(recorders.length, 0, "Core owns the fallback decision");
 `));
 
 test("connected, stopped and replaced direct sessions cancel deadlines and reject stale events", () => check(`
@@ -522,7 +533,7 @@ test("screen capture defaults to bounded video and unprocessed audio, with expli
   assert.equal(screen.video, true);
   assert.equal(captureRequests[0].video.width.max, 1920);
   assert.equal(captureRequests[0].video.height.max, 1080);
-  assert.deepEqual(captureRequests[0].video.frameRate, { ideal: 60, max: 60 });
+  assert.deepEqual(captureRequests[0].video.frameRate, { ideal: 30, max: 30 });
   assert.deepEqual(captureRequests[0].audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: false });
   await session.end();
   const picture = await session.start({ kind: "screen", videoQuality: "720p", includeAudio: false });
@@ -571,7 +582,7 @@ test("picture edits serialize, recover from rejection and leave replacement capt
   await session.start({ kind: "screen" });
   await stale;
   assert.equal(session.sharing().quality, "1080p");
-  assert.equal(session.sharing().frameRate, 60);
+  assert.equal(session.sharing().frameRate, 30);
   await session.end();
   await session.start({ kind: "system-audio" });
   await session.setFrameRate(120);

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { executableName, nodeExecutables } from "./executable.fixture";
 import { test } from "node:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,13 +11,15 @@ import { runYtDlp } from "../src/server/yt-dlp";
 import { soundCloudPlugin } from "../src/server/soundcloud";
 import fixture from "./fixtures/soundcloud-extractor.py" with { type: "text" };
 
-test("SoundCloud keeps yt-dlp's client cache inside Couch and loads only its bundled plugin", { skip: process.platform === "win32" }, async t => {
+test("SoundCloud keeps yt-dlp's client cache inside Couch and loads only its bundled plugin", async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-soundcloud-")), bin = join(directory, "bin");
+  const fixtures = nodeExecutables(directory);
   mkdirSync(bin);
   const originalPath = process.env.PATH, originalData = process.env.COUCH_DATA_DIR, certificates = process.env.SSL_CERT_FILE;
   const timers: ReturnType<typeof setInterval>[] = [], set = globalThis.setInterval;
   t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const timer = set(...args); timers.push(timer); return timer; });
-  t.after(() => {
+  t.after(async () => {
+    await fixtures.close();
     for (const timer of timers) clearInterval(timer);
     for (const [key, value] of Object.entries({ PATH: originalPath, COUCH_DATA_DIR: originalData, SSL_CERT_FILE: certificates })) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -24,7 +27,7 @@ test("SoundCloud keeps yt-dlp's client cache inside Couch and loads only its bun
     rmSync(directory, { recursive: true, force: true });
   });
   for (const [name, version] of [["yt-dlp", "2026.08.19"], ["qjs", "0.17.0"], ["ffmpeg", "ffmpeg version 7.0"]]) {
-    writeFileSync(join(bin, name!), `#!${process.execPath}\nconst args = process.argv.slice(2); console.log(args.includes("--dump-single-json") ? JSON.stringify(args) : ${JSON.stringify(version)});\n`, { mode: 0o755 });
+    writeFileSync(join(bin, executableName(name!)), `#!${process.execPath}\nconst args = process.argv.slice(2); console.log(args.includes("--dump-single-json") ? JSON.stringify(args) : ${JSON.stringify(version)});\n`, { mode: 0o755 });
   }
   process.env.PATH = bin;
   process.env.COUCH_DATA_DIR = directory;

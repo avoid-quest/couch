@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, copyFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import { executableName, nodeExecutables } from "./executable.fixture";
 import { createServer, type ServerResponse } from "node:http";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
@@ -49,12 +50,14 @@ async function fixture(raw = false) {
   };
   const binary = join(directory, "bin"), nativeLog = join(directory, "mpv.jsonl"), readyLog = join(directory, "mpv-ready"), originalPath = process.env.PATH;
   mkdirSync(binary);
+  const executables = nodeExecutables(binary, { workers: true });
+  const ffmpegPath = join(binary, executableName("ffmpeg")), mpvPath = join(binary, executableName("mpv"));
   // A repo-local COUCH_DATA_DIR otherwise inherits the app's ESM package scope.
   writeFileSync(join(binary, "package.json"), '{"type":"commonjs"}\n');
   // The native process can create its log before its first record is readable.
   writeFileSync(nativeLog, "");
   // Model only the external mpv executable/IPC boundary. No video/audio device is opened.
-  writeFileSync(join(binary, "mpv"), `#!${process.execPath}\n${[
+  writeFileSync(mpvPath, `#!${process.execPath}\n${[
     'const { appendFileSync, rmSync } = require("node:fs"), { createServer } = require("node:net");',
     'if (process.argv.includes("--version")) { console.log("mpv 0.40.0"); process.exit(); }',
     `appendFileSync(${JSON.stringify(nativeLog)}, JSON.stringify({ pid: process.pid, source: process.argv.at(-1) }) + "\\n");`,
@@ -62,9 +65,9 @@ async function fixture(raw = false) {
     `const server = createServer(socket => { let commands = 0, ready = false; socket.on("data", bytes => { commands += String(bytes).split("\\n").length - 1; if (commands >= 6 && !ready) { ready = true; appendFileSync(${JSON.stringify(readyLog)}, process.pid + "\\n"); } }); socket.on("error", () => {}); }); server.listen(ipc);`,
     'process.on("SIGTERM", () => server.close(() => process.exit()));',
   ].join("\n")}\n`, { mode: 0o755 });
-  if (process.env.COUCH_TEST_FFMPEG) symlinkSync(process.env.COUCH_TEST_FFMPEG, join(binary, "ffmpeg"));
+  if (process.env.COUCH_TEST_FFMPEG) (process.platform === "win32" ? copyFileSync : symlinkSync)(process.env.COUCH_TEST_FFMPEG, ffmpegPath);
   // HLS routing alone needs no audio decoding. Keep its unrelated Synced helper offline.
-  else writeFileSync(join(binary, "ffmpeg"), `#!${process.execPath}\nif (process.argv.includes("-version")) console.log("ffmpeg version 7.0.0");\n`, { mode: 0o755 });
+  else writeFileSync(ffmpegPath, `#!${process.execPath}\nif (process.argv.includes("-version")) console.log("ffmpeg version 7.0.0");\n`, { mode: 0o755 });
   const streams: Record<string, Buffer> = {};
   if (raw) {
     assert.ok(process.env.COUCH_TEST_FFMPEG, "Set COUCH_TEST_FFMPEG to a real FFmpeg 7+ executable for raw TS fixtures.");
@@ -72,7 +75,7 @@ async function fixture(raw = false) {
       streams[name!] = execFileSync(process.env.COUCH_TEST_FFMPEG, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=s=64x64:r=10", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "0.3", "-c:v", video!, "-threads", "1", ...video === "libx265" ? ["-x265-params", "pools=none:log-level=error"] : [], "-c:a", audio!, "-f", "mpegts", "pipe:1"]);
     }
   }
-  process.env.PATH = `${binary}:${originalPath ?? ""}`;
+  process.env.PATH = `${binary}${delimiter}${originalPath ?? ""}`;
   let held: { path: string; entered: () => void; responses: Map<ServerResponse, string | Buffer> } | undefined;
   const source = createServer((request, response) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
@@ -95,8 +98,8 @@ async function fixture(raw = false) {
   }) as typeof fetch;
   startHelpers(join(directory, "helpers"));
   const helpers = await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp"), checkHelper("mpv")]);
-  assert.deepEqual(helpers[0], { status: "fulfilled", value: join(binary, "ffmpeg") });
-  assert.deepEqual(helpers[3], { status: "fulfilled", value: join(binary, "mpv") });
+  assert.deepEqual(helpers[0], { status: "fulfilled", value: ffmpegPath });
+  assert.deepEqual(helpers[3], { status: "fulfilled", value: mpvPath });
   const hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: Number(process.env.COUCH_PORT ?? 0) });
   const sockets: WebSocket[] = [];
   const connect = async (auth: string, id: string, sharing = false) => {
@@ -122,6 +125,7 @@ async function fixture(raw = false) {
     source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve()));
     await until(() => nativeLoads().every(({ pid }) => { try { process.kill(pid, 0); return false; } catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH"; } }));
     if (nativeLoads().length) rmSync(join(tmpdir(), `couch-mpv-${process.pid}.sock`), { force: true });
+    assert.deepEqual(await executables.close(), { children: [], workers: [] }, "routing retires every fixture child and worker");
     globalThis.fetch = originalFetch; process.env.PATH = originalPath; rmSync(directory, { recursive: true, force: true });
   };
   try {

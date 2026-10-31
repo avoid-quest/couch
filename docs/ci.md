@@ -34,6 +34,31 @@ stale caches.
 Add a test only where a behaviour must stay locked, and run it with
 `bun run test <path>`.
 
+Production-renderer journey fixtures run with `bun tests/ui-journeys.native.ts
+.artifacts/ui-journeys` on a display (`xvfb-run -a` without one). They exercise
+search, navigation, Saved, collection caching, settings, pairing and radio with
+isolated fixture APIs, a fresh renderer per check and their own data directory.
+`--only=reorder` includes the saved-list render-work regression;
+`--only=queue` checks queued Play controls and HTML fullscreen. Native macOS
+window transitions use the actual Main/preload/player in
+`bun tests/player-fullscreen.native.ts <evidence directory>` after `bun run build`.
+Rebuild the complete app after running standalone `bun scripts/core.ts`: that
+development Core does not carry the client bundle's build identity, and mixing
+them can stop a native journey at the connection gate.
+It requires macOS and FFmpeg on PATH (or `COUCH_TEST_FFMPEG`); the
+[Mac audit](release-audit-2026-10-29.md#mac-fixes-and-retained-fullscreen-observations)
+records the native transition fix, retained failures and qualification limits.
+The default runs rapid, native-restore, external-exit, native-exit, escape, combined and TV scenarios serially
+in separate apps; a final argument selects one scenario.
+`--width=390 --height=844` checks phone-sized layouts, and
+`--tv --width=1920 --height=1080 --only=tv` checks TV focus and reachability.
+The Windows TV fixture uses a frameless window and reapplies its bounds to
+retain the requested viewport beyond the initial work-area clamp.
+The evidence directory holds `result.json`. These checks do not establish real
+provider availability, physical-device pairing or hardware playback performance.
+Run native focus suites serially: another Electron test window can take focus
+and invalidate remote-navigation assertions.
+
 Live audio's correctness checks are listed in [Live audio](live-audio.md#checks).
 
 The update regressions run with `bun test tests/updates.test.ts` and
@@ -51,6 +76,14 @@ bun build tests/<name>.integration.ts --target=node --outfile=build/<name>.integ
 node --test build/<name>.integration.mjs
 ```
 
+`executable-fixture.integration.ts` checks real fixture children and the separate
+audio-worker boundary; set `COUCH_TEST_FFMPEG` to a provisioned real FFmpeg for
+its media path. `build-relay.integration.ts` checks runtime/dependency license
+selection using real temporary files and stubbed Go responses, without a package
+build. Run both through the Node recipe above with isolated `COUCH_DATA_DIR`
+and `COUCH_PORT=0`; build Core/audio-worker first. Portable fixture coverage on
+one platform does not establish native execution on another.
+
 The TV health integration needs native Linux `/proc` (CPU emulation changes the
 reported executable). The installed app's Node also runs it:
 `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
@@ -66,10 +99,14 @@ their measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
 Main's window lifecycle has a native check, after `bun run build`, on a display
 (`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence
 directory>`. It reserves `COUCH_PORT` (default 42870) and the next two ports.
+It runs on macOS, Windows and Linux; the Linux process/boot identity is asserted only
+where `/proc` supplies it. Use an isolated evidence directory on each platform.
 
 ## Bundled live relay
 
 Packaging also requires Go on PATH (at least the version in `native/live-relay/go.mod`).
+Runtime notices support the upstream Go layout and Homebrew's `libexec` layout,
+where the Go license sits one directory above `GOROOT`.
 Package installs the latest stable Go;
 ordinary `bun run build` still needs only Bun/Node. The electron-builder `afterPack`
 hook compiles the `native/live-relay` module for the actual platform and

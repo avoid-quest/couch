@@ -2,7 +2,7 @@
 // --seek drives playback, hover and native mouse drags (default: three rounds); --profile measures React render cost.
 // An isolated Electron renderer, production CSS/routes and fixture API reads; COUCH_PERF_AUDIO adds local audio decoding.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 import { build, mergeConfig } from 'vite';
 import electron from 'electron';
 import config from '../vite.config';
@@ -45,7 +45,7 @@ if (audioPath) copyFileSync(audioPath, join(outDir, 'benchmark.mp3'));
 const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
   const pathname = decodeURIComponent(new URL(request.url).pathname);
   const path = resolve(outDir, '.' + pathname);
-  if (!path.startsWith(outDir + '/')) return new Response(null, { status: 404 });
+  if (!path.startsWith(outDir + sep)) return new Response(null, { status: 404 });
   const file = Bun.file(path);
   return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
 } });
@@ -63,7 +63,7 @@ app.whenReady().then(async () => {
   });
   let code = 0;
   try {
-    await window.loadURL(${JSON.stringify(`http://127.0.0.1:${server.port}/${entry.split('/').at(-1)}`)});
+    await window.loadURL(${JSON.stringify(`http://127.0.0.1:${server.port}/${basename(entry)}`)});
     if (process.env.COUCH_PERF_REDUCED_MOTION === '1') {
       window.webContents.debugger.attach('1.3');
       await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });

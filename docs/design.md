@@ -141,6 +141,11 @@ painted once: no blurred copy of the picture, nothing animated.
 Video keeps black letterbox bars in windowed, fullscreen and TV playback; no
 artwork light is painted behind its picture. Its control bands use neutral
 black scrims for legibility. Audio and browsing keep their artwork-lit rooms.
+On macOS, the player completes native window entry before entering document
+fullscreen and restores the previous native mode on exit. Its button and shortcut
+stay pending until the native animation finishes; playback sheets remain available.
+An older remote Couch page in Client mode still uses its own fullscreen code;
+the native-first ordering requires the updated page as well as the app.
 A hovered or focused tile or row glows under its picture in its first colour
 (`useItemLight`).
 
@@ -491,8 +496,9 @@ its results hold, as it finds them).
 
 Available updates show a small **Update ready** link in the header, with a count
 for several devices. It opens the viewer's single [Updates page](design/settings.md#updates),
-where device status, release notes and actions live together. Nothing adds a banner
-or pushes Home's artwork down. Successful checks and updates finish with a brief
+where device status, release notes and actions live together. The link uses the
+measured status row below the primary controls; Home clears that row as it grows.
+Successful checks and updates finish with a brief
 toast and clear their saved results automatically; failures stay visible for retry.
 
 - **Toast** (sonner): errors, Undo, Queue confirmation and unexpected outcomes.
@@ -511,6 +517,9 @@ toast and clear their saved results automatically; failures stay visible for ret
   key returns. The TV ignores pointer hover on them.
 - A refused media request shows its HTTP status. **Try again** requests a fresh
   stream; a 403 alone does not claim that the video requires age verification or sign-in.
+  A failed synchronized encoder stops only its Playback or Source. If the shared
+  audio worker stops, current and later scheduled playback and source attempts
+  report an error until Core restarts.
   YouTube stays loading until its selected formats pass a downloadability check,
   including after **Try again**. Website playback uses the faster bundled Node
   runtime where available and starts delivery without discarded relay probes;
@@ -581,6 +590,9 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Home](design/home.md): the hero, your own rows and the sources.
 - [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
   rows and tiles, filters and pages, breadcrumbs.
+  Saved's ordering controls check adjacent positions without rebuilding each
+  possible order while rendering the list.
+  RaiPlay collection actions read complete seasons once; browsing remains paged.
   Captions remove confirmed type/category overlaps while keeping compound genres
   and creator names; channel Details preserves chosen Saved names and canonical identity.
 - [Player](design/player.md): the picture, scrims, the band, settings, Up next,
@@ -588,7 +600,7 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 - [Where it plays](design/where-it-plays.md): the mixer and Play on.
 - [Share](design/share.md): sharing this device's screen or sound, the
   capsule while it runs. Picture capture accepts independent resolution and
-  30/60/120 FPS targets (60 by default); see [video measurements](video-performance.md)
+  30/60/120 FPS targets (30 by default); see [video measurements](video-performance.md)
   for achieved rates and the limits of those targets.
 - [TV](design/tv.md): what the TV adds for its remote.
 - [Remote](design/remote.md): the Remote section and Type on TV.
@@ -608,6 +620,8 @@ subtitle initialization keeps the connection stable even with 16 tracks.
 
 `apps/web` (the couch.avoid.quest site) keeps its own pages; its structure and
 words follow [the website notes](product/website.md) and [voice](product/voice.md).
+About describes one Up next per playback and distinguishes shared transport
+controls from private playback.
 Download uses flat rows per channel, with explicit **Mac (Apple Silicon)**
 (macOS 14+) and **Mac (Intel)** (macOS 13+) choices. Each row appears only when
 that channel has its installer; it carries the architecture, minimum OS and

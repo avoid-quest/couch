@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { liveFixture, until } from "./live-input.fixture";
+import { executableName } from "./executable.fixture";
 
 type Receiver = Awaited<ReturnType<typeof liveFixture>>["receiver"];
 const loads = (receiver: Receiver) => receiver.messages.flatMap(message => message.type === "player" && message.command.type === "load" ? [message.command] : []);
@@ -88,11 +89,16 @@ test("retrying a shared buffer keeps other independent playbacks failed until th
 
 test("a healthy second receiver reports and controls playback while the first waits for provisioning", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
-  const directory = dirname(f.databasePath), gate = join(directory, "gate"), slow = join(directory, "slow");
+  const directory = dirname(f.databasePath), gate = join(directory, "gate"), held = join(directory, "held"), slow = join(directory, "slow");
   mkdirSync(slow);
-  writeFileSync(join(slow, "ffmpeg"), `#!/bin/sh
-case " $* " in *" -version "*) while [ ! -e '${gate}' ]; do sleep 0.02; done;; esac
-exec '${join(directory, "ffmpeg")}' "$@"
+  writeFileSync(join(slow, executableName("ffmpeg")), `#!${process.execPath}
+const fs = require('node:fs');
+if (process.argv.includes('-version')) {
+  fs.writeFileSync(${JSON.stringify(held)}, String(process.pid));
+  const timer = setInterval(() => { if (fs.existsSync(${JSON.stringify(gate)})) { clearInterval(timer); console.log('ffmpeg version 7.0'); } }, 20);
+} else {
+  ${readFileSync(f.executable, "utf8").replace(/^#![^\n]*\n/, "")}
+}
 `, { mode: 0o755 });
   process.env.PATH = `${slow}${delimiter}${process.env.PATH}`;
   try {
@@ -104,6 +110,7 @@ exec '${join(directory, "ffmpeg")}' "$@"
     await until(() => !!other.load());
     const firstId = f.receiver.load()!.playbackId, peerId = other.load()!.livePeerId, before = loads(other).length;
     failPeer(f.receiver);
+    await until(() => existsSync(held));
     await f.receiver.command({ type: "volume", deviceId: f.receiver.id, volume: 37 });
     await until(() => other.state.devices?.find(device => device.id === f.receiver.id)?.volume === 37);
     assert.equal(output(f.receiver)?.buffered, true);
@@ -131,5 +138,10 @@ exec '${join(directory, "ffmpeg")}' "$@"
     await other.command({ type: "volume", deviceId: other.id, volume: 39 });
     await until(() => other.state.devices?.find(device => device.id === other.id)?.volume === 39);
     assert.deepEqual(other.state.player.tracks, [audio]);
-  } finally { writeFileSync(gate, ""); await f.close(); }
+  } finally {
+    writeFileSync(gate, "");
+    const pid = existsSync(held) ? Number(readFileSync(held, "utf8")) : undefined;
+    assert.deepEqual(await f.close(), { children: [], workers: [] }, "helper children and workers must stop before forced cleanup");
+    if (pid) assert.throws(() => process.kill(pid, 0), { code: "ESRCH" }, "the held helper child must stop");
+  }
 });

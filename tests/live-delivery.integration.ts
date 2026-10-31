@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import type { MediaTrack, PlaybackCommand } from "../src/shared/protocol";
 import { liveFixture, until } from "./live-input.fixture";
+import { executableName } from "./executable.fixture";
 
 type Fixture = Awaited<ReturnType<typeof liveFixture>>;
 type Receiver = Fixture["receiver"];
@@ -124,7 +125,7 @@ test("Move here from an In sync group restores RTC without replacing the queue",
     await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
     const beforeSolo = loads(f.receiver).length;
     const solo = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
-    assert.equal(solo.ok, true, solo.error);
+    assert.equal(solo.ok, true, solo.error ?? "");
     await until(() => loads(f.receiver).length > beforeSolo);
     assert.notEqual(rtc(f.receiver.load()!), firstPeer, "returning to RTC must grant a fresh peer");
     await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === false);
@@ -291,17 +292,22 @@ test("a second receiver's newest tab that closes hands its peer back to its olde
 const ffmpeg = (f: Fixture, script: string) => {
   const directory = join(dirname(f.databasePath), "replaced");
   mkdirSync(directory);
-  writeFileSync(join(directory, "ffmpeg"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+  writeFileSync(join(directory, executableName("ffmpeg")), `#!${process.execPath}\n${script}\n`, { mode: 0o755 });
   process.env.PATH = `${directory}${delimiter}${process.env.PATH}`;
   return directory;
 };
 
 test("a fallback that becomes ready after a pause loads paused", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
+  const gate = join(dirname(f.databasePath), "gate");
   try {
     await start(f);
-    const gate = join(dirname(f.databasePath), "gate");
-    ffmpeg(f, `case " $* " in *" -version "*) while [ ! -e '${gate}' ]; do sleep 0.02; done;; esac\nexec '${join(dirname(f.databasePath), "ffmpeg")}' "$@"`);
+    ffmpeg(f, `const fs = require('node:fs');
+if (process.argv.includes('-version')) {
+  const timer = setInterval(() => { if (fs.existsSync(${JSON.stringify(gate)})) { clearInterval(timer); console.log('ffmpeg version 7.0'); } }, 20);
+} else {
+  ${readFileSync(f.executable, "utf8").replace(/^#![^\n]*\n/, "")}
+}`);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
     await until(() => !!f.publisher.state.outputs?.[0]?.buffered);
     assert.equal((await f.publisher.command({ type: "pause", playbackId: f.receiver.load()!.playbackId, paused: true })).ok, true);
@@ -311,7 +317,7 @@ test("a fallback that becomes ready after a pause loads paused", { timeout: 15_0
     await until(() => !!f.receiver.load()?.hls);
     relayed(f.receiver.load()!, f.receiver);
     assert.equal(f.receiver.load()!.paused, true, "it loads as the playback is now");
-  } finally { await f.close(); }
+  } finally { writeFileSync(gate, ""); await f.close(); }
 });
 
 test("a buffered stream that fails stops its receiver and says why, while the other keeps its peer and Core doesn't retry", { timeout: 15_000 }, async t => {
@@ -322,7 +328,7 @@ test("a buffered stream that fails stops its receiver and says why, while the ot
     await start(f);
     const other = await addOther(f);
     const otherPeer = rtc(other.load()!), before = [f.receiver.messages.length, loads(other).length];
-    ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
+    ffmpeg(f, `if (process.argv.includes('-version')) console.log('ffmpeg version 7.0'); else process.exit(1);`);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
     await until(() => !!f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error);
     assert.ok(lines.some(line => line.includes("player error") && line.includes("buffered stream of this live input stopped")), "a failed buffered stream is still a playback error");
@@ -346,7 +352,7 @@ test("a buffered stream that fails stops its receiver and says why, while the ot
 async function failBuffered(f: Fixture) {
   await start(f);
   const other = await addOther(f);
-  const broken = ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
+  const broken = ffmpeg(f, `if (process.argv.includes('-version')) console.log('ffmpeg version 7.0'); else process.exit(1);`);
   f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
   await until(() => !!f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error);
   other.report();
@@ -404,7 +410,7 @@ test("a buffered stream that fails on the only receiver shows its error", { time
   const f = await liveFixture();
   try {
     await start(f);
-    const broken = ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
+    const broken = ffmpeg(f, `if (process.argv.includes('-version')) console.log('ffmpeg version 7.0'); else process.exit(1);`);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
     await until(() => f.publisher.state.player.status === "error");
     assert.ok(f.publisher.state.player.error);
@@ -475,7 +481,7 @@ test("Move here grants a fresh peer to a device that can connect, and relays to 
     await until(() => f.publisher.state.player.status === "playing");
     const before = loads(f.receiver).length;
     const back = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
-    assert.equal(back.ok, true, back.error);
+    assert.equal(back.ok, true, back.error ?? "");
     await until(() => loads(f.receiver).length > before);
     relayed(f.receiver.load()!, f.receiver);
   } finally { await f.close(); }

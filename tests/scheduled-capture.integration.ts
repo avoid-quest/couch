@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { WebSocket, WebSocketServer } from "ws";
-import { Identity, serverNowUs } from "@sonn-audio/node-sendspin";
+import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
 import { createScheduledAudio } from "../src/server/scheduled-audio";
 import type { PlayerState } from "../src/shared/protocol";

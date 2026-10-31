@@ -32,6 +32,11 @@ devices admin with **Make admin** there, and manages the
 whole Couch from its own device: network sharing, HTTP, the relay, TV mode,
 sources, hardware and updates. A browser does not become another player.
 
+Pairing again with the current pairing code replaces that device ID's token
+and revokes its previous connections and publications. The replacement gets
+Controller access, including when the previous token belonged to an admin.
+Use **Admin code** or **Make admin** to grant administrator access again.
+
 ## Native desktop app
 
 The Couch app for macOS, Windows and Linux runs in **This computer** (Full) or

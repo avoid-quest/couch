@@ -1,7 +1,7 @@
 // COUCH_TEST_FFMPEG=/path/to/ffmpeg xvfb-run -a bun tests/media-startup.native.ts .artifacts/media-startup/baseline --rounds=3 --delay=200
 // Measures resolved-media-to-first-frame, excluding provider extraction. No external traffic.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { build, mergeConfig } from "vite";
 import electron from "electron";
 import config from "../vite.config";
@@ -65,7 +65,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
   }
   const path = resolve(outDir, "." + url.pathname);
   const file = Bun.file(path);
-  return path.startsWith(outDir + "/") && await file.exists() ? new Response(file) : new Response(null, { status: 404 });
+  return path.startsWith(outDir + sep) && await file.exists() ? new Response(file) : new Response(null, { status: 404 });
 } });
 const origin = `http://127.0.0.1:${server.port}`, probe = join(directory, "probe.cjs");
 writeFileSync(probe, `
@@ -81,7 +81,7 @@ app.whenReady().then(async () => {
   try {
     for (let round = 0; round < ${rounds}; round++) for (const mode of (round % 2 ? ['hls', 'split', 'mp4'] : ['mp4', 'split', 'hls'])) {
       await window.webContents.session.clearCache();
-      await window.loadURL(${JSON.stringify(origin + "/" + entry.split("/").at(-1))});
+      await window.loadURL(${JSON.stringify(origin + "/" + basename(entry))});
       const sample = { round, ...await window.webContents.executeJavaScript('window.measureMediaStartup(' + JSON.stringify(mode) + ')', true) };
       result.samples.push(sample); console.log(JSON.stringify(sample));
       if (sample.width !== 1280 || sample.height !== 720 || sample.totalFrames < 5 || (${budget} && sample.firstFrameMs > ${budget})) code = 1;

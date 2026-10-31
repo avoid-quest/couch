@@ -9,7 +9,7 @@ export type LiveSource = { id: string; deviceId: string; name: string; kind: Cap
 export const liveTitle = (source: LiveSource) => source.metadata?.title || source.name;
 export type LiveVideoQuality = "720p" | "1080p" | "original";
 export type LiveVideoFrameRate = 30 | 60 | 120;
-export const defaultLiveFrameRate: LiveVideoFrameRate = 60;
+export const defaultLiveFrameRate: LiveVideoFrameRate = 30;
 // surface: the browser picker's first offer (a screen or a window).
 export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; nativeChannelMap?: import("./capture").NativeChannelMap; videoQuality?: LiveVideoQuality; videoFrameRate?: LiveVideoFrameRate; includeAudio?: boolean; surface?: "monitor" | "window"; intent?: "relaxed" | "live"; metadata?: LiveMetadata };
 
