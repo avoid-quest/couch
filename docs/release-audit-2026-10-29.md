@@ -1323,12 +1323,12 @@ ledgers and failed runs alongside their reruns are under the ignored
 
 | Gate | Result | Evidence under that directory |
 | --- | --- | --- |
-| Fullscreen | **Pass**: three complete seven-scenario runs, including native-exit; no first-Enter failure on the idle machine. This does not establish the cause of the earlier interrupted runs. | `fullscreen-01` through `fullscreen-03` |
+| Fullscreen | **Pass**: three consecutive complete seven-scenario runs on `590c2a50`, then all seven on the combined `c9d02463`, including native-exit. The historical first-Enter failure did not recur; the separate focus failure below remains unexplained. | `fullscreen-01` through `fullscreen-07`, `fullscreen-04-verdict.json`, `combined-fullscreen-01` |
 | Window-only retirement | **Fail, production/upstream**: closing the source window while its process remains alive leaves the raw track, publication and receiver active past the unchanged deadline. Minimize/hide preserve sharing and sound; process exit retires it. Native Stop works after the failure and a new source recovers. | `window-close-01`, `window-raw-01`, `window-visibility-01`, `window-process-exit-01`, `window-stop-ui-02`, `window-retirement-verdict.json` |
-| First capture consent | **Incomplete**: the user granted the real screen-recording and microphone requests to a locally signed test identity. Restart verified both grants and real source enumeration; Couch's own consent/cancel regressions pass. Driven OS deny/cancel remain blocked because computer use refuses access to `com.apple.UserNotificationCenter`. No owner permission entry was reset. | `couch-consent-01`, `consent-runs`, `consent-verdict.json` |
+| First capture consent | **Incomplete**: the user granted the real screen-recording and microphone requests to a locally signed test identity. Restart verified both grants and real source enumeration; Couch's own consent/cancel regressions pass, and native UI Allow, Deny and Escape cancel were driven separately. Driven OS deny/cancel remain blocked because computer use refuses access to `com.apple.UserNotificationCenter`. No owner permission entry was reset. | `couch-consent-01`, `consent-runs`, `own-consent-runs`, `consent-verdict.json` |
 | Playback and UI | **Pass**: Main/Core journey, second paired renderer, Direct/synchronized transitions and output choice; compressor three rounds in every mode with performance checks; all nine providers plus RaiPlay live, YouTube separate A/V included; player checks, startup, status, quit, desktop/phone/queue and TV at an actual 1920×1080. | `journey-01`, `compressor-01`, `providers-01`, `provider-bandcamp-link-02`, `provider-summary.json`, `player-checks-01`, `startup-01`, `renderer-status-01`, `app-quit-01`, `ui-*` |
-| Sharing with sound | **Fail, production**: three 8-second steady samples at true 1920×1080, after 3-second warmup, retain ≥55 FPS and ≤1% drops. With 60 requested, captured 57.76–58.01, encoded 33.68–34.29 and presented 33.56–34.17 FPS; VP8/libvpx encode and decode, roughly 74–75% of one CPU core across the benchmark app's processes. Reported warmup/steady player drops are zero; that does not erase the capture-to-encode cadence loss. The pushed 30 FPS default presents about 29.31 FPS and also fails the unchanged 55 FPS gate. | `sharing-01`, `sharing-sound-01`, `sharing-02`, `sharing-default-30-02`, `sharing-summary.json` |
-| Install and update | **Pass within the existing self-signing policy**: local ZIP/DMG build; unchanged published preview.5 and latest available branch Package artifacts (run `41146525623`, `f5e98ccd`) extracted/mounted only in scratch locations and passed real packaged smoke. A real generic-feed electron-updater/Squirrel update from preview.5 to the branch build replaced and relaunched the test identity, preserving Core identity, setup, device name and both real permissions. Unchanged downloads share the release signing requirement; app signatures from both archive formats verify. Gatekeeper rejects the unnotarized self-signed downloads, including quarantined scratch copies, as documented in ci.md. | `local-package-01`, `install-inspection`, `package-published-smoke-01`, `package-branch-smoke-01`, `update-02`, `quarantine-01` |
+| Sharing with sound | **Fail, production**: the combined head keeps three 8-second steady samples at true 1920×1080 after 3-second warmup, with the unchanged ≥55 FPS and ≤1% drop thresholds. With 60 requested, captured 57.23–57.38, encoded 34.28–34.30 and presented 33.90–34.18 FPS; VP8/libvpx encode and decode, 74.3–79.8% of one CPU core across the benchmark app's processes. Warmup player drops are zero; steady drops are 1/0/0 (0.364/0/0%). This does not erase the capture-to-encode cadence loss. The pushed 30 FPS default presents 29.04–29.18 FPS, with zero reported warmup/steady player drops and 71.9–73.5% CPU, and fails the same unchanged 55 FPS gate. Sound passes advancing RTP energy and nonzero decoded PCM in every sample. | `sharing-01`, `sharing-sound-01`, `sharing-02`, `sharing-03`, `sharing-default-30-02`, `sharing-combined-01`, `sharing-combined-default-01`, `sharing-summary.json` |
+| Install and update | **Pass within the existing self-signing policy**: local ZIP/DMG build; unchanged published preview.5 and the initially latest available branch Package artifacts (run `41146525623`, `f5e98ccd`) extracted/mounted only in scratch locations and passed real packaged smoke. A real generic-feed electron-updater/Squirrel update from preview.5 to the branch build replaced and relaunched the test identity, preserving Core identity, setup, device name and both real permissions. Unchanged downloads share the release signing requirement; app signatures from both archive formats verify. Gatekeeper rejects the unnotarized self-signed downloads, including quarantined scratch copies, as documented in ci.md. | `local-package-01`, `install-inspection`, `package-published-smoke-01`, `package-branch-smoke-01`, `update-02`, `quarantine-01` |
 
 The retirement limitation is below Couch's track handling. The direct native
 ScreenCaptureKit probe receives frames until window closure, but neither
@@ -1340,7 +1340,8 @@ arrives during the observation window. The process-exit control does deliver
 Electron's public [`desktopCapturer.getSources`](https://www.electronjs.org/docs/latest/api/desktop-capturer)
 returns a snapshot, with no external-window destruction subscription. The
 previous Quartz/Accessibility investigation remains applicable: cached window
-descriptions are not a reliable lifetime signal, and Accessibility observation
+descriptions are not a reliable lifetime signal (`sck-quartz-06` still returns the
+closed window from current description queries), and Accessibility observation
 requires another permission. No visibility/source-list heuristic or speculative
 sharing change was retained. User-visible behaviour remains active sharing after
 window-only closure until **Stop sharing** or source-process exit. This gate
@@ -1365,10 +1366,27 @@ with one platform-specific skip. Private diagnostic setup errors and the first
 test-only updater bundle naming error are classified as fixture failures and
 retained beside corrected runs. No production code was changed on the Mac.
 
+`fullscreen-04` failed the native-window/renderer focus precondition in six
+scenarios before attempting any Enter click: the app was inactive and the window
+unfocused. It made no fullscreen request. The next three unchanged complete
+suites passed. This remains **unexplained**, rather than being assigned to the
+fixture or product, and is distinct from the historical ignored Enter click.
+
+The Windows final commit `c9d02463` arrived on the fourth 15-minute origin poll,
+45 minutes after the Mac push (`windows-poll.json`). A clean combined rebuild,
+all seven fullscreen scenarios, the 24-sample compressor with performance
+checks and the 17-checkpoint Main/Core journey pass (`combined-run.json`). Both
+strict sharing series above fail only the original FPS requirement; their sound
+checks pass. The changed Node integration fixtures were also rerun on this Mac;
+counts and existing skips are in `combined-integrations-01/summary.json`.
+The exact-size TV fixture rerun is `combined-ui-tv-01`.
+
 The PR remains a draft: automatic window retirement, driven first deny/cancel
-and the unchanged ≥55 FPS sharing gate are not qualified. Windows integration,
-combined-head reruns and the final Check/Package results are recorded below when
-available; no release was started.
+and the unchanged ≥55 FPS sharing gate are not qualified. The Windows record
+below retains its additional native integration and installation limitations.
+The final tracked change is this qualification record; final clean archives,
+isolated launcher and manual Check/Package run results remain under `final-local/`,
+`final-package-01/` and `final-ci/`. No release was started.
 
 ## Windows qualification 31 October 2026
 
