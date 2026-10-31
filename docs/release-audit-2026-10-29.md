@@ -1226,3 +1226,73 @@ The build is ready for **manual testing**, not release approval. The default
 leaves sharing active; current native fullscreen/J1 and the original native
 entry/consent observations remain unqualified or unresolved. These need their
 own native/platform evidence and are not relabelled fixed by background checks.
+
+### 31 October qualification of `f5e98cc`
+
+Source: `f5e98ccd9b715f6277abf935f1c2dc2a2eedd5c2`, the PR head. All 80 reviewed
+source, test and documentation files in the earlier package's source manifest
+match this commit byte for byte; only this audit document has changed since.
+The reviewed fixes therefore need no further review. Foreground GUI stayed
+stopped: no Electron window, capture, focus change, OS prompt or signing prompt
+ran on this Mac, and no linked test machine was available. The installed Couch,
+its data and its permissions were untouched.
+
+**Manual workflows on this branch.** [Check](https://github.com/avoid-quest/couch/actions/runs/41146522695)
+passes on Linux with 766 tests and no skips.
+[Package](https://github.com/avoid-quest/couch/actions/runs/41146525623) passes
+on all three runners. Linux, Mac and Windows each pass the typechecks; Linux
+runs 766 unit tests, Mac and Windows 765 with the one Linux-only skip, and each
+passes all 18 Go relay tests without network skips. Mac signs both the arm64 and
+x64 apps with the `Couch Releases` identity and passes the strict deep and
+helper signature checks. The Linux, Mac and Windows installers are unpublished
+run artifacts (expiring 13 November); none was installed. Windows tests on a
+hosted runner are not native GUI, GPU or capture execution.
+
+File-only signing continuity: the downloaded arm64 and x64 apps pass
+`codesign --verify --deep --strict` and satisfy, with `codesign --verify -R`,
+the designated requirement of the published preview.5 arm64 app. Both carry the
+identical requirement: identifier `quest.avoid.couch` and the certificate root of
+[`couch-releases.pem`](../packaging/couch-releases.pem). That is the condition
+Squirrel.Mac and macOS permissions check. The combined `latest-mac.yml` lists
+both architectures' ZIPs and DMGs. No artifact was launched or installed, so an
+actual update and permission retention remain untested.
+
+**Current local build.** A frozen install, typecheck, 765 unit tests (one skip),
+the app build and an ad-hoc ZIP package all ran in the background from the
+clean commit. The packaged build identity is now `f5e98cc` and not dirty,
+replacing the earlier package's dirty revision. The ZIP, ASAR and the 87 bundled
+Main/preload/Core/worker/frontend files match the build. Five strict signature
+checks and the Go license comparison pass. Packaged Core in Electron's Node mode
+passes the same ten offline smoke checks with a clean SIGTERM exit and closed
+listener. This is Core and archive evidence only. The extracted app and its
+isolated manual launcher are in `qualification/local-package/manual/` under
+`.artifacts/audit-remediation-2026-10-31/`; the launcher was syntax-checked, not
+run.
+
+Electron 45.2.0 (released 30 October) lists no capture or fullscreen fix, so
+it changes neither the window-retirement nor the fullscreen analysis.
+
+**Gate status for this commit:**
+
+| Gate | Status | Missing evidence or access |
+| --- | --- | --- |
+| Default 60 FPS sharing ≥55 FPS, ≤1% drops | **Fails** (Mac and Windows, unchanged) | A production change that passes every steady sample on Mac and Windows, measured natively with sound. No candidate passes on both; bitrate/codec/buffering stay benchmark-only. |
+| Window-only Close with the source process alive | **Open defect** | An upstream end signal, or a permission-free lifetime signal shown to keep hidden/minimized capture, plus a native run. |
+| Fullscreen J1 and six-scenario suite | **Unqualified** | A native run of `player-fullscreen.native.ts`, including external exit, native-button exit during HTML fullscreen, Escape, rapid toggles and restores; it needs visible windows. |
+| First OS capture grant/deny/cancel, relaunch persistence | **Untested** | An isolated test identity on a machine where OS prompts and UI automation are permitted. |
+| Native Windows/Linux GPU, minimum OS, physical devices, providers, compressor and YouTube rechecks | **Not rerun** | Linked Windows, native Linux GPU, Intel Ventura and Apple Silicon macOS 14 machines; physical receivers and remotes. The hub/Sendspin changes in this commit call for the compressor Direct/synchronized native recheck. |
+| Builds, packaging, signing | **Pass** (CI, local, file-only requirement check) | Install, Gatekeeper, an actual update from preview.5 and permission retention need a GUI-permitted machine. |
+
+Evidence: `qualification/` under `.artifacts/audit-remediation-2026-10-31/`
+holds `steps.txt`, the local and CI logs, `local-package/` verification and smoke
+results, and the signing comparison. Commands:
+
+```sh
+gh workflow run check.yml --ref t3/platform-performance-audit
+gh workflow run package.yml --ref t3/platform-performance-audit
+bun install --frozen-lockfile && bun run typecheck && bun run test && bun run build
+CI=true CSC_IDENTITY_AUTO_DISCOVERY=false bun run package --mac zip -c.mac.identity=- -c.mac.notarize=false -c.directories.output=<scratch>
+```
+
+Not release-ready: the sharing and window-retirement gates fail, and the native
+fullscreen, first-consent, platform and install/update gates lack evidence.
