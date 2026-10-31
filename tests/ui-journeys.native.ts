@@ -62,7 +62,9 @@ app.whenReady().then(async () => {
   for (const name of ${JSON.stringify(checks)}) {
     // These fixtures exercise HTML fullscreen. player-fullscreen.native.ts tests
     // native window transitions with the real Main/preload and production player.
-    const window = new BrowserWindow({ width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)}, useContentSize: true, enableLargerThanScreen: true, show: true, webPreferences: { backgroundThrottling: false, disableHtmlFullscreenWindowResize: true, partition: name } });
+    const window = new BrowserWindow({ width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)}, useContentSize: true, enableLargerThanScreen: true, ...${tv} && process.platform === "win32" ? { frame: false, x: 0, y: 0 } : {}, show: true, webPreferences: { backgroundThrottling: false, disableHtmlFullscreenWindowResize: true, partition: name } });
+    // Reapply the frameless TV fixture after Windows' initial work-area clamp.
+    if (${tv} && process.platform === "win32") window.setBounds({ x: 0, y: 0, width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)} });
     window.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (request, done) => done(new URL(request.url).origin === ${JSON.stringify(origin)} ? {} : request.resourceType === 'image' ? { redirectURL: ${JSON.stringify(origin + "/icons/pwa-512.png")} } : { cancel: true }));
     const timeout = setTimeout(() => window.destroy(), 180_000);
     const viewport = window.getContentBounds();

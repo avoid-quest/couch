@@ -23,9 +23,9 @@ async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
 async function fixture(t: TestContext, mode: Mode, fetch: Parameters<typeof serve<string>>[0]["fetch"] = async () => new Response("ok"), hostname = "127.0.0.1") {
   const directory = await mkdtemp(join(tmpdir(), "couch-http-shutdown-"));
   const tls = await certificate(directory, ["localhost", "127.0.0.1"]);
-  const generic = { opens: 0, closes: 0 };
+  const generic = { opens: 0, closes: 0 }, genericClosed = Promise.withResolvers<void>();
   const listener = await serve<string>({ hostname, port: 0, ...(mode === "plain" ? {} : { tls: { ...tls, securePort: 8443 } }), maxRequestBodySize: 8, fetch,
-    websocket: { maxPayload: 1024, open(socket) { generic.opens++; assert.equal(socket.data, "generic"); }, message(socket, message) { socket.send(message ?? "binary"); }, close() { generic.closes++; } },
+    websocket: { maxPayload: 1024, open(socket) { generic.opens++; assert.equal(socket.data, "generic"); }, message(socket, message) { socket.send(message ?? "binary"); }, close() { generic.closes++; genericClosed.resolve(); } },
   });
   const clients: Array<Socket | WebSocket> = [];
   t.after(async () => {
@@ -47,7 +47,7 @@ async function fixture(t: TestContext, mode: Mode, fetch: Parameters<typeof serv
     await bounded(once(socket, "open"), "WebSocket upgrade");
     return socket;
   }
-  return { listener, client, ws, generic };
+  return { listener, client, ws, generic, genericClosed: genericClosed.promise };
 }
 
 function request(socket: Socket, path = "/", extra = "", method = "GET") {
@@ -133,10 +133,10 @@ for (const mode of modes) {
   });
 
   test(`${mode}: generic and custom WebSocket owners receive messages and close on stop`, { timeout: 5000 }, async t => {
-    let customCloses = 0;
+    let customCloses = 0; const customClosed = Promise.withResolvers<void>();
     const f = await fixture(t, mode, async (request, upgrade) => {
       if (new URL(request.url).pathname === "/custom") upgrade(socket => {
-        socket.on("message", data => socket.send(`custom:${data}`)); socket.once("close", () => customCloses++);
+        socket.on("message", data => socket.send(`custom:${data}`)); socket.once("close", () => { customCloses++; customClosed.resolve(); });
       }); else upgrade("generic");
       return undefined;
     });
@@ -145,7 +145,7 @@ for (const mode of modes) {
     const customEcho = once(custom, "message"); custom.send("hello"); assert.equal(String((await bounded(customEcho, "custom echo"))[0]), "custom:hello");
     assert.equal(f.generic.opens, 1);
     const closes = [once(generic, "close"), once(custom, "close")];
-    await bounded(Promise.all([f.listener.stop(), ...closes]), "WebSocket shutdown");
+    await bounded(Promise.all([f.listener.stop(), ...closes, f.genericClosed, customClosed.promise]), "WebSocket shutdown");
     assert.equal(f.generic.closes, 1); assert.equal(customCloses, 1);
   });
 

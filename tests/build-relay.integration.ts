@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import cp from "node:child_process";
+import fs from "node:fs/promises";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -10,8 +11,14 @@ import { promisify } from "node:util";
 
 test("buildRelay reads real runtime and module licenses across Go layouts", async t => {
   const directory = await mkdtemp(join(tmpdir(), "couch-relay-licenses-")), dependency = join(directory, "dependency");
-  const execFile = cp.execFile;
-  t.after(async () => { cp.execFile = execFile; syncBuiltinESMExports(); await rm(directory, { recursive: true, force: true }); });
+  const execFile = cp.execFile, read = fs.readFile;
+  const reads: string[] = [];
+  let readFailure: unknown;
+  fs.readFile = (async (...args: Parameters<typeof read>) => {
+    reads.push(String(args[0]));
+    try { return await read(...args); } catch (error) { readFailure = error; throw error; }
+  }) as typeof fs.readFile;
+  t.after(async () => { cp.execFile = execFile; fs.readFile = read; syncBuiltinESMExports(); await rm(directory, { recursive: true, force: true }); });
   await mkdir(dependency);
   await writeFile(join(dependency, "LICENSE"), "Real dependency license\n");
   let goroot = "";
@@ -47,9 +54,11 @@ test("buildRelay reads real runtime and module licenses across Go layouts", asyn
     if (scenario.parent) await writeFile(join(prefix, "LICENSE"), scenario.parent);
     if (scenario.directDirectory) await mkdir(join(goroot, "LICENSE"));
     if (scenario.parentDirectory) await mkdir(join(prefix, "LICENSE"));
+    reads.length = 0; readFailure = undefined;
     if (scenario.error) await assert.rejects(buildRelay("linux", "x64", destination), (error: NodeJS.ErrnoException) => {
       assert.equal(error.code, scenario.error);
-      assert.equal(error.path, join(scenario.missing === "parent" || scenario.parentDirectory ? prefix : goroot, "LICENSE"));
+      assert.equal(error, readFailure, "propagate the actual filesystem error unchanged");
+      assert.deepEqual(reads, [join(goroot, "LICENSE"), ...scenario.missing === "parent" || scenario.parentDirectory ? [join(prefix, "LICENSE")] : []], "attempt exactly the allowed license paths, without masking a read error");
       return true;
     });
     else {

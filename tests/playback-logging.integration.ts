@@ -2,7 +2,9 @@ import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import { executableName, nodeExecutables } from "./executable.fixture";
+import { startHelpers } from "../src/server/helpers";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
@@ -31,17 +33,19 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
   const fetch = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (input: RequestInfo | URL, init?: RequestInit) => new URL(input instanceof Request ? input.url : String(input)).hostname === "127.0.0.1"
     ? fetch(input, init) : Promise.resolve(new Response(null, { status: 503 })));
+  const executables = refusedFfmpeg ? nodeExecutables(directory, { workers: true }) : undefined;
   if (refusedFfmpeg) {
     // A real executable at the helper boundary: version discovery succeeds,
     // then the exact FFmpeg input argument is refused without producing audio.
-    writeFileSync(join(directory, "ffmpeg"), `#!${process.execPath}\nif (process.argv.includes('-version')) console.log('ffmpeg version 9.0.0');\nelse { console.error('Error opening input ' + process.argv[process.argv.indexOf('-i') + 1] + ' (Connection refused)\\u0085\\u009b\\u2028\\u2029'); process.exitCode = 1; }\n`, { mode: 0o755 });
+    writeFileSync(join(directory, executableName("ffmpeg")), `#!${process.execPath}\nif (process.argv.includes('-version')) console.log('ffmpeg version 9.0.0');\nelse { console.error('Error opening input ' + process.argv[process.argv.indexOf('-i') + 1] + ' (Connection refused)\\u0085\\u009b\\u2028\\u2029'); process.exitCode = 1; }\n`, { mode: 0o755 });
     const path = process.env.PATH;
-    process.env.PATH = `${directory}:${path}`;
+    process.env.PATH = `${directory}${delimiter}${path}`;
     t.after(() => { process.env.PATH = path; });
   }
   const store = openStore(databasePath, true), deviceId = "t".repeat(43);
   const token = store.pair(deviceId, name);
   store.close();
+  startHelpers(join(directory, "helpers"));
   const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0 });
   const sockets: WebSocket[] = [];
   const connect = async (deviceId: string, token: string, sharing = "") => {
@@ -67,7 +71,7 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
       barrier: () => command({ type: "volume", volume: 100 }),
     };
   };
-  t.after(async () => { for (const socket of sockets) socket.terminate(); await hub.close(); rmSync(directory, { recursive: true, force: true }); });
+  t.after(async () => { for (const socket of sockets) socket.terminate(); await hub.close(); if (executables) assert.deepEqual(await executables.close(), { children: [], workers: [] }); rmSync(directory, { recursive: true, force: true }); });
   const tv = await connect(deviceId, token);
   return { hub, lines, ...tv,
     get state() { return tv.state; },

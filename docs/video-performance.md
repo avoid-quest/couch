@@ -127,7 +127,7 @@ it is not, by itself, evidence of a Couch playback defect. The harness records
 the required dimensions alongside the observed sample without relaxing the gate.
 
 `--sound` includes a generated tone over Windows loopback and asserts advancing
-audio bytes and nonzero decoded energy or PCM level in each steady sample.
+audio bytes and nonzero decoded energy and PCM level in each steady sample.
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
 `--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
 reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits

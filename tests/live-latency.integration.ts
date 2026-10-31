@@ -9,6 +9,7 @@ import { WebSocketServer } from "ws";
 import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs, type SessionUpdateMetadata } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
 import { physical } from "../packaging/tv/evidence.js";
+import { nodeExecutables } from "./executable.fixture";
 import { writeEvidence } from "./evidence";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
@@ -90,6 +91,7 @@ for (const silent of [false, true]) test(`live HLS ${silent ? "silence" : "sound
 // boundary catches accidental application to radio, finite HLS and raw MPEG-TS.
 for (const kind of ["live-hls", "vod-hls", "radio-hls", "live-mpegts"] as const) test(`Sendspin scopes live HLS options for ${kind}`, { timeout: 5_000 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-options-")), argumentsPath = join(directory, "arguments.json"), executable = join(directory, "ffmpeg");
+  const executables = nodeExecutables(directory, { workers: true });
   writeFileSync(executable, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(argumentsPath)}, JSON.stringify(process.argv.slice(2))); setInterval(() => {}, 1000);\n`, { mode: 0o755 });
   const server = createServer((_request, response) => {
     response.setHeader("Content-Type", kind === "live-mpegts" ? "video/mp2t" : "application/vnd.apple.mpegurl");
@@ -98,7 +100,7 @@ for (const kind of ["live-hls", "vod-hls", "radio-hls", "live-mpegts"] as const)
   const core = createSendspin({ name: "Options fixture", admit: () => false, changed() {}, ffmpeg: async () => executable });
   const group = core.group("options", () => {});
   group.members([{ deviceId: "speaker", level: 100 }]);
-  t.after(async () => { group.close(); core.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });
+  t.after(async () => { group.close(); await core.close(); assert.deepEqual(await executables.close(), { children: [], workers: [] }); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address === "object");
   group.send({ type: "load", playbackId: "options", source: `http://127.0.0.1:${address.port}/opaque-stream`, live: kind !== "vod-hls", radio: kind === "radio-hls" });

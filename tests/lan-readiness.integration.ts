@@ -14,9 +14,10 @@ import { serve } from "../src/server/http";
 
 // Change only the OS inventory boundary; bind and request the real private IP.
 const interfaces = networkInterfaces();
-const candidate = Object.entries(interfaces).find(([name, entries]) => {
-  try { selectLan({ [name]: entries }, name); return true; } catch { return false; }
-});
+const candidate = (() => {
+  try { const network = selectLan(interfaces); return [network.name, interfaces[network.name]] as const; }
+  catch { return undefined; }
+})();
 const port = Number(process.env.COUCH_PORT ?? 42640);
 
 async function fixture(t: TestContext, { enabled = true, available = false, automatic = false, advertised = [], resolve, beforeStart }: {
@@ -63,7 +64,7 @@ async function fixture(t: TestContext, { enabled = true, available = false, auto
     });
   };
   return { lan, network, ready, arrive: () => { inventory = { [name]: entries }; }, depart: () => { inventory = {}; }, reads: () => reads,
-    addNetwork: () => { inventory.bridge100 = [{ ...entries!.find(entry => entry.family === "IPv4")!, address: "192.168.254.1", internal: false }]; },
+    addNetwork: () => { inventory["vEthernet zz fixture"] = [{ ...entries!.find(entry => entry.family === "IPv4")!, address: "192.168.254.1", internal: false }]; },
   };
 }
 

@@ -1,3 +1,4 @@
+import { nodeExecutables } from "./executable.fixture";
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -14,6 +15,7 @@ async function until(predicate: () => boolean) {
 
 async function fixture(t: TestContext, executable?: () => Promise<string>) {
   const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-logging-")), marker = join(directory, "started"), script = join(directory, "ffmpeg");
+  const executables = nodeExecutables(directory, { workers: true });
   const lines: string[] = [], states: PlayerState[] = [];
   t.mock.method(console, "log", (line: string) => lines.push(line));
   // Produce no media or physical audio; hold a real child open until Core halts it.
@@ -25,9 +27,10 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   group.members([{ deviceId: "unconnected", level: 100 }]);
   const load: SyncedLoad = { type: "load", playbackId: "p".repeat(36), source: `http://127.0.0.1:${(source.address() as { port: number }).port}/input?sig=synthetic-secret` };
   t.after(async () => {
-    group.close(); server.close();
+    group.close(); await server.close();
     if (existsSync(marker)) await until(() => { try { process.kill(Number(readFileSync(marker, "utf8")), 0); return false; } catch { return true; } });
     source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve()));
+    assert.deepEqual(await executables.close(), { children: [], workers: [] });
     rmSync(directory, { recursive: true, force: true });
   });
   return { group, load, states, marker, script, errors: () => lines.filter(line => line.includes("player error ")) };

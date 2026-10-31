@@ -151,7 +151,7 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
         if (sound) {
           const advances = (type: string, key: string) => afterStats.some(stat => stat.kind === "audio" && stat.type === type && stat[key] > (beforeStats.find(previous => previous.id === stat.id)?.[key] ?? 0));
           if (!publisher?.sharing()?.source.audio
-            || !advances("outbound-rtp", "bytesSent") || !advances("inbound-rtp", "bytesReceived") || !(advances("inbound-rtp", "totalAudioEnergy") || decodedAudioRms > 0)) errors.push("Sharing sound must remain live with advancing sent/received bytes and decoded audio energy");
+            || !advances("outbound-rtp", "bytesSent") || !advances("inbound-rtp", "bytesReceived") || (!advances("inbound-rtp", "totalAudioEnergy") || decodedAudioRms <= 0)) errors.push("Sharing sound must remain live with advancing sent/received bytes and decoded audio energy");
         }
         const total = after.totalFrames - before.totalFrames, dropped = after.droppedFrames - before.droppedFrames;
         const result = { mode, startupMs, seconds, decodedAudioRms, before, after, totalFrames: total, droppedFrames: dropped, droppedPercent: total ? dropped / total * 100 : null,

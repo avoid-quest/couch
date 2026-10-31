@@ -52,6 +52,8 @@ The default runs rapid, native-restore, external-exit, native-exit, escape, comb
 in separate apps; a final argument selects one scenario.
 `--width=390 --height=844` checks phone-sized layouts, and
 `--tv --width=1920 --height=1080 --only=tv` checks TV focus and reachability.
+The Windows TV fixture uses a frameless window and reapplies its bounds to
+retain the requested viewport beyond the initial work-area clamp.
 The evidence directory holds `result.json`. These checks do not establish real
 provider availability, physical-device pairing or hardware playback performance.
 Run native focus suites serially: another Electron test window can take focus

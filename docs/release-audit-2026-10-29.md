@@ -1369,3 +1369,156 @@ The PR remains a draft: automatic window retirement, driven first deny/cancel
 and the unchanged ≥55 FPS sharing gate are not qualified. Windows integration,
 combined-head reruns and the final Check/Package results are recorded below when
 available; no release was started.
+
+## Windows qualification 31 October 2026
+
+Source: `b0e27d8b0cdb6b63cdc151a1779168b041d4683d`, fetched first, followed by
+`037405be8baf65520f0813fecfd25697622bf51c` for the reviewed 30 FPS fallback.
+The final fixture changes incorporate the Mac record at `590c2a502204143ce1d7e36217aa1a3e530b5309`.
+Live audio mode remains excluded. Ordinary audio, compressor and sharing sound
+are included. Scratch profiles and ports are isolated; existing installation and
+`%APPDATA%` data are preserved. Raw output and source controls remain ignored in
+`.artifacts/windows-qualification-2026-10-31/`, under `native/evidence/` and
+`native/source/.artifacts/qualification/`. No release, version bump or ready-state
+change is part of this qualification.
+
+**Sharing.** Reapplying the frameless fixture's bounds after window creation
+avoids Windows' initial work-area clamp. Every reported cadence sample below
+retains actual 1920×1080 capture, encoding and decoding. Three serial eight-second
+steady samples follow three seconds of warmup, with the original 55 FPS / 1% gate.
+
+| Requested target / diagnostic | Captured FPS | Encoded / decoded FPS | Delivered FPS | Presented FPS | Steady drops | Summed process CPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| Default VP8, 60 | 59.27–59.94 | 37.86–38.23 / 37.86–38.23 | 36.10–36.63 | 35.98–36.38 | 3.27–5.19% | 115–120% |
+| VP8, 8 Mbit/s, 60 | 59.63–59.82 | 59.63–59.82 / 59.63–59.79 | 58.71–59.30 | 58.59–58.92 | 1.25 / 1.66 / 0.83% | 152–161% |
+| H.264, 60 | 59.90–59.99 | 41.38–42.06 / 41.26–41.94 | 35.29–40.41 | 35.05–40.41 | 14.46 / 5.03 / 3.55% | 50–53% |
+| VP8, 30, verified sound | 29.81–29.93 | 29.89–29.94 / 29.89–29.94 | 29.77–29.93 | 29.52–29.69 | 0.41 / 0 / 0.41% | 82–83% |
+
+Defaults and bitrate diagnostics use libvpx on both ends. H.264 uses the NVIDIA
+Media Foundation encoder and D3D11 decoder. Raising the bitrate restores sender
+cadence but does not eliminate receiver presentation drops; hardware H.264 also
+fails. This supports bitrate pressure at the sender and a remaining downstream
+presentation limit, without identifying the browser's exact internal dropper.
+No tested 60 FPS candidate passes every sample. The production fallback therefore
+sets 30 FPS by default; 60/120 remain selectable targets. No production codec,
+bitrate, buffering or resolution policy changes. The Mac qualification above
+includes the pushed fallback; it measures about 29.31 presented FPS.
+
+The initial 30 FPS run passes its separate 28 FPS / 1% control with advancing sent and
+received sound bytes and nonzero decoded PCM level in every steady sample.
+Startup/warmup drops are zero for those samples. A later strict sound series
+retains 30.01/29.82/28.68 delivered FPS and 0/0.41/4.13% steady drops; the third
+sample fails the same drop limit, with two warmup drops. It is an unexplained
+presentation failure, not a clean release qualification. Defaults with verified
+sound also fail at 35.92–36.88 FPS and 2.30–4.92% drops (3/3/2 warmup drops).
+The fallback lowers the requested default, without erasing these failures. The three 60 FPS configurations
+retain respectively 13/4/4, 11/8/16 and 42/17/28 warmup drops, with zero startup
+drops. Early sound diagnostics established packet transport only; a too-quiet
+generated tone decoded as silence. Their failures remain beside the louder,
+verified-signal rerun, without a production audio change. Browser frame age and
+loopback sound do not establish physical display latency or acoustic alignment.
+
+**Window lifetime.** With acknowledged source-window actions, the original
+Windows production path retires window capture, publication and receiver when
+its window is destroyed while its process stays alive. Process exit also retires
+sharing. Minimize/Hide preserve the publication and advancing receiver audio
+bytes, samples and energy. Earlier stdin-driven source actions were not delivered;
+those apparent retirement failures are fixture failures, not Windows production
+regressions. A candidate native observer was independently reviewed and discarded
+after the corrected original-source control passed. No observer, native helper,
+Windows capture policy or Mac capture/fullscreen change is retained.
+
+The fallback regressions fail the original 60 FPS default and pass at 30; explicit
+30/60/120 selection and live edits stay covered. The first full rerun retained an
+outdated Share selection expectation of 60, corrected to the new default.
+
+Commands run include the frozen install/typecheck/unit/build sequence, the native
+journey/lifecycle/player/startup checks, and:
+
+```sh
+bun tests/video-performance.native.ts <fresh evidence> --modes=live --seconds=8 --rounds=3 --assert-fps=55 --diagnostics
+bun tests/video-performance.native.ts <fresh evidence> --modes=live --fps=30 --seconds=8 --rounds=3 --assert-fps=28 --sound --diagnostics
+bun tests/compressor.native.ts <fresh evidence> --warmup=3 --seconds=8 --rounds=3 --modes=none,bypass,enabled,advanced,stress,paused,paused-native,toggle --perf-checks
+```
+
+`COUCH_PERF_MEDIA` points to the generated 1080p60 clip; all four
+`COUCH_TEST_*` helper paths name real provisioned Windows executables.
+
+**Windows regressions and playback.** Frozen install, required typechecks, 765
+unit tests (one Linux-only skip), build and all 18 Go tests pass. Desktop/phone
+journeys, queue HTML fullscreen/Escape, renderer status, quit, capture consent,
+five player checks and six delayed-startup samples pass. The first TV run's
+1920×993 viewport is a fixture limit; the corrected 1920×1080 run passes both TV
+suites. The Windows bounds correction preserves the Mac fixture's larger-window
+option and exact viewport assertion. After incorporating `590c2a5`, full
+desktop/phone reruns pass all 27 journey functions each, the exact-size TV rerun
+passes both suites, and required typechecks/unit tests pass again.
+
+The compressor passes 24 samples (three rounds in all eight requested modes),
+including its desktop/phone correctness and performance checks. A second paired
+renderer passes seven observed Direct/synchronized/output-selection states;
+each state has advancing playback and an audible 997 Hz output signal measured
+through system loopback. All nine providers plus RaiPlay live pass 3-second
+warmup and 15-second steady playback, pause/resume and VOD seek. Every video
+sample has zero steady drops; YouTube's separate video/audio both advance.
+Video uses D3D11 hardware decoding; audio uses FFmpeg, except Bandcamp's Symphonia
+decoder. These are sampled provider sessions, not a claim of permanent service
+availability or physical receiver qualification.
+
+All 119 Node integration files were built and attempted natively. Latest results
+are 970 passes, four failures, one cancellation and 119 existing platform skips
+across 1,094 cases. Executable-fixture passes 4/4 and build-relay passes 9/9,
+without their earlier Windows skips. The retained fixture fixes use Windows
+named pipes, native executable workers and PATH delimiters, await real shutdown
+owners and close SQLite before removing its directory. License-error coverage
+now checks the exact attempted paths and identity of the propagated filesystem
+error; Windows EISDIR does not supply `error.path`. Assertions and deadlines stay
+intact. Both opt-in Remote stop tests pass with `COUCH_TEST_STOP=1`.
+
+The remaining failures are fixture/environment limits: `lan-routed` times out
+and cancels, as does an independent raw TCP cross-interface control; one
+`live-stun` case cannot send from either eligible non-loopback interface to
+loopback. A raw Node UDP echo control, with no Couch imports, reports
+`EADDRNOTAVAIL` for both sources while its loopback control succeeds; three
+`tv-session` cases cannot
+run their Linux shell/service fixture natively. The 119 skips concern Linux
+appliance/helper/native-preflight fixtures. They are untested here, not passes.
+The optional expanded test-typing configuration fails with the same 56 baseline
+diagnostics before and after these edits, with none introduced; the required
+`bun run typecheck` passes. Initial setup, worker-launch, cleanup-order, private
+journey and package-smoke failures are retained as fixture failures beside reruns.
+
+**Packages.** `bun run package --win nsis` produces a clean-source installer at
+`037405be`; its bundled Main/preload/Core/audio worker match the build byte for
+byte. The existing branch Package run `41146525623` at `f5e98ccd` supplies the
+other Windows installer (artifact `13020802584`), with its downloaded SHA-256
+verified. Both extracted payloads pass fresh-profile onboarding, generated-video
+playback, local generic-feed electron-updater check and clean Main/Core quit.
+The unchanged published preview.5 payload is also SHA-256 verified, extracted
+without installing, and passes the same four checks on its preview feed. Its
+published build identity reports revision `73668e36` with `dirty: true`; this run
+does not relabel that existing artifact as a clean-source build.
+Only scratch `app-update.yml` files point at that feed; no production source
+change is needed. This checks an up-to-date response, not update installation.
+
+An installed Couch and its profile already exist. Accordingly, preview.5 install,
+upgrade/settings/paired-device retention and uninstall were skipped to preserve
+them. SmartScreen behaviour is unobserved: launching this one-click installer
+could touch that installation. Both inspected installers are unsigned; that
+alone is not a SmartScreen result. No system-wide security setting was changed.
+A fresh Package dispatch is unavailable through the connected GitHub tools and
+there is no authenticated command-line dispatch route. The older artifact is
+additional evidence, not a substitute for a Package run dispatched on this head.
+
+| Requested Windows gate | Result | Evidence relative to the ignored qualification directory |
+| --- | --- | --- |
+| Default 60 FPS sharing | **Fail**; reviewed 30 FPS fallback pushed, with a retained 30 FPS drop failure | `native/source/.artifacts/qualification/live60-bounds-02`, `live60-default-sound`, `live60-bitrate-sound`, `live60-h264-sound`, `live30-sound-02`, `live30-sound-strict` |
+| Window-only close, process exit, minimize/hide with sound | **Pass** on Windows; Mac's separate retirement failure remains above | `native/source/.artifacts/qualification/window-retirement-final`, `window-process-exit`, `window-lifecycle-baseline` |
+| Windows app and all Node integrations | **Fail overall**; app checks pass, native integration limits remain | `native/evidence/integration-summary.json`, `integration-skips.json`, `udp-control.json`, `network-probe.json`; `native/source/.artifacts/qualification/{desktop-combined,phone-combined,queue,tv-combined,renderer-status,app-quit,capture-consent,player-checks,media-startup}` |
+| Compressor, paired-output transitions and sustained providers | **Pass** within the sampled scope | `native/source/.artifacts/qualification/{compressor,ordinary-transitions-02,providers}` |
+| NSIS and Package artifacts, install/upgrade/uninstall and updater | **Fail overall**; builds and isolated payload checks pass, protected install and fresh dispatch remain untested | `native/evidence/{package-clean.log,package-verification.json,ci-smoke-04,local-smoke-04,preview-smoke-01}`, `native/{ci-package,published-preview}/verification.json` |
+
+No release was started and the PR remains a draft. The Mac fallback measurement
+is already recorded above; the final combined-head CI/Package integration belongs
+to the Mac agent. Windows leaves no scratch app running and preserves every
+failed run alongside its corrected run.
