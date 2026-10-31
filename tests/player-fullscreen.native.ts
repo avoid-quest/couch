@@ -1,6 +1,6 @@
 // Run serially on macOS after bun run build:
 // COUCH_TEST_FFMPEG=/path/to/ffmpeg bun tests/player-fullscreen.native.ts [fresh evidence directory]
-// Optional final argument: rapid | native-restore | external-exit | escape | combined | tv. Default runs each serially in a fresh app.
+// Optional final argument: rapid | native-restore | external-exit | native-exit | escape | combined | tv. Default runs each serially in a fresh app.
 // Uses the actual Main, preload, Core and PlayerPage; no network media or Live audio.
 import assert from "node:assert/strict";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,7 +12,7 @@ import electron from "electron";
 
 assert.equal(process.platform, "darwin", "This regression requires macOS native fullscreen transitions");
 const scenario = process.argv[3] ?? "all";
-assert(["all", "combined", "rapid", "native-restore", "external-exit", "escape", "tv"].includes(scenario), "Unknown fullscreen scenario");
+assert(["all", "combined", "rapid", "native-restore", "external-exit", "native-exit", "escape", "tv"].includes(scenario), "Unknown fullscreen scenario");
 const root = resolve(import.meta.dirname, "..");
 const directory = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "couch-fullscreen-"));
 if (process.argv[2]) assert(!existsSync(directory), "Use a fresh evidence directory; preserve failed runs");
@@ -20,7 +20,7 @@ assert(existsSync(join(root, "build/main.mjs")), "Run bun run build first");
 mkdirSync(directory, { recursive: true });
 if (scenario === "all") {
   const results = [];
-  for (const name of ["rapid", "native-restore", "external-exit", "escape", "combined", "tv"]) {
+  for (const name of ["rapid", "native-restore", "external-exit", "native-exit", "escape", "combined", "tv"]) {
     const evidence = join(directory, name), output = Bun.file(join(directory, `${name}.log`));
     const child = Bun.spawn([process.execPath, import.meta.filename, evidence, name], { cwd: root, env: process.env, stdout: output, stderr: output });
     const exitCode = await child.exited;
@@ -165,6 +165,29 @@ async function run(window) {
       await click(window, 'Exit fullscreen');
       await settled(window, false, false);
       evidence.steps.push({ name: 'player exit restores the completed native exit', round, native: window.isFullScreen(), ui: await state(window) }); record();
+    }
+  }
+  if (scenario === 'native-exit') {
+    // The window's own fullscreen control (setFullScreen is its AppKit toggle) ends player fullscreen too.
+    for (const fromNative of [false, true]) {
+      if (fromNative) {
+        const entered = count('enter-full-screen');
+        window.setFullScreen(true);
+        await until(() => count('enter-full-screen') === entered + 1, 'OS native fullscreen entry');
+        await settled(window, false, true);
+        await click(window, 'Enter fullscreen');
+        await settled(window, true, true);
+      } else await toggle(window, true);
+      const left = count('leave-full-screen'), entered = count('enter-full-screen');
+      window.setFullScreen(false);
+      await until(() => count('leave-full-screen') === left + 1, 'native exit during player fullscreen');
+      await settled(window, false, false);
+      await wait(750); // Allow an unintended native re-entry to start before asserting the exit holds.
+      assert.equal(window.isFullScreen(), false, 'Native exit during player fullscreen must stay windowed');
+      assert.equal(count('enter-full-screen'), entered, 'Native exit must not re-enter native fullscreen');
+      evidence.steps.push({ name: 'native exit ends player fullscreen', fromNative, native: window.isFullScreen(), ui: await state(window) }); record();
+      await toggle(window, true);
+      await toggle(window, false);
     }
   }
   if (scenario === 'combined' || scenario === 'rapid') {

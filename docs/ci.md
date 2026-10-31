@@ -48,7 +48,7 @@ them can stop a native journey at the connection gate.
 It requires macOS and FFmpeg on PATH (or `COUCH_TEST_FFMPEG`); the
 [Mac audit](release-audit-2026-10-29.md#mac-fixes-and-retained-fullscreen-observations)
 records the native transition fix, retained failures and qualification limits.
-The default runs rapid, native-restore, external-exit, escape, combined and TV scenarios serially
+The default runs rapid, native-restore, external-exit, native-exit, escape, combined and TV scenarios serially
 in separate apps; a final argument selects one scenario.
 `--width=390 --height=844` checks phone-sized layouts, and
 `--tv --width=1920 --height=1080 --only=tv` checks TV focus and reachability.

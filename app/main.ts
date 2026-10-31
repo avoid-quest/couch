@@ -349,7 +349,8 @@ function createWindow() {
         } else if (restoreFullscreen !== null) {
           const restore = restoreFullscreen;
           restoreFullscreen = null;
-          await change(restore);
+          // The window's own fullscreen control may already be leaving; don't reverse it.
+          await change(restore && host.isFullScreen());
         }
       };
       // HTML begins after native entry. Escape and older remote pages also exit here.

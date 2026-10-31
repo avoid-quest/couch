@@ -1278,7 +1278,7 @@ it changes neither the window-retirement nor the fullscreen analysis.
 | --- | --- | --- |
 | Default 60 FPS sharing ≥55 FPS, ≤1% drops | **Fails** (Mac and Windows, unchanged) | A production change that passes every steady sample on Mac and Windows, measured natively with sound. No candidate passes on both; bitrate/codec/buffering stay benchmark-only. |
 | Window-only Close with the source process alive | **Open defect** | An upstream end signal, or a permission-free lifetime signal shown to keep hidden/minimized capture, plus a native run. |
-| Fullscreen J1 and six-scenario suite | **Unqualified** | A native run of `player-fullscreen.native.ts`, including external exit, native-button exit during HTML fullscreen, Escape, rapid toggles and restores; it needs visible windows. |
+| Fullscreen J1 and scenario suite | **Passes, with a new fix** | See below. The original no-entry-after-Escape observation remains unexplained. |
 | First OS capture grant/deny/cancel, relaunch persistence | **Untested** | An isolated test identity on a machine where OS prompts and UI automation are permitted. |
 | Native Windows/Linux GPU, minimum OS, physical devices, providers, compressor and YouTube rechecks | **Not rerun** | Linked Windows, native Linux GPU, Intel Ventura and Apple Silicon macOS 14 machines; physical receivers and remotes. The hub/Sendspin changes in this commit call for the compressor Direct/synchronized native recheck. |
 | Builds, packaging, signing | **Pass** (CI, local, file-only requirement check) | Install, Gatekeeper, an actual update from preview.5 and permission retention need a GUI-permitted machine. |
@@ -1293,6 +1293,22 @@ gh workflow run package.yml --ref t3/platform-performance-audit
 bun install --frozen-lockfile && bun run typecheck && bun run test && bun run build
 CI=true CSC_IDENTITY_AUTO_DISCOVERY=false bun run package --mac zip -c.mac.identity=- -c.mac.notarize=false -c.directories.output=<scratch>
 ```
+
+**Native fullscreen on current Main.** With the owner's later permission, the
+six-scenario suite passed natively in one run on this Mac, J1's external-exit
+overlap included. A new `native-exit` scenario leaves native fullscreen with the
+window's own control (`setFullScreen(false)`, its AppKit toggle; a real pointer
+press is not automated) during player fullscreen. Starting windowed, this already
+passed. Starting from native fullscreen, Main restored the earlier native mode on
+the resulting HTML exit, so the window went back into fullscreen right after the
+user left it. Main now restores only while the window is still fullscreen. On the
+unchanged harness the original Main fails that case and the fix passes it three
+times out of three. A later full seven-scenario run passed every scenario except
+`rapid` and `combined`, and the run after that failed all but TV. Every one of
+these failures was the same: a fresh app's first synthetic Enter click produced no
+fullscreen request at all. The owner was using the Mac during those runs, so they
+are not evidence of a fullscreen defect, and they don't qualify the full suite on
+the fixed build either. GUI testing then stopped at the owner's request.
 
 Not release-ready: the sharing and window-retirement gates fail, and the native
 fullscreen, first-consent, platform and install/update gates lack evidence.
