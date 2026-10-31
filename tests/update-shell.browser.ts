@@ -60,6 +60,12 @@ export async function mountUpdateShellAudit(completed = false) {
   await wait();
   return {
     ...audit, requests, key,
+    async go(...args: Parameters<typeof audit.go>) {
+      const result = await audit.go(...args);
+      // The shared route fixture restores paused playback; updater checks start idle.
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, playbacks: [] } }));
+      return result;
+    },
     async ready(ids = ["tv"]) {
       for (const id of ids) { states[id] = { ...current, status: "ready", available: "0.4.0-preview.3" }; audit.client.setQueryData(["updates", id], states[id]); }
       await wait();

@@ -1312,3 +1312,60 @@ the fixed build either. GUI testing then stopped at the owner's request.
 
 Not release-ready: the sharing and window-retirement gates fail, and the native
 fullscreen, first-consent, platform and install/update gates lack evidence.
+
+## Mac qualification 2026-10-31
+
+Qualification used a fresh worktree from `b0e27d8b`, then incorporated
+`037405be`. The owner's installed app, data and permission entries were left
+alone. All GUI and timing runs were serial. Private logs, commands, process
+ledgers and failed runs alongside their reruns are under the ignored
+`.artifacts/mac-qualification-20261031/`; machine details stay there.
+
+| Gate | Result | Evidence under that directory |
+| --- | --- | --- |
+| Fullscreen | **Pass**: three complete seven-scenario runs, including native-exit; no first-Enter failure on the idle machine. This does not establish the cause of the earlier interrupted runs. | `fullscreen-01` through `fullscreen-03` |
+| Window-only retirement | **Fail, production/upstream**: closing the source window while its process remains alive leaves the raw track, publication and receiver active past the unchanged deadline. Minimize/hide preserve sharing and sound; process exit retires it. Native Stop works after the failure and a new source recovers. | `window-close-01`, `window-raw-01`, `window-visibility-01`, `window-process-exit-01`, `window-stop-ui-02`, `window-retirement-verdict.json` |
+| First capture consent | **Incomplete**: the user granted the real screen-recording and microphone requests to a locally signed test identity. Restart verified both grants and real source enumeration; Couch's own consent/cancel regressions pass. Driven OS deny/cancel remain blocked because computer use refuses access to `com.apple.UserNotificationCenter`. No owner permission entry was reset. | `couch-consent-01`, `consent-runs`, `consent-verdict.json` |
+| Playback and UI | **Pass**: Main/Core journey, second paired renderer, Direct/synchronized transitions and output choice; compressor three rounds in every mode with performance checks; all nine providers plus RaiPlay live, YouTube separate A/V included; player checks, startup, status, quit, desktop/phone/queue and TV at an actual 1920×1080. | `journey-01`, `compressor-01`, `providers-01`, `provider-bandcamp-link-02`, `provider-summary.json`, `player-checks-01`, `startup-01`, `renderer-status-01`, `app-quit-01`, `ui-*` |
+| Sharing with sound | **Fail, production**: three 8-second steady samples at true 1920×1080, after 3-second warmup, retain ≥55 FPS and ≤1% drops. With 60 requested, captured 57.76–58.01, encoded 33.68–34.29 and presented 33.56–34.17 FPS; VP8/libvpx encode and decode, roughly 74–75% of one CPU core across the benchmark app's processes. Reported warmup/steady player drops are zero; that does not erase the capture-to-encode cadence loss. The pushed 30 FPS default presents about 29.31 FPS and also fails the unchanged 55 FPS gate. | `sharing-01`, `sharing-sound-01`, `sharing-02`, `sharing-default-30-02`, `sharing-summary.json` |
+| Install and update | **Pass within the existing self-signing policy**: local ZIP/DMG build; unchanged published preview.5 and latest available branch Package artifacts (run `41146525623`, `f5e98ccd`) extracted/mounted only in scratch locations and passed real packaged smoke. A real generic-feed electron-updater/Squirrel update from preview.5 to the branch build replaced and relaunched the test identity, preserving Core identity, setup, device name and both real permissions. Unchanged downloads share the release signing requirement; app signatures from both archive formats verify. Gatekeeper rejects the unnotarized self-signed downloads, including quarantined scratch copies, as documented in ci.md. | `local-package-01`, `install-inspection`, `package-published-smoke-01`, `package-branch-smoke-01`, `update-02`, `quarantine-01` |
+
+The retirement limitation is below Couch's track handling. The direct native
+ScreenCaptureKit probe receives frames until window closure, but neither
+[`didStopWithError`](https://developer.apple.com/documentation/screencapturekit/scstreamdelegate/stream(_:didstopwitherror:))
+nor [`streamDidBecomeInactive`](https://developer.apple.com/documentation/screencapturekit/scstreamdelegate/streamdidbecomeinactive(_:))
+arrives during the observation window. The process-exit control does deliver
+`noCaptureSource` to the same delegate (`sck-lifetime-03/04` and
+`sck-process-exit-05`). Chromium owns that stream and forwards stream errors;
+Electron's public [`desktopCapturer.getSources`](https://www.electronjs.org/docs/latest/api/desktop-capturer)
+returns a snapshot, with no external-window destruction subscription. The
+previous Quartz/Accessibility investigation remains applicable: cached window
+descriptions are not a reliable lifetime signal, and Accessibility observation
+requires another permission. No visibility/source-list heuristic or speculative
+sharing change was retained. User-visible behaviour remains active sharing after
+window-only closure until **Stop sharing** or source-process exit. This gate
+remains open for an upstream end signal or another proven lifetime mechanism.
+
+Provider samples use 3-second warmup and 15-second steady playback, pause/resume
+and seek where offered; live sources have no seek. All sampled warmup and steady
+drop counters are zero. Video uses VideoToolbox; audio uses FFmpeg, except
+Bandcamp's Symphonia decoder. Bandcamp search twice received HTTP 200 HTML
+“Client Challenge” instead of JSON from its public endpoint. This is retained as
+a production provider-path failure, not dismissed as a playback fixture failure.
+Its supported public-album URL path passes the same sustained playback checks;
+search is not claimed fixed.
+
+Two UI fixture corrections preserve all assertions and timeouts: Electron's
+first-class `enableLargerThanScreen` option plus an exact viewport check prevent
+a clamped TV run from being counted, and the updater fixture restores its idle
+playback state after route changes rather than accidentally recreating paused
+playback (which correctly suppresses TV update cues). The full TV rerun passes
+29 checks; desktop/phone updater reruns pass. Typechecks and 765 unit tests pass,
+with one platform-specific skip. Private diagnostic setup errors and the first
+test-only updater bundle naming error are classified as fixture failures and
+retained beside corrected runs. No production code was changed on the Mac.
+
+The PR remains a draft: automatic window retirement, driven first deny/cancel
+and the unchanged ≥55 FPS sharing gate are not qualified. Windows integration,
+combined-head reruns and the final Check/Package results are recorded below when
+available; no release was started.

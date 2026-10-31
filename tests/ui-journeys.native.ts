@@ -62,11 +62,12 @@ app.whenReady().then(async () => {
   for (const name of ${JSON.stringify(checks)}) {
     // These fixtures exercise HTML fullscreen. player-fullscreen.native.ts tests
     // native window transitions with the real Main/preload and production player.
-    const window = new BrowserWindow({ width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)}, useContentSize: true, show: true, webPreferences: { backgroundThrottling: false, disableHtmlFullscreenWindowResize: true, partition: name } });
+    const window = new BrowserWindow({ width: ${Number(argument("width") ?? 1440)}, height: ${Number(argument("height") ?? 900)}, useContentSize: true, enableLargerThanScreen: true, show: true, webPreferences: { backgroundThrottling: false, disableHtmlFullscreenWindowResize: true, partition: name } });
     window.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (request, done) => done(new URL(request.url).origin === ${JSON.stringify(origin)} ? {} : request.resourceType === 'image' ? { redirectURL: ${JSON.stringify(origin + "/icons/pwa-512.png")} } : { cancel: true }));
     const timeout = setTimeout(() => window.destroy(), 180_000);
     const viewport = window.getContentBounds();
     try {
+      if (viewport.width !== ${Number(argument("width") ?? 1440)} || viewport.height !== ${Number(argument("height") ?? 900)}) throw new Error("The test window was clamped: " + JSON.stringify(viewport));
       await window.loadURL(${JSON.stringify(`${origin}/${basename(entry)}${tv ? "?tv=1" : ""}`)});
       window.focus();
       const result = await window.webContents.executeJavaScript('window.checks[' + JSON.stringify(name) + ']()', true);
