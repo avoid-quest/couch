@@ -524,6 +524,13 @@ toast and clear their saved results automatically; failures stay visible for ret
   playlist. Original-language HTTPS audio takes priority over a dubbed HLS rendition.
   Bandcamp selects browser-compatible MP3, AAC, FLAC or WAV audio, retaining
   supported lossless formats while excluding ALAC and AIFF downloads.
+  Bandcamp search uses `/api/fuzzysearch/1/app_autocomplete` for up to 50 albums
+  and tracks, through the managed yt-dlp transport and protected proxy because
+  Node's direct HTTP requests can be challenged. Each search makes one request,
+  with the same 12-second deadline. Result links remove a duplicated leading origin
+  while keeping the original item when a query or fragment contains another URL.
+  A challenge page or other non-JSON response shows
+  "Bandcamp search is unavailable. Try again shortly."
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again

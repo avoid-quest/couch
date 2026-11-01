@@ -7,12 +7,13 @@ import { streamingCommunityPlugin } from "./streamingcommunity";
 import { soundCloudPlugin } from "./soundcloud";
 import { raiPlayPreviewPlugin } from "./raiplay-preview";
 import { twitchPlugin } from "./twitch";
+import { bandcampSearchPlugin } from "./bandcamp";
 import { createPublicMediaProxy } from "./public-media-proxy";
 
 // Only fixed, public messages from the extractor may cross the catalog boundary.
 export class ExtractionError extends Error {}
 
-export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; plugin?: "streamingcommunity" };
+export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; plugin?: "streamingcommunity" | "bandcamp" };
 
 let running = 0;
 const waiting: Array<() => void> = [];
@@ -131,7 +132,7 @@ async function extractWith(command: string, args: string[], { signal, timeoutMs 
       const target = args.at(-1) ?? "";
       const soundcloud = /^scsearch\d*:/.test(target) || providerForUrl(target) === "soundcloud";
       const provider = providerForUrl(target);
-      const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : soundcloud ? await soundCloudPlugin()
+      const bundled = plugin === "bandcamp" ? await bandcampSearchPlugin() : plugin === "streamingcommunity" ? await streamingCommunityPlugin() : soundcloud ? await soundCloudPlugin()
         : provider === "raiplay" ? await raiPlayPreviewPlugin() : provider === "twitch" ? await twitchPlugin() : null;
       try {
         const proxy = await createPublicMediaProxy(cancellation);
