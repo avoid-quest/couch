@@ -57,14 +57,20 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     return current.pictureWork = (current.pictureWork ?? Promise.resolve()).catch(() => {}).then(async () => {
       if (publication !== current) return;
       const quality = choice.quality ?? current.quality, frameRate = choice.frameRate ?? current.frameRate;
-      try { await track.applyConstraints(pictureConstraints(quality, frameRate)); }
-      catch (cause) { throw new Error("Couldn't change the shared picture. Try a lower resolution or frame rate.", { cause }); }
-      current.quality = quality;
-      current.frameRate = frameRate;
-      await Promise.all([...publishers].map(([id, peer]) => peer.work = peer.work.then(async () => {
-        if (publication !== current || publishers.get(id) !== peer) return;
-        for (const sender of peer.connection.getSenders()) if (sender.track?.kind === "video") await configureLiveVideo(sender, quality, frameRate);
-      }).catch(reason => failPublisher(id, peer, reason))));
+      try {
+        await track.applyConstraints(pictureConstraints(quality, frameRate));
+        current.quality = quality;
+        current.frameRate = frameRate;
+        await Promise.all([...publishers].map(([id, peer]) => {
+          const work = peer.work.then(async () => {
+            if (publication !== current || publishers.get(id) !== peer) return;
+            for (const sender of peer.connection.getSenders()) if (sender.track?.kind === "video") await configureLiveVideo(sender, quality, frameRate);
+          });
+          // Report this edit's error without poisoning later signaling or edits.
+          peer.work = work.catch(() => {});
+          return work;
+        }));
+      } catch (cause) { throw new Error("Couldn't change the shared picture. Try a lower resolution or frame rate.", { cause }); }
     });
   };
   const closeReceiver = () => {

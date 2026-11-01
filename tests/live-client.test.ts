@@ -35,7 +35,13 @@ const check = (source: string, couchApp = "undefined") => {
       attachStream: (load, stream) => attachments.push({ load, stream }),
       streamChanged: (id, stream, error) => streamReports.push({ id, stream, error }),
     }));
-    globalThis.RTCRtpSender = class { static getCapabilities() { return { codecs: [] }; } };
+    const codecs = [
+      { mimeType: "video/VP8", clockRate: 90000 },
+      { mimeType: "video/H264", clockRate: 90000, sdpFmtpLine: "profile-level-id=42e01f;packetization-mode=1" },
+      { mimeType: "video/H264", clockRate: 90000, sdpFmtpLine: "profile-level-id=64001f;packetization-mode=1" },
+      { mimeType: "video/rtx", clockRate: 90000 },
+    ];
+    globalThis.RTCRtpSender = class { static getCapabilities() { return { codecs }; } };
     globalThis.RTCPeerConnection = class {
       connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = []; senders = []; transceivers = [];
       constructor(config) { this.config = config; peers.push(this); }
@@ -635,6 +641,31 @@ test("receiver pacing cancels pending setup on Stop and falls back to the origin
   assert.equal(unreachable().length, 0, "pacing failure need not abandon a working peer");
 `));
 
+test("H.264 preference requires a supported, smooth, power-efficient prediction and retains fallback codecs", () => check(`
+  const queries = [];
+  let prediction;
+  navigator.mediaCapabilities = { async encodingInfo(config) { queries.push(config); if (prediction instanceof Error) throw prediction; return prediction; } };
+  for (const [preferred, info] of [
+    [true, { supported: true, smooth: true, powerEfficient: true }],
+    [false, { supported: false, smooth: true, powerEfficient: true }],
+    [false, { supported: true, smooth: false, powerEfficient: true }],
+    [false, { supported: true, smooth: true, powerEfficient: false }],
+    [false, new Error("Unsupported query")],
+  ]) {
+    prediction = info; queries.length = 0; signals.length = 0;
+    const source = await session.start({ kind: "screen", videoQuality: "720p", videoFrameRate: 30 });
+    session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "picture", deviceId: "picture", picture: true, sound: false }] });
+    await flush(); await flush();
+    const transceiver = peers.at(-1).getTransceivers()[0];
+    assert.equal(queries.length, preferred ? 1 : 2);
+    assert.deepEqual(queries[0], { type: "webrtc", video: { contentType: "video/H264;" + codecs[1].sdpFmtpLine, width: 1280, height: 720, bitrate: 2000000, framerate: 30 } });
+    assert.deepEqual(transceiver.codecs, preferred ? [codecs[1], codecs[0], codecs[2], codecs[3]] : undefined);
+    assert.ok(signals.some(message => message.type === "liveSignal" && message.signal.description?.type === "offer"));
+    assert.equal(unreachable().length, 0);
+    await session.end();
+  }
+`));
+
 test("failed video parameters fall back only that receiver and leave capture and audio routes alive", () => check(`
   const add = RTCPeerConnection.prototype.addTrack;
   RTCPeerConnection.prototype.addTrack = function(track) {
@@ -649,8 +680,36 @@ test("failed video parameters fall back only that receiver and leave capture and
   ] });
   await flush(); await flush();
   assert.deepEqual(unreachable().map(message => message.peerId), ["picture"]);
-  assert.equal(peers[1].connectionState, "new");
+  assert.deepEqual(peers[1].tracks.map(track => track.kind), ["audio"]);
+  assert.ok(signals.some(message => message.type === "liveSignal" && message.peerId === "sound" && message.signal.description?.type === "offer"));
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
+`));
+
+test("failed sender edits report a picture error and keep peers available for later edits and signaling", () => check(`
+  const source = await session.start({ kind: "screen" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [
+    { peerId: "one", deviceId: "one", picture: true, sound: true },
+    { peerId: "two", deviceId: "two", picture: true, sound: true },
+  ] });
+  await flush(); await flush();
+  for (const peer of peers) peer.connectionState = "connected";
+  const sender = peers[0].getSenders().find(sender => sender.track.kind === "video");
+  const setParameters = sender.setParameters;
+  sender.setParameters = async () => { throw new Error("Encoder busy"); };
+  await assert.rejects(session.setQuality("720p"), /Couldn't change the shared picture/);
+  assert.equal(unreachable().length, 0);
+  assert.ok(peers.every(peer => peer.connectionState === "connected"));
+  assert.ok(captures[0].getTracks().every(track => !track.stopped));
+  assert.equal(peers[1].getSenders().find(sender => sender.track.kind === "video").parameters.encodings[0].maxBitrate, 4000000);
+  session.receive({ type: "liveSignal", peerId: "one", signal: { description: { type: "answer", sdp: "still connected" } } });
+  await flush();
+  assert.equal(peers[0].remoteDescription.sdp, "still connected");
+  sender.setParameters = setParameters;
+  await session.setFrameRate(30);
+  assert.equal(session.sharing().quality, "720p");
+  assert.equal(session.sharing().frameRate, 30);
+  assert.ok(peers.every(peer => peer.getSenders().find(sender => sender.track.kind === "video").parameters.encodings[0].maxBitrate === 2000000));
+  assert.equal(captureRequests.length, 1);
 `));
 
 test("picture edits serialize, recover from rejection and leave replacement captures alone", () => check(`

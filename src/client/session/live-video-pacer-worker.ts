@@ -2,7 +2,7 @@
 // frames, as Moonlight's pacer does; no pixel copy, retimestamping or duplicate frames.
 const scope = self;
 const queue: VideoFrame[] = [];
-let received = 0, pushed = 0, dropped = 0, frame = 0, stopped = false, writing = false, started = false;
+let received = 0, pushed = 0, dropped = 0, frame = 0, stopped = false, writing = false;
 let reader: ReadableStreamDefaultReader<VideoFrame>, writer: WritableStreamDefaultWriter<VideoFrame>;
 const fail = (reason: unknown) => { if (!stopped) scope.postMessage({ error: String(reason) }); stopped = true; };
 scope.onmessage = async event => {
@@ -23,8 +23,7 @@ scope.onmessage = async event => {
     const pump = () => {
       if (stopped) return;
       frame = scope.requestAnimationFrame(pump);
-      started ||= queue.length >= 2;
-      if (!started || writing || !queue.length) return;
+      if (writing || !queue.length) return;
       writing = true;
       const value = queue.shift()!;
       void writer.write(value).then(() => { pushed++; }, fail).finally(() => { value.close(); writing = false; });

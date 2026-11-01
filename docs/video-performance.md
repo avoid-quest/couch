@@ -5,10 +5,12 @@ Measured on 29 October 2026 against main `73668e36` and the capture API in
 there is no JavaScript pixel loop to move onto WebGPU. Live pictures normally
 use WebRTC; buffered HLS is a separate compatibility/synchronization path.
 
-The opening measurements are the historical software baseline. Later Windows
-and [native Mac results](release-audit-2026-10-29.md#native-macos-follow-up)
-retain their separate environments and failures; none establishes a passing
-cross-platform 60 FPS sharing release gate.
+The opening measurements and the audit's Windows and
+[native Mac results](release-audit-2026-10-29.md#native-macos-follow-up)
+are historical baselines with retained failures. The subsequent
+[paced Windows and native Mac qualification](live-sharing-performance.md#worker-pacing-follow-up)
+passes the controlled 1080p60 sharing gate on both platforms and restores the
+60 FPS default. Physical cross-device and native Linux GPU sharing remain unqualified.
 
 ## Retained changes
 
@@ -319,7 +321,8 @@ Windows runs and the earlier failures are in the
 `--trace` captures a bounded Chromium Perfetto trace, `--frames` records bounded
 frame timing/metadata, and `--audio-jitter=50` was an unsuccessful synchronized
 buffering probe. These do not change product preferences. Physical/acoustic A/V
-alignment and Mac/120 Hz qualification remain to be measured at handoff.
+alignment remains unqualified. The subsequent Mac follow-up below qualifies
+its tested 60/120 Hz chain; Windows 120 Hz remains unqualified.
 
 ### Native Mac qualification and restored default
 

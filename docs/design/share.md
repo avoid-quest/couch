@@ -151,13 +151,16 @@ Sheet on phones and the TV:
   screen or encoder may not reach; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections. Native input mute
   sends zero samples while preserving the source clock.
+  A failed sender reconfiguration reports a Picture error while capture and
+  existing connections keep running; a later edit can retry.
 - Direct picture senders have an explicit bitrate budget and frame-rate ceiling;
   both follow Picture edits and apply to each new receiver. Text/detail and
   resolution take priority under congestion. Smooth, power-efficient H.264 is
   preferred when the host’s WebRTC capability query supports it; all other codecs
   remain available for negotiation. Supported receivers pace decoded frames in a
-  worker through a queue of at most three waiting frames, retaining WebRTC sound
-  and timestamps. Unsupported or failed pacing restores native WebRTC playback
+  worker through a queue of at most three waiting frames, presenting the first
+  frame on the next display tick and retaining WebRTC sound and timestamps.
+  Unsupported or failed pacing restores native WebRTC playback
   ([measurements](../live-sharing-performance.md#native-mac-follow-up)).
   The default is 60 FPS after native Mac and Windows 1080p60 qualification;
   the measured rates and remaining limits stay in the performance record.

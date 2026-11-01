@@ -381,8 +381,9 @@ Pacing snapshots retain cumulative pre-steady queue drops separately from player
 startup/warmup/steady counters; the historical worker startup-versus-warmup split
 is not separately recorded. Raw CPU, implementations and all stage counters for
 the other gates remain in each result. No raw frames or sound recordings are
-retained. Full typecheck, 769 Bun tests and the production build pass on the
-paced code; live-client cases include pending-worker cancellation and native-track
+retained. The pre-Mac paced-code check passed full typecheck, all 769 Bun tests
+and the production build; the later Mac run below has 768 passes and one
+Linux-only skip. Live-client cases include pending-worker cancellation and native-track
 recovery after worker failure. Native Windows sharing/capture unit suites pass
 111/111. The unchanged Core/backend integration code retains its earlier 189/189
 passes on Linux/WSL and native Windows.
@@ -551,3 +552,33 @@ quality. This session supplies no new Windows hardware run; its existing native
 The local gh-stack catalog migration conflict involves another branch, so this
 continuation uses a normal fetched/rebased, non-force Git push to the existing
 draft PR, without changing that unrelated catalog.
+
+### PR review follow-up (1 November 2026)
+
+The worker now presents a lone first frame on the next display tick instead of
+waiting indefinitely for a second frame. A rejected sender reconfiguration during
+a Picture edit reports the picture-change error without closing the connection
+or requesting buffered fallback; subsequent signaling and edits remain usable.
+Regressions exercise the real worker's single-frame write/cleanup, sender-edit
+recovery, positive/negative H.264 capability predictions with fallback codecs,
+and the surviving sound-only peer's audio track and offer.
+
+Linux correctness checks pass frozen install, full typecheck, all 772 Bun tests
+with no skips, and the production build. Local evidence is under
+`.artifacts/pr948-review/`. The native Electron harness loads the browser fixture
+and runs three 8-second samples after 3-second warmups with the original
+≥55 FPS and ≤1% loss assertions:
+
+- `playback-controls/result.json`: playback and real timeline controls pass
+  every sample at 1920×1080 with zero player drops.
+- `live-two/result.json`: both independent receivers negotiate and finish all
+  three rounds at 1920×1080 without session errors. This rejects the review's
+  startup-deadlock claim: the external receiver exposes `receiveVideo` before
+  awaiting playback readiness. The performance gate **fails**: each receiver
+  delivers about 36–38 FPS with 33–40% combined loss under software Xvfb.
+
+The runs use isolated profiles, data directories and ephemeral ports; their
+owned Electron main PIDs exit. This Linux host reports hardware video
+encode/decode and GPU composition disabled. It cannot repeat native Mac/Windows
+hardware or system-loopback sound qualification. Those earlier passes remain
+historical evidence; these review fixes have not been requalified on that hardware.
