@@ -31,8 +31,8 @@ COUCH_PERF_REDUCED_MOTION=1 bun tests/player-performance.native.ts .artifacts/pl
   through the real navigation links instead of the player.
 - `--checks` uses React's profiling build for commit assertions and runs the
   artwork, clock isolation, player transitions, Remote navigation, footer
-  clearance, player status and seek-preview regressions. Timing runs use the
-  ordinary minified build.
+  clearance, player status, pointer-leave auto-hide and seek-preview regressions.
+  Timing runs use the ordinary minified build.
 
 ## Add continuous audio
 

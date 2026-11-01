@@ -267,8 +267,9 @@ The differences are deliberate:
 | Beside artwork (audio, or playing elsewhere) | Up next opens the player's Up next | Up next opens over the room; Info is at the top right, fullscreen at the bottom right | The bottom row keeps playback tools; Info reveals the show's details. |
 | Phones | Play/Pause and Open player, after the title | the transport at the left, then Where it plays, Up next, the gear and fullscreen | A minimized player needs no mixer; the player has it. Open player sits at fullscreen's x. The band has no room to centre the transport beside four tools. |
 
-Over a playing video, the bands hide 4 s after the last key while focus is on
-the picture. They show and hide together. They stay up:
+Over a playing video, the bands hide 4 s after the last key or pointer movement
+while focus is on the picture. Leaving the window keeps that timer running and
+does not reveal hidden controls. They show and hide together. They stay up:
 - while a panel or menu is open
 - during recovery
 - while the keyboard is in them

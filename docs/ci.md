@@ -89,7 +89,9 @@ gh workflow run release.yml -f channel=production          # promote the latest 
 
 For a PR from this repository, `<branch>` is its head branch
 (`gh pr view <number> --json headRefName`). For a fork PR, push its head to a
-branch in this repository first, then use that branch as `--ref`.
+branch in this repository first, then use that branch as `--ref` with Check.
+Package's build scripts receive the Mac signing secrets; run it only on code
+the owner has reviewed and trusts.
 
 Check, Package and Release run on [Blacksmith](https://docs.blacksmith.sh/blacksmith-runners/overview)
 runners: Linux on `blacksmith-4vcpu-ubuntu-2404`, macOS on

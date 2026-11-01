@@ -69,7 +69,7 @@ again when you want a fresh result.
 To try it beside an installed Couch, use a scratch data directory and port:
 
 ```sh
-couch_radio_data="$(mktemp -d "${TMPDIR:-/tmp}/couch-radio.XXXXXX")" || exit 1
+couch_radio_data="$(mktemp -d "${TMPDIR:-/tmp}/couch-radio.XXXXXX")" &&
 COUCH_DATA_DIR="$couch_radio_data" COUCH_PORT=49101 bun run app
 ```
 
