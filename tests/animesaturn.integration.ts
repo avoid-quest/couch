@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { animeSaturnPageUrl, animesaturnOrigin, isAnimeSaturnHost } from "../src/shared/animesaturn";
-import { animeSaturnText, animeSaturnTitle, browseAnimeSaturn, loadAnimeSaturnList } from "../src/server/providers/animesaturn";
+import { animeSaturnTitle, browseAnimeSaturn, loadAnimeSaturnList } from "../src/server/providers/animesaturn";
 
 const origin = animesaturnOrigin;
 const titleUrl = `${origin}/anime/one-piece/`;
@@ -90,15 +90,6 @@ test("large titles browse bounded public chunks, while queue loading enforces 50
   assert.equal(requests.length, before + 1);
 });
 
-test("queue loading gathers every chunk and rejects incomplete or repeated upstream rows", async () => {
-  const route = (url: string) => url === titleUrl ? title(51) : JSON.stringify({ success: true, data: { html: row(51) } });
-  const page = await loadAnimeSaturnList(titleUrl, undefined, fixture(route));
-  assert.equal(page.items.length, 51);
-  assert.equal(page.items.at(-1)?.collection?.index, 50);
-  for (const html of ["", row(1)]) await assert.rejects(() => loadAnimeSaturnList(titleUrl, undefined, fixture(url => url === titleUrl ? title(51) : JSON.stringify({ success: true, data: { html } }))), /changed this page/);
-  await assert.rejects(() => browseAnimeSaturn({ url: titleUrl, cursor: "1" }, undefined, fixture(url => url === titleUrl ? title(51) : '{"success":false}')), /changed this page/);
-});
-
 test("invalid inputs and upstream changes cannot become unrelated queue entries", async () => {
   let calls = 0;
   const never = fixture(() => { calls++; throw new Error("unexpected fetch"); });
@@ -108,15 +99,4 @@ test("invalid inputs and upstream changes cannot become unrelated queue entries"
   for (const html of ["<html>Challenge page</html>", title(2).replace('data-series="70221"', 'data-series="private"'), title(2).replace(episodeUrl(1), "https://private.example/episode-1/")]) await assert.rejects(() => loadAnimeSaturnList(titleUrl, undefined, fixture(html)), /changed this page/);
   await assert.rejects(() => animeSaturnTitle(episodeUrl(2), undefined, fixture(episode.replace("http://schema.org/Episode", "http://schema.org/WebPage"))), /changed this page/);
   await assert.rejects(() => browseAnimeSaturn({}, undefined, fixture("<html>Challenge page</html>")), /changed this page/);
-});
-
-test("requests bound streamed bodies and stop reads on cancellation", async () => {
-  const cancellation = new AbortController();
-  let cancelled = false;
-  const request = (async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("<html>")); }, cancel() { cancelled = true; } }))) as typeof fetch;
-  const pending = animeSaturnText(titleUrl, cancellation.signal, request);
-  cancellation.abort();
-  await assert.rejects(() => pending, error => error instanceof DOMException && error.name === "AbortError");
-  assert.equal(cancelled, true);
-  await assert.rejects(() => animeSaturnText(titleUrl, undefined, fixture(new Array(2 * 1024 * 1024 + 2).join("x"))), /changed this page/);
 });

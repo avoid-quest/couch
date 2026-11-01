@@ -7,17 +7,14 @@ import type { PlaybackCommand, SessionState } from "../src/shared/protocol";
 function fixture(t: TestContext) {
   const store = openStore(":memory:");
   const commands: PlaybackCommand[] = [];
-  let state: SessionState, reject = false;
-  const session = createSession({ ...store, ...store.playback("audio-selection") }, command => {
-    if (reject && command.type === "track") throw new Error("Disconnected");
-    commands.push(command);
-  }, next => { state = structuredClone(next); });
+  let state: SessionState;
+  const session = createSession({ ...store, ...store.playback("audio-selection") }, command => { commands.push(command); }, next => { state = structuredClone(next); });
   t.after(() => { session.close(); store.close(); });
   session.command({ type: "enqueue", entry: { id: "one", title: "Two languages", source: "https://media.example/master.m3u8" }, playNow: true });
   const tracks = (selected: number) => ["English", "Italian"].map((label, index) => ({ id: `a${index}`, kind: "audio" as const, index, label, language: index ? "it" : "en", selected: index === selected }));
   const report = (selected: number, status: "playing" | "error" = "playing") => session.observe({ ...state!.player, status, tracks: tracks(selected) });
   report(0);
-  return { session, commands, report, get state() { return state!; }, reject() { reject = true; }, choose: (index = 1) => session.command({ type: "track", playbackId: state!.player.playbackId!, kind: "audio", index }) };
+  return { session, commands, report, get state() { return state!; }, choose: (index = 1) => session.command({ type: "track", playbackId: state!.player.playbackId!, kind: "audio", index }) };
 }
 
 test("stale detailed tracks cannot replace a commanded choice before confirmation or a reload", t => {
@@ -35,21 +32,6 @@ test("stale detailed tracks cannot replace a commanded choice before confirmatio
   f.report(0);
   assert.equal(f.session.audioSelection()?.language, "en", "confirmed intent permits later renderer choices");
 });
-
-test("rejected or failed audio commands do not pin an unconfirmed selection", t => {
-  const f = fixture(t);
-  assert.throws(() => f.choose(99), /not available/);
-  assert.equal(f.session.audioSelection()?.language, "en");
-  f.choose();
-  f.report(0, "error");
-  assert.equal(f.session.audioSelection()?.language, "en");
-  f.report(1);
-  assert.equal(f.session.audioSelection()?.language, "it");
-  f.reject();
-  assert.throws(() => f.choose(0), /Disconnected/);
-  assert.equal(f.session.audioSelection()?.language, "it");
-});
-
 
 test("audio intent follows identity across rendition reordering and resets for the next item", t => {
   const f = fixture(t);

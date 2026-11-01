@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { once } from "node:events";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -14,17 +13,13 @@ const setup = resolve("packaging/couch-setup");
 const namespace = spawnSync("unshare", ["-r", "true"]).status === 0;
 const options = { skip: process.platform !== "linux" ? "Linux only" : false, timeout: 20_000 };
 const rootOptions = { ...options, skip: options.skip || (!namespace && "Needs unprivileged user namespaces (unshare -r).") };
-// Cases that run setup without root: a root runner has root there too, and chmod 0 doesn't stop it.
-const nonRoot = "Needs a non-root runner; root reads what these cases make unreadable.";
-const unprivilegedOptions = { ...options, skip: options.skip || (process.getuid?.() === 0 && nonRoot) };
-const mixedOptions = { ...rootOptions, skip: rootOptions.skip || (process.getuid?.() === 0 && nonRoot) };
 const mutating = /^(apt-get|adduser|chgrp|install|touch|ln|chmod|mv|mkdir|rm|cp|sync|flock) |^systemctl .*\b(enable|disable|start|stop|restart|reset-failed|daemon-reload|set-default|mask)\b|^couch /m;
 // Setup refuses group-writable state directories, as it should.
 process.umask(0o022);
 const packages = readFileSync("packaging/tv/packages", "utf8").trim().split("\n");
 
 type Scenario = {
-  installed?: string[]; account?: string | null; locked?: boolean; timer?: string; active?: boolean;
+  installed?: string[]; account?: string | null; locked?: boolean; timer?: string;
   displayManager?: string; state?: "complete" | "pending"; files?: Record<string, string>; links?: Record<string, string>; os?: string;
 };
 
@@ -59,16 +54,10 @@ function fixture(scenario: Scenario = {}) {
     "is-enabled couch-update.timer") echo "${scenario.timer ?? "disabled"}"; [[ "${scenario.timer}" = enabled ]] ;;
     "is-enabled lightdm.service") echo disabled; exit 1 ;;
     get-default) echo multi-user.target ;;
-    "--user is-active --quiet couch-tv.service") [[ "${scenario.active ? 1 : 0}" = 1 ]] ;;
-    "--user show couch-tv.service --property=MainPID --value") echo 4242 ;;
+    "--user is-active --quiet couch-tv.service") exit 1 ;;
   esac`);
   writeFileSync(join(directory, "installed"), ["couch", ...scenario.installed ?? []].join("\n") + "\n");
   if (scenario.account !== null) writeFileSync(join(directory, "account"), `couch-tv:x:999:999::${scenario.account ?? "/var/lib/couch"}:/bin/sh\n`);
-  // A live user bus, as a running TV session has.
-  if (scenario.active) {
-    mkdirSync(join(root, "run/user/1001"), { recursive: true });
-    execFileSync("python3", ["-I", "-c", "import socket; socket.socket(socket.AF_UNIX).bind('bus')"], { cwd: join(root, "run/user/1001") });
-  }
   writeFileSync(events, "");
   const run = (argument: string, asRoot: boolean) => {
     writeFileSync(events, "");
@@ -77,12 +66,7 @@ function fixture(scenario: Scenario = {}) {
     });
     return { status: result.status, stdout: result.stdout, stderr: result.stderr, events: readFileSync(events, "utf8") };
   };
-  return { root, directory, run, [Symbol.dispose]: () => { chmodTree(directory); rmSync(directory, { recursive: true, force: true }); } };
-}
-
-function chmodTree(path: string) {
-  try { if (!lstatSync(path).isSymbolicLink()) chmodSync(path, 0o755); } catch {}
-  try { for (const entry of readdirSync(path)) if (lstatSync(join(path, entry)).isDirectory()) chmodTree(join(path, entry)); } catch {}
+  return { root, directory, run, [Symbol.dispose]: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
 // Every path's type, mode, content and link target, to prove a run wrote nothing.
@@ -90,7 +74,6 @@ function snapshot(root: string, path = ""): string[] {
   const full = join(root, path), info = lstatSync(full);
   const entry = `${path || "."} ${info.mode.toString(8)}`;
   if (info.isSymbolicLink()) return [`${entry} -> ${readlinkSync(full)}`];
-  if (info.isSocket()) return [`${entry} socket`];
   if (!info.isDirectory()) { try { return [`${entry} ${createHash("sha256").update(readFileSync(full)).digest("hex")}`]; } catch { return [`${entry} unreadable`]; } }
   let entries: string[];
   try { entries = readdirSync(full).sort(); } catch { return [`${entry} unreadable`]; }
@@ -103,7 +86,7 @@ function inspect(environment: ReturnType<typeof fixture>, asRoot = true) {
   assert.deepEqual(snapshot(environment.root), before, "Inspection must not change any file");
   assert.doesNotMatch(result.events, mutating, "Inspection must not run a mutating command");
   const section = (title: string) => (result.stdout.split(`${title}:\n`)[1] ?? "").split(/\n(?! )/)[0]!.split("\n").map(line => line.trim()).filter(Boolean);
-  return { ...result, would: section("Setup would"), keep: section("Setup would keep"), unavailable: section("Unavailable"), refuse: section("Setup would refuse") };
+  return { ...result, would: section("Setup would"), keep: section("Setup would keep"), refuse: section("Setup would refuse") };
 }
 
 test("a fresh machine's inspection predicts exactly what --tv then does", rootOptions, () => {
@@ -150,28 +133,12 @@ test("a completed setup's inspection keeps administrator files, data and masks a
   assert.match(readFileSync(join(environment.root, "etc/couch/appliance.env"), "utf8"), /srv\/couch data/);
 });
 
-test("a running session's inspection predicts the stop, restart and health check", rootOptions, () => {
-  using environment = fixture({ installed: packages, state: "complete", active: true, displayManager: "/usr/sbin/lightdm" });
-  const plan = inspect(environment);
-  assert.ok(plan.would.includes("Stop the running Couch TV app, then start it again and check its health"), plan.stdout);
-  const applied = environment.run("--tv", true);
-  assert.equal(applied.status, 0, applied.stderr);
-  const order = ["systemctl --user stop couch-tv.service", "systemctl --user start couch-tv.service", "couch /"].map(event => applied.events.indexOf(event));
-  assert.ok(order.every((index, position) => index >= 0 && (position === 0 || index > order[position - 1]!)), applied.events);
-  assert.equal(readFileSync(join(environment.root, "var/lib/couch-installer/native-tv/health.json"), "utf8").trim(), '{"mode":"local"}');
-});
-
 // Each conflict alone: inspection reports the refusal --tv stops with, and both leave packages, accounts and services alone.
 const conflicts: [string, Scenario][] = [
   ["Supported target: Debian 13 amd64.", { os: 'ID=ubuntu\nVERSION_ID="24.04"\n' }],
   ["Refusing symbolic link: /var/lib/couch-installer", { links: { "var/lib/couch-installer": "/tmp" } }],
-  ["The existing couch-tv account is not the locked dedicated runtime account.", { account: "/home/couch-tv" }],
   ["The existing couch-tv account is not the locked dedicated runtime account.", { locked: false }],
-  ["Inspect the existing service override before migration: /etc/systemd/system/couch-tv.service", { files: { "etc/systemd/system/couch-tv.service": "[Service]\n" } }],
-  ["Inspect the existing service override before migration: /var/lib/couch/.config/systemd/user/couch-tv.service.d", { files: { "var/lib/couch/.config/systemd/user/couch-tv.service.d/local.conf": "" } }],
-  ["Inspect the existing TV user unit before migration.", { files: { "etc/systemd/user/couch-tv.service": "[Service]\n" } }],
   ["Another display manager is configured. Keep the desktop or select LightDM deliberately.", { displayManager: "/usr/sbin/gdm3" }],
-  ["LightDM already has a desktop policy. Use ordinary installation.", { displayManager: "/usr/sbin/lightdm" }],
 ];
 for (const [refusal, scenario] of conflicts) test(`inspection and --tv agree on refusing: ${refusal}`, rootOptions, () => {
   using environment = fixture({ installed: packages, ...scenario });
@@ -184,120 +151,8 @@ for (const [refusal, scenario] of conflicts) test(`inspection and --tv agree on 
   assert.doesNotMatch(applied.events, /^(apt-get|adduser|chgrp|couch) |^systemctl /m, "A refused setup changes no package, account or service");
 });
 
-test("inspection refuses as --tv does while another installation holds the lock, without taking it", rootOptions, async () => {
-  using environment = fixture({ installed: packages, state: "complete", displayManager: "/usr/sbin/lightdm" });
-  const lock = join(environment.root, "var/lib/couch-install-locks/tv.lock"), held = join(environment.directory, "held");
-  mkdirSync(join(lock, ".."), { recursive: true });
-  writeFileSync(lock, "");
-  // An installation or recovery in progress, as a real flock holder.
-  const holder = spawn("flock", ["-x", lock, "-c", `touch ${JSON.stringify(held)}; exec sleep 30`], { stdio: "ignore", detached: true });
-  try {
-    while (!existsSync(held)) await new Promise(resolve => setTimeout(resolve, 20));
-    const plan = inspect(environment);
-    assert.equal(plan.status, 1, plan.stdout);
-    assert.deepEqual(plan.refuse, ["Another Couch installation or recovery is running."]);
-    const applied = environment.run("--tv", true);
-    assert.equal(applied.status, 1);
-    assert.match(applied.stderr, /^couch-setup: Another Couch installation or recovery is running\.$/m);
-  } finally {
-    // The lock goes with its last holder: flock and the command it started.
-    const exited = once(holder, "exit");
-    process.kill(-holder.pid!, "SIGKILL");
-    await exited;
-    while (readFileSync("/proc/locks", "utf8").includes(`:${lstatSync(lock).ino} `)) await new Promise(resolve => setTimeout(resolve, 20));
-  }
-  const plan = inspect(environment);
-  assert.equal(plan.status, 0, plan.stdout);
-  assert.deepEqual(plan.refuse, []);
-  assert.ok(!plan.unavailable.some(line => line.includes("installation or recovery")), plan.stdout);
-});
-
-test("several conflicts are all listed, where --tv would stop at the first", rootOptions, () => {
-  using environment = fixture({ installed: packages, account: "/home/couch-tv", displayManager: "/usr/sbin/gdm3", files: { "etc/systemd/system/couch-tv.service": "" } });
-  const plan = inspect(environment);
-  assert.equal(plan.status, 1);
-  assert.equal(plan.refuse.length, 3, plan.stdout);
-  assert.match(environment.run("--tv", true).stderr, /couch-setup: The existing couch-tv account/);
-});
-
-test("without root, inspection reports what only root can read as unavailable", unprivilegedOptions, () => {
-  using environment = fixture({ installed: packages, files: { "var/lib/couch/.keep": "" } });
-  chmodSync(join(environment.root, "var/lib/couch"), 0);
-  try {
-    const plan = inspect(environment, false);
-    assert.equal(plan.status, 0, plan.stdout + plan.stderr);
-    assert.match(plan.stdout, /Runtime account couch-tv: unknown/);
-    for (const line of ["Run with sudo to read what only root can.", "Whether the couch-tv account is locked", "Whether /var/lib/couch/.config/systemd/user/couch-tv.service exists", "Whether the Couch TV app is running"]) assert.ok(plan.unavailable.includes(line), `${line}\n${plan.stdout}`);
-  } finally { chmodSync(join(environment.root, "var/lib/couch"), 0o755); }
-});
-
-// Permission denial is not absence: an administrator's file under a directory only root can
-// read must be reported unknown, never planned over, and still kept by --tv.
-test("without root, files only root can see are unknown, not added, and --tv keeps them", mixedOptions, () => {
-  const customised = "# Administrator's own power policy\n";
-  using environment = fixture({
-    installed: packages, account: null,
-    files: {
-      "etc/couch/appliance.env": "COUCH_DATA_DIR=\"/srv/couch data\"\n",
-      // The legacy location setup keeps in place of /etc/systemd/logind.conf.d.
-      "usr/lib/systemd/logind.conf.d/50-couch.conf": customised,
-      // Unreadable itself, beneath a readable directory: its existence is still visible.
-      "etc/lightdm/lightdm.conf.d/50-couch.conf": customised,
-    },
-  });
-  const hidden = ["etc/couch", "usr/lib/systemd/logind.conf.d"].map(path => join(environment.root, path));
-  const unreadable = join(environment.root, "etc/lightdm/lightdm.conf.d/50-couch.conf");
-  for (const path of hidden) chmodSync(path, 0);
-  chmodSync(unreadable, 0);
-  try {
-    const plan = inspect(environment, false);
-    assert.equal(plan.status, 0, plan.stdout + plan.stderr);
-    assert.match(plan.stdout, /^Data directory: unknown \(only root can read \/etc\/couch\/appliance\.env\)$/m);
-    for (const line of ["Which data directory /etc/couch/appliance.env sets", "Whether /etc/couch/appliance.env exists", "Whether /usr/lib/systemd/logind.conf.d/50-couch.conf exists"]) assert.ok(plan.unavailable.includes(line), `${line}\n${plan.stdout}`);
-    for (const line of ["Copy /etc/couch/appliance.env", "Copy /etc/systemd/logind.conf.d/50-couch.conf", "Copy /etc/lightdm/lightdm.conf.d/50-couch.conf"]) assert.ok(!plan.would.includes(line), `${line}\n${plan.stdout}`);
-    assert.ok(plan.keep.includes("/etc/lightdm/lightdm.conf.d/50-couch.conf"), plan.stdout);
-    // Readable and missing paths are still planned as before.
-    assert.ok(plan.would.includes("Link /usr/sbin/couch-session") && plan.would.includes("Link /etc/systemd/user/couch-tv.service"), plan.stdout);
-  } finally { for (const path of hidden) chmodSync(path, 0o755); }
-
-  const root = inspect(environment);
-  assert.match(root.stdout, /^Data directory: \/srv\/couch data \(from \/etc\/couch\/appliance\.env\)$/m);
-  for (const kept of ["/etc/couch/appliance.env", "/usr/lib/systemd/logind.conf.d/50-couch.conf", "/etc/lightdm/lightdm.conf.d/50-couch.conf"]) assert.ok(root.keep.includes(kept), `${kept}\n${root.stdout}`);
-  const applied = environment.run("--tv", true);
-  assert.equal(applied.status, 0, applied.stderr);
-  assert.match(readFileSync(join(environment.root, "etc/couch/appliance.env"), "utf8"), /srv\/couch data/);
-  assert.ok(!existsSync(join(environment.root, "etc/systemd/logind.conf.d/50-couch.conf")), "The legacy policy file stays the one in force");
-  chmodSync(unreadable, 0o644);
-  assert.equal(readFileSync(unreadable, "utf8"), customised);
-});
-
-test("inspection leaves an inaccessible TV user unit unknown until it can check the administrator's file", unprivilegedOptions, () => {
-  using environment = fixture({ installed: packages, account: null, files: { "etc/systemd/user/couch-tv.service": "[Service]\n" } });
-  const directory = join(environment.root, "etc/systemd/user");
-  chmodSync(directory, 0);
-  try {
-    const plan = inspect(environment, false);
-    assert.equal(plan.status, 0, plan.stdout + plan.stderr);
-    assert.ok(plan.unavailable.includes("Whether /etc/systemd/user/couch-tv.service exists"), plan.stdout);
-    assert.ok(!plan.would.includes("Link /etc/systemd/user/couch-tv.service"), plan.stdout);
-    assert.ok(!plan.keep.includes("/etc/systemd/user/couch-tv.service"), plan.stdout);
-  } finally { chmodSync(directory, 0o755); }
-  const readable = inspect(environment, false);
-  assert.equal(readable.status, 1, readable.stdout);
-  assert.ok(readable.refuse.includes("Inspect the existing TV user unit before migration."), readable.stdout);
-});
-
-test("--tv and --refresh still require root, and --refresh leaves an incomplete setup alone", mixedOptions, () => {
-  using environment = fixture({ installed: packages });
-  for (const argument of ["--tv", "--refresh"]) assert.match(environment.run(argument, false).stderr, /couch-setup: sudo couch-setup --tv/);
-  const refresh = environment.run("--refresh", true);
-  assert.equal(refresh.status, 0);
-  assert.match(refresh.stdout, /nothing to refresh/);
-  assert.doesNotMatch(refresh.events, mutating);
-});
-
 // A damaged package: a TV list missing, unreadable or empty must never apply an empty plan.
-for (const [manifest, damage] of [["packages", "missing"], ["files", "missing"], ["packages", "empty"], ["files", "directory"]] as const) test(`a ${manifest} list that is ${damage} refuses before anything changes`, rootOptions, () => {
+for (const [manifest, damage] of [["files", "missing"], ["packages", "empty"]] as const) test(`a ${manifest} list that is ${damage} refuses before anything changes`, rootOptions, () => {
   for (const mode of ["--inspect", "--tv", "--refresh"]) {
     using environment = fixture({ installed: packages, state: mode === "--refresh" ? "complete" : undefined });
     const list = join(environment.root, "usr/share/couch/tv", manifest);

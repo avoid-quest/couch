@@ -2,10 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { Database } from "../src/server/sqlite";
 import { openStore } from "../src/server/store";
-import { liveFixture, until } from "./live-input.fixture";
+import { helper, startHelpers } from "../src/server/helpers";
+import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
+
+// Keep helper status and downloads in the fixture's directory, not the working directory.
+async function liveFixture(options?: Parameters<typeof createLiveFixture>[0]) {
+  const f = await createLiveFixture(options);
+  startHelpers(join(dirname(f.databasePath), "helpers"));
+  await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
+  return f;
+}
 
 test("older Playback rows default In sync to false", () => {
   const directory = mkdtempSync(join(process.env.COUCH_DATA_DIR ?? tmpdir(), "old-sync-")), path = join(directory, "couch.sqlite");

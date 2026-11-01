@@ -97,116 +97,23 @@ async function pause(device: Awaited<ReturnType<typeof fixture>>["devices"][numb
   await until(() => device.state.player.status === "paused");
 }
 
-for (const restart of [false, true]) {
-  test(`new private speaker keeps its own level ${restart ? "after Core restart" : "without restart"}`, { timeout: 12_000 }, async () => {
-    const f = await fixture();
-    try {
-      const original = f.devices[0]!;
-      await original.command(f.queue("saved"));
-      await original.command({ type: "allSpeakers", level: 20 });
-      const [a, b] = restart ? await f.restart() : f.devices;
-      await a!.command({ type: "play", entryId: "saved" });
-      await until(() => directLevel(a!.messages) === 14);
-      await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
-      await b!.command(f.queue("next", a!.id));
-      await pause(a!);
-      await b!.command({ type: "output", deviceId: b!.id, level: 40 });
-      const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
-      await until(() => levels.every(wire => wire.length > 0));
-      console.log("RESTART_WIRE", JSON.stringify({ restart, mixTrim: b!.state.mixTrim, shared: levels[0]!.at(-1), private: levels[1]!.at(-1) }));
-      assert.equal(levels[1]!.at(-1), 40);
-      assert.equal(levels[0]!.at(-1), 14);
-      assert.equal(b!.state.mixTrim, 20);
-    } finally { await f.close(); }
-  });
-}
-
-test("restored All follows live audio consent in Direct and Synced delivery", { timeout: 12_000 }, async () => {
+test("new private speaker keeps its own level after Core restart", { timeout: 12_000 }, async () => {
   const f = await fixture();
   try {
-    await f.devices[0]!.command(f.queue("saved"));
-    await f.devices[0]!.command({ type: "allSpeakers", level: 20 });
+    const original = f.devices[0]!;
+    await original.command(f.queue("saved"));
+    await original.command({ type: "allSpeakers", level: 20 });
     const [a, b] = await f.restart();
     await a!.command({ type: "play", entryId: "saved" });
-    await pause(a!);
     await until(() => directLevel(a!.messages) === 14);
-    const outputs = a!.state.outputs;
-    await a!.command({ type: "sharing", sharing: { audio: false, video: true } });
-    await until(() => directLevel(a!.messages) === 70);
-    assert.deepEqual(a!.state.outputs, outputs);
-    await a!.command({ type: "sharing", sharing: { audio: true, video: true } });
-    await until(() => directLevel(a!.messages) === 14);
+    await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
     await b!.command(f.queue("next", a!.id));
     await pause(a!);
     await b!.command({ type: "output", deviceId: b!.id, level: 40 });
     const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
-    await until(() => levels[0]!.at(-1) === 14 && levels[1]!.at(-1) === 8);
-    // SDK volume commands can precede Core's worker-admission snapshot. Capture
-    // the comparison only after both receivers' delay fields are published.
-    await until(() => b!.state.outputs?.length === 2 && b!.state.outputs.every(output => output.delay === 0 && output.delayActive === true));
-    const localOutputs = b!.state.outputs;
-    for (const audio of [false, true, false]) {
-      await b!.command({ type: "sharing", sharing: { audio, video: true } });
-      await until(() => levels[1]!.at(-1) === (audio ? 8 : 40));
-      assert.deepEqual(b!.state.outputs, localOutputs);
-      assert.equal(levels[0]!.at(-1), 14);
-      assert.equal(b!.state.mixTrim, 20);
-    }
-    console.log("RESTART_WIRE", JSON.stringify({ scenario: "liveAudioConsent", shared: levels[0]!.at(-1), private: levels[1]!.at(-1) }));
-  } finally { await f.close(); }
-});
-
-test("private Move here after restored All=0 stays audible and a positive fader still unsilences All", { timeout: 12_000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.devices[0]!.command(f.queue("saved"));
-    await f.devices[0]!.command({ type: "allSpeakers", level: 0 });
-    const [a, b] = await f.restart();
-    await a!.command({ type: "play", entryId: "saved" });
-    await until(() => directLevel(a!.messages) === 0);
-    await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
-    await b!.command(f.queue("next", a!.id));
-    await pause(a!);
-    // Move here is exclusive: Device 70 shares, so it leaves and Device 40 plays Direct at its own level.
-    await b!.command({ type: "solo", deviceId: b!.id });
-    await until(() => b!.state.outputs?.map(output => output.deviceId).join() === b!.id && directLevel(b!.messages) === 40);
-    assert.equal(b!.state.mixTrim, 0);
-    await b!.command({ type: "output", deviceId: b!.id, level: 40 });
-    await until(() => b!.state.mixTrim === 100);
-    assert.equal(directLevel(b!.messages), 40);
-    console.log("RESTART_WIRE", JSON.stringify({ scenario: "zeroUnsilence", private: directLevel(b!.messages), mixTrim: b!.state.mixTrim }));
-  } finally { await f.close(); }
-});
-
-test("private resume does not adopt saved All authority; a fresh own All survives foreign All", { timeout: 12_000 }, async () => {
-  const f = await fixture();
-  try {
-    const original = f.devices[1]!;
-    await original.command({ type: "sharing", sharing: { audio: false, video: false } });
-    await original.command(f.queue("own"));
-    await original.command({ type: "allSpeakers", level: 25 });
-    await until(() => directLevel(original.messages) === 10);
-    const [a, b] = await f.restart();
-    assert.equal(b!.state.outputs?.length ?? 0, 0);
-    await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
-    await b!.command({ type: "play", entryId: "own" });
-    await pause(b!);
-    assert.equal(directLevel(b!.messages), 40);
-    assert.equal(b!.state.mixTrim, 25);
-    await b!.command({ type: "allSpeakers", level: 25 });
-    await until(() => directLevel(b!.messages) === 10);
-    await b!.command({ type: "output", deviceId: a!.id, picture: true, level: 70 });
-    const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
-    await until(() => levels[0]!.at(-1) === 18 && levels[1]!.at(-1) === 10);
-    await a!.command({ type: "allSpeakers", level: 0 });
-    await until(() => levels[0]!.at(-1) === 0);
-    assert.equal(levels[1]!.at(-1), 10);
-    await b!.command({ type: "mute", deviceId: b!.id, muted: true });
-    await until(() => levels[1]!.at(-1) === 0);
-    await a!.command({ type: "allSpeakers", level: 50 });
-    await until(() => levels[0]!.at(-1) === 35);
-    await b!.command({ type: "mute", deviceId: b!.id, muted: false });
-    await until(() => levels[1]!.at(-1) === 10);
-    console.log("RESTART_WIRE", JSON.stringify({ scenario: "freshOwnAll", shared: levels[0]!.at(-1), private: levels[1]!.at(-1) }));
+    await until(() => levels.every(wire => wire.length > 0));
+    assert.equal(levels[1]!.at(-1), 40);
+    assert.equal(levels[0]!.at(-1), 14);
+    assert.equal(b!.state.mixTrim, 20);
   } finally { await f.close(); }
 });

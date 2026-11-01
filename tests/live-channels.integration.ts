@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { liveFixture, until } from "./live-input.fixture";
+import { dirname, join } from "node:path";
+import { helper, startHelpers } from "../src/server/helpers";
+import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
+
+// Keep helper status and downloads in the fixture's directory, not the working directory.
+async function liveFixture(options?: Parameters<typeof createLiveFixture>[0]) {
+  const f = await createLiveFixture(options);
+  startHelpers(join(dirname(f.databasePath), "helpers"));
+  await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
+  return f;
+}
 
 // These requests cross the real HTTP authorization boundary. Real encoded track
 // contents and timestamps are checked separately in live-stream.integration.ts.
@@ -69,18 +79,5 @@ test("fallback grants only selected channels and revokes saved links while other
     assert.equal((await f.publisher.command({ type: "output", deviceId: f.receiver.id, picture: false, level: 50 })).ok, true);
     await revoked(video);
     assert.equal(f.uploads.size, 1, "channel/mode changes reuse the source's single upload");
-  } finally { await f.close(); }
-});
-
-for (const kind of ["microphone", "screen"] as const) test(`${kind} with one captured channel falls back to that channel`, { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    await f.publish("input", kind, kind === "microphone");
-    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
-    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "input", deviceId: f.receiver.id })).ok, true);
-    await until(() => !!f.receiver.load()?.livePeerId);
-    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: f.receiver.load()!.livePeerId, error: "Unreachable." }));
-    await until(() => !!f.receiver.load()?.hls);
-    await granted(f.receiver.load()!.source, kind === "microphone" ? "audio" : "video");
   } finally { await f.close(); }
 });

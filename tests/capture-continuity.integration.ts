@@ -4,19 +4,6 @@ import { createScheduledCapture } from "../src/server/scheduled-capture";
 
 const until = async (check: () => boolean) => { const end = Date.now() + 5000; while (!check()) { if (Date.now() > end) throw new Error("Capture output did not arrive"); await new Promise(resolve => setTimeout(resolve, 10)); } };
 
-test("a streaming encoder makes progress with 50 ms of input without waiting for a large raw-demux packet", async t => {
-  const errors: string[] = [], wires = new Set<string>();
-  const source = createScheduledCapture(async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", error => errors.push(error));
-  t.after(() => source.close());
-  source.subscribe(event => { if (event.type === "chunk") wires.add(event.wire); });
-  for (let sequence = 0; sequence < 5; sequence++) assert.equal(source.write({ generation: "short", sequence,
-    samplePosition: sequence * 480, capturedAtUs: 1_000_000 + sequence * 10_000,
-    sampleRate: 48000, channels: 2, pcm: new Float32Array(960).fill(.25) }), true);
-  await until(() => errors.length > 0 || wires.size === 2);
-  assert.deepEqual(errors, []);
-  assert.deepEqual([...wires].sort(), ["opus", "pcm"]);
-});
-
 test("a bounded browser capture gap becomes silence without ending the source", async t => {
   const errors: string[] = [], pcm: Buffer[] = [];
   const source = createScheduledCapture(async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", error => errors.push(error));

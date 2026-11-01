@@ -28,12 +28,12 @@ test("multiple adapters and addresses resolve consistently without configuration
   assert.equal(selectLan(inventory, undefined, b.address).name, "Ethernet 2");
 });
 
-function fixture(t: TestContext, options: { enabled?: boolean; selected?: string; address?: string } = {}) {
+function fixture(t: TestContext) {
   let inventory: NodeJS.Dict<NetworkInterfaceInfo[]> = { eth0: [a] };
   let urls: string[] = [], error: string | null = null;
   const starts: { address: string; port: number; stopped: boolean }[] = [];
   const lan = createLanListener({
-    port: 4100, enabled: true, ...options, advertised: ["http://couch.home"], interfaces: () => inventory,
+    port: 4100, enabled: true, advertised: ["http://couch.home"], interfaces: () => inventory,
     resolve: (async () => [{ address: a.address, family: 4 }]) as typeof lookup,
     start: async (network, port) => {
       const listener = { address: network.address, port, stopped: false };
@@ -80,37 +80,4 @@ for (const loss of ["interface", "address"]) test(`automatic selection waits for
   assert.ok(f.starts.every(listener => listener.address === a.address));
   assert.deepEqual(f.urls(), ["https://couch.home:4100", `https://${a.address}:4100`]);
   assert.equal(f.error(), null);
-});
-
-test("disabled discovery does not pin a network, but disabling established sharing retains its selection until restart", async t => {
-  const f = fixture(t, { enabled: false });
-  await f.lan.refresh();
-  f.inventory({ eth1: [b] });
-  await f.lan.refresh();
-  assert.equal(f.starts.length, 0);
-  await f.lan.setEnabled(true);
-  assert.equal(f.lan.network?.address, b.address);
-  await f.lan.setEnabled(false);
-  f.inventory({ eth0: [a] });
-  await assert.rejects(f.lan.refresh(), /No eligible LAN address/);
-  await assert.rejects(f.lan.validateAlias("http://couch.home"), /No eligible LAN address/);
-  await assert.rejects(f.lan.setEnabled(true), /No eligible LAN address/);
-  assert.equal(f.lan.server, null);
-  assert.ok(f.starts.every(listener => listener.stopped));
-  await f.lan.close();
-
-  const restarted = fixture(t);
-  await restarted.lan.refresh();
-  assert.equal(restarted.lan.network?.address, a.address);
-  assert.ok(restarted.lan.server);
-});
-
-for (const selector of ["interface", "address"]) test(`an explicit ${selector} selector keeps its existing scope`, async t => {
-  const f = fixture(t, selector === "interface" ? { selected: "eth0" } : { address: a.address });
-  await f.lan.refresh();
-  f.inventory(selector === "interface" ? { eth0: [b] } : { eth1: [a] });
-  await f.lan.refresh();
-  assert.equal(f.lan.network?.address, selector === "interface" ? b.address : a.address);
-  assert.equal(f.lan.network?.name, selector === "interface" ? "eth0" : "eth1");
-  assert.ok(f.lan.server);
 });

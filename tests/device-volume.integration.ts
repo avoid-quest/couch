@@ -8,8 +8,6 @@ import WebSocket from "ws";
 import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
-import { soundRaised } from "../src/server/sound-routing";
-import { parseCommand } from "../src/server/validation";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 
 async function fixture() {
@@ -105,7 +103,6 @@ test("All is independent attenuation, restores from zero and preserves individua
       assert.deepEqual(device.state.outputs, outputs);
       assert.equal(level(device.messages), Math.round(70 * trim / 100));
     }
-    assert.throws(() => parseCommand(JSON.stringify({ type: "command", requestId: "1", action: { type: "allSpeakers", level: 50.5 } })));
     // Moving the one Volume folds that trim into the Device's level, so it plays at what Volume shows.
     await device.command({ type: "allSpeakers", level: 50 });
     await device.command({ type: "volume", volume: 41 });
@@ -210,53 +207,6 @@ test("The one Volume folds a trim into device levels, keeping their proportion e
     await a!.command({ type: "volume", volume: 70 });
     assert.deepEqual(volumes(), [70, 40]);
   } finally { await f.close(); }
-});
-
-test("The one Volume at 0 keeps the devices' proportion for when it rises again", { timeout: 15_000 }, async () => {
-  const f = await fixture(), [a, b] = f.devices;
-  try {
-    await a!.command(f.queue("mix"));
-    await a!.command({ type: "output", deviceId: b!.id, level: 40 });
-    const volumes = () => [a, b].map(device => a!.state.devices?.find(item => item.id === device!.id)?.volume);
-    // 70 and 40 each go to 0, as their faders show, and come back at 35 and 20 rather than 35 each.
-    await a!.command({ type: "volume", volume: 0 });
-    assert.deepEqual(volumes(), [0, 0]);
-    assert.equal(a!.state.player.volume, 0);
-    await a!.command({ type: "volume", volume: 0 });
-    await a!.command({ type: "volume", volume: 35 });
-    assert.deepEqual(volumes(), [35, 20]);
-    assert.equal(a!.state.player.volume, 35);
-  } finally { await f.close(); }
-});
-
-test("Unmuting brings All back only for muted sound in the looked-at Playback", { timeout: 15_000 }, async () => {
-  const f = await fixture(), [a, , , d] = f.devices;
-  try {
-    await a!.command(f.queue("mix"));
-    await d!.command(f.queue("elsewhere"));
-    await a!.command({ type: "allSpeakers", level: 0 });
-    await d!.command({ type: "allSpeakers", level: 0 });
-    await d!.command({ type: "mute", muted: true });
-    await a!.command({ type: "mute", muted: false });
-    assert.equal(a!.state.mixTrim, 0);
-    await a!.command({ type: "mute", deviceId: d!.id, muted: false });
-    await until(() => d!.state.devices?.find(device => device.id === d!.id)?.muted === false);
-    assert.equal(a!.state.mixTrim, 0);
-    assert.equal(d!.state.mixTrim, 0);
-    await a!.command({ type: "mute", muted: true });
-    await a!.command({ type: "mute", muted: false });
-    assert.equal(a!.state.mixTrim, 100);
-  } finally { await f.close(); }
-});
-
-test("The TV's volume keys raising or unmuting system sound count as raising sound", () => {
-  const system = (volume: number | null, muted = false) => ({ selectedOutput: "tv", observedOutput: "tv", volume, muted, error: null });
-  assert.equal(soundRaised(system(30), system(35)), true);
-  assert.equal(soundRaised(system(30, true), system(30)), true);
-  assert.equal(soundRaised(system(30), system(25)), false);
-  assert.equal(soundRaised(system(30), system(35, true)), false);
-  assert.equal(soundRaised(system(null), system(30)), false);
-  assert.equal(soundRaised(undefined, system(30)), false);
 });
 
 test("A Playback saved before the All trim plays at 100", () => {

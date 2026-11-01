@@ -84,5 +84,4 @@ test("one compressed Sendspin mix feeds Opus and PCM, preserves timestamps, and 
   group.send({ type: "load", playbackId: "live", source: `${origin}/tone.wav`, liveSourceId: "capture", compressor: { ...defaultCompressor, enabled: true, threshold: -60 } });
   await until(() => pcm.clears > liveClears && pcm.frames.length > 10 && state?.playbackId === "live");
   assert.ok(Math.abs(rms(0) - .8 / Math.sqrt(2)) < .003, "Buffered live sharing was compressed");
-  t.diagnostic(`compressed PCM RMS ${compressedRms.toFixed(4)}; original 0.5657; mixed Opus/PCM and late receiver verified`);
 });

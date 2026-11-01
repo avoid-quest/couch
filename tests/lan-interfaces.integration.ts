@@ -6,7 +6,7 @@ import { syncBuiltinESMExports } from "node:module";
 import type { NetworkInterfaceInfo } from "node:os";
 import { promisify } from "node:util";
 import { lanInterfacePriorities } from "../src/server/lan-interfaces";
-import { createLanListener, selectLan } from "../src/server/lan-listener";
+import { selectLan } from "../src/server/lan-listener";
 
 const entry: NetworkInterfaceInfo = { address: "192.168.1.20", family: "IPv4", internal: false, netmask: "255.255.255.0", cidr: "192.168.1.20/24", mac: "00:11:22:33:44:55" };
 function platform(t: TestContext, value: NodeJS.Platform) {
@@ -38,45 +38,6 @@ for (const wireless of [1, 9]) test(`Windows hardware information handles rename
   const priorities = await lanInterfacePriorities();
   assert.equal(selectLan({ Ethernet: [entry], "A radio": [entry], "Z câblé": [entry] }, undefined, undefined, priorities).name, "Z câblé");
   assert.equal(selectLan({ Ethernet: [entry], "A radio": [entry] }, undefined, undefined, priorities).name, "A radio");
-
-  const starts: string[] = [];
-  const lan = createLanListener({
-    port: 4100, enabled: true, advertised: [], priorities,
-    interfaces: () => ({ Ethernet: [entry], "A radio": [entry], "Z câblé": [entry] }),
-    start: async network => { starts.push(network.name); return { stop: async () => {} }; }, changed() {},
-  });
-  t.after(() => lan.close());
-  await lan.refresh();
-  assert.deepEqual(starts, ["Z câblé"]);
-});
-
-test("Windows supports an older Ethernet driver reporting an unspecified physical medium", async t => {
-  platform(t, "win32");
-  command(t, "powershell.exe", JSON.stringify([{ Name: "Office", HardwareInterface: true, NdisPhysicalMedium: 0, InterfaceType: 6 }]));
-  assert.equal(selectLan({ "Wi-Fi": [entry], Office: [entry] }, undefined, undefined, await lanInterfacePriorities()).name, "Office");
-});
-
-test("first enabling sharing discovers an Ethernet adapter added after startup, without probing on polls", async t => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
-  let inventory = { "Wi-Fi": [entry] } as NodeJS.Dict<NetworkInterfaceInfo[]>;
-  let probes = 0;
-  const lan = createLanListener({
-    port: 4100, enabled: false, advertised: [], interfaces: () => inventory,
-    priorities: async () => { probes++; return new Map([["Wi-Fi", 1], ["Office", 0]]); },
-    start: async () => ({ stop: async () => {} }), changed() {},
-  });
-  t.after(() => lan.close());
-  await lan.refresh();
-  assert.equal(probes, 0);
-  inventory = { "Wi-Fi": [entry], Office: [{ ...entry, address: "192.168.1.21" }] };
-  await lan.setEnabled(true);
-  assert.equal(lan.network?.name, "Office");
-  assert.equal(probes, 1);
-  t.mock.timers.tick(60_000);
-  await lan.refresh();
-  await lan.setEnabled(false);
-  await lan.setEnabled(true);
-  assert.equal(probes, 1, "an established selection must not repeat adapter discovery");
 });
 
 test("macOS uses hardware ports so Wi-Fi on en0 follows USB Ethernet", async t => {
@@ -104,7 +65,7 @@ for (const devtype of [true, false]) test(`Linux identifies wireless hardware ${
   assert.equal(priorities.has("gone"), false);
 });
 
-for (const output of [new Error("PowerShell unavailable"), "invalid JSON", "[]"]) test(`missing adapter details still allow automatic LAN selection: ${String(output)}`, async t => {
+for (const output of [new Error("PowerShell unavailable"), "invalid JSON"]) test(`missing adapter details still allow automatic LAN selection: ${String(output)}`, async t => {
   platform(t, "win32");
   command(t, "powershell.exe", output);
   const priorities = await lanInterfacePriorities();

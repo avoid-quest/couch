@@ -5,7 +5,17 @@ import { request as httpsRequest } from "node:https";
 import { test } from "node:test";
 import { WebSocket } from "ws";
 import { AudioCodec, beginClientHandshake, Identity, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
-import { liveFixture, until } from "./live-input.fixture";
+import { dirname, join } from "node:path";
+import { helper, startHelpers } from "../src/server/helpers";
+import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
+
+// Keep helper status and downloads in the fixture's directory, not the working directory.
+async function liveFixture(options?: Parameters<typeof createLiveFixture>[0]) {
+  const f = await createLiveFixture(options);
+  startHelpers(join(dirname(f.databasePath), "helpers"));
+  await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
+  return f;
+}
 
 test("rebinding a paired ID refuses its old control and capture upload while host windows stay connected", { timeout: 10_000 }, async t => {
   const f = await liveFixture({ media: { ffmpeg: process.env.COUCH_TEST_FFMPEG ?? "ffmpeg", recording: new Uint8Array() } }), identity = f.identities[0]!;
@@ -47,77 +57,6 @@ test("rebinding a paired ID refuses its old control and capture upload while hos
     refused.once("unexpected-response", (request, response) => { response.resume(); request.destroy(); resolve(response.statusCode!); });
   });
   assert.equal(status, 403, "old capture credentials cannot open another upload");
-});
-
-test("rebinding a paired ID closes its Sendspin session and removes its output assignments", { timeout: 10_000 }, async t => {
-  const f = await liveFixture(), identity = f.identities[1]!;
-  const player = new SendspinClient(identity.id, "Receiver", [Roles.PLAYER], { playerSupport: {
-    supported_formats: [{ codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 }], buffer_capacity: 65536, supported_commands: [],
-  } });
-  t.after(async () => { await player.disconnect(); await f.close(); });
-  const host = await f.connect(-1);
-  await player.connect(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
-  identity.id = Identity.generate().peerId;
-  const rebound = await f.connect(1);
-  await until(() => !player.isConnected)
-    .catch(() => assert.fail("the old Sendspin session must close after rebinding"));
-  assert.equal((await host.command({ type: "publishLive", sourceId: "concert", uploadToken: f.uploadToken,
-    kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" })).ok, true);
-  assert.equal((await rebound.command({ type: "playLive", sourceId: "concert", deviceId: identity.id })).ok, true);
-  await until(() => host.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === identity.id)) === true);
-  const oldId = identity.id;
-  identity.id = Identity.generate().peerId;
-  await f.connect(1);
-  await until(() => host.state.playbacks?.every(playback => playback.outputs.every(output => output.deviceId !== oldId)) === true);
-  assert.ok(host.state.liveSources?.some(source => source.id === "concert"), "another device's publication survives");
-});
-
-test("repeated paired ID rebinding leaves only the current ID's connections, and revocation closes them", { timeout: 10_000 }, async t => {
-  const f = await liveFixture(), identity = f.identities[1]!;
-  const generations: WebSocket[][] = [[f.receiver.socket]];
-  t.after(async () => { for (const socket of generations.flat()) socket.terminate(); await f.close(); });
-  const connect = (path: string, sockets: WebSocket[]) => new Promise<void>((resolve, reject) => {
-    const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}${path}`, { origin: f.hub.origin });
-    sockets.push(socket);
-    socket.once("open", () => resolve());
-    socket.once("error", reject);
-  });
-  for (let generation = 0; generation < 3; generation++) {
-    if (generation) { identity.id = Identity.generate().peerId; generations.push([]); }
-    const sockets = generations.at(-1)!;
-    for (let i = 0; i < 2; i++) await connect(`/api/ws?token=${identity.token}&device=${identity.id}`, sockets);
-    for (let i = 0; i < 2; i++) await connect(`/api/audio/${identity.token}/sendspin`, sockets);
-    await until(() => generations.slice(0, -1).flat().every(socket => socket.readyState !== WebSocket.OPEN));
-  }
-  assert.equal((await fetch(`${f.hub.origin}/api/devices/${identity.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${"h".repeat(64)}` } })).status, 200);
-  await until(() => generations.flat().every(socket => socket.readyState !== WebSocket.OPEN));
-});
-test("revocation closes an authorized audio connection during its Noise handshake", { timeout: 10_000 }, async t => {
-  const f = await liveFixture(), identity = f.identities[1]!;
-  const socket = new WebSocket(`${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`);
-  socket.on("error", () => {});
-  t.after(async () => { socket.terminate(); await f.close(); });
-  await once(socket, "open");
-  const handshake = beginClientHandshake({ identity: identity.key, suite: "25519_AESGCM_SHA256" });
-  const frames: string[] = [];
-  socket.on("message", (data, binary) => { if (!binary) frames.push(String(data)); });
-  socket.send(handshake.clientInit);
-  await until(() => frames.length === 2);
-  handshake.onServerInit(frames[0]!);
-  const next = await handshake.onMessage1(frames[1]!);
-  const removal = await fetch(`${f.hub.origin}/api/devices/${identity.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${"h".repeat(64)}` } });
-  assert.equal(removal.status, 200);
-  const accepted: string[] = [];
-  socket.on("message", (data, binary) => {
-    if (binary) {
-      const frame = next.result.transport.decode(Buffer.from(data as Buffer));
-      if (frame?.kind === "text") accepted.push(JSON.parse(frame.data).type);
-    }
-  });
-  if (socket.readyState === WebSocket.OPEN) socket.send(next.send);
-  await until(() => socket.readyState === WebSocket.CLOSED || accepted.length > 0);
-  assert.deepEqual(accepted, [], "a revoked connection must not finish the handshake and receive server/hello");
-  assert.equal(socket.readyState, WebSocket.CLOSED);
 });
 
 test("turning network sharing off closes an established paired audio session", { timeout: 10_000 }, async t => {

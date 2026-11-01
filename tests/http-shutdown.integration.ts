@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir, networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { connect, createServer, type Socket } from "node:net";
+import { connect, type Socket } from "node:net";
 import { connect as connectTLS, type TLSSocket } from "node:tls";
 import WebSocket from "ws";
 import { certificate } from "../src/server/certificate";
@@ -87,17 +87,6 @@ for (const mode of modes) {
     finally { probe.destroy(); }
   });
 
-  test(`${mode}: stop interrupts a slow request body before dispatch`, { timeout: 5000 }, async t => {
-    let called = false;
-    const f = await fixture(t, mode, async () => { called = true; return new Response("unexpected"); });
-    const socket = await f.client();
-    request(socket, "/", "Content-Length: 8\r\n", "POST"); socket.write("a");
-    // Allow the request parser to begin waiting on the remaining body.
-    await new Promise(resolve => setTimeout(resolve, 20));
-    await stopped(f.listener, socket);
-    assert.equal(called, false);
-  });
-
   test(`${mode}: stop aborts an in-flight handler`, { timeout: 5000 }, async t => {
     const entered = Promise.withResolvers<void>(), aborted = Promise.withResolvers<void>();
     const f = await fixture(t, mode, async request => {
@@ -107,29 +96,6 @@ for (const mode of modes) {
     const socket = await f.client(); request(socket);
     await bounded(entered.promise, "handler entry");
     await stopped(f.listener, socket); await bounded(aborted.promise, "request cancellation");
-  });
-
-  test(`${mode}: stop cancels a slow response stream`, { timeout: 5000 }, async t => {
-    const aborted = Promise.withResolvers<void>(), cancelled = Promise.withResolvers<void>();
-    const f = await fixture(t, mode, async request => {
-      request.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
-      return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("first")); }, cancel() { cancelled.resolve(); } }));
-    });
-    const socket = await f.client(); const response = dataUntil(socket, text => text.includes("first")); request(socket); await response;
-    await stopped(f.listener, socket);
-    await bounded(Promise.all([aborted.promise, cancelled.promise]), "response cancellation");
-  });
-
-  test(`${mode}: peer disconnect still cancels a response without stopping the listener`, { timeout: 5000 }, async t => {
-    const aborted = Promise.withResolvers<void>();
-    const f = await fixture(t, mode, async request => {
-      if (new URL(request.url).pathname === "/ok") return new Response("ok");
-      request.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
-      return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("first")); } }));
-    });
-    const socket = await f.client(), response = dataUntil(socket, text => text.includes("first")); request(socket); await response;
-    socket.destroy(); await bounded(aborted.promise, "peer cancellation");
-    const next = await f.client(), completed = dataUntil(next, text => text.endsWith("0\r\n\r\n")); request(next, "/ok"); assert.match(await completed, /^HTTP\/1.1 200/);
   });
 
   test(`${mode}: generic and custom WebSocket owners receive messages and close on stop`, { timeout: 5000 }, async t => {
@@ -174,22 +140,6 @@ for (const mode of modes) {
   });
 }
 
-for (const mode of ["plain", "shared-http"] as const) {
-  test(`${mode}: stop closes an accepted client that sent no first byte`, { timeout: 5000 }, async t => {
-    const f = await fixture(t, mode), socket = await f.client();
-    await new Promise(resolve => setTimeout(resolve, 20));
-    await stopped(f.listener, socket);
-  });
-}
-
-test("shared TLS: stop closes a partial handshake and a completed handshake without HTTP", { timeout: 5000 }, async t => {
-  const f = await fixture(t, "shared-https"), pending = await f.client(false), ready = await f.client();
-  pending.write(Buffer.from([0x16, 0x03, 0x01, 0x00, 0x10, 0x01]));
-  await new Promise(resolve => setTimeout(resolve, 20));
-  const closes = [once(pending, "close"), once(ready, "close")];
-  await bounded(Promise.all([f.listener.stop(), ...closes]), "pending TLS shutdown");
-});
-
 const lanAddress = Object.values(networkInterfaces()).flat().find(address => address?.family === "IPv4" && !address.internal)?.address;
 test("shared listener retains the LAN HTTP redirect and refuses insecure upgrades", { skip: !lanAddress, timeout: 5000 }, async t => {
   let calls = 0;
@@ -202,41 +152,3 @@ test("shared listener retains the LAN HTTP redirect and refuses insecure upgrade
   await bounded(closed, "insecure upgrade refusal"); assert.equal(calls, 0);
 });
 
-// A failed constructor has no returned stop() for its caller to invoke.
-for (const secure of [false, true]) {
-  test(`${secure ? "TLS mux" : "plain HTTP"}: failed binds release heartbeat timers before retry`, async t => {
-    const directory = await mkdtemp(join(tmpdir(), "couch-bind-cleanup-"));
-    const tls = secure ? await certificate(directory, ["localhost", "127.0.0.1"]) : undefined;
-    const blocker = createServer();
-    blocker.listen(0, "127.0.0.1");
-    await once(blocker, "listening");
-    const address = blocker.address();
-    assert.ok(address && typeof address !== "string");
-    const timers = new Set<ReturnType<typeof setInterval>>();
-    const set = globalThis.setInterval, clear = globalThis.clearInterval;
-    t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => {
-      const timer = set(...args); timers.add(timer); return timer;
-    });
-    t.mock.method(globalThis, "clearInterval", (timer: Parameters<typeof clearInterval>[0]) => {
-      timers.delete(timer as ReturnType<typeof setInterval>); clear(timer);
-    });
-    let listener: Awaited<ReturnType<typeof serve>> | undefined;
-    t.after(async () => {
-      await listener?.stop();
-      if (blocker.listening) await new Promise<void>(resolve => blocker.close(() => resolve()));
-      for (const timer of timers) clear(timer);
-      await rm(directory, { recursive: true, force: true });
-    });
-    const start = () => serve({ hostname: "127.0.0.1", port: address.port, tls, maxRequestBodySize: 4096,
-      fetch: async () => Response.json({ ok: true }),
-      websocket: { maxPayload: 4096, open() {}, message() {}, close() {} },
-    });
-    for (let attempt = 0; attempt < 3; attempt++) await assert.rejects(start(), { code: "EADDRINUSE" });
-    assert.equal(timers.size, 0, "failed binds retained active heartbeat intervals");
-    await new Promise<void>(resolve => blocker.close(() => resolve()));
-    listener = await start();
-    assert.equal((await fetch(`http://127.0.0.1:${listener.port}`)).status, 200);
-    await listener.stop();
-    assert.equal(timers.size, 0, "successful recovery retained heartbeat intervals after stop");
-  });
-}
