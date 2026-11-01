@@ -14,7 +14,7 @@ says *in preview* until a stable release exists, and never says *stable*.
 
 | Claim | Evidence | Public wording limits |
 | --- | --- | --- |
-| Packages desktop apps for macOS 14+ (Apple Silicon), macOS 13+ (Intel), Windows 11 (x64) and Linux (x64 AppImage, Debian 13 `.deb`) | `apps/web/src/pages/download.astro`, Package workflow, release assets | Name the platforms; not "every computer". Intel 13–14 needs a compatible local mpv for some TV codecs; automatic Intel mpv needs 15+. Intel downloads appear after publication; Ventura runtime/install/update validation remains required ([audit](../intel-macos-research.md)) |
+| Packages desktop apps for macOS 14+ (Apple Silicon), macOS 13+ (Intel), Windows 11 (x64) and Linux (x64 AppImage, Debian 13 `.deb`) | `apps/web/src/pages/download.astro`, Package workflow, release assets | Name the platforms; not "every computer". Intel 13–14 needs a compatible local mpv for some TV codecs; automatic Intel mpv needs 15+. Intel downloads appear after publication; Ventura runtime/install/update validation remains required ([platforms](../ci.md#platforms-and-signing)) |
 | Can be set up as a dedicated Debian TV | `couch-setup --tv`, [native-tv](../native-tv.md) | The TV layout has only been run on a Mac ([usage](../usage.md#what-plays-where)); say "set up", not "tested on TVs" |
 | Phones and laptops join through a browser by scanning a QR code or typing a six-digit code; no app install | [usage](../usage.md#connect-a-phone) | The first visit shows a certificate warning; mention it in how-to copy |
 | No accounts; it runs on your own network | Pairing is per Couch, on the LAN ([architecture](../architecture.md)) | Online sources still need the internet |
@@ -39,7 +39,7 @@ says *in preview* until a stable release exists, and never says *stable*.
 
 | Claim | Evidence | Status |
 | --- | --- | --- |
-| A sound card's stereo input delivered directly to scheduled receivers, without the buffered path | Lab experiment `ccac10b` (lab notes, not in this repo): UMC404HD, one MacBook Air receiver over Ethernet | Short wired captures only. The sender imposed a 350 ms lead; the measured electrical output delay was about 0.35–0.37 s, against about 3.1 s for the buffered comparator (which excluded the browser's recording stage, so it's no whole-run comparison). Diagnostic observations, not a product number or target. Not qualified for fidelity, continuity, Wi-Fi, two receivers or recovery |
+| A sound card's stereo input delivered directly to scheduled receivers, without the buffered path | Lab experiment `ccac10b` (lab notes, not in this repo): a USB audio interface, one Mac laptop receiver over Ethernet | Short wired captures only. The sender imposed a 350 ms lead; the measured electrical output delay was about 0.35–0.37 s, against about 3.1 s for the buffered comparator (which excluded the browser's recording stage, so it's no whole-run comparison). Diagnostic observations, not a product number or target. Not qualified for fidelity, continuity, Wi-Fi, two receivers or recovery |
 | Source-clock stability for long live input | Active milestone (lab notes) | Projected lead loss over minutes; unresolved |
 
 Never publish the lab's numbers as targets or results.

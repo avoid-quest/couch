@@ -116,7 +116,7 @@ in its own row below primary navigation and search: a silent picture of what goe
 the share's name, how many devices watch (0 included, so a capture that
 reaches nobody says so), and **Stop**, its one place (accessible
 name: Stop sharing). The
-name is the one Home, the Stage and the now-playing bar show ("Studio Mac ·
+name is the one Home, the Stage and the now-playing bar show ("Office Mac ·
 Screen"). It floats on the toasts' surface and shadow,
 without the bar's filter, which stays the page's one backdrop filter
 ([Glass](../design.md#glass)). Its name truncates within the available width,

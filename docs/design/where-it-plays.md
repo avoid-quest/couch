@@ -36,7 +36,7 @@ a Sheet's first line sticks on the Sheet's ground. Its Sheet is unchanged
 Picture 1, Sound 2
 Compressor                  Advanced  ○
 Living room TV      ▣  ♪  ───●───  40  …
-Francesco's phone   ▢  ♪  ──────●  60  …
+Guest's phone       ▢  ♪  ──────●  60  …
 This device
 ─────────────────────────────────────
 Kitchen laptop      ▢  ♪        Move here
@@ -280,5 +280,12 @@ its existing FFmpeg at the current position (a brief rebuffer); Apply batches
 edits to avoid restarting on every slider movement. mpv replaces its named
 lavfi filter. There is no continuously polled meter.
 
-[Research and implementation notes](../master-compressor-research.md) describe
-the DSP, browser constraints and [performance measurements](../master-compressor-performance.md).
+Each route uses built-in processing: Web Audio's `DynamicsCompressorNode` for
+Direct, one FFmpeg `acompressor` in shared Sendspin audio before its Opus/PCM
+split, and mpv's `lavfi` on the host ([compressor.ts](../../src/shared/compressor.ts)).
+The settings belong to the Playback and are saved with its queue, so they survive
+devices joining and delivery changes; a new Playback starts off with the
+defaults. Core rejects out-of-range values instead of letting engines clamp them:
+threshold −60…0 dB, ratio 1…20:1, attack 0.1…1000 ms, release 1…1000 ms, knee
+0…18 dB, output gain −12…+12 dB. Live shares (WebRTC and buffered) aren't
+compressed.

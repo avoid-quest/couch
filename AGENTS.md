@@ -1,8 +1,10 @@
-- Follow YAGNI. Prefer small, readable changes and one-liners where sufficient. 
-- Prefer first class solutions. Check official docs.
-- UI: use shadcn components, keep it flat (no Card or bordered panels) and show only what people need: no filler copy, no headers or labels that repeat the screen. [docs/design.md](docs/design.md) describes what's built; update it with the code.
-- Start CI and releases by hand as [docs/ci.md](docs/ci.md) lists; nothing runs on push.
-- Scratch runs of Couch get their own `COUCH_DATA_DIR` and `COUCH_PORT` and are stopped by PID; the owner's installed Couch and its data (`<platform data dir>/quest.avoid.couch`) stay as they are.
+- Prefer the simplest solution that fully solves the problem and that a reader understands at a glance; clarity beats brevity.
+- Prefer first-class solutions: check the official docs before working around a tool or library.
+- Unless the owner explicitly asks for that action, never: dispatch a workflow (Check, Package and Release run only by hand; Housekeeping is the one scheduled workflow, so don't edit it either), create or push a tag, bump a version, publish, deploy the website (`bun run web:deploy`) or merge. An open or approved PR is not that request. See [docs/ci.md](docs/ci.md).
+- Before asking for review, run `bun run typecheck` and `bun run test`, and see the change working (app, browser or phone), not only built. [docs/ci.md](docs/ci.md) has the other checks.
+- Run Couch from source as the [README](README.md#develop) says: `bun run app` keeps its data in `.data`. Give a run its own `COUCH_PORT` while the installed Couch is running (both default to 4100), and stop only the processes you started, by PID. Never touch the installed Couch or its data (`<platform data dir>/quest.avoid.couch`, see [docs/usage.md](docs/usage.md#run-from-source)).
 - Debug the installed app from `<data dir>/logs/couch.log` (previous run: `couch.1.log`), which holds Main's and Core's output.
-- Model the desktop shell, releases and repo setup on [t3code](https://github.com/pingdotgg/t3code): read how it solves the problem before designing your own.
-- Write PR titles as plain sentences: they become the release notes (docs/ci.md).
+- UI: use shadcn components, keep it flat (no Card or bordered panels) and show only what people need: no filler copy, no headers or labels that repeat the screen. [docs/design.md](docs/design.md) describes what's built; update it with the code.
+- Use the domain terms in [GLOSSARY.md](GLOSSARY.md).
+- For the desktop shell, releases and repo setup, read how [t3code](https://github.com/pingdotgg/t3code) solves the problem before designing your own.
+- Write PR titles as plain sentences: they become the release notes.

@@ -122,7 +122,7 @@ also catch Up wrongly choosing the Saved rail over the preceding video; taller
 rows with metadata can hide that regression. Reload the renderer before
 each run so the second Saved item’s Details query is cold; its check delays the
 real For later response by 800 ms. Run with the tab visible
-or a T3 recording active so animation frames run (a removal moves focus in one). Also save two radio
+or a screen recording active so animation frames run (a removal moves focus in one). Also save two radio
 favorites, configure a local Live TV channel the second output can play (serve its
 stream with CORS), and pair a second online shared output for the favorite ordering/Undo
 and Live TV Queue/Play on checks. Queue skips a channel already anywhere in the queue,
@@ -134,7 +134,7 @@ Build the browser checks, minified so the bundle fits one preview evaluation:
 bun build tests/tv-navigation.browser.ts --target browser --format iife --minify --outfile build/tv-navigation.browser.js
 ```
 
-Evaluate that bundle in the T3 preview, then evaluate
+Evaluate that bundle in a browser preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
 focus and playback behavior: one Home station stop, a held OK opening a Home tile's menu (Back returns to the tile, a short OK acts on release, and the Remote's held OK does the same), Up and Down out of a shelf beside a tile with a longer or shorter caption, Home entry on the hero's
 primary verb and Up from its last shelf through each shelf and the hero to the
@@ -151,7 +151,7 @@ item opener after settling and continue arrow navigation from it. Live TV checks
 the labeled Play on device group, a successful Queue request and recipient selection.
 Details Back asserts Playback focus,
 the same entry and paused state, then immediate OK reopens the Sheet. They use DOM activation
-and bubbling key events; also use T3 keyboard input to check actual D-pad
+and bubbling key events; also use trusted (OS-level) keyboard input to check actual D-pad
 navigation and capture screenshots. This browser evidence does not qualify
 native Main, Linux packaging or a physical TV remote.
 
@@ -333,7 +333,7 @@ together. Run tests on an isolated Couch (its own `COUCH_DATA_DIR` and
    measure its runtime. Each writes a `couch-evidence/1` record with the
    revision, runtime, machine, input route, measurements and what it didn't test.
 3. Run the [TV navigation regression](#browser-regression) and record its input
-   route: DOM key events, T3 keyboard input or a physical remote.
+   route: DOM key events, trusted keyboard input or a physical remote.
 
 Every record keeps measured and untested conditions apart. Loopback and
 synthetic-input results don't measure the network between devices, browser

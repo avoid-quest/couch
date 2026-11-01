@@ -66,11 +66,10 @@ again when you want a fresh result.
 
 ## Implementation and checks
 
-To try this branch beside an installed Couch, use an isolated data directory
-and port from the checkout:
+To try it beside an installed Couch, use a scratch data directory and port:
 
 ```sh
-COUCH_DATA_DIR="$PWD/.data/pr-901" COUCH_PORT=49101 bun run app
+COUCH_DATA_DIR="$(mktemp -d)" COUCH_PORT=49101 bun run app
 ```
 
 Choose **This computer**, play a saved public radio station, open its player

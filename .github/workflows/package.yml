@@ -48,8 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Release passes the commit preflight chose: for production, the latest
-      # preview's rather than this run's. (A `ref` on checkout would stop act
-      # from using the local tree.)
+      # preview's rather than this run's.
       - if: inputs.ref
         shell: bash
         run: git fetch --depth=1 origin "${{ inputs.ref }}" && git checkout --detach FETCH_HEAD
