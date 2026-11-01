@@ -9,7 +9,7 @@ test("music search routes serve results, reuse cached searches and retain action
   let calls = 0;
   const bandcamp = createBandcampCatalog(undefined, (async () => {
     calls++;
-    return Response.json({ auto: { results: [{ type: "t", name: "Arsider track", item_url_path: "https://arsider.bandcamp.com/track/track" }] } });
+    return Response.json({ results: [{ type: "t", name: "Arsider track", url: "https://arsider.bandcamp.com/track/track" }] });
   }) as typeof fetch);
   const soundcloud = createSoundCloudBrowser(async () => {
     calls++;

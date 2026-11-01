@@ -61,18 +61,20 @@ function checkTrack(info: Metadata, source: Target) {
 export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request: typeof fetch = globalThis.fetch) {
   async function search(query: string, signal?: AbortSignal): Promise<ProviderPage> {
     if (query.length > 200) throw new ProviderError("Enter a Bandcamp search of at most 200 characters.", 400);
-    // Bandcamp's own search box uses this public JSON endpoint. The documented
-    // partner API covers accounts and sales, not catalog search (/developer).
-    const info = await providerJson("https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic", {
-      method: "POST", headers: { "Content-Type": "application/json" }, signal,
-      body: JSON.stringify({ search_text: query, search_filter: "", full_page: true, fan_id: null }),
-    }, request);
-    if (!object(info) || !object(info.auto) || info.auto.ac_error || !Array.isArray(info.auto.results)) throw new ProviderError("Bandcamp search is unavailable. Try again shortly.");
+    // Bandcamp's web search can return a Client Challenge instead of JSON; its app
+    // endpoint still serves catalog search. The documented partner API covers accounts and sales (/developer).
+    const unavailable = new ProviderError("Bandcamp search is unavailable. Try again shortly.");
+    const info = await providerJson(`https://bandcamp.com/api/fuzzysearch/1/app_autocomplete?q=${encodeURIComponent(query)}`, { signal }, request).catch(error => {
+      if (error instanceof ProviderError) throw unavailable;
+      throw error;
+    });
+    if (!object(info) || !Array.isArray(info.results)) throw unavailable;
     const seen = new Set<string>();
-    const items = info.auto.results.slice(0, 50).flatMap((entry): ProviderItem[] => {
+    const items = info.results.slice(0, 50).flatMap((entry): ProviderItem[] => {
       if (!object(entry) || !["a", "t"].includes(String(entry.type))) return [];
       let source: Target;
-      try { source = target(entry.item_url_path); } catch { return []; }
+      // The app can prepend the artist's origin to an already absolute URL. Keep the last URL.
+      try { source = target(typeof entry.url === "string" ? entry.url.replace(/^.*(?=https?:\/\/)/i, "") : entry.url); } catch { return []; }
       const title = label(entry.name);
       if (!title || seen.has(source.url) || source.kind !== (entry.type === "a" ? "album" : "track")) return [];
       seen.add(source.url);
