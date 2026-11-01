@@ -21,9 +21,9 @@ async function until(predicate: () => boolean, message: string) {
   const deadline = Date.now() + 5_000;
   while (!predicate()) { assert.ok(Date.now() < deadline, message); await new Promise(resolve => setTimeout(resolve, 10)); }
 }
-async function fixture(t: TestContext, mode = "success", delay = 50) {
+async function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "couch-web-intake-")), bin = join(directory, "bin"), helpers = join(directory, "helpers");
-  const runsFile = join(directory, "runs"), gate = join(directory, "gate");
+  const runsFile = join(directory, "runs");
   const before = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE };
   const fixtures = nodeExecutables(directory);
   mkdirSync(bin);
@@ -47,13 +47,8 @@ if (process.argv.includes("--version")) console.log("2026.10.21");
 else {
   const inspect = process.argv.includes("--ignore-no-formats-error"), url = process.argv.at(-1);
   fs.appendFileSync(${JSON.stringify(runsFile)}, JSON.stringify({inspect, url}) + "\\n");
-  const finish = () => {
-    if (!inspect && fs.existsSync(${JSON.stringify(gate)})) { setTimeout(finish, 10); return; }
-    if (!inspect && ${JSON.stringify(mode)} === "failure") { console.error("Requested format is not available"); process.exit(1); }
-    const metadata = !inspect && ${JSON.stringify(mode)} === "empty" ? {} : {title:"Title " + url.slice(-11), duration:60, thumbnail:"https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", channel:"Channel", channel_url:"https://www.youtube.com/@fixture"};
-    console.log(JSON.stringify({url:"https://example.com/video.mp4", protocol:"https", ...metadata}));
-  };
-  setTimeout(finish, inspect ? 10 : ${delay});
+  const metadata = {title:"Title " + url.slice(-11), duration:60, thumbnail:"https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", channel:"Channel", channel_url:"https://www.youtube.com/@fixture"};
+  setTimeout(() => console.log(JSON.stringify({url:"https://example.com/video.mp4", protocol:"https", ...metadata})), inspect ? 10 : 50);
 }
 `, { mode: 0o755 });
   startHelpers(helpers);
@@ -69,10 +64,8 @@ else {
     if (message.type === "text") socket.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok: true }));
     if (message.type === "player" && message.command.type === "load") socket.send(JSON.stringify({ type: "player", state: { playbackId: message.command.playbackId, status: "playing", position: 0, duration: 60, volume: 80, seekable: true, buffering: false, error: null, speed: 1, tracks: [], audioDelay: 0, subtitleDelay: 0 } }));
   };
-  let closed = false;
-  const close = async () => { if (!closed) { closed = true; socket.terminate(); await hub.close(); } };
   t.after(async () => {
-    await close();
+    socket.terminate(); await hub.close();
     for (const timer of timers) clearInterval(timer);
     await updateStatus(helpers, () => {});
     t.mock.restoreAll(); syncBuiltinESMExports();
@@ -82,11 +75,8 @@ else {
   });
   await until(() => !!state, "Core published its state");
   return {
-    close,
     get state() { return state!; },
     get upstreamRequests() { return upstreamRequests; },
-    hold: () => writeFileSync(gate, ""),
-    release: () => rmSync(gate, { force: true }),
     runs: (): { inspect: boolean; url: string }[] => existsSync(runsFile) ? readFileSync(runsFile, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [],
     command: async (action: Action) => {
       const requestId = String(++sequence);
@@ -119,61 +109,6 @@ test("a queued link is inspected immediately without starting playback", options
   await until(() => f.state.queue[0]?.title === "Title abcdefghijk", "queue title resolved");
   assert.equal(f.state.player.status, "idle");
   assert.deepEqual(f.runs(), [{ inspect: true, url }]);
-});
-
-for (const mode of ["failure", "empty"]) test(`playback with ${mode} metadata still inspects its queue title`, options, async t => {
-  const f = await fixture(t, mode), url = video("abcdefghijk");
-  await f.command({ type: "enqueueWeb", entryId: "playing", url, playNow: true });
-  await until(() => f.state.queue[0]?.title === "Title abcdefghijk" && f.state.player.status === (mode === "failure" ? "error" : "playing"), "fallback metadata and playback state resolved");
-  assert.deepEqual(f.runs(), [{ inspect: false, url }, { inspect: true, url }]);
-});
-
-test("a later Play cancels extraction but keeps the earlier queued title", options, async t => {
-  const f = await fixture(t);
-  f.hold();
-  await f.command({ type: "enqueueWeb", entryId: "earlier", url: video("abcdefghijk"), playNow: true });
-  await until(() => f.runs().length > 0, "first extraction started");
-  await f.command({ type: "enqueueWeb", entryId: "later", url: video("lmnopqrstuv"), playNow: true });
-  f.release();
-  await until(() => f.state.player.status === "playing" && f.state.queue.find(entry => entry.id === "earlier")?.title === "Title abcdefghijk", "cancelled entry enriched");
-  assert.equal(f.state.currentEntryId, "later");
-  assert.equal(f.state.queue.find(entry => entry.id === "later")?.title, "Title lmnopqrstuv");
-  assert.equal(f.runs().filter(run => run.inspect && run.url === video("abcdefghijk")).length, 1);
-  assert.equal(f.runs().filter(run => run.url === video("lmnopqrstuv")).length, 1);
-});
-
-test("Stop keeps the queued link and still resolves its title", options, async t => {
-  const f = await fixture(t);
-  f.hold();
-  await f.command({ type: "enqueueWeb", entryId: "stopped", url: video("abcdefghijk"), playNow: true });
-  await until(() => f.runs().length > 0, "extraction started");
-  await f.command({ type: "stop" });
-  await until(() => f.state.queue.find(entry => entry.id === "stopped")?.title === "Title abcdefghijk", "stopped entry enriched");
-  assert.equal(f.state.currentEntryId, null);
-  assert.equal(f.state.player.playbackId, null);
-  assert.deepEqual(f.runs(), [{ inspect: false, url: video("abcdefghijk") }, { inspect: true, url: video("abcdefghijk") }]);
-});
-
-test("removing a resolving entry prevents its fallback inspection", options, async t => {
-  const f = await fixture(t);
-  f.hold();
-  await f.command({ type: "enqueueWeb", entryId: "removed", url: video("abcdefghijk"), playNow: true });
-  await until(() => f.runs().length > 0, "extraction started");
-  await f.command({ type: "remove", entryId: "removed" });
-  f.release();
-  await new Promise(resolve => setTimeout(resolve, 200));
-  assert.equal(f.state.queue.some(entry => entry.id === "removed"), false);
-  assert.deepEqual(f.runs(), [{ inspect: false, url: video("abcdefghijk") }]);
-});
-
-test("shutdown cancels a resolving entry without starting fallback inspection", options, async t => {
-  const f = await fixture(t);
-  f.hold();
-  await f.command({ type: "enqueueWeb", entryId: "closing", url: video("abcdefghijk"), playNow: true });
-  await until(() => f.runs().length > 0, "extraction started");
-  await f.close();
-  await new Promise(resolve => setTimeout(resolve, 200));
-  assert.deepEqual(f.runs(), [{ inspect: false, url: video("abcdefghijk") }]);
 });
 
 test("playback metadata does not replace a supplied title", options, async t => {

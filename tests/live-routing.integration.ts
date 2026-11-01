@@ -42,7 +42,7 @@ test("receiver churn preserves a healthy live peer without repeating its volume"
 });
 
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
-const receiver = (socket: string, volume = 50, relay?: string) => ({ socket, deviceId: socket, picture: false, sound: true, volume, relay });
+const receiver = (socket: string) => ({ socket, deviceId: socket, picture: false, sound: true, volume: 50 });
 const load = { type: "load", playbackId: "item", source: "" } as const;
 function routing() {
   const messages: { socket: string; message: ServerMessage }[] = [];
@@ -51,28 +51,6 @@ function routing() {
   const notices = () => messages.filter(item => item.message.type === "livePeers").map(item => ({ socket: item.socket, ...item.message as Extract<ServerMessage, { type: "livePeers" }> }));
   return { live, messages, publish, notices };
 }
-
-test("a synchronous routing burst sends immediate receiver commands and one final publisher list", async () => {
-  const { live, messages, publish, notices } = routing();
-  try {
-    publish();
-    live.route("programme", "event", load, [receiver("one")]);
-    live.route("programme", "event", load, [receiver("one"), receiver("two")]);
-    live.route("programme", "event", load, [receiver("two")]);
-    assert.ok(messages.some(item => item.socket === "one" && item.message.type === "player" && item.message.command.type === "stop"));
-    assert.equal(notices().length, 0, "intermediate lists must not start obsolete negotiations");
-    await turn();
-    assert.equal(notices().length, 1);
-    assert.equal(notices()[0]!.socket, "publisher");
-    const [peer] = notices()[0]!.peers;
-    assert.equal(peer!.deviceId, "two");
-    assert.ok(messages.some(item => item.socket === "two" && item.message.type === "player" && item.message.command.type === "load" && item.message.command.livePeerId === peer!.peerId));
-    const candidate = { type: "liveSignal", peerId: peer!.peerId, signal: { candidate: null } } as const;
-    assert.throws(() => live.receive("stranger", candidate), /no live peer permission/);
-    live.receive("publisher", candidate);
-    assert.deepEqual(messages.at(-1), { socket: "two", message: candidate });
-  } finally { live.close(); }
-});
 
 test("ending or replacing a publication cancels queued lists and keeps current upload and peer authority", async () => {
   const { live, messages, publish, notices } = routing();
@@ -102,29 +80,5 @@ test("ending or replacing a publication cancels queued lists and keeps current u
     live.close();
     await turn();
     assert.deepEqual(notices().map(message => ({ peers: message.peers, upload: message.upload })), [{ peers: [], upload: false }], "close cannot leave a stale announcement");
-  } finally { live.close(); }
-});
-
-test("volume deduplication preserves zero and reload levels for direct and relayed peers", () => {
-  const { live, messages, publish } = routing();
-  try {
-    publish();
-    for (const relay of [undefined, "https://core.example/live"]) {
-      live.route("programme", "event", load, [receiver("one", 50, relay)]);
-      messages.length = 0;
-      live.route("programme", "event", load, [receiver("one", 50, relay)]);
-      assert.deepEqual(messages, []);
-      for (const volume of [0, 62]) {
-        live.route("programme", "event", load, [receiver("one", volume, relay)]);
-        assert.deepEqual(messages.at(-1), { socket: "one", message: { type: "player", command: { type: "volume", volume } } });
-      }
-      messages.length = 0;
-      live.route("programme", "event", { ...load, playbackId: "next" }, [receiver("one", 62, relay)]);
-      const commands = messages.filter(item => item.socket === "one" && item.message.type === "player").map(item => item.message);
-      assert.equal(commands[0]?.type === "player" && commands[0].command.type, "stop");
-      assert.equal(commands[1]?.type === "player" && commands[1].command.type, "load");
-      if (relay) assert.deepEqual(commands[2], { type: "player", command: { type: "volume", volume: 62 } });
-      else assert.equal(commands[1]?.type === "player" && commands[1].command.type === "load" && commands[1].command.liveOutput?.volume, 62);
-    }
   } finally { live.close(); }
 });

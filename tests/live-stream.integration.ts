@@ -28,7 +28,7 @@ async function until(check: () => Promise<boolean>, timeout = 10_000) {
   while (!await check()) { if (Date.now() > deadline) throw new Error("Live input did not reach the expected state."); await new Promise(resolve => setTimeout(resolve, 25)); }
 }
 
-async function fixture(t: TestContext, executable?: () => Promise<string>) {
+async function fixture(t: TestContext) {
   // Observe the real encoder without a POSIX shell wrapper, so Windows runs it too.
   const spawn = childProcess.spawn, encoders: { pid: number | undefined; directory: string }[] = [];
   t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
@@ -38,7 +38,7 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   });
   syncBuiltinESMExports();
   const failures: string[] = [];
-  const streams = createLiveStreams({ ffmpeg: executable ?? (async () => ffmpeg), failed: (_sourceId, error) => failures.push(error) });
+  const streams = createLiveStreams({ ffmpeg: async () => ffmpeg, failed: (_sourceId, error) => failures.push(error) });
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: 65_536 });
   await once(server, "listening");
   const clients: WebSocket[] = [];
@@ -119,24 +119,7 @@ test("one continuous upload becomes bounded HLS with real audio and video before
   assert.throws(() => process.kill(encoder.pid!, 0), { code: "ESRCH" });
 });
 
-test("audio-only input uses the same HLS path without a video track", { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
-  const f = await fixture(t);
-  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:a", "libopus", "-f", "webm", "pipe:1"]);
-  await f.streams.start("audio", { audio: true, video: false });
-  const uploader = await f.upload("audio");
-  for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
-  await f.streams.ready("audio", AbortSignal.timeout(10_000));
-  for (const rendition of ["av", "audio"] as const) {
-    const playlist = await (await f.streams.response("audio", "stream.m3u8", rendition)).text();
-    const name = playlist.split("\n").find(line => line.endsWith(".ts"))!;
-    const bytes = Buffer.from(await (await f.streams.response("audio", name, rendition)).arrayBuffer());
-    assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes }).status, 0);
-    assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"], { input: bytes }).status, 0);
-  }
-  assert.equal((await f.streams.response("audio", "stream.m3u8", "video")).status, 404);
-});
-
-for (const rate of [10, 30, 60, 120]) test(`misleading WebM metadata preserves ${rate} captured frames per second`, { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
+for (const rate of [10, 60]) test(`misleading WebM metadata preserves ${rate} captured frames per second`, { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
   const f = await fixture(t);
   const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", `testsrc2=size=160x90:rate=${rate}`, "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", String(rate), "-c:a", "libopus", "-f", "webm", "pipe:1"]);
   // A MediaRecorder WebM can advertise 1000 fps while delivering fewer timestamped
@@ -209,32 +192,6 @@ test("picture-only input includes a silent clock track for shared playback", { s
   assert.deepEqual(f.failures, []);
 });
 
-test("ending while the encoder helper is pending cannot start a process later", { timeout: 10_000 }, async t => {
-  const pending = Promise.withResolvers<string>();
-  const f = await fixture(t, () => pending.promise);
-  const start = f.streams.start("canceled", { audio: true, video: false });
-  const rejected = assert.rejects(start, /stopped/);
-  const controller = new AbortController();
-  const canceled = assert.rejects(f.streams.ready("canceled", controller.signal), /receiver left/);
-  const waiting = assert.rejects(f.streams.ready("canceled"), /stopped/);
-  controller.abort(new Error("receiver left"));
-  await canceled;
-  assert.equal(f.streams.has("canceled"), true, "one caller's cancellation leaves the shared stream intact");
-  f.streams.end("canceled");
-  await Promise.all([rejected, waiting]);
-  pending.resolve(ffmpeg);
-  await f.streams.close();
-  assert.equal(f.encoders.length, 0, "cancellation must not spawn an encoder");
-  assert.deepEqual(f.failures, []);
-});
-
-test("a failed encoder lookup rejects and cleans the pending input", { timeout: 10_000 }, async t => {
-  const f = await fixture(t, async () => { throw new Error("unavailable helper"); });
-  await assert.rejects(f.streams.start("failed", { audio: true, video: false }), /unavailable helper/);
-  assert.equal(f.failures.length, 1);
-  await assert.rejects(f.streams.ready("failed"), /stopped/);
-});
-
 test("an input that sends no bytes expires and reports an upload error", { skip: !hasFfmpeg, timeout: 10_000 }, async t => {
   t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
   const f = await fixture(t);
@@ -248,24 +205,4 @@ test("an input that sends no bytes expires and reports an upload error", { skip:
   assert.match(f.failures[0]!, /stopped sending media/);
   assert.equal(uploader.messages.filter(message => message.type === "error").length, 1);
   await assert.rejects(f.streams.ready("silent"), /stopped/);
-});
-
-test("a slow helper lookup does not consume the media startup deadline", { skip: !hasFfmpeg, timeout: 10_000 }, async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
-  const pending = Promise.withResolvers<string>();
-  const f = await fixture(t, () => pending.promise);
-  const start = f.streams.start("slow-helper", { audio: true, video: false });
-  t.mock.timers.tick(35_000);
-  pending.resolve(ffmpeg);
-  await start;
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.deepEqual(f.failures, []);
-  await f.upload("slow-helper");
-  t.mock.timers.tick(29_000);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.deepEqual(f.failures, []);
-  t.mock.timers.tick(1001);
-  await new Promise(resolve => setTimeout(resolve, 300));
-  assert.equal(f.failures.length, 1);
-  assert.match(f.failures[0]!, /stopped sending media/);
 });

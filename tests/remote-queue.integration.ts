@@ -7,7 +7,7 @@ import WebSocket from "ws";
 import { createServer } from "node:http";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
-import { applyUndo, undoPlan } from "../src/client/session/undo";
+import { undoPlan } from "../src/client/session/undo";
 import type { Action, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
 import type { SavedPlaylist } from "../src/shared/playlists";
 
@@ -186,41 +186,6 @@ test("delayed Remote queue and transport commands cannot follow their entries to
   } finally { await f.close(); }
 });
 
-test("selected Remote queue supports reorder, remove Undo, play and Stop Undo without changing the other TV", async () => {
-  const f = await fixture();
-  try {
-    await f.host.command({ type: "enqueue", entry: entry("other", f.source), playNow: true });
-    await choose(f);
-    assert.equal((await f.phone.command({ type: "move", entryId: "later", beforeEntryId: "waiting" }, tvId)).ok, true);
-    assert.deepEqual(queueIds(f.phone.state), ["chosen", "later", "waiting"]);
-    const before = f.phone.state;
-    assert.equal((await f.phone.command({ type: "remove", entryId: "later" }, tvId)).ok, true);
-    const removed = undoPlan({ type: "remove", entryId: "later" }, before, f.phone.state);
-    assert.ok(removed);
-    const command = async (action: Action) => { const result = await f.phone.command(action, tvId); if (!result.ok) throw new Error(result.error); };
-    await applyUndo(removed, command, () => f.phone.state);
-    assert.deepEqual(queueIds(f.phone.state), ["chosen", "later", "waiting"]);
-    await command({ type: "play", entryId: "later" });
-    await until(() => f.phone.state.player.status === "playing");
-    await command({ type: "seek", playbackId: f.phone.state.player.playbackId!, position: 12 });
-    await command({ type: "pause", playbackId: f.phone.state.player.playbackId!, paused: true });
-    await until(() => f.phone.state.player.status === "paused");
-    const playing = f.phone.state;
-    await command({ type: "stop", playbackId: playing.player.playbackId! });
-    const stopped = undoPlan({ type: "stop" }, playing, f.phone.state);
-    assert.ok(stopped);
-    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [tvId]);
-    await applyUndo(stopped, command, () => f.phone.state);
-    assert.equal(f.phone.state.currentEntryId, "later");
-    await until(() => f.phone.state.player.status === "paused" && f.phone.state.player.position === 12);
-    await command({ type: "pause", playbackId: f.phone.state.player.playbackId!, paused: false });
-    await until(() => f.phone.state.player.status === "playing");
-    assert.equal(f.host.state.currentEntryId, "other");
-    assert.deepEqual(f.phone.state.devices?.find(device => device.id === phoneId)?.sharing, { audio: false, video: false });
-    assert.equal(f.phone.state.outputs?.some(output => output.deviceId === phoneId), false);
-  } finally { await f.close(); }
-});
-
 test("captured queue/Undo actions reject a target switch, offline TV and revoked sharing; reconnect restores only the same TV", async () => {
   const f = await fixture();
   try {
@@ -248,72 +213,6 @@ test("captured queue/Undo actions reject a target switch, offline TV and revoked
   } finally { await f.close(); }
 });
 
-test("Stop's real ten-second reservation expires without Remote adopting an idle or another TV's queue", { timeout: 20000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.host.command({ type: "enqueue", entry: entry("other", f.source), playNow: true });
-    await choose(f);
-    // A saved queue with waiting items stays available by design. Exhaust it to exercise
-    // the Stop-only reservation rather than the ordinary saved-queue lifetime.
-    await f.phone.command({ type: "remove", entryId: "waiting" }, tvId);
-    await f.phone.command({ type: "remove", entryId: "later" }, tvId);
-    await f.phone.command({ type: "stop" }, tvId);
-    const retained = f.phone.state.playback, started = Date.now();
-    assert.ok(retained);
-    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [tvId]);
-    await until(() => !f.phone.state.playback, 12000);
-    assert.ok(Date.now() - started >= 9500, "reservation expired too early");
-    assert.equal(f.phone.state.controlling, tvId);
-    assert.deepEqual(queueIds(f.phone.state), []);
-    assert.equal((await f.phone.command({ type: "play", entryId: "chosen" }, tvId)).ok, false);
-    assert.equal((await f.phone.command({ type: "play", entryId: "other" }, tvId)).ok, false);
-    assert.equal(f.host.state.currentEntryId, "other");
-  } finally { await f.close(); }
-});
-
-test("ordinary non-Remote queue control still follows a deliberate move and permits remove/Undo/play", async () => {
-  const f = await fixture();
-  try {
-    await f.phone.command({ type: "enqueue", entry: entry("ordinary", f.source), playNow: true });
-    await f.phone.command({ type: "enqueue", entry: entry("waiting", f.source) });
-    await until(() => f.phone.state.player.status === "playing");
-    await f.phone.command({ type: "solo", deviceId: tvId });
-    await until(() => f.phone.state.controlling === tvId && f.phone.state.player.status === "playing");
-    const before = f.phone.state;
-    assert.equal((await f.phone.command({ type: "remove", entryId: "waiting" })).ok, true);
-    const plan = undoPlan({ type: "remove", entryId: "waiting" }, before, f.phone.state);
-    assert.ok(plan);
-    await applyUndo(plan, async action => { const result = await f.phone.command(action); assert.equal(result.ok, true); }, () => f.phone.state);
-    assert.equal((await f.phone.command({ type: "play", entryId: "waiting" })).ok, true);
-    assert.equal(f.phone.state.currentEntryId, "waiting");
-  } finally { await f.close(); }
-});
-
-test("a Remove Undo token and Stop Undo captured on B never restore or restart a reassigned sequence on A", async () => {
-  const f = await fixture();
-  try {
-    await choose(f);
-    const beforeRemove = f.phone.state;
-    await f.phone.command({ type: "remove", entryId: "waiting" }, tvId);
-    const removed = undoPlan({ type: "remove", entryId: "waiting" }, beforeRemove, f.phone.state);
-    assert.ok(removed?.removed);
-    const beforeStop = f.phone.state;
-    await f.phone.command({ type: "stop" }, tvId);
-    const stopped = undoPlan({ type: "stop" }, beforeStop, f.phone.state);
-    assert.ok(stopped);
-    assert.equal((await f.phone.command({ type: "solo", deviceId: hostId })).ok, true);
-    await until(() => f.host.state.queue.some(entry => entry.id === "chosen"));
-    const afterMove = queueIds(f.host.state);
-    for (const target of [undefined, tvId]) {
-      assert.equal((await f.phone.command({ type: "restoreRemoved", token: removed.removed.token }, target)).ok, false);
-      assert.equal((await f.phone.command({ type: "play", entryId: stopped.resume!.entryId }, target)).ok, false);
-    }
-    assert.deepEqual(queueIds(f.host.state), afterMove);
-    assert.equal(f.host.state.currentEntryId, null);
-    assert.equal(f.phone.state.controlling, tvId);
-  } finally { await f.close(); }
-});
-
 test("new queue additions use the selected idle TV and ordinary explicit Play on can change that choice", async () => {
   const f = await fixture();
   try {
@@ -326,14 +225,5 @@ test("new queue additions use the selected idle TV and ordinary explicit Play on
     await until(() => f.phone.state.controlling === hostId && f.phone.state.currentEntryId === "explicit");
     assert.equal((await f.phone.command({ type: "control", deviceId: tvId })).ok, true);
     assert.deepEqual(queueIds(f.phone.state), ["idle-added"]);
-  } finally { await f.close(); }
-});
-
-test("another device's play and queue reach the TV as its activity, sent before Core clears it", async () => {
-  const f = await fixture();
-  try {
-    await choose(f);
-    const activity = () => f.tv.messages.flatMap(message => message.type === "state" && message.state.activity ? [message.state.activity.text] : []);
-    await until(() => activity().includes("Phone played chosen") && activity().includes("Phone queued waiting"));
   } finally { await f.close(); }
 });

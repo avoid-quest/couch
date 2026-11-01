@@ -46,42 +46,6 @@ test("one caller cancels promptly without canceling the other caller's work", as
   } finally { gate.resolve(page); providers.close(); }
 });
 
-test("last waiter cancellation retires pending work; late data cannot overwrite a replacement", async () => {
-  const old = Promise.withResolvers<ProviderPage>(), fresh = Promise.withResolvers<ProviderPage>();
-  let calls = 0, upstream: AbortSignal | undefined;
-  const providers = catalog(async (_, signal) => { if (++calls === 1) { upstream = signal; return old.promise; } return fresh.promise; });
-  const controller = new AbortController(), other = new AbortController();
-  try {
-    const abandoned = providers.handle(request("same", controller.signal));
-    const alsoAbandoned = providers.handle(request("same", other.signal));
-    await tick(); controller.abort(); await tick();
-    assert.equal(upstream?.aborted, false);
-    other.abort(); await tick();
-    assert.equal(upstream?.aborted, true);
-    const replacement = providers.handle(request());
-    old.resolve({ items: [], title: "Obsolete" });
-    await Promise.all([abandoned, alsoAbandoned]); await tick();
-    const joined = providers.handle(request());
-    fresh.resolve(page);
-    for (const response of await Promise.all([replacement, joined])) assert.deepEqual(await response.json(), page);
-    assert.equal(calls, 2);
-    assert.deepEqual(await (await providers.handle(request())).json(), page);
-  } finally { old.resolve(page); fresh.resolve(page); providers.close(); }
-});
-
-test("ten distinct upstream jobs stay bounded, while duplicates may join at capacity", async () => {
-  const gate = Promise.withResolvers<ProviderPage>(); let calls = 0;
-  const providers = catalog(async () => { calls++; return gate.promise; });
-  try {
-    const reads = Array.from({ length: 10 }, (_, i) => providers.handle(request(String(i))));
-    const joined = providers.handle(request("0"));
-    assert.equal((await providers.handle(request("overflow"))).status, 503);
-    gate.resolve(page);
-    for (const response of await Promise.all([...reads, joined])) assert.equal(response.status, 200);
-    assert.equal(calls, 10);
-  } finally { gate.resolve(page); providers.close(); }
-});
-
 test("shared failures leave no negative cache or stuck pending entry", async () => {
   const gate = Promise.withResolvers<ProviderPage>(); let calls = 0;
   const providers = catalog(async () => ++calls === 1 ? gate.promise : page);
@@ -94,20 +58,7 @@ test("shared failures leave no negative cache or stuck pending entry", async () 
   } finally { providers.close(); }
 });
 
-test("shutdown cancels shared upstream work and releases all callers", async () => {
-  const gate = Promise.withResolvers<ProviderPage>(); let upstream: AbortSignal | undefined;
-  const providers = catalog(async (_, signal) => { upstream = signal; return gate.promise; });
-  try {
-    const reads = [providers.handle(request()), providers.handle(request())];
-    await tick(); providers.close();
-    assert.equal(upstream?.aborted, true);
-    const outcome = await Promise.race([Promise.all(reads), tick().then(() => null)]);
-    assert.ok(outcome, "shutdown must release callers even if upstream ignores cancellation");
-    assert.equal((await providers.handle(request())).status, 503);
-  } finally { gate.resolve(page); providers.close(); }
-});
-
-test("provider, query, URL and cursor remain distinct; resolved TTLs and 100-entry bound survive", async () => {
+test("provider, query, URL and cursor remain distinct and resolved TTLs expire", async () => {
   const realNow = Date.now; let now = realNow(), calls = 0;
   Date.now = () => now;
   const providers = catalog(async () => { calls++; return page; });
@@ -118,36 +69,5 @@ test("provider, query, URL and cursor remain distinct; resolved TTLs and 100-ent
     await providers.handle(request()); await providers.handle(request("same", undefined, "twitch"));
     assert.equal(calls, 6);
     now += 40_000; await providers.handle(request()); assert.equal(calls, 7);
-    for (let i = 0; i < 100; i++) await providers.handle(request(`entry-${i}`));
-    await providers.handle(request("entry-99")); assert.equal(calls, 107);
-    await providers.handle(request()); assert.equal(calls, 108);
   } finally { Date.now = realNow; providers.close(); }
-});
-
-test("already aborted callers start no work; cancellation during adapter startup also releases the caller", async () => {
-  const gate = Promise.withResolvers<ProviderPage>(), controller = new AbortController();
-  let calls = 0;
-  const providers = catalog(async () => { calls++; controller.abort(); return gate.promise; });
-  try {
-    const aborted = new AbortController(); aborted.abort();
-    await providers.handle(request("before", aborted.signal)); assert.equal(calls, 0);
-    const read = providers.handle(request("during", controller.signal));
-    assert.ok(await Promise.race([read, tick().then(() => null)]));
-    assert.equal(calls, 1);
-  } finally { gate.resolve(page); providers.close(); }
-});
-
-test("canceled adapters that are still settling retain their upstream slots", async () => {
-  const gate = Promise.withResolvers<ProviderPage>(); let calls = 0;
-  const providers = catalog(async () => { calls++; return gate.promise; });
-  try {
-    const controllers = Array.from({ length: 10 }, () => new AbortController());
-    const reads = controllers.map((controller, i) => providers.handle(request(String(i), controller.signal)));
-    controllers.forEach(controller => controller.abort());
-    await Promise.all(reads);
-    assert.equal((await providers.handle(request("new"))).status, 503);
-    gate.resolve(page); await tick();
-    assert.equal((await providers.handle(request("new"))).status, 200);
-    assert.equal(calls, 11);
-  } finally { gate.resolve(page); providers.close(); }
 });

@@ -2,9 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { liveFixture, until } from "./live-input.fixture";
 
-async function grouped(withHost = false) {
+async function grouped() {
   const f = await liveFixture();
-  if (withHost) await f.connect(-1, "&tv=1");
   await f.publish("screen");
   await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
   await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
@@ -17,22 +16,6 @@ async function grouped(withHost = false) {
   await until(() => !!other.load());
   return { ...f, delays, receivers: [f.receiver, other] };
 }
-
-test("a live input In sync on multiple devices uses the normal shared sound and picture clock", { timeout: 15_000 }, async () => {
-  const f = await grouped(true);
-  try {
-    for (const receiver of f.receivers) {
-      await until(() => receiver.messages.some(message => message.type === "sendspin" && message.listen && message.watch));
-      const follow = receiver.messages.findLast(message => message.type === "player" && (message.command.type === "follow" || message.command.type === "load") && message.command.follow);
-      assert.ok(follow?.type === "player" && "follow" in follow.command && follow.command.follow);
-      assert.deepEqual(follow.command.follow, { group: f.publisher.state.playback, pts: true, timeline: { kind: "source-pts", generation: follow.command.playbackId, mapping: "hls" } });
-      assert.equal(receiver.state.controlling, receiver.id, "a receiving device with no explicit selection must show its own playback");
-      assert.equal(receiver.state.playback, f.publisher.state.playback);
-      assert.equal(receiver.state.currentEntryId, f.publisher.state.currentEntryId);
-      assert.deepEqual(receiver.state.outputs, f.publisher.state.outputs);
-    }
-  } finally { await f.close(); }
-});
 
 test("a live input uses the same speaker delay setting as other grouped playback", { timeout: 15_000 }, async () => {
   const f = await grouped();

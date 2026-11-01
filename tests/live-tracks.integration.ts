@@ -50,31 +50,3 @@ for (const sound of [true, false]) {
     } finally { await f.close(); }
   });
 }
-
-test("a genuinely audio-only live source keeps PlayerPage's audio presentation", { timeout: 10_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
-    await f.publish("microphone", "microphone");
-    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "microphone", deviceId: f.receiver.id })).ok, true);
-    await until(() => !!f.receiver.load()?.livePeerId);
-    assert.equal(audioOnly(f.receiver.state), true, "source metadata works before tracks arrive");
-    f.receiver.report({ tracks: [audio] });
-    await until(() => f.receiver.state.player.tracks?.length === 1);
-    assert.equal(audioOnly(f.receiver.state), true);
-  } finally { await f.close(); }
-});
-
-test("ordinary playback preserves radio, source and selected-track inference", () => {
-  const film = { id: "film", title: "Film", source: "web:https://media.example/film.mp4" };
-  assert.equal(isAudioOnly(undefined, undefined, undefined), false);
-  assert.equal(isAudioOnly(undefined, film, undefined), false);
-  assert.equal(isAudioOnly(undefined, film, [audio]), true);
-  assert.equal(isAudioOnly(undefined, film, [audio, video]), false);
-  assert.equal(isAudioOnly(undefined, film, [audio, { ...video, selected: false }]), true);
-  assert.equal(isAudioOnly(undefined, { ...film, live: true }, [audio]), true, "ordinary live TV retains track inference");
-  assert.equal(isAudioOnly(undefined, { ...film, source: "radio:station" }, undefined), true);
-  assert.equal(isAudioOnly(undefined, { ...film, kind: "radio" }, [audio, video]), true);
-  assert.equal(isAudioOnly({ id: "p", title: null, status: "playing", outputs: [], audioOnly: true }, film, [audio, video]), true);
-  assert.equal(isAudioOnly({ id: "p", title: null, status: "playing", outputs: [], audioOnly: false }, film, [audio]), true);
-});

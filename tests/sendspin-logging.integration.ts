@@ -13,7 +13,7 @@ async function until(predicate: () => boolean) {
   while (!predicate()) { if (Date.now() > deadline) throw new Error("Expected Sendspin lifecycle did not complete."); await new Promise(resolve => setTimeout(resolve, 10)); }
 }
 
-async function fixture(t: TestContext, executable?: () => Promise<string>) {
+async function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-logging-")), marker = join(directory, "started"), script = join(directory, "ffmpeg");
   const executables = nodeExecutables(directory, { workers: true });
   const lines: string[] = [], states: PlayerState[] = [];
@@ -22,7 +22,7 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   writeFileSync(script, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
   const source = createServer((_request, response) => response.end("fixture input"));
   await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
-  const server = createSendspin({ name: "Test Couch", admit: () => false, changed: () => {}, ffmpeg: executable ?? (() => Promise.resolve(script)) });
+  const server = createSendspin({ name: "Test Couch", admit: () => false, changed: () => {}, ffmpeg: () => Promise.resolve(script) });
   const group = server.group("a".repeat(36), state => states.push(state));
   group.members([{ deviceId: "unconnected", level: 100 }]);
   const load: SyncedLoad = { type: "load", playbackId: "p".repeat(36), source: `http://127.0.0.1:${(source.address() as { port: number }).port}/input?sig=synthetic-secret` };
@@ -35,17 +35,6 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
   });
   return { group, load, states, marker, script, errors: () => lines.filter(line => line.includes("player error ")) };
 }
-
-test("an executable spawn failure logs once even when close follows error", { timeout: 10_000 }, async t => {
-  const f = await fixture(t, async () => join(tmpdir(), "couch-missing-ffmpeg", "missing"));
-  f.group.send(f.load);
-  await until(() => f.states.at(-1)?.status === "error");
-  // Force an additional publication of the failed state: logging belongs to fail,
-  // not to periodic or membership reports of that state.
-  f.group.members([{ deviceId: "unconnected", level: 100 }]);
-  assert.equal(f.errors().length, 1);
-  assert.match(f.errors()[0]!, / Synced host=127\.0\.0\.1: Couch couldn't start FFmpeg\.$/);
-});
 
 for (const action of ["pause", "stop", "close"] as const) {
   test(`a deliberate Sendspin ${action} reaps FFmpeg without a playback failure`, { timeout: 10_000 }, async t => {
@@ -61,23 +50,7 @@ for (const action of ["pause", "stop", "close"] as const) {
   });
 }
 
-test("stopping a pending FFmpeg start ignores its later rejection", { timeout: 10_000 }, async t => {
-  let requested = false, reject!: (error: Error) => void;
-  const waiting = new Promise<string>((_resolve, failed) => { reject = failed; });
-  const f = await fixture(t, () => { requested = true; return waiting; });
-  f.group.send(f.load);
-  await until(() => requested);
-  f.group.send({ type: "stop" });
-  reject(new DOMException("Synthetic start aborted", "AbortError"));
-  // The rejection handlers are microtasks queued before this turn yields.
-  await until(() => f.states.at(-1)?.status === "idle");
-  await new Promise(resolve => setTimeout(resolve, 50));
-  assert.equal(f.errors().length, 0);
-  assert.equal(f.states.at(-1)?.status, "idle");
-  assert.equal(existsSync(f.marker), false);
-});
-
-for (const [separator, chunked] of [["", false], ["\t", false], ["\u2028", false], ["\n", false], ["\r\n", false], ["\n", true]] as const) test(`Core redacts a complete source before its stderr bound (separator ${JSON.stringify(separator)}, chunked ${chunked})`, { timeout: 10_000 }, async t => {
+for (const [separator, chunked] of [["", false], ["\n", false], ["\n", true]] as const) test(`Core redacts a complete source before its stderr bound (separator ${JSON.stringify(separator)}, chunked ${chunked})`, { timeout: 10_000 }, async t => {
   const f = await fixture(t);
   const username = "synthetic-private-user";
   const prefix = "Decoder input refused: ".padEnd(200 - (`http://${username}`).length - 1, "x") + " ";

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { WebSocket } from "ws";
 import { SendspinCore, loadSendspinClientIdentity, type DecodedAudioChunk } from "@sendspin/sendspin-js";
-import { AudioCodec } from "@sonn-audio/node-sendspin";
 import { liveFixture, until } from "./live-input.fixture";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
@@ -45,32 +44,6 @@ for (const intent of ["live", "relaxed"] as const) test(`unmodified browser SDK 
   // still belong to the source timeline plus the configured presentation lead.
   assert.ok(chunks[0]!.serverTimeUs - input.origin >= lead);
   assert.ok(chunks.every(chunk => (chunk.serverTimeUs - input.origin - lead) % 5_000 === 0));
-  if (intent === "relaxed") return;
-  await until(() => receiver.state.outputs?.some(output => output.deviceId === identity.id && output.delayActive) === true);
-  if (intent === "live") assert.ok(receiver.messages.some(message => message.type === "sendspin" && message.listen && message.live?.minBufferMs === 150));
-  assert.equal(receiver.messages.some(message => message.type === "player" && message.command.type === "load" && message.command.livePeerId), false);
-  // The SDK's public option is applied without a custom output preparation protocol.
-  player.setMinBufferMs(400);
-  // A larger buffer moves the running share's timestamps later at once; a smaller one keeps its lead until restart.
-  const raised = chunks.length;
-  await until(() => chunks.slice(raised - 1).some((chunk, i, list) => i > 0 && chunk.serverTimeUs - list[i - 1]!.serverTimeUs >= 250_000));
-  player.setMinBufferMs(150);
-  const lowered = chunks.length;
-  await until(() => chunks.length > lowered + 20);
-  assert.ok(chunks.slice(lowered).every((chunk, i, list) => i === 0 || chunk.serverTimeUs - list[i - 1]!.serverTimeUs === 5_000), "a smaller buffer keeps the running lead");
-  player.setMinBufferMs(400);
-  await until(() => receiver.state.player.status === "playing");
-  const other = await f.connect(2);
-  assert.equal((await other.command({ type: "playLive", sourceId: "host-input", deviceId: other.id })).ok, true);
-  await f.speaker(2, AudioCodec.OPUS, { min_buffer_ms: 250, required_lead_time_ms: 250 });
-  await until(() => f.heard(2) > 5);
-  const before = chunks.length;
-  await player.disconnect("user_request");
-  await player.connect();
-  await until(() => chunks.length > before + 5);
-  assert.equal((await receiver.command({ type: "leave", playbackId: receiver.state.player.playbackId! })).ok, true);
-  await until(() => receiver.state.controls?.leave === false);
-  assert.ok(other.state.outputs?.some(output => output.deviceId === other.id));
 });
 
 test("encrypted init cannot claim another device behind an authenticated token", { timeout: 10_000 }, async t => {

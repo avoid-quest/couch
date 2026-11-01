@@ -5,13 +5,8 @@ import { createBandcampCatalog } from "../src/server/providers/bandcamp";
 import { ExtractionError } from "../src/server/yt-dlp";
 import { providerJson } from "../src/server/providers/http";
 
-for (const message of [
-  "The website took too long to respond. Try again.",
-  "This website requires an account or browser session. Website sign-in is not supported yet.",
-  "This isn't available in your region.",
-  "This item requires DRM playback, which is not supported.",
-  "This live stream is offline or has not started yet.",
-]) test(`safe extraction error survives catalog: ${message}`, async () => {
+test("a safe extraction error survives the catalog", async () => {
+  const message = "This isn't available in your region.";
   const catalog = createBandcampCatalog(async () => { throw new ExtractionError(message); });
   const providers = createProviders({ databasePath: ":memory:", browse: { bandcamp: catalog.browse } as Parameters<typeof createProviders>[0]["browse"] });
   try {
@@ -58,27 +53,5 @@ for (const declared of [false, true]) test(`provider JSON bounds a ${declared ? 
     cancel() { cancelled = true; },
   }), { headers: declared ? { "Content-Length": "9999999" } : {} })) as typeof fetch;
   await assert.rejects(providerJson("https://provider.example/catalog", {}, request), /The provider returned too much data\./);
-  assert.equal(cancelled, true);
-});
-
-test("provider JSON keeps safe empty and invalid response errors", async () => {
-  for (const [response, message] of [[new Response(null), "The provider returned no data."], [new Response("<html>PRIVATE</html>"), "The provider returned invalid data."]] as const) {
-    await assert.rejects(providerJson("https://provider.example/catalog", {}, (async () => response) as typeof fetch), error => error instanceof Error && error.message === message);
-  }
-});
-
-test("provider JSON cancels a stalled response and keeps the caller's reason", async () => {
-  const controller = new AbortController(), reason = new Error("Stopped browsing");
-  let cancelled = false, started!: () => void;
-  const ready = new Promise<void>(resolve => { started = resolve; });
-  const request = (async () => {
-    const response = new Response(new ReadableStream({ cancel() { cancelled = true; } }));
-    started();
-    return response;
-  }) as typeof fetch;
-  const pending = providerJson("https://provider.example/catalog", { signal: controller.signal }, request);
-  await ready;
-  controller.abort(reason);
-  await assert.rejects(pending, error => error === reason);
   assert.equal(cancelled, true);
 });

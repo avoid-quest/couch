@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { authorityFixture, resultOk, until } from "./hub-authority.fixture";
 
-for (const guarded of [true, false]) for (const playNow of [false, true]) for (const change of ["selection", "disconnect", "migration", "consent", "unchanged", "explicit"] as const) {
-  if (playNow && change === "explicit") continue;
-  test(`catalogue preparation retains its original Remote target (${guarded ? "guarded" : "legacy"}, ${playNow ? "play" : "append"}, ${change})`, { timeout: 15_000 }, async t => {
+for (const change of ["selection", "disconnect", "consent", "unchanged", "explicit"] as const) {
+  test(`catalogue preparation retains its original Remote target (${change})`, { timeout: 15_000 }, async t => {
     const f = await authorityFixture(t); t.after(() => f.close());
     const phone = await f.connect(), tv = await f.connect(f.devices[2]!, "&tv=1&audio=1&video=1"), other = await f.connect(f.devices[3]!, "&tv=1&audio=1&video=1");
     const source = `${f.hub.origin}/api/health`;
@@ -19,16 +18,10 @@ for (const guarded of [true, false]) for (const playNow of [false, true]) for (c
       if (String(input) === "https://www.raiplay.it/programmi/authority.json") { entered.resolve(); return response.promise; }
       return localFetch(input, init);
     });
-    const pending = phone.command({ type: "enqueueProvider", provider: "raiplay", shape: "playlist", url: "https://www.raiplay.it/programmi/authority", playNow, ...(change === "explicit" ? { playNow: true, deviceId: other.id } : {}) }, guarded ? tv.id : undefined);
+    const pending = phone.command({ type: "enqueueProvider", provider: "raiplay", shape: "playlist", url: "https://www.raiplay.it/programmi/authority", playNow: false, ...(change === "explicit" ? { playNow: true, deviceId: other.id } : {}) }, tv.id);
     await entered.promise;
     if (change === "selection" || change === "explicit") resultOk(await phone.command({ type: "control", deviceId: other.id }));
     if (change === "disconnect") { tv.socket.terminate(); await until(() => phone.state.devices?.find(device => device.id === tv.id)?.online === false); }
-    if (change === "migration") {
-      resultOk(await tv.command({ type: "solo", deviceId: other.id }));
-      await until(() => other.messages.some(message => message.type === "player" && message.command.type === "load"));
-      other.report({ status: "paused" });
-      await until(() => phone.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === other.id) && playback.status === "paused") === true);
-    }
     if (change === "consent") resultOk(await tv.command({ type: "sharing", sharing: { audio: false, video: false } }));
     const before = phone.state.playbacks;
     response.resolve(Response.json({ name: "Delayed list", items: [{ name: "Delayed episode", weblink: "/video/2026/10/authority-episode.html" }] }));

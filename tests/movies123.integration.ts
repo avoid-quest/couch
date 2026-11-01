@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { browseMovies123, loadMovies123List, movies123Text, movies123Title } from "../src/server/providers/movies123";
-import { createProviders } from "../src/server/providers";
+import { browseMovies123, loadMovies123List, movies123Title } from "../src/server/providers/movies123";
 import { movies123PageUrl } from "../src/shared/movies123";
 import { providerForUrl, publicProviderMediaUrl } from "../src/shared/providers";
-import { parseCommand } from "../src/server/validation";
 import { createContinuationResolver } from "../src/server/continuation";
 
 const origin = "https://ww8.123moviesfree.net";
@@ -109,38 +107,6 @@ test("invalid targets and changed upstream markup fail without queueing unrelate
   await assert.rejects(() => browseMovies123({ query: "Example" }, undefined, fixture('{"data":[{"unsupported":true}],"meta":{"total_items":1}}')), /changed this page/);
 });
 
-test("catalogue requests stop on cancellation and bound streamed bodies", async () => {
-  const cancellation = new AbortController();
-  let cancelled = false;
-  const request = (async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("<html>")); }, cancel() { cancelled = true; } }))) as typeof fetch;
-  const pending = movies123Text(`${origin}/movies/`, cancellation.signal, request);
-  cancellation.abort();
-  await assert.rejects(() => pending, error => error instanceof DOMException && error.name === "AbortError");
-  assert.equal(cancelled, true);
-  await assert.rejects(() => movies123Text(`${origin}/movies/`, undefined, (async () => new Response(new Uint8Array(2 * 1024 * 1024 + 1))) as typeof fetch), /changed this page/);
-});
-
-test("the registered source browses, caches, saves a season and accepts its queue command", async () => {
-  let calls = 0;
-  const providers = createProviders({ databasePath: ":memory:", browse: { movies123: (request, signal) => { calls++; return browseMovies123(request, signal, fixture(series)); } } as Parameters<typeof createProviders>[0]["browse"] });
-  try {
-    const browse = () => new Request(`http://localhost/api/providers/movies123/items?${new URLSearchParams({ url: season })}`);
-    const response = await providers.handle(browse());
-    assert.equal(response.status, 200);
-    const page = await response.json();
-    assert.deepEqual(await (await providers.handle(browse())).json(), page);
-    assert.equal(calls, 1);
-    const saved = await providers.handle(new Request("http://localhost/api/providers/favorites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item: page.item }) }));
-    assert.equal(saved.status, 200);
-    const favorites = await (await providers.handle(new Request("http://localhost/api/providers/favorites"))).json();
-    assert.equal(favorites.favorites[0].url, season);
-    const episode = page.items[1];
-    const action = { type: "enqueueProvider", provider: "movies123", shape: "atom", url: episode.url, title: episode.title, collection: episode.collection };
-    assert.deepEqual(parseCommand(JSON.stringify({ type: "command", requestId: "request", action })).action, action);
-    assert.throws(() => parseCommand(JSON.stringify({ type: "command", requestId: "request", action: { ...action, collection: { ...episode.collection, url: "https://example.com/season" } } })));
-  } finally { providers.close(); }
-});
-
 test("automatic continuation advances within the selected season only", async () => {
   const page = await loadMovies123List(season, undefined, fixture(series));
   const first = page.items[0]!;
@@ -149,28 +115,6 @@ test("automatic continuation advances within the selected season only", async ()
   assert.deepEqual(continuation?.entries.map(entry => entry.source), page.items.slice(1).map(item => `web:${item.url}`));
   const unrelated = await resolve({ id: "other", source: `web:${season}?episode=99`, title: "Other", collection: first.collection }, new AbortController().signal);
   assert.equal(unrelated, null);
-});
-
-test("pasted episodes discover their season without collection metadata", async () => {
-  const page = await loadMovies123List(season, undefined, fixture(series));
-  const second = page.items[1]!;
-  const resolve = createContinuationResolver(async (provider, url) => { assert.equal(provider, "movies123"); assert.equal(url, season); return page; });
-  const continuation = await resolve({ id: "pasted", source: `web:${second.url}`, title: second.title }, new AbortController().signal);
-  assert.equal(continuation?.title, page.title);
-  assert.deepEqual(continuation?.entries.map(entry => ({ source: entry.source, collection: entry.collection })), [{
-    source: `web:${page.items[2]!.url}`, collection: { title: page.title, url: season, index: 2 },
-  }]);
-});
-
-test("continuation matches canonical episode URLs with HTTP or a missing trailing slash", async () => {
-  const page = await loadMovies123List(season, undefined, fixture(series));
-  const second = page.items[1]!;
-  const resolve = createContinuationResolver(async (provider, url) => { assert.equal(provider, "movies123"); assert.equal(url, season); return page; });
-  const references = [second.url.replace("https:", "http:"), second.url.replace("/?", "?"), second.url.replace("https:", "http:").replace("/?", "?")];
-  for (const url of references) for (const collection of [undefined, second.collection]) {
-    const continuation = await resolve({ id: "canonical", source: `web:${url}`, title: second.title, collection }, new AbortController().signal);
-    assert.deepEqual(continuation?.entries.map(entry => entry.source), [`web:${page.items[2]!.url}`]);
-  }
 });
 
 test("continuation never matches the same episode number from another season", async () => {

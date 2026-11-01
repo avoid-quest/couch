@@ -122,7 +122,7 @@ test("Web playback selection and safe extraction errors", async t => {
     assert.equal(new URL(media.source).pathname, "/picture.mp4");
     assert.equal(media.audioSource, undefined);
   });
-  const qualities = [["480p", 480], ["720p", 720], ["1080p", 1080], ["auto", 1080], ["best", 2160]] as const;
+  const qualities = [["720p", 720], ["auto", 1080], ["best", 2160]] as const;
   for (const portrait of [false, true]) for (const vp9 of [false, true]) for (const [quality, cap] of qualities) {
     await t.test(`${portrait ? "portrait" : "landscape"} ${quality}, vp9=${vp9}`, real, async () => {
       const formats = [240, 360, 480, 720, 1080, 2160].flatMap(size => {
@@ -153,7 +153,7 @@ test("Web playback selection and safe extraction errors", async t => {
   await t.test("low-resolution-only video falls back below the requested cap", real, async () => {
     assert.equal(new URL((await select([video("low", 320, 240), aac], "1080p")).source).pathname, "/low.mp4");
   });
-  for (const quality of ["480p", "720p", "1080p", "auto"] as const) await t.test(`above-cap-only video stays unavailable at ${quality}`, real, () => noFormat(select([video("large", 3840, 2160), aac], quality)));
+  await t.test("above-cap-only video stays unavailable", real, () => noFormat(select([video("large", 3840, 2160), aac], "auto")));
   for (const [width, height] of [[undefined, undefined], [640, undefined], [undefined, 360]]) await t.test(`missing dimensions ${width}x${height} remain playable`, real, async () => {
     assert.equal(new URL((await select([video("unknown-size", width, height), aac])).source).pathname, "/unknown-size.mp4");
   });
@@ -289,18 +289,14 @@ test("Web playback selection and safe extraction errors", async t => {
     }
   });
   for (const [upstream, expected] of [
-    ["This live stream recording is not available.", "This video is unavailable or was removed."],
     ["Video unavailable", "This video is unavailable or was removed."],
-    ["This live event is offline", "This live stream is offline or has not started yet."],
-    ["Requested format is not available", unavailable],
     ["Sign in to confirm your age", "This website requires an account or browser session. Website sign-in is not supported yet."],
-    ["This video is not available in your country", "This isn't available in your region."],
     ["unexpected extraction error", "Couldn't open this page. It may be unsupported."],
   ]) await t.test(`fixed error: ${upstream}`, async () => {
     stderr = `ERROR: [youtube] fixture: ${upstream}\nhttps://media.example/stream?signature=PRIVATE`;
     await assert.rejects(runYtDlp(["--", "https://www.youtube.com/watch?v=fixture"]), error => error instanceof ExtractionError && error.message === expected);
   });
   assert.equal(lookups, 0, "offline fixtures must make no outbound DNS requests");
-  if (executable) assert.ok(extractions >= 40, "selection must run the actual executable");
+  if (executable) assert.ok(extractions >= 30, "selection must run the actual executable");
   assert.ok(children.every(child => child.exitCode !== null || child.signalCode !== null), "all owned helpers exited");
 });

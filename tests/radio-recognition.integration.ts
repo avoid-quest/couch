@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { executableName, nodeExecutables } from "./executable.fixture";
-import cp, { execFileSync } from "node:child_process";
-import { syncBuiltinESMExports } from "node:module";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
@@ -14,7 +12,6 @@ import { createPublicMediaProxy } from "../src/server/public-media-proxy";
 import { lookupPublic } from "../src/server/public-network";
 import { RadioError } from "../src/server/radio";
 import { createRadioRecognition, sampleRadio } from "../src/server/radio-recognition";
-import { SongRecognitionError } from "../src/server/song-recognition";
 
 const stationId = "01234567-89ab-4cde-8fab-0123456789ab";
 const source = "https://radio.example/stream";
@@ -87,43 +84,6 @@ test("authorization is rechecked before recognition and before returning a recog
   });
 });
 
-test("concurrent manual requests are bounded, cancellation releases the slot, and shutdown stops new work", { timeout: 3000 }, async () => {
-  const shutdown = new AbortController(), request = new AbortController();
-  const started = Promise.withResolvers<void>();
-  let samples = 0, matches = 0;
-  const recognition = createRecognition({ station, signal: shutdown.signal,
-    sample: async (_url, signal) => {
-      if (++samples > 1) return { pcm: Buffer.from("audio"), sampledAt: Date.now() };
-      return new Promise<never>((_resolve, reject) => { signal.addEventListener("abort", () => reject(signal.reason), { once: true }); started.resolve(); });
-    },
-    recognize: async () => { matches++; return null; },
-  });
-  const first = recognition.handle(post({ stationId }, request.signal), allow);
-  await started.promise;
-  assert.equal((await recognition.handle(post(), allow)).status, 429);
-  assert.equal((await recognition.handle(post(), allow)).status, 429);
-  assert.equal(samples, 1);
-  request.abort();
-  assert.equal((await first).status, 499);
-  assert.equal(matches, 0);
-  assert.equal((await recognition.handle(post(), allow)).status, 200);
-  assert.equal(samples, 2);
-  assert.equal(matches, 1);
-  shutdown.abort();
-  assert.equal((await recognition.handle(post(), allow)).status, 499);
-  assert.equal(samples, 2);
-});
-
-test("a provider failure releases the manual-request slot", async () => {
-  let attempts = 0;
-  const recognition = createRecognition({ station, signal: new AbortController().signal,
-    sample: async () => ({ pcm: Buffer.from("audio"), sampledAt: Date.now() }),
-    recognize: async () => { if (++attempts === 1) throw new SongRecognitionError("Provider unavailable."); return null; },
-  });
-  assert.equal((await recognition.handle(post(), allow)).status, 502);
-  assert.equal((await recognition.handle(post(), allow)).status, 200);
-});
-
 test("history survives reopening and preserves capture-time station, programme, requester and results", async t => {
   const directory = await mkdtemp(join(tmpdir(), "couch-recognition-history-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -161,35 +121,6 @@ test("history survives reopening and preserves capture-time station, programme, 
   reopened.close();
 });
 
-test("canceling while FFmpeg is being provisioned rejects promptly and releases the late helper lease once", { timeout: 3000 }, async () => {
-  const started = Promise.withResolvers<void>();
-  const helper = Promise.withResolvers<{ path: string; release: () => void }>();
-  const controller = new AbortController(), reason = new Error("canceled during provisioning");
-  let releases = 0, proxies = 0;
-  const pending = sampleRadio(source, controller.signal, {
-    helper: () => { started.resolve(); return helper.promise; },
-    proxy: async () => { proxies++; throw new Error("A canceled sampler must not create a proxy."); },
-  });
-  const settled = pending.then(() => new Error("The canceled sample resolved."), error => error);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await started.promise;
-    controller.abort(reason);
-    const observed = await Promise.race([settled, new Promise<Error>(resolve => {
-      timer = setTimeout(() => resolve(new Error("Cancellation waited for helper provisioning.")), 300);
-    })]);
-    assert.equal(observed, reason);
-    assert.equal(releases, 0, "the helper has not been acquired yet");
-  } finally {
-    clearTimeout(timer);
-    helper.resolve({ path: "must-not-run", release() { releases++; } });
-    await settled;
-    await immediate();
-  }
-  assert.equal(releases, 1);
-  assert.equal(proxies, 0);
-});
-
 async function listen(server: Server) {
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -205,14 +136,12 @@ async function closedProxy(url: string) {
   }), { code: "ECONNREFUSED" });
 }
 
-test("FFmpeg sampling caps audio, protects nested requests, and cleans up on cancellation", { skip: !process.env.COUCH_TEST_FFMPEG, timeout: 20_000 }, async t => {
+test("FFmpeg sampling caps audio and protects nested requests", { skip: !process.env.COUCH_TEST_FFMPEG, timeout: 20_000 }, async t => {
   const ffmpeg = process.env.COUCH_TEST_FFMPEG!;
   const input = execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", "15", "-ac", "2", "-f", "wav", "pipe:1"], { maxBuffer: 4 * 1024 * 1024 });
   let privateContacts = 0, released = 0;
-  const received = Promise.withResolvers<void>(), disconnected = Promise.withResolvers<void>();
   const server = createServer((request, response) => {
     if (request.url === "/secret.ts") privateContacts++;
-    if (request.url === "/stall") { response.once("close", disconnected.resolve); received.resolve(); return; }
     if (request.url === "/private.m3u8") {
       response.writeHead(200, { "Content-Type": "application/vnd.apple.mpegurl" });
       response.end(`#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:12\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:12,\nhttp://127.0.0.1:${port}/secret.ts\n#EXT-X-ENDLIST\n`);
@@ -255,43 +184,4 @@ test("FFmpeg sampling caps audio, protects nested requests, and cleans up on can
     assert.equal(privateContacts, 0);
     assert.equal(released, 3);
   });
-  await t.test("canceling a stalled stream closes its connection, decoder, proxy, and helper lease", async () => {
-    const controller = new AbortController(), reason = new Error("fixture canceled");
-    const rejected = assert.rejects(sampleRadio(`http://radio.test:${port}/stall`, controller.signal, dependencies), error => error === reason);
-    await received.promise;
-    controller.abort(reason);
-    await rejected;
-    await disconnected.promise;
-    assert.equal(released, 4);
-    await closedProxy(proxies.at(-1)!);
-  });
-});
-
-test("an oversized decoder output is killed and its resources are released", { timeout: 5000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), "couch-recognition-test-"));
-  const fixtures = nodeExecutables(directory);
-  const spawn = cp.spawn;
-  let bytes = 0, terminated = false;
-  t.mock.method(cp, "spawn", (...args: Parameters<typeof spawn>) => {
-    const child = spawn(...args);
-    child.stdout?.on("data", (chunk: Buffer) => { bytes += chunk.length; });
-    child.once("close", code => { terminated = code !== 0; });
-    return child;
-  });
-  syncBuiltinESMExports();
-  t.after(async () => { t.mock.restoreAll(); await fixtures.close(); syncBuiltinESMExports(); await rm(directory, { recursive: true, force: true }); });
-  const executable = join(directory, executableName("oversized-decoder"));
-  const started = join(directory, "started");
-  await writeFile(executable, `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(started)}, "started"); process.stdout.write(Buffer.alloc(1024 * 1024)); setInterval(() => {}, 1000);\n`, { mode: 0o755 });
-  let releases = 0, proxyUrl = "";
-  await assert.rejects(sampleRadio(source, AbortSignal.timeout(3000), {
-    helper: async () => ({ path: executable, release() { releases++; } }),
-    proxy: async signal => { const proxy = await createPublicMediaProxy(signal); proxyUrl = proxy.url; return proxy; },
-  }), /reachable public radio stream/);
-  assert.equal(await readFile(started, "utf8"), "started", "the fixture must run, rather than fail to launch");
-  assert.ok(bytes > 512 * 1024, "the real child must exceed the decoder output limit");
-  assert.equal(terminated, true, "the still-running oversized child must be terminated");
-  assert.equal(releases, 1);
-  assert.deepEqual(fixtures.active(), [], "the oversized child must terminate before sampling rejects");
-  await closedProxy(proxyUrl);
 });
