@@ -83,10 +83,10 @@ Each harness documents its commands in its opening comments.
   same comparison (three alternating runs each, 9 samples) moved the playlist
   request median from 10.5 to 1.7 ms and the HLS first frame from 447 / 482 / 482
   to 438 / 464 / 464 ms (median / p95 / max). The MP4 median went from 227 to
-  230 ms and split from 228 to 226 ms, within noise: MP4 samples spanned 224–337
-  ms on main and 225–343 ms with the change, split 224–229 and 218–227 ms.
-  hls.js loads quickly on this CPU, so the HLS gain is small. Browsers, such as phones joined
-  as remotes, skip the idle preload: their service worker may precache the
+  230 ms and split from 228 to 226 ms, within noise: MP4 samples spanned 225–338
+  ms on main and 225–344 ms with the change, split 225–230 and 218–228 ms.
+  hls.js loads quickly on this CPU, so the HLS gain is small. Browsers, such as
+  phones joined as remotes, skip the idle preload: their service worker may precache the
   578 KB chunk, but they still load and evaluate it on their first HLS start.
 - Video playback and capture rates:
   `COUCH_PERF_MEDIA=<absolute path to a 1080p60 file> bun tests/video-performance.native.ts .artifacts/video --modes=playback,controls,live --fps=60`.
