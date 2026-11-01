@@ -1,6 +1,7 @@
 // Production shell/router with isolated session data. Runs cold and repeated player navigation,
 // optionally while decoding audio, with clock updates reaching the real UI consumers.
 import { mountUiAudit } from "./ui-audit.browser";
+import { setBuffered } from "../src/client/session/buffered";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const percentile = (values: number[], fraction: number) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))] ?? 0;
@@ -106,4 +107,88 @@ export async function runPlayerPerformance({ rounds = 40, clockMs = 250, audioUr
     document.startViewTransition = original; audit.close();
     if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
   }
+}
+
+// Native runner supplies trusted mouse input; clock/buffer traffic reaches the production components.
+export async function prepareSeekPerformance(audioUrl?: string) {
+  let phase = 'setup', surface = 'bar', position = 120, frame = 0, previous = 0, moves = 0;
+  const frames: { phase: string; gap: number }[] = [];
+  const chapters: Record<string, number> = {}, geometry: Record<string, number> = {};
+  const renders: Record<string, number[]> = {};
+  const errors: string[] = [], longTasks: number[] = [];
+  const audio = audioUrl ? new Audio(audioUrl) : undefined;
+  if (audio) { audio.loop = true; audio.volume = 0; await audio.play(); }
+  const audit = await mountUiAudit((_id, _kind, duration) => { (renders[phase] ??= []).push(duration); });
+  const originalRect = Element.prototype.getBoundingClientRect;
+  let watched: HTMLElement | null = null;
+  Element.prototype.getBoundingClientRect = function () {
+    if (this === watched || watched && !watched.hasAttribute('data-playback-seek') && this === watched.parentElement) geometry[phase] = (geometry[phase] ?? 0) + 1;
+    return originalRect.call(this);
+  };
+  const pointerEvents: unknown[] = [];
+  const capture = (event: Event) => {
+    const e = event as PointerEvent, target = e.target;
+    pointerEvents.push({ phase, type:e.type, buttons:e.buttons, trusted:e.isTrusted, target:target instanceof Element ? target.getAttribute('data-slot') ?? target.tagName : 'document', x:e.clientX, y:e.clientY });
+  };
+  for (const name of ['pointerdown','pointerup','gotpointercapture','lostpointercapture']) document.addEventListener(name,capture);
+  const onMove = () => { moves++; };
+  document.addEventListener('pointermove', onMove);
+  const tasks = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => entry.duration)));
+  tasks.observe({ type: 'longtask' });
+  const tick = (time: number) => {
+    if (previous && phase !== 'setup') frames.push({ phase, gap: time - previous });
+    previous = time; frame = requestAnimationFrame(tick);
+  };
+  frame = requestAnimationFrame(tick);
+  const clock = setInterval(() => {
+    position += .25;
+    void audit.updateClock({ playbackId: 'p', position, duration: 900 });
+    setBuffered({ playbackId: 'p', end: position + 60 });
+  }, 250);
+  let beforeDrag = 0;
+  return {
+    async surface(next: string) {
+      phase = 'setup'; surface = next;
+      await audit.go(next === 'bar' ? '/' : '/now', { player: 'playing' });
+      await audit.updateSession(gate => ({ ...gate, state: { ...gate.state!, player: { ...gate.state!.player,
+        chapters: Array.from({ length: 60 }, (_, i) => ({ title: `Chapter ${i + 1}`, get position() { chapters[phase] = (chapters[phase] ?? 0) + 1; return i * 15; } })),
+      } } }));
+      await document.fonts.ready; await wait(250);
+      const thumb = document.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]')!;
+      watched = thumb.closest('[data-slot="slider"]')!;
+      const rect = watched.getBoundingClientRect();
+      return { x: rect.left, y: rect.top + rect.height / 2, width: rect.width };
+    },
+    begin(kind: string) {
+      phase = `${surface}-${kind}`; performance.mark(`seek-${phase}`);
+      if (kind === 'drag') beforeDrag = audit.actions.filter(action => action.type === 'seek').length;
+    },
+    beforeRelease() {
+      if (audit.actions.filter(action => action.type === 'seek').length !== beforeDrag) errors.push('Drag sent seek commands before release');
+      const value = Number(watched?.querySelector('[role="slider"]')?.getAttribute('aria-valuenow'));
+      if (Math.abs(value - 765) > 4) errors.push(`${surface}: drag preview ended at ${value}, expected about 765`);
+    },
+    async afterRelease() {
+      await wait(100);
+      const seeks = audit.actions.filter(action => action.type === 'seek');
+      if (seeks.length !== beforeDrag + 1 || Math.abs((seeks.at(-1)?.position ?? 0) - 765) > 4) errors.push('Release did not send exactly one seek to the drag target');
+    },
+    finish() {
+      clearInterval(clock); cancelAnimationFrame(frame); tasks.disconnect();
+      for (const name of ['pointerdown','pointerup','gotpointercapture','lostpointercapture']) document.removeEventListener(name,capture);
+      document.removeEventListener('pointermove', onMove); Element.prototype.getBoundingClientRect = originalRect;
+      const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.floor(values.length * p)] ?? 0;
+      const stats = (values: number[]) => ({ frames: values.length, median: percentile(values, .5), p95: percentile(values, .95), max: Math.max(0, ...values), over60HzFloor: values.filter(value => value > 1000 / 60 + 1).length });
+      const all = stats(frames.map(frame => frame.gap));
+      const phases = Object.fromEntries([...new Set(frames.map(frame => frame.phase))].map(name => [name, { ...stats(frames.filter(frame => frame.phase === name).map(frame => frame.gap)), chapterReads: chapters[name] ?? 0, geometryReads: geometry[name] ?? 0, commits: renders[name]?.length ?? 0, renderMs: { total: (renders[name] ?? []).reduce((sum, ms) => sum + ms, 0), p95: percentile(renders[name] ?? [], .95) } }]));
+      const decoding = audio ? { currentTime: audio.currentTime, paused: audio.paused, readyState: audio.readyState } : undefined;
+      if (decoding && (decoding.paused || decoding.readyState < 3 || !decoding.currentTime)) errors.push('Audio did not keep playing');
+      audit.close(); setBuffered(null);
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+      return { environment: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, phases, moves, pointerEvents, seeks: audit.actions.filter(action => action.type === 'seek'), decoding,
+        frameMs: { median: all.median, p95: all.p95, max: all.max }, over60HzFloor: all.over60HzFloor,
+        meets60HzFloor: !all.over60HzFloor && !errors.length, meets120HzBudget: frames.every(frame => frame.gap <= 12.5) && !errors.length,
+        errors, longTasks, slowFrames: frames.filter(frame => frame.gap > 12.5) };
+    },
+  };
 }
