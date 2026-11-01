@@ -87,7 +87,7 @@ item remains the remote’s first focus stop. Loading sections hold their place.
   is in their player. The publisher stays a publisher and never monitors itself.
 - **Radio**: one shelf of up to twelve stations, yours first (those this
   device played lately, then the saved ones), then Couch's built-in ones, each
-  with its current show and its categories (else the station's tags), never the hero's station. A tile plays; its menu
+  with its current show and its first two categories (else the station's first two tags), never the hero's station. A tile plays; its menu
   holds Details. The heading opens every station
   ([Radio](browse.md#radio-and-live-tv), `/radio`). Stations a device has
   loaded show at once, before their shows; a tile without a show stays level
@@ -116,7 +116,8 @@ disappear when everything fits. Reduced motion makes paging immediate. Touch
 swipes and the TV moves focus, without paging buttons; Up and Down go shelf to
 shelf. The scrollbar remains available for direct scrolling. Each item is one
 [`MediaTile`](browse.md#rows-and-tiles) whose press does its main verb: a
-station or channel plays, a saved channel or series opens its page. Station art is contained in square frames; transparent station marks use a
-neutral mid-grey ground so both dark and light lettering remain visible. Show
-artwork keeps its own ground. Personal shelves use natural image proportions.
+station or channel plays, a saved channel or series opens its page. Radio's pictures share the personal shelves' height at their own proportions, so a show's wide frame fills its tile instead of floating in a
+square; one wider than a phone's column shows whole. When a show has no separate artwork, the station's logo stays in a
+square frame; a transparent one uses a neutral mid-grey ground so both dark
+and light lettering remain visible. Personal shelves use natural image proportions.
 The tile or row of what plays carries the [level](../design.md#motion).

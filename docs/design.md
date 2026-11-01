@@ -588,7 +588,9 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 
 - [Shell](design/shell.md): sections and paths, the header and search, tab
   bars, the Couch switch, the now-playing bar, keyboard, first run.
-- [Home](design/home.md): the hero, your own rows and the sources.
+- [Home](design/home.md): the hero, your own rows and the sources. Radio show
+  artwork keeps its own proportions at the shelves' shared height; station
+  logos stay square.
 - [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
   rows and tiles, filters and pages, breadcrumbs.
   Captions remove confirmed type/category overlaps while keeping compound genres

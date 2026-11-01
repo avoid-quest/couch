@@ -617,7 +617,7 @@ html[data-stage-under-header] .app-header { background: transparent; }
 [data-stage="home"] .stage-copy > [data-nav-row]:last-child { margin-top: .25rem; }
 [data-stage="home"] > .room { --room-x: 20%; }
 /* Whole pictures share a height; captions and progress share their visible edges. */
-.home-shelves [data-natural] { --tile-art: clamp(8.5rem, 12.5vw, 11.5rem); }
+.home-shelves [data-natural], .home-radio-tile { --tile-art: clamp(8.5rem, 12.5vw, 11.5rem); }
 .home-shelves [data-natural][data-tile-shape="poster"] { --tile-art: clamp(11rem, 16vw, 15rem); }
 [data-natural] [data-tile-art] { width: min(calc(100vw - 2 * var(--gutter)), calc(var(--tile-art) * var(--tile-ratio))); }
 [data-natural] [data-tile-art][data-own="poster"] > span.media-artwork { width: 100%; }
