@@ -70,6 +70,16 @@ Each harness documents its commands in its opening comments.
 - Media startup, resolved media to first frame, no external traffic:
   `xvfb-run -a bun tests/media-startup.native.ts .artifacts/media-startup/run --rounds=3`
   (set `COUCH_TEST_FFMPEG` to an FFmpeg binary when needed).
+  On 1 November 2026 (Linux Xeon E5-2690 v3, Electron 45.1.0, 1920×1080 60 Hz
+  HDMI display on an RTX 3060 with GPU compositing), a fresh page asked for the
+  HLS playlist 36–64 ms after the load because hls.js was still loading and
+  evaluating. The Couch app now loads it while idle. Three alternating runs each
+  against main `0b860fe5`, as the app with 1 s to settle and 200 ms per upstream
+  read: the playlist request median went from 64 to 10 ms and the HLS first frame
+  from 561 / 581 / 627 ms (median / p95 / max of 9) to 500 / 562 / 568 ms. MP4
+  and split controls stayed within noise (MP4 median 258 vs 276 ms, max 342 vs
+  345 ms). Browsers, such as phones joined as remotes, don't preload the 578 KB
+  chunk and keep the original first-start cost.
 - Video playback and capture rates:
   `COUCH_PERF_MEDIA=<absolute path to a 1080p60 file> bun tests/video-performance.native.ts .artifacts/video --modes=playback,controls,live --fps=60`.
   Use a real display to qualify hardware; `xvfb-run` measures software
