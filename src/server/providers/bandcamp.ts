@@ -1,5 +1,5 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
-import { runYtDlp } from "../yt-dlp";
+import { ExtractionError, runYtDlp } from "../yt-dlp";
 import { ProviderError, providerItemId, providerJson, withProviderItem } from "./http";
 
 type Metadata = Record<string, unknown>;
@@ -58,14 +58,22 @@ function checkTrack(info: Metadata, source: Target) {
   if (!playable) throw new ProviderError("This Bandcamp track has no supported public audio stream. Account-only playback is not supported.");
 }
 
-export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request: typeof fetch = globalThis.fetch) {
+export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request?: typeof fetch) {
   async function search(query: string, signal?: AbortSignal): Promise<ProviderPage> {
     if (query.length > 200) throw new ProviderError("Enter a Bandcamp search of at most 200 characters.", 400);
     // Bandcamp's web search can return a Client Challenge instead of JSON; its app
     // endpoint still serves catalog search. The documented partner API covers accounts and sales (/developer).
     const unavailable = new ProviderError("Bandcamp search is unavailable. Try again shortly.");
-    const info = await providerJson(`https://bandcamp.com/api/fuzzysearch/1/app_autocomplete?q=${encodeURIComponent(query)}`, { signal }, request).catch(error => {
-      if (error instanceof ProviderError) throw unavailable;
+    const info = await providerJson(`https://bandcamp.com/api/fuzzysearch/1/app_autocomplete?q=${encodeURIComponent(query)}`, { signal }, request ?? (async (url, init) => {
+      // Node's HTTP client is challenged too. Reuse the managed extractor's
+      // working transport and protected proxy, without extracting each result.
+      const output = await run(["--use-extractors", "CouchBandcampSearch,end", "--dump-single-json", "--flat-playlist", "--retries", "0", "--extractor-retries", "0", "--", String(url)], { signal: init?.signal ?? undefined, timeoutMs: 12_000, plugin: "bandcamp" });
+      let result: unknown;
+      try { result = JSON.parse(output); } catch { throw unavailable; }
+      if (!object(result) || typeof result.couch_bandcamp_search !== "string") throw unavailable;
+      return new Response(result.couch_bandcamp_search);
+    })).catch(error => {
+      if (error instanceof ProviderError || error instanceof ExtractionError) throw unavailable;
       throw error;
     });
     if (!object(info) || !Array.isArray(info.results)) throw unavailable;

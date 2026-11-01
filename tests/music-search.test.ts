@@ -6,12 +6,44 @@ import { parseCommand } from "../src/server/validation";
 import { readCollectionSearch } from "../src/client/collection-pagination";
 import { readSearchState, searchLocation } from "../src/client/search";
 import { supportsWebVideoQuality } from "../src/shared/video-quality";
+import { ExtractionError } from "../src/server/yt-dlp";
 
 const album = { type: "a", name: "A che punto siamo", band_name: "Arsider", url: "https://arsider.bandcamp.com/album/a-che-punto-siamo", img: "https://f4.bcbits.com/img/3034736658_3.jpg", art_id: 3034736658 };
 const track = { type: "t", name: "Track", band_name: "Arsider", url: "https://arsider.bandcamp.com/track/track" };
 const soundcloud = (index = 0) => ({ _type: "url", title: `Arsider track ${index}`, uploader: "Arsider Produzioni", duration: 92.566,
   url: `https://api.soundcloud.com/tracks/${index}`, webpage_url: `https://soundcloud.com/arsiderprod/track-${index}`,
   thumbnails: [{ url: "https://i1.sndcdn.com/artworks-small.jpg" }, { url: "https://i1.sndcdn.com/artworks-original.jpg" }] });
+
+test("Bandcamp search uses Couch's yt-dlp transport with one bounded request", async () => {
+  let calls = 0;
+  const controller = new AbortController();
+  const catalog = createBandcampCatalog(async (args, options) => {
+    calls++;
+    expect(args.at(-1)).toBe("https://bandcamp.com/api/fuzzysearch/1/app_autocomplete?q=tycho");
+    expect(args).toContain("CouchBandcampSearch,end");
+    expect(args.slice(args.indexOf("--retries"), args.indexOf("--retries") + 4)).toEqual(["--retries", "0", "--extractor-retries", "0"]);
+    expect(options?.plugin).toBe("bandcamp");
+    expect(options?.timeoutMs).toBe(12_000);
+    expect(options?.signal?.aborted).toBe(false);
+    controller.abort();
+    expect(options?.signal?.aborted).toBe(true);
+    return JSON.stringify({ couch_bandcamp_search: JSON.stringify({ results: [album, track] }) });
+  });
+  await expect(catalog.browse({ query: "tycho" }, controller.signal)).rejects.toBe(controller.signal.reason);
+  expect(calls).toBe(1);
+});
+
+test("Bandcamp parses helper search results and reports helper failures or challenge HTML", async () => {
+  for (const body of [JSON.stringify({ results: [album, track] }), "<!doctype html><title>Client Challenge</title>"]) {
+    const catalog = createBandcampCatalog(async () => JSON.stringify({ couch_bandcamp_search: body }));
+    if (body.startsWith("{")) expect((await catalog.browse({ query: "tycho" })).items.map(item => item.url)).toEqual([album.url, track.url]);
+    else await expect(catalog.browse({ query: "tycho" })).rejects.toThrow("Bandcamp search is unavailable. Try again shortly.");
+  }
+  for (const output of ["not JSON", "{}", '{"couch_bandcamp_search":{}}']) {
+    await expect(createBandcampCatalog(async () => output).browse({ query: "tycho" })).rejects.toThrow("Bandcamp search is unavailable. Try again shortly.");
+  }
+  await expect(createBandcampCatalog(async () => { throw new ExtractionError("Couldn't open this page."); }).browse({ query: "tycho" })).rejects.toThrow("Bandcamp search is unavailable. Try again shortly.");
+});
 
 test("Bandcamp keyword search returns openable albums and tracks without extracting each result", async () => {
   let extractions = 0;

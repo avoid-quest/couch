@@ -522,7 +522,9 @@ toast and clear their saved results automatically; failures stay visible for ret
   Bandcamp selects browser-compatible MP3, AAC, FLAC or WAV audio, retaining
   supported lossless formats while excluding ALAC and AIFF downloads.
   Bandcamp search uses `/api/fuzzysearch/1/app_autocomplete` for up to 50 albums
-  and tracks. A challenge page or other non-JSON response shows
+  and tracks, through the managed yt-dlp transport and protected proxy because
+  Node's direct HTTP requests can be challenged. Each search makes one request,
+  with the same 12-second deadline. A challenge page or other non-JSON response shows
   "Bandcamp search is unavailable. Try again shortly."
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
