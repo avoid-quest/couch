@@ -532,3 +532,7 @@ export function hear() {
 // iOS lets a media element play by itself only after a gesture has touched it once.
 const unlock = () => { for (const element of [video, audio]) if (!element.hasAttribute("src") && !element.srcObject) element.load(); };
 addEventListener("pointerdown", unlock, { capture: true, once: true });
+
+// The Couch app is usually a screen. Its first HLS start would otherwise wait for hls.js to load and evaluate.
+// A failed preload stays quiet: that first start imports it again and reports the error.
+if (window.couchApp) requestIdleCallback(() => void import("hls.js").catch(() => {}));

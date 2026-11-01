@@ -184,7 +184,9 @@ that follows the video, Couch-hosted HLS through hls.js where supported with
 native HLS as the fallback, and raw MPEG-TS through mpegts.js. Direct cross-origin
 HLS retains native playback with hls.js as the fallback because a provider's
 segments may not permit CORS. Synced live pictures use hls.js to map source
-timestamps where supported. VP9-capable Devices prefer YouTube's VP9 and Opus;
+timestamps where supported. The Couch app loads hls.js while idle, so its first
+HLS start usually doesn't wait for it (a start before that load finishes waits for
+the same import); browsers load it on their first HLS start. VP9-capable Devices prefer YouTube's VP9 and Opus;
 other Devices require H.264 and AAC, including separate audio and progressive
 fallbacks, or receive the fixed no-playable-format error. YouTube quality uses
 yt-dlp's smaller-dimension resolution (including portrait Shorts): Auto caps at
