@@ -237,8 +237,8 @@ Always inspect actual captured/encoded dimensions and warmup/steady drops.
    independently scheduled Sendspin audio and WebRTC picture are not automatically
    synchronized. Do not route an interactive Live video mode through seconds of
    HLS buffering just to reuse relaxed playback. The existing
-   [live-input ADR](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md) and
-   [synchronization research](live-sync-research.md) describe that remaining work.
+   [live-input ADR](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)
+   describes that remaining work.
 
 Official references checked: [screen-capture constraints](https://www.w3.org/TR/screen-capture/),
 [FFmpeg frame-rate modes and time bases](https://ffmpeg.org/ffmpeg.html#Advanced-options),

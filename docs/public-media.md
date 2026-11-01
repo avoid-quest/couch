@@ -24,7 +24,7 @@ allows browser CORS. Preparing its Core and Device routes does not make discarde
 CORS probes: the extractor's selected transport identifies HLS even when its URL
 has no extension. Actual delivery still uses the public-only request boundary and
 checks playlist MIME types and prefixes. Explicit direct/LAN sources retain their
-delivery probes. See [startup measurements](media-startup-performance.md).
+delivery probes.
 Every HLS variant, segment, key, map and rendition is rewritten
 through the same boundary. Playlist reloads and redirects remain protected.
 Stored media credentials are bound to the original media source's exact origin,
@@ -117,8 +117,8 @@ from an upstream HTTP response. `media resolve-failed` records the safe extracto
 error or cancellation. Try again creates a new attempt and re-runs extraction;
 it does not reuse the previous signed URL.
 
-For a failure in the Mac test instance, capture
-`~/Library/Application Support/quest.avoid.couch-test/logs/couch.log` immediately
+For a failure in a Mac test instance, use that instance's configured
+`COUCH_DATA_DIR` and capture `<COUCH_DATA_DIR>/logs/couch.log` immediately
 after one failure and one **Try again**. Include the `media resolve`,
 `media resolved`, `media response` and `player error` lines for both attempts,
 helper selection lines, Couch version and the failure's local time. If the app

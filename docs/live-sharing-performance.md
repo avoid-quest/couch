@@ -3,8 +3,7 @@
 Investigated 2026-10-14 against `35ffee9` (`v0.3.1-preview.4`), a report of a MacBook
 screen shared to one Android Chrome receiver playing at least ten seconds behind,
 where earlier builds had been much faster. The resulting decision is
-[ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md); synchronization
-research is in [live-sync-research.md](live-sync-research.md).
+[ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md).
 
 ## What changed between builds
 

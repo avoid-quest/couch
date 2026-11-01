@@ -62,8 +62,8 @@ releases it; controlling playback on the TV does not keep your phone awake.
 The choice is saved for this browser and Couch address. Turn it off to allow
 normal screen sleep. Your browser can still refuse or release the lock, for
 example in battery-saving mode; the setting shows when it is unavailable.
-See [browser keep-awake and installation](browser-client.md) for browser support
-and the trusted HTTPS requirements.
+See [browser remote](architecture.md#browser-remote) for how it works and the
+trusted HTTPS requirements.
 
 A bookmark to the TV's address works on either platform. For a separate window,
 the browsers also provide their own website-app installation:

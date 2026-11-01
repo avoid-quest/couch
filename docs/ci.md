@@ -1,120 +1,144 @@
 # Checks and releases
 
-Use the latest stable Bun (1.4.4 or newer) and the committed lockfile.
+## Local checks
+
+Use the latest stable Bun (1.4.4 or newer, as `package.json` `engines` says),
+Node 24 or newer and the committed lockfile. Run these before asking for review:
 
 ```sh
 bun install --frozen-lockfile
 bun run typecheck
-bun run test
+bun run test      # bun test --isolate: mocks, globals and timers stay per file
 bun run build
 ```
 
-[Check](../.github/workflows/check.yml) runs the same commands on Linux, then
-builds and runs `in-sync-persistence.integration.ts` on Node 24 with isolated
-`COUCH_DATA_DIR` and `COUCH_PORT=0`.
-Package also typechecks and runs the tests before building installers on each OS.
-Both workflows install the latest stable Bun. The test command uses Bun's
-`--isolate` so module mocks, globals and timers stay within each test file.
+`bun run test` isolates each file. When you run suites by hand with plain
+`bun test`, run them one file at a time: module mocks in a combined process can
+interfere. Run one file with `bun run test <path>`. Add a test only where a
+behaviour must stay locked.
 
-Dependencies use semver ranges. Run `bun update --recursive` for compatible
-updates, or `bun update --latest --recursive` to update across major versions,
-then run the checks and commit the manifests and `bun.lock` together.
-CI's frozen install uses that tested dependency set without restricting upgrades.
+Dependencies use semver ranges. Update with `bun update --recursive` (or
+`bun update --latest --recursive` across majors), run the checks, and commit the
+manifests and `bun.lock` together.
 
-Nothing runs on push or on pull requests. Every workflow starts by hand:
+### Focused suites
 
-| Workflow | Start it with | It does |
-|---|---|---|
-| Check | `gh workflow run check.yml` | Typecheck, test and build on Linux |
-| Package | `gh workflow run package.yml --ref <branch>` | Unpublished installers of any branch, kept 14 days as run artifacts |
-| Release | `gh workflow run release.yml -f channel=preview` | Publishes `main` as the next preview |
-| Release | `gh workflow run release.yml -f channel=production` | Promotes the latest preview to production |
+- Updates: `bun test tests/updates.test.ts` and `bun test tests/remote-updates.test.ts`.
+- Browser storage and the old native bridge: `bun test tests/browser-device-identity.test.ts`;
+  browser server switching: `bun test tests/browser-connections.test.ts`.
+- Packaging hooks and the combined Mac update feed: `bun test tests/package-hooks.test.ts`.
+- Website release catalog: `bun test tests/release-catalog.test.ts`.
+- Live audio: see [Live audio](live-audio.md#checks).
+- Renderer journeys: `bun tests/ui-journeys.native.ts <evidence directory>` on a
+  display (`xvfb-run -a` without one), with isolated APIs, data and a fresh renderer
+  per check. Covers search, navigation, Saved, collection caching, settings,
+  pairing and radio; `--only=reorder` checks render work, `--only=queue` queued
+  Play controls and HTML fullscreen. `--width=390 --height=844` checks phone
+  layouts; `--tv --width=1920 --height=1080 --only=tv` checks TV focus/reachability.
+  Windows uses a frameless TV window and reapplies its bounds after the work-area
+  clamp. Results go to `result.json`; provider availability, physical pairing and
+  hardware playback performance remain unqualified.
+- Mac fullscreen: after `bun run build`, run
+  `bun tests/player-fullscreen.native.ts <evidence directory>` with FFmpeg on
+  PATH (or `COUCH_TEST_FFMPEG`). Uses the actual Main/preload/player; runs rapid,
+  native-restore, external-exit, native-exit, escape, combined and TV serially in
+  separate apps, or selects one with a final argument. See the [Mac audit](release-audit-2026-10-29.md#mac-fixes-and-retained-fullscreen-observations)
+  for retained failures and qualification limits.
+- Run native focus suites serially: another Electron window can steal focus.
+  After standalone `bun scripts/core.ts`, rebuild the complete app: mixing its
+  development Core with the client's build identity can block native journeys at
+  the connection gate.
 
-Housekeeping also runs weekly on its own and only deletes expired artifacts and
-stale caches.
-
-Add a test only where a behaviour must stay locked, and run it with
-`bun run test <path>`.
-
-Production-renderer journey fixtures run with `bun tests/ui-journeys.native.ts
-.artifacts/ui-journeys` on a display (`xvfb-run -a` without one). They exercise
-search, navigation, Saved, collection caching, settings, pairing and radio with
-isolated fixture APIs, a fresh renderer per check and their own data directory.
-`--only=reorder` includes the saved-list render-work regression;
-`--only=queue` checks queued Play controls and HTML fullscreen. Native macOS
-window transitions use the actual Main/preload/player in
-`bun tests/player-fullscreen.native.ts <evidence directory>` after `bun run build`.
-Rebuild the complete app after running standalone `bun scripts/core.ts`: that
-development Core does not carry the client bundle's build identity, and mixing
-them can stop a native journey at the connection gate.
-It requires macOS and FFmpeg on PATH (or `COUCH_TEST_FFMPEG`); the
-[Mac audit](release-audit-2026-10-29.md#mac-fixes-and-retained-fullscreen-observations)
-records the native transition fix, retained failures and qualification limits.
-The default runs rapid, native-restore, external-exit, native-exit, escape, combined and TV scenarios serially
-in separate apps; a final argument selects one scenario.
-`--width=390 --height=844` checks phone-sized layouts, and
-`--tv --width=1920 --height=1080 --only=tv` checks TV focus and reachability.
-The Windows TV fixture uses a frameless window and reapplies its bounds to
-retain the requested viewport beyond the initial work-area clamp.
-The evidence directory holds `result.json`. These checks do not establish real
-provider availability, physical-device pairing or hardware playback performance.
-Run native focus suites serially: another Electron test window can take focus
-and invalidate remote-navigation assertions.
-
-Live audio's correctness checks are listed in [Live audio](live-audio.md#checks).
-
-The update regressions run with `bun test tests/updates.test.ts` and
-`bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
-coverage runs with `bun test tests/browser-device-identity.test.ts`, and browser
-server switching with `bun test tests/browser-connections.test.ts`.
-
-Run Bun suites separately: module mocks in a combined process can interfere.
-Build Core and `build/audio-worker.mjs` together before Node audio integrations.
-
-An integration test, `tests/<name>.integration.ts`, runs on Core's Node runtime:
+An integration test, `tests/<name>.integration.ts`, runs on Core's Node runtime.
+Build Core and `build/audio-worker.mjs` first for the audio integrations.
 
 ```sh
 bun build tests/<name>.integration.ts --target=node --outfile=build/<name>.integration.mjs
 node --test build/<name>.integration.mjs
 ```
 
-`executable-fixture.integration.ts` checks real fixture children and the separate
-audio-worker boundary; set `COUCH_TEST_FFMPEG` to a provisioned real FFmpeg for
-its media path. `build-relay.integration.ts` checks runtime/dependency license
-selection using real temporary files and stubbed Go responses, without a package
-build. Run both through the Node recipe above with isolated `COUCH_DATA_DIR`
-and `COUCH_PORT=0`; build Core/audio-worker first. Portable fixture coverage on
-one platform does not establish native execution on another.
+- `executable-fixture.integration.ts` checks real child fixtures and the separate
+  audio worker; `COUCH_TEST_FFMPEG` enables its real-FFmpeg media path.
+  `build-relay.integration.ts` checks runtime/dependency licenses with temporary
+  files and stubbed Go responses, without packaging. Build Core/audio-worker
+  first; use the Node recipe above with isolated `COUCH_DATA_DIR` and
+  `COUCH_PORT=0`. Portable fixtures do not qualify another platform's native runtime.
+- Bandcamp: `bun run test tests/music-search.test.ts` and the Node integration
+  `tests/bandcamp-helper.integration.ts` (recipe above). Cleanup waits for all
+  helper startup checks; `COUCH_TEST_YT_DLP=<real yt-dlp executable>` also checks
+  the bundled plugin against offline JSON and challenge-HTML fixtures.
+- The TV health integration needs native Linux `/proc` (CPU emulation changes the
+  reported executable). The installed app's Node can run it too:
+  `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
+- `tests/couch-setup.integration.ts` runs `couch-setup` against a fixture root with
+  its OS commands replaced. Its `--tv` and `--refresh` cases run as root in an
+  unprivileged user namespace (`unshare -r`) and skip where the runner forbids
+  one; a skip is not setup coverage. `tests/tv-diagnose.integration.ts` runs
+  `packaging/tv/diagnose.js` the same way, with a hung sound server and seeded
+  secrets.
+- Set `COUCH_EVIDENCE=<directory>` on the latency integrations to keep their
+  measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
+- Main's window lifecycle has a native check, after `bun run build`, on a display
+  (`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence directory>`.
+  It reserves `COUCH_PORT` and the next two ports; this test defaults to 42870,
+  not Couch's 4100. Runs on macOS, Windows and Linux with a separate evidence
+  directory per platform; process/boot identity is asserted only with Linux `/proc`.
 
-Bandcamp search coverage runs with `bun run test tests/music-search.test.ts` and
-the Node integration `tests/bandcamp-helper.integration.ts` built as above. Its
-fixture cleanup waits for all helper startup checks before removing their data.
-Set `COUCH_TEST_YT_DLP` to a real yt-dlp executable to also check the bundled
-search plugin against offline JSON and challenge-HTML fixtures.
+## Workflows
 
-The TV health integration needs native Linux `/proc` (CPU emulation changes the
-reported executable). The installed app's Node also runs it:
-`ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
-The setup integration (`tests/couch-setup.integration.ts`) runs `couch-setup`
-against a fixture root with its OS commands replaced. Its `--tv` and `--refresh`
-cases run as root in an unprivileged user namespace (`unshare -r`) and skip
-where the runner forbids one; a skip is not setup coverage.
-The diagnosis integration (`tests/tv-diagnose.integration.ts`) runs
-`packaging/tv/diagnose.js` the same way, with a hung sound server and seeded
-secrets. Set `COUCH_EVIDENCE=<directory>` on the latency integrations to keep
-their measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
+Nothing runs on push or on pull requests. Check, Package and Release start only
+by hand, and only when the owner asks: agents never dispatch them on their own.
+Housekeeping is the one scheduled workflow.
 
-Main's window lifecycle has a native check, after `bun run build`, on a display
-(`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence
-directory>`. It reserves `COUCH_PORT` (default 42870) and the next two ports.
-It runs on macOS, Windows and Linux; the Linux process/boot identity is asserted only
-where `/proc` supplies it. Use an isolated evidence directory on each platform.
+| Workflow | Start it with | It does |
+|---|---|---|
+| [Check](../.github/workflows/check.yml) | `gh workflow run check.yml --ref <branch>` | Typecheck, test and build `<branch>` on Linux |
+| [Package](../.github/workflows/package.yml) | `gh workflow run package.yml --ref <branch>` | Typecheck, tests, Go tests and installers of `<branch>` on Linux, macOS and Windows, kept 14 days as run artifacts and never published |
+| [Release](../.github/workflows/release.yml) | Owner only ([For the owner](#for-the-owner), [Releases](#releases)) | Publishes a preview or promotes one to production |
+| [Housekeeping](../.github/workflows/housekeeping.yml) | Scheduled or `gh workflow run housekeeping.yml` | Weekly, Mondays 02:23 UTC: deletes expired artifacts and caches unused for 30 days |
+
+Check and Package install the latest stable Bun and use the frozen lockfile.
+
+- Check also builds and runs `in-sync-persistence.integration.ts` on Node 24 with
+  isolated `COUCH_DATA_DIR` and `COUCH_PORT=0`.
+
+Without `--ref`, a run uses the default branch, not your work. Follow a run on
+the same branch: `gh run list --workflow <workflow> --branch <branch>`, with
+`<workflow>` set to `check.yml` or `package.yml`, then `gh run watch <run id>`.
+
+Housekeeping keeps GitHub storage in check; agents don't edit or dispatch it
+unless the owner asks.
+
+### For the owner
+
+The owner's usual flow: build test installers from a branch or PR, then publish
+a preview from `main`. **Agents never run these commands unless the owner
+explicitly asks for that specific run.**
+
+```sh
+gh workflow run package.yml --ref <branch>                 # installers of a branch or PR, as run artifacts
+gh workflow run release.yml -f channel=preview             # publish main as the next preview
+gh workflow run release.yml -f channel=production          # promote the latest preview to production
+```
+
+For a PR from this repository, `<branch>` is its head branch
+(`gh pr view <number> --json headRefName`). For a fork PR, push its head to a
+branch in this repository first, then use that branch as `--ref` with Check.
+Package's build scripts receive the Mac signing secrets; run it only on code
+the owner has reviewed and trusts.
+
+Check, Package and Release run on [Blacksmith](https://docs.blacksmith.sh/blacksmith-runners/overview)
+runners: Linux on `blacksmith-4vcpu-ubuntu-2404`, macOS on
+`blacksmith-6vcpu-macos-26` and Windows on `blacksmith-4vcpu-windows-2025`;
+Housekeeping uses GitHub's `ubuntu-latest`. Mac and Windows minutes cost more
+than Linux's, so a Package or Release run costs roughly one Mac build. Keep the
+Blacksmith GitHub App enabled for this repository.
 
 ## Bundled live relay
 
 Packaging also requires Go on PATH (at least the version in `native/live-relay/go.mod`).
-Runtime notices support the upstream Go layout and Homebrew's `libexec` layout,
-where the Go license sits one directory above `GOROOT`.
+Runtime notices support upstream Go and Homebrew's `libexec` layout, whose Go
+license sits one directory above `GOROOT`.
 Package installs the latest stable Go;
 ordinary `bun run build` still needs only Bun/Node. The electron-builder `afterPack`
 hook compiles the `native/live-relay` module for the actual platform and
@@ -135,7 +159,7 @@ The lifecycle integration also compiles a native TURN test client with Go. It
 checks real allocations before and after paired-device removal, including an
 allocation held open across revocation. Keep Go on PATH for that test too.
 
-The desktop resource pattern follows t3code's
+The packaging follows t3code's
 [native resource monitor packaging](https://github.com/pingdotgg/t3code/blob/main/scripts/build-desktop-artifact.ts).
 The helper uses [Pion TURN](https://github.com/pion/turn), recorded in `go.mod`/`go.sum`.
 Update it with `go get -u ./...` and `go mod tidy` in `native/live-relay`, then run
@@ -195,8 +219,8 @@ runner; a local Linux package needs `cmake pkg-config libssl-dev libplist-dev
 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev` and git, and fetches the
 pinned commit once into `.artifacts/uxplay`. macOS and Windows packages have no
 receiver. Build it for a development Core and run its tests as
-[Receive AirPlay](airplay.md#develop-and-test) describes; prove changes to it in a
-dispatched Package run.
+[Receive AirPlay](airplay.md#develop-and-test) describes. A Package run on the
+branch, dispatched when the owner asks, proves changes to it.
 
 electron-builder loads `scripts/after-pack.ts` with Node, not Bun, so its imports
 name their `.ts` extension; `bun test tests/package-hooks.test.ts` loads the hook
@@ -234,74 +258,82 @@ using isolated executable fixtures on Linux. This does not validate the Mac bina
 
 ## Releases
 
+Only the owner starts a release, from `main`; Release refuses any other branch.
+Agents never dispatch it, create tags, bump the version or publish, even when a
+PR is ready. Write pull request titles as plain sentences: GitHub's generated
+release notes list them.
+
 Couch ships on two channels, both published in
 [this repository's releases](https://github.com/avoid-quest/couch/releases):
 
-- **Preview**, `vX.Y.Z-preview.N`: `main` when you run Release with
-  `channel=preview`, skipped when that commit already has a preview. It
-  installs as Couch Preview, with its own icon.
-- **Production**, `vX.Y.Z`: Release with `channel=production`. It promotes the
-  latest preview's commit and drops the suffix, so try that preview first.
+- **Preview**, `vX.Y.Z-preview.N`: `main` when Release runs with
+  `channel=preview`, skipped when that commit already has a preview. It installs
+  as Couch Preview, with its own icon.
+- **Production**, `vX.Y.Z`: Release with `channel=production` promotes the latest
+  preview's commit and drops the suffix, so try that preview first.
+
+For now Couch publishes previews only. `package.json`'s base is 0.4.0, so Release
+publishes `v0.4.0-preview.N` until the owner promotes one to production; no
+production release exists yet.
 
 `package.json` holds the base version, X.Y.Z. A preview counts N up from the
 highest preview of that base; once `vX.Y.Z` ships, previews continue at
-X.Y.(Z+1)-preview.1 without a commit. Bump the minor or major version by
-editing `package.json`. CI sets the resolved version in the tree only for the
-build ([scripts/release.ts](../scripts/release.ts)).
+X.Y.(Z+1)-preview.1 without a commit. The owner bumps the minor or major version
+by editing `package.json`. CI sets the resolved version only in the build's tree
+([scripts/release.ts](../scripts/release.ts)).
 
-Couch and Couch Preview share an appId and a data directory, so only one of
-them runs at a time. electron-updater keeps each on its channel: a preview
-follows only previews (`preview-*.yml`), production only the latest production
-release (`latest-*.yml`). **Settings > Updates** switches channel; leaving
-Preview for Stable installs the older stable release. The app checks at start
-and every 4 hours, and electron-updater installs the update when Couch quits or
-restarts to update ([app/update.ts](../app/update.ts)). The TV installs through
-a root unit ([native TV](native-tv.md)).
+Release runs four jobs:
 
-[Release](../.github/workflows/release.yml) resolves the version, opens a draft
-release with GitHub's generated notes, builds with
-[Package](../.github/workflows/package.yml) (AppImage and deb on Linux, dmg and
-zip on macOS, nsis on Windows), which uploads straight into the draft, then
-publishes it with a tag pointing to the built commit. Nothing passes through
-artifact storage, and the updater never sees a draft, so a failed run publishes
-nothing; rerun its failed jobs to finish it. Write pull request titles as plain
-sentences: they become the release notes. Package can also be dispatched on its
-own for a test build of `package.json`'s version, kept as run artifacts and
-never published.
+1. **preflight** checks out shallowly, fetches only `v*` tags (one commit deep,
+   no file history) and resolves the version, tag and commit, within ten minutes.
+2. **draft** opens a draft release whose notes start with the macOS first-launch
+   command, followed by GitHub's generated notes since the previous release on
+   the same channel.
+3. **package** calls Package with that version and commit; each OS uploads its
+   installers and update files straight into the draft.
+4. **publish** publishes the draft, marking production as latest; its tag points
+   to the built commit.
 
-Release preflight uses a shallow checkout and fetches only `v*` release tags,
-one commit deep and without historical file contents. Version resolution needs
-tag names and their commits, so it does not clone every branch's history.
-The job has ten minutes for checkout, Bun setup and version resolution.
+The updater never sees a draft, so a failed run publishes nothing; rerun its
+failed jobs to finish it (a rerun keeps its draft). Nothing passes through
+artifact storage. Release and Package use GitHub's automatic `GITHUB_TOKEN` with
+`contents: write`; no personal access token or separate release repository is
+needed. The repository must stay public so the website and installed apps can
+read its releases without authentication.
 
-The single Mac invocation builds **arm64 and x64 DMGs and ZIPs** with architecture
-in every filename. ZIPs are the updater payloads. electron-builder
-merges both architectures into one `preview-mac.yml` or `latest-mac.yml`;
-electron-updater chooses the matching ZIP. Keep both architectures in this
-invocation: separate jobs uploading the same feed with `--clobber` would lose
-one architecture. `bun test tests/package-hooks.test.ts` exercises the installed
-builder's merge and updater's selection on both channels.
+Couch and Couch Preview share an appId and a data directory, so only one of them
+runs at a time. electron-updater keeps each on its channel: a preview follows
+only previews (`preview-*.yml`), production only the latest production release
+(`latest-*.yml`). **Settings > Updates** switches channel; leaving Preview for
+Stable installs the older stable release. The app checks at start and every 4
+hours and installs the update when Couch quits or restarts to update
+([app/update.ts](../app/update.ts)). The TV installs through a root unit
+([native TV](native-tv.md)).
 
-Mac support is **Apple Silicon on macOS 14+**, **Intel on macOS 13+**. The app's
-`LSMinimumSystemVersionByArchitecture` declares those floors; the common floor
-is 13. Intel's optional native TV codec fallback downloads an official mpv build
-only on 15+. Intel 13–14 can use a compatible mpv 0.35+ on PATH or in the helper
-cache; otherwise just the channel needing it reports the installation requirement.
-Core reads Apple's `/usr/bin/sw_vers -productVersion` before an automatic Intel
-mpv download, leaving other platforms unchanged. System audio needs 14.2.
-`tests/intel-mpv.integration.ts`, run on Node as above, covers first-use failure,
-PATH/cache precedence, manual checks and the newer-OS download route using
-simulated Mac selection and executable fixtures on Linux.
-The Intel FFmpeg supplier stops making
-new Intel releases in January 2027; migrate that verified distribution source
-before promising continued maintained support ([audit](intel-macos-research.md)).
-Cross-packaging on the ARM runner is not an Intel runtime test:
-before shipping, validate clean helper setup, playback (including native TV
-codecs with a compatible local mpv, and their clear failure without one), screen
-and audio-input capture, pairing and signed install/update on an Intel Ventura
-Mac. System audio on 14.2+ and the existing Apple Silicon 14 floor need their
-own device checks. A hosted ARM Package run proves cross-build/targets/signatures,
-not Ventura execution.
+## Platforms and signing
+
+Package builds AppImage and deb on Linux (x64), dmg and zip on macOS, and nsis on
+Windows (x64). The single Mac invocation builds **arm64 and x64 DMGs and ZIPs**
+with the architecture in every filename; ZIPs are the updater payloads.
+electron-builder merges both architectures into one `preview-mac.yml` or
+`latest-mac.yml`, and electron-updater picks the matching ZIP. Keep both
+architectures in this one invocation: separate jobs uploading the same feed with
+`--clobber` would lose one. `bun test tests/package-hooks.test.ts` exercises the
+installed builder's merge and the updater's selection on both channels.
+
+Mac support is **Apple Silicon on macOS 14+** and **Intel on macOS 13+**, declared
+by `LSMinimumSystemVersionByArchitecture`; system audio needs 14.2. Intel's
+optional native TV codec fallback downloads an official mpv build only on 15+;
+Intel 13–14 can use a compatible mpv 0.35+ on PATH or in the helper cache,
+otherwise only the channel needing it reports the requirement. Core reads
+`/usr/bin/sw_vers -productVersion` before that download.
+`tests/intel-mpv.integration.ts` (run on Node as above) covers this with
+simulated Mac selection on Linux. Couch's Intel FFmpeg supplier,
+[Martin Riedl](https://ffmpeg.martin-riedl.de/), stops new Intel releases in
+January 2027; migrate that source before promising continued Intel support.
+A hosted ARM Package run proves cross-build, targets and signatures,
+not execution on an Intel Mac: validate helpers, playback, capture, pairing and
+signed install/update on Intel hardware before claiming them.
 
 The Mac app is signed with Couch's own self-signed certificate,
 [`Couch Releases`](../packaging/couch-releases.pem), without an Apple account or
@@ -310,26 +342,12 @@ update, only when the new build satisfies the running one's
 [designated requirement](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements):
 its identifier and this certificate. Users' Macs need not trust it; the runner
 trusts it for code signing so that codesign accepts it. The repository secrets
-`CSC_LINK` (the base64 .p12) and `CSC_KEY_PASSWORD` hold the private key for
-electron-builder, and a copy lives in the owner's password manager. Keep that
-certificate: a new one makes every Mac user grant permissions and download
-Couch again. Windows and Linux builds are unsigned.
+`CSC_LINK` (the base64 .p12) and `CSC_KEY_PASSWORD` hold the private key, which
+the owner also keeps backed up. Keep that certificate: a new one makes every Mac
+user grant permissions and download Couch again. After packaging, the Mac job
+verifies both app bundles with `codesign --verify --deep --strict` and the
+bundled QuickJS and capture executables with `codesign --verify --strict`.
+Windows and Linux builds are unsigned.
 
-Every build runs on [Blacksmith](https://docs.blacksmith.sh/blacksmith-runners/overview),
-as in t3code: macOS on `blacksmith-6vcpu-macos-26` and Windows on
-`blacksmith-4vcpu-windows-2025`, beside Linux. Their minutes cost 20× and 4×
-Linux's from the same allowance, so a release costs roughly one Mac build.
-
-Release and Package use GitHub's automatic `GITHUB_TOKEN` with
-`contents: write` for release creation, uploads and publication. No separate
-release repository or personal access token is needed. Existing credentials
-remain available for the integrations that use them.
-
-The repository must be public before the website and installed apps can read
-its releases without authentication. Workflow dispatches do not change its
-visibility. Keep the Blacksmith GitHub App enabled for this repository.
-
-The website's fallback catalog should list only installers that have actually
-been published here. Intel downloads come from real release assets; add no
-Intel entry to `apps/web/src/releases.json` until one has shipped. Catalog
-coverage runs with `bun test tests/release-catalog.test.ts`.
+The website's fallback catalog lists only installers actually published here:
+add no Intel entry to `apps/web/src/releases.json` until one has shipped.

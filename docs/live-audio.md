@@ -6,7 +6,7 @@ official SDKs: `@sendspin/sendspin-js` 5.0.0 in browsers and
 presentation timestamps, group membership and authorization; the SDKs own the
 connection, Noise encryption, clock synchronization, decoding, receiver
 buffering, correction and reconnection. The [capability
-contract](audio-video-use-cases.md) defines what each playback behavior allows;
+contract](product/specs/audio-video-use-cases.md) defines what each playback behavior allows;
 user-facing behavior is in [Share](design/share.md#live-audio).
 
 ## Connection and identity
@@ -117,9 +117,10 @@ such gaps; the host floor avoids them where outputs are known to be slow.
 Sync after a raise is only as good as the browser's own output-latency report.
 On the rig (29 Oct, v3 timing), a Linux receiver slowed with PulseAudio to about
 200 ms raised the lead 150 → 250 ms 5 s after joining and then stayed within
-1.3 ms of the Redmi (p95 5.6 ms); with Chrome's buffer forced to 8192 frames it
-raised the lead to 775 ms but played about 90 ms off, because Chrome
-under-reported that buffer. Couch cannot correct a misreported output delay.
+1.3 ms of an Android Chrome receiver (phone A, p95 5.6 ms); with Chrome's
+buffer forced to 8192 frames it raised the lead to 775 ms but played about
+90 ms off, because Chrome under-reported that buffer. Couch cannot correct a
+misreported output delay.
 
 The **35 ms allowance is fixed**, not measured jitter. SDK 5.0.0's public
 `SendspinPlayer` has no arrival/queue statistics or late/dropped chunk counters.
@@ -176,11 +177,11 @@ only other formats gets an error on its row.
 ## Measured behavior
 
 Electrical measurements, 27–28 October 2026: a Mac desktop host capturing a
-UMC404HD native input at 48 kHz, a Linux Chrome receiver on wired LAN and a
-Redmi Note 8T Chrome receiver on Wi-Fi, recorded on the UMC's own clock. The
+USB audio interface's native input at 48 kHz, a Linux Chrome receiver on wired LAN and an
+Android Chrome receiver (phone A) on Wi-Fi, recorded on the interface's own clock. The
 later runs tabulated below used 128-frame capture; earlier settings varied.
 The buffer is a scheduling setting, not a physical latency guarantee. In the
-110 ms run, Linux delay median/p95 was 110.32/111.04 ms and Redmi was
+110 ms run, Linux delay median/p95 was 110.32/111.04 ms and phone A was
 112.17/112.89 ms. These timing estimates describe matched half-second windows;
 successful timing matches do not establish continuity between them.
 
@@ -191,14 +192,14 @@ browser output costs into a further fixed delay budget.
 
 Offline reprocessing covers all 126 retained recordings; the full table, method
 and validation stay with the field evidence, outside this repository.
-The old absolute −40 dBFS cutoff scored only 13.62 s of the Redmi's twelve
+The old absolute −40 dBFS cutoff scored only 13.62 s of phone A's twelve
 “one-hour” recordings. Its zero count did not mean an hour without gaps.
 
 Below, each receiver cell is **attenuation candidates; scored seconds (% of the
 entire recording)**. Coverage estimates where a 20 ms interruption is detectable
 above that receiver's measured noise floor. Unscored time remains unknown.
 
-| Condition (recorded duration) | Linux, wired | Redmi, Wi-Fi, L−R return |
+| Condition (recorded duration) | Linux, wired | Phone A, Wi-Fi, L−R return |
 |---|---|---|
 | 200 ms, twelve separate captures (3,589.7 s) | 3; 339.3 s (9.45%) | 113; 3,397.7 s (94.65%) |
 | 180 ms, screen on (299.2 s) | 0; 57.7 s (19.29%) | 0; 283.9 s (94.89%) |
@@ -216,7 +217,7 @@ with expected signal at least 14 dB above measured noise. On covered positions,
 synthetic 20 ms silence/−20 dB dips were detected in 98.1–100% of trials;
 10 ms edits occasionally triggered (0.11–0.16%). Counts are electrical
 attenuation candidates, not sample-exact gap durations, audible stereo gaps or
-identified transport faults. Redmi mono output cancels in this L−R wiring and
+identified transport faults. Phone A's mono output cancels in this L−R wiring and
 cannot receive a continuity verdict. Linux's noisy return sharply limits coverage.
 
 A separate Linux silent-output incident retained the SDK's playing state until
@@ -243,19 +244,20 @@ Most of the gain is bitrate; 10 ms frames would add about 10 ms in Core for
 0.04 more. Opus payload averages about 173 kbit/s per listener instead of 105.
 The scores are a codec proxy, not a listening test.
 
-Owner listening on 28 October also found trouble with a screen-off Pixel
-(GrapheneOS, Vanadium). The Pixel was not electrically recorded:
+Owner listening on 28 October also found trouble with a second Android phone
+(phone B, GrapheneOS/Vanadium) with its screen off. Phone B was not electrically
+recorded:
 
-| Buffer / condition | Pixel owner report | Linux candidates; coverage | Redmi candidates; coverage |
+| Buffer / condition | Phone B owner report | Linux candidates; coverage | Phone A candidates; coverage |
 |---|---|---|---|
-| 150 ms, Pixel screen off | no clear artifacts heard | 0; 25.2 s (8.44%) | 28; 284.0 s (94.93%) |
+| 150 ms, phone B screen off | no clear artifacts heard | 0; 25.2 s (8.44%) | 28; 284.0 s (94.93%) |
 | 120 ms, both phones screen off | struggled / dropouts | 0; 30.8 s (10.31%) | 117; 283.5 s (94.76%) |
-| 120 ms, Pixel JIT/reload changed during run | dropouts remained after reload | 0; 21.9 s (7.32%) | 39; 283.3 s (94.70%) |
+| 120 ms, phone B JIT/reload changed during run | dropouts remained after reload | 0; 21.9 s (7.32%) | 39; 283.3 s (94.70%) |
 
-The selected 150 ms default remains configurable; the bounded Pixel listening
+The selected 150 ms default remains configurable; the bounded phone B listening
 report does not qualify continuity across phones. The JIT comparison was
 confounded by a reload during recording and does not establish a causal
-improvement. PCM uses about 1.5 Mbit/s per listener; the owner reported Pixel
+improvement. PCM uses about 1.5 Mbit/s per listener; the owner reported phone B
 starvation with PCM where Opus played.
 
 Android-minus-Linux skew median/p95 was 1.69/2.61 ms in the 110 ms run;

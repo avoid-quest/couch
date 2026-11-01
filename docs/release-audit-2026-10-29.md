@@ -348,7 +348,7 @@ collision. The revised probe passes on both platforms.
   follow-up below.
 
 Read these claims with [the capability inventory](product/claims.md),
-[startup methodology](media-startup-performance.md) and
+[startup harnesses](preview-performance.md#other-harnesses) and
 [video methodology](video-performance.md). Historical PR results describe
 their original machines and revisions; they are not automatically current-main
 results or platform-wide promises.

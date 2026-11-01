@@ -306,8 +306,16 @@ where their hardware introduces extra delay. Direct capture bypasses that buffer
 pipeline; each receiver's MediaStream keeps its own audio/video synchronization, but
 Direct receivers are not aligned with each other.
 
+Playback uses the browser's native `<video>` decoder and compositor; there is no
+JavaScript pixel loop. Screen and window capture take independent resolution and
+30, 60 or 120 FPS targets (`defaultLiveFrameRate` is 60, `src/shared/live-input.ts`);
+a target is a request, not a guaranteed rate. Buffered encoding keeps the
+recording's actual timestamps (`-fps_mode vfr -enc_time_base demux`,
+`src/server/live-stream.ts`), so idle frames aren't duplicated and 60/120 FPS
+recordings keep their rate.
+
 Live audio sources use the same Sendspin groups as other scheduled audio.
-The [capability contract](audio-video-use-cases.md) separates acquisition from
+The [capability contract](product/specs/audio-video-use-cases.md) separates acquisition from
 delivery and control. The current Mac-only native helper remains wired to local
 desktop Live publication; this coupling is an implementation limit.
 Couch establishes an authenticated HttpOnly `/sendspin` cookie, binds the SDK's
@@ -406,7 +414,9 @@ its upstream permission restrictions, retaining QuickJS-NG as fallback.
 Desktop Main passes its executable as `COUCH_NODE_PATH`; the extractor's
 children set `ELECTRON_RUN_AS_NODE=1`, so no separate Node installation is needed.
 Standalone Core uses `process.execPath`. Bun-only tools keep QuickJS unless
-given a Node path. See [media startup measurements](media-startup-performance.md).
+given a Node path. YouTube keeps yt-dlp's `--check-formats`
+(`src/server/web-media.ts`): a faster challenge solve doesn't prove that a newly
+issued media URL downloads.
 Mac packages ship
 QuickJS-NG 0.17.0, built from pinned upstream source for their actual CPU and
 macOS 13 rather than using upstream's macOS-26-only binaries
@@ -500,6 +510,31 @@ from Couch ([Receive AirPlay](airplay.md)).
   retains its public client ID between searches and playback. yt-dlp refreshes
   that ID on HTTP 401/403. This does not cache signed audio URLs or account
   credentials. Other sites keep the extractor cache disabled.
+
+## Browser remote
+
+Phones and laptops use Couch in the browser, as a PWA: `vite.config.ts` sets a
+standalone manifest, 192/512 px and maskable icons, and an app-shell service
+worker from `vite-plugin-pwa` whose navigation fallback covers only frontend
+routes; API and WebSocket traffic stays on the network.
+`src/client/register-sw.ts` registers `/sw.js` only for production browser
+clients in a secure context, never in the app window. The worker doesn't keep
+the page, its WebSocket or timers alive once the OS backgrounds or locks the
+device, so the client relies on reconnecting.
+
+**Keep screen awake** (**Settings → This device**, on by default, stored per
+browser and Couch address) holds a Screen Wake Lock
+(`src/client/screen-wake-lock.ts`) while this device plays picture or sound and
+Couch is visible. It reacquires the lock when the page becomes visible again and
+releases it when local playback stops; playback on another device doesn't keep a
+controller awake. The browser or OS can refuse or release the lock (battery
+saving, policy), and the setting then says so.
+
+Wake Lock and service workers need a secure context. Couch's LAN listener uses a
+self-signed certificate: clicking past the warning gives a secure context, but
+Chrome still won't register the worker or offer installation for it. Plain HTTP
+(`COUCH_ALLOW_HTTP=1`) on a LAN address gets neither; see [LAN address](lan-origin.md)
+for trusted certificates.
 
 ## Delivery
 

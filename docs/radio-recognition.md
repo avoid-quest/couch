@@ -66,17 +66,18 @@ again when you want a fresh result.
 
 ## Implementation and checks
 
-To try this branch beside an installed Couch, use an isolated data directory
-and port from the checkout:
+To try it beside an installed Couch, use a scratch data directory and port:
 
 ```sh
-COUCH_DATA_DIR="$PWD/.data/pr-901" COUCH_PORT=49101 bun run app
+couch_radio_data="$(mktemp -d "${TMPDIR:-/tmp}/couch-radio.XXXXXX")" &&
+COUCH_DATA_DIR="$couch_radio_data" COUCH_PORT=49101 bun run app
 ```
 
 Choose **This computer**, play a saved public radio station, open its player
 and press **Identify song**. Try Cancel, retry, switching stations and leaving
-the player. Quit this scratch app when finished; the installed Couch and its
-data stay untouched.
+the player. Keep `$couch_radio_data` for logs and cleanup. Main records its PID
+in `$couch_radio_data/logs/couch.log`; quit the scratch app or stop only that
+PID when finished. The installed Couch and its data stay untouched.
 
 The authenticated `POST /api/radio/recognize` endpoint accepts only
 `{ "stationId": "<saved station id>" }`. Core resolves the URL from its saved

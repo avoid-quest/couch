@@ -11,7 +11,6 @@ Screen capture defaults to at most 1920×1080 and a 30 FPS target, preserving it
 Buffered video keeps the recording's actual timestamps and variable frame rate,
 including 60/120 FPS, instead of converting everything to a 30 FPS ceiling.
 Misleading MediaRecorder frame-rate metadata does not duplicate idle frames.
-[Video performance](video-performance.md) describes measurements and repeatable checks.
 
 Active inputs lead **Home**'s **Shared sources** row while a device shares, and appear alongside other sources in **Search** results. Search's **Shared sources** source filter includes them. Their primary action plays; their menu offers **Play on**, **Play next** and **Queue**. Playing one opens the same **Now Playing** experience as a TV channel or radio station, with the controls allowed by its intent. Relaxed sources retain the normal player, **Playback** settings and **Up next**. Live audio listeners get **Join**, **Leave** and their own listening level; joining grants reception, while the source owns the programme.
 

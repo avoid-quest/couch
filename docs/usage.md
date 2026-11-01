@@ -189,7 +189,7 @@ SmartScreen shows **More info > Run anyway** the first time.
 
 ## Run from source
 
-Install Bun 1.4.x and Node 24 or later. Core finds or downloads its media
+Use the latest stable Bun and Node 24 or later. Core finds or downloads its media
 helpers itself (see [architecture](architecture.md#helpers)).
 
 ```sh
@@ -199,8 +199,10 @@ bun run app
 
 - `bun run app` builds everything and starts the Electron app from the checkout.
   Its data defaults to `.data`; `COUCH_DATA_DIR` and `COUCH_PORT` (default 4100)
-  select another scratch directory and port. An installed app uses the Tauri
-  app's data directory instead: `~/Library/Application Support/quest.avoid.couch`
+  select another scratch directory and port. The installed app also listens on
+  4100, so give the source run its own `COUCH_PORT` while the installed app runs.
+  An installed app uses the Tauri app's data directory instead:
+  `~/Library/Application Support/quest.avoid.couch`
   on macOS, `%APPDATA%\quest.avoid.couch` on Windows and
   `$XDG_DATA_HOME/quest.avoid.couch` (`~/.local/share/...`) on Linux.
 - `bun run dev` runs the browser-only loop: Core under `node --watch` and Vite

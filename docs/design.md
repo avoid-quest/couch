@@ -14,7 +14,7 @@ one serves, and **Where it plays**, a Playback's Devices with their picture and
 sound. A Device running Couch's TV presentation is a **TV**; other Devices get
 a **Remote** for it.
 
-The [use-case and capability contract](audio-video-use-cases.md) separates source,
+The [use-case and capability contract](product/specs/audio-video-use-cases.md) separates source,
 acquisition environment and playback behavior. Native capture is currently
 Mac-only and wired to local desktop Live publication; that coupling is an
 implementation limit, not a product rule.
@@ -387,12 +387,12 @@ arrives, 600 ms for colour that follows what plays.
   the player's bands fade together with the subtitles they lift.
 - Over a playing video, moving the pointer out of the window leaves the four-second
   controls hide timer running (`tests/player-auto-hide.browser.ts`, included in
-  the [player fixture checks](preview-performance.md#repeat-the-measurements)).
+  the [player fixture checks](preview-performance.md#run-the-harness)).
 - Opening the player fades it in over 160 ms; Back fades the restored bar in
   over the same interval. Only opacity animates, with no route snapshots or
   shared-element capture. The transport keeps its familiar positions in both
-  layouts. Reduced motion presents them immediately. The measured navigation
-  costs and frame budget are in [Preview performance](preview-performance.md).
+  layouts. Reduced motion presents them immediately. How to measure
+  navigation against the frame budget is in [Player performance checks](preview-performance.md).
 - When what plays changes, the room's colours and the bar's tone cross-fade
   over 600 ms ([Room](#room)). Reduced motion swaps them at once.
 - Media lights up at once: its glow is a shadow, and nothing animates
@@ -525,9 +525,7 @@ toast and clear their saved results automatically; failures stay visible for ret
   report an error until Core restarts.
   YouTube stays loading until its selected formats pass a downloadability check,
   including after **Try again**. Website playback uses the faster bundled Node
-  runtime where available and starts delivery without discarded relay probes;
-  [startup measurements](media-startup-performance.md) separate website resolution
-  from time to first frame. On Devices using native H.264 playback, YouTube
+  runtime where available and starts delivery without discarded relay probes. On Devices using native H.264 playback, YouTube
   prefers HLS picture and original sound when available, preserving the selected
   quality and audio instead of taking the first dubbed track from the master
   playlist. Original-language HTTPS audio takes priority over a dubbed HLS rendition.

@@ -24,9 +24,9 @@ A few milliseconds of inter-device skew can be acceptable; sample-perfect output
 is not a product requirement. Acoustic travel through a venue is separate from
 electronic delay and does not make chasing isolated timing numbers useful.
 
-The [glossary](../GLOSSARY.md) defines the product terms. Built integration details
-and verification limits belong in [Live audio](live-audio.md), with user-facing
-behavior in [Share](design/share.md). A documented capability and a physically
+The [glossary](../../../GLOSSARY.md) defines the product terms. Built integration details
+and verification limits belong in [Live audio](../../live-audio.md), with user-facing
+behavior in [Share](../../design/share.md). A documented capability and a physically
 measured result are separate facts.
 
 ## Source, environment and playback behavior
@@ -78,7 +78,7 @@ product rule that ordinary input must always be browser-based.
 | Live audio | Follow the ongoing source on a path intended for low-delay listening. It uses the upstream Sendspin player with a configurable playback buffer; the mature Live latency ambition remains future work. | Join/Leave and own volume/mute. Publisher owns capture; host removal remains. Audience membership grants no programme/queue authority. |
 
 Keep routing and authority decisions in the existing
-[`playback-policy.ts`](../src/shared/playback-policy.ts) and Core. A single speaker
+[`playback-policy.ts`](../../../src/shared/playback-policy.ts) and Core. A single speaker
 with picture on another device still needs the common timeline. A live broadcast
 URL is not automatically a Live audio-input publication. Different behaviors may
 share the same capture and audio modules without sharing control rights.
@@ -113,7 +113,7 @@ generation and codec-delay correctness only as needed for continuous, correctly
 ordered playback. Explain the remaining mapping with input/output and a targeted
 correctness check; remove a redundant operation when a public upstream API
 already covers it. The implementation's exact SDK/default-buffer choices are documented
-once in [Live audio](live-audio.md).
+once in [Live audio](../../live-audio.md).
 
 ## 1. Direct: I play something on one permitted device
 
@@ -172,7 +172,7 @@ this contract does not claim interruption-free output without observing it.
 | **L1. Share an audio input with an audience.** | On the local Couch desktop app: **Share → Audio input → Playback: Live → choose a device**. Guests use existing pairing, find the source and Join, with Tap to hear when required. | Keep the selected supported capture backend and useful input controls. Deliver PCM or Opus through Sendspin using receiver capabilities. Preserve capture permission and ownership independently of playback authorization. |
 | **L2. I join an ongoing source.** | Discover the source, choose a permitted listening device and allow audio if prompted. | Join the ongoing programme with normal buffering; other listeners and independent Playbacks keep working. A join must not restart the captured source. |
 | **L3. I adjust my listening or leave.** | Own volume/mute and Leave; host removal remains available. | Leaving releases only this reception. Joining grants no programme pause, queue, seek or Next authority, and no control over another device's level, even one that shares its speaker, including through crafted commands; only the host keeps those. |
-| **L4. My connection recovers or I change output.** | Existing reconnect and local output selection. | Let the upstream player handle timing/recovery and rejoin the current source. Keep actual failures visible and isolate a failed peer. The owner heard no clear Pixel artifacts in one screen-off run at 150 ms and reported dropouts at 120 ms; the Pixel was not electrically recorded. Separate Redmi returns contained attenuations at both settings, with coverage stated in the [measurements](live-audio.md#measured-behavior). |
+| **L4. My connection recovers or I change output.** | Existing reconnect and local output selection. | Let the upstream player handle timing/recovery and rejoin the current source. Keep actual failures visible and isolate a failed peer. The owner heard no clear artifacts on a second Android phone (phone B) in one screen-off run at 150 ms and reported dropouts at 120 ms; phone B was not electrically recorded. Separate phone A returns contained attenuations at both settings, with coverage stated in the [measurements](../../live-audio.md#measured-behavior). |
 
 A publisher closing/reloading its page or losing its owning connection ends that
 capture for everyone. Stop sharing ends the source; a listener's Leave does not.
@@ -212,17 +212,17 @@ discovery, source selection, output consent and handoff journeys.
 
 ## Verification references
 
-- Item destination labels and actions: [PlayOn.tsx](../src/client/components/PlayOn.tsx).
-- Share kinds/quality/targets: [share.ts](../src/client/sections/share/share.ts),
-  [ShareDialog.tsx](../src/client/sections/share/ShareDialog.tsx),
-  [ShareControl.tsx](../src/client/sections/share/ShareControl.tsx).
-- Shared source discovery: [HomeSources.tsx](../src/client/sections/home/HomeSources.tsx).
-- Routing controls: [Outputs.tsx](../src/client/sections/shell/Outputs.tsx),
-  [where-it-plays.ts](../src/client/session/where-it-plays.ts).
-- Consent: [DeviceSharingSettings.tsx](../src/client/sections/settings/this-device/DeviceSharingSettings.tsx).
-- Capture's 30 fps limit: [live.ts](../src/client/session/live.ts:18).
-- Routing/ownership/permission rules: [hub.ts](../src/server/hub.ts).
-- TV control: [RemotePage.tsx](../src/client/sections/remote/RemotePage.tsx),
-  [Remote design](design/remote.md).
-- AirPlay auto-start and restrictions: [airplay.md](airplay.md).
-- Desktop Core lifecycle: [app/main.ts](../app/main.ts:196).
+- Item destination labels and actions: [PlayOn.tsx](../../../src/client/components/PlayOn.tsx).
+- Share kinds/quality/targets: [share.ts](../../../src/client/sections/share/share.ts),
+  [ShareDialog.tsx](../../../src/client/sections/share/ShareDialog.tsx),
+  [ShareControl.tsx](../../../src/client/sections/share/ShareControl.tsx).
+- Shared source discovery: [HomeSources.tsx](../../../src/client/sections/home/HomeSources.tsx).
+- Routing controls: [Outputs.tsx](../../../src/client/sections/shell/Outputs.tsx),
+  [where-it-plays.ts](../../../src/client/session/where-it-plays.ts).
+- Consent: [DeviceSharingSettings.tsx](../../../src/client/sections/settings/this-device/DeviceSharingSettings.tsx).
+- Capture's 30 fps limit: [live.ts](../../../src/client/session/live.ts#L18).
+- Routing/ownership/permission rules: [hub.ts](../../../src/server/hub.ts).
+- TV control: [RemotePage.tsx](../../../src/client/sections/remote/RemotePage.tsx),
+  [Remote design](../../design/remote.md).
+- AirPlay auto-start and restrictions: [airplay.md](../../airplay.md).
+- Desktop Core lifecycle: [app/main.ts](../../../app/main.ts#L196).
