@@ -211,7 +211,7 @@ automatic receiver buffering. The default stays 30 FPS. Capability predictions
 alone do not justify a codec preference; keep the failed experiments with their
 reruns and require actual encoder/decoder implementations in the evidence.
 
-### Native Windows evidence
+### Native Windows evidence, initial sender candidate
 
 The isolated Windows run is launched from WSL through native PowerShell/Bun/
 Electron, not through WSLg. It uses actual 1920×1080 capture (1280×720 for the
@@ -278,7 +278,7 @@ qualification: one H.264/150 ms final interval overlapped the following VP8
 build, and local setup/unit checks ran during early probes. Their failures are
 retained, not replaced by the final serial matrix or dismissed as passes.
 
-### Open gates
+### Open gates before the pacing follow-up
 
 - **1080p60 smooth by default remains incomplete.** The sender budget is fixed;
   Windows receiver presentation still exceeds 1% drops. The internal cause is
@@ -318,3 +318,79 @@ test discovery (which cannot run Bun suites). Those failed/empty invocations
 remain as `integration.log` and the latter portion of `windows-correctness.log`;
 the corrected explicit bundle paths produce the 189-case results above. They
 are harness invocation errors, not passing integrations or product failures.
+
+
+### Worker pacing follow-up
+
+After the first draft, Chromium tracing localized the loss to remote-video
+presentation: decoded frames arrived about 12 ms before their reference render
+time, and the reference-time mapping was stable, yet the compositor skipped
+frames. Equal audio/video jitter targets, a video-only control and 20 Mbit/s
+ceilings did not fix it. These additional failures remain in `trace60`,
+`av-jitter50`, `video-only60`, `vp8-20m` and `h264-20m`.
+
+A bounded decoded-frame FIFO, modeled on Moonlight's pacer, removes that loss
+without replacing WebRTC. The production receiver uses a dedicated worker's
+animation-frame cadence and forwards each original `VideoFrame` once through a
+local video track. It does not copy pixels, duplicate frames, re-encode or rewrite
+timestamps. At most three frames wait; overflow closes the oldest frame and is
+counted. Audio remains the original WebRTC track, and the original RTP receiver
+continues decoding/synchronizing. Existing TURN, pairing, privacy, multiple
+peers, buffered fallback and source-window lifetime are retained.
+
+The browser APIs are feature-detected. Unsupported/failed setup uses the native
+WebRTC track; worker failure restores that track. Stop/replacement abort pending
+setup, close owned clones/generated tracks and bound worker retirement. The
+standard worker `requestAnimationFrame` supplies display cadence, while
+Chromium's compatible track processor/generator APIs carry frames; no canvas
+pixel loop or transport replacement is introduced.
+
+With pacing, native Windows H.264 also passes. The host now prefers H.264 only
+when its WebRTC Media Capabilities query predicts supported, smooth,
+power-efficient encoding, retaining all fallback codecs. The native runs below
+confirm NVIDIA H.264 MFT encode and D3D11 decode; the earlier unpaced hardware
+failures are retained above. These are serial three-by-eight-second samples
+following three-second warmups, with generated sound and unchanged dimensions.
+
+The original FPS/drop/dimension assertions remain. The harness additionally
+checks **combined** compositor drops, pacing overflow and missing processor
+frames against decoded RTP frames, at the same ≤1% ceiling. Thus forwarding to a
+local track cannot conceal drops in its producer.
+
+| Gate | Delivered FPS, samples 1 / 2 / 3 | Combined drops %, samples 1 / 2 / 3 | Windows | Evidence under `.artifacts/streaming-windows/` |
+| --- | --- | --- | --- | --- |
+| 1080p60 | 59.14 / 59.75 / 59.33 | 0.42 / 0.00 / 0.00 | **Pass** | `paced60-01/result.json` |
+| 1080p30 | 29.71 / 29.62 / 29.83 | 0.00 / 0.00 / 0.00 | **Pass** | `paced30/result.json` |
+| 720p60 | 59.69 / 59.74 / 58.95 | 0.00 / 0.00 / 0.00 | **Pass** | `paced720/result.json` |
+| Two 1080p60 receivers | A: 60.02 / 59.79 / 59.70; B: 60.00 / 59.77 / 59.69 | A: 0.00 / 0.00 / 0.21; B: 0.00 / 0.00 / 0.21 | **Pass** | `paced-two/result.json` |
+| 1080p60, emulated 6 Mbit/s | 59.05 / 59.11 / 59.69 | 0.21 / 0.21 / 0.21 | **Pass** | `paced-mid6m/result.json` |
+
+All steady player presentation-drop counters are zero. The conservative combined
+counter also includes producer/processor losses and snapshot-boundary differences.
+Every sample passes advancing RTP sound/energy and nonzero decoded PCM checks.
+For 1080p60, requested/captured/encoded/decoded/presented rates and CPU are:
+
+| Requested / sample | Captured | Encoded | Decoded | Presented | Player warmup drops | Combined steady drops % | Summed process CPU % |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 60 / 1 | 59.26 | 59.26 | 59.38 | 58.89 | 3 | 0.42 | 58.2 |
+| 60 / 2 | 59.63 | 59.63 | 59.63 | 59.63 | 2 | 0.00 | 57.6 |
+| 60 / 3 | 59.46 | 59.46 | 59.46 | 59.09 | 2 | 0.00 | 60.7 |
+
+Pacing snapshots retain cumulative pre-steady queue drops separately from player
+startup/warmup/steady counters; the historical worker startup-versus-warmup split
+is not separately recorded. Raw CPU, implementations and all stage counters for
+the other gates remain in each result. No raw frames or sound recordings are
+retained. Full typecheck, 769 Bun tests and the production build pass on the
+paced code; live-client cases include pending-worker cancellation and native-track
+recovery after worker failure. Native Windows sharing/capture unit suites pass
+111/111. The unchanged Core/backend integration code retains its earlier 189/189
+passes on Linux/WSL and native Windows.
+
+At the user's request, further experiments stop at this handoff. **Mac, 120 Hz,
+perceptual image-quality and physical/acoustic A/V checks remain unqualified.**
+Timestamp-preserving forwarding and the existing WebRTC audio clock are retained,
+but software frame age and decoded audio energy do not prove acoustic alignment.
+The optional A/V marker prototype was not tested and remains ignored, outside
+the shipped code. Default capture remains 30 FPS until native Mac qualification
+passes as well; do not treat the earlier failing sender-only draft as the final
+Windows result. No merge or release was performed.

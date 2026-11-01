@@ -16,3 +16,22 @@ export async function configureLiveVideo(sender: RTCRtpSender, quality: LiveVide
   parameters.degradationPreference = "maintain-resolution";
   await sender.setParameters(parameters);
 }
+
+/** Codec support alone says nothing about hardware. Keep all negotiated fallbacks. */
+export async function preferLiveVideoCodec(transceiver: RTCRtpTransceiver, quality: LiveVideoQuality, frameRate: LiveVideoFrameRate) {
+  if (!transceiver.setCodecPreferences || !navigator.mediaCapabilities?.encodingInfo) return;
+  const codecs = RTCRtpSender.getCapabilities("video")?.codecs ?? [];
+  const size = pictureSize(transceiver.sender.track!, quality);
+  for (const codec of codecs.filter(codec => codec.mimeType.toLowerCase() === "video/h264")) {
+    try {
+      const info = await navigator.mediaCapabilities.encodingInfo({ type: "webrtc", video: {
+        contentType: `${codec.mimeType}${codec.sdpFmtpLine ? `;${codec.sdpFmtpLine}` : ""}`,
+        ...size, bitrate: transceiver.sender.getParameters().encodings[0]?.maxBitrate ?? 8_000_000, framerate: frameRate,
+      } });
+      if (info.supported && info.smooth && info.powerEfficient) {
+        transceiver.setCodecPreferences([codec, ...codecs.filter(other => other !== codec)]);
+        return;
+      }
+    } catch { /* Unsupported queries keep the browser's codec order. */ }
+  }
+}

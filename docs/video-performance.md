@@ -263,9 +263,9 @@ Mac and Windows.
 cover Sunshine's capture/encoder/pacing/FEC and Moonlight's decode/presentation
 queues, plus the browser APIs and the decision to continue with WebRTC. Native
 Windows experiments with H.264 hardware preference, motion, 50/150 ms jitter
-targets and a 59 FPS encoder ceiling fail the unchanged gate; those experiments
-are not production defaults. Replacing only the encoder does not explain away
-frames lost after successful decoding.
+targets and a 59 FPS encoder ceiling fail the unchanged gate; those initial experiments
+were not adopted alone. The subsequent worker-pacing fix below allows H.264
+hardware preference without that presentation loss.
 
 The harness additionally supports `--receivers=2` (a second iframe with its own
 production session/player and independent FPS/drop/sound checks) and
@@ -286,3 +286,35 @@ receiver above other windows for an occlusion control; `--encoder-fps=59` and
 The original ≥55 FPS / ≤1% drop gate and dimension checks remain unchanged;
 second receivers must independently meet them too. Run all timing tests
 serially, without concurrent checks/builds, and preserve failures beside reruns.
+
+
+### Worker pacing follow-up
+
+The initial configured sender still lost frames in Chromium’s remote-video
+compositor. A bounded receiver worker now forwards the original decoded
+`VideoFrame`s, in order, at the display’s animation-frame cadence through a
+local video track. It does not re-encode, copy pixels, duplicate frames or rewrite
+timestamps. At most three frames wait; overflow is counted and closes old frames.
+Audio remains on the original WebRTC track. This keeps the existing transport,
+A/V clock, pairing, TURN, buffered fallback and multiple-receiver behavior.
+
+Hardware H.264 is preferred only after a smooth/power-efficient WebRTC Media
+Capabilities prediction; actual implementation stats are retained. Missing APIs,
+worker setup refusal and worker failure retain/restore the native WebRTC track.
+Stop and playback replacement abort pending setup and retire owned workers/clones.
+Browsers without these APIs retain their existing path. The default stays 30 FPS
+until Mac qualification; Windows alone is not a cross-platform default gate.
+
+The original delivered-FPS, drop and dimension assertions remain. The harness
+also rejects more than 1% **combined** compositor drops, pacing overflow and
+missing processor frames against decoded RTP frames; a local generated track
+cannot hide dropped frames in its producer. `pacing` counters and
+`combinedDroppedPercent` are in every paced native sample. Detailed passing
+Windows runs and the earlier failures are in the
+[follow-up](live-sharing-performance.md#worker-pacing-follow-up).
+
+`--native-presentation` provides a diagnostic control without the pacer;
+`--trace` captures a bounded Chromium Perfetto trace, `--frames` records bounded
+frame timing/metadata, and `--audio-jitter=50` was an unsuccessful synchronized
+buffering probe. These do not change product preferences. Physical/acoustic A/V
+alignment and Mac/120 Hz qualification remain to be measured at handoff.

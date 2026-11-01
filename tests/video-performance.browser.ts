@@ -1,6 +1,7 @@
 // Real renderer and live-session paths; only Core signaling and UI reads are fixtures.
 import { mountUiAudit } from "./ui-audit.browser";
 import { connectRenderer, play } from "../src/client/session/renderer";
+import { liveVideoPacingStats, type VideoPacingStats } from "../src/client/session/live-video-pacer";
 import { createLiveSession } from "../src/client/session/live";
 import type { PlayerState } from "../src/shared/protocol";
 import type { LiveSignalMessage, LiveSource, LiveVideoFrameRate, LiveVideoQuality } from "../src/shared/live-input";
@@ -16,10 +17,13 @@ const until = async (ready: () => boolean) => {
 type ReceiverBridge = { source: LiveSource; send: (message: LiveSignalMessage) => void };
 type SecondaryFixture = { receive: (message: LiveSignalMessage) => void; begin: () => Promise<unknown>; finish: () => Promise<unknown>; close: () => void };
 
-export async function prepareVideo(mode: "playback" | "controls" | "live", media: string, frameRate: LiveVideoFrameRate, quality: LiveVideoQuality, codec?: string, hint?: string, bitrate = 0, jitter = 0, diagnostics = false, bitrateAtOffer = false, sound = false, encoderFps = 0, receivers = 1, external?: ReceiverBridge) {
+export async function prepareVideo(mode: "playback" | "controls" | "live", media: string, frameRate: LiveVideoFrameRate, quality: LiveVideoQuality, codec?: string, hint?: string, bitrate = 0, jitter = 0, diagnostics = false, bitrateAtOffer = false, sound = false, encoderFps = 0, audioJitter = 0, receivers = 1, external?: ReceiverBridge) {
   const audit = await mountUiAudit();
   const errors: string[] = [];
   const peers: RTCPeerConnection[] = [];
+  const frameGlobals = window as Window & { MediaStreamTrackGenerator?: unknown; nativePresentation?: boolean };
+  const NativeGenerator = frameGlobals.MediaStreamTrackGenerator;
+  if (frameGlobals.nativePresentation) frameGlobals.MediaStreamTrackGenerator = undefined;
   const NativePeer = window.RTCPeerConnection;
   const parameters = (sender: RTCRtpSender) => {
     const value = sender.getParameters();
@@ -58,6 +62,8 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
   let latest: PlayerState | undefined;
   const disconnect = connectRenderer(state => { latest = state; });
   let publisher: ReturnType<typeof createLiveSession> | undefined, receiver: typeof publisher;
+  const processorFrames: { now: number; timestamp: number; metadata: unknown }[] = [];
+  let processorTrack: MediaStreamTrack | undefined, processorReader: ReadableStreamDefaultReader<VideoFrame> | undefined;
   let secondary: SecondaryFixture | undefined, secondaryFrame: HTMLIFrameElement | undefined;
   let frame = 0, videoFrame = 0, clock: ReturnType<typeof setInterval> | undefined;
   let sampling = false, previous = 0;
@@ -68,9 +74,9 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
   const longTasks = new PerformanceObserver(list => { if (sampling) tasks.push(...list.getEntries().map(entry => entry.duration)); });
   longTasks.observe({ type: "longtask" });
   const close = () => {
-    sampling = false; clearInterval(clock); cancelAnimationFrame(frame);
+    sampling = false; void processorReader?.cancel().catch(() => {}); processorTrack?.stop(); clearInterval(clock); cancelAnimationFrame(frame);
     video?.cancelVideoFrameCallback(videoFrame); longTasks.disconnect();
-    secondary?.close(); secondaryFrame?.remove(); publisher?.close(); receiver?.close(); disconnect(); audit.close(); window.RTCPeerConnection = NativePeer;
+    secondary?.close(); secondaryFrame?.remove(); publisher?.close(); receiver?.close(); disconnect(); audit.close(); window.RTCPeerConnection = NativePeer; frameGlobals.MediaStreamTrackGenerator = NativeGenerator;
   };
   let video: HTMLVideoElement;
   const started = performance.now();
@@ -115,6 +121,21 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
       await sender.setParameters(parameters);
     }
     if (jitter) for (const peer of peers) for (const receiver of peer.getReceivers()) if (receiver.track.kind === "video" && "jitterBufferTarget" in receiver) receiver.jitterBufferTarget = jitter === -1 ? null : jitter;
+    if (audioJitter) for (const peer of peers) for (const receiver of peer.getReceivers()) if (receiver.track.kind === "audio" && "jitterBufferTarget" in receiver) receiver.jitterBufferTarget = audioJitter;
+    if ((window as Window & { probeFrames?: boolean }).probeFrames && video.srcObject instanceof MediaStream) {
+      const Processor = (window as Window & { MediaStreamTrackProcessor?: new (options: { track: MediaStreamTrack; maxBufferSize: number }) => { readable: ReadableStream<VideoFrame> } }).MediaStreamTrackProcessor;
+      if (!Processor) throw new Error("Frame processor unavailable");
+      processorTrack = video.srcObject.getVideoTracks()[0]!.clone();
+      processorReader = new Processor({ track: processorTrack, maxBufferSize: 3 }).readable.getReader();
+      void (async () => {
+        while (true) {
+          const { value, done } = await processorReader!.read();
+          if (done) break;
+          if (processorFrames.length < 4096) processorFrames.push({ now: performance.now(), timestamp: value.timestamp, metadata: (value as VideoFrame & { metadata?: () => unknown }).metadata?.() });
+          value.close();
+        }
+      })().catch(error => errors.push(String(error)));
+    }
     let audioContext: AudioContext | undefined, analyser: AnalyserNode | undefined;
     if (sound && video.srcObject instanceof MediaStream) {
       audioContext = new AudioContext();
@@ -162,12 +183,14 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
     const preWarmup = { ...health(), stats: await stats() };
     const preparedSenders = diagnostics ? senders() : null;
     const stages: { health: ReturnType<typeof health>; stats: Awaited<ReturnType<typeof stats>> }[] = [];
+    const pacingStats = async () => video.srcObject instanceof MediaStream ? (await Promise.all(video.srcObject.getVideoTracks().map(track => liveVideoPacingStats(track)))).filter((value): value is VideoPacingStats => !!value) : [];
+    let beforePacing: VideoPacingStats[];
     let before: ReturnType<typeof health>, beforeStats: Awaited<ReturnType<typeof stats>>;
     return {
       startupMs,
       receive: (message: LiveSignalMessage) => receiver!.receive(message),
       async sample() { if (diagnostics && stages.length < 120) stages.push({ health: health(), stats: await stats() }); },
-      async begin() { await secondary?.begin(); beforeStats = await stats(); before = health(); sampling = true; return before; },
+      async begin() { await secondary?.begin(); beforeStats = await stats(); before = health(); beforePacing = await pacingStats(); sampling = true; return before; },
       async finish() {
         sampling = false;
         const after = health(), afterStats = await stats(), decodedAudioRms = audioRms();
@@ -190,7 +213,7 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
             jitterDelayMs: jitterDelay === null ? null : jitterDelay * 1000, jitterTargetMs: jitterTarget === null ? null : jitterTarget * 1000,
             meanQp: perFrame("qpSum", "framesEncoded") };
         });
-        const result = { mode, requestedFps: frameRate, stageFps, preWarmup, warmupDroppedFrames: before.droppedFrames - preWarmup.droppedFrames, startupDroppedFrames: preWarmup.droppedFrames,
+        const result = { mode, requestedFps: frameRate, stageFps, preWarmup, processorFrames, pacing: (await pacingStats()).map((stats, index) => ({ ...stats, before: beforePacing[index] })), warmupDroppedFrames: before.droppedFrames - preWarmup.droppedFrames, startupDroppedFrames: preWarmup.droppedFrames,
           startupMs, seconds, decodedAudioRms, before, after, totalFrames: total, droppedFrames: dropped, droppedPercent: total ? dropped / total * 100 : null,
           // Playback quality counts include dropped frames; callbacks are limited by display refresh.
           videoFps: (total - dropped) / seconds, presentedFps: firstPresented === undefined ? 0 : (lastPresented! - firstPresented) / seconds, callbacks,

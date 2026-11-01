@@ -8,7 +8,8 @@ import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 import { routeOf, type LiveRoute } from "./live-route";
-import { configureLiveVideo } from "./live-video";
+import { configureLiveVideo, preferLiveVideoCodec } from "./live-video";
+import { paceLiveVideo } from "./live-video-pacer";
 
 type Publication = { captureFormat?: AudioCaptureFormat; nativeAudioId?: string; nativeMuted?: boolean; source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; frameRate: LiveVideoFrameRate; pictureWork?: Promise<void>; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>; stopAudio?: () => void; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
@@ -17,7 +18,8 @@ type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; 
  * silent preview; relay: a TURN relay is offered to its connections.
  */
 export type LiveSharing = { captureFormat?: AudioCaptureFormat; source: LiveSource; stream: MediaStream; quality: LiveVideoQuality; frameRate: LiveVideoFrameRate; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
-type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
+type VideoPacer = NonNullable<Awaited<ReturnType<typeof paceLiveVideo>>>;
+type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; pacers?: Set<VideoPacer>; pacerController?: AbortController; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 // Bound work before encoding. A requested rate is a ceiling; a slower display remains usable.
 const pictureConstraints = (quality: LiveVideoQuality, frameRate: LiveVideoFrameRate): MediaTrackConstraints => ({ ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: frameRate, max: frameRate } });
@@ -70,6 +72,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     receiver = undefined;
     if (!current) return;
     clearTimeout(current.timeout);
+    current.pacerController?.abort();
+    for (const pacer of current.pacers ?? []) pacer.close();
     current.peer?.connection.close();
     stopTracks(current.stream);
   };
@@ -133,6 +137,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
           const sender = peer.connection.addTrack(track, current.stream);
           if (track.kind === "video") {
             await configureLiveVideo(sender, current.quality, current.frameRate);
+            if (!active()) return;
+            await preferLiveVideoCodec(peer.connection.getTransceivers().find(item => item.sender === sender)!, current.quality, current.frameRate);
             if (!active()) return;
           }
         }
@@ -299,8 +305,24 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
           // Only the channels Core routed to this output play, whatever the publisher sends.
           const { picture, sound } = command.liveOutput!;
           if (!(event.track.kind === "video" ? picture : event.track.kind === "audio" && sound)) { event.track.stop(); return; }
-          if (!stream.getTracks().includes(event.track)) stream.addTrack(event.track);
-          streamChanged(command.playbackId, stream);
+          const original = event.track;
+          const attach = (track: MediaStreamTrack) => {
+            if (receiver !== current) { track.stop(); return; }
+            if (!stream.getTracks().includes(track)) stream.addTrack(track);
+            streamChanged(command.playbackId, stream);
+          };
+          let paced: VideoPacer | undefined;
+          const pending = original.kind === "video" ? paceLiveVideo(original, () => {
+            if (receiver !== current) return;
+            if (paced) { stream.removeTrack(paced.track); current.pacers?.delete(paced); }
+            attach(original);
+          }, (current.pacerController ??= new AbortController()).signal) : undefined;
+          if (pending) void pending.then(pacer => {
+            if (receiver !== current) { pacer?.close(); original.stop(); return; }
+            if (!pacer || pacer.track.readyState === "ended") { attach(original); return; }
+            paced = pacer; (current.pacers ??= new Set()).add(pacer); attach(pacer.track);
+          }, () => attach(original));
+          else attach(original);
         };
         peer.connection.onconnectionstatechange = () => {
           if (receiver !== current) return;

@@ -153,9 +153,12 @@ Sheet on phones and the TV:
   sends zero samples while preserving the source clock.
 - Direct picture senders have an explicit bitrate budget and frame-rate ceiling;
   both follow Picture edits and apply to each new receiver. Text/detail and
-  resolution take priority under congestion. Codec selection and receiver
-  buffering remain automatic after the native experiments failed the drop gate
-  ([measurements](../live-sharing-performance.md#smooth-sharing-investigation-1-november-2026)).
+  resolution take priority under congestion. Smooth, power-efficient H.264 is
+  preferred when the host’s WebRTC capability query supports it; all other codecs
+  remain available for negotiation. Supported receivers pace decoded frames in a
+  worker through a queue of at most three waiting frames, retaining WebRTC sound
+  and timestamps. Unsupported or failed pacing restores native WebRTC playback
+  ([measurements](../live-sharing-performance.md#worker-pacing-follow-up)).
   The default remains 30 FPS until 1080p60 passes on Mac and Windows.
 - Minimizing, hiding or closing a shared window adds no Couch closure detection.
   Sharing follows the original capture track’s lifetime; quitting the source app

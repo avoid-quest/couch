@@ -35,17 +35,20 @@ const check = (source: string, couchApp = "undefined") => {
       attachStream: (load, stream) => attachments.push({ load, stream }),
       streamChanged: (id, stream, error) => streamReports.push({ id, stream, error }),
     }));
+    globalThis.RTCRtpSender = class { static getCapabilities() { return { codecs: [] }; } };
     globalThis.RTCPeerConnection = class {
-      connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = []; senders = [];
+      connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = []; senders = []; transceivers = [];
       constructor(config) { this.config = config; peers.push(this); }
       addTrack(track) {
         this.tracks.push(track);
         const sender = { track, parameters: { encodings: [{}], codecs: [], transactionId: "transaction" },
           getParameters() { return structuredClone(this.parameters); }, async setParameters(value) { this.parameters = value; } };
         this.senders.push(sender);
+        this.transceivers.push({ sender, setCodecPreferences(value) { this.codecs = value; } });
         return sender;
       }
       getSenders() { return this.senders; }
+      getTransceivers() { return this.transceivers; }
       async createOffer() { return { type: "offer", sdp: "offer" }; }
       async createAnswer() { return { type: "answer", sdp: "answer" }; }
       async setLocalDescription(description) { this.localDescription = description; }
@@ -75,6 +78,7 @@ const check = (source: string, couchApp = "undefined") => {
       getAudioTracks() { return this.tracks.filter(track => track.kind === "audio"); }
       getVideoTracks() { return this.tracks.filter(track => track.kind === "video"); }
       addTrack(track) { this.tracks.push(track); }
+      removeTrack(track) { this.tracks = this.tracks.filter(item => item !== track); }
     };
     const track = kind => ({ kind, getSettings: () => ({ width: 1920, height: 1080 }), stopped: false, async applyConstraints(value) { this.constraints = value; }, stop() { this.stopped = true; }, addEventListener() {} });
     const captureRequests = [], captures = [];
@@ -596,6 +600,39 @@ test("each picture sender gets a bitrate and frame ceiling before its offer, inc
   }
   assert.equal(offers, 2);
   assert.equal(captureRequests.length, 1);
+`));
+
+test("receiver pacing cancels pending setup on Stop and falls back to the original track after worker failure", () => check(`
+  const workers = [], generated = [];
+  globalThis.MediaStreamTrackProcessor = class { readable = new ReadableStream(); };
+  globalThis.MediaStreamTrackGenerator = class {
+    kind = "video"; readyState = "live"; writable = new WritableStream();
+    constructor() { generated.push(this); }
+    stop() { this.readyState = "ended"; }
+  };
+  globalThis.Worker = class {
+    constructor() { workers.push(this); }
+    postMessage(message) { this.last = message; }
+    terminate() { this.terminated = true; }
+  };
+  const original = track("video"), clone = track("video"); original.clone = () => clone;
+  session.play(direct()); peers[0].ontrack({ track: original });
+  assert.equal(attachments[0].stream.getTracks().length, 0, "setup waits for its worker");
+  session.play({ type: "stop" }); await flush(); advance(100);
+  assert.equal(clone.stopped, true, "Stop cancels the pending owned capture clone immediately");
+  assert.equal(workers[0].terminated, true);
+  assert.equal(generated[0].readyState, "ended");
+  assert.equal(attachments[0].stream.getTracks().length, 0, "a late setup cannot attach to a retired playback");
+  const next = track("video"), copy = track("video"); next.clone = () => copy;
+  session.play(direct({ livePeerId: "next" })); peers[1].ontrack({ track: next });
+  workers[1].onmessage({ data: { ready: true } }); await flush();
+  assert.deepEqual(attachments[1].stream.getTracks(), [generated[1]]);
+  workers[1].onerror(); await flush(); advance(100);
+  assert.deepEqual(attachments[1].stream.getTracks(), [next], "a failed pacer restores the native WebRTC track");
+  assert.equal(next.stopped, false);
+  assert.equal(copy.stopped, true);
+  assert.equal(workers[1].terminated, true);
+  assert.equal(unreachable().length, 0, "pacing failure need not abandon a working peer");
 `));
 
 test("failed video parameters fall back only that receiver and leave capture and audio routes alive", () => check(`
