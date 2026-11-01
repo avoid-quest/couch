@@ -114,11 +114,11 @@ comes with its dependencies' notices.
 
 ## Docs
 
-- [Usage and development](docs/usage.md)
+- [Using Couch](docs/usage.md)
+- [Native Debian TV](docs/native-tv.md)
 - [Share a live device](docs/live-inputs.md)
 - [Live audio](docs/live-audio.md)
-- [Identify a song on radio](docs/radio-recognition.md)
 - [Checks and releases](docs/ci.md)
-- [Current architecture](docs/architecture.md)
-- [Design system](docs/design.md)
+- [Architecture](docs/architecture.md)
+- [Design](docs/design.md)
 - [Product: vision, positioning, voice and what we can claim](docs/product/vision.md)

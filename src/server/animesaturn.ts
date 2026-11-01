@@ -49,7 +49,7 @@ async function probeProgressive(url: string, signal: AbortSignal, request: typeo
 }
 
 // Both public players publish JSON string literals. Read those values without
-// downloading their libraries or evaluating any JavaScript (docs/animesaturn.md).
+// downloading their libraries or evaluating any JavaScript (docs/providers.md).
 function directStream(html: string): URL | undefined {
   for (const match of html.matchAll(/\bvar\s+(?:src|primary)\s*=\s*("(?:\\.|[^"\\])*")\s*;/g)) {
     try {

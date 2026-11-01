@@ -5,7 +5,7 @@ import type { CaptureKind, CaptureSource } from "../../../shared/capture";
 import { defaultLiveFrameRate, type LiveSelection, type LiveVideoFrameRate, type LiveVideoQuality } from "../../../shared/live-input";
 import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
-// Sources and their capture variants (docs/design/share.md). The dialog offers source choices first; Live is an
+// Sources and their capture variants (docs/live-inputs.md). The dialog offers source choices first; Live is an
 // audio input's playback mode. The capsule also uses the variant to describe a running share.
 export type ShareKind = {
   id: string;
@@ -79,7 +79,7 @@ export function viewersOf(state: ClientSessionState | null | undefined, sourceId
 
 /**
  * What a viewer's row says under its name: its channels and its route on the sharer's own panel, where every row names
- * it (docs/design/share.md); Behind and Can't play as Where it plays says them.
+ * it (docs/live-inputs.md); Behind and Can't play as Where it plays says them.
  */
 export function viewerLine(viewer: Viewer, route: LiveRoute | undefined) {
   if (viewer.error) return `Can't play: ${viewer.error}`;

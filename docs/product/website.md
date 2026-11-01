@@ -74,7 +74,7 @@ Not part of this edition; for whoever redesigns the page.
   scene seen from the couch: a TV and phones in hands; a laptop sharing a game
   to the TV; for live sound, a crowd's phones and headphones in low light. Real
   places, not device mockups or UI screenshots, which date quickly.
-- **Colour.** Borrow the app's [room](../design.md#room): each scene's picture
+- **Colour.** Borrow the app's [room](../design.md#room-glass-and-stage): each scene's picture
   tints the dark around it. No other accent.
 - **Interaction.** One idea at most, and it should demonstrate joining in: for
   example, a QR code that, scanned, makes the visitor's phone play a short

@@ -22,7 +22,7 @@ import { LiveMetadataEditor } from "./LiveMetadata";
 import { formatClock } from "@/time-format";
 
 /**
- * The header's Share (docs/design/share.md): a button that opens the Share dialog on a device that can capture, and,
+ * The header's Share (docs/live-inputs.md): a button that opens the Share dialog on a device that can capture, and,
  * while this device shares, a separate row showing what goes out, who watches, and Stop sharing. Both stay this
  * device's own: another device's Remote never reaches them on a TV. Settings can hide the button (a TV does by
  * default), never the capsule.

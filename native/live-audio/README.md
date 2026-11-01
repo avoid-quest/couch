@@ -64,7 +64,7 @@ dynamic dependencies, native-architecture discovery and ad-hoc signature before
 `afterPack` stages the helper, PortAudio license, notice and build receipt.
 Package verifies signatures again after app signing. Build logs remain in
 `.artifacts/portaudio`; receipt binary hashes describe the pre-app-signing helper.
-Linux/Windows skip this build. See [CI](../../docs/ci.md#bundled-mac-capture-input).
+Linux/Windows skip this build. See [CI](../../docs/ci.md#bundled-helpers).
 
 The implementation follows [PortAudio's CoreAudio API](https://www.portaudio.com/docs/v19-doxydocs/pa__mac__core_8h.html),
 [its pinned CMake build](https://github.com/PortAudio/portaudio/blob/1ca0eeedb678c3cca80f3306c474d69a7a4b5278/CMakeLists.txt),

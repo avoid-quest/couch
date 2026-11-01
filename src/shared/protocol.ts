@@ -24,7 +24,7 @@ export type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
 export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "hidden" | "devices" | "settings" | "sound" | "bluetooth" | "display";
-// "menu" is OK held, which opens a focused item's menu (docs/design/remote.md).
+// "menu" is OK held, which opens a focused item's menu.
 export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "menu" | "back" | "home" | "info";
 
 // The shared capture lead and the Receiver whose declaration raised it, retained until input restart.

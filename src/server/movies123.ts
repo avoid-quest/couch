@@ -13,7 +13,7 @@ const unavailable = () => new ExtractionError("123MoviesFree's direct stream is 
 const changed = () => new ExtractionError("123MoviesFree changed its player response. Choose another source and try again later.");
 
 // The public player encrypts its metadata request with this published protocol.
-// Its script is never downloaded or executed by Couch. See docs/123moviesfree.md.
+// Its script is never downloaded or executed by Couch. See docs/providers.md.
 function playbackToken(id: string, episode: number, server = 1): string {
   const salt = randomBytes(8), iv = randomBytes(12);
   const key = pbkdf2Sync("player", salt, 1000, 32, "sha256");

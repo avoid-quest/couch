@@ -26,7 +26,7 @@ electronic delay and does not make chasing isolated timing numbers useful.
 
 The [glossary](../../../GLOSSARY.md) defines the product terms. Built integration details
 and verification limits belong in [Live audio](../../live-audio.md), with user-facing
-behavior in [Share](../../design/share.md). A documented capability and a physically
+behavior in [Share a live device](../../live-inputs.md). A documented capability and a physically
 measured result are separate facts.
 
 ## Source, environment and playback behavior
@@ -172,7 +172,7 @@ this contract does not claim interruption-free output without observing it.
 | **L1. Share an audio input with an audience.** | On the local Couch desktop app: **Share → Audio input → Playback: Live → choose a device**. Guests use existing pairing, find the source and Join, with Tap to hear when required. | Keep the selected supported capture backend and useful input controls. Deliver PCM or Opus through Sendspin using receiver capabilities. Preserve capture permission and ownership independently of playback authorization. |
 | **L2. I join an ongoing source.** | Discover the source, choose a permitted listening device and allow audio if prompted. | Join the ongoing programme with normal buffering; other listeners and independent Playbacks keep working. A join must not restart the captured source. |
 | **L3. I adjust my listening or leave.** | Own volume/mute and Leave; host removal remains available. | Leaving releases only this reception. Joining grants no programme pause, queue, seek or Next authority, and no control over another device's level, even one that shares its speaker, including through crafted commands; only the host keeps those. |
-| **L4. My connection recovers or I change output.** | Existing reconnect and local output selection. | Let the upstream player handle timing/recovery and rejoin the current source. Keep actual failures visible and isolate a failed peer. The owner heard no clear artifacts on a second Android phone (phone B) in one screen-off run at 150 ms and reported dropouts at 120 ms; phone B was not electrically recorded. Separate phone A returns contained attenuations at both settings, with coverage stated in the [measurements](../../live-audio.md#measured-behavior). |
+| **L4. My connection recovers or I change output.** | Existing reconnect and local output selection. | Let the upstream player handle timing/recovery and rejoin the current source. Keep actual failures visible and isolate a failed peer. The owner heard no clear artifacts on a second Android phone (phone B) in one screen-off run at 150 ms and reported dropouts at 120 ms; phone B was not electrically recorded. Separate phone A returns contained attenuations at both settings, with coverage stated in the measurements (git history of `docs/live-audio.md`). |
 
 A publisher closing/reloading its page or losing its owning connection ends that
 capture for everyone. Stop sharing ends the source; a listener's Leave does not.
@@ -223,6 +223,6 @@ discovery, source selection, output consent and handoff journeys.
 - Capture's 30 fps limit: [live.ts](../../../src/client/session/live.ts#L18).
 - Routing/ownership/permission rules: [hub.ts](../../../src/server/hub.ts).
 - TV control: [RemotePage.tsx](../../../src/client/sections/remote/RemotePage.tsx),
-  [Remote design](../../design/remote.md).
+  [design](../../design.md).
 - AirPlay auto-start and restrictions: [airplay.md](../../airplay.md).
 - Desktop Core lifecycle: [app/main.ts](../../../app/main.ts#L196).

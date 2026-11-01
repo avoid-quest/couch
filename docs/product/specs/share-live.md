@@ -40,8 +40,8 @@ In published preview.5: screen, window, this computer's sound,
 microphone or audio input; picture up to 1080p30 by default. Current main adds
 independent resolution and 30/60/120 FPS targets, with 30 as the default.
 These are requested ceilings, not measured delivery rates; see the
-[video measurements](../../video-performance.md) and
-[current audit](../../release-audit-2026-10-29.md). Limits: system
+the video measurements and 29 October audit
+(git history). Limits: system
 sound needs macOS 14.2+ or Windows, not Linux; it's the whole computer's mix,
 not one app's; the sharer's upload grows with each viewer; viewers aren't
 aligned with each other. A viewer that can't connect directly plays a few

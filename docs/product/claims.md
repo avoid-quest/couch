@@ -4,7 +4,7 @@ The evidence behind Couch's public copy. Before a sentence about a capability
 goes on the website, in the README or in a release note, find its row here; if
 it isn't here, verify it and add it. The original capability inventory was
 checked on 2026-10-23 against `3e603a5`. The 2026-10-29
-[release audit](../release-audit-2026-10-29.md) checks main `8beabc5`, including
+release audit of 29 October 2026 (git history) checks main `8beabc5`, including
 the differences between published builds and newly merged work. It excludes
 qualification of Live audio mode.
 
@@ -19,15 +19,15 @@ copy; do not equate "on main" with "in the latest preview".
 | Claim | Evidence | Public wording limits |
 | --- | --- | --- |
 | Packages desktop apps for macOS 14+ (Apple Silicon), macOS 13+ (Intel), Windows 11 (x64) and Linux (x64 AppImage, Debian 13 `.deb`) | `apps/web/src/pages/download.astro`, Package workflow, release assets | Name the platforms; not "every computer". Intel 13–14 needs a compatible local mpv for some TV codecs; automatic Intel mpv needs 15+. Intel downloads appear after publication; Ventura runtime/install/update validation remains required ([platforms](../ci.md#platforms-and-signing)) |
-| Can be set up as a dedicated Debian TV | `couch-setup --tv`, [native-tv](../native-tv.md) | Renderer fixtures exercise the TV layout; physical Debian TV installation remains unverified ([audit](../release-audit-2026-10-29.md)). Say "set up", not "tested on TVs" |
+| Can be set up as a dedicated Debian TV | `couch-setup --tv`, [native-tv](../native-tv.md) | Renderer fixtures exercise the TV layout; physical Debian TV installation remains unverified (29 October audit, git history). Say "set up", not "tested on TVs" |
 | Phones and laptops join through a browser by scanning a QR code or typing a six-digit code; no app install | [usage](../usage.md#connect-a-phone) | The first visit shows a certificate warning; mention it in how-to copy |
 | No accounts; it runs on your own network | Pairing is per Couch, on the LAN ([architecture](../architecture.md)) | Online sources still need the internet |
 | Everyone paired can search, play, queue and control; admins manage the Couch | [usage](../usage.md#administrator-access), `src/server/devices.ts` | The first device is admin and admins can make others admin. A playback that plays only on devices keeping their outputs private can't be joined or controlled by others ([architecture](../architecture.md)) |
-| Saved lists and items; resume where you left off | [browse](../design/browse.md), [live-inputs](../live-inputs.md) (Save as list) | — |
-| Several independent playbacks at once, each with its own Up next and devices | [architecture](../architecture.md), [where-it-plays](../design/where-it-plays.md) | — |
+| Saved lists and items; resume where you left off | [live-inputs](../live-inputs.md) (Save as list) | — |
+| Several independent playbacks at once, each with its own Up next and devices | [architecture](../architecture.md) | — |
 | Sources: YouTube, Twitch, RaiPlay, Bandcamp, SoundCloud search, other yt-dlp links, avoid radio, radio playlists and Radio Browser, M3U Live TV with XMLTV guide | [usage](../usage.md#sources) | Per-source/device support varies: link the table |
 | Film, series and anime catalogues (StreamingCommunity, 123MoviesFree, AnimeSaturn, AnimeUnity) | [usage](../usage.md#sources) | Public copy names them by category only; their names stay in the docs. 123MoviesFree is experimental. Broader catalogue and device coverage remains unqualified; later main-only playback smokes are listed below |
-| Choose each device's picture and sound in **Where it plays**; move playback with **Move here** | [where-it-plays](../design/where-it-plays.md) | Move here is unavailable while another device's private output plays |
+| Choose each device's picture and sound in **Where it plays**; move playback with **Move here** | [architecture](../architecture.md#playbacks) | Move here is unavailable while another device's private output plays |
 | Ordinary media plays with its sound in sync on several devices | Sendspin grouping; [usage table](../usage.md#what-plays-where), "Synced sound" column | YouTube, Twitch, RaiPlay, radio, other yt-dlp sites and H.264 Live TV only. Say "in sync", never "perfect sync" |
 | A phone or laptop can be a speaker or screen for the Couch, once it allows it | [live-inputs](../live-inputs.md), "Let other devices use" | The device must allow it itself |
 | Synced sound keeps playing with the screen locked | #841; owner tested Chrome on iPad and Android phones | Only for those tested setups |
@@ -43,9 +43,9 @@ copy; do not equate "on main" with "in the latest preview".
 
 | Claim | Evidence | Public wording limits |
 | --- | --- | --- |
-| Film, series and anime catalogue playback | Individual Linux/Windows provider smokes in the audit checkout based on main `8beabc5` ([audit](../release-audit-2026-10-29.md)) | These smokes do not qualify preview.5 or broader catalogue and device coverage |
-| Screen/window sharing offers independent resolution and 30/60/120 FPS targets, default 60 | #941, #940; [video measurements](../video-performance.md) | Targets, not locked rates. Historical software/native failures remain in the [audit](../release-audit-2026-10-29.md); final [paced Windows and Mac runs](../live-sharing-performance.md#worker-pacing-follow-up) pass the controlled 1080p60 gate, and the tested Mac 120 Hz chain passes ≥110 FPS. Native Linux GPU sharing, multiple physical receivers, Windows 120 Hz and physical/acoustic A/V remain unqualified |
-| External media avoids discarded preparation requests; YouTube can use the existing Node runtime | #944; [startup measurements](../release-audit-2026-10-29.md#video-and-ui-performance) | The controlled delay experiment and individual provider samples do not guarantee internet startup times or improvements for every source |
+| Film, series and anime catalogue playback | Individual Linux/Windows provider smokes in the audit checkout based on main `8beabc5` (29 October audit, git history) | These smokes do not qualify preview.5 or broader catalogue and device coverage |
+| Screen/window sharing offers independent resolution and 30/60/120 FPS targets, default 60 | #941, #940, #948 | Targets, not locked rates. Historical software/native failures remain in the 29 October audit (git history); final paced Windows and Mac runs (#948) pass the controlled 1080p60 gate, and the tested Mac 120 Hz chain passes ≥110 FPS. Native Linux GPU sharing, multiple physical receivers, Windows 120 Hz and physical/acoustic A/V remain unqualified |
+| External media avoids discarded preparation requests; YouTube can use the existing Node runtime | #944 | The controlled delay experiment and individual provider samples do not guarantee internet startup times or improvements for every source |
 | Playback delivery and controls are decided by Core | #918, #919; [delivery ADR](../adr/0002-playback-delivery-and-authority.md) | A private playback does not give every paired device transport control. Live audio mode is excluded from this audit; its existence on main is not venue or latency qualification |
 
 ## Historical live-audio experiments

@@ -35,7 +35,7 @@ function Row({ label, htmlFor, description, children }: { label: string; htmlFor
 }
 
 /**
- * Share screen or sound (docs/design/share.md): what to share, the screens or windows as pictures, the input, Play on,
+ * Share screen or sound (docs/live-inputs.md): what to share, the screens or windows as pictures, the input, Play on,
  * this computer's sound and the picture's quality, then Start sharing, which starts the capture and plays it on the
  * chosen devices. A Dialog on desktop, a bottom Sheet on phones and the TV.
  */
