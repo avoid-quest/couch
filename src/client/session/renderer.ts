@@ -534,4 +534,5 @@ const unlock = () => { for (const element of [video, audio]) if (!element.hasAtt
 addEventListener("pointerdown", unlock, { capture: true, once: true });
 
 // The Couch app is usually a screen. Its first HLS start would otherwise wait for hls.js to load and evaluate.
-if (window.couchApp) requestIdleCallback(() => void import("hls.js"));
+// A failed preload stays quiet: that first start imports it again and reports the error.
+if (window.couchApp) requestIdleCallback(() => void import("hls.js").catch(() => {}));

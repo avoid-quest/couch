@@ -73,13 +73,18 @@ Each harness documents its commands in its opening comments.
   On 1 November 2026 (Linux Xeon E5-2690 v3, Electron 45.1.0, 1920×1080 60 Hz
   HDMI display on an RTX 3060 with GPU compositing), a fresh page asked for the
   HLS playlist 36–64 ms after the load because hls.js was still loading and
-  evaluating. The Couch app now loads it while idle. Three alternating runs each
-  against main `0b860fe5`, as the app with 1 s to settle and 200 ms per upstream
-  read: the playlist request median went from 64 to 10 ms and the HLS first frame
+  evaluating. The Couch app now loads it while idle. Measured with a scratch copy
+  of the harness that sets `window.couchApp = {}` before the module script and
+  waits 1 s at the start of each sample, as a running app would have, with
+  `--rounds=3 --delay=200`. Three alternating runs each against main `0b860fe5`:
+  the playlist request median went from 64 to 10 ms and the HLS first frame
   from 561 / 581 / 627 ms (median / p95 / max of 9) to 500 / 562 / 568 ms. MP4
-  and split controls stayed within noise (MP4 median 258 vs 276 ms, max 342 vs
-  345 ms). Browsers, such as phones joined as remotes, don't preload the 578 KB
-  chunk and keep the original first-start cost.
+  and split controls stayed within noise. On an Apple M5 Pro (macOS 26.7), the
+  same comparison moved the playlist request from 10.5 to 1.7 ms and the HLS
+  first frame from 447 / 482 / 482 to 438 / 464 / 464 ms; MP4 went from 227 to
+  230 ms and split from 228 to 226 ms (medians). Browsers, such as phones joined
+  as remotes, skip the idle preload: their service worker may precache the
+  578 KB chunk, but they still load and evaluate it on their first HLS start.
 - Video playback and capture rates:
   `COUCH_PERF_MEDIA=<absolute path to a 1080p60 file> bun tests/video-performance.native.ts .artifacts/video --modes=playback,controls,live --fps=60`.
   Use a real display to qualify hardware; `xvfb-run` measures software
