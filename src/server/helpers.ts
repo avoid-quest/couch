@@ -170,6 +170,7 @@ async function verify(name: Helper, release: Release, path: string) {
 }
 
 async function install(name: Helper, release: Release) {
+  if (!root) throw new Error("Couch's helpers aren't set up, so nothing can be downloaded.");
   console.error(`Couch helpers: downloading ${name} ${release.version}`);
   const data = new Uint8Array(await (await get(release.url)).arrayBuffer());
   if (createHash("sha256").update(data).digest("hex") !== release.sha256) throw new Error(`the ${name} download doesn't match its SHA-256`);
@@ -201,6 +202,8 @@ async function install(name: Helper, release: Release) {
 // Records what was selected and removes the other copies, except yt-dlp's previous one: the
 // newest that played media, else the newest, which `--helpers previous` can choose.
 async function select(name: Helper, choice: Choice, copies: Copy[] | null) {
+  // Before startHelpers (tests, one-off tools) there's no helper directory to record in or clean.
+  if (!root) return choice;
   // Copies in use now stay through this check: a run ending meanwhile may record that its copy
   // worked only after the read below, while one that ended before has recorded it (helperWorked).
   const busy = new Set(inUse.keys());
