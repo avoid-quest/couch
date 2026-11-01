@@ -30,6 +30,10 @@ while it's off and across restarts.
 Commands reject a disconnected, revoked or reassigned target rather than act
 on a different TV. Up next can play that TV's Autoplay suggestions directly;
 ordering and removal still apply only to entries already in its queue.
+Core rechecks the selected TV, its connection, consent and original Playback
+after a catalogue list finishes preparing. A delayed command cannot follow a
+queue that moved to another TV. Explicit **Play on** still addresses the chosen
+destination.
 
 ## Type on TV
 

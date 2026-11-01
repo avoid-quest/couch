@@ -49,7 +49,7 @@ test("FFmpeg converts native mono/stereo rates to PCM and Opus and retires old c
       // An intentionally non-nominal source clock checks that deadlines use the
       // measured block times, not a new clock synthesized from encoded samples.
       assert.equal(source.write({ generation: `capture-${generation}`, sequence, samplePosition: sequence * frames, capturedAtUs: origin + sequence * 10_010,
-        sampleRate, channels, pcm: Float32Array.from({ length: frames * channels }, (_, i) => channels === 1 || i % 2 === 0 ? .25 : -.5) }), true);
+        sampleRate, channels, pcm: Float32Array.from({ length: frames * channels }, (_, i) => channels === 1 ? .5 : i % 2 === 0 ? .25 : -.5) }), true);
     }
     await until(() => errors.length > 0 || ["pcm", "opus"].every(wire => output.filter(chunk => chunk.generation === generation && chunk.wire === wire).length >= 80));
     assert.deepEqual(errors, []);
@@ -64,8 +64,9 @@ test("FFmpeg converts native mono/stereo rates to PCM and Opus and retires old c
     const position = (pcm.length - 1) * 5_000, block = Math.floor(position / 10_000);
     assert.equal(last.at, origin + block * 10_010 + position - block * 10_000, "capture time mapping survives source clock drift");
     const bytes = Buffer.concat(pcm.map(chunk => chunk.data));
-    // Skip converter startup and inspect native channel order/mono upmix.
-    assert.equal(bytes.readInt16LE(4096), channels === 1 ? Math.round(8192 / Math.SQRT2) : 8192);
+    // Skip converter startup and inspect native channel order/mono upmix. The
+    // mono signal avoids a one-LSB rounding boundary in FFmpeg's float rematrix.
+    assert.equal(bytes.readInt16LE(4096), channels === 1 ? Math.round(16384 / Math.SQRT2) : 8192);
     assert.equal(bytes.readInt16LE(4098), channels === 1 ? bytes.readInt16LE(4096) : -16384);
     generation++;
   }

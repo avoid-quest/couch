@@ -4,8 +4,9 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { dirname, join, resolve } from "node:path";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { WebSocketServer } from "ws";
 import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { prepareNativeCapture } from "../app/native-capture";
@@ -14,6 +15,7 @@ import { acceptCaptureUpload } from "../src/server/capture-ingest";
 import type { CaptureAudioPacket } from "../src/server/capture-audio";
 import { liveFixture, until } from "./live-input.fixture";
 import { helper as mediaHelper, startHelpers } from "../src/server/helpers";
+import { executableName, nodeExecutables } from "./executable.fixture";
 
 const requested = { sampleRate: 48000, requestedCallbackFrames: 128 } as const;
 const helper = (mode: string) => spawn(process.execPath, [resolve("tests/fixtures/native-capture-helper.mjs"), mode], { stdio: ["pipe", "pipe", "pipe"] });
@@ -110,14 +112,15 @@ test("Main rejects a helper that opens a different channel map", async () => {
 });
 
 test("a native publication restarts uploads at sample zero and applies only explicit mute", { timeout: 6000 }, async t => {
-  const directory = mkdtempSync(resolve(tmpdir(), "couch-native-fixture-")), executable = resolve(directory, "capture");
-  writeFileSync(executable, `#!${process.execPath}\n` + readFileSync(resolve("tests/fixtures/native-capture-helper.mjs"), "utf8"), { mode: 0o700 });
+  const directory = mkdtempSync(resolve(tmpdir(), "couch-native-fixture-")), executable = resolve(directory, executableName("capture"));
+  const executables = nodeExecutables(directory);
+  writeFileSync(executable, `#!${process.execPath}\nvoid import(${JSON.stringify(pathToFileURL(resolve("tests/fixtures/native-capture-helper.mjs")).href)});\n`, { mode: 0o700 });
   const server = createServer(), sockets = new WebSocketServer({ server });
   const packets: CaptureAudioPacket[][] = [], errors: string[] = [];
   sockets.on("connection", socket => { const current: CaptureAudioPacket[] = []; packets.push(current); acceptCaptureUpload(socket, packet => { current.push(packet); return true; }, error => errors.push(error)); });
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   const source = nativeAudioInput(executable, { uid: "test", name: "ordered", channels: 4, nominalRate: 48000, ownerHalBufferFrames: 256 }, 48000, 128, error => errors.push(error), new AbortController().signal);
-  t.after(async () => { await source.stop(); for (const socket of sockets.clients) socket.terminate(); await new Promise<void>(resolve => sockets.close(() => server.close(() => resolve()))); rmSync(directory, { recursive: true }); });
+  t.after(async () => { await source.stop(); for (const socket of sockets.clients) socket.terminate(); await new Promise<void>(resolve => sockets.close(() => server.close(() => resolve()))); const forced = await executables.close(); rmSync(directory, { recursive: true }); assert.deepEqual(forced, { children: [], workers: [] }, "capture fixture children must stop before forced cleanup"); });
   await source.prepare();
   const address = server.address(); assert.ok(address && typeof address !== "string");
   const url = `ws://127.0.0.1:${address.port}/api/live/upload`;

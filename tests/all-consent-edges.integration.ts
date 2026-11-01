@@ -97,7 +97,7 @@ test("private Move here after All=0 plays there alone at its own level; the shar
     await until(()=>f.levels[0]!.at(-1)===0);
     // Move here is exclusive: Admin shares, so its output leaves rather than staying in a partial mix.
     const only=await f.device.command({type:"solo",deviceId:f.deviceId});
-    assert.equal(only.ok,true,only.error);
+    assert.equal(only.ok,true,only.error ?? "");
     await until(()=>f.device.state.outputs?.map(o=>o.deviceId).join()===f.deviceId&&!!f.device.state.outputs[0]!.sound);
     const own=f.device.state.devices!.find(d=>d.id===f.deviceId)!.volume;
     const volume=()=>f.device.messages.flatMap(message=>message.type==="player"&&message.command.type==="volume"?[message.command.volume]:[]).at(-1);
@@ -223,7 +223,7 @@ test("Direct sound refreshes on revocation and regrant even when local channels 
     await f.device.command({ type: "output", deviceId: f.deviceId, level: 40 });
     await until(() => directLevel(f.device.messages) === 40);
     const trim = await f.admin.command({ type: "allSpeakers", level: 0 });
-    assert.equal(trim.ok, true, trim.error);
+    assert.equal(trim.ok, true, trim.error ?? "");
     await until(() => directLevel(f.device.messages) === 0);
     const outputs = f.device.state.outputs;
     await f.device.command({ type: "sharing", sharing: { audio: false, video: false } });

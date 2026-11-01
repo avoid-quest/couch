@@ -22,3 +22,12 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Check In sync persistence on Core's Node runtime
+        run: |
+          bun build tests/in-sync-persistence.integration.ts --target=node --outfile=build/in-sync-persistence.integration.mjs
+          couch_test_data=$(mktemp -d)
+          trap 'rm -rf "$couch_test_data"' EXIT
+          COUCH_DATA_DIR="$couch_test_data" COUCH_PORT=0 node --test build/in-sync-persistence.integration.mjs

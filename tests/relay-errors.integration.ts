@@ -18,7 +18,7 @@ for (const secondStatus of [200, 404]) test(`a screen reports its own ${secondSt
   const other = await f.connect(2, "&audio=1&video=1");
   await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
   const start = await f.receiver.command({ type: "enqueue", entry: { id: "film", title: "Film", source: `http://127.0.0.1:${port}/film.m3u8` }, playNow: true, deviceId: f.receiver.id });
-  assert.equal(start.ok, true, start.error);
+  assert.equal(start.ok, true, start.error ?? "");
   await until(() => !!f.receiver.load());
   f.receiver.report();
   await f.speaker(1);

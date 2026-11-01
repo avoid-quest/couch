@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { executableName, nodeExecutables } from "../executable.fixture";
 
-// POSIX test executable with explicit startup barriers, never real TURN credentials.
+// Real Node child with explicit startup barriers, never real TURN credentials.
 export async function delayedRelay(directory: string) {
-  const executable = join(directory, "delayed-relay");
+  const fixtures = nodeExecutables(directory);
+  const executable = join(directory, executableName("delayed-relay"));
   await writeFile(executable, `#!${process.execPath}
 const fs = require("node:fs"), path = require("node:path");
 const directory = ${JSON.stringify(directory)};
@@ -24,6 +26,7 @@ process.stdin.resume();
 `, { mode: 0o755 });
   return {
     executable,
+    close: () => fixtures.close(),
     async started(run: number) {
       const deadline = Date.now() + 4000;
       for (;;) {

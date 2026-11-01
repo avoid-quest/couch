@@ -97,7 +97,7 @@ async function fixture(t: TestContext, { executable = true, uxplay: replacement,
   const fetchLocal = globalThis.fetch;
   globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(String(input)) ? fetchLocal(input, init) : Promise.resolve(new Response(""))) as typeof fetch;
   const directory = await mkdtemp(join(tmpdir(), "couch-airplay-")), databasePath = join(directory, "data", "couch.sqlite");
-  const uxplay = join(directory, "uxplay"), control = join(directory, "control.sock");
+  const uxplay = join(directory, "uxplay"), control = process.platform === "win32" ? String.raw`\\.\pipe\couch-airplay-${crypto.randomUUID()}` : join(directory, "control.sock");
   await writeFile(uxplay, replacement ?? fakeUxPlay, { mode: 0o755 });
   await writeFile(join(directory, "package.json"), '{ "type": "commonjs" }'); // Wherever the checkout puts temporary files
   // Real FFmpeg, found through Couch's own helper lookup.

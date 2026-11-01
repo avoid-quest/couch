@@ -94,11 +94,11 @@ test("device removal retires cached TURN credentials and existing allocations, a
   assert.equal((await (await request("/api/settings/live-relay/local")).json()).status, "error");
 });
 
-test("revocation during startup never publishes the retired generation, including overlapping revocations", { skip: !network || process.platform === "win32", timeout: 10000 }, async t => {
+test("revocation during startup never publishes the retired generation, including overlapping revocations", { skip: !network, timeout: 10000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), "couch-relay-start-revoke-")), helper = await delayedRelay(directory);
   const published: string[] = [];
   const relay = createLocalRelay({ executable: helper.executable, enabled: true, changed: () => { const current = relay.state().relay; if (current) published.push(current.urls); } });
-  t.after(async () => { await relay.close(); await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => { await relay.close(); await helper.close(); await rm(directory, { recursive: true, force: true }); });
   const starting = relay.setNetwork(network!);
   await helper.started(1);
   const revoked = relay.revoke(), again = relay.revoke();
@@ -113,10 +113,10 @@ test("revocation during startup never publishes the retired generation, includin
   assert.ok(published.every(url => url.includes(":40002?")));
 });
 
-for (const action of ["off", "network-loss", "close"] as const) test(`revocation racing ${action} during startup leaves no relay`, { skip: !network || process.platform === "win32", timeout: 10000 }, async t => {
+for (const action of ["off", "network-loss", "close"] as const) test(`revocation racing ${action} during startup leaves no relay`, { skip: !network, timeout: 10000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), "couch-relay-stop-revoke-")), helper = await delayedRelay(directory);
   const relay = createLocalRelay({ executable: helper.executable, enabled: true, changed() {} });
-  t.after(async () => { await relay.close(); await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => { await relay.close(); await helper.close(); await rm(directory, { recursive: true, force: true }); });
   const starting = relay.setNetwork(network!);
   await helper.started(1);
   const revoked = relay.revoke();

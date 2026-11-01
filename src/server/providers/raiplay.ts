@@ -99,8 +99,8 @@ function cards(rows: Record<string, unknown>[]): ProviderItem[] {
   return [...new Map(rows.map(card).filter((item): item is ProviderItem => !!item).map(item => [item.url, item])).values()];
 }
 
-function page(items: ProviderItem[], offset: number, title: string): ProviderPage {
-  return { title, items: items.slice(offset, offset + pageSize), ...(offset + pageSize < Math.min(items.length, 10000) ? { nextCursor: String(offset + pageSize) } : {}) };
+function page(items: ProviderItem[], offset: number, title: string, size = pageSize): ProviderPage {
+  return { title, items: items.slice(offset, offset + size), ...(offset + size < Math.min(items.length, 10000) ? { nextCursor: String(offset + size) } : {}) };
 }
 
 function replayDates(): string[] {
@@ -112,7 +112,7 @@ function replayDates(): string[] {
 // Public schemas used by RaiPlay's own web app and the Kodi RaiPlay catalog.
 // https://www.raiplay.it/assets/js/webcomponents/rai-search.js
 // https://github.com/maxbambi/plugin.video.raitv/blob/master/resources/lib/raiplay.py
-async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: typeof globalThis.fetch = globalThis.fetch): Promise<ProviderPage> {
+async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: typeof globalThis.fetch = globalThis.fetch, size = pageSize): Promise<ProviderPage> {
   signal?.throwIfAborted();
   if (request.cursor !== undefined && !/^\d{1,4}$/.test(request.cursor)) throw new ProviderError("Invalid RaiPlay page cursor.", 400);
   const offset = Number(request.cursor || 0);
@@ -176,7 +176,7 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
       : /\/ContentSet-/.test(url.pathname) ? items.find(item => item.collection)?.collection : undefined;
     const container = { title, url: blockId ? `${url.href}#block=${blockId}` : url.href, ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}) };
     const programme = /^\/(?:programmi|collezioni)\//.test(url.pathname);
-    return { ...page(items.map((item, index) => item.kind === "media" && programme ? { ...item, collection: { ...container, ...(index < 500 ? { index } : {}) } } : item), offset, title),
+    return { ...page(items.map((item, index) => item.kind === "media" && programme ? { ...item, collection: { ...container, ...(index < 500 ? { index } : {}) } } : item), offset, title, size),
       ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}),
       ...(metadata?.thumbnail || items[0]?.thumbnail ? { thumbnail: metadata?.thumbnail ?? items[0]?.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) };
   };
@@ -222,16 +222,21 @@ export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal
   return withProviderItem("raiplay", url.href, media ? "media" : "collection", page);
 }
 
-export function createRaiPlayProgrammeLoader(browse: typeof browseRaiPlay = browseRaiPlay) {
+// A season JSON already contains all episodes. Queue expansion reads it once,
+// including one extra item to enforce the list limit; browsing keeps 24-item pages.
+export function createRaiPlayProgrammeLoader(browse: typeof browseRaiPlay = (request, signal) => readRaiPlay(request, signal, undefined, 501)) {
   const allItems = async (url: string, signal?: AbortSignal) => {
     let title = "RaiPlay";
     const items: ProviderItem[] = [];
-    for (let offset = 0;; offset += pageSize) {
-      const result = await browse({ url, ...(offset ? { cursor: String(offset) } : {}) }, signal);
+    let cursor: string | undefined;
+    for (;;) {
+      signal?.throwIfAborted();
+      const result = await browse({ url, ...(cursor ? { cursor } : {}) }, signal);
       if (result.title) title = result.title;
       items.push(...result.items);
-      if (!result.nextCursor) return { title, items };
       if (items.length > 500) throw new ProviderError("This RaiPlay programme has more than 500 episodes. Save individual episodes instead.", 400);
+      if (!result.nextCursor) return { title, items };
+      cursor = result.nextCursor;
     }
   };
   return async function loadRaiPlayProgramme(url: string, signal?: AbortSignal): Promise<ProviderPage> {
@@ -244,15 +249,17 @@ export function createRaiPlayProgrammeLoader(browse: typeof browseRaiPlay = brow
       throw new ProviderError("Choose a RaiPlay programme or collection link to save it as a playlist.", 400);
     }
     const { title, items } = await allItems(source.href, signal);
-    const episodes = items.filter(item => item.kind === "media");
+    // The programme's first episode may also appear in its newest season.
+    const episodes = new Map(items.filter(item => item.kind === "media").map(item => [item.id, item]));
     for (const item of items) {
       if (item.kind !== "collection" || !/\/ContentSet-[a-f0-9-]+\.json$/i.test(new URL(item.url).pathname)) continue;
-      episodes.push(...(await allItems(item.url, signal)).items);
+      for (const episode of (await allItems(item.url, signal)).items) {
+        if (episode.kind === "media") episodes.set(episode.id, episode);
+      }
+      if (episodes.size > 500) throw new ProviderError("This RaiPlay programme has more than 500 episodes. Save individual episodes instead.", 400);
     }
-    // The programme's own first item also appears inside its newest season set.
-    const unique = [...new Map(episodes.map(item => [item.id, item])).values()];
-    if (!unique.length) throw new ProviderError("This RaiPlay programme has no playable episodes. Open it in RaiPlay to check availability.", 404);
-    return { title, items: unique };
+    if (!episodes.size) throw new ProviderError("This RaiPlay programme has no playable episodes. Open it in RaiPlay to check availability.", 404);
+    return { title, items: [...episodes.values()] };
   };
 }
 

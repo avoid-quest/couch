@@ -88,6 +88,14 @@ if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presenta
 
 contextBridge.exposeInMainWorld("couchApp", {
   tvPresentation: process.argv.includes("--couch-tv-presentation"),
+  ...(process.platform === "darwin" && !process.argv.includes("--couch-tv-presentation") ? {
+    playerFullscreen: (enter: boolean) => call<void>("player-fullscreen", enter),
+  } : {}),
+  onFullscreenPending: listener => {
+    const handler = (_event: unknown, pending: boolean) => listener(pending);
+    ipcRenderer.on("couch:fullscreen-pending", handler);
+    return () => { ipcRenderer.off("couch:fullscreen-pending", handler); };
+  },
   deviceName: name => call("device-name", name),
   deviceSharing: sharing => call("device-sharing", sharing),
   captureSources: () => call("capture-sources"),

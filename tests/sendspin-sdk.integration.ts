@@ -19,7 +19,7 @@ for (const intent of ["live", "relaxed"] as const) test(`unmodified browser SDK 
   const cookie = authorization.headers.get("set-cookie")!.split(";")[0]!;
   const originalSocket = globalThis.WebSocket;
   // Node has no browser cookie jar. Supply the HTTP cookie at the public socket boundary.
-  globalThis.WebSocket = class extends WebSocket { constructor(url: string | URL) { super(url, { headers: { Cookie: cookie } }); } } as typeof globalThis.WebSocket;
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, writable: true, value: class extends WebSocket { constructor(url: string | URL) { super(url, { headers: { Cookie: cookie } }); } } });
   t.after(() => { globalThis.WebSocket = originalSocket; });
   const chunks: DecodedAudioChunk[] = [];
   const player = new SendspinCore({ suite: "aesgcm", storage, baseUrl: f.hub.origin, codecs: ["pcm"], minBufferMs: 150 });

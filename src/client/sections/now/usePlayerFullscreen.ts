@@ -7,6 +7,9 @@ export function usePlayerFullscreen() {
   const supported = !isTvPresentation() && document.fullscreenEnabled === true;
   const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
   const [pending, setPending] = useState(false);
+  const [nativePending, setNativePending] = useState(false);
+
+  useEffect(() => window.couchApp?.onFullscreenPending?.(setNativePending), []);
 
   useEffect(() => {
     if (!supported) return;
@@ -16,16 +19,23 @@ export function usePlayerFullscreen() {
   }, [supported]);
 
   const toggle = async () => {
-    if (!supported || pending) return;
+    if (!supported || pending || nativePending) return;
     setPending(true);
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       // Fullscreen the document so portaled playback sheets stay available.
-      else await document.documentElement.requestFullscreen();
+      else {
+        await window.couchApp?.playerFullscreen?.(true);
+        try { await document.documentElement.requestFullscreen(); }
+        catch (reason) {
+          await window.couchApp?.playerFullscreen?.(false);
+          throw reason;
+        }
+      }
     } catch (reason) {
       failed("Couldn't change fullscreen.", reason);
     } finally { setPending(false); }
   };
 
-  return { supported, fullscreen, pending, toggle };
+  return { supported, fullscreen, pending: pending || nativePending, toggle };
 }

@@ -126,8 +126,8 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => void enqueue(favorite, true, deviceId) },
         { label: "Queue", disabled: !connected || pending, run: () => void enqueue(favorite, false) },
         ...browserActions(favorite.kind === "provider" ? favorite.item.url : favorite.item.homepage),
-        { label: "Move up", disabled: blocked || !moveFavorite(favorites, favorite, -1), run: () => move(-1) },
-        { label: "Move down", disabled: blocked || !moveFavorite(favorites, favorite, 1), run: () => move(1) },
+        { label: "Move up", disabled: blocked || favorites[index - 1]?.kind !== favorite.kind, run: () => move(-1) },
+        { label: "Move down", disabled: blocked || favorites[index + 1]?.kind !== favorite.kind, run: () => move(1) },
         { label: "Remove", disabled: !connected || pending, run: () => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); } },
       ]}>
       {favorite.kind === "provider" && favorite.item.kind === "media" && favorite.item.duration != null && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}

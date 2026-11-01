@@ -117,6 +117,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
   // Each Playback keeps the Mixer's All trim; older rows play at the Devices' levels.
   if (!db.query<{ name: string }, []>("PRAGMA table_info(playback)").all().some(column => column.name === "mixTrim")) db.exec("ALTER TABLE playback ADD COLUMN mixTrim INTEGER NOT NULL DEFAULT 100");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(playback)").all().some(column => column.name === "compressor")) db.exec("ALTER TABLE playback ADD COLUMN compressor TEXT");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(playback)").all().some(column => column.name === "inSync")) db.exec("ALTER TABLE playback ADD COLUMN inSync INTEGER NOT NULL DEFAULT 0");
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
 
@@ -240,8 +241,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     playbackIds() { return db.query<{ id: string }, []>("SELECT id FROM playback ORDER BY rowid").all().map(row => row.id); },
     forgetPlayback(id: string) { db.query("DELETE FROM playback WHERE id = ?").run(id); },
     playback(id: string) {
-      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null; mixTrim: number; compressor: string | null }, [string]>("SELECT queue, cursor, continuation, mixTrim, compressor FROM playback WHERE id = ?").get(id);
-      const save = (column: "queue" | "cursor" | "continuation" | "mixTrim" | "compressor", value: string | number | null) => {
+      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null; mixTrim: number; compressor: string | null; inSync: number }, [string]>("SELECT queue, cursor, continuation, mixTrim, compressor, inSync FROM playback WHERE id = ?").get(id);
+      const save = (column: "queue" | "cursor" | "continuation" | "mixTrim" | "compressor" | "inSync", value: string | number | null) => {
         db.query("INSERT OR IGNORE INTO playback (id, queue) VALUES (?, '[]')").run(id);
         db.query(`UPDATE playback SET ${column} = ? WHERE id = ?`).run(value, id);
       };
@@ -251,6 +252,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
         playbackContinuation(): PlaybackContinuation | null { const value = row()?.continuation; return value ? JSON.parse(value) : null; },
         mixTrim() { return row()?.mixTrim ?? 100; },
         saveMixTrim(level: number) { save("mixTrim", level); },
+        inSync() { return !!row()?.inSync; },
+        saveInSync(enabled: boolean) { save("inSync", Number(enabled)); },
         compressor(): CompressorSettings {
           try { const value: unknown = JSON.parse(row()?.compressor ?? "null"); return { ...defaultCompressor, ...isCompressorPatch(value) ? value : {} }; }
           catch { return { ...defaultCompressor }; }
@@ -451,7 +454,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     // A speaker's Sendspin static delay as it last reported it; its player keeps the value itself.
     deviceSyncDelay: (id: string) => db.query<{ delay: number }, [string]>("SELECT delay FROM device_sync_delay WHERE id = ?").get(id)?.delay,
     saveDeviceSyncDelay(id: string, delay: number) { db.query("INSERT INTO device_sync_delay VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET delay = excluded.delay").run(id, delay); },
-    /** Pairs the Device whose ID is `id`, or gives an already paired ID a new token. */
+    /** Pairs the Device whose ID is `id`; code-authorized token replacement grants Controller access. */
     pair(id: unknown, name?: unknown) {
       if (!isDeviceId(id)) throw new ControllerError("Update Couch on this device, then pair again.");
       if (id === installation().deviceId) throw new ControllerError("This device already runs this Couch.", 409);
@@ -459,7 +462,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const token = crypto.randomUUID() + crypto.randomUUID();
       const now = Date.now();
       db.transaction(() => {
-        if (pairedDevice(id)) db.query("UPDATE devices SET token_hash = ?, name = ?, lastSeenAt = ? WHERE id = ?").run(hash(token), label, now, id);
+        if (pairedDevice(id)) db.query("UPDATE devices SET token_hash = ?, name = ?, role = 'controller', lastSeenAt = ? WHERE id = ?").run(hash(token), label, now, id);
         else {
           const role = db.query("SELECT 1 FROM devices LIMIT 1").get() ? "controller" : "administrator";
           db.query("INSERT INTO devices (token_hash, id, name, role, createdAt, lastSeenAt) VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), id, label, role, now, now);

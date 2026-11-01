@@ -42,7 +42,7 @@ test("Direct compression prepares readable bytes without grouping, preserves pos
     await f.restart();
     const restored = await f.connect(0);
     const resumed = await restored.command({ type: "play", entryId: "film" });
-    assert.equal(resumed.ok, true, resumed.error);
+    assert.equal(resumed.ok, true, resumed.error ?? "");
     assert.equal(restored.state.compressor?.threshold, -24);
     assert.equal(restored.state.compressor?.enabled, true);
   } finally { await f.close(); }

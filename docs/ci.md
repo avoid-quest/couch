@@ -29,6 +29,25 @@ manifests and `bun.lock` together.
 - Packaging hooks and the combined Mac update feed: `bun test tests/package-hooks.test.ts`.
 - Website release catalog: `bun test tests/release-catalog.test.ts`.
 - Live audio: see [Live audio](live-audio.md#checks).
+- Renderer journeys: `bun tests/ui-journeys.native.ts <evidence directory>` on a
+  display (`xvfb-run -a` without one), with isolated APIs, data and a fresh renderer
+  per check. Covers search, navigation, Saved, collection caching, settings,
+  pairing and radio; `--only=reorder` checks render work, `--only=queue` queued
+  Play controls and HTML fullscreen. `--width=390 --height=844` checks phone
+  layouts; `--tv --width=1920 --height=1080 --only=tv` checks TV focus/reachability.
+  Windows uses a frameless TV window and reapplies its bounds after the work-area
+  clamp. Results go to `result.json`; provider availability, physical pairing and
+  hardware playback performance remain unqualified.
+- Mac fullscreen: after `bun run build`, run
+  `bun tests/player-fullscreen.native.ts <evidence directory>` with FFmpeg on
+  PATH (or `COUCH_TEST_FFMPEG`). Uses the actual Main/preload/player; runs rapid,
+  native-restore, external-exit, native-exit, escape, combined and TV serially in
+  separate apps, or selects one with a final argument. See the [Mac audit](release-audit-2026-10-29.md#mac-fixes-and-retained-fullscreen-observations)
+  for retained failures and qualification limits.
+- Run native focus suites serially: another Electron window can steal focus.
+  After standalone `bun scripts/core.ts`, rebuild the complete app: mixing its
+  development Core with the client's build identity can block native journeys at
+  the connection gate.
 
 An integration test, `tests/<name>.integration.ts`, runs on Core's Node runtime.
 Build Core and `build/audio-worker.mjs` first for the audio integrations.
@@ -38,6 +57,16 @@ bun build tests/<name>.integration.ts --target=node --outfile=build/<name>.integ
 node --test build/<name>.integration.mjs
 ```
 
+- `executable-fixture.integration.ts` checks real child fixtures and the separate
+  audio worker; `COUCH_TEST_FFMPEG` enables its real-FFmpeg media path.
+  `build-relay.integration.ts` checks runtime/dependency licenses with temporary
+  files and stubbed Go responses, without packaging. Build Core/audio-worker
+  first; use the Node recipe above with isolated `COUCH_DATA_DIR` and
+  `COUCH_PORT=0`. Portable fixtures do not qualify another platform's native runtime.
+- Bandcamp: `bun run test tests/music-search.test.ts` and the Node integration
+  `tests/bandcamp-helper.integration.ts` (recipe above). Cleanup waits for all
+  helper startup checks; `COUCH_TEST_YT_DLP=<real yt-dlp executable>` also checks
+  the bundled plugin against offline JSON and challenge-HTML fixtures.
 - The TV health integration needs native Linux `/proc` (CPU emulation changes the
   reported executable). The installed app's Node can run it too:
   `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
@@ -52,7 +81,8 @@ node --test build/<name>.integration.mjs
 - Main's window lifecycle has a native check, after `bun run build`, on a display
   (`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence directory>`.
   It reserves `COUCH_PORT` and the next two ports; this test defaults to 42870,
-  not Couch's 4100.
+  not Couch's 4100. Runs on macOS, Windows and Linux with a separate evidence
+  directory per platform; process/boot identity is asserted only with Linux `/proc`.
 
 ## Workflows
 
@@ -68,6 +98,10 @@ Housekeeping is the one scheduled workflow.
 | [Housekeeping](../.github/workflows/housekeeping.yml) | Scheduled or `gh workflow run housekeeping.yml` | Weekly, Mondays 02:23 UTC: deletes expired artifacts and caches unused for 30 days |
 
 Check and Package install the latest stable Bun and use the frozen lockfile.
+
+- Check also builds and runs `in-sync-persistence.integration.ts` on Node 24 with
+  isolated `COUCH_DATA_DIR` and `COUCH_PORT=0`.
+
 Without `--ref`, a run uses the default branch, not your work. Follow a run on
 the same branch: `gh run list --workflow <workflow> --branch <branch>`, with
 `<workflow>` set to `check.yml` or `package.yml`, then `gh run watch <run id>`.
@@ -103,6 +137,8 @@ Blacksmith GitHub App enabled for this repository.
 ## Bundled live relay
 
 Packaging also requires Go on PATH (at least the version in `native/live-relay/go.mod`).
+Runtime notices support upstream Go and Homebrew's `libexec` layout, whose Go
+license sits one directory above `GOROOT`.
 Package installs the latest stable Go;
 ordinary `bun run build` still needs only Bun/Node. The electron-builder `afterPack`
 hook compiles the `native/live-relay` module for the actual platform and

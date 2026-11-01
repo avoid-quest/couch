@@ -251,7 +251,10 @@ export async function runTvFocusReachability() {
       const controls = [...document.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex="0"]')]
         .filter(element => (element.tabIndex >= 0 || element.matches('[role="radio"], [role="tab"]')) && !element.matches('[role="radiogroup"], [role="tablist"]') && element.checkVisibility() && !element.matches(':disabled, [aria-disabled="true"]') && !element.closest('[inert], [aria-hidden="true"], [data-tv-local-only]'));
       let start = controls.indexOf(document.activeElement as HTMLElement);
-      if (start < 0) { applyTvNavigation('down'); start = controls.indexOf(document.activeElement as HTMLElement); }
+      if (start < 0) { applyTvNavigation('down'); await wait(0); start = controls.indexOf(document.activeElement as HTMLElement); }
+      // A loading page focuses its heading until it has controls; Up reaches the header.
+      if (start < 0) { applyTvNavigation('up'); await wait(0); start = controls.indexOf(document.activeElement as HTMLElement); }
+      assert(start >= 0, `No reachable entry on ${href} (${mode})`);
       const obscured = new Set<string>();
       const edges: number[][] = [];
       for (const element of controls) {

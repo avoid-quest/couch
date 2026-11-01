@@ -141,7 +141,8 @@ const fail = (message: string) => {
 // Every window shows the error, so it names this Device.
 const unsupported = () => fail(`${localDeviceName() ?? "This device"} can't play this format. Play it on another device.`);
 // SRC_NOT_SUPPORTED also covers HTTP/DNS failures before any media was read.
-const sourceFailed = () => fail(video.error?.message || "This media couldn't load. The source may be unavailable or unsupported.");
+const unavailable = "This media couldn't load. The source may be unavailable or unsupported.";
+const sourceFailed = () => fail(video.error?.message || unavailable);
 // Pass-through says whether a source is HLS; without it, the path does.
 const isPlaylist = (command: NonNullable<typeof loading>) => !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
 // The timeline's loaded segment, only for media that seeks: not a capture, raw MPEG-TS or a live stream.
@@ -277,7 +278,15 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
     ...following ? { maxLiveSyncPlaybackRate: 1 } : {} });
   const active = () => current === generation && attempt === decoderGeneration && hls === decoder;
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
-  hls.on(Hls.Events.ERROR, (_event, data) => { if (active() && data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
+  hls.on(Hls.Events.ERROR, (_event, data) => {
+    if (!active() || !data.fatal) return;
+    const status = data.response?.code ?? 0;
+    if (codecs.includes(data.details)) unsupported();
+    else if (status >= 400) fail(`The media server refused this stream (HTTP ${status}).`);
+    // A cross-origin refusal without CORS headers hides its status from the page.
+    else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) fail(unavailable);
+    else fail(`The stream failed (${data.details}).`);
+  });
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => {
     if (active() && data.id === "main" && Number.isFinite(data.initPTS) && data.timescale > 0) { ptsOffset = data.initPTS / data.timescale; updateMapping(); send(); }
   });

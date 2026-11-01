@@ -30,7 +30,7 @@ async function fixture(t: TestContext, selectedLive = false) {
   const play = async () => {
     const previous = f.receiver.load();
     const reply = await f.receiver.command({ type: "enqueue", entry: { id: "programme", title: "Two languages", source }, playNow: true });
-    assert.equal(reply.ok, true, reply.error);
+    assert.equal(reply.ok, true, reply.error ?? "");
     await until(() => !!f.receiver.load() && f.receiver.load() !== previous);
     return f.receiver.load()!;
   };
@@ -91,7 +91,7 @@ test("selected Italian and its menu survive picture off and restoration with the
   for (const picture of [false, true]) {
     const previous = f.receiver.load();
     const reply = await f.receiver.command({ type: "output", deviceId: f.receiver.id, picture });
-    assert.equal(reply.ok, true, reply.error);
+    assert.equal(reply.ok, true, reply.error ?? "");
     await until(() => f.receiver.load() !== previous);
     const load = f.receiver.load()!;
     assert.deepEqual(load.output, { picture, sound: true });

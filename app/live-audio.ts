@@ -59,7 +59,7 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
       const lifetime = new AbortController();
       const waiting = new Map<number, { resolve(value?: AudioCaptureFormat): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
       const ensure = () => {
-        if (closed || active !== state || ownerOf() !== owner || owner.isDestroyed() || owner.mainFrame !== frame || frame.detached || frame.url !== ownerUrl) throw new Error("Audio capture was canceled.");
+        if (closed || active !== state || ownerOf() !== owner || owner.isDestroyed() || owner.mainFrame !== frame || frame.detached || new URL(frame.url).origin !== localOrigin) throw new Error("Audio capture was canceled.");
       };
       const fail = (error: string, uploadId?: string) => {
         if (!closed && !owner.isDestroyed()) owner.send("couch:live-audio-error", { id: action.id, error, ...(uploadId ? { uploadId } : {}) });
@@ -81,7 +81,7 @@ export function createLiveAudio(ownerOf: () => WebContents | null, capture: Retu
           if (typeof data.error === "string") pending.reject(new Error(data.error)); else pending.resolve(data.format);
         } else if (typeof data.error === "string") fail(data.error, data.uploadId);
       };
-      const ownerNavigation = (_event: unknown, _url: string, _inPlace: boolean, main: boolean) => { if (main) state.stop(); };
+      const ownerNavigation = (_event: unknown, _url: string, inPlace: boolean, main: boolean) => { if (main && !inPlace) state.stop(); };
       const ownerGone = () => state.stop();
       const state: Active = {
         id: action.id,

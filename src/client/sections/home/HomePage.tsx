@@ -4,8 +4,9 @@ import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { Play, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -31,6 +32,7 @@ import { useSessionGate } from "@/session/session-context";
 import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
 import { PlaysOnLine } from "@/sections/shell/Outputs";
+import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId, isRadio, radioHost, radioShowLabels, stationSources, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
@@ -144,7 +146,7 @@ export function HomePage() {
   const continuingUrls = new Set(hasRow("continue") ? unfinished.map(item => item.url).filter(Boolean) : []);
   const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
   const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live && !continuingUrls.has(item.url) && (!currentUrl || item.url !== currentUrl)) ?? [], item => item.id, hero !== undefined && !later.isPending);
-  const stationMeta = (station: RadioStation) => metaLine(showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode));
+  const stationMeta = (station: RadioStation, show: RadioProgrammeDetails | null) => metaLine(showMeta(station, show) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode));
   const filled: Partial<Record<HomeRowId, boolean>> = { upNext: !!upcoming.length, continue: !!continued.length, later: !!savedMedia.length, recent: !!recent.length };
   // The sources: shared inputs, Live TV while a source has channels, and what's saved from each source with a home.
   const sharedSources = useLiveSourceHits("");
@@ -215,11 +217,15 @@ export function HomePage() {
 
     // Every station on air, yours (played here lately, saved) first; the heading opens every station.
     radio: !!stations.length && <Shelf title="Radio" label="Radio stations" href="/radio">
-      {stations.map((station, index) => <li key={station.id} className="flex shrink-0">
-        {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-        <MediaTile fit="contain" logo={!onAir(station.id)?.artworkUrl || onAir(station.id)?.artworkUrl === station.logoUrl} data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
-          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
-      </li>)}
+      {stations.map((station, index) => {
+        const show = onAir(station.id);
+        const logo = !show?.artworkUrl || show.artworkUrl === station.logoUrl;
+        return <li key={station.id} className="flex shrink-0">
+          {/* Every picture stands at the shelf's height in its own shape, a logo on its square ground, so a row reads as one shelf. */}
+          <MediaTile className="home-radio-tile" fit="contain" natural={!logo} logo={logo} data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={stationMeta(station, show)} thumbnail={show?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
+            aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
+        </li>;
+      })}
     </Shelf>,
 
     "live-tv": iptv.data?.sources.some(source => source.channelCount) ? <LiveTvShelf /> : iptv.error && !iptv.data ? <Failed what="Live TV" retry={() => void iptv.refetch()} /> : null,
@@ -309,9 +315,15 @@ function UpNextRow({ entry, shape, meta, disabled, onPlay, verbs, pageFirst }: {
  * Stage has no verbs: its title is the one stop and opens the player, as its picture does under a pointer.
  */
 function HomeHero({ thumbnail, shape, title, meta, context, progress, open, children }: { thumbnail?: string; shape: ArtShape; title: string; meta?: string; context?: ReactNode; progress?: ReactNode; open?: () => void; children?: ReactNode }) {
+  const router = useRouter();
+  // Stop from anywhere replaces the playing title: return its lost focus as the bar does.
+  const titleFocused = useRef(false);
+  useLayoutEffect(() => {
+    if (open) return () => { if (titleFocused.current) { titleFocused.current = false; returnLostFocus(router); } };
+  }, [!!open, router]);
   return <Stage data-home-hero size="home" label={title} thumbnail={thumbnail ?? ""} shape={shape} title={title} onPicture={open}>
     {open
-      ? <div data-nav-row className="w-full"><StageTitle as="h2" title={title}><button type="button" data-page-first aria-label={`Open player: ${title}`} className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]" onClick={open}>{title}</button></StageTitle></div>
+      ? <div data-nav-row className="w-full"><StageTitle as="h2" title={title}><button type="button" data-page-first aria-label={`Open player: ${title}`} className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]" onFocus={() => { titleFocused.current = true; }} onBlur={() => { titleFocused.current = false; }} onClick={open}>{title}</button></StageTitle></div>
       : <StageTitle as="h2" title={title} />}
     {/* The meta line and its links read as one block under the title. */}
     {(meta || context) && <div className="home-hero-meta flex flex-wrap items-baseline gap-x-2 gap-y-1">{meta && <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>}{context}</div>}

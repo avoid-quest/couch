@@ -34,10 +34,21 @@ export async function runPlayerQueueRegression() {
       }
     });
     if (!isTvPresentation()) await check("fullscreen video keeps black letterbox bars", async () => {
+      const settled = async (fullscreen: boolean) => {
+        const deadline = Date.now() + 5000;
+        const label = fullscreen ? "Exit fullscreen" : "Enter fullscreen";
+        while (!!document.fullscreenElement !== fullscreen || !document.querySelector(`button[aria-label="${label}"]:enabled`)) {
+          assert(Date.now() < deadline, `Fullscreen transition did not settle: ${label}; ${JSON.stringify({ fullscreen: !!document.fullscreenElement, focused: document.hasFocus(), controls: [...document.querySelectorAll<HTMLButtonElement>('button[aria-label$="fullscreen"]')].map(button => ({ label: button.getAttribute('aria-label'), disabled: button.disabled })) })}`);
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+      };
       await audit.click("Enter fullscreen");
+      // Fullscreen is asynchronous; wait for the control to accept the next action.
+      await settled(true);
       assert(document.fullscreenElement, "Player did not enter fullscreen");
       assert(!document.querySelector(".player-page .ambient-light, .player-page .room"), "Fullscreen video paints artwork color");
       await audit.click("Exit fullscreen");
+      await settled(false);
       assert(!document.fullscreenElement, "Player did not exit fullscreen");
     });
     await check("manually queued items play directly", async () => {
