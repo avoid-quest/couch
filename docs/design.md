@@ -385,6 +385,9 @@ arrives, 600 ms for colour that follows what plays.
 - Routes appear immediately with cached content; artwork fades only on a cold
   load, and a Stage's object settles .75rem into place as it does (450 ms);
   the player's bands fade together with the subtitles they lift.
+- Over a playing video, moving the pointer out of the window leaves the four-second
+  controls hide timer running (`tests/player-auto-hide.browser.ts`, included in
+  the [player fixture checks](preview-performance.md#repeat-the-measurements)).
 - Opening the player fades it in over 160 ms; Back fades the restored bar in
   over the same interval. Only opacity animates, with no route snapshots or
   shared-element capture. The transport keeps its familiar positions in both
@@ -530,6 +533,13 @@ toast and clear their saved results automatically; failures stay visible for ret
   playlist. Original-language HTTPS audio takes priority over a dubbed HLS rendition.
   Bandcamp selects browser-compatible MP3, AAC, FLAC or WAV audio, retaining
   supported lossless formats while excluding ALAC and AIFF downloads.
+  Bandcamp search uses `/api/fuzzysearch/1/app_autocomplete` for up to 50 albums
+  and tracks, through the managed yt-dlp transport and protected proxy because
+  Node's direct HTTP requests can be challenged. Each search makes one request,
+  with the same 12-second deadline. Result links remove a duplicated leading origin
+  while keeping the original item when a query or fragment contains another URL.
+  A challenge page or other non-JSON response shows
+  "Bandcamp search is unavailable. Try again shortly."
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
 - **Alert** for a persistent problem on the page (destructive, with Try again
@@ -587,7 +597,9 @@ Next, Play next, Queue, Save, Open, Resume, From start, Remove, Hide.
 
 - [Shell](design/shell.md): sections and paths, the header and search, tab
   bars, the Couch switch, the now-playing bar, keyboard, first run.
-- [Home](design/home.md): the hero, your own rows and the sources.
+- [Home](design/home.md): the hero, your own rows and the sources. Radio show
+  artwork keeps its own proportions at the shelves' shared height; station
+  logos stay square.
 - [Browse](design/browse.md): Search, Radio and Live TV, Hide, Details, Saved,
   rows and tiles, filters and pages, breadcrumbs.
   Saved's ordering controls check adjacent positions without rebuilding each

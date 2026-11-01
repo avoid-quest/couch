@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Only bundled source is staged; every extraction owns and removes its directory.
-export async function stageExtractor(name: "soundcloud" | "streamingcommunity" | "raiplay" | "twitch", source: string) {
+export async function stageExtractor(name: "soundcloud" | "streamingcommunity" | "raiplay" | "twitch" | "bandcamp", source: string) {
   const directory = await mkdtemp(join(tmpdir(), `couch-${name}-`));
   try {
     const target = join(directory, "bundled", "yt_dlp_plugins", "extractor");

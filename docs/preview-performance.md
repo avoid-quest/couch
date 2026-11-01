@@ -109,8 +109,9 @@ the report verifies that playback keeps advancing. Run timing samples serially,
 without another build or test competing for the CPU.
 
 `--checks` uses React's profiling build for commit assertions and runs artwork,
-clock isolation, player transitions/Remote navigation/footer clearance, and player
-status and seek-preview regressions. Performance samples use the ordinary minified React build.
+clock isolation, player transitions/Remote navigation/footer clearance, player
+status, pointer-leave auto-hide and seek-preview regressions. Performance samples
+use the ordinary minified React build.
 The harness uses an ephemeral loopback port and its own data directory, exits its
 own Electron process, and leaves the owner's installed Couch untouched. Narrow
 windows exercise phone layout, not phone hardware.

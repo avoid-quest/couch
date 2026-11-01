@@ -86,6 +86,12 @@ build. Run both through the Node recipe above with isolated `COUCH_DATA_DIR`
 and `COUCH_PORT=0`; build Core/audio-worker first. Portable fixture coverage on
 one platform does not establish native execution on another.
 
+Bandcamp search coverage runs with `bun run test tests/music-search.test.ts` and
+the Node integration `tests/bandcamp-helper.integration.ts` built as above. Its
+fixture cleanup waits for all helper startup checks before removing their data.
+Set `COUCH_TEST_YT_DLP` to a real yt-dlp executable to also check the bundled
+search plugin against offline JSON and challenge-HTML fixtures.
+
 The TV health integration needs native Linux `/proc` (CPU emulation changes the
 reported executable). The installed app's Node also runs it:
 `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.

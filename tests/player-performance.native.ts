@@ -26,11 +26,12 @@ import './index.css';
 import { runPlayerPerformance } from '../../tests/player-performance.browser';
 import { runPlayerTransitionRegression } from '../../tests/player-transition.browser';
 import { runPlayerStatusRegression } from '../../tests/player-status.browser';
+import { runPlayerAutoHideRegression } from '../../tests/player-auto-hide.browser';
 import { runArtworkMountRegression } from '../../tests/artwork-mount.browser';
 import { runPlayerClockRenderingRegression } from '../../tests/player-clock-rendering.browser';
 import { prepareSeekPerformance, runSeekBarRegression } from '../../tests/seek-bar.browser';
 window.prepareSeek = () => prepareSeekPerformance(${JSON.stringify(audioPath ? '/benchmark.mp3' : undefined)});
-window.runFixture = ${checks ? `async () => ({ checks: [await runArtworkMountRegression(), await runPlayerClockRenderingRegression(), await runPlayerTransitionRegression(), await runPlayerStatusRegression(), await runSeekBarRegression()] })` : `() => runPlayerPerformance(${JSON.stringify({ rounds, clockMs, navigation, audioUrl: audioPath ? '/benchmark.mp3' : undefined })})`};
+window.runFixture = ${checks ? `async () => ({ checks: [await runArtworkMountRegression(), await runPlayerClockRenderingRegression(), await runPlayerTransitionRegression(), await runPlayerStatusRegression(), await runPlayerAutoHideRegression(), await runSeekBarRegression()] })` : `() => runPlayerPerformance(${JSON.stringify({ rounds, clockMs, navigation, audioUrl: audioPath ? '/benchmark.mp3' : undefined })})`};
 </script></body></html>`);
 try {
   await build(mergeConfig(config({ command: 'build', mode: 'production' }), {
