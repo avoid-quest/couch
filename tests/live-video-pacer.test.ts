@@ -17,6 +17,7 @@ test("the pacer presents a lone first frame at the next display tick and release
   runInNewContext(code, { self: scope });
   const running = scope.onmessage({ data: { readable: input, writable: output } });
   await new Promise<void>(resolve => setImmediate(resolve));
+  expect(writes).toEqual([]);
   tick();
   await new Promise<void>(resolve => setImmediate(resolve));
   expect(writes).toEqual([frame]);
