@@ -1,6 +1,7 @@
 import { Slider } from "@videojs/react";
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { formatDuration } from "@/time-format";
+import { cn } from "@/lib/utils";
 import { PlaybackThumbnail } from "./PlaybackThumbnail";
 
 /** One playback/source identity per mount. Video.js owns input; only Couch commits transport. */
@@ -90,7 +91,6 @@ export function PlaybackSeekBar({ value, max, disabled, playbackId, buffered, pa
       <Slider.Track data-slot="slider-track" className="relative h-1 w-full rounded-full bg-muted">
         {buffered !== null && <div data-slot="slider-buffered" className="absolute inset-y-0 left-0 rounded-full bg-foreground/35" style={{ width: `${clamp(buffered) / max * 100}%` }} />}
         <Slider.Fill data-slot="slider-range" className="absolute inset-y-0 left-0 w-(--media-slider-fill) rounded-full bg-primary" />
-        {children}
       </Slider.Track>
       <Slider.Thumb data-slot="slider-thumb" data-page-first={pageFirst || undefined}
         aria-valuenow={current} aria-valuemax={max}
@@ -111,5 +111,7 @@ export function PlaybackSeekBar({ value, max, disabled, playbackId, buffered, pa
         }} />
       </Slider.Preview>
     </Slider.Root>
+    {/* Marks over the track, outside the slider: Video.js restyles the slider's whole subtree on every pointer move. */}
+    {children && <div aria-hidden="true" className={cn("pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2", disabled && "opacity-50")}>{children}</div>}
   </div>;
 }

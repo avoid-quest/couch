@@ -141,7 +141,8 @@ The timeline row:
   cue timing; the label still rounds to seconds. A duration change clamps the
   preview, thumb and committed target to the same range.
 - Preview pointer updates leave the track, chapter cues and playback labels alone;
-  touch without a drag and disabled timelines do no hover work. Dragging stays
+  the cues are drawn over the track outside the slider, so the CSS variables
+  Video.js writes on every move don't restyle them. Touch without a drag and disabled timelines do no hover work. Dragging stays
   local and sends one Couch seek on release. Cancellation, Escape, lost pointer
   capture, a changed source or lost permission discard the draft. Escape cancels an
   active edit before leaving the player. Keyboard seeking keeps its ten-second
