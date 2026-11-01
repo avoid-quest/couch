@@ -6,11 +6,13 @@ Use the latest stable Bun (1.4.4+, see `engines`), Node 24+ and the committed
 lockfile.
 
 ```sh
-bun install --frozen-lockfile
-bun run typecheck
-bun run test      # unit tests, each file isolated from other files' mocks and globals
+bun install --frozen-lockfile   # also installs the pre-commit hook (.githooks)
+bun run check     # oxlint, typecheck, knip (unused files, exports, dependencies), unit tests
 bun run build
 ```
+
+The pre-commit hook runs the same checks except the tests. `bun run test` runs
+unit tests alone, each file isolated from other files' mocks and globals.
 
 Run one unit file with `bun run test <path>`. Plain `bun test` shares one
 process across files, so module mocks can interfere.

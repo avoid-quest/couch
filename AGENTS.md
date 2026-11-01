@@ -8,7 +8,7 @@ A media player everyone shares. Use the terms in [GLOSSARY.md](GLOSSARY.md).
 - **Real app, real content**: check behavior by running `bun run app` with its own `COUCH_DATA_DIR` and `COUCH_PORT` and playing real media, plus a phone-sized browser for phone layouts. Stop only the processes you started; leave the installed Couch (port 4100, `quest.avoid.couch` data) alone.
 - **Owner only**: running workflows, tags, version bumps, publishing, deploying and merging. Do each only when the owner asks for it.
 - Notes, research, handoffs and measurements go in `.scratch/` (gitignored) or the PR body.
-- Before handing back, run `bun run typecheck` and `bun run test`.
+- Before handing back, run `bun run check` (lint, typecheck, unused code, unit tests).
 - PR titles are plain sentences: they become the release notes.
 
 ## Where to look
