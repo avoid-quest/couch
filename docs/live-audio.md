@@ -117,9 +117,10 @@ such gaps; the host floor avoids them where outputs are known to be slow.
 Sync after a raise is only as good as the browser's own output-latency report.
 On the rig (29 Oct, v3 timing), a Linux receiver slowed with PulseAudio to about
 200 ms raised the lead 150 → 250 ms 5 s after joining and then stayed within
-1.3 ms of phone A (p95 5.6 ms); with Chrome's buffer forced to 8192 frames it
-raised the lead to 775 ms but played about 90 ms off, because Chrome
-under-reported that buffer. Couch cannot correct a misreported output delay.
+1.3 ms of an Android Chrome receiver (phone A, p95 5.6 ms); with Chrome's
+buffer forced to 8192 frames it raised the lead to 775 ms but played about
+90 ms off, because Chrome under-reported that buffer. Couch cannot correct a
+misreported output delay.
 
 The **35 ms allowance is fixed**, not measured jitter. SDK 5.0.0's public
 `SendspinPlayer` has no arrival/queue statistics or late/dropped chunk counters.
@@ -243,8 +244,9 @@ Most of the gain is bitrate; 10 ms frames would add about 10 ms in Core for
 0.04 more. Opus payload averages about 173 kbit/s per listener instead of 105.
 The scores are a codec proxy, not a listening test.
 
-Owner listening on 28 October also found trouble with a second Android phone (phone B) with its
-screen off. Phone B was not electrically recorded:
+Owner listening on 28 October also found trouble with a second Android phone
+(phone B, GrapheneOS/Vanadium) with its screen off. Phone B was not electrically
+recorded:
 
 | Buffer / condition | Phone B owner report | Linux candidates; coverage | Phone A candidates; coverage |
 |---|---|---|---|

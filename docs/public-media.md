@@ -117,8 +117,8 @@ from an upstream HTTP response. `media resolve-failed` records the safe extracto
 error or cancellation. Try again creates a new attempt and re-runs extraction;
 it does not reuse the previous signed URL.
 
-For a failure in a Mac test instance, capture
-`<data dir>/logs/couch.log` immediately
+For a failure in a Mac test instance, use that instance's configured
+`COUCH_DATA_DIR` and capture `<COUCH_DATA_DIR>/logs/couch.log` immediately
 after one failure and one **Try again**. Include the `media resolve`,
 `media resolved`, `media response` and `player error` lines for both attempts,
 helper selection lines, Couch version and the failure's local time. If the app

@@ -24,7 +24,8 @@ COUCH_PERF_REDUCED_MOTION=1 bun tests/player-performance.native.ts .artifacts/pl
 - `--assert-budget=60` checks cold and repeated navigation against 16.67 ms plus
   1 ms of scheduling jitter; `--assert-budget=120` uses 12.5 ms to detect a
   missed 120 Hz interval. rAF samples measure scheduling cadence, not GPU
-  presentation.
+  presentation. The measured Mac runs on 23 October 2026 failed the strict
+  120 Hz budget; it is not an established passing gate.
 - Clock updates arrive every 250 ms by default; `--clock-ms=0` disables them.
 - `--shell-navigation` visits Saved, Settings and Remote from Home and back
   through the real navigation links instead of the player.
@@ -36,7 +37,8 @@ COUCH_PERF_REDUCED_MOTION=1 bun tests/player-performance.native.ts .artifacts/pl
 ## Add continuous audio
 
 Set `COUCH_PERF_AUDIO` to a local MP3 to include silent decoding during the run;
-the report checks that playback keeps advancing.
+the report checks only the final audio state: unpaused, `readyState >= 3` and
+nonzero `currentTime`. It does not sample playback position during the run.
 
 ```sh
 ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000 -t 16 -ac 2 -codec:a libmp3lame .artifacts/benchmark.mp3
@@ -63,7 +65,7 @@ freshness and extraction reuse. They don't assert timing thresholds.
 
 ## Other harnesses
 
-Each harness documents its command on its first line; run them the same way.
+Each harness documents its commands in its opening comments.
 
 - Media startup, resolved media to first frame, no external traffic:
   `xvfb-run -a bun tests/media-startup.native.ts .artifacts/media-startup/run --rounds=3`

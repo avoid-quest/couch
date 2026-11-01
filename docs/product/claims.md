@@ -39,7 +39,7 @@ says *in preview* until a stable release exists, and never says *stable*.
 
 | Claim | Evidence | Status |
 | --- | --- | --- |
-| A sound card's stereo input delivered directly to scheduled receivers, without the buffered path | Lab experiment `ccac10b` (lab notes, not in this repo): a USB audio interface, one Mac laptop receiver over Ethernet | Short wired captures only. The sender imposed a 350 ms lead; the measured electrical output delay was about 0.35–0.37 s, against about 3.1 s for the buffered comparator (which excluded the browser's recording stage, so it's no whole-run comparison). Diagnostic observations, not a product number or target. Not qualified for fidelity, continuity, Wi-Fi, two receivers or recovery |
+| A sound card's stereo input delivered directly to scheduled receivers, without the buffered path | Lab experiment `ccac10b` (lab notes, not in this repo): UMC404HD, one MacBook Air receiver over Ethernet | Short wired captures only. The sender imposed a 350 ms lead; the measured electrical output delay was about 0.35–0.37 s, against about 3.1 s for the buffered comparator (which excluded the browser's recording stage, so it's no whole-run comparison). Diagnostic observations, not a product number or target. Not qualified for fidelity, continuity, Wi-Fi, two receivers or recovery |
 | Source-clock stability for long live input | Active milestone (lab notes) | Projected lead loss over minutes; unresolved |
 
 Never publish the lab's numbers as targets or results.

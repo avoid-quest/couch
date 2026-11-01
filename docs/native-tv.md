@@ -121,8 +121,8 @@ to exercise the Home tile and asynchronous Details check. Their compact controls
 also catch Up wrongly choosing the Saved rail over the preceding video; taller
 rows with metadata can hide that regression. Reload the renderer before
 each run so the second Saved item’s Details query is cold; its check delays the
-real For later response by 800 ms. Run with the tab visible
-or a screen recording active so animation frames run (a removal moves focus in one). Also save two radio
+real For later response by 800 ms. Run with the tab visible so animation frames
+run (a removal moves focus in one). Also save two radio
 favorites, configure a local Live TV channel the second output can play (serve its
 stream with CORS), and pair a second online shared output for the favorite ordering/Undo
 and Live TV Queue/Play on checks. Queue skips a channel already anywhere in the queue,

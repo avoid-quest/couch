@@ -65,12 +65,12 @@ Housekeeping is the one scheduled workflow.
 | [Check](../.github/workflows/check.yml) | `gh workflow run check.yml --ref <branch>` | Typecheck, test and build `<branch>` on Linux |
 | [Package](../.github/workflows/package.yml) | `gh workflow run package.yml --ref <branch>` | Typecheck, tests, Go tests and installers of `<branch>` on Linux, macOS and Windows, kept 14 days as run artifacts and never published |
 | [Release](../.github/workflows/release.yml) | Owner only ([For the owner](#for-the-owner), [Releases](#releases)) | Publishes a preview or promotes one to production |
-| [Housekeeping](../.github/workflows/housekeeping.yml) | Scheduled | Weekly, Mondays 02:23 UTC: deletes expired artifacts and caches unused for 30 days |
+| [Housekeeping](../.github/workflows/housekeeping.yml) | Scheduled or `gh workflow run housekeeping.yml` | Weekly, Mondays 02:23 UTC: deletes expired artifacts and caches unused for 30 days |
 
 Check and Package install the latest stable Bun and use the frozen lockfile.
 Without `--ref`, a run uses the default branch, not your work. Follow a run on
-the same branch: `gh run list --workflow check.yml --branch <branch>`, then
-`gh run watch <run id>`.
+the same branch: `gh run list --workflow <workflow> --branch <branch>`, with
+`<workflow>` set to `check.yml` or `package.yml`, then `gh run watch <run id>`.
 
 Housekeeping keeps GitHub storage in check; agents don't edit or dispatch it
 unless the owner asks.
@@ -87,7 +87,9 @@ gh workflow run release.yml -f channel=preview             # publish main as the
 gh workflow run release.yml -f channel=production          # promote the latest preview to production
 ```
 
-For a PR, `<branch>` is its head branch (`gh pr view <number> --json headRefName`).
+For a PR from this repository, `<branch>` is its head branch
+(`gh pr view <number> --json headRefName`). For a fork PR, push its head to a
+branch in this repository first, then use that branch as `--ref`.
 
 Check, Package and Release run on [Blacksmith](https://docs.blacksmith.sh/blacksmith-runners/overview)
 runners: Linux on `blacksmith-4vcpu-ubuntu-2404`, macOS on
@@ -288,9 +290,10 @@ Intel 13–14 can use a compatible mpv 0.35+ on PATH or in the helper cache,
 otherwise only the channel needing it reports the requirement. Core reads
 `/usr/bin/sw_vers -productVersion` before that download.
 `tests/intel-mpv.integration.ts` (run on Node as above) covers this with
-simulated Mac selection on Linux. The Intel FFmpeg supplier stops new Intel
-releases in January 2027; migrate that source before promising continued Intel
-support. A hosted ARM Package run proves cross-build, targets and signatures,
+simulated Mac selection on Linux. Couch's Intel FFmpeg supplier,
+[Martin Riedl](https://ffmpeg.martin-riedl.de/), stops new Intel releases in
+January 2027; migrate that source before promising continued Intel support.
+A hosted ARM Package run proves cross-build, targets and signatures,
 not execution on an Intel Mac: validate helpers, playback, capture, pairing and
 signed install/update on Intel hardware before claiming them.
 

@@ -24,7 +24,7 @@ free and open source, one of the projects of [avoid.quest](https://avoid.quest).
   as they arrive; turn on **In sync** to have them play together, a little behind.
 - **Keep it running.** An admin looks after the Couch from their phone:
   pairing, sources, sound outputs and updates, including updating a TV.
-  On Linux, Couch can also receive AirPlay sound and pair Bluetooth speakers.
+  On Linux, Couch can also pair Bluetooth speakers.
 
 Not every source plays everywhere: see
 [what plays where](docs/usage.md#what-plays-where). Local files, media folders
