@@ -80,9 +80,10 @@ Each harness documents its commands in its opening comments.
   the playlist request median went from 64 to 10 ms and the HLS first frame
   from 561 / 581 / 627 ms (median / p95 / max of 9) to 500 / 562 / 568 ms. MP4
   and split controls stayed within noise. On an Apple M5 Pro (macOS 26.7), the
-  same comparison moved the playlist request from 10.5 to 1.7 ms and the HLS
-  first frame from 447 / 482 / 482 to 438 / 464 / 464 ms; MP4 went from 227 to
-  230 ms and split from 228 to 226 ms (medians). Browsers, such as phones joined
+  same comparison (three alternating runs each, 9 samples) moved the playlist
+  request median from 10.5 to 1.7 ms and the HLS first frame from 447 / 482 / 482
+  to 438 / 464 / 464 ms (median / p95 / max); the MP4 median went from 227 to
+  230 ms and split from 228 to 226 ms. Browsers, such as phones joined
   as remotes, skip the idle preload: their service worker may precache the
   578 KB chunk, but they still load and evaluate it on their first HLS start.
 - Video playback and capture rates:
