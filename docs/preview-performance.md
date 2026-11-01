@@ -67,8 +67,8 @@ Those per-write figures are a one-off diagnostic, not a harness output; the
 `--seek` runs below are the reproducible measurement. The cues now sit over the
 track beside the slider, at the same positions.
 
-`--seek --rounds=3` without audio, three alternating runs each against main
-`0b860fe5`, Linux Xeon E5-2690 v3, Electron 45.1.0 / Chromium 156, a 1920×1080
+The seek command above with `COUCH_PERF_AUDIO` unset (no audio), three
+alternating runs each against main `0b860fe5`, Linux Xeon E5-2690 v3, Electron 45.1.0 / Chromium 156, a 1920×1080
 60 Hz HDMI display on an RTX 3060 (nouveau/Mesa, GPU compositing) under Cage.
 CPU is sampled from `/proc` over the 34 s run; 100% is one logical CPU. CPU cells
 list the three runs; frame p95 and max were the same or within the shown range
@@ -84,11 +84,12 @@ machines may show as smoothness. Media without chapters is unaffected. Main's
 runs reported the fixture's "drag preview ended at 759.5, expected about 765"
 two or three times each; the change's runs one, one and zero times.
 
-On an Apple M5 Pro (macOS 26.7, 120 Hz built-in display), with the whole renderer
-process sampled by `ps` and averaged over each run, the 59-cue fixture went from
-21.9–22.3% to 16.2–16.6% of a core, 10 cues from 17.1–17.8% to 15.8–16.1%, and no
-cues stayed at 15.6–15.9% vs 16.0–16.1%. Frame p95 / max stayed 9.7–9.9 / 10.4 ms
-on both, with no drag preview errors.
+On an Apple M5 Pro (macOS 26.7, 120 Hz built-in display), the same command
+without audio, three alternating runs each, with the whole renderer process
+sampled by `ps` and averaged over each run: the 59-cue fixture went from
+21.9–22.3% to 16.2–16.6% of a core and 10 cues from 17.1–17.8% to 15.8–16.1%;
+with no cues it went from 15.6–15.9% to 16.0–16.1%, within noise. Frame p95 / max
+stayed 9.7–9.9 / 10.4 ms on both, with no drag preview errors.
 
 Couch doesn't deliver chapters to players yet: no source sets them and Core's
 `parsePlayer` drops them from renderer reports. Until chapters are wired through,
