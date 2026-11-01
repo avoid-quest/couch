@@ -56,6 +56,30 @@ COUCH_PERF_AUDIO=.artifacts/benchmark.mp3 COUCH_PERF_WIDTH=1512 COUCH_PERF_HEIGH
 COUCH_PERF_AUDIO=.artifacts/benchmark.mp3 COUCH_PERF_WIDTH=1512 COUCH_PERF_HEIGHT=982 bun tests/player-performance.native.ts .artifacts/seek-profile --seek --rounds=3 --profile
 ```
 
+### Chapter cues outside the slider (1 November 2026)
+
+Video.js writes `--media-slider-fill` and `--media-slider-pointer` on the slider
+root at every pointer move, and a custom property change restyles that element's
+whole subtree. The seek fixture's 59 chapter cues lived inside it. Timed in the
+player page with style forced by a layout read, one write cost 0.58–1.6 ms with
+the cues and 0.13–0.15 ms without them; an ordinary inline property cost 0.04 ms.
+The cues now sit over the track beside the slider, at the same positions.
+
+`--seek --rounds=3` without audio, three alternating runs each against main
+`0b860fe5`, Linux Xeon E5-2690 v3, Electron 45.1.0 / Chromium 156, a 1920×1080
+60 Hz HDMI display on an RTX 3060 (nouveau/Mesa, GPU compositing) under Cage.
+CPU is sampled from `/proc` over the 34 s run; 100% is one logical CPU.
+
+| | Renderer main thread | Whole renderer | Frame p95 / max |
+| --- | --- | --- | --- |
+| main | 47.3 / 47.5 / 47.8% | 58.7 / 58.8 / 59.7% | 16.7 / 16.8 ms |
+| cues outside the slider | 22.6 / 22.8 / 23.8% | 33.6 / 34.1 / 34.5% | 16.7–16.8 / 16.8 ms |
+
+Frame timing already met 60 Hz on this machine, so the gain is CPU, which slower
+machines may show as smoothness. Media without chapters is unaffected. Main's
+runs reported the fixture's "drag preview ended at 759.5, expected about 765"
+two or three times each; the change's runs one, one and zero times.
+
 ## Behaviour regressions
 
 `tests/artwork-route.test.ts`, `tests/search-navigation.browser.tsx`,

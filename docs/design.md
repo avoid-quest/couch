@@ -465,7 +465,8 @@ Shared building blocks in `src/client/components`:
 - `PlaybackTransport`, `PlaybackTimeline`, `VolumeButton`
   ([Player](design/player.md)). The dedicated `PlaybackSeekBar` uses Video.js Slider
   primitives with Couch styling. Pointer motion leaves the track, chapter cues
-  and playback labels alone.
+  and playback labels alone. Chapter cues sit over the track outside the slider,
+  which Video.js restyles on every pointer move.
   `PlaybackThumbnail` uses standalone Video.js thumbnails for optional provider
   grids and timed cues, including on remote controllers. The selected cue is
   memoized; failed images can recover and cue gaps keep timestamps. Couch keeps

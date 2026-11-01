@@ -62,7 +62,8 @@ export async function runSeekBarRegression() {
     if (thumb.getAttribute('aria-valuenow') !== '100' || track.querySelector('[data-hover-time]')?.textContent !== '1:40') failures.push('Duration change left the preview outside the slider');
     setBuffered({ playbackId: 'p', end: 200 }); await nextFrame();
     if (track.querySelector<HTMLElement>('[data-slot="slider-buffered"]')?.style.width !== '100%') failures.push('Buffered end was not clamped to the duration');
-    if (!track.querySelector('[data-chapter-tick]')) failures.push('Timeline lost chapter cues');
+    if (!track.parentElement!.querySelector('[data-chapter-tick]')) failures.push('Timeline lost chapter cues');
+    if (track.querySelector('[data-chapter-tick]')) failures.push('Chapter cues are restyled with every pointer move inside the slider');
     await audit.updateClock({ playbackId: 'p', position: 121, duration: 900 });
     thumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
     const deadline = performance.now() + 1000;
