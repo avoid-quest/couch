@@ -303,8 +303,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     {remedy}
   </div>;
 
-  // A mouse leaving the window shows the controls; a lifted finger "leaves" too, but must let them hide.
-  return <section ref={root} style={artworkStage ? { ...roomStyle(roomLight), "--art-ratio": artRatio } as CSSProperties : undefined} className={cn("player-page fixed inset-0 isolate overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-osd={osd || undefined} data-artwork-stage={artworkStage || undefined} data-info={info || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={event => { if (event.pointerType === "touch") return; setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
+  return <section ref={root} style={artworkStage ? { ...roomStyle(roomLight), "--art-ratio": artRatio } as CSSProperties : undefined} className={cn("player-page fixed inset-0 isolate overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-osd={osd || undefined} data-artwork-stage={artworkStage || undefined} data-info={info || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
     {/* The picture is the player's surface. It fills the window and never moves or resizes: every panel lies over it. It
         takes focus when the player opens, and keys on it are shortcuts (useCouchHotkeys counts a tabindex of -1 as
         background). As on YouTube, a click on a video plays or pauses (on audio, a stray click leaves the music alone),
