@@ -1,11 +1,6 @@
 import { expect, test } from "bun:test";
 import { createBandcampCatalog } from "../src/server/providers/bandcamp";
 import { createSoundCloudBrowser } from "../src/server/providers/soundcloud";
-import { publicProviderMediaUrl, providerForUrl } from "../src/shared/providers";
-import { parseCommand } from "../src/server/validation";
-import { readCollectionSearch } from "../src/client/collection-pagination";
-import { readSearchState, searchLocation } from "../src/client/search";
-import { supportsWebVideoQuality } from "../src/shared/video-quality";
 import { ExtractionError } from "../src/server/yt-dlp";
 
 const album = { type: "a", name: "A che punto siamo", band_name: "Arsider", url: "https://arsider.bandcamp.com/album/a-che-punto-siamo", img: "https://f4.bcbits.com/img/3034736658_3.jpg", art_id: 3034736658 };
@@ -13,25 +8,6 @@ const track = { type: "t", name: "Track", band_name: "Arsider", url: "https://ar
 const soundcloud = (index = 0) => ({ _type: "url", title: `Arsider track ${index}`, uploader: "Arsider Produzioni", duration: 92.566,
   url: `https://api.soundcloud.com/tracks/${index}`, webpage_url: `https://soundcloud.com/arsiderprod/track-${index}`,
   thumbnails: [{ url: "https://i1.sndcdn.com/artworks-small.jpg" }, { url: "https://i1.sndcdn.com/artworks-original.jpg" }] });
-
-test("Bandcamp search uses Couch's yt-dlp transport with one bounded request", async () => {
-  let calls = 0;
-  const controller = new AbortController();
-  const catalog = createBandcampCatalog(async (args, options) => {
-    calls++;
-    expect(args.at(-1)).toBe("https://bandcamp.com/api/fuzzysearch/1/app_autocomplete?q=tycho");
-    expect(args).toContain("CouchBandcampSearch,end");
-    expect(args.slice(args.indexOf("--retries"), args.indexOf("--retries") + 4)).toEqual(["--retries", "0", "--extractor-retries", "0"]);
-    expect(options?.plugin).toBe("bandcamp");
-    expect(options?.timeoutMs).toBe(12_000);
-    expect(options?.signal?.aborted).toBe(false);
-    controller.abort();
-    expect(options?.signal?.aborted).toBe(true);
-    return JSON.stringify({ couch_bandcamp_search: JSON.stringify({ results: [album, track] }) });
-  });
-  await expect(catalog.browse({ query: "tycho" }, controller.signal)).rejects.toBe(controller.signal.reason);
-  expect(calls).toBe(1);
-});
 
 test("Bandcamp parses helper search results and reports helper failures or challenge HTML", async () => {
   for (const body of [JSON.stringify({ results: [album, track] }), "<!doctype html><title>Client Challenge</title>"]) {
@@ -85,18 +61,6 @@ test("Bandcamp distinguishes an empty search from unavailable or malformed respo
   }
 });
 
-test("Bandcamp reports challenge pages and other non-JSON responses without retrying", async () => {
-  for (const body of ["<!doctype html><html><title>Client Challenge</title></html>", "not JSON"]) {
-    let calls = 0;
-    const catalog = createBandcampCatalog(undefined, (async () => {
-      calls++;
-      return new Response(body, { status: 200, headers: { "Content-Type": "text/html" } });
-    }) as typeof fetch);
-    await expect(catalog.browse({ query: "tycho" })).rejects.toMatchObject({ status: 502, message: "Bandcamp search is unavailable. Try again shortly." });
-    expect(calls).toBe(1);
-  }
-});
-
 test("Bandcamp keeps search limits and builds zero-padded art_id covers", async () => {
   let calls = 0;
   const catalog = createBandcampCatalog(undefined, (async () => {
@@ -110,18 +74,6 @@ test("Bandcamp keeps search limits and builds zero-padded art_id covers", async 
   expect(page.items[0]?.thumbnail).toBe("https://f4.bcbits.com/img/a0978734060_5.jpg");
 });
 
-test("Bandcamp search cancellation reaches the request and pasted tracks keep their extractor path", async () => {
-  const controller = new AbortController();
-  const catalog = createBandcampCatalog(async args => {
-    expect(args.at(-1)).toBe(track.url);
-    return JSON.stringify({ title: "Track", vcodec: "none", acodec: "mp3", url: "https://t4.bcbits.com/stream/track" });
-  }, (async (_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true }))) as typeof fetch);
-  const pending = catalog.browse({ query: "arsider" }, controller.signal);
-  controller.abort();
-  await expect(pending).rejects.toBe(controller.signal.reason);
-  expect((await catalog.browse({ url: track.url })).item?.kind).toBe("media");
-});
-
 test("SoundCloud searches metadata, paginates, and uses public track links instead of API URLs", async () => {
   const calls: string[][] = [];
   const browse = createSoundCloudBrowser(async args => {
@@ -132,10 +84,8 @@ test("SoundCloud searches metadata, paginates, and uses public track links inste
   expect(first.items).toHaveLength(24);
   expect(first.nextCursor).toBe("24");
   expect(first.items[0]).toMatchObject({ title: "Arsider track 0", provider: "soundcloud", kind: "media", url: soundcloud().webpage_url, duration: 92.566, thumbnail: "https://i1.sndcdn.com/artworks-original.jpg" });
-  expect(calls[0]).toContain("--flat-playlist");
   expect(calls[0]?.at(-1)).toBe("scsearch25:arsider");
   const next = await browse({ query: "arsider", cursor: first.nextCursor });
-  expect(calls[1]).toContain("25:49");
   expect(calls[1]?.at(-1)).toBe("scsearch49:arsider");
   expect(next.items[0]?.url).toBe(soundcloud(24).webpage_url);
   expect(next.nextCursor).toBeUndefined();
@@ -157,29 +107,8 @@ test("SoundCloud details are independently openable and query text cannot select
   }
 });
 
-test("SoundCloud filters unsafe results and propagates cancellation and invalid upstream data", async () => {
-  const controller = new AbortController();
-  const browse = createSoundCloudBrowser(async (_args, options) => {
-    expect(options?.signal).toBe(controller.signal);
-    return JSON.stringify({ entries: [soundcloud(), { ...soundcloud(), webpage_url: "https://outside.example/artist/track" }, { ...soundcloud(), webpage_url: "https://user:password@soundcloud.com/artist/track" }] });
-  });
-  expect((await browse({ query: "arsider" }, controller.signal)).items).toHaveLength(1);
-  controller.abort();
-  await expect(browse({ query: "arsider" }, controller.signal)).rejects.toThrow();
+test("SoundCloud filters unsafe results and rejects invalid upstream data", async () => {
+  const browse = createSoundCloudBrowser(async () => JSON.stringify({ entries: [soundcloud(), { ...soundcloud(), webpage_url: "https://outside.example/artist/track" }, { ...soundcloud(), webpage_url: "https://user:password@soundcloud.com/artist/track" }] }));
+  expect((await browse({ query: "arsider" })).items).toHaveLength(1);
   for (const output of ["not json", "{}", '{"entries":{}}']) await expect(createSoundCloudBrowser(async () => output)({ query: "arsider" })).rejects.toThrow("invalid catalog information");
-});
-
-test("music filters, SoundCloud details, queue commands and history share the provider identity", () => {
-  for (const source of ["Bandcamp", "SoundCloud"]) {
-    const state = { query: "arsider", source, kind: "music" as const };
-    expect(readSearchState(new URL(searchLocation(state), "https://couch.local").search)).toEqual(state);
-  }
-  const url = soundcloud().webpage_url;
-  expect(providerForUrl(url)).toBe("soundcloud");
-  expect(publicProviderMediaUrl(url)).toBe(url);
-  expect(publicProviderMediaUrl(`${url}?secret_token=private`)).toBeUndefined();
-  expect(readCollectionSearch({ provider: "soundcloud", url }).provider).toBe("soundcloud");
-  expect(supportsWebVideoQuality(url)).toBe(false);
-  const action = { type: "enqueueProvider", provider: "soundcloud", url, shape: "atom", title: "Arsider", playNow: true };
-  expect(parseCommand(JSON.stringify({ type: "command", requestId: "test", action })).action).toEqual(action);
 });

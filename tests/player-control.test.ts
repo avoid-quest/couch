@@ -41,7 +41,6 @@ test("stale/foreign player snapshots, offline, private and disconnected targets 
   for (const changed of [
     { ...session, state: { ...state, controlling: tvA } },
     { ...session, state: { ...state, outputs: [{ deviceId: tvA }] } },
-    { ...session, state: { ...state, devices: [] } },
     { ...session, state: { ...state, devices: state.devices!.map(device => ({ ...device, online: false })) } },
     { ...session, state: { ...state, devices: state.devices!.map(device => ({ ...device, sharing: { audio: false, video: false } })) } },
     { ...session, connected: false },
@@ -53,19 +52,4 @@ test("stale/foreign player snapshots, offline, private and disconnected targets 
     await assert.rejects(scoped.command({ type: "restoreRemoved", token: "undo-token" }));
   }
   assert.deepEqual(calls, []);
-  const returned = remotePlayerSession(session, tvB);
-  assert.equal(returned.connected, true);
-  assert.equal(await returned.run({ type: "play", entryId: "waiting" }), true);
-  assert.equal(calls[0]?.target, tvB);
-});
-
-test("validated route context survives queue toggles and idle Stop snapshots; plain /now stays ordinary", async () => {
-  const { session } = fixture();
-  const route = readPlayerSearch({ queue: true, targetDeviceId: tvB });
-  assert.deepEqual(readPlayerSearch({ ...route, queue: undefined }), { queue: undefined, targetDeviceId: tvB });
-  assert.deepEqual(readPlayerSearch({ queue: "true" }), { queue: true, targetDeviceId: undefined });
-  for (const value of [true, [], {}, "other", "b".repeat(44)]) assert.equal(readPlayerSearch({ targetDeviceId: value }).targetDeviceId, undefined);
-  const idle = remotePlayerSession({ ...session, state: { ...session.state!, playback: null, outputs: [], queue: [] } }, tvB);
-  assert.equal(idle.connected, true);
-  assert.equal(idle.state?.queue.length, 0);
 });

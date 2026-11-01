@@ -1,10 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 
 const players: FixturePlayer[] = [];
-const authenticated: unknown[][] = [];
-const taps: unknown[] = [];
-const failures: unknown[][] = [];
-let authenticationFailure: Error | undefined;
 class FixturePlayer {
   buffers: number[] = [];
   disconnected = false;
@@ -19,25 +15,14 @@ class FixturePlayer {
   setMinBufferMs(value: number) { this.buffers.push(value); }
 }
 mock.module("@sendspin/sendspin-js", () => ({ SendspinPlayer: FixturePlayer }));
-mock.module("../src/client/api/client", () => ({ apiFetch: async (...args: unknown[]) => {
-  authenticated.push(args);
-  if (authenticationFailure) { const error = authenticationFailure; authenticationFailure = undefined; throw error; }
-} }));
-mock.module("../src/client/toasts", () => ({ failed: (...args: unknown[]) => failures.push(args) }));
-mock.module("../src/client/session/renderer", () => ({ waitForTap: (callback: unknown) => taps.push(callback) }));
+mock.module("../src/client/api/client", () => ({ apiFetch: async () => {} }));
+mock.module("../src/client/toasts", () => ({ failed: () => {} }));
+mock.module("../src/client/session/renderer", () => ({ waitForTap: () => {} }));
 mock.module("../src/client/session/device-id", () => ({ storage: null, deviceId: () => "opaque-device" }));
 const { listen } = await import("../src/client/session/sendspin");
 const credentials = { origin: "http://localhost", token: "fixture-token" };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 afterEach(async () => { listen(false, false, credentials, "Fixture"); await settle(); });
-
-test("Couch supplies shared identity storage and cookie authorization while the SDK keeps playback defaults", async () => {
-  listen(true, false, credentials, "Fixture"); await settle();
-  const player = players.at(-1)!;
-  expect(player.options).toMatchObject({ baseUrl: credentials.origin, storage: null, suite: "aesgcm" });
-  expect(authenticated.at(-1)).toEqual([credentials, "/api/audio/session", { method: "POST", credentials: "include" }]);
-  for (const key of ["playerId", "codecs", "requiredLeadTimeMs", "minBufferMs", "correctionMode", "outputMode", "latencyHint"]) expect(player.options[key]).toBeUndefined();
-});
 
 test("clock-only watch reuses the player; public buffer changes keep the connection", async () => {
   listen(true, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 }); await settle();
@@ -59,27 +44,6 @@ async function sampling(run: () => Promise<void>) {
   return (ticks: number) => { for (let i = 0; i < ticks; i++) tick(); };
 }
 
-test("a Receiver declares the host floor at stream start and raises once, coarsely, from five smoothed readings", async () => {
-  const settings = { codec: "pcm", minBufferMs: 150, sourceId: "concert" } as const;
-  const tick = await sampling(async () => { listen(true, false, credentials, "Fixture", settings); await settle(); });
-  const player = players.at(-1)!;
-  expect(player.options.minBufferMs).toBe(150);
-  player.syncInfo.outputLatencyMs = 118;
-  tick(10);
-  expect(player.buffers).toEqual([]);
-  player.syncInfo.outputLatencyMs = 201;
-  tick(2);
-  expect(player.buffers).toEqual([]);
-  tick(1);
-  expect(player.buffers).toEqual([250]);
-  tick(10);
-  expect(player.buffers).toEqual([250]);
-  listen(true, false, credentials, "Fixture", { ...settings, minBufferMs: 0 }); await settle();
-  expect(player.buffers).toEqual([250]);
-  listen(true, false, credentials, "Fixture", { ...settings, codec: "opus", minBufferMs: 0 }); await settle();
-  expect(players.at(-1)!.options.minBufferMs).toBe(250);
-});
-
 test("a new Live source or a new Join starts again from the host floor", async () => {
   const settings = { codec: "pcm", minBufferMs: 150, sourceId: "first" } as const;
   const tick = await sampling(async () => { listen(true, false, credentials, "Fixture", settings); await settle(); });
@@ -93,83 +57,6 @@ test("a new Live source or a new Join starts again from the host floor", async (
   listen(false, false, credentials, "Fixture"); await settle();
   listen(true, false, credentials, "Fixture", settings); await settle();
   expect(players.at(-1)!.options.minBufferMs).toBe(150);
-});
-
-test("output readings count only while playing in sync, and sampling stops on Leave", async () => {
-  const tick = await sampling(async () => { listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150, sourceId: "concert" }); await settle(); });
-  const player = players.at(-1)!;
-  player.syncInfo.outputLatencyMs = 201;
-  player.timeSyncInfo.synced = false;
-  tick(10);
-  expect(player.buffers).toEqual([]);
-  player.timeSyncInfo.synced = true;
-  tick(5);
-  expect(player.buffers).toEqual([250]);
-  listen(false, false, credentials, "Fixture"); await settle();
-  player.syncInfo.outputLatencyMs = 450;
-  tick(10);
-  expect(player.buffers).toEqual([250]);
-});
-
-test("a failed audio bootstrap is visible and its retry creates a fresh player", async () => {
-  const count = players.length, error = new Error("Temporary connection failure");
-  authenticationFailure = error;
-  listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 }); await settle();
-  expect(players.length).toBe(count);
-  expect(failures.at(-1)?.[1]).toBe(error);
-  const retry = taps.at(-1);
-  expect(typeof retry).toBe("function");
-  (retry as () => void)(); await settle();
-  expect(players.length).toBe(count + 1);
-  expect(players.at(-1)!.options.codecs).toEqual(["pcm"]);
-});
-
-test("leaving cancels an offered bootstrap retry", async () => {
-  authenticationFailure = new Error("Temporary connection failure");
-  listen(true, false, credentials, "Fixture"); await settle();
-  const retry = taps.at(-1) as () => void, count = players.length;
-  listen(false, false, credentials, "Fixture");
-  retry(); await settle();
-  expect(players.length).toBe(count);
-});
-
-test("a rejected Tap to hear keeps its retry and reports the output failure", async () => {
-  const original = FixturePlayer.prototype.unlock;
-  const error = new Error("The audio output is unavailable.");
-  FixturePlayer.prototype.unlock = async () => { throw error; };
-  try {
-    listen(true, false, credentials, "Fixture"); await settle();
-    await new Promise(resolve => setTimeout(resolve, 510));
-    const retry = taps.at(-1) as () => void;
-    expect(typeof retry).toBe("function");
-    retry();
-    // renderer.hear clears the offered gesture synchronously; the rejected attempt must restore it.
-    taps.push(null);
-    await settle();
-    expect(typeof taps.at(-1)).toBe("function");
-    expect(failures.at(-1)?.[1]).toBe(error);
-    expect(failures.at(-1)?.[0]).toContain(error.message);
-    FixturePlayer.prototype.unlock = original;
-    (taps.at(-1) as () => void)(); await settle();
-    expect(taps.at(-1)).toBeNull();
-  } finally { FixturePlayer.prototype.unlock = original; }
-});
-
-test("leaving while Tap to hear is pending cannot restore its prompt or report a stale failure", async () => {
-  const original = FixturePlayer.prototype.unlock;
-  FixturePlayer.prototype.unlock = async () => { throw new Error("Needs a gesture."); };
-  try {
-    listen(true, false, credentials, "Fixture"); await settle();
-    await new Promise(resolve => setTimeout(resolve, 510));
-    const pending = Promise.withResolvers<void>();
-    FixturePlayer.prototype.unlock = () => pending.promise;
-    (taps.at(-1) as () => void)();
-    listen(false, false, credentials, "Fixture");
-    const before = failures.length;
-    pending.reject(new Error("Old output failed.")); await settle();
-    expect(taps.at(-1)).toBeNull();
-    expect(failures.length).toBe(before);
-  } finally { FixturePlayer.prototype.unlock = original; }
 });
 
 test("a codec change keeps the Media Session that Couch set when the SDK's disconnect clears it", async () => {

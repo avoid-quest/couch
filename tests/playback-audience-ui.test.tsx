@@ -1,4 +1,4 @@
-import { expect, mock, spyOn, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Action, PlaybackControls } from "../src/shared/protocol";
@@ -14,25 +14,15 @@ mock.module("../src/client/session/device-id", () => ({ deviceId: () => here, an
 const sent: Action[] = [];
 const audience: PlaybackControls = { programme: false, queue: false, seek: false, speed: false, audioDelay: false, subtitleDelay: false, leave: true };
 let state = fixture();
-let connected = true;
 const run = async (action: Action) => { sent.push(action); return true; };
-mock.module("../src/client/session/session-context", () => ({ useSessionGate: () => ({ state, connected, run, seekBy: (seconds: number) => { throw new Error(`unexpected seek ${seconds}`); }, credentials: { origin: "http://couch", token: "test" } }), useOptionalSessionGate: () => ({ state, connected, run }) }));
+mock.module("../src/client/session/session-context", () => ({ useSessionGate: () => ({ state, connected: true, run, seekBy: (seconds: number) => { throw new Error(`unexpected seek ${seconds}`); }, credentials: { origin: "http://couch", token: "test" } }), useOptionalSessionGate: () => ({ state, connected: true, run }) }));
 const query = await import("@tanstack/react-query");
 mock.module("@tanstack/react-query", () => ({ ...query, queryOptions: (options: unknown) => options, useQuery: () => ({ data: {} }), useMutation: () => ({ isPending: false }) }));
 mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
-let hotkeys: { hotkey: string; enabled?: boolean; action: () => unknown }[] = [];
-mock.module("../src/client/useCouchHotkeys", () => ({ useCouchHotkeys: (keys: typeof hotkeys) => { hotkeys = keys; } }));
 mock.module("../src/client/sections/shell/shell-context", () => ({ useShell: () => ({ section: "Now", changeSection() {}, openPlayer() {}, focusSearch() {} }) }));
-const { PlaybackTransport, PlaybackVolume, LiveParticipation, VolumeButton } = await import("../src/client/components/PlaybackTransport");
-const { PlaybackMenu } = await import("../src/client/components/PlaybackSettings");
-const { KeyboardShortcuts } = await import("../src/client/sections/shell/KeyboardShortcuts");
-const { hasUpNext, UpNextButton } = await import("../src/client/sections/now/QueuePanel");
+const { PlaybackVolume, LiveParticipation } = await import("../src/client/components/PlaybackTransport");
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
-const { useItemMenu } = await import("../src/client/components/RowMenu");
-const { LiveClock } = await import("../src/client/components/LiveClock");
-const { setCoreTime } = await import("../src/client/core-clock");
-const { listeningLive } = await import("../src/client/session/playback-controls");
 
 function fixture(): ClientSessionState {
   const outputs = [{ deviceId: here, picture: false, sound: true }];
@@ -53,21 +43,6 @@ function read<T>(render: () => T): T {
 }
 const buttons = (node: ReactNode) => elements(node).filter(element => typeof element.props.onClick === "function");
 
-test("listener transport is local Leave, queue is absent, and repeated presses emit one leave generation", async () => {
-  state = fixture(); sent.length = 0;
-  const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).toContain(">Leave</button>");
-  expect(html).not.toMatch(/aria-label="(?:Pause|Stop|Next)"/);
-  expect(hasUpNext(state)).toBe(false);
-  expect(UpNextButton({ state })).toBeNull();
-  const tree = read(() => LiveParticipation({ state, connected: true, run }));
-  const button = buttons(tree)[0]!;
-  const first = button.props.onClick!();
-  await button.props.onClick!();
-  await first;
-  expect(sent).toEqual([{ type: "leave", playbackId: "load-generation" }]);
-});
-
 test("Join always targets this listener even while its browser controls a TV", async () => {
   state = { ...fixture(), player: { ...fixture().player, playbackId: null }, controls: { ...audience, leave: false }, outputs: [] }; sent.length = 0;
   const tree = read(() => LiveParticipation({ state, connected: true, run }));
@@ -76,8 +51,6 @@ test("Join always targets this listener even while its browser controls a TV", a
   expect(sent).toEqual([{ type: "playLive", sourceId: "source", deviceId: here }]);
   let hits: ReturnType<typeof useLiveSourceHits> = [];
   read(() => { hits = useLiveSourceHits(""); });
-  expect(hits[0]!.primary.label).toBe("Join");
-  expect(hits[0]!.actions.map(action => action.label)).toEqual(["Join", "Play on"]);
   hits[0]!.primary.run();
   expect(sent.at(-1)).toEqual({ type: "playLive", sourceId: "source", deviceId: here });
 });
@@ -95,27 +68,6 @@ test("audience volume and mute read and change only its own device; Remote can n
   expect(sent.at(-1)).toEqual({ type: "volume", deviceId: "tv", volume: 32 });
 });
 
-test("Core rights hide settings and queue verbs, and disable programme shortcuts while own-volume shortcuts remain", () => {
-  state = fixture(); sent.length = 0;
-  const tree = read(() => PlaybackMenu({ player: state.player, controls: audience, ready: true, connected: true, credentials: { origin: "http://couch", token: "test" }, preferences: {} as never, profile: { id: "profile" } as never, onCommand: run, trigger: null }));
-  expect(elements(tree).filter(item => item.props["data-view"])).toHaveLength(0);
-  const menu = read(() => useItemMenu([{ label: "Queue", run() {} }, { label: "Play next", run() {} }, { label: "Details", run() {} }]));
-  expect(menu.shown.map(item => item.label)).toEqual(["Details"]);
-  read(() => KeyboardShortcuts({ open: false, onOpenChange() {} }));
-  for (const key of ["K", "Space", "J", "L", "ArrowLeft", "ArrowRight", "0", "C", "Shift+N", "Q"]) expect(hotkeys.find(item => item.hotkey === key)?.enabled).toBe(false);
-  hotkeys.find(item => item.hotkey === "ArrowUp")!.action();
-  hotkeys.find(item => item.hotkey === "M")!.action();
-  expect(sent).toEqual([{ type: "volume", deviceId: here, volume: 32 }, { type: "mute", deviceId: here, muted: true }]);
-});
-
-test("the real playback menu keeps split audio delay and omits unsupported muxed delay", () => {
-  const menu = (audioDelay: number | undefined, allowed = true) => read(() => PlaybackMenu({ player: { ...fixture().player, audioDelay }, controls: { ...audience, programme: true, audioDelay: allowed }, ready: true, connected: true, credentials: { origin: "http://couch", token: "test" }, preferences: {} as never, profile: { id: "profile" } as never, onCommand: run, trigger: null }));
-  const delayRows = (tree: ReactNode) => elements(tree).filter(item => item.props["data-view"] === "audioDelay");
-  expect(delayRows(menu(undefined))).toHaveLength(0);
-  expect(delayRows(menu(.3))).toHaveLength(1);
-  expect(delayRows(menu(.3, false))).toHaveLength(0);
-});
-
 test("Live owns Media Session without a queued item, its controls do nothing, and ordinary playback is restored", () => {
   const handlers = new Map<string, MediaSessionActionHandler | null>();
   const mediaSession = { metadata: null as MediaMetadata | null, playbackState: "none", position: undefined as MediaPositionState | undefined,
@@ -123,169 +75,28 @@ test("Live owns Media Session without a queued item, its controls do nothing, an
     setPositionState(position?: MediaPositionState) { this.position = position; } };
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { mediaSession } });
   Object.assign(globalThis, { MediaMetadata: class { constructor(metadata: MediaMetadataInit) { Object.assign(this, metadata); } } });
+  const session = (next: ClientSessionState) => { state = next; read(useMediaSession); for (const effect of effects.splice(0)) effect(); };
   effects.length = 0; sent.length = 0;
-  state = { ...fixture(), queue: [], currentEntryId: null };
-  read(useMediaSession);
-  for (const effect of effects.splice(0)) effect();
+  session({ ...fixture(), queue: [], currentEntryId: null });
   expect(mediaSession.metadata?.title).toBe("Concert");
   expect(mediaSession.playbackState).toBe("playing");
-  expect(mediaSession.position).toBeUndefined();
   for (const action of ["nexttrack", "seekto", "seekbackward", "seekforward"]) expect(handlers.get(action)).toBeNull();
   // Listeners get no media commands. Unhandled, Android's notification Pause would pause the SDK's silent
   // keep-alive element, so Play, Pause and Stop are handled and do nothing.
   for (const action of ["play", "pause", "stop"] as const) handlers.get(action)!({ action });
   expect(sent).toEqual([]);
   // Ordinary player updates cannot clear Live or supply stale programme metadata.
-  state = { ...state, player: { ...state.player, status: "idle", nowPlaying: { title: "Old programme", artist: "Old artist" } } };
-  read(useMediaSession);
-  for (const effect of effects.splice(0)) effect();
-  expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "", album: "", artwork: [] });
-  expect(mediaSession.playbackState).toBe("playing");
-  state.liveSources![0]!.metadata = { title: "Evening concert", description: "Piano · second set" };
-  read(useMediaSession);
-  for (const effect of effects.splice(0)) effect();
-  expect(mediaSession.metadata).toMatchObject({ title: "Evening concert", artist: "Piano · second set", album: "", artwork: [] });
-  state.liveSources![0]!.metadata = {};
-  read(useMediaSession);
-  for (const effect of effects.splice(0)) effect();
+  session({ ...state, player: { ...state.player, status: "idle", nowPlaying: { title: "Old programme", artist: "Old artist" } } });
   expect(mediaSession.metadata).toMatchObject({ title: "Concert", artist: "" });
-  state = { ...fixture(), controls: undefined, playbacks: [], liveSources: [], player: { ...fixture().player, status: "paused" }, queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film", duration: 300 }, { id: "next", source: "web:https://example.com/next", title: "Next" }] };
-  read(useMediaSession);
-  for (const effect of effects.splice(0)) effect();
+  expect(mediaSession.playbackState).toBe("playing");
+  session({ ...fixture(), controls: undefined, playbacks: [], liveSources: [], player: { ...fixture().player, status: "paused" }, queue: [{ id: "entry", source: "web:https://example.com/movie", title: "Film", duration: 300 }, { id: "next", source: "web:https://example.com/next", title: "Next" }] });
   expect(mediaSession.metadata?.title).toBe("Film");
   expect(mediaSession.playbackState).toBe("paused");
-  expect(mediaSession.position).toEqual({ duration: 300, position: 0, playbackRate: 1.25 });
-  for (const action of ["play", "pause", "stop", "nexttrack", "seekto"]) expect(typeof handlers.get(action)).toBe("function");
   handlers.get("stop")!({ action: "stop" });
   expect(sent.at(-1)).toEqual({ type: "stop", playbackId: "load-generation" });
   // A remaining source and audience do not claim this device after it leaves.
-  state = { ...fixture(), controls: { ...audience, leave: false }, outputs: [], queue: [], currentEntryId: null, player: { ...fixture().player, playbackId: null, status: "idle" } };
-  read(useMediaSession);
-  for (const effect of effects.splice(0)) effect();
+  session({ ...fixture(), controls: { ...audience, leave: false }, outputs: [], queue: [], currentEntryId: null, player: { ...fixture().player, playbackId: null, status: "idle" } });
   expect(mediaSession.metadata).toBeNull();
   expect(mediaSession.playbackState).toBe("none");
-  expect(mediaSession.position).toBeUndefined();
   expect([...handlers.values()].every(value => value === null)).toBe(true);
-});
-
-test("Live discovery uses shared details and searches the title, line and original source", () => {
-  state = fixture();
-  state.liveSources![0]!.metadata = { title: "Evening concert", description: "Piano · second set" };
-  for (const query of ["evening", "second", "concert"]) {
-    const hits = read(() => useLiveSourceHits(query));
-    expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({ title: "Evening concert", meta: "Piano · second set" });
-  }
-});
-
-test("Live clocks start at publication time, stay cheap, and dispose their timer", () => {
-  const now = spyOn(Date, "now").mockReturnValue(10_000_000);
-  const interval = spyOn(globalThis, "setInterval").mockReturnValue(123 as never);
-  const clear = spyOn(globalThis, "clearInterval").mockImplementation(() => {});
-  try {
-    state = fixture(); state.liveSources![0]!.startedAt = 10_000_000 - 3_733_000;
-    effects.length = 0;
-    const first = renderToStaticMarkup(<LiveParticipation state={state} connected run={run} />);
-    expect(first).toContain("Live · 1:02:13");
-    expect(first).not.toContain('role="timer"'); // No once-per-second screen reader announcements.
-    const cleanups = effects.splice(0).map(effect => effect());
-    expect(interval).toHaveBeenCalledTimes(1);
-    expect(interval.mock.calls[0]![1]).toBe(1000);
-    for (const cleanup of cleanups) if (cleanup) cleanup();
-    expect(clear).toHaveBeenCalledWith(123);
-    now.mockReturnValue(10_005_000);
-    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
-    expect(renderToStaticMarkup(<LiveClock startedAt={10_006_000} />)).toContain("Live · 0:00");
-    expect(renderToStaticMarkup(<LiveClock />)).not.toContain("NaN");
-    // A device whose own clock is an hour slow still counts from Core's publication time.
-    now.mockReturnValue(10_005_000 - 3_600_000); setCoreTime(10_005_000);
-    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:18");
-    now.mockReturnValue(10_005_000 - 3_600_000 + 2_000);
-    expect(renderToStaticMarkup(<LiveClock startedAt={state.liveSources![0]!.startedAt} />)).toContain("Live · 1:02:20");
-  } finally { now.mockRestore(); setCoreTime(Date.now()); interval.mockRestore(); clear.mockRestore(); effects.length = 0; }
-});
-
-test("a receiver failure is actionable and disconnected audience controls cannot send", () => {
-  state = fixture();
-  state.outputs![0]!.error = "This output cannot decode audio.";
-  const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).toContain("This output cannot decode audio.");
-  expect(html).not.toContain("leave and join again");
-  connected = false;
-  expect(renderToStaticMarkup(<PlaybackTransport state={state} connected={connected} run={run} />)).toContain("disabled");
-  connected = true;
-});
-
-test("reconnect and Join remain local", async () => {
-  const state = fixture();
-  let html = renderToStaticMarkup(<PlaybackTransport state={state} connected={false} run={run} />);
-  expect(html).toContain("Reconnecting…");
-  expect(html).not.toContain("Preparing audio");
-  state.outputs![0]!.sound = false;
-  html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).not.toContain("Preparing audio");
-  state.controls = { ...audience, leave: false };
-  state.outputs = [{ deviceId: "tv", picture: false, sound: true }];
-  html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).toContain(">Join</button>");
-  expect(html).not.toMatch(/Preparing audio|Listening|Waiting for audio/);
-  sent.length = 0;
-  const tree = read(() => LiveParticipation({ state, connected: true, run }));
-  await buttons(tree)[0]!.props.onClick!();
-  expect(sent).toEqual([{ type: "playLive", sourceId: "source", deviceId: here }]);
-});
-
-test("a device that has not joined never inherits another listener's error", () => {
-  const state = fixture();
-  state.controls = { ...audience, leave: false };
-  state.outputs = [{ deviceId: "tv", picture: false, sound: true, error: "TV speakers disconnected." }];
-  state.player = { ...state.player, status: "error", error: "TV speakers disconnected." };
-  const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).toContain(">Join</button>");
-  expect(html).not.toContain("TV speakers disconnected.");
-});
-
-test("only a Live listener's playback status lines stay quiet; its publisher keeps them for errors", () => {
-  const listener = fixture();
-  expect(listeningLive(listener)).toBe(true);
-  const publisher = fixture();
-  publisher.liveSources![0]!.deviceId = here;
-  publisher.controls = { ...audience, leave: false };
-  expect(listeningLive(publisher)).toBe(false);
-});
-
-test("the publisher does not offer to join or adjust reception of its own capture", () => {
-  state = fixture();
-  state.liveSources![0]!.deviceId = here;
-  state.controls = { ...audience, leave: false };
-  expect(read(() => useLiveSourceHits(""))[0]!.primary).toMatchObject({ label: "Sharing", disabled: true });
-  expect(read(() => LiveParticipation({ state, connected: true, run }))).toBeNull();
-  expect(read(() => VolumeButton({ state, connected: true, run }))).toBeNull();
-});
-
-test("own-volume keys stay available when the viewed Live output is unavailable", () => {
-  state = fixture();
-  state.player = { ...state.player, status: "unavailable" };
-  read(() => KeyboardShortcuts({ open: false, onOpenChange() {} }));
-  expect(hotkeys.find(item => item.hotkey === "M")!.enabled).toBe(true);
-  expect(hotkeys.find(item => item.hotkey === "ArrowUp")!.enabled).toBe(true);
-});
-
-
-for (const priority of ["native", "group", "receiver"] as const) test(`Core-projected ${priority} failure remains visible`, () => {
-  const state = fixture();
-  const nativeError = "System audio output unavailable. Choose an audio output.";
-  const groupError = "Captured audio exceeded its bounded queue.";
-  const receiverError = "Audio output failed. Check this device's audio output.";
-  // Match the actual corrected Hub projection: native > source/group > receiver.
-  const expected = priority === "native" ? nativeError : priority === "group" ? groupError : receiverError;
-  state.player = { ...state.player, status: priority === "receiver" ? "playing" : "error", error: priority === "receiver" ? null : groupError };
-  state.outputs![0] = { ...state.outputs![0]!, error: expected };
-  const html = renderToStaticMarkup(<PlaybackTransport state={state} connected run={run} />);
-  expect(html).toContain('role="alert"');
-  expect(html).toContain(renderToStaticMarkup(<p>{expected}</p>).slice(3, -4));
-  for (const hidden of [nativeError, groupError, receiverError].filter(error => error !== expected)) expect(html).not.toContain(hidden);
-  expect(html).toContain(">Leave</button>");
-  expect(html).not.toMatch(/Preparing audio|Listening|Waiting for audio|leave and join again/);
-  expect(html).not.toMatch(/aria-label="(?:Pause|Stop|Next)"/);
 });

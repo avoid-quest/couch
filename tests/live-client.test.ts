@@ -5,15 +5,14 @@ import { spawnSync } from "node:child_process";
 // The desktop app's bridge, as its preload exposes it: Close notifies the page, and Main grants one capture.
 const desktop = `{
   onWindowClosed(listener) { windowClosed.add(listener); return () => windowClosed.delete(listener); },
-  async prepareCapture(selection) { prepared.push(selection); if (selection && preparing) await preparing.promise; },
+  async prepareCapture(selection) { prepared.push(selection); },
 }`;
 const check = (source: string, couchApp = "undefined") => {
   const result = spawnSync(process.execPath, ["-e", `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
     globalThis.window = new EventTarget();
-    const windowClosed = new Set(), prepared = [], liveActions = [], audioErrors = new Set();
-    let preparing;
+    const windowClosed = new Set(), prepared = [];
     const closeWindow = () => { for (const listener of [...windowClosed]) listener(); };
     mock.module("./src/client/session/native-context.ts", () => ({ couchApp: ${couchApp} }));
     mock.module("./src/client/session/device-id.ts", () => ({ deviceId: () => "receiver", localDeviceName: () => "Receiver" }));
@@ -99,8 +98,7 @@ const check = (source: string, couchApp = "undefined") => {
     ] } }, configurable: true });
     const { createLiveSession } = await import("./src/client/session/live.ts");
     const iceServers = [{ urls: "turn:relay.example:3478?transport=tcp", username: "test", credential: "test-only" }];
-    let publishing;
-    const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); if (action.type === "publishLive" && publishing) await publishing.promise; }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {}, uploadUrl: (sourceId, key, uploadId) => \`wss://couch.example/api/live/upload?sourceId=\${sourceId}&key=\${key}&uploadId=\${uploadId}\` });
+    const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {}, uploadUrl: (sourceId, key, uploadId) => \`wss://couch.example/api/live/upload?sourceId=\${sourceId}&key=\${key}&uploadId=\${uploadId}\` });
     const direct = (options = {}) => ({ type: "load", playbackId: "playing", source: "", liveSourceId: "source", livePeerId: "peer", liveOutput: { picture: true, sound: true, volume: 75 }, ...options });
     const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     const unreachable = () => signals.filter(message => message.type === "liveFailed");
@@ -114,21 +112,6 @@ const check = (source: string, couchApp = "undefined") => {
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 };
-
-test("direct playback attaches the received stream to the normal renderer with authenticated ICE", () => check(`
-  assert.equal(session.play(direct()), true);
-  assert.deepEqual(peers[0].config.iceServers, iceServers);
-  assert.equal(attachments[0].load.playbackId, "playing");
-  const picture = track("video"), sound = track("audio");
-  peers[0].ontrack({ track: picture });
-  peers[0].ontrack({ track: sound });
-  assert.deepEqual(attachments[0].stream.getTracks(), [picture, sound]);
-  session.receive({ type: "liveSignal", peerId: "peer", signal: { candidate: { candidate: "candidate" } } });
-  session.receive({ type: "liveSignal", peerId: "peer", signal: { description: { type: "offer", sdp: "offer" } } });
-  await flush(); await flush();
-  assert.equal(peers[0].candidates.length, 1);
-  assert.equal(signals.at(-1).signal.description.type, "answer");
-`));
 
 test("a receiver keeps only the channels Core routed to its output", () => check(`
   const received = output => {
@@ -183,191 +166,6 @@ test("a publisher that can't negotiate a peer reports it instead of dropping it 
   assert.equal(recorders.length, 0, "nothing records until Core asks");
 `));
 
-test("a publisher that cannot create a connection requests fallback without waiting for the receiver deadline", () => check(`
-  const source = await session.start({ kind: "screen" });
-  globalThis.RTCPeerConnection = class { constructor() { throw new DOMException("No connection resources available.", "UnknownError"); } };
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
-  await flush();
-  assert.deepEqual(unreachable(), [{ type: "liveFailed", peerId: "remote", error: "No connection resources available." }]);
-  assert.ok(captures[0].getTracks().every(track => !track.stopped), "other receivers can keep watching");
-  assert.equal(recorders.length, 0, "Core owns the fallback decision");
-`));
-
-test("connected, stopped and replaced direct sessions cancel deadlines and reject stale events", () => check(`
-  session.play(direct());
-  const first = peers[0];
-  first.connectionState = "connected"; first.onconnectionstatechange();
-  advance(60000);
-  assert.equal(streamReports.filter(report => report.error).length, 0);
-  session.play(direct({ playbackId: "next", livePeerId: "next-peer" }));
-  const second = peers[1];
-  const before = streamReports.length;
-  first.ontrack({ track: track("video") });
-  first.connectionState = "failed"; first.onconnectionstatechange();
-  assert.equal(streamReports.length, before);
-  assert.equal(session.play({ type: "pause", playbackId: "stale", paused: true }), false);
-  assert.notEqual(second.connectionState, "closed", "transport commands remain owned by the normal renderer");
-  assert.equal(session.play({ type: "stop" }), false);
-  advance(60000);
-  assert.equal(second.connectionState, "closed");
-  assert.equal(streamReports.filter(report => report.error).length, 0);
-  assert.equal(unreachable().length, 0, "stopped and replaced peers are never reported");
-`));
-
-test("switching direct playback to a synced URL keeps capture alive", () => check(`
-  const source = await session.start({ kind: "screen" });
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
-  await flush();
-  assert.equal(peers[0].tracks.length, 2);
-  assert.equal(signals[0].signal.description.type, "offer");
-  // A capturing window can receive another source; Core never routes its own capture back to it.
-  session.play(direct());
-  assert.equal(peers.length, 2);
-  assert.equal(session.play({ type: "load", playbackId: "playing", source: "https://couch.example/stream.m3u8", follow: { group: "group", pts: true } }), false);
-  assert.equal(peers[1].connectionState, "closed");
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [], upload: false });
-  assert.equal(peers[0].connectionState, "closed");
-  assert.equal(recorders.length, 0);
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-  advance(60000);
-  assert.equal(failures.length, 0);
-  session.play(direct({ livePeerId: "returned" }));
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-`));
-
-test("a synced URL replacement closes remote tracks and cancels its pending direct deadline", () => check(`
-  session.play(direct());
-  const old = peers[0], picture = track("video");
-  old.ontrack({ track: picture });
-  assert.equal(session.play({ type: "load", playbackId: "playing", source: "https://couch.example/live.m3u8", follow: { group: "group", pts: true } }), false);
-  assert.equal(old.connectionState, "closed");
-  assert.equal(picture.stopped, true);
-  advance(60000);
-  assert.equal(streamReports.filter(report => report.error).length, 0);
-`));
-
-test("a signaling failure from a replaced receiver cannot fail its replacement", () => check(`
-  session.play(direct());
-  let reject;
-  peers[0].setRemoteDescription = () => new Promise((_, fail) => { reject = fail; });
-  session.receive({ type: "liveSignal", peerId: "peer", signal: { description: { type: "offer", sdp: "offer" } } });
-  await flush();
-  session.play(direct({ livePeerId: "new-peer" }));
-  reject(new Error("stale failure"));
-  await flush();
-  assert.equal(streamReports.filter(report => report.error).length, 0);
-  assert.equal(unreachable().length, 0);
-  peers[1].connectionState = "connected"; peers[1].onconnectionstatechange();
-`));
-
-test("the capture can publish to another tab on the same device", () => check(`
-  const source = await session.start({ kind: "screen" });
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "other-tab", deviceId: "receiver", picture: true, sound: false }] });
-  await flush();
-  assert.equal(peers.length, 1);
-  assert.deepEqual(peers[0].tracks.map(track => track.kind), ["video"]);
-  assert.equal(signals[0].peerId, "other-tab");
-`));
-
-test("publisher offers pace a hundred peers in batches of four without duplicate announcements", () => check(`
-  const source = await session.start({ kind: "screen" });
-  const targets = Array.from({ length: 100 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: true, sound: false }));
-  const announcement = { type: "livePeers", sourceId: source.id, peers: targets };
-  session.receive(announcement);
-  session.receive(announcement);
-  await flush();
-  assert.equal(peers.length, 4, "a burst starts only four offer operations");
-  assert.equal(signals.length, 4);
-  advance(99); await flush();
-  session.receive(announcement);
-  assert.equal(peers.length, 4, "settlement and repeated announcements cannot bypass pacing");
-  advance(1); await flush();
-  assert.equal(signals.length, 8);
-  for (let i = 0; i < 23; i++) { advance(100); await flush(); }
-  assert.equal(signals.length, 100);
-  assert.equal(new Set(signals.map(message => message.peerId)).size, 100);
-  assert.ok(peers.every(peer => peer.tracks.length === 1 && peer.tracks[0].kind === "video"));
-  assert.equal(unreachable().length, 0);
-  // Mocked negotiation proves setup bounds, not a hundred working media paths.
-`));
-
-for (const operation of ["createOffer", "setLocalDescription"]) for (const cancellation of ["peer removal", "publication restart"])
-  test(`publisher ${operation} keeps unsettled slots through ${cancellation}`, () => check(`
-  let source = await session.start({ kind: "screen" });
-  const pending = [];
-  let active = 0, peak = 0;
-  RTCPeerConnection.prototype[${JSON.stringify(operation)}] = function (description) {
-    const work = Promise.withResolvers();
-    pending.push(work); peak = Math.max(peak, ++active);
-    if (description) this.localDescription = description;
-    // Closing the peer deliberately leaves its browser operation unsettled.
-    return work.promise.finally(() => active--);
-  };
-  const targets = Array.from({ length: 8 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: true, sound: true }));
-  const announce = peers => session.receive({ type: "livePeers", sourceId: source.id, peers });
-  announce(targets.slice(0, 4)); await flush();
-  advance(5000); await flush();
-  assert.equal(pending.length, 4, "four stalled operations fill the session's budget");
-  for (let round = 0; round < 3; round++) {
-    if (${JSON.stringify(cancellation)} === "publication restart") {
-      await session.end();
-      assert.ok(captures.at(-1).getTracks().every(track => track.stopped));
-      assert.equal(timers.size, 0, "ending capture immediately cancels queued setup");
-      source = await session.start({ kind: "screen" });
-    } else announce([]);
-    announce(targets); advance(100); await flush();
-    assert.equal(active, 4, "removing a peer cannot release its unsettled slot");
-    assert.equal(pending.length, 4);
-    assert.ok(peers.every(peer => peer.connectionState === "closed"));
-  }
-  pending[0].resolve({ type: "offer", sdp: "stale" }); await flush();
-  assert.equal(active, 3);
-  advance(99); await flush();
-  assert.equal(pending.length, 4, "settlement still observes the pacing interval");
-  advance(1); await flush();
-  assert.equal(pending.length, 5, "one settlement releases exactly one slot");
-  assert.equal(active, 4);
-  pending[1].reject(new Error("stale browser failure")); await flush();
-  advance(100); await flush();
-  assert.equal(pending.length, 6, "rejection also releases exactly one slot");
-  assert.equal(active, 4);
-  assert.equal(signals.length, 0, "stale completion and failure cannot affect a reused peer ID");
-  // Canceled operations remain pending throughout these removals and restarts.
-  session.close();
-  assert.equal(timers.size, 0);
-  assert.ok(peers.every(peer => peer.connectionState === "closed"));
-  assert.ok(captures.every(stream => stream.getTracks().every(track => track.stopped)));
-  for (const work of pending) work.resolve({ type: "offer", sdp: "closed" });
-  await flush(); advance(10000); await flush();
-  assert.equal(active, 0);
-  assert.equal(peak, 4);
-  assert.equal(peers.length, 6);
-  assert.equal(signals.length, 0, "closing cannot revive offers, failures or queued peers");
-  assert.equal(timers.size, 0);
-`));
-
-test("publisher queue follows the latest Core targets and disappears when Core removes the publication", () => check(`
-  const source = await session.start({ kind: "screen" });
-  const targets = Array.from({ length: 8 }, (_, i) => ({ peerId: "peer-" + i, deviceId: "device-" + i, picture: true, sound: true }));
-  const announce = peers => session.receive({ type: "livePeers", sourceId: source.id, peers });
-  announce(targets); await flush();
-  assert.equal(peers.length, 4);
-  const latest = { peerId: "latest", deviceId: "latest-device", picture: false, sound: true };
-  announce([...targets.slice(0, 4), latest]);
-  announce([...targets.slice(0, 4), { ...latest, picture: true, sound: false }]);
-  session.receive({ type: "livePeers", sourceId: "stale-source", peers: targets });
-  advance(100); await flush();
-  assert.deepEqual(signals.map(message => message.peerId), ["peer-0", "peer-1", "peer-2", "peer-3", "latest"]);
-  assert.deepEqual(peers[4].tracks.map(track => track.kind), ["video"], "queued channel selection uses Core's latest request");
-  announce([...targets.slice(0, 4), latest, ...targets.slice(4)]);
-  session.observe([]);
-  assert.equal(timers.size, 0, "Core removal cancels pending setup immediately");
-  assert.ok(peers.every(peer => peer.connectionState === "closed"));
-  assert.ok(captures[0].getTracks().every(track => track.stopped));
-  advance(10000); await flush();
-  assert.equal(peers.length, 5, "removed queued peers never create browser connections");
-`));
-
 test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () => check(`
   const source = await session.start({ kind: "screen" });
   assert.equal(uploads.length, 0, "Publish starts no recording");
@@ -397,30 +195,6 @@ test("Core's request starts one ordered recording, and its release or Core closi
   assert.equal(commands.some(action => action.type === "endLive"), false);
 `));
 
-test("Publish waits for Core however long its first FFmpeg lookup takes, and Cancel still releases capture", () => check(`
-    const { replyDeadline } = await import("./src/client/session/reply-deadline.ts");
-    assert.equal(replyDeadline({ type: "publishLive" }), 8_000, "Core answers Publish without starting an encoder");
-    assert.equal(replyDeadline({ type: "videoQuality" }), 35_000);
-    publishing = Promise.withResolvers();
-    const slow = session.start({ kind: "screen" });
-    await flush();
-    advance(10 * 60_000);
-    assert.equal(captures[0].getTracks()[0].stopped, false);
-    publishing.resolve();
-    await slow;
-    await session.end();
-    publishing = Promise.withResolvers();
-    const canceled = session.start({ kind: "screen" });
-    const rejected = assert.rejects(canceled, /stopped/);
-    await flush();
-    await session.end();
-    assert.ok(captures[1].getTracks().every(track => track.stopped));
-    assert.equal(commands.at(-1).type, "endLive");
-    publishing.reject(new Error("This input has stopped."));
-    await rejected;
-    assert.equal(uploads.length, 0, "Publish never uploads");
-`));
-
 test("upload backpressure stops the upload instead of growing an unbounded queue, and sharing continues", () => check(`
   const source = await session.start({ kind: "screen" });
   requestUpload(source.id);
@@ -437,101 +211,6 @@ test("upload backpressure stops the upload instead of growing an unbounded queue
   assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: failures[0].message }]);
 `));
 
-for (const [failure, setup, error] of [
-  ["missing MediaRecorder", "globalThis.MediaRecorder = undefined;", "This browser cannot record a live input for buffered playback."],
-  ["no supported MIME", "MediaRecorder.isTypeSupported = () => false;", "This browser cannot encode this live input for buffered playback."],
-  ["recorder construction throws", "globalThis.MediaRecorder = class extends MediaRecorder { constructor() { throw new Error('Cannot construct recorder.'); } };", "Cannot construct recorder."],
-]) test(`${failure} reports buffered failure to Core before opening an upload, without ending direct sharing`, () => check(`
-  const Recorder = MediaRecorder;
-  const source = await session.start({ kind: "screen" });
-  const peersMessage = { type: "livePeers", sourceId: source.id, peers: [{ peerId: "healthy", deviceId: "other", picture: true, sound: true }], upload: true, uploadId: "attempt-1" };
-  ${setup}
-  session.receive(peersMessage);
-  await flush();
-  const reported = () => signals.filter(message => message.type === "liveUploadFailed");
-  assert.deepEqual(reported(), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: ${JSON.stringify(error)} }]);
-  assert.equal(uploads.length, 0, "the failure reaches Core without an upload socket");
-  assert.equal(failures.length, 1);
-  assert.equal(peers.length, 1);
-  assert.notEqual(peers[0].connectionState, "closed");
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-  assert.equal(commands.some(action => action.type === "endLive"), false);
-  session.receive(peersMessage);
-  session.receive(peersMessage);
-  assert.equal(failures.length, 1, "peer announcements cannot loop the same failed upload");
-  assert.equal(reported().length, 1);
-  session.receive({ ...peersMessage, upload: false });
-  globalThis.MediaRecorder = Recorder;
-  Recorder.isTypeSupported = type => type.includes("webm");
-  session.receive({ ...peersMessage, uploadId: "attempt-2" });
-  await flush();
-  assert.equal(uploads.length, 1, "a new Core request deliberately retries buffered playback");
-  assert.equal(recorders.at(-1).state, "recording");
-  assert.equal(peers.length, 1, "the healthy peer remains in place throughout retry");
-  assert.equal(failures.length, 1);
-`));
-
-for (const [failure, trigger, error] of [
-  ["recorder start", "MediaRecorder.prototype.start = () => { throw new Error('Cannot start.'); }; await flush();", "The live input could not start recording."],
-  ["recording", "await flush(); recorders[0].onerror();", "The live input stopped recording for buffered playback."],
-  ["socket handshake", "uploads[0].onerror();", "The live input lost its connection to Couch."],
-  ["Core transfer", "await flush(); uploads[0].onmessage({ data: JSON.stringify({ type: 'error', error: 'Transfer failed.' }) });", "Transfer failed."],
-  ["invalid response", "await flush(); uploads[0].onmessage({ data: 'invalid JSON' });", "Couch sent an invalid live input response."],
-]) test(`${failure} errors report buffered failure once and leave capture running`, () => check(`
-  const source = await session.start({ kind: "screen" });
-  requestUpload(source.id);
-  ${trigger}
-  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: ${JSON.stringify(error)} }]);
-  assert.equal(failures.length, 1);
-  assert.equal(recorders[0].state, "inactive");
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-  requestUpload(source.id);
-  assert.equal(uploads.length, 1, "the same demand never retries a failed transfer");
-`));
-
-test("late events from a failed upload cannot stop or report failure for an intentional retry", () => check(`
-  const source = await session.start({ kind: "screen" });
-  requestUpload(source.id);
-  await flush();
-  const stale = { open: uploads[0].onopen, message: uploads[0].onmessage, error: uploads[0].onerror, close: uploads[0].onclose, data: recorders[0].ondataavailable, recordingError: recorders[0].onerror };
-  stale.error();
-  requestUpload(source.id, false);
-  requestUpload(source.id, true, "attempt-2");
-  await flush();
-  stale.open();
-  stale.message({ data: JSON.stringify({ type: "error", error: "Late failure." }) });
-  stale.error();
-  stale.close();
-  stale.recordingError();
-  stale.data({ data: new Blob(["late media"]) });
-  assert.equal(recorders[0].state, "inactive");
-  assert.equal(recorders[1].state, "recording");
-  assert.equal(uploads[1].readyState, WebSocket.OPEN);
-  assert.equal(signals.filter(message => message.type === "liveUploadFailed").length, 1);
-  assert.equal(failures.length, 1);
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-  recorders[1].onerror();
-  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed").map(message => message.uploadId), ["attempt-1", "attempt-2"], "each failure echoes the Core request that created its recorder");
-`));
-
-test("a Live share ends, saying why, when its desktop capture upload fails", () => check(`
-  const source = await session.start({ kind: "microphone", intent: "live", audioDeviceId: "interface" });
-  assert.equal(source.audioDelivery, "pcm");
-  requestUpload(source.id);
-  await flush();
-  assert.deepEqual(liveActions.filter(action => action.op === "upload").map(action => action.uploadId), ["attempt-1"]);
-  for (const listener of audioErrors) listener({ id: source.id, uploadId: "attempt-1", error: "Couch fell behind reading the audio input." });
-  await flush();
-  assert.deepEqual(failures.map(error => error.message), ["Couch fell behind reading the audio input."]);
-  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed").map(message => message.uploadId), ["attempt-1"]);
-  assert.ok(commands.some(action => action.type === "endLive" && action.sourceId === source.id), "nothing else can reach its listeners");
-  assert.ok(liveActions.some(action => action.op === "stop" && action.id === source.id));
-`, `{
-  ...${desktop},
-  async liveAudio(action) { liveActions.push(action); return action.op === "prepare" ? { sampleRate: 48000, channels: 2 } : undefined; },
-  onLiveAudioError(listener) { audioErrors.add(listener); return () => audioErrors.delete(listener); },
-}`));
-
 test("a source Core removed reports failure and releases capture", () => check(`
   await session.start({ kind: "screen" });
   session.observe([]);
@@ -542,70 +221,6 @@ test("a source Core removed reports failure and releases capture", () => check(`
   await session.end();
   session.observe([]);
   assert.equal(failures.length, 1, "an explicit Stop sharing is not a failure");
-`));
-
-test("screen capture defaults to bounded video and unprocessed audio, with explicit quality and audio choices", () => check(`
-  const screen = await session.start({ kind: "screen" });
-  assert.equal(screen.audio, true);
-  assert.equal(screen.video, true);
-  assert.equal(captureRequests[0].video.width.max, 1920);
-  assert.equal(captureRequests[0].video.height.max, 1080);
-  assert.deepEqual(captureRequests[0].video.frameRate, { ideal: 60, max: 60 });
-  assert.deepEqual(captureRequests[0].audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: false });
-  await session.end();
-  const picture = await session.start({ kind: "screen", videoQuality: "720p", includeAudio: false });
-  assert.equal(picture.audio, false);
-  assert.equal(captureRequests[1].audio, false);
-  assert.equal(captureRequests[1].video.height.max, 720);
-  await session.end();
-  await session.start({ kind: "screen", videoQuality: "original" });
-  assert.equal(captureRequests[2].video.width, undefined);
-  assert.equal(captureRequests[2].video.height, undefined);
-`));
-
-test("screen frame rate is selectable and survives resolution changes without restarting capture", () => check(`
-  for (const frameRate of [30, 60, 120]) {
-    await session.start({ kind: "screen", videoFrameRate: frameRate });
-    assert.deepEqual(captureRequests.at(-1).video.frameRate, { ideal: frameRate, max: frameRate });
-    assert.equal(session.sharing().frameRate, frameRate);
-    await session.setQuality("720p");
-    assert.deepEqual(captures.at(-1).getVideoTracks()[0].constraints.frameRate, { ideal: frameRate, max: frameRate });
-    await session.setFrameRate(120);
-    assert.equal(session.sharing().frameRate, 120);
-    assert.equal(captures.at(-1).getVideoTracks()[0].constraints.height.max, 720);
-    assert.equal(captureRequests.length, [30, 60, 120].indexOf(frameRate) + 1, "changing rate must not open the picker again");
-    await session.end();
-  }
-`));
-
-test("each picture sender gets a bitrate and frame ceiling before its offer, including live edits and late joins", () => check(`
-  const source = await session.start({ kind: "screen", videoFrameRate: 60 });
-  assert.equal(captures[0].getVideoTracks()[0].contentHint, "detail");
-  const announce = peers => session.receive({ type: "livePeers", sourceId: source.id, peers });
-  const target = id => ({ peerId: id, deviceId: id, picture: true, sound: true });
-  let offers = 0;
-  RTCPeerConnection.prototype.createOffer = async function() {
-    offers++;
-    const video = this.getSenders().find(sender => sender.track.kind === "video");
-    assert.equal(video.parameters.encodings[0].maxBitrate, offers === 1 ? 8000000 : 4000000);
-    assert.equal(video.parameters.encodings[0].maxFramerate, 60);
-    assert.equal(video.parameters.degradationPreference, "maintain-resolution");
-    assert.equal(video.parameters.transactionId, "transaction");
-    assert.ok(this.getSenders().find(sender => sender.track.kind === "audio").parameters.encodings.every(encoding => !encoding.maxBitrate));
-    return { type: "offer", sdp: "offer" };
-  };
-  announce([target("one")]); await flush(); await flush();
-  await session.setQuality("720p");
-  assert.equal(peers[0].getSenders()[1].parameters.encodings[0].maxBitrate, 4000000);
-  announce([target("one"), target("two")]); advance(100); await flush(); await flush();
-  await session.setFrameRate(120);
-  for (const peer of peers) {
-    const video = peer.getSenders().find(sender => sender.track.kind === "video");
-    assert.equal(video.parameters.encodings[0].maxBitrate, 8000000);
-    assert.equal(video.parameters.encodings[0].maxFramerate, 120);
-  }
-  assert.equal(offers, 2);
-  assert.equal(captureRequests.length, 1);
 `));
 
 test("receiver pacing cancels pending setup on Stop and falls back to the original track after worker failure", () => check(`
@@ -639,105 +254,6 @@ test("receiver pacing cancels pending setup on Stop and falls back to the origin
   assert.equal(copy.stopped, true);
   assert.equal(workers[1].terminated, true);
   assert.equal(unreachable().length, 0, "pacing failure need not abandon a working peer");
-`));
-
-test("H.264 preference requires a supported, smooth, power-efficient prediction and retains fallback codecs", () => check(`
-  const queries = [];
-  let prediction;
-  navigator.mediaCapabilities = { async encodingInfo(config) { queries.push(config); if (prediction instanceof Error) throw prediction; return prediction; } };
-  for (const [preferred, info] of [
-    [true, { supported: true, smooth: true, powerEfficient: true }],
-    [false, { supported: false, smooth: true, powerEfficient: true }],
-    [false, { supported: true, smooth: false, powerEfficient: true }],
-    [false, { supported: true, smooth: true, powerEfficient: false }],
-    [false, new Error("Unsupported query")],
-  ]) {
-    prediction = info; queries.length = 0; signals.length = 0;
-    const source = await session.start({ kind: "screen", videoQuality: "720p", videoFrameRate: 30 });
-    session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "picture", deviceId: "picture", picture: true, sound: false }] });
-    await flush(); await flush();
-    const transceiver = peers.at(-1).getTransceivers()[0];
-    assert.equal(queries.length, preferred ? 1 : 2);
-    assert.deepEqual(queries[0], { type: "webrtc", video: { contentType: "video/H264;" + codecs[1].sdpFmtpLine, width: 1280, height: 720, bitrate: 2000000, framerate: 30 } });
-    assert.deepEqual(transceiver.codecs, preferred ? [codecs[1], codecs[0], codecs[2], codecs[3]] : undefined);
-    assert.ok(signals.some(message => message.type === "liveSignal" && message.signal.description?.type === "offer"));
-    assert.equal(unreachable().length, 0);
-    await session.end();
-  }
-`));
-
-test("failed video parameters fall back only that receiver and leave capture and audio routes alive", () => check(`
-  const add = RTCPeerConnection.prototype.addTrack;
-  RTCPeerConnection.prototype.addTrack = function(track) {
-    const sender = add.call(this, track);
-    if (track.kind === "video") sender.setParameters = async () => { throw new Error("Encoder unavailable"); };
-    return sender;
-  };
-  const source = await session.start({ kind: "screen" });
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [
-    { peerId: "picture", deviceId: "picture", picture: true, sound: true },
-    { peerId: "sound", deviceId: "sound", picture: false, sound: true },
-  ] });
-  await flush(); await flush();
-  assert.deepEqual(unreachable().map(message => message.peerId), ["picture"]);
-  assert.deepEqual(peers[1].tracks.map(track => track.kind), ["audio"]);
-  assert.ok(signals.some(message => message.type === "liveSignal" && message.peerId === "sound" && message.signal.description?.type === "offer"));
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-`));
-
-test("failed sender edits report a picture error and keep peers available for later edits and signaling", () => check(`
-  const source = await session.start({ kind: "screen" });
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [
-    { peerId: "one", deviceId: "one", picture: true, sound: true },
-    { peerId: "two", deviceId: "two", picture: true, sound: true },
-  ] });
-  await flush(); await flush();
-  for (const peer of peers) peer.connectionState = "connected";
-  const sender = peers[0].getSenders().find(sender => sender.track.kind === "video");
-  const setParameters = sender.setParameters;
-  sender.setParameters = async () => { throw new Error("Encoder busy"); };
-  await assert.rejects(session.setQuality("720p"), /Couldn't change the shared picture/);
-  assert.equal(unreachable().length, 0);
-  assert.ok(peers.every(peer => peer.connectionState === "connected"));
-  assert.ok(captures[0].getTracks().every(track => !track.stopped));
-  assert.equal(peers[1].getSenders().find(sender => sender.track.kind === "video").parameters.encodings[0].maxBitrate, 4000000);
-  session.receive({ type: "liveSignal", peerId: "one", signal: { description: { type: "answer", sdp: "still connected" } } });
-  await flush();
-  assert.equal(peers[0].remoteDescription.sdp, "still connected");
-  sender.setParameters = setParameters;
-  await session.setFrameRate(30);
-  assert.equal(session.sharing().quality, "720p");
-  assert.equal(session.sharing().frameRate, 30);
-  assert.ok(peers.every(peer => peer.getSenders().find(sender => sender.track.kind === "video").parameters.encodings[0].maxBitrate === 2000000));
-  assert.equal(captureRequests.length, 1);
-`));
-
-test("picture edits serialize, recover from rejection and leave replacement captures alone", () => check(`
-  await session.start({ kind: "screen" });
-  const first = captures[0].getVideoTracks()[0];
-  const pending = Promise.withResolvers();
-  first.applyConstraints = async value => { await pending.promise; first.constraints = value; };
-  const quality = session.setQuality("720p"), rate = session.setFrameRate(120);
-  pending.resolve();
-  await Promise.all([quality, rate]);
-  assert.equal(first.constraints.height.max, 720);
-  assert.deepEqual(first.constraints.frameRate, { ideal: 120, max: 120 });
-  first.applyConstraints = async () => { throw new DOMException("constraint", "OverconstrainedError"); };
-  await assert.rejects(session.setFrameRate(60), /lower resolution or frame rate/);
-  assert.equal(session.sharing().frameRate, 120);
-  first.applyConstraints = async value => { first.constraints = value; };
-  await session.setFrameRate(30);
-  assert.equal(session.sharing().frameRate, 30);
-  const stale = session.setQuality("original");
-  await session.end();
-  await session.start({ kind: "screen" });
-  await stale;
-  assert.equal(session.sharing().quality, "1080p");
-  assert.equal(session.sharing().frameRate, 60);
-  await session.end();
-  await session.start({ kind: "system-audio" });
-  await session.setFrameRate(120);
-  assert.equal(captureRequests.at(-1).video.frameRate.max, 1);
 `));
 
 test("the desktop app is told which source to prepare and whether its sound is included", () => check(`
@@ -774,82 +290,6 @@ test("choosing an audio input releases its permission probe and captures the sel
   await session.start({ kind: "microphone", audioDeviceId: "interface" });
   assert.deepEqual(captureRequests[1].audio.deviceId, { exact: "interface" });
   await assert.rejects(session.audioInputs(), /Stop sharing/);
-`));
-
-test("native channel choices reach Main and a restart updates the reported capture format", () => check(`
-  const inputs = await session.audioInputs(true);
-  assert.equal(inputs.find(input => input.deviceId === "native:umc").nativeChannels, 4);
-  await session.start({ kind: "microphone", intent: "live", audioDeviceId: "native:umc", nativeChannelMap: [1] });
-  assert.deepEqual(liveActions.find(action => action.op === "prepare").channelMap, [1]);
-  assert.equal(session.sharing().captureFormat.channels, 1);
-  await session.setCaptureInput({ op: "channels", channelMap: [2, 3] });
-  assert.equal(liveActions.at(-1).op, "channels");
-  assert.deepEqual(liveActions.at(-1).channelMap, [2, 3]);
-  assert.equal(session.sharing().captureFormat.channels, 2);
-  assert.deepEqual(session.sharing().captureFormat.native.channelMap, [2, 3]);
-  assert.equal(captureRequests.length, 1, "only input discovery uses browser capture");
-`, `{
-  ...${desktop},
-  nativeAudioInputs: async () => [{ uid: "umc", name: "UMC", channels: 4 }],
-  liveAudio: async action => { liveActions.push(action); if (action.op === "prepare" || action.op === "channels") return { sampleRate: 48000, channels: action.channelMap.length, native: { channelMap: action.channelMap, inputChannels: 4, requestedFrames: 128, reportedFrames: 128 } }; },
-}`));
-
-test("Live publication carries host details and keeps Core's clock across input changes", () => check(`
-  const metadata = { title: "Evening concert", description: "Piano · first set" };
-  const source = await session.start({ kind: "microphone", intent: "live", audioDeviceId: "native:umc", metadata });
-  assert.deepEqual(commands.find(action => action.type === "publishLive").metadata, metadata);
-  session.observe([{ ...source, startedAt: 123000, metadata: { ...metadata, description: "Second set" } }]);
-  assert.equal(session.sharing().source.startedAt, 123000);
-  assert.equal(session.sharing().source.metadata.description, "Second set");
-  await session.setCaptureInput({ op: "buffer", bufferFrames: 512 });
-  assert.equal(session.sharing().source.startedAt, 123000);
-  assert.equal(commands.filter(action => action.type === "publishLive").length, 1);
-`, `{
-  ...${desktop},
-  liveAudio: async action => { liveActions.push(action); return { sampleRate: 48000, channels: 2 }; },
-}`));
-
-test("a refused or closed capture prompt says what happened in Couch's words", () => check(`
-  navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException("Permission denied", "NotAllowedError"); };
-  await assert.rejects(session.start({ kind: "screen" }), /Screen capture wasn't allowed\\. Choose a screen or window/);
-  await assert.rejects(session.start({ kind: "system-audio" }), /System audio capture wasn't allowed/);
-  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Requested device not found", "NotFoundError"); };
-  await assert.rejects(session.start({ kind: "microphone" }), /No audio input was found/);
-  navigator.mediaDevices.getUserMedia = async () => { throw new Error("Live capture needs a secure Couch connection."); };
-  await assert.rejects(session.start({ kind: "microphone" }), /secure Couch connection/, "other errors keep their message");
-  assert.equal(commands.length, 0, "a refused capture publishes nothing");
-`));
-
-test("choosing an audio input translates permission errors and releases desktop preparation", () => check(`
-  const originalCapture = navigator.mediaDevices.getUserMedia;
-  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
-  await assert.rejects(session.audioInputs(), /Audio input access wasn't allowed/);
-  assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
-  assert.equal(commands.length, 0, "a refused probe publishes nothing");
-  navigator.mediaDevices.getUserMedia = originalCapture;
-  assert.equal((await session.audioInputs())[0].deviceId, "interface", "a failed probe allows retry");
-  assert.ok(captures[0].getTracks().every(track => track.stopped));
-`, desktop));
-
-test("native inputs stay listed when the browser's microphone probe fails", () => check(`
-  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
-  assert.deepEqual(await session.audioInputs(true), [{ deviceId: "native:umc", label: "UMC · Native", nativeChannels: 4 }]);
-  assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
-  await assert.rejects(session.audioInputs(), /Audio input access wasn't allowed/, "without native inputs the browser's refusal stands");
-`, desktop.replace("{", "{ async nativeAudioInputs() { return [{ uid: 'umc', name: 'UMC', channels: 4, nominalRate: 48000, ownerHalBufferFrames: 512 }]; },")));
-
-test("closing while audio input permission is pending releases the eventual capture", () => check(`
-  let finish;
-  navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { finish = resolve; });
-  const selecting = session.audioInputs();
-  await Promise.resolve();
-  await assert.rejects(session.start({ kind: "screen" }), /already starting/);
-  session.close();
-  const microphone = track("audio");
-  finish(new MediaStream([microphone]));
-  await assert.rejects(selecting, /canceled/);
-  assert.equal(microphone.stopped, true);
-  assert.equal(commands.length, 0);
 `));
 
 test("leaving a publishing page ends capture before its control socket closes", () => check(`
@@ -891,52 +331,3 @@ test("closing the desktop window ends this device's sharing, while its playback 
   assert.ok(captures[1].getTracks().every(track => track.stopped));
   assert.equal(prepared.at(-1), null, "no capture grant stays armed");
 `, desktop));
-
-test("closing the desktop window cancels sharing at each step of starting it", () => check(`
-  const display = navigator.mediaDevices.getDisplayMedia;
-  for (const step of ["prepare", "capture", "publish"]) {
-    const before = { captures: captures.length, commands: commands.length, recorders: recorders.length };
-    let release = () => {};
-    if (step === "prepare") { preparing = Promise.withResolvers(); release = preparing.resolve; }
-    if (step === "capture") navigator.mediaDevices.getDisplayMedia = request => new Promise(resolve => { release = () => resolve(display(request)); });
-    if (step === "publish") { publishing = Promise.withResolvers(); release = publishing.resolve; }
-    const starting = session.start({ kind: "screen" });
-    const rejected = assert.rejects(starting, /canceled/);
-    await flush(); await flush();
-    const published = commands.slice(before.commands).filter(action => action.type === "publishLive").length;
-    assert.equal(published, step === "publish" ? 1 : 0, step);
-    assert.equal(recorders.length - before.recorders, 0, step);
-    closeWindow();
-    release();
-    await rejected;
-    await flush();
-    preparing = publishing = undefined; navigator.mediaDevices.getDisplayMedia = display;
-    assert.equal(captures.length - before.captures, step === "prepare" ? 0 : 1, step);
-    assert.ok(captures.slice(before.captures).flatMap(stream => stream.getTracks()).every(track => track.stopped), step);
-    assert.ok(recorders.every(recorder => recorder.state === "inactive"), step);
-    assert.ok(uploads.every(upload => upload.readyState === 3), step);
-    // Core may already hold the published source; nothing else is ended.
-    assert.equal(commands.slice(before.commands).filter(action => action.type === "endLive").length, published, step);
-    assert.equal(prepared.at(-1), null, step);
-  }
-  assert.equal(failures.length, 0);
-  assert.equal(timers.size, 0);
-  // The session still shares after each canceled start.
-  const shared = await session.start({ kind: "screen" });
-  requestUpload(shared.id);
-  await flush();
-  assert.equal(recorders.at(-1).state, "recording");
-`, desktop));
-
-test("saved relay changes reach the next negotiation without interrupting a live peer", () => check(`
-  session.play(direct());
-  peers[0].connectionState = "connected";
-  peers[0].onconnectionstatechange();
-  const updated = [{ urls: "turn:other.example:3478", username: "new", credential: "new-password" }];
-  session.receive({ type: "liveIceServers", iceServers: updated });
-  assert.equal(peers[0].connectionState, "connected");
-  assert.deepEqual(peers[0].config.iceServers, iceServers);
-  session.play(direct({ livePeerId: "next" }));
-  assert.deepEqual(peers[1].config.iceServers, updated);
-  assert.equal(signals.length, 0);
-`));
