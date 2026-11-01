@@ -13,8 +13,9 @@ cross-platform 60 FPS sharing release gate.
 ## Retained changes
 
 - Screen/window capture accepts independent resolution and **30, 60 or 120 FPS**
-  targets. `defaultLiveFrameRate` is 30 following the [Windows qualification](release-audit-2026-10-29.md#windows-qualification-31-october-2026). Both constraints are applied before
-  encoding, and edits during sharing retain the other setting without another
+  targets. `defaultLiveFrameRate` is 60 after the [native Mac and Windows pacing
+  qualification](live-sharing-performance.md#native-mac-follow-up). The historical
+  Windows-only workaround was 30. Both constraints are applied before encoding, and edits during sharing retain the other setting without another
   picker or connection. Concurrent edits serialize; a failed constraint leaves
   the last successful settings intact. Sound-only capture remains at 1 FPS and
   its picture is not transmitted.
@@ -128,10 +129,10 @@ mismatch is reported explicitly and fails qualification even if FPS passes;
 it is not, by itself, evidence of a Couch playback defect. The harness records
 the required dimensions alongside the observed sample without relaxing the gate.
 
-`--sound` includes a generated tone over Windows loopback and asserts advancing
-audio bytes and nonzero decoded energy and PCM level in each steady Live sharing
-sample. Ordinary playback and controls samples do not create a publisher and
-do not run that sharing-specific assertion.
+`--sound` includes a generated tone over native Windows/macOS loopback and
+asserts advancing audio bytes and nonzero decoded energy and PCM level in each
+steady Live sharing sample. Ordinary playback and controls samples do not
+create a publisher and do not run that sharing-specific assertion.
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
 `--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
 reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits
@@ -256,8 +257,8 @@ get the current settings. At 30/60/120 FPS, 720p uses 2/4/8 Mbit/s and 1080p use
 These are per-receiver ceilings; WebRTC still controls congestion. `detail` and
 `maintain-resolution` retain readable screen content when resources run short.
 Sound, buffered delivery, pairing and capture lifetime retain their existing paths.
-The default stays **30 FPS** until native 60 FPS qualification passes on both
-Mac and Windows.
+At this initial candidate stage, the default remained **30 FPS** pending native
+Mac and Windows qualification; the later Mac follow-up below restores 60.
 
 [Research and evidence](live-sharing-performance.md#smooth-sharing-investigation-1-november-2026)
 cover Sunshine's capture/encoder/pacing/FEC and Moonlight's decode/presentation
@@ -302,8 +303,9 @@ Hardware H.264 is preferred only after a smooth/power-efficient WebRTC Media
 Capabilities prediction; actual implementation stats are retained. Missing APIs,
 worker setup refusal and worker failure retain/restore the native WebRTC track.
 Stop and playback replacement abort pending setup and retire owned workers/clones.
-Browsers without these APIs retain their existing path. The default stays 30 FPS
-until Mac qualification; Windows alone is not a cross-platform default gate.
+Browsers without these APIs retain their existing path. The subsequent
+[native Mac follow-up](live-sharing-performance.md#native-mac-follow-up) passes the same 1080p60 gate and restores the 60 FPS default. Windows alone was
+not used to qualify that default.
 
 The original delivered-FPS, drop and dimension assertions remain. The harness
 also rejects more than 1% **combined** compositor drops, pacing overflow and
@@ -318,3 +320,32 @@ Windows runs and the earlier failures are in the
 frame timing/metadata, and `--audio-jitter=50` was an unsuccessful synchronized
 buffering probe. These do not change product preferences. Physical/acoustic A/V
 alignment and Mac/120 Hz qualification remain to be measured at handoff.
+
+### Native Mac qualification and restored default
+
+The [native Mac follow-up](live-sharing-performance.md#native-mac-follow-up)
+passes every controlled 1080p60 steady sample: 57.86 / 57.85 / 57.74 delivered
+FPS, zero combined loss, exact 1920×1080 capture/encode/decode and verified
+system-loopback sound. Actual H.264 uses VideoToolbox encode/decode, with
+58.3 / 58.7 / 60.3% summed Electron CPU. Three 1080p30, 720p60, independent
+two-receiver and uninstrumented 60 FPS samples also pass. The separate unpaced
+Mac control passes and is retained; the Windows compositor failure is not
+claimed reproduced on Mac. A genuine 120 FPS fixture on the tested 120 Hz Mac
+chain passes the ≥110 target at 111.58 / 111.39 / 111.63 delivered FPS, not a
+locked 120. All final paced steady player/queue/processor loss counters are zero.
+
+With the retained Windows 1080p60 passes, `defaultLiveFrameRate` returns to 60.
+Only that shared default and its affected assertions change; the Windows-tested
+codec, bitrate, pacing and original-audio policy stays intact. Historical failed
+samples remain. The final two-receiver pre-steady queue drops are 5 / 6 / 31
+for each receiver, distinct from player startup and warmup; per-sample rates,
+frame ages and all counters stay in `.artifacts/macbook-sharing/final-report.md`
+and each `final*/result.json`.
+
+The requested 6 Mbit/s emulation passes FPS/loss but still reports RTP above its
+requested limit, even with a global-only rule, so hard-link qualification remains
+open. Generated flash/beep software timing is recorded, but the separate audio
+analysis context cannot establish the production element's acoustic alignment.
+Physical A/V, perceptual quality and physical phone/Linux TV/cross-device checks
+remain unqualified. Feature-detected native fallback and injected worker-error
+recovery pass on Mac; full correctness and Live audio results are in the follow-up.

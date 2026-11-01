@@ -97,8 +97,8 @@ This work starts at audit head `8bd6c873`. The native Mac and Windows results in
 [the audit](release-audit-2026-10-29.md#playback-and-sharing-performance) are
 baseline evidence, not measurements of this change. In particular, raising the
 sender ceiling restored encoding cadence but did not consistently pass receiver
-presentation. Keep the 30 FPS default until **every** 1080p60 steady sample passes
-on both native platforms, with sound. Window minimize/hide/window-only closure
+presentation. The initial 30 FPS default was retained pending **every** 1080p60
+steady sample passing on both native platforms, with sound. Window minimize/hide/window-only closure
 keep sharing; source-app exit or Stop sharing ends it. No closure detector is
 part of this work.
 
@@ -207,7 +207,8 @@ decode, but receiver drops were substantially worse than VP8. A 150 ms target
 added roughly 100 ms of frame age without fixing the drops. A 59 FPS encoder
 ceiling also failed. Those settings are not retained. The bitrate candidate
 uses `detail`, explicit `maintain-resolution`, and the browser's codec order and
-automatic receiver buffering. The default stays 30 FPS. Capability predictions
+automatic receiver buffering. At this sender-only stage the default stayed
+30 FPS. Capability predictions
 alone do not justify a codec preference; keep the failed experiments with their
 reruns and require actual encoder/decoder implementations in the evidence.
 
@@ -386,7 +387,7 @@ recovery after worker failure. Native Windows sharing/capture unit suites pass
 111/111. The unchanged Core/backend integration code retains its earlier 189/189
 passes on Linux/WSL and native Windows.
 
-At the user's request, further experiments stop at this handoff. **Mac, 120 Hz,
+At the previous Windows handoff, further experiments stopped at the user's request. **Mac, 120 Hz,
 perceptual image-quality and physical/acoustic A/V checks remain unqualified.**
 Timestamp-preserving forwarding and the existing WebRTC audio clock are retained,
 but software frame age and decoded audio energy do not prove acoustic alignment.
@@ -394,3 +395,159 @@ The optional A/V marker prototype was not tested and remains ignored, outside
 the shipped code. Default capture remains 30 FPS until native Mac qualification
 passes as well; do not treat the earlier failing sender-only draft as the final
 Windows result. No merge or release was performed.
+
+### Native Mac follow-up
+
+Native Mac validation on 1 November 2026 starts at `9a6a5fe`, with frozen Bun
+dependencies, Electron 45.1.0 and Chromium 156.0.8078.49. The final series follows
+the owner's explicit exclusive-access handoff and includes the restored default.
+Samples run serially without concurrent builds/tests, using isolated profiles,
+`COUCH_DATA_DIR` and ports. A task-owned caffeinate process keeps the display
+awake and exits afterward. Installed Couch/data/TCC entries are untouched;
+hardware details remain only in ignored evidence.
+
+The real moving 1920×1080 H.264 fixtures contain 960 frames in 16 seconds at
+60 FPS, or 1,920 at 120 FPS, generated before sampling. The source window is
+sized in physical pixels. The display reports 120 Hz and animation callbacks
+confirm it. Each row below retains three eight-second steady samples after
+three-second warmups, with the original FPS and ≤1% loss gates.
+
+Sound is real macOS system loopback of the generated tone: every receiver sample
+has advancing RTP sound bytes/energy and nonzero decoded PCM. Actual H.264
+encode is `VideoToolbox`, decode is
+`ExternalDecoder (VideoToolboxVideoDecoder)` throughout. The primary 60 FPS RTP
+stats also report power-efficient encode and decode in all three samples. All captured, encoded
+and decoded dimensions pass, including 1280×720 in the 720p case. Every paced
+sample has nonempty pacing snapshots; only the intentional native-presentation
+comparison has none.
+
+| Gate | Delivered FPS, samples 1 / 2 / 3 | Combined steady loss % | Mac result | Evidence under `.artifacts/macbook-sharing/` |
+| --- | --- | --- | --- | --- |
+| 1080p60, ≥55 FPS | 57.86 / 57.85 / 57.74 | 0 / 0 / 0 | **Pass** | `final60/result.json` |
+| 1080p30, ≥28 FPS | 29.30 / 29.31 / 29.42 | 0 / 0 / 0 | **Pass** | `final30/result.json` |
+| 720p60, ≥55 FPS | 57.81 / 57.58 / 57.60 | 0 / 0 / 0 | **Pass** | `final720/result.json` |
+| Two 1080p60 receivers, each ≥55 FPS | A: 57.87 / 57.61 / 57.87; B: 57.97 / 57.59 / 57.85 | 0 / 0 / 0 | **Pass independently** | `final-two/result.json` |
+| 1080p60, requested 6 Mbit/s emulation | 57.61 / 57.74 / 57.73 | 0 / 0 / 0 | FPS/loss **pass**; hard link **unqualified** | `final-mid6m/result.json` |
+| 1080p120 target, ≥110 FPS | 111.58 / 111.39 / 111.63 | 0 / 0 / 0 | **Pass at measured rates** | `final120/result.json` |
+| 1080p60 without optional diagnostics | 57.90 / 57.91 / 57.78 | 0 / 0 / 0 | **Pass** | `final-quiet60/result.json` |
+| 1080p60 native presentation, pacer disabled | 58.09 / 56.71 / 56.46 | 0 / 0 / 0 player loss | **Pass comparison** | `final-native60/result.json` |
+
+Two receivers means two independent production sessions/players in separate
+iframe globals and distinct WebRTC peer connections on one Mac. It is genuine
+per-peer fanout, not two views of one incoming track; it is not cross-device
+Wi-Fi or phone/TV qualification.
+
+The CDP command accepts the requested global 6 Mbit/s rule, but video RTP is
+6.72 / 5.57 / 6.70 Mbit/s. A separate diagnostic removing the unlimited localhost
+rule also passes FPS/loss (57.18 / 56.82 / 55.95 FPS), yet video RTP still reaches
+5.78 / 6.74 / 6.73 Mbit/s (`final-mid6m-global/result.json`, diagnostic source in
+`bandwidth-global-only.source.ts`). Neither establishes an enforced 6 Mbit/s
+link. The emulation discrepancy remains unresolved; no production bandwidth
+policy or assertion was changed to make it pass.
+
+120 is a requested target, not a locked rate: actual capture is
+111.83 / 111.77 / 111.76 FPS, source playback counters advance at about 120,
+and presentation exceeds the unchanged 110 FPS assertion. This supports the
+120 target on this tested Mac chain, not physical display latency or Windows
+120 Hz. Callback counts alone are not used to qualify source playback.
+
+| Requested / sample | Captured | Encoded | Decoded | Presented | Player startup / warmup / steady drops | Pre-steady queue / steady queue drops | Combined steady loss % | Summed process CPU % | Frame age p50 / p95 ms |
+| --- | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | --- |
+| 60 / 1 | 57.99 | 57.99 | 57.99 | 57.74 | 0 / 0 / 0 | 0 / 0 | 0 | 58.3 | 36.8 / 45.8 |
+| 60 / 2 | 57.85 | 57.85 | 57.85 | 57.85 | 0 / 0 / 0 | 0 / 0 | 0 | 58.7 | 38.4 / 47.7 |
+| 60 / 3 | 57.86 | 57.74 | 57.74 | 57.49 | 0 / 0 / 0 | 0 / 0 | 0 | 60.3 | 37.6 / 53.3 |
+
+All final paced samples have zero steady player drops, queue overflow and
+missing-processor counts. CPU ranges are 43.3–44.7% for 30, 61.0–63.2% for
+720p60, 69.0–71.5% for two receivers together, 58.1–60.0% for requested 6 Mbit/s,
+63.7–66.7% for 120, and 55.1–58.0% for quiet60. 100% is one logical CPU; these
+sums include the source, publisher and receiver Electron processes, not all
+macOS services.
+
+Startup/warmup are separate from the steady result. Two-receiver player startup
+counts A/B are 0/0, 1/0, 1/0; warmup counts are 1/1, 0/0, 0/0. Each receiver's
+pacer has cumulative **pre-steady** queue drops of 5 / 6 / 31 across the three
+runs, with zero additional drops during steady sampling. These snapshots do not
+split queue loss into startup versus warmup. Other final paced rows have zero
+player startup/warmup and pre-steady queue drops. The native comparison has one
+player warmup drop in its first sample. Queues remain bounded at three frames.
+`final-summary.json` and `final-report.md` retain every sample's requested/
+captured/encoded/decoded/delivered/presented rates, CPU, audio RMS,
+implementations, frame age and all drop counters; raw per-second stats and
+source playback probes remain in individual results.
+
+Earlier preliminary runs remain separately in `paced60-01`, `paced30`,
+`paced720`, `paced-two`, `paced-mid6m`, `paced120`, `quiet60` and `native60`,
+with `summary.json`/`report.md`. Their 1080p60 combined losses are 0 / 0 / 0.22%:
+the last is one frame of disagreement between RTP decode and processor
+snapshots, whose exact cause was not isolated. Preliminary two-receiver
+pre-steady queue loss is 15 / 14 / 9, distinct from the final series. Late
+bandwidth diagnostics `mid6m-global-only` (also missing its bandwidth argument)
+and `mid6m-global-only-02` fail with low FPS and disappearing capture-source
+IDs before exclusive access; they are not qualification samples and their
+cause is not attributed to a production change. A zsh read-only variable also
+broke their outer exit-code reporting. Raw results/logs and excluded-run notes
+remain. No failed evidence was overwritten or assertion weakened.
+
+Native 1080p60 now passes every final Mac and retained Windows steady sample
+with sound and exact dimensions. The targeted 30 FPS workaround from `037405be`
+is therefore reversed: default capture is **60 FPS**, with explicit 30 and 120
+still available. This changes the shared default and its assertions only; the
+Windows-qualified bitrate, codec preference, worker, transport and audio
+pipeline are unchanged. A future change to that pipeline requires Windows
+requalification.
+
+**Lifecycle and A/V scope.** `final-lifecycle-av/result.json` records native
+production-session checks for 720p/1080p and 30/60 Picture edits with unchanged
+source identity and the expected sender ceilings, twelve one-second queue
+snapshots (maximum one queued frame), three Stop/restart/playback replacements,
+track/worker retirement, injected worker-error recovery to advancing original
+video, and a missing-generator native fallback. Pending-setup cancellation is
+also covered by the live-client unit suite. No source-window visibility or
+closure detector was added; capture lifetime retains the existing platform path.
+
+A separately generated 60 FPS flash/997 Hz beep marker traverses real Mac
+screen/system-audio capture and the production WebRTC/player path. Pixel
+transitions are detected from presented frames. The source element audio tap
+works, but `MediaElementAudioSourceNode` returns zeros when tapping this receiver
+`srcObject`, with WebContents muting both enabled and disabled. A separate
+`MediaStreamAudioSourceNode` analysis branch detects the received pulses after
+its output is silenced to prevent same-Mac loopback feedback. Its
+[output timestamp](https://webaudio.github.io/web-audio-api/#dom-audiocontext-getoutputtimestamp)
+is an OS estimate, and the separate audio context contributes its own timing;
+[video callbacks](https://wicg.github.io/video-rvfc/) report expected composition,
+not photons. The final diagnostic matches 21 source and 17 receiver events:
+source audio-minus-video median 32.90 ms (32.13–35.85), receiver estimate
+92.93 ms (55.03–126.33). These are **not** the production element's acoustic A/V
+offset and cannot qualify alignment or identify a pacing regression. Raw pulse
+onsets, output-clock mappings and `timing-summary.json` remain beside the result.
+Physical/acoustic A/V remains unqualified, as on Windows; no physical timing
+recording or calibrated output loopback is available in this validation.
+
+All earlier A/V/lifecycle attempts remain: `lifecycle-av-01` has an invalid
+cross-track media-clock comparison after fallback; `lifecycle-av-02/03` retain
+successful lifecycle checks but failed element-audio detection;
+`av-element-04` confirms the zero tap without muting; `av-stream-05` exposes
+recapture feedback; `av-stream-06` is the first silent-analysis diagnostic.
+None is substituted for a passing physical alignment measurement.
+
+**Regressions.** Frozen install, full typecheck and production build pass on the
+final code. The Bun suite passes 768 tests with one existing Linux `/proc`
+process-name check skipped on macOS (769 total). This includes sharing,
+live-client, capture, quality/FPS edits, fallback codecs, pairing/privacy and
+pending-worker cancellation. All 81 tests across the eight Live audio suites in
+`docs/live-audio.md` plus the 12-case real-FFmpeg buffered-video suite pass with
+no skips. Native Main/preload/Core hidden stereo capture, restart, cleanup and
+quit ordering pass in `checks/live-host/stereo/events.json`; it uses Chromium's
+synthetic input, not a physical stereo device. Logs stay under
+`.artifacts/macbook-sharing/checks/`. The first Node invocation used the wrong
+Bun output subdirectory and ran no tests; `integrations-02.log` is the corrected
+81-test run. No release or package workflow was started.
+
+Remaining qualification is acoustic/physical A/V, an enforced mid-bandwidth
+network, physical cross-device/phone/Linux TV behavior and perceptual image
+quality. This session supplies no new Windows hardware run; its existing native
+60 FPS evidence remains applicable because the tested pipeline is unchanged.
+The local gh-stack catalog migration conflict involves another branch, so this
+continuation uses a normal fetched/rebased, non-force Git push to the existing
+draft PR, without changing that unrelated catalog.
