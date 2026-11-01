@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { startHelpers } from "../src/server/helpers";
+import { helper, startHelpers } from "../src/server/helpers";
 import { createBandcampCatalog } from "../src/server/providers/bandcamp";
 import { bandcampSearchPlugin } from "../src/server/bandcamp";
 import fixture from "./fixtures/bandcamp-extractor.py" with { type: "text" };
@@ -14,10 +14,12 @@ test("Node searches Bandcamp through the managed helper, then removes its privat
   const directory = mkdtempSync(join(tmpdir(), "couch-bandcamp-")), bin = join(directory, "bin");
   mkdirSync(bin);
   const before = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE };
+  let startup: Promise<unknown> | undefined;
   const timers: ReturnType<typeof setInterval>[] = [], set = globalThis.setInterval;
   t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const timer = set(...args); timers.push(timer); return timer; });
-  t.after(() => {
+  t.after(async () => {
     for (const timer of timers) clearInterval(timer);
+    await startup;
     for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     rmSync(directory, { recursive: true, force: true });
   });
@@ -36,6 +38,7 @@ else {
   process.env.COUCH_DATA_DIR = directory;
   t.mock.method(globalThis, "fetch", async () => { throw new Error("Direct Node fetch must not perform Bandcamp search"); });
   startHelpers(join(directory, "helpers"));
+  startup = Promise.allSettled((["yt-dlp", "qjs", "ffmpeg"] as const).map(helper));
   const page = await createBandcampCatalog().browse({ query: "artist" });
   assert.equal(page.items[0]?.url, "https://artist.bandcamp.com/track/track");
   const args: string[] = JSON.parse(readFileSync(captured, "utf8"));
@@ -44,6 +47,7 @@ else {
   assert.equal(args[args.lastIndexOf("--extractor-retries") + 1], "0");
   assert.ok(args.includes("--no-plugin-dirs"));
   assert.ok(args.includes("--proxy"));
+  assert.ok(args.includes("--plugin-dirs"));
   const plugin = args[args.indexOf("--plugin-dirs") + 1]!;
   assert.ok(plugin);
   assert.throws(() => readFileSync(join(plugin, "bundled", "yt_dlp_plugins", "extractor", "bandcamp.py")), /ENOENT/);

@@ -81,8 +81,8 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request?:
     const items = info.results.slice(0, 50).flatMap((entry): ProviderItem[] => {
       if (!object(entry) || !["a", "t"].includes(String(entry.type))) return [];
       let source: Target;
-      // The app can prepend the artist's origin to an already absolute URL. Keep the last URL.
-      try { source = target(typeof entry.url === "string" ? entry.url.replace(/^.*(?=https?:\/\/)/i, "") : entry.url); } catch { return []; }
+      // The app can prepend the artist's origin to an already absolute URL.
+      try { source = target(typeof entry.url === "string" ? entry.url.replace(/^https?:\/\/[^/?#]+(?=https?:\/\/)/i, "") : entry.url); } catch { return []; }
       const title = label(entry.name);
       if (!title || seen.has(source.url) || source.kind !== (entry.type === "a" ? "album" : "track")) return [];
       seen.add(source.url);

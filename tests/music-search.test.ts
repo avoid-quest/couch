@@ -68,6 +68,15 @@ test("Bandcamp keyword search returns openable albums and tracks without extract
   expect(extractions).toBe(0);
 });
 
+test("Bandcamp search keeps the original item when a query or fragment contains another URL", async () => {
+  for (const item of [album, track]) for (const prefix of ["", "https://arsider.bandcamp.com"]) {
+    for (const suffix of ["?from=https://other.bandcamp.com/track/other", "#https://outside.example/track/other"]) {
+      const catalog = createBandcampCatalog(undefined, (async () => Response.json({ results: [{ ...item, url: `${prefix}${item.url}${suffix}` }] })) as typeof fetch);
+      expect((await catalog.browse({ query: "arsider" })).items.map(result => result.url)).toEqual([item.url]);
+    }
+  }
+});
+
 test("Bandcamp distinguishes an empty search from unavailable or malformed responses", async () => {
   for (const response of [{ results: [] }, { results: null }, { results: {} }, {}, null]) {
     const catalog = createBandcampCatalog(undefined, (async () => Response.json(response)) as typeof fetch);

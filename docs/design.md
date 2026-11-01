@@ -524,7 +524,9 @@ toast and clear their saved results automatically; failures stay visible for ret
   Bandcamp search uses `/api/fuzzysearch/1/app_autocomplete` for up to 50 albums
   and tracks, through the managed yt-dlp transport and protected proxy because
   Node's direct HTTP requests can be challenged. Each search makes one request,
-  with the same 12-second deadline. A challenge page or other non-JSON response shows
+  with the same 12-second deadline. Result links remove a duplicated leading origin
+  while keeping the original item when a query or fragment contains another URL.
+  A challenge page or other non-JSON response shows
   "Bandcamp search is unavailable. Try again shortly."
 - **System notification**: only the desktop app's "Couch X is ready" when an
   update has downloaded, since it installs on quit.
