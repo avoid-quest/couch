@@ -18,7 +18,7 @@ export type AirPlaySessions = {
 
 const restartWindow = 5 * 60_000, maxRestarts = 3;
 const startTimeout = 20_000, quietLimit = 30 * 60_000;
-export const airPlayPackages = "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav and libplist-2.0-4";
+const airPlayPackages = "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav and libplist-2.0-4";
 const executable = (path: string) => { try { accessSync(path, constants.X_OK); return true; } catch { return false; } };
 const which = (name: string) => (process.env.PATH ?? "/usr/bin:/bin").split(delimiter).map(directory => join(directory, name)).find(executable);
 // A sender names itself before it is admitted; keep only a short, printable label.
@@ -134,7 +134,7 @@ export function createAirPlay(options: {
   };
   const line = (text: string) => {
     let match: RegExpExecArray | null;
-    if (!ready && /^Initialized server socket/.test(text)) { ready = true; options.changed(); }
+    if (!ready && text.startsWith('Initialized server socket')) { ready = true; options.changed(); }
     // Each sender connection is its own session: one that follows another never continues it.
     else if (/^New connection \S+ identified as Connection type RAOP$/.test(text)) { end(); connected = true; authenticated = false; sender = ""; log("airplay sender connected"); }
     else if (connected && text === "Client authentication success") authenticated = true;
@@ -143,8 +143,8 @@ export function createAirPlay(options: {
       log("airplay sender disconnected");
       if (authenticated) { authenticated = false; spent = true; recycle(); }
     }
-    else if (match = /^connection request from (.*) \(.*\) with deviceID = /.exec(text)) { if (connected && !session) sender = label(match[1]!); }
-    else if (match = /error while loading shared libraries: ([^:\s]+)/.exec(text)) error = `AirPlay needs ${label(match[1]!)}. Install ${airPlayPackages}.`;
+    else if ((match = /^connection request from (.*) \(.*\) with deviceID = /.exec(text))) { if (connected && !session) sender = label(match[1]!); }
+    else if ((match = /error while loading shared libraries: ([^:\s]+)/.exec(text))) error = `AirPlay needs ${label(match[1]!)}. Install ${airPlayPackages}.`;
     else if (/Required gstreamer (?:libav )?plugin/.test(text)) error = `AirPlay needs GStreamer. Install ${airPlayPackages}.`;
     // UxPlay exits when it can't announce itself; retrying wouldn't change the network.
     else if (/dnssd_register_(?:raop|airplay) failed|mDNSResponder .* failed/.test(text)) error = "AirPlay couldn't announce this Couch on the network. Allow multicast and UDP port 5353, then turn AirPlay off and on.";

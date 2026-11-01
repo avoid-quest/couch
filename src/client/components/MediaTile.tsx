@@ -12,7 +12,7 @@ import { useArtwork, useItemLight } from "./AmbientLight";
 import { useRelatedMenu, type Related } from "./MediaContext";
 
 // A channel keeps its circle in a frame of another shape: as large as the frame's shorter side, centred.
-export const roundInFrame = "mx-auto aspect-square! h-auto! w-[min(100%,var(--tile-art))]! rounded-full object-cover";
+const roundInFrame = "mx-auto aspect-square! h-auto! w-[min(100%,var(--tile-art))]! rounded-full object-cover";
 /** A media item's shape (art-shape.ts): an episode is a frame, the rest go by their source. */
 export const tileShape = (source: string | undefined, episode: boolean) => artShape(source, episode ? "episode" : "media");
 // A tile's artwork height by its shelf's shape, so posters, frames and squares carry about the same weight and a shelf

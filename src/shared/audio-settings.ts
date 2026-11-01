@@ -1,3 +1,4 @@
+import type { NativeBufferFrames, NativeChannelMap } from "./capture";
 export type LiveAudioSettings = { codec: "auto" | "pcm" | "opus"; minBufferMs: number };
 export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 150 };
 export const isLiveAudioSettings = (value: unknown): value is LiveAudioSettings => {
@@ -9,15 +10,15 @@ export const nativeInputBufferOptions = ["128", "256", "512", "1024"] as const;
 export type NativeInputBufferPreference = typeof nativeInputBufferOptions[number];
 export const defaultNativeInputBuffer: NativeInputBufferPreference = "128";
 export const isNativeInputBufferPreference = (value: unknown): value is NativeInputBufferPreference => typeof value === "string" && nativeInputBufferOptions.includes(value as NativeInputBufferPreference);
-export const nativeInputBufferFrames = (value: NativeInputBufferPreference) => Number(value) as import("./capture").NativeBufferFrames;
+export const nativeInputBufferFrames = (value: NativeInputBufferPreference) => Number(value) as NativeBufferFrames;
 
-export function isNativeChannelMap(value: unknown, channels: number): value is import("./capture").NativeChannelMap {
+export function isNativeChannelMap(value: unknown, channels: number): value is NativeChannelMap {
   return Array.isArray(value) && (value.length === 1 || value.length === 2) &&
     [...value].every(channel => Number.isInteger(channel) && channel >= 0 && channel < channels) &&
     (value.length === 1 ? channels > 2 : value[0] % 2 === 0 && value[1] === value[0] + 1) &&
     (channels > 2 || value.length === 2 && value[0] === 0);
 }
-export const nativeInputChannelMap = (value: string) => value.split("/").map(channel => Number(channel) - 1) as import("./capture").NativeChannelMap;
+export const nativeInputChannelMap = (value: string) => value.split("/").map(channel => Number(channel) - 1) as NativeChannelMap;
 export const isNativeInputChannelPreference = (value: unknown): value is string => typeof value === "string" && /^[1-9]\d{0,4}(\/[1-9]\d{0,4})?$/.test(value) && isNativeChannelMap(nativeInputChannelMap(value), 100_000);
 export const nativeInputChannelOptions = (channels: number) => [
   ...Array.from({ length: Math.floor(channels / 2) }, (_, i) => `${i * 2 + 1}/${i * 2 + 2}`),

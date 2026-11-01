@@ -25,8 +25,8 @@ const fixture = (route: (url: string, init?: RequestInit) => string | Response, 
   requests.push(url);
   assert.equal(init?.redirect, "error");
   assert.equal(init?.credentials, "omit");
-  assert.equal((init?.headers as Record<string, string>)["User-Agent"], "Mozilla/5.0");
-  assert.equal((init?.headers as Record<string, string>).Referer, `${origin}/`);
+  assert.equal((init!.headers as Record<string, string>)["User-Agent"], "Mozilla/5.0");
+  assert.equal((init!.headers as Record<string, string>).Referer, `${origin}/`);
   const body = route(url, init);
   return body instanceof Response ? body : new Response(body);
 }) as typeof fetch;

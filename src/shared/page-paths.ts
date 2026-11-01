@@ -1,7 +1,7 @@
 import { settingsAliases, settingsPageForPath, settingsPages } from "./settings-pages.ts";
 
 // The sections in tab order, then the search results and the player. Sources are shelves on Home, not places.
-export const pagePaths: Record<string, string> = {
+const pagePaths: Record<string, string> = {
   Home: "/", Saved: "/saved", Remote: "/remote", Settings: "/settings", Search: "/search", Now: "/now",
 };
 // Home's own pages: every station, and every Live TV channel.

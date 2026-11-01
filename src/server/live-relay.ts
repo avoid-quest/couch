@@ -19,7 +19,7 @@ async function startRelay(executable: string, network: LanNetwork, failed: () =>
     const port = await new Promise<number>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("The bundled relay did not start in time.")), 5000);
       let output = "";
-      const finish = (error?: Error, port?: number) => { clearTimeout(timeout); error ? reject(error) : resolve(port!); };
+      const finish = (error?: Error, port?: number) => { clearTimeout(timeout); if (error) reject(error); else resolve(port!); };
       child.once("error", () => finish(new Error("The bundled relay could not be launched. Reinstall this Couch build.")));
       child.once("exit", () => finish(new Error("The bundled relay could not listen on this network.")));
       child.stdout.on("data", data => {

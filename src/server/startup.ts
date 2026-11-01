@@ -11,7 +11,7 @@ const command = (file: string, args: string[]): Promise<string> => new Promise((
 
 // LightDM prints its merged configuration on stderr, with source IDs before keys.
 // Seat:* applies first, then matching seat sections in their printed order.
-export function startupEnabled(configuration: string): boolean {
+function startupEnabled(configuration: string): boolean {
   if (/^Failed to (?:load configuration from|open configuration directory) /m.test(configuration)) throw new Error(`Couldn't read the complete LightDM configuration. ${help}`);
   const groups = new Map<string, Record<string, string>>();
   let current: Record<string, string> | undefined;
@@ -36,7 +36,7 @@ export function startupEnabled(configuration: string): boolean {
   return true;
 }
 
-export function startupBootReady(service: string, target: string, manager: string) {
+function startupBootReady(service: string, target: string, manager: string) {
   // Ubuntu's display-manager alias makes LightDM "indirect", not "enabled".
   return service.split("\n").includes("LoadState=loaded") && /^(?:UnitFileState=)(?:enabled|indirect)$/m.test(service) && target.trim() === "graphical.target" && manager.trim() === "lightdm.service";
 }

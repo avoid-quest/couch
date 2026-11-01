@@ -1,0 +1,47 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/main.ts",
+        "src/server/audio-worker.ts",
+        "app/main.ts",
+        "app/preload.ts",
+        "scripts/*.ts",
+        "tests/*.integration.ts",
+        "tests/*.native.ts",
+        "src/client/session/native-audio.ts",
+        "tests/*.browser.{ts,tsx}",
+        "tests/fixtures/*.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "app/**/*.ts",
+        "scripts/**/*.ts",
+        "tests/**/*.{ts,tsx}"
+      ],
+      "ignore": [
+        "src/client/routeTree.gen.ts"
+      ],
+      "ignoreBinaries": [
+        "go",
+        "mkfifo",
+        "setpriv",
+        "unshare"
+      ]
+    },
+    "apps/web": {
+      "ignoreDependencies": [
+        "tailwindcss"
+      ]
+    }
+  },
+  "ignoreIssues": {
+    "src/client/components/ui/**": [
+      "exports"
+    ]
+  },
+  "ignoreDependencies": [
+    "app-builder-lib"
+  ]
+}

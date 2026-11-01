@@ -10,7 +10,7 @@ export class GuideError extends Error {
   constructor(message: string, readonly status = 400, readonly retryMs?: number) { super(message); }
 }
 const fail = (message: string): never => { throw new GuideError(message); };
-export const guideId = (...parts: string[]) => createHash("sha256").update(JSON.stringify(["couch:iptv:v1", ...parts])).digest("hex");
+const guideId = (...parts: string[]) => createHash("sha256").update(JSON.stringify(["couch:iptv:v1", ...parts])).digest("hex");
 export const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 export function guideText(value: unknown, max: number, optional = false): string {
   if (value === undefined && optional) return "";

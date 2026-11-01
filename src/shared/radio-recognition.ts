@@ -10,7 +10,7 @@ export type RecognizedSong = {
 };
 
 /** An observation of a radio stream, separate from its station and programme. */
-export type RadioRecognitionResult = { track: RecognizedSong | null; sampledAt: number };
+type RadioRecognitionResult = { track: RecognizedSong | null; sampledAt: number };
 export type RadioRecognitionEntry = RadioRecognitionResult & {
   id: string;
   station: { id: string; name: string };

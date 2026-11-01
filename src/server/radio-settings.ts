@@ -56,9 +56,10 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
         if (request.method !== "DELETE") return methods("DELETE");
         radio.removePlaylist(match[1]!);
         return new Response(null, { status: 204 });
-      } catch (error) {
+      } catch (caught) {
         // A shared refresh belongs to its first caller. Each waiter must still
         // have authority before receiving that caller's private failure details.
+        let error = caught;
         if (!browsing) { try { authorize(); } catch (rejected) { error = rejected; } }
         if (error instanceof ControllerError || error instanceof RadioError) return Response.json({ error: error.message }, { status: error.status });
         return Response.json({ error: "Couldn't update radio sources. Try again." }, { status: 500 });

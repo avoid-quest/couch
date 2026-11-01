@@ -60,7 +60,7 @@ function queryInteger(params: URLSearchParams, key: string, fallback: number, mi
 }
 
 export function createCatalog({ radio, viewing }: Services) {
-  type ProgressRows = import("./store").ProgressSnapshot;
+  type ProgressRows = ProgressSnapshot;
   const progressUndo = new Map<string, { rows: ProgressRows; expected: ProgressRows; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   const rememberProgress = (rows: ProgressRows, expected: ProgressRows = []) => {
     const undoToken = crypto.randomUUID();

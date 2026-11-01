@@ -32,10 +32,10 @@ export const choosesHere = (action: Action, before: ClientSessionState | null, a
 };
 
 /** Why a control is disabled, in one word where it can be: Core's refusal, or what the media lacks. */
-export type Reason = "Offline" | "Private" | "Sharing this source" | "Can't play this channel" | "No picture" | "No sound";
+type Reason = "Offline" | "Private" | "Sharing this source" | "Can't play this channel" | "No picture" | "No sound";
 export type Control = { enabled: boolean; reason?: Reason };
 /** A channel's toggle: pressed while the device plays it here; its action turns it over, and turning off the last channel takes the device out. */
-export type Channel = Control & { on: boolean; action: Action };
+type Channel = Control & { on: boolean; action: Action };
 export type Row = {
   device: DeviceSummary;
   /** Its picture and sound in this playback: in while it has either. */
@@ -143,7 +143,7 @@ export const soundActions = (row: Row, action: Action): Action[] =>
 
 /** The summary's counts and the filters they become, in the order the summary says them. */
 export type Filter = "picture" | "sound" | "sync" | "behind" | "error" | "offline";
-export const filterLabels: Record<Filter, string> = { picture: "Picture", sound: "Sound", sync: "In sync", behind: "Behind", error: "Can't play", offline: "Offline" };
+const filterLabels: Record<Filter, string> = { picture: "Picture", sound: "Sound", sync: "In sync", behind: "Behind", error: "Can't play", offline: "Offline" };
 const filtersOf = (row: Row): Filter[] => [
   ...row.picture.on ? ["picture" as const] : [], ...row.level.sound ? ["sound" as const] : [], ...row.output?.delayActive ? ["sync" as const] : [],
   ...row.output?.buffered && !row.output.error ? ["behind" as const] : [], ...row.output?.error ? ["error" as const] : [], ...!row.device.online ? ["offline" as const] : [],

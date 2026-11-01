@@ -23,7 +23,7 @@ function attributes(tag: string): Record<string, string> {
   return Object.fromEntries([...tag.matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(match => [match[1]!.toLowerCase(), text(match[2] ?? match[3] ?? match[4] ?? "")]));
 }
 
-export async function movies123Text(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<string> {
+async function movies123Text(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<string> {
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12_000)]);
   const response = await request(url, { signal: cancellation, credentials: "omit", redirect: "error", headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0" } });
   if (!response.ok) {

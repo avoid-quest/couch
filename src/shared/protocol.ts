@@ -1,6 +1,6 @@
 import type { LiveAudioSettings } from "./audio-settings";
 import type { RadioProgrammeDetails } from "./radio";
-import type { MediaCollection, MediaShape } from "./media";
+import type { CollectionLink, MediaCollection, MediaShape } from "./media";
 import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
@@ -8,19 +8,24 @@ import type { DeviceSharing } from "./device-sharing";
 import type { LiveMetadata, LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
 import type { CaptureKind } from "./capture";
 import type { CompressorSettings } from "./compressor";
+import type { RemoteTextField } from "./remote";
+import type { SetupStep } from "./setup";
+import type { SoundRouteState } from "./sound";
+import type { UpdateAction, UpdateState } from "./app-bridge";
+import type { DisplayAction, DisplayState } from "./display";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
 export type PlaybackCollection = MediaCollection;
-export type QueueEntry = { creator?: import("./media").CollectionLink; subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; liveSourceId?: string; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
+export type QueueEntry = { creator?: CollectionLink; subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; liveSourceId?: string; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 // Runtime selection intent carried between renderers and the scheduled decoder.
 export type AudioSelection = Pick<MediaTrack, "index" | "language" | "label">;
-export type Chapter = { title: string; position: number };
+type Chapter = { title: string; position: number };
 export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; autoplay?: boolean };
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
-export type NowPlaying = { title: string; artist?: string };
+type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
 export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "hidden" | "devices" | "settings" | "sound" | "bluetooth" | "display";
@@ -69,7 +74,7 @@ export type DeviceSummary = { id: string; name: string; online: boolean; updates
 export type SessionState = {
   controls?: PlaybackControls;
   controlling?: string;
-  textField?: import("./remote").RemoteTextField | null;
+  textField?: RemoteTextField | null;
   queue: QueueEntry[];
   // upcoming: the first entries Autoplay will play after Up next, in order.
   autoplay?: { enabled: boolean; contextTitle: string | null; upcoming: QueueEntry[]; pending?: boolean };
@@ -99,7 +104,7 @@ export type SessionState = {
   // Revision per client query-key root. A bump tells controllers to refetch that domain.
   versions?: Partial<Record<Domain, number>>;
   installationName?: string;
-  setupStep?: import("./setup").SetupStep;
+  setupStep?: SetupStep;
   appearance?: TvAppearance;
   // Couch-wide, admin-managed opt-in for shared live-source chooser requests. Defaults to false.
   askEveryDevice?: boolean;
@@ -107,7 +112,7 @@ export type SessionState = {
   radioRetry?: RadioRetry | null;
   radioProgramme?: RadioProgramme | null;
   webRetry?: { paused: boolean } | null;
-  systemAudio?: import("./sound").SoundRouteState;
+  systemAudio?: SoundRouteState;
 };
 
 export type Action =
@@ -162,7 +167,6 @@ export type Action =
 export type ClientMessage = { type: "command"; requestId: string; action: Action; targetDeviceId?: string };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
-export type UpdateReply = { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
   | { type: "liveIceServers"; iceServers: RTCIceServer[] }
@@ -170,7 +174,7 @@ export type ServerMessage =
   // upload: Core needs the publisher's encoded capture, for a playback in sync or a receiver it relays to.
   // uploadId identifies this request so delayed recorder errors cannot fail a later retry of the same source.
   | { type: "livePeers"; sourceId: string; peers: LivePeer[]; upload: boolean; uploadId?: string }
-  | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
+  | { type: "updates"; requestId: string; action: UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
   // Core's Unix time in milliseconds, once per connection: elapsed Live times count on it.
   | { type: "time"; now: number }
@@ -213,11 +217,11 @@ export type ConnectionInfo = {
 };
 
 // Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
-export type AppMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string }
-  | { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string } | { type: "tvMode"; requestId: string; error?: string } | { type: "renamed" } | { type: "shutdown" };
+export type AppMessage = { type: "display"; requestId: string; state?: DisplayState; error?: string }
+  | { type: "updates"; requestId: string; state?: UpdateState; error?: string } | { type: "tvMode"; requestId: string; error?: string } | { type: "renamed" } | { type: "shutdown" };
 export type CoreMessage =
   | { type: "ready"; origin: string; urls: string[]; pairingCode: string }
   | { type: "addresses"; urls: string[] }
-  | { type: "display"; requestId: string; action: import("./display").DisplayAction }
-  | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
+  | { type: "display"; requestId: string; action: DisplayAction }
+  | { type: "updates"; requestId: string; action: UpdateAction }
   | { type: "tvMode"; requestId: string; enabled: boolean };

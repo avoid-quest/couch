@@ -7,7 +7,7 @@ import { metaLine } from "@/media-caption";
 import { cn } from "@/lib/utils";
 
 /** Couch's clock (time-format.ts): local hours and minutes, with the weekday only when it isn't today. */
-export const radioTime = (at: number, now = Date.now()) => new Date(at).toLocaleString([], {
+const radioTime = (at: number, now = Date.now()) => new Date(at).toLocaleString([], {
   ...new Date(at).toDateString() === new Date(now).toDateString() ? {} : { weekday: "short" }, hour: "2-digit", minute: "2-digit", hour12: false,
 });
 

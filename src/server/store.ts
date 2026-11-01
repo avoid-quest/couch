@@ -16,6 +16,7 @@ import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 import { CHANGED_ELSEWHERE } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 import { defaultCompressor, isCompressorPatch, type CompressorSettings } from "../shared/compressor";
+import type { SavedSoundProfile } from "../shared/sound";
 
 type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
 export type ProgressSnapshot = Array<ProgressRow & { profileId: string }>;
@@ -231,7 +232,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       }).immediate();
     },
     audioProfile() { const value = db.query<{ card: string | null; profile: string | null }, []>("SELECT card, profile FROM audio_output WHERE id = 1").get(); const bluetooth = db.query<{ address: string }, []>("SELECT address FROM bluetooth_output WHERE id = 1").get(); return value?.card && value.profile ? { card: value.card, profile: value.profile, ...(bluetooth ? { bluetoothAddress: bluetooth.address } : {}) } : null; },
-    saveAudioOutput(name: string, profile?: import("../shared/sound").SavedSoundProfile | null) { db.transaction(() => { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); if (profile?.bluetoothAddress) db.query("INSERT INTO bluetooth_output VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET address=excluded.address").run(profile.bluetoothAddress); else db.exec("DELETE FROM bluetooth_output"); })(); },
+    saveAudioOutput(name: string, profile?: SavedSoundProfile | null) { db.transaction(() => { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); if (profile?.bluetoothAddress) db.query("INSERT INTO bluetooth_output VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET address=excluded.address").run(profile.bluetoothAddress); else db.exec("DELETE FROM bluetooth_output"); })(); },
     tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
     saveTvInterfaceSize(size: InterfaceSize) {
       if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");

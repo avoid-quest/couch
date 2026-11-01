@@ -10,6 +10,7 @@ import { createPassThrough } from "../src/server/pass-through";
 import { createPreviewResolver, vttPreview } from "../src/server/preview-manifest";
 import { createPreviewImages, playbackPreviewResponse } from "../src/server/playback-preview";
 import { hlsPreview } from "../src/server/hls-preview";
+import type { AddressInfo } from "node:net";
 
 test("only public IPv4 and global IPv6 addresses pass", () => {
   for (const address of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2001:4860:4860::8888", "2606:4700:4700::1111"]) assert.equal(isPublicAddress(address), true, address);
@@ -40,7 +41,7 @@ test("literal and DNS private targets never reach a local sentinel", async t => 
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
-  const port = (server.address() as import("node:net").AddressInfo).port;
+  const port = (server.address() as AddressInfo).port;
   let lookups = 0;
   t.mock.method(dns, "lookup", (_host: string, _options: dns.LookupOptions, callback: (error: null, rows: dns.LookupAddress[]) => void) => { lookups++; callback(null, [{ address: "127.0.0.1", family: 4 }]); });
   for (const host of ["127.0.0.1", "127.1", "2130706433", "0x7f000001", "0177.0.0.1", "[::ffff:127.0.0.1]", "[::ffff:7f00:1]", "private.test"]) await assert.rejects(() => publicFetch(`http://${host}:${port}/`), PublicNetworkError);
@@ -57,7 +58,7 @@ test("public HLS relay rejects signed private variants, keys and segments before
   sentinel.listen(0, "127.0.0.1");
   await once(sentinel, "listening");
   t.after(() => new Promise<void>((resolve, reject) => sentinel.close(error => error ? reject(error) : resolve())));
-  const local = `http://127.0.0.1:${(sentinel.address() as import("node:net").AddressInfo).port}`;
+  const local = `http://127.0.0.1:${(sentinel.address() as AddressInfo).port}`;
   const master = "https://public-media.test/master.m3u8";
   const manifests = [
     `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\n${local}/variant.m3u8\n`,
@@ -92,7 +93,7 @@ test("Core's media listener is literal loopback, guarded and media-only", async 
   sentinel.listen(0, "127.0.0.1");
   await once(sentinel, "listening");
   t.after(() => new Promise<void>((resolve, reject) => sentinel.close(error => error ? reject(error) : resolve())));
-  const port = (sentinel.address() as import("node:net").AddressInfo).port;
+  const port = (sentinel.address() as AddressInfo).port;
   const master = "https://public-media.test/master.m3u8";
   const request = (async (input, init) => {
     if (String(input) !== master) return publicFetch(input, init);
@@ -160,7 +161,7 @@ test("public fetch preserves the original URL host and streams its response", as
   assert.equal(response.headers.getSetCookie()[0], "anonymous=yes");
   assert.equal(await response.text(), "public content");
   assert.equal(calls[0]?.url.hostname, "media.public.test");
-  assert.equal((calls[0]?.options.headers as Record<string, string>).host, "media.public.test:8443");
+  assert.equal((calls[0]!.options.headers as Record<string, string>).host, "media.public.test:8443");
   assert.equal(calls[0]?.options.lookup, publicLookup);
   assert.notEqual(calls[0]?.options.agent, https.globalAgent);
 });
@@ -266,8 +267,8 @@ for (const [label, referer, expected] of [
   test(`cross-origin redirects sanitize referrers containing ${label}`, async t => {
     const calls = transport(t, call => call.url.hostname === "public.test" ? { status: 307, headers: { Location: "https://cdn.public.test/final" } } : { body: "done" });
     assert.equal(await (await publicFetch("https://public.test/start", { headers: { rEfErEr: referer } })).text(), "done");
-    assert.equal((calls[0]?.options.headers as Record<string, string>).referer, referer);
-    assert.equal((calls[1]?.options.headers as Record<string, string>).referer, expected);
+    assert.equal((calls[0]!.options.headers as Record<string, string>).referer, referer);
+    assert.equal((calls[1]!.options.headers as Record<string, string>).referer, expected);
   });
 }
 

@@ -1,11 +1,10 @@
 import type { InterfaceSize } from "./appearance";
-import type { ConnectionInfo } from "./protocol";
+import type { ConnectionInfo, PlayerState } from "./protocol";
 import type { DeviceSharing } from "./device-sharing";
 import type { UpdateAction, UpdateChannel, UpdateState } from "./updates";
-import type { CaptureKind, CaptureSelection, CaptureSource } from "./capture";
+import type { AudioCaptureFormat, CaptureKind, CaptureSelection, CaptureSource, LiveAudioAction, LiveAudioError, NativeAudioInput } from "./capture";
 
-// Keep the existing type imports usable by older renderer code.
-export type { UpdateAction, UpdateChannel, UpdateOutcome, UpdateState, UpdateTarget } from "./updates";
+export type { UpdateAction, UpdateState, UpdateTarget } from "./updates";
 
 // The Couch app's preload (app/preload.ts) gives its window this bridge to Main (app/main.ts).
 // Full mode ("local") hosts Couch on this computer; Client mode ("remote") shows another Couch.
@@ -21,9 +20,9 @@ export type CouchApp = {
   /** Selects one capture request; null cancels a prepared selection. */
   prepareCapture?(selection: CaptureSelection | null): Promise<void>;
   /** Desktop Live microphone capture owned by Main, independent of this page's render loop. */
-  liveAudio?(action: import("./capture").LiveAudioAction): Promise<import("./capture").AudioCaptureFormat | undefined>;
-  nativeAudioInputs?(): Promise<import("./capture").NativeAudioInput[]>;
-  onLiveAudioError?(listener: (error: import("./capture").LiveAudioError) => void): () => void;
+  liveAudio?(action: LiveAudioAction): Promise<AudioCaptureFormat | undefined>;
+  nativeAudioInputs?(): Promise<NativeAudioInput[]>;
+  onLiveAudioError?(listener: (error: LiveAudioError) => void): () => void;
   /** What to allow in the system's settings before capturing this kind; null when nothing. */
   captureAccess?(kind: CaptureKind): Promise<string | null>;
   /** Opens the system's setting that allows this kind. */
@@ -53,7 +52,7 @@ export type CouchApp = {
   /** Quits this app and shuts down its Core, even when the system tray is unavailable. */
   quit?(): Promise<void>;
   // The TV's own renderer also plays in Client mode, without a local Core.
-  reportPlayback?(status: import("./protocol").PlayerState["status"]): Promise<void>;
+  reportPlayback?(status: PlayerState["status"]): Promise<void>;
   /** Tells the app that this page's shell mounted; false when it was not this window's current page. Older apps lack it. */
   shellReady?(): Promise<boolean>;
 };

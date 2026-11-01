@@ -11,7 +11,7 @@ export class SoundError extends Error {}
 // so installing it repairs sound controls without restarting Couch.
 export const hasPulseTools = () => existsSync("/usr/bin/pactl");
 export const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
-export const querySound = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
+const querySound = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
   if (!hasPulseTools()) { reject(new SoundError("Linux sound controls need pactl. Install pulseaudio-utils, then try again.")); return; }
   execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => {
     if (!error) return resolve(stdout.trim());
@@ -23,7 +23,7 @@ export const querySound = (args: string[]): Promise<string> => new Promise((reso
 
 const bluetoothAddress = (card?: Card) => { const value = card?.properties?.["api.bluez5.address"] ?? card?.properties?.["device.string"]; return value && /^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(value) ? { bluetoothAddress: value.toUpperCase() } : {}; };
 
-export function soundProfiles(value: unknown): SoundProfile[] {
+function soundProfiles(value: unknown): SoundProfile[] {
   if (!Array.isArray(value)) throw new Error("The audio server returned invalid cards.");
   return value.slice(0, 128).flatMap((card: Card) => {
     if (typeof card.name !== "string" || !card.name || card.name.length > 512) throw new Error("Invalid audio card.");
@@ -32,7 +32,7 @@ export function soundProfiles(value: unknown): SoundProfile[] {
   });
 }
 
-export function soundOutputs(value: unknown, cards: Card[] = []): SoundOutput[] {
+function soundOutputs(value: unknown, cards: Card[] = []): SoundOutput[] {
   if (!Array.isArray(value)) throw new Error("The audio server returned an invalid output list.");
   return value.slice(0, 128).map((sink: Sink) => {
     if (typeof sink.name !== "string" || !sink.name || sink.name.length > 512 || typeof sink.index !== "number") throw new Error("The audio server returned an invalid output.");
@@ -43,7 +43,7 @@ export function soundOutputs(value: unknown, cards: Card[] = []): SoundOutput[] 
   });
 }
 
-export function testTone(): Uint8Array {
+function testTone(): Uint8Array {
   // Three seconds, stereo PCM; 0.2 seconds of initial silence permits route readback.
   const frames = 48_000 * 3;
   const bytes = new Uint8Array(frames * 4);

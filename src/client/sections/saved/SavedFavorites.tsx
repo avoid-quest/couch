@@ -39,7 +39,7 @@ const meta = (favorite: Favorite) => {
 };
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.
-export function moveFavorite(favorites: Favorite[], favorite: Favorite, offset: number): { kind: Favorite["kind"]; order: string[] } | null {
+function moveFavorite(favorites: Favorite[], favorite: Favorite, offset: number): { kind: Favorite["kind"]; order: string[] } | null {
   const group = favorites.filter(item => item.kind === favorite.kind);
   const next = reorderedIds(group, item => item.item.id, favorite.item.id, group[group.indexOf(favorite) + offset]?.item.id ?? "");
   return next && { kind: favorite.kind, order: next.map(item => item.item.id) };

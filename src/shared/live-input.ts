@@ -1,4 +1,4 @@
-import type { CaptureKind } from "./capture";
+import type { CaptureKind, NativeChannelMap } from "./capture";
 
 // Publications belong to the capturing connection and disappear when it closes. An AirPlay
 // sender's belongs to Core, under AIRPLAY_PUBLISHER, which is never a Device.
@@ -11,10 +11,10 @@ export type LiveVideoQuality = "720p" | "1080p" | "original";
 export type LiveVideoFrameRate = 30 | 60 | 120;
 export const defaultLiveFrameRate: LiveVideoFrameRate = 60;
 // surface: the browser picker's first offer (a screen or a window).
-export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; nativeChannelMap?: import("./capture").NativeChannelMap; videoQuality?: LiveVideoQuality; videoFrameRate?: LiveVideoFrameRate; includeAudio?: boolean; surface?: "monitor" | "window"; intent?: "relaxed" | "live"; metadata?: LiveMetadata };
+export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; nativeChannelMap?: NativeChannelMap; videoQuality?: LiveVideoQuality; videoFrameRate?: LiveVideoFrameRate; includeAudio?: boolean; surface?: "monitor" | "window"; intent?: "relaxed" | "live"; metadata?: LiveMetadata };
 
 export type LivePeer = { peerId: string; deviceId: string; picture: boolean; sound: boolean };
-export type LiveSignal = { description?: { type: "offer" | "answer"; sdp: string }; candidate?: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null } | null };
+type LiveSignal = { description?: { type: "offer" | "answer"; sdp: string }; candidate?: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null } | null };
 export type LiveSignalMessage = { type: "liveSignal"; peerId: string; signal: LiveSignal };
 // Either end of a peer that can't connect directly tells Core, which plays the source through its own stream.
 export type LiveFailedMessage = { type: "liveFailed"; peerId: string; error: string };

@@ -4,15 +4,16 @@ import { boundedBytes } from "./iptv-feeds";
 import { serve, type Listener } from "./http";
 import { logMediaDiagnostic, mediaAddress, mediaHeaders } from "./media-diagnostics";
 import type { WebMediaSource } from "./web-media";
+import type { AudioManifest } from "./source-preparation";
 
 // Pass-through (#644 Delivery): a Device that can't fetch a source itself because of its
 // Origin, CORS or headers gets the bytes through Core. Public web-provider media always
 // uses the protected relay; other URL media is probed for the destination's access.
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
-type Media = { source: string; audioSource?: string; audioManifest?: import("./source-preparation").AudioManifest; credentialOrigin?: string; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
+type Media = { source: string; audioSource?: string; audioManifest?: AudioManifest; credentialOrigin?: string; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
 // refused: the last error status the source answered, which a browser reports as an unsupported format.
-type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; audioCors?: boolean; audioManifest?: import("./source-preparation").AudioManifest; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; hlsSelection?: Media["hlsSelection"]; logged: Set<string> };
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; audioCors?: boolean; audioManifest?: AudioManifest; createdAt: number; segments?: Promise<boolean>; refused?: number; source: string; audioSource?: string; hlsSelection?: Media["hlsSelection"]; logged: Set<string> };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);

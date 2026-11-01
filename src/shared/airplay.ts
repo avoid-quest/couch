@@ -3,7 +3,7 @@
 // waiting: on, but the Couch isn't shared on the network, so nothing listens.
 /** Public receiver capability, independent of its admin-only settings and sender. */
 export type AirPlayAvailability = "unsupported" | "unavailable" | "available";
-export type AirPlayStatus = "unsupported" | "unavailable" | "off" | "waiting" | "starting" | "ready" | "receiving" | "error";
+type AirPlayStatus = "unsupported" | "unavailable" | "off" | "waiting" | "starting" | "ready" | "receiving" | "error";
 export type AirPlayState = {
   enabled: boolean;
   status: AirPlayStatus;

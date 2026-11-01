@@ -166,7 +166,7 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
   url.hash = "";
   const home = /^\/(?:index\.(?:json|html))?$/.test(url.pathname);
   const source = new URL(url);
-  source.pathname = home ? "/index.json" : /\.json$/.test(source.pathname) ? source.pathname : /\.html$/.test(source.pathname) ? source.pathname.replace(/\.html$/, ".json") : /^\/tipologia\//.test(source.pathname) ? `${source.pathname}/index.json` : `${source.pathname}.json`;
+  source.pathname = home ? "/index.json" : source.pathname.endsWith('.json') ? source.pathname : source.pathname.endsWith('.html') ? source.pathname.replace(/\.html$/, ".json") : source.pathname.startsWith('/tipologia/') ? `${source.pathname}/index.json` : `${source.pathname}.json`;
   const data = object(await json(source.href));
   const title = text(data.name || data.title || object(data.program_info).name) || "RaiPlay";
   const info = object(data.program_info);

@@ -4,7 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@
 import { collectionLocation } from "@/detail-navigation";
 import { providerCollectionCursor } from "@/collection-pagination";
 import type { Action } from "../../../shared/protocol";
-import type { MediaCollection } from "../../../shared/media";
+import type { CollectionLink, MediaCollection } from "../../../shared/media";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
 import { pageSection, providerShape } from "../../../shared/providers";
 import { providerBrowseQuery, providerPageQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
@@ -29,7 +29,7 @@ export type SearchHit = {
   kind: "Video" | "Music" | "Live" | "Radio" | "Channels"; duration?: number | null;
   id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
-  radio?: {id: string; title: string; url: string; tags?: string[]; categories?: string[]; host?: string; group?: string; next?: {start: number; title: string}}; context?: MediaCollection; creator?: import("../../../shared/media").CollectionLink;
+  radio?: {id: string; title: string; url: string; tags?: string[]; categories?: string[]; host?: string; group?: string; next?: {start: number; title: string}}; context?: MediaCollection; creator?: CollectionLink;
   /** What an openable hit is, shown instead of a length. */
   collection?: "Channel" | "List" | "Album" | "Series" | "Season" | "Programme";
   thumbnail?: string; video?: boolean;
@@ -37,7 +37,7 @@ export type SearchHit = {
   /** Every verb, the primary's included; MediaRow's menu holds the rest. */
   actions: MenuAction[];
 };
-export type SearchCollection = { context?: MediaCollection; creator?: import("../../../shared/media").CollectionLink; url?: string; title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
+export type SearchCollection = { context?: MediaCollection; creator?: CollectionLink; url?: string; title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; refreshing?: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
 export type SearchPlaybackProps = {
   onResults?: (source: string, summary: SearchResultSummary) => void;
@@ -89,7 +89,7 @@ function OnlineResults(props: Props) {
   // Hidden sources still report search counts. Active controls presentation,
   // not whether a source participates in the cross-source search.
   const refetchInterval = provider === "twitch" && props.connected && props.active ? 20_000 : false;
-  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, request), enabled: props.connected && !props.paged, refetchInterval, refetchIntervalInBackground: false, refetchOnMount: !!props.retry ? "always" : true });
+  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, request), enabled: props.connected && !props.paged, refetchInterval, refetchIntervalInBackground: false, refetchOnMount: props.retry ? "always" : true });
   const single = useQuery({ ...providerPageQuery(props, provider, { ...request, cursor: props.cursor }), enabled: props.connected && !!props.paged, refetchInterval, refetchIntervalInBackground: false });
   const page = useMemo<ProviderSearchPage | null>(() => {
     if (props.paged) return single.data ?? null;

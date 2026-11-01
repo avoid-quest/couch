@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
-export { supportsWebVideoQuality, supportsCurrentVideoQuality } from "../shared/video-quality";
+export { supportsWebVideoQuality } from "../shared/video-quality";
 
 // The only labels for video quality. Settings, the player and Search all use these. Auto plays 1080p (Core), so the
 // choices offer it once, as 1080p; an explicit "1080p" from an older Couch or a playlist shows as that choice.
@@ -9,14 +9,14 @@ export const videoQualityChoice = (value: VideoQuality): VideoQuality => value =
 export const videoQualityOptions = (["best", "auto", "720p", "480p"] as const).map(value => ({ value, label: videoQualityLabels[value] }));
 const storageKey = "couch.online-video-quality";
 
-export function readVideoQuality(storage?: Pick<Storage, "getItem">): VideoQuality {
+function readVideoQuality(storage?: Pick<Storage, "getItem">): VideoQuality {
   try {
     const value = (storage ?? localStorage).getItem(storageKey);
     return value && Object.hasOwn(videoQualityLabels, value) ? videoQualityChoice(value as VideoQuality) : "auto";
   } catch { return "auto"; }
 }
 
-export function saveVideoQuality(value: VideoQuality, storage?: Pick<Storage, "setItem">) {
+function saveVideoQuality(value: VideoQuality, storage?: Pick<Storage, "setItem">) {
   (storage ?? localStorage).setItem(storageKey, value);
 }
 

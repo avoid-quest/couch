@@ -91,9 +91,9 @@ function decodeEntities(value: string): string {
   return value.replace(/&(?:quot|apos|lt|gt|amp|#0?39|#x27);/g, entity => entity === "&quot;" ? "\"" : entity === "&lt;" ? "<" : entity === "&gt;" ? ">" : entity === "&amp;" ? "&" : "'");
 }
 
-export type InertiaPage = { component: string; props: Record<string, unknown> };
+type InertiaPage = { component: string; props: Record<string, unknown> };
 
-export function parseInertiaPage(html: string): InertiaPage {
+function parseInertiaPage(html: string): InertiaPage {
   const match = /data-page="([^"]+)"/.exec(html);
   if (!match) throw changed();
   let page: unknown;
@@ -139,7 +139,7 @@ function translated(row: Record<string, unknown>, key: string, limit = 2000): st
 
 function cdnUrl(props: Record<string, unknown>, origin: string): string {
   const cdn = clean(props.cdn_url, 2048);
-  if (/^https:\/\//.test(cdn) && !/[\u0000-\u001f\u007f]/.test(cdn)) return cdn;
+  if (cdn.startsWith('https://') && !/[\u0000-\u001f\u007f]/.test(cdn)) return cdn;
   return `https://cdn.${new URL(origin).hostname}`;
 }
 
@@ -270,7 +270,7 @@ function titlePageItems(page: InertiaPage, origin: string): ProviderPage {
 
 const cataloguePath = /^\/(?:[a-z]{2}\/)?(?:archive|search|browse\/genre|titles\/\d+(?:-[\w-]*)?(?:\/season-\d+)?)$/;
 const listPath = /^\/(?:[a-z]{2}\/)?(?:archive|browse\/genre)$/;
-const allowedParameter = /^[a-z_\[\]]{1,20}$/;
+const allowedParameter = /^[a-z_[\]]{1,20}$/;
 
 function catalogueTarget(value: string, cursor?: string): URL {
   let url: URL;

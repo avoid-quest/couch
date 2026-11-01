@@ -1,0 +1,6 @@
+#!/bin/sh
+# Installed by `bun install` (package.json "prepare"). Tests run with `bun run check`.
+set -e
+bun run lint
+bun run typecheck
+bun run knip

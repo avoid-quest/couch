@@ -10,7 +10,7 @@ export async function checkLiveRelay(relay: LiveRelay, signal?: AbortSignal): Pr
         clearTimeout(timeout);
         signal?.removeEventListener("abort", abort);
         connection.onicecandidate = connection.onicegatheringstatechange = null;
-        error ? reject(error) : resolve();
+        if (error) reject(error); else resolve();
       };
       const abort = () => finish(new Error("Relay check canceled."));
       const unavailable = () => finish(new Error("Couldn't reach the relay with these credentials. Check its address, username, password and network access."));

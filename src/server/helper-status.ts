@@ -23,7 +23,7 @@ export type SelectedHelper = {
 };
 // A managed copy on disk. `worked` maps a provider (or "other") to the last time Couch resolved
 // playable media with this copy; listing a site, reading a page's details or --version doesn't count.
-export type ManagedCopy = { sha256: string | null; installedAt: string | null; worked: Record<string, string> };
+type ManagedCopy = { sha256: string | null; installedAt: string | null; worked: Record<string, string> };
 export type HelperStatus = {
   schema: 1;
   selected: Partial<Record<Helper, SelectedHelper>>;

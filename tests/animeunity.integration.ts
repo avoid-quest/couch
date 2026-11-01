@@ -58,7 +58,7 @@ test("AnimeUnity uses its moved origin for browsing and legacy saved episode pla
     "https://www.animeunity.to/anime/12-one-piece",
     "https://www.animeunity.to/anime/12-one-piece/5987",
   ]);
-  assert.equal((calls[4]?.init?.headers as Record<string, string>).Referer, "https://www.animeunity.to/");
+  assert.equal((calls[4]!.init!.headers as Record<string, string>).Referer, "https://www.animeunity.to/");
 });
 
 test("catalogue and search read only public collection metadata", async () => {

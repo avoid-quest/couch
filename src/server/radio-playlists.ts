@@ -85,7 +85,3 @@ export async function readRadioSource(url: string, sourceId: string, request: ty
   }
   return { stations, discoveredGuideUrl };
 }
-
-export async function readRadioPlaylist(url: string, sourceId: string, request: typeof globalThis.fetch, signal: AbortSignal): Promise<RadioStation[]> {
-  return (await readRadioSource(url, sourceId, request, signal)).stations;
-}

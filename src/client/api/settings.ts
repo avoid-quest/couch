@@ -12,7 +12,7 @@ import { apiJson, type ApiCredentials } from "./client";
 // The server bumps each root after a write or a device change. Polling is
 // reserved for hardware work that finishes on its own (see each factory).
 
-export type SoundChoice = { key: string; output: SoundOutput } | { key: string; profile: SoundProfile };
+type SoundChoice = { key: string; output: SoundOutput } | { key: string; profile: SoundProfile };
 export type SoundView = SoundState & { choices: SoundChoice[] };
 export function soundView(previous: SoundView | null | undefined, next: SoundState): SoundView {
   const outputs = next.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked);

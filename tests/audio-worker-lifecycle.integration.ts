@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
-import type { Worker } from "node:worker_threads";
+import type { Worker, WorkerOptions } from "node:worker_threads";
 import { createSendspin } from "../src/server/sendspin";
 import type { PlayerState } from "../src/shared/protocol";
 import { nodeExecutables } from "./executable.fixture";
@@ -21,7 +21,7 @@ async function fixture(t: TestContext) {
   const threads = process.getBuiltinModule("node:worker_threads"), Original = threads.Worker;
   let worker!: Worker;
   threads.Worker = class extends Original {
-    constructor(file: string | URL, options?: import("node:worker_threads").WorkerOptions) { super(file, options); worker = this; }
+    constructor(file: string | URL, options?: WorkerOptions) { super(file, options); worker = this; }
   };
   syncBuiltinESMExports();
   const source = createServer((_request, response) => response.end("synthetic source"));

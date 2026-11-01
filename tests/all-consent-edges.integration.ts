@@ -13,7 +13,7 @@ import type { Action, ServerMessage, SessionState } from "../src/shared/protocol
 const originalFetch = globalThis.fetch;
 before(() => {
   globalThis.fetch = (async (input, init) => {
-    if (/^https:\/\/streamingcommunity/.test(String(input))) {
+    if (String(input).startsWith('https://streamingcommunity')) {
       const response = new Response('<div data-page="{&quot;component&quot;:&quot;Home&quot;,&quot;props&quot;:{}}"></div>');
       Object.defineProperty(response, "url", { value: String(input) });
       return response;

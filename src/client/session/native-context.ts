@@ -1,5 +1,5 @@
 
-export type { AppMode, CouchApp } from "../../shared/app-bridge";
+export type { AppMode } from "../../shared/app-bridge";
 import type { CouchApp } from "../../shared/app-bridge";
 
 declare global {

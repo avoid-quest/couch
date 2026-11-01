@@ -30,7 +30,7 @@ export const scopes: Scope[] = [
 
 const squash = (value: string) => value.normalize("NFC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 /** The scopes the typed text names, best first: an exact name or short form, then those it starts. Two letters at least. */
-export function matchScopes(text: string): Scope[] {
+function matchScopes(text: string): Scope[] {
   const typed = squash(text);
   if (typed.length < 2) return [];
   const names = (scope: Scope) => [scope.label, ...scope.words].map(squash);
