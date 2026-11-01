@@ -38,7 +38,7 @@ Now playing                         [Optional]   Live Audio input
 Playback buffer floor (ms)               [150]    Live Audio input
 Play on                (Living room TV) (Kitchen)
 Include system audio                       [on]   desktop Screen and Window
-Picture          [1080p, balanced ▾] [30 FPS ▾]   Screen and Window
+Picture          [1080p, balanced ▾] [60 FPS ▾]   Screen and Window
                               Cancel  [Start sharing]
 ```
 
@@ -101,7 +101,7 @@ Picture          [1080p, balanced ▾] [30 FPS ▾]   Screen and Window
   values prevent starting; settings failures appear inline.
   Dismissing the Dialog or Sheet returns keyboard focus to its Share button while that button remains mounted.
 - **Picture** chooses the largest resolution and, beside it, the frame rate:
-  30, 60 or 120 FPS, 30 by default. Its tooltip identifies the rate as a target:
+  30, 60 or 120 FPS, 60 by default. Its tooltip identifies the rate as a target:
   the most frames a second capture asks for. The screen and encoder may deliver fewer. System audio and
   Audio input have no picture, so no Picture row.
 - **Disabled keeps its place:** a browser that can't capture a display (a
@@ -145,12 +145,29 @@ Sheet on phones and the TV:
   play: {reason}" (in red) read as Where it plays says them, and a row whose
   sound plays shows the [level](../design.md#motion), moving only where Where
   it plays' would (online, unmuted, above zero).
-- **Picture**, its resolution and frame rate (30, 60 or 120 FPS, 30 by default)
+- **Picture**, its resolution and frame rate (30, 60 or 120 FPS, 60 by default)
   side by side, changed live through `applyConstraints` on the captured track,
   without restarting it; the frame rate is the most the picture asks for, which a
   screen or encoder may not reach; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections. Native input mute
   sends zero samples while preserving the source clock.
+  A failed sender reconfiguration reports a Picture error while capture and
+  existing connections keep running; a later edit can retry.
+- Direct picture senders have an explicit bitrate budget and frame-rate ceiling;
+  both follow Picture edits and apply to each new receiver. Text/detail and
+  resolution take priority under congestion. Smooth, power-efficient H.264 is
+  preferred when the host’s WebRTC capability query supports it; all other codecs
+  remain available for negotiation. Supported receivers pace decoded frames in a
+  worker through a queue of at most three waiting frames, presenting the first
+  frame on the next display tick and retaining WebRTC sound and timestamps.
+  Unsupported or failed pacing restores native WebRTC playback
+  ([measurements](../live-sharing-performance.md#native-mac-follow-up)).
+  The default is 60 FPS after native Mac and Windows 1080p60 qualification;
+  the measured rates and remaining limits stay in the performance record.
+- Minimizing, hiding or closing a shared window adds no Couch closure detection.
+  Sharing follows the original capture track’s lifetime; quitting the source app
+  or **Stop sharing** ends it. Native capture can itself end a track; this change
+  preserves that existing platform behavior.
 - Live sharing reports the delivered rate and channels, and a native input's
   device buffer when it differs from the requested **Capture buffer**.
 - One line about the relay only when a device is Behind: with no relay, that a

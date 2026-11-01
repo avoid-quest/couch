@@ -8,6 +8,8 @@ import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 import { routeOf, type LiveRoute } from "./live-route";
+import { configureLiveVideo, preferLiveVideoCodec } from "./live-video";
+import { paceLiveVideo } from "./live-video-pacer";
 
 type Publication = { captureFormat?: AudioCaptureFormat; nativeAudioId?: string; nativeMuted?: boolean; source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; frameRate: LiveVideoFrameRate; pictureWork?: Promise<void>; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>; stopAudio?: () => void; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
@@ -16,7 +18,8 @@ type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; 
  * silent preview; relay: a TURN relay is offered to its connections.
  */
 export type LiveSharing = { captureFormat?: AudioCaptureFormat; source: LiveSource; stream: MediaStream; quality: LiveVideoQuality; frameRate: LiveVideoFrameRate; muted: boolean; surface?: LiveSelection["surface"]; since: number; relay: boolean };
-type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
+type VideoPacer = NonNullable<Awaited<ReturnType<typeof paceLiveVideo>>>;
+type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; pacers?: Set<VideoPacer>; pacerController?: AbortController; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 // Bound work before encoding. A requested rate is a ceiling; a slower display remains usable.
 const pictureConstraints = (quality: LiveVideoQuality, frameRate: LiveVideoFrameRate): MediaTrackConstraints => ({ ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: frameRate, max: frameRate } });
@@ -54,10 +57,20 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     return current.pictureWork = (current.pictureWork ?? Promise.resolve()).catch(() => {}).then(async () => {
       if (publication !== current) return;
       const quality = choice.quality ?? current.quality, frameRate = choice.frameRate ?? current.frameRate;
-      try { await track.applyConstraints(pictureConstraints(quality, frameRate)); }
-      catch (cause) { throw new Error("Couldn't change the shared picture. Try a lower resolution or frame rate.", { cause }); }
-      current.quality = quality;
-      current.frameRate = frameRate;
+      try {
+        await track.applyConstraints(pictureConstraints(quality, frameRate));
+        current.quality = quality;
+        current.frameRate = frameRate;
+        await Promise.all([...publishers].map(([id, peer]) => {
+          const work = peer.work.then(async () => {
+            if (publication !== current || publishers.get(id) !== peer) return;
+            for (const sender of peer.connection.getSenders()) if (sender.track?.kind === "video") await configureLiveVideo(sender, quality, frameRate);
+          });
+          // Report this edit's error without poisoning later signaling or edits.
+          peer.work = work.catch(() => {});
+          return work;
+        }));
+      } catch (cause) { throw new Error("Couldn't change the shared picture. Try a lower resolution or frame rate.", { cause }); }
     });
   };
   const closeReceiver = () => {
@@ -65,6 +78,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     receiver = undefined;
     if (!current) return;
     clearTimeout(current.timeout);
+    current.pacerController?.abort();
+    for (const pacer of current.pacers ?? []) pacer.close();
     current.peer?.connection.close();
     stopTracks(current.stream);
   };
@@ -122,15 +137,25 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     peer.deviceId = target.deviceId;
     publishers.set(target.peerId, peer);
     const active = () => publication === current && publishers.get(target.peerId) === peer;
-    try {
-      for (const track of current.stream.getTracks()) if (track.kind === "video" ? target.picture : target.sound) peer.connection.addTrack(track, current.stream);
-      const offer = await peer.connection.createOffer();
-      if (!active()) return;
-      await peer.connection.setLocalDescription(offer);
-      if (active()) options.send({ type: "liveSignal", peerId: target.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
-    } catch (reason) {
-      if (active()) failPublisher(target.peerId, peer, reason);
-    }
+    await (peer.work = peer.work.then(async () => {
+      try {
+        for (const track of current.stream.getTracks()) if (track.kind === "video" ? target.picture : target.sound) {
+          const sender = peer.connection.addTrack(track, current.stream);
+          if (track.kind === "video") {
+            await configureLiveVideo(sender, current.quality, current.frameRate);
+            if (!active()) return;
+            await preferLiveVideoCodec(peer.connection.getTransceivers().find(item => item.sender === sender)!, current.quality, current.frameRate);
+            if (!active()) return;
+          }
+        }
+        const offer = await peer.connection.createOffer();
+        if (!active()) return;
+        await peer.connection.setLocalDescription(offer);
+        if (active()) options.send({ type: "liveSignal", peerId: target.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
+      } catch (reason) {
+        if (active()) failPublisher(target.peerId, peer, reason);
+      }
+    }));
   };
   const negotiate = () => {
     negotiationTimer = undefined;
@@ -286,8 +311,24 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
           // Only the channels Core routed to this output play, whatever the publisher sends.
           const { picture, sound } = command.liveOutput!;
           if (!(event.track.kind === "video" ? picture : event.track.kind === "audio" && sound)) { event.track.stop(); return; }
-          if (!stream.getTracks().includes(event.track)) stream.addTrack(event.track);
-          streamChanged(command.playbackId, stream);
+          const original = event.track;
+          const attach = (track: MediaStreamTrack) => {
+            if (receiver !== current) { track.stop(); return; }
+            if (!stream.getTracks().includes(track)) stream.addTrack(track);
+            streamChanged(command.playbackId, stream);
+          };
+          let paced: VideoPacer | undefined;
+          const pending = original.kind === "video" ? paceLiveVideo(original, () => {
+            if (receiver !== current) return;
+            if (paced) { stream.removeTrack(paced.track); current.pacers?.delete(paced); }
+            attach(original);
+          }, (current.pacerController ??= new AbortController()).signal) : undefined;
+          if (pending) void pending.then(pacer => {
+            if (receiver !== current) { pacer?.close(); original.stop(); return; }
+            if (!pacer || pacer.track.readyState === "ended") { attach(original); return; }
+            paced = pacer; (current.pacers ??= new Set()).add(pacer); attach(pacer.track);
+          }, () => attach(original));
+          else attach(original);
         };
         peer.connection.onconnectionstatechange = () => {
           if (receiver !== current) return;
@@ -359,6 +400,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
         if (!nativeAudioId && selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
         if (selection.kind === "screen" && !videoTracks.length) throw new Error("The selected capture did not provide a screen.");
+        for (const track of videoTracks) track.contentHint = "detail";
         let audioFrames: Awaited<ReturnType<typeof prepareCaptureAudio>> | undefined;
         if (!videoTracks.length && audioTracks.length && canCaptureAudio() && options.uploadUrl) {
           try { audioFrames = await prepareCaptureAudio(audioTracks[0]!, selection.intent === "live", requestedRate, value => { captureFormat = value; }); }

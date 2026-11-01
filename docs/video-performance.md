@@ -5,16 +5,19 @@ Measured on 29 October 2026 against main `73668e36` and the capture API in
 there is no JavaScript pixel loop to move onto WebGPU. Live pictures normally
 use WebRTC; buffered HLS is a separate compatibility/synchronization path.
 
-The opening measurements are the historical software baseline. Later Windows
-and [native Mac results](release-audit-2026-10-29.md#native-macos-follow-up)
-retain their separate environments and failures; none establishes a passing
-cross-platform 60 FPS sharing release gate.
+The opening measurements and the audit's Windows and
+[native Mac results](release-audit-2026-10-29.md#native-macos-follow-up)
+are historical baselines with retained failures. The subsequent
+[paced Windows and native Mac qualification](live-sharing-performance.md#worker-pacing-follow-up)
+passes the controlled 1080p60 sharing gate on both platforms and restores the
+60 FPS default. Physical cross-device and native Linux GPU sharing remain unqualified.
 
 ## Retained changes
 
 - Screen/window capture accepts independent resolution and **30, 60 or 120 FPS**
-  targets. `defaultLiveFrameRate` is 30 following the [Windows qualification](release-audit-2026-10-29.md#windows-qualification-31-october-2026). Both constraints are applied before
-  encoding, and edits during sharing retain the other setting without another
+  targets. `defaultLiveFrameRate` is 60 after the [native Mac and Windows pacing
+  qualification](live-sharing-performance.md#native-mac-follow-up). The historical
+  Windows-only workaround was 30. Both constraints are applied before encoding, and edits during sharing retain the other setting without another
   picker or connection. Concurrent edits serialize; a failed constraint leaves
   the last successful settings intact. Sound-only capture remains at 1 FPS and
   its picture is not transmitted.
@@ -128,10 +131,10 @@ mismatch is reported explicitly and fails qualification even if FPS passes;
 it is not, by itself, evidence of a Couch playback defect. The harness records
 the required dimensions alongside the observed sample without relaxing the gate.
 
-`--sound` includes a generated tone over Windows loopback and asserts advancing
-audio bytes and nonzero decoded energy and PCM level in each steady Live sharing
-sample. Ordinary playback and controls samples do not create a publisher and
-do not run that sharing-specific assertion.
+`--sound` includes a generated tone over native Windows/macOS loopback and
+asserts advancing audio bytes and nonzero decoded energy and PCM level in each
+steady Live sharing sample. Ordinary playback and controls samples do not
+create a publisher and do not run that sharing-specific assertion.
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
 `--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
 reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits
@@ -245,3 +248,107 @@ Official references checked: [screen-capture constraints](https://www.w3.org/TR/
 [WebGPU external textures](https://www.w3.org/TR/webgpu/#external-texture-creation).
 The existing unforced Electron window configuration also follows
 [t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts).
+
+## Configured WebRTC candidate, 1 November 2026
+
+The branch based on audit `8bd6c873` now gives every Direct video sender an
+explicit bitrate and frame-rate ceiling before its offer. Existing senders
+update through their serialized peer work when Picture changes; late receivers
+get the current settings. At 30/60/120 FPS, 720p uses 2/4/8 Mbit/s and 1080p uses
+4/8/16 Mbit/s. Original scales with actual captured pixels up to 40 Mbit/s.
+These are per-receiver ceilings; WebRTC still controls congestion. `detail` and
+`maintain-resolution` retain readable screen content when resources run short.
+Sound, buffered delivery, pairing and capture lifetime retain their existing paths.
+At this initial candidate stage, the default remained **30 FPS** pending native
+Mac and Windows qualification; the later Mac follow-up below restores 60.
+
+[Research and evidence](live-sharing-performance.md#smooth-sharing-investigation-1-november-2026)
+cover Sunshine's capture/encoder/pacing/FEC and Moonlight's decode/presentation
+queues, plus the browser APIs and the decision to continue with WebRTC. Native
+Windows experiments with H.264 hardware preference, motion, 50/150 ms jitter
+targets and a 59 FPS encoder ceiling fail the unchanged gate; those initial experiments
+were not adopted alone. The subsequent worker-pacing fix below allows H.264
+hardware preference without that presentation loss.
+
+The harness additionally supports `--receivers=2` (a second iframe with its own
+production session/player and independent FPS/drop/sound checks) and
+`--bandwidth=6000000` (bits/s in each direction). The latter uses
+[CDP network rules](https://chromedevtools.github.io/devtools-protocol/tot/Network/#method-emulateNetworkConditionsByRule):
+an empty URL pattern throttles P2P while an earlier unlimited localhost rule
+keeps the generated fixture's file reads out of the bottleneck. This is same-host
+network emulation, not physical Wi-Fi or TURN qualification. Record actual RTP
+rate, codec QP and dimensions; these are quality proxies, not a perceptual
+quality score.
+
+Every sample now retains startup and warmup drops separately from steady drops,
+requested/captured/encoded/decoded/presented rates, source hashes, actual codec
+implementations and receiver visibility/focus. `--foreground` keeps the scratch
+receiver above other windows for an occlusion control; `--encoder-fps=59` and
+`--jitter=-1` (automatic buffering) are diagnostic overrides. A previous
+`result.json` makes the harness refuse to overwrite the evidence directory.
+The original ≥55 FPS / ≤1% drop gate and dimension checks remain unchanged;
+second receivers must independently meet them too. Run all timing tests
+serially, without concurrent checks/builds, and preserve failures beside reruns.
+
+
+### Worker pacing follow-up
+
+The initial configured sender still lost frames in Chromium’s remote-video
+compositor. A bounded receiver worker now forwards the original decoded
+`VideoFrame`s, in order, at the display’s animation-frame cadence through a
+local video track. It does not re-encode, copy pixels, duplicate frames or rewrite
+timestamps. At most three frames wait; overflow is counted and closes old frames.
+Audio remains on the original WebRTC track. This keeps the existing transport,
+A/V clock, pairing, TURN, buffered fallback and multiple-receiver behavior.
+
+Hardware H.264 is preferred only after a smooth/power-efficient WebRTC Media
+Capabilities prediction; actual implementation stats are retained. Missing APIs,
+worker setup refusal and worker failure retain/restore the native WebRTC track.
+Stop and playback replacement abort pending setup and retire owned workers/clones.
+Browsers without these APIs retain their existing path. The subsequent
+[native Mac follow-up](live-sharing-performance.md#native-mac-follow-up) passes the same 1080p60 gate and restores the 60 FPS default. Windows alone was
+not used to qualify that default.
+
+The original delivered-FPS, drop and dimension assertions remain. The harness
+also rejects more than 1% **combined** compositor drops, pacing overflow and
+missing processor frames against decoded RTP frames; a local generated track
+cannot hide dropped frames in its producer. `pacing` counters and
+`combinedDroppedPercent` are in every paced native sample. Detailed passing
+Windows runs and the earlier failures are in the
+[follow-up](live-sharing-performance.md#worker-pacing-follow-up).
+
+`--native-presentation` provides a diagnostic control without the pacer;
+`--trace` captures a bounded Chromium Perfetto trace, `--frames` records bounded
+frame timing/metadata, and `--audio-jitter=50` was an unsuccessful synchronized
+buffering probe. These do not change product preferences. Physical/acoustic A/V
+alignment remains unqualified. The subsequent Mac follow-up below qualifies
+its tested 60/120 Hz chain; Windows 120 Hz remains unqualified.
+
+### Native Mac qualification and restored default
+
+The [native Mac follow-up](live-sharing-performance.md#native-mac-follow-up)
+passes every controlled 1080p60 steady sample: 57.86 / 57.85 / 57.74 delivered
+FPS, zero combined loss, exact 1920×1080 capture/encode/decode and verified
+system-loopback sound. Actual H.264 uses VideoToolbox encode/decode, with
+58.3 / 58.7 / 60.3% summed Electron CPU. Three 1080p30, 720p60, independent
+two-receiver and uninstrumented 60 FPS samples also pass. The separate unpaced
+Mac control passes and is retained; the Windows compositor failure is not
+claimed reproduced on Mac. A genuine 120 FPS fixture on the tested 120 Hz Mac
+chain passes the ≥110 target at 111.58 / 111.39 / 111.63 delivered FPS, not a
+locked 120. All final paced steady player/queue/processor loss counters are zero.
+
+With the retained Windows 1080p60 passes, `defaultLiveFrameRate` returns to 60.
+Only that shared default and its affected assertions change; the Windows-tested
+codec, bitrate, pacing and original-audio policy stays intact. Historical failed
+samples remain. The final two-receiver pre-steady queue drops are 5 / 6 / 31
+for each receiver, distinct from player startup and warmup; per-sample rates,
+frame ages and all counters stay in `.artifacts/macbook-sharing/final-report.md`
+and each `final*/result.json`.
+
+The requested 6 Mbit/s emulation passes FPS/loss but still reports RTP above its
+requested limit, even with a global-only rule, so hard-link qualification remains
+open. Generated flash/beep software timing is recorded, but the separate audio
+analysis context cannot establish the production element's acoustic alignment.
+Physical A/V, perceptual quality and physical phone/Linux TV/cross-device checks
+remain unqualified. Feature-detected native fallback and injected worker-error
+recovery pass on Mac; full correctness and Live audio results are in the follow-up.
