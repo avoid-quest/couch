@@ -117,6 +117,7 @@ swipes and the TV moves focus, without paging buttons; Up and Down go shelf to
 shelf. The scrollbar remains available for direct scrolling. Each item is one
 [`MediaTile`](browse.md#rows-and-tiles) whose press does its main verb: a
 station or channel plays, a saved channel or series opens its page. Radio's pictures share the personal shelves' height at their own proportions, so a show's wide frame fills its tile instead of floating in a
-square. A station's logo stays in a square frame; a transparent one uses a
-neutral mid-grey ground so both dark and light lettering remain visible. Personal shelves use natural image proportions.
+square. When a show has no separate artwork, the station's logo stays in a
+square frame; a transparent one uses a neutral mid-grey ground so both dark
+and light lettering remain visible. Personal shelves use natural image proportions.
 The tile or row of what plays carries the [level](../design.md#motion).

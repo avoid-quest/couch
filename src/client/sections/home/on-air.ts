@@ -37,7 +37,7 @@ export function useOnAir(enabled = true, first: RadioStation[] = []) {
     /** The stations themselves are still loading; their shows may follow (a tile keeps room for one). */
     loading: enabled && (favorites.isPending || builtIn.isPending),
     /** Playing, then the show and its first two categories, else the station's first two tags: tiles in a row read alike. */
-    meta: (station: RadioStation) => { const on = show(station.id); return metaLine(playing(station) && playbackStatus(state, connected).label, ...on ? [on.title, ...radioShowLabels(on).slice(0, 2)] : station.tags?.slice(0, 2) ?? []); },
+    meta: (station: RadioStation, on = show(station.id)) => metaLine(playing(station) && playbackStatus(state, connected).label, ...on ? [on.title, ...radioShowLabels(on).slice(0, 2)] : station.tags?.slice(0, 2) ?? []),
   };
 }
 
