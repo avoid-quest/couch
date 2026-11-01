@@ -144,6 +144,7 @@ export function HomePage() {
   const continuingUrls = new Set(hasRow("continue") ? unfinished.map(item => item.url).filter(Boolean) : []);
   const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
   const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live && !continuingUrls.has(item.url) && (!currentUrl || item.url !== currentUrl)) ?? [], item => item.id, hero !== undefined && !later.isPending);
+  const stationLogo = (station: RadioStation) => !onAir(station.id)?.artworkUrl || onAir(station.id)?.artworkUrl === station.logoUrl;
   const stationMeta = (station: RadioStation) => metaLine(showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? undefined : station.groupTitle || station.countryCode));
   const filled: Partial<Record<HomeRowId, boolean>> = { upNext: !!upcoming.length, continue: !!continued.length, later: !!savedMedia.length, recent: !!recent.length };
   // The sources: shared inputs, Live TV while a source has channels, and what's saved from each source with a home.
@@ -216,8 +217,8 @@ export function HomePage() {
     // Every station on air, yours (played here lately, saved) first; the heading opens every station.
     radio: !!stations.length && <Shelf title="Radio" label="Radio stations" href="/radio">
       {stations.map((station, index) => <li key={station.id} className="flex shrink-0">
-        {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-        <MediaTile fit="contain" logo={!onAir(station.id)?.artworkUrl || onAir(station.id)?.artworkUrl === station.logoUrl} data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
+        {/* Every picture stands at the shelf's height in its own shape, a logo on its square ground, so a row reads as one shelf. */}
+        <MediaTile className="home-radio-tile" fit="contain" natural={!stationLogo(station)} logo={stationLogo(station)} data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl} source={stationSources(station)}
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>,
