@@ -11,7 +11,7 @@
   **Play on**, then **Start sharing**. Without a destination the source waits in
   Home's **Shared sources**. A browser without screen capture offers audio inputs
   only.
-- **Picture**: 1080p and 30 FPS by default, with 720p or original resolution and
+- **Picture**: 1080p and 60 FPS by default, with 720p or original resolution and
   30/60/120 FPS targets, changeable while sharing. Targets are ceilings, not
   guarantees. Captured audio turns off echo cancellation, noise suppression and
   gain control so music isn't altered.

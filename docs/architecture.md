@@ -60,9 +60,9 @@ Playback at a time.
 - **Play on** a Device isolates that Device; ordinary Play keeps the current mix.
   Move here (`solo`) is refused, changing nothing, while another device's private
   output would stay behind.
-- A Device owns one volume and mute (`devices` table). The Playback's `mixTrim`
-  (the All band) attenuates its shared sound; private speakers keep their own
-  level. On the Linux TV, volume and mute are the system's.
+- A Device owns one volume and mute (`devices` table). The Playback's
+  **Volume** scales the sounding devices the actor may control, so the loudest
+  reaches the chosen level. On the Linux TV, volume and mute are the system's.
 - A Playback ends when its queue does. After Stop it keeps the queue for 10 s for
   Undo. Up next is saved in the `playback` table.
 - Core decides delivery and programme authority

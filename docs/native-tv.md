@@ -37,7 +37,7 @@ the [AirPlay receiver](airplay.md) uses. It creates the locked, unprivileged
 
 ## Updates
 
-An admin updates the TV from **Settings → Updates → Update and restart**, also
+An admin updates the TV from **Settings → Updates**, also
 for a TV in **Another Couch** mode. Root installs updates:
 
 - `couch-update.timer` runs `couch-update.service` 15–75 minutes after boot and
@@ -45,7 +45,7 @@ for a TV in **Another Couch** mode. Root installs updates:
   channel unless something plays, and never goes back to an older version except
   from a preview to Stable.
 - The `couch-tv` account may only start `couch-update@<version>.service`
-  (**Restart to update**). Both download the release's `.deb`, check its sha512
+  (when an admin updates the TV from Couch). Both download the release's `.deb`, check its sha512
   against the release's update file, install it and restart the app.
 - If the app doesn't pass the health check within a minute, the script
   reinstalls the previous version (`/var/lib/couch-update/installed.deb`), and

@@ -10,8 +10,8 @@ screen or sound.
   playlists), Twitch, RaiPlay, public Bandcamp albums and tracks, SoundCloud
   tracks, and links from other sites yt-dlp supports.
 - **StreamingCommunity, 123MoviesFree, AnimeSaturn and AnimeUnity** catalogues.
-  An administrator sets StreamingCommunity's current address in
-  **Settings → Sources**. See [providers](providers.md).
+  Couch follows StreamingCommunity when its address moves; an administrator
+  can also set it in **Settings → Sources**. See [providers](providers.md).
 - **Radio**: avoid radio, M3U radio playlists and Radio Browser search. While a
   station plays, **Identify song** recognizes a short excerpt
   ([song recognition](radio-recognition.md)).
@@ -52,7 +52,7 @@ A Couch app hosts with **This computer** chosen and joins with **Another Couch**
 
 ## Connect a phone
 
-1. On the playback computer choose **This computer**, turn on **Share on
+1. On the playback computer choose **Host on this computer**, turn on **Share on
    network** in **Settings → Devices & network**, then choose **Pair a device**.
 2. On the phone, scan the code or open the address shown. Continue past the
    browser's "not private" warning, name the device and enter the six-digit
