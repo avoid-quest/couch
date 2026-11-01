@@ -31,7 +31,7 @@ function redirect(directory: string, journal: string, native?: { path: string; t
   cp.spawn = ((file: string, args: string[], options: import("node:child_process").SpawnOptions) => {
     const [command, argv] = argumentsFor(file, args);
     const child = spawn(command, argv, options);
-    if (file === native?.path && !args.includes("-version")) fs.appendFileSync(native.log, `${child.pid}|${options.cwd ?? process.cwd()}|${args.join(" ")}\n`);
+    if (file === native?.path && !args.includes("-version")) fs.appendFileSync(native.log, JSON.stringify({ pid: child.pid, cwd: options.cwd ?? process.cwd(), args: args.join(" ") }) + "\n");
     return command !== file ? record(child) : child;
   }) as typeof cp.spawn;
   cp.execFile = ((file: string, args: string[], ...rest: unknown[]) => {

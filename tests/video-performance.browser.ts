@@ -148,7 +148,7 @@ export async function prepareVideo(mode: "playback" | "controls" | "live", media
         const after = health(), afterStats = await stats(), decodedAudioRms = audioRms();
         void audioContext?.close();
         const seconds = (after.time - before.time) / 1000;
-        if (sound) {
+        if (sound && mode === "live") {
           const advances = (type: string, key: string) => afterStats.some(stat => stat.kind === "audio" && stat.type === type && stat[key] > (beforeStats.find(previous => previous.id === stat.id)?.[key] ?? 0));
           if (!publisher?.sharing()?.source.audio
             || !advances("outbound-rtp", "bytesSent") || !advances("inbound-rtp", "bytesReceived") || (!advances("inbound-rtp", "totalAudioEnergy") || decodedAudioRms <= 0)) errors.push("Sharing sound must remain live with advancing sent/received bytes and decoded audio energy");

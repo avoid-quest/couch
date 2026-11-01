@@ -2295,6 +2295,7 @@ export async function createHub(options: HubOptions) {
               // a continuous listener never visits an idle, non-listening route.
               continuing = !!action.deviceId && source.intent === "live" && !!mix && intentOf(mix) === "live";
               playback = continuing ? createPlayback() : mediaPlayback(playingOn(playedBy, action.deviceId ?? null), true);
+              if (continuing) playback.createdFor = playedBy;
             } else { fresh = true; playback = mediaPlayback(playedBy, false); }
             const select = () => { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); };
             // Play where its buffered stream failed tries that stream again; the other receivers keep their peers.

@@ -4,7 +4,7 @@ import { openStore } from "../src/server/store";
 import { authorityFixture, until } from "./hub-authority.fixture";
 
 test("code-authorized re-pair replaces the token without inheriting administrator authority", { timeout: 15_000 }, async t => {
-  const f = await authorityFixture(); t.after(() => f.close());
+  const f = await authorityFixture(t); t.after(() => f.close());
   const admin = f.devices[0]!, controller = f.devices[1]!;
   const connected = await f.connect(admin);
   const listed = await f.api("/api/devices", controller.token);
@@ -31,7 +31,7 @@ test("code-authorized re-pair replaces the token without inheriting administrato
 
 test("first pairing and explicit recovery retain their existing admin semantics", { timeout: 15_000 }, async t => {
   const recoveryCode = "abc123".repeat(8);
-  const f = await authorityFixture({ adminRecoveryCode: recoveryCode }); t.after(() => f.close());
+  const f = await authorityFixture(t, { adminRecoveryCode: recoveryCode }); t.after(() => f.close());
   const store = openStore(f.databasePath);
   try {
     for (const device of store.devices()) store.revokeDevice(device.id);

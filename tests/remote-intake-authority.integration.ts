@@ -5,7 +5,7 @@ import { authorityFixture, resultOk, until } from "./hub-authority.fixture";
 for (const guarded of [true, false]) for (const playNow of [false, true]) for (const change of ["selection", "disconnect", "migration", "consent", "unchanged", "explicit"] as const) {
   if (playNow && change === "explicit") continue;
   test(`catalogue preparation retains its original Remote target (${guarded ? "guarded" : "legacy"}, ${playNow ? "play" : "append"}, ${change})`, { timeout: 15_000 }, async t => {
-    const f = await authorityFixture(); t.after(() => f.close());
+    const f = await authorityFixture(t); t.after(() => f.close());
     const phone = await f.connect(), tv = await f.connect(f.devices[2]!, "&tv=1&audio=1&video=1"), other = await f.connect(f.devices[3]!, "&tv=1&audio=1&video=1");
     const source = `${f.hub.origin}/api/health`;
     resultOk(await tv.command({ type: "enqueue", entry: { id: "original", title: "Original", source }, playNow: true }));
@@ -42,6 +42,7 @@ for (const guarded of [true, false]) for (const playNow of [false, true]) for (c
       assert.equal(result.ok, false, "stale catalogue intake must reject after the held provider response");
       assert.deepEqual(phone.state.playbacks, before, "a refused completion cannot alter the current output assignments");
       assert.equal(phone.state.queue.some(entry => entry.title === "Delayed episode"), false);
+      assert.equal(tv.state.queue.some(entry => entry.title === "Delayed episode"), false);
       assert.equal(other.state.queue.some(entry => entry.title === "Delayed episode"), false);
     }
   });

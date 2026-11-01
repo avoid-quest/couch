@@ -23,7 +23,7 @@ fs.writeFileSync(${JSON.stringify(selecting)}, String(process.pid));
 const finish = () => { if (fs.existsSync(${JSON.stringify(gate)})) setTimeout(finish, 10); else console.log('ffmpeg version 9.0.2'); };
 finish();
 `, { mode: 0o755 });
-  const f = await authorityFixture();
+  const f = await authorityFixture(t);
   let closing: Promise<void> | undefined, bufferedDirectory: string | undefined, directSignal: AbortSignal | undefined, workerClose = false;
   t.after(async () => {
     rmSync(gate, { force: true });
@@ -74,7 +74,7 @@ finish();
 });
 
 test("Core close awaits its owned audio worker's completion and remains idempotent", { timeout: 10_000 }, async t => {
-  const f = await authorityFixture();
+  const f = await authorityFixture(t);
   const stopped = Promise.withResolvers<void>();
   const stop = f.hub.server.stop.bind(f.hub.server), post = Worker.prototype.postMessage;
   let release: (() => void) | undefined, workerExited = false, completed = false, closing: Promise<void> | undefined;

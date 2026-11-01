@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { authorityFixture, resultOk, until } from "./hub-authority.fixture";
 
 for (const guarded of [true, false]) test(`Remote retains explicit consented Live TV volume authority (${guarded ? "guarded" : "legacy"})`, { timeout: 15_000 }, async t => {
-  const f = await authorityFixture(); t.after(() => f.close());
+  const f = await authorityFixture(t); t.after(() => f.close());
   const host = await f.connect(f.host), phone = await f.connect(), tvIdentity = f.devices[2]!, otherIdentity = f.devices[3]!;
   const tv = await f.connect(tvIdentity, "&tv=1&audio=1&video=1"), other = await f.connect(otherIdentity, "&tv=1&audio=1");
   // Synthetic publication and audience admission only: no capture/upload or audio player.
@@ -36,14 +36,14 @@ for (const guarded of [true, false]) test(`Remote retains explicit consented Liv
 });
 
 test("a Remote-bound controller can unmute and adjust another consented ordinary output", { timeout: 15_000 }, async t => {
-  const f = await authorityFixture(); t.after(() => f.close());
+  const f = await authorityFixture(t); t.after(() => f.close());
   const phone = await f.connect(), tv = await f.connect(f.devices[2]!, "&tv=1&audio=1&video=1");
   const speaker = await f.connect(f.devices[3]!, "&audio=1");
   resultOk(await tv.command({ type: "enqueue", entry: { id: "ordinary", title: "Ordinary queue", source: `${f.hub.origin}/api/health` } }));
   resultOk(await tv.command({ type: "output", deviceId: speaker.id, level: 40 }));
   resultOk(await speaker.command({ type: "mute", deviceId: speaker.id, muted: true }));
   resultOk(await phone.command({ type: "control", deviceId: tv.id }));
-  assert.equal(phone.state.outputs?.filter(output => output.sound).length, 2);
+  await until(() => phone.state.outputs?.filter(output => output.sound).length === 2);
   resultOk(await phone.command({ type: "mute", deviceId: speaker.id, muted: false }));
   resultOk(await phone.command({ type: "volume", deviceId: speaker.id, volume: 37 }));
   await until(() => phone.state.devices?.find(device => device.id === speaker.id)?.volume === 37);
@@ -52,7 +52,7 @@ test("a Remote-bound controller can unmute and adjust another consented ordinary
 });
 
 test("a Remote-bound Live viewer retains its own device volume and mute", { timeout: 15_000 }, async t => {
-  const f = await authorityFixture(); t.after(() => f.close());
+  const f = await authorityFixture(t); t.after(() => f.close());
   const host = await f.connect(f.host), phone = await f.connect(f.devices[1]!, "&audio=1");
   const tv = await f.connect(f.devices[2]!, "&tv=1&audio=1&video=1");
   resultOk(await phone.command({ type: "volume", deviceId: phone.id, volume: 19 }));

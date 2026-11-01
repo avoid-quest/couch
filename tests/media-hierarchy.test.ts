@@ -96,7 +96,8 @@ test("StreamingCommunity films still open without an episode and explicit episod
   const origin = "https://streamingcommunityz.pictures";
   const fetchPage = (async (input: string | URL | Request) => {
     const data = { component: String(input).includes("/watch/") ? "Titles/Watch" : "Titles/Title", props: {
-      title: { id: 42, slug: "the-film", name: "The film", seasons: [] }, episode: null,
+      title: { id: 42, slug: "the-film", name: "The film", seasons: [] },
+      episode: new URL(String(input)).searchParams.has("e") ? { id: 11, season: { number: 2 } } : null,
     } };
     return new Response(`<div data-page="${JSON.stringify(data).replaceAll('"', "&quot;")}"></div>`);
   }) as typeof fetch;

@@ -9,7 +9,9 @@ bun run test
 bun run build
 ```
 
-[Check](../.github/workflows/check.yml) runs the same commands on Linux.
+[Check](../.github/workflows/check.yml) runs the same commands on Linux, then
+builds and runs `in-sync-persistence.integration.ts` on Node 24 with isolated
+`COUCH_DATA_DIR` and `COUCH_PORT=0`.
 Package also typechecks and runs the tests before building installers on each OS.
 Both workflows install the latest stable Bun. The test command uses Bun's
 `--isolate` so module mocks, globals and timers stay within each test file.

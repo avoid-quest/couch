@@ -254,8 +254,9 @@ another channel's ID or a legacy custom slug stays as chosen. Search uses a
 verified canonical channel reference when provided. A device removed while
 Details loads cannot repair Saved; another paired reader can reuse that metadata.
 Playlist Queue all retains each occurrence's list and position.
-RaiPlay programme Queue/Save expansion reads each season's full episode JSON
-once, independently of the 24-item browsing pages. The 500-episode limit
+Saving a RaiPlay programme stores its reference; Play or Queue on the saved
+programme expands each season's full episode JSON once, independently of the
+24-item browsing pages. The 500-episode limit
 applies across all seasons, with duplicate episodes counted once.
 Move up and Move down stop at the ends of For later and, in Channels & stations,
 at each store's boundary. Rendering those controls only checks the adjacent

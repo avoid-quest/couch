@@ -38,7 +38,7 @@ the person sharing stays in control of what's shared and when it stops.
 
 In published preview.5: screen, window, this computer's sound,
 microphone or audio input; picture up to 1080p30 by default. Current main adds
-independent resolution and 30/60/120 FPS targets, with 60 as the default.
+independent resolution and 30/60/120 FPS targets, with 30 as the default.
 These are requested ceilings, not measured delivery rates; see the
 [video measurements](../../video-performance.md) and
 [current audit](../../release-audit-2026-10-29.md). Limits: system

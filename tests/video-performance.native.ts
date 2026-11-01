@@ -84,15 +84,17 @@ app.whenReady().then(async () => {
         console.log('Preparing ' + mode);
         if (mode === 'live') {
           // Window bounds are DIPs; retain a 1920×1080 physical source on Retina displays.
-          const scale = screen.getPrimaryDisplay().scaleFactor;
-          source = new BrowserWindow({ width: Math.round(1920 / scale), height: Math.round(1080 / scale), x: 0, y: 0, frame: false, show: true, webPreferences: { backgroundThrottling: false } });
+          const display = screen.getPrimaryDisplay(), scale = display.scaleFactor;
+          const bounds = { x: display.bounds.x, y: display.bounds.y, width: Math.round(1920 / scale), height: Math.round(1080 / scale) };
+          if (${process.argv.includes("--screen")} && (Math.round(display.bounds.width * scale) !== 1920 || Math.round(display.bounds.height * scale) !== 1080)) throw new Error('--screen requires a controlled 1920×1080 primary display');
+          source = new BrowserWindow({ ...bounds, frame: false, show: true, webPreferences: { backgroundThrottling: false } });
           // Windows clamps initial bounds to the work area; reapply the fixture size.
-          if (process.platform === 'win32') source.setBounds({ x: 0, y: 0, width: Math.round(1920 / scale), height: Math.round(1080 / scale) });
+          if (process.platform === 'win32') source.setBounds(bounds);
           await source.loadURL(${JSON.stringify(origin + "/source.html")});
           const sources = await desktopCapturer.getSources({ types: ${JSON.stringify(process.argv.includes("--screen") ? ["screen"] : ["window", "screen"])}, thumbnailSize: { width: 0, height: 0 } });
-          const selected = sources.find(item => ${process.argv.includes("--screen") ? "item.id.startsWith('screen:')" : "item.id === source.getMediaSourceId()"});
+          const selected = sources.find(item => ${process.argv.includes("--screen") ? "item.display_id === String(display.id)" : "item.id === source.getMediaSourceId()"});
           if (!selected) throw new Error('Requested benchmark capture source was not found');
-          result.captureSource = { id: selected.id, name: selected.name, window: selected.id === source.getMediaSourceId(), bounds: source.getBounds(), contentBounds: source.getContentBounds(), visible: source.isVisible(), minimized: source.isMinimized() };
+          result.captureSource = { id: selected.id, name: selected.name, displayId: selected.display_id, displayBounds: display.bounds, scaleFactor: scale, window: selected.id === source.getMediaSourceId(), bounds: source.getBounds(), contentBounds: source.getContentBounds(), visible: source.isVisible(), minimized: source.isMinimized() };
           window.webContents.session.setDisplayMediaRequestHandler((_request, callback) => callback({ video: selected, ...${sound} ? { audio: "loopback" } : {} }));
         }
         await window.loadURL(${JSON.stringify(origin + "/" + basename(entry))});

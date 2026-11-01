@@ -114,9 +114,11 @@ window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
 
 Core starts independent producer cancellation before awaiting buffered setup
-cleanup. Shutdown waits for its audio worker, owned children and late helper
-leases to retire. REST and WebSocket commands settle empty Playbacks they
-created when they finish; cleanup cannot retire another command's pending queue.
+cleanup. Shutdown waits for its audio worker and owned children to retire; pending
+helper acquisition gets only the remaining three-second graceful teardown budget.
+A later helper lease is released when it arrives. REST and WebSocket commands
+settle empty Playbacks they created, including continuous Live switches, when
+they finish; cleanup cannot retire another command's pending queue.
 
 Many Playbacks run at once (`src/server/session.ts`, one session each). A Playback
 is a queue, current item, position, pause state, speed and tracks, with its own
@@ -267,9 +269,10 @@ while the public Sendspin group ID stays stable. Retired FFmpeg callbacks cannot
 change a replacement programme. A malformed encoder stream fails only its
 Playback or Source. If the shared audio worker stops, current and later scheduled
 loads and source registrations report an error until Core restarts. Core awaits
-the worker, owned encoders and helper leases before completing shutdown, with a
-bounded fallback for worker termination. An already pending helper selection is
-released when it resolves; it does not delay cancellation of unrelated producers.
+the worker and owned encoders before completing shutdown, with a three-second
+graceful budget and bounded fallback for worker termination. An already pending
+helper selection uses only the remaining graceful budget and is released when it
+resolves; it does not delay cancellation of unrelated producers.
 After an unexpected worker exit on POSIX, a killed encoder can remain a dead,
 unreaped process until Core exits. Shutdown accepts only a confirmed dead child;
 a running or unknown process still fails cleanup. Graceful shutdown reaps children

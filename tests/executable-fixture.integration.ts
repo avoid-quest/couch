@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import cp, { execFile } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
@@ -89,4 +90,29 @@ test("the shared real-media fixture encodes and decodes through actual FFmpeg, i
   assert.equal(f.capturePids().length, 1);
   assert.ok(f.encoders().some(encoder => encoder.args.includes("pipe:0")), "the real recording is encoded incrementally");
   assert.ok(f.encoders().some(encoder => encoder.args.includes("s16le")), "the audio worker decodes real HLS to PCM");
+});
+
+test("native launch records preserve pipes and spaces in FFmpeg arguments", async t => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "couch native-journal-")));
+  const executable = join(directory, "ffmpeg"), log = join(directory, "encoders");
+  const fixtures = nodeExecutables(directory, { native: { path: executable, target: process.execPath, log } });
+  t.after(async () => { await fixtures.close(); rmSync(directory, { recursive: true, force: true }); });
+  const args = ["--eval", "process.exit(0)", "--", "[f=hls]first path|[f=hls]second path"];
+  const child = cp.spawn(executable, args, { cwd: directory });
+  await once(child, "close");
+  assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), { pid: child.pid, cwd: directory, args: args.join(" ") });
+});
+
+test("failed live fixture setup restores executable hooks, PATH and fetch", async t => {
+  const spawn = cp.spawn, exec = cp.execFile, worker = threads.Worker, path = process.env.PATH, fetch = globalThis.fetch;
+  const fs = process.getBuiltinModule("node:fs"), write = fs.writeFileSync;
+  t.mock.method(fs, "writeFileSync", (...args: Parameters<typeof write>) => {
+    if (String(args[0]).endsWith(process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg")) throw new Error("Injected fixture setup failure");
+    return Reflect.apply(write, fs, args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  await assert.rejects(liveFixture(), /Injected fixture setup failure/);
+  assert.equal(cp.spawn, spawn); assert.equal(cp.execFile, exec); assert.equal(threads.Worker, worker);
+  assert.equal(process.env.PATH, path); assert.equal(globalThis.fetch, fetch);
 });

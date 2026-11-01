@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
+import type { TestContext } from "node:test";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
@@ -16,7 +17,7 @@ export async function until(predicate: () => boolean) {
 }
 
 // Real Core/HTTP/socket boundaries; no capture devices or renderer are opened.
-export async function authorityFixture(options: Partial<Parameters<typeof createHub>[0]> = {}) {
+export async function authorityFixture(t: TestContext, options: Partial<Parameters<typeof createHub>[0]> = {}) {
   const fetchLocal = globalThis.fetch;
   globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(String(input)) ? fetchLocal(input, init) : Promise.resolve(new Response(""))) as typeof fetch;
   const directory = mkdtempSync(join(process.env.COUCH_DATA_DIR ?? tmpdir(), "authority-"));
@@ -64,7 +65,12 @@ export async function authorityFixture(options: Partial<Parameters<typeof create
     restart: async () => { await hub.close(); for (const socket of sockets.splice(0)) socket.terminate(); hub = await createHub({ databasePath, hostToken: host.token, hostname: "127.0.0.1", port: 0, ...options }); },
     close: async () => {
       try { await hub.close(); }
-      finally { for (const socket of sockets) socket.terminate(); globalThis.fetch = fetchLocal; rmSync(directory, { recursive: true, force: true }); }
+      finally {
+        for (const socket of sockets) socket.terminate();
+        // Forget nested mocks so automatic teardown cannot reinstall our fetch wrapper.
+        t.mock.reset(); globalThis.fetch = fetchLocal;
+        rmSync(directory, { recursive: true, force: true });
+      }
     },
   };
 }

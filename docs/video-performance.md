@@ -111,8 +111,10 @@ bun tests/video-performance.native.ts .artifacts/video-live-60 \
 ```
 
 On headless Linux prefix the benchmark command with
-`xvfb-run -a -s '-screen 0 1920x1080x24'` and add `--screen`. This selects the test
-display rather than a window, which Xvfb without a window manager cannot list.
+`xvfb-run -a -s '-screen 0 1920x1080x24'` and add `--screen`. This selects the
+primary display by Electron's matching display ID and checks its physical
+1920×1080 bounds before sampling. Xvfb without a window manager cannot list
+the generated-video window.
 Do not describe that as a GPU or physical-display test. Use separate evidence
 directories for each run. The harness owns an ephemeral port, Electron profile,
 `COUCH_DATA_DIR` and `COUCH_PORT`, and kills only its own child on timeout.
@@ -127,7 +129,9 @@ it is not, by itself, evidence of a Couch playback defect. The harness records
 the required dimensions alongside the observed sample without relaxing the gate.
 
 `--sound` includes a generated tone over Windows loopback and asserts advancing
-audio bytes and nonzero decoded energy and PCM level in each steady sample.
+audio bytes and nonzero decoded energy and PCM level in each steady Live sharing
+sample. Ordinary playback and controls samples do not create a publisher and
+do not run that sharing-specific assertion.
 `--fps=30|60|120` and `--quality=720p|1080p|original` select capture constraints.
 `--codec=h264`, `--hint=motion`, `--bitrate=8000000`, `--jitter=50` and `--bare`
 reproduce exploratory probes; `--bitrate` sets only the sender's maximum bits

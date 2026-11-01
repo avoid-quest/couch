@@ -7,6 +7,14 @@ import { test } from "node:test";
 import { createScheduledAudio } from "../src/server/scheduled-audio";
 import type { PlayerState } from "../src/shared/protocol";
 
+async function until(predicate: () => boolean) {
+  const deadline = Date.now() + 5_000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, "FFmpeg did not start within five seconds");
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
 test("retired FFmpeg stderr, error and close cannot change the replacement programme", async t => {
   const cp = process.getBuiltinModule("node:child_process");
   const children: (ChildProcess & { stdout: PassThrough; stderr: PassThrough; stdio: PassThrough[] })[] = [];
@@ -19,9 +27,8 @@ test("retired FFmpeg stderr, error and close cannot change the replacement progr
   const source = createServer((_request, response) => response.end("synthetic source"));
   await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   const states: PlayerState[] = [], errors: string[] = [];
-  let requested!: () => void;
-  const started = () => new Promise<void>(resolve => { requested = resolve; });
-  const audio = createScheduledAudio({ name: "Run ownership", admit: () => false, changed() {}, ffmpeg: async () => { queueMicrotask(() => requested()); return "synthetic-ffmpeg"; }, logError: (_id, _source, error) => errors.push(error) });
+  let requested = 0;
+  const audio = createScheduledAudio({ name: "Run ownership", admit: () => false, changed() {}, ffmpeg: async () => { queueMicrotask(() => requested++); return "synthetic-ffmpeg"; }, logError: (_id, _source, error) => errors.push(error) });
   const group = audio.group("programme", state => states.push(state));
   t.after(async () => {
     group.close(); const closing = audio.close();
@@ -32,14 +39,14 @@ test("retired FFmpeg stderr, error and close cannot change the replacement progr
   });
   const url = `http://127.0.0.1:${(source.address() as { port: number }).port}/input`;
   group.members([{ deviceId: "unconnected", level: 100 }]);
-  const a = started(); group.send({ type: "load", playbackId: "A", source: url }); await a;
+  group.send({ type: "load", playbackId: "A", source: url });
+  await until(() => requested >= 1 && children.length > 0);
   // Flush the source/helper continuation, using the actual module's state publication.
-  while (!children.length) await new Promise(resolve => setImmediate(resolve));
   children[0]!.stderr.write("Duration: 00:00:12.00\n");
   group.members([{ deviceId: "unconnected", level: 90 }]);
   assert.equal(states.at(-1)!.duration, 12, "current run metadata remains valid");
-  const b = started(); group.send({ type: "load", playbackId: "B", source: url, radio: true }); await b;
-  while (children.length < 2) await new Promise(resolve => setImmediate(resolve));
+  group.send({ type: "load", playbackId: "B", source: url, radio: true });
+  await until(() => requested >= 2 && children.length >= 2);
   children[0]!.stderr.write("Duration: 00:09:59.00\n");
   children[0]!.emit("error", new Error("retired error")); children[0]!.emit("close", 1);
   group.members([{ deviceId: "unconnected", level: 80 }]);

@@ -121,12 +121,19 @@ async function fixture(raw = false) {
   // Wait for mpv's observation commands to drain before replacing its IPC process.
   const nativeReady = () => until(() => existsSync(readyLog) && readFileSync(readyLog, "utf8").split("\n").includes(String(nativeLoads().at(-1)?.pid)));
   const close = async () => {
-    for (const socket of sockets) socket.terminate(); await hub.close();
-    source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve()));
-    await until(() => nativeLoads().every(({ pid }) => { try { process.kill(pid, 0); return false; } catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH"; } }));
-    if (nativeLoads().length) rmSync(join(tmpdir(), `couch-mpv-${process.pid}.sock`), { force: true });
-    assert.deepEqual(await executables.close(), { children: [], workers: [] }, "routing retires every fixture child and worker");
-    globalThis.fetch = originalFetch; process.env.PATH = originalPath; rmSync(directory, { recursive: true, force: true });
+    try {
+      for (const socket of sockets) socket.terminate(); await hub.close();
+      await until(() => nativeLoads().every(({ pid }) => { try { process.kill(pid, 0); return false; } catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH"; } }));
+    } finally {
+      try { assert.deepEqual(await executables.close(), { children: [], workers: [] }, "routing retires every fixture child and worker"); }
+      finally {
+        source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve()));
+        if (nativeLoads().length) rmSync(join(tmpdir(), `couch-mpv-${process.pid}.sock`), { force: true });
+        globalThis.fetch = originalFetch;
+        if (originalPath === undefined) delete process.env.PATH; else process.env.PATH = originalPath;
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
   };
   try {
     const host = await connect(hostToken, hostId), remote = await connect(token, remoteId);

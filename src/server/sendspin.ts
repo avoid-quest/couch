@@ -230,10 +230,16 @@ export function createSendspin(options: { serverId?: string; privateKey?: string
       closeConnections(); groups.clear(); sources.clear();
       // Give graceful teardown its existing budget. Reap the children while their
       // worker can still consume close events, then use Node's termination promise.
+      const deadline = Date.now() + 3000;
+      let releaseTimeout: ReturnType<typeof setTimeout> | undefined;
       const timeout = setTimeout(() => { void retireChildren().catch(() => {}).then(() => worker.terminate()); }, 3000);
       closing = (async () => {
-        try { await retired; await retireChildren(); await Promise.all(releases); }
-        finally { clearTimeout(timeout); }
+        try {
+          await retired; await retireChildren();
+          // Pending downloads still release their leases on arrival, but cannot
+          // extend shutdown beyond the existing graceful teardown budget.
+          await Promise.race([Promise.all(releases), new Promise<void>(resolve => { releaseTimeout = setTimeout(resolve, Math.max(0, deadline - Date.now())); })]);
+        } finally { clearTimeout(timeout); clearTimeout(releaseTimeout); }
       })();
       return closing;
     },

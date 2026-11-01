@@ -226,7 +226,7 @@ test("bounded close fallback retires an owned child even when the worker misses 
   assert.deepEqual(f.executables.active(), []);
 });
 
-test("close releases a helper that resolves after worker retirement without starting a child", { timeout: 15_000 }, async t => {
+test("close does not wait for helper selection and releases a late lease without starting a child", { timeout: 15_000 }, async t => {
   let requested = false, released = 0, resolve!: (lease: { path: string; release(): void }) => void;
   const lease = new Promise<{ path: string; release(): void }>(done => { resolve = done; });
   const f = await fixture(t, () => { requested = true; return lease; });
@@ -236,9 +236,11 @@ test("close releases a helper that resolves after worker retirement without star
   const closing = f.audio.close(); let settled = false;
   void closing.then(() => { settled = true; });
   await until(() => f.worker.threadId === -1);
-  assert.equal(settled, false, "the selected helper lease is still owned until release");
-  resolve({ path: f.script, release() { released++; } });
-  await closing;
+  try {
+    await until(() => settled);
+    assert.equal(released, 0, "pending selection must not hold shutdown open");
+  } finally { resolve({ path: f.script, release() { released++; } }); }
+  await until(() => released === 1);
   assert.equal(released, 1);
   assert.deepEqual(f.executables.active(), []);
 });

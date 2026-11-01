@@ -100,7 +100,13 @@ for (const kind of ["live-hls", "vod-hls", "radio-hls", "live-mpegts"] as const)
   const core = createSendspin({ name: "Options fixture", admit: () => false, changed() {}, ffmpeg: async () => executable });
   const group = core.group("options", () => {});
   group.members([{ deviceId: "speaker", level: 100 }]);
-  t.after(async () => { group.close(); await core.close(); assert.deepEqual(await executables.close(), { children: [], workers: [] }); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); });
+  t.after(async () => {
+    try { group.close(); await core.close(); }
+    finally {
+      try { assert.deepEqual(await executables.close(), { children: [], workers: [] }); }
+      finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); }
+    }
+  });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address === "object");
   group.send({ type: "load", playbackId: "options", source: `http://127.0.0.1:${address.port}/opaque-stream`, live: kind !== "vod-hls", radio: kind === "radio-hls" });

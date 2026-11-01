@@ -137,12 +137,12 @@ export async function runChecks() {
   await until(() => single.paused && context.state === "suspended", "Synced picture did not wait for its clock");
   assert(single.muted && context.state === "suspended", "Synced picture retained local processing");
   play({ type: "follow", playbackId: "audio", follow: null, compressor: active });
+  assert(single.paused, "Leaving follow must preserve the picture's paused transport");
   play({ type: "pause", playbackId: "audio", paused: false });
-  await until(() => context.state === "running", "Direct did not resume its graph");
+  await until(() => context.state === "running", "Explicit Direct resume did not resume its graph");
   assert(!single.muted && context.state === "running", "Direct did not resume its graph");
   play({ type: "follow", playbackId: "audio", follow: { group: "fixture" } });
   play({ type: "follow", playbackId: "audio", follow: null, compressor: active });
-  play({ type: "pause", playbackId: "audio", paused: false });
   await wait(50);
   await until(() => context.state === "running", "A quick return to Direct left its graph suspended");
   assert(context.state === "running", "A quick return to Direct left its graph suspended");
