@@ -7,17 +7,28 @@ import { appendFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 // file starts with the run's header, so a rotated tail still names its run.
 export function startLog(path: string, maxBytes: number, header: (file: number) => string) {
   const previous = path.replace(/\.log$/, ".1.log");
-  for (const [from, to] of [[path, previous], [`${path}.1`, `${previous}.1`]] as const) {
+  for (const [from, to] of [
+    [path, previous],
+    [`${path}.1`, `${previous}.1`],
+  ] as const) {
     rmSync(to, { force: true });
-    try { renameSync(from, to); } catch {}
+    try {
+      renameSync(from, to);
+    } catch {}
   }
-  let writable = true, size = 0, count = 0;
+  let writable = true,
+    size = 0,
+    count = 0;
   const open = () => {
     const text = header(++count);
     writeFileSync(path, text);
     size = Buffer.byteLength(text);
   };
-  try { open(); } catch { writable = false; }
+  try {
+    open();
+  } catch {
+    writable = false;
+  }
   return (chunk: unknown) => {
     if (!writable || !(typeof chunk === "string" || chunk instanceof Uint8Array)) return;
     const bytes = typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.byteLength;

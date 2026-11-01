@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { animeUnityOrigin, animeUnityPageUrl, isAnimeUnityHost } from "../src/shared/animeunity";
-import { animeUnityText, animeUnityTitle, browseAnimeUnity, loadAnimeUnityList } from "../src/server/providers/animeunity";
+import {
+  animeUnityText,
+  animeUnityTitle,
+  browseAnimeUnity,
+  loadAnimeUnityList,
+} from "../src/server/providers/animeunity";
 import { resolveAnimeUnityLink } from "../src/server/animeunity";
 import { createProviders } from "../src/server/providers";
 import { createForLater } from "../src/server/for-later";
@@ -12,11 +17,37 @@ const anime = `${animeUnityOrigin}/anime/12-one-piece`;
 const episode = `${anime}/5987`;
 // Reduced public fields observed in /archivio, /anime/12-one-piece, /info_api
 // and the linked Vixcloud embed; domains rechecked on 2026-10-19. IDs/numbers vary in edge cases.
-const row = { id: 12, slug: "one-piece", title: null, title_eng: "One Piece", imageurl: "https://img.animeunity.so/anime/one-piece.jpg", plot: "A pirate&#039;s adventure.", date: "1999", type: "TV", dub: 0, episodes_length: 24 };
-const ep = (number = 1, extra: Record<string, unknown> = {}) => ({ id: 5986 + number, anime_id: 12, number: String(number), public: 1, scws_id: 304644 + number, link: "One.Piece.mkv", ...extra });
-const attribute = (value: unknown) => JSON.stringify(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-const embed = "https://vixcloud.cc/embed/304645?token=55119f2c6d8c2ba4fc85ee216976e62e&expires=1797414560&canPlayFHD=1";
-function titleHtml(rows = [ep(), ep(2)], count = 2, selected: unknown = rows[0], extra: Record<string, unknown> = {}) {
+const row = {
+  id: 12,
+  slug: "one-piece",
+  title: null,
+  title_eng: "One Piece",
+  imageurl: "https://img.animeunity.so/anime/one-piece.jpg",
+  plot: "A pirate&#039;s adventure.",
+  date: "1999",
+  type: "TV",
+  dub: 0,
+  episodes_length: 24,
+};
+const ep = (number = 1, extra: Record<string, unknown> = {}) => ({
+  id: 5986 + number,
+  anime_id: 12,
+  number: String(number),
+  public: 1,
+  scws_id: 304644 + number,
+  link: "One.Piece.mkv",
+  ...extra,
+});
+const attribute = (value: unknown) =>
+  JSON.stringify(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+const embed =
+  "https://vixcloud.cc/embed/304645?token=55119f2c6d8c2ba4fc85ee216976e62e&expires=1797414560&canPlayFHD=1";
+function titleHtml(
+  rows = [ep(), ep(2)],
+  count = 2,
+  selected: unknown = rows[0],
+  extra: Record<string, unknown> = {},
+) {
   return `<video-player anime="${attribute({ ...row, ...extra })}" episode="${attribute(selected)}" episodes="${attribute(rows)}" episodes_count="${count}" embed_url="${embed.replace(/&/g, "&amp;")}"></video-player>`;
 }
 function archiveHtml(rows: unknown[], total = rows.length) {
@@ -24,20 +55,33 @@ function archiveHtml(rows: unknown[], total = rows.length) {
 }
 const cookies = { "Set-Cookie": "animeunity_session=anonymous; Path=/; HttpOnly" };
 type Call = { url: string; init?: RequestInit };
-const fixture = (body: string | ((call: Call) => string | Response), calls: Call[] = []) => (async (input: RequestInfo | URL, init?: RequestInit) => {
-  const call = { url: String(input), init };
-  calls.push(call);
-  assert.equal(init?.credentials, "omit");
-  assert.equal(init?.redirect, "error");
-  const result = typeof body === "function" ? body(call) : body;
-  return result instanceof Response ? result : new Response(result);
-}) as typeof fetch;
+const fixture = (body: string | ((call: Call) => string | Response), calls: Call[] = []) =>
+  (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const call = { url: String(input), init };
+    calls.push(call);
+    assert.equal(init?.credentials, "omit");
+    assert.equal(init?.redirect, "error");
+    const result = typeof body === "function" ? body(call) : body;
+    return result instanceof Response ? result : new Response(result);
+  }) as typeof fetch;
 
 test("AnimeUnity canonical references distinguish title and database episode IDs", () => {
   assert.equal(animeUnityPageUrl("http://animeunity.so/anime/12-one-piece/5987/")?.href, episode);
   assert.equal(animeUnityPageUrl(`${anime}/`)?.href, anime);
   assert.equal(isAnimeUnityHost("www.animeunity.so"), true);
-  for (const value of [episode.replace("/anime/", ".evil.example/anime/"), episode.replace("www.", "cdn."), `${episode}?token=private`, `${episode}#x`, episode.replace("https://", "https://user:secret@"), episode.replace("/anime/", ":444/anime/"), `${anime}/0`, `${anime}/1/2`, `${anime}/%31`, `${anime}/5987\n`]) assert.equal(animeUnityPageUrl(value), undefined, value);
+  for (const value of [
+    episode.replace("/anime/", ".evil.example/anime/"),
+    episode.replace("www.", "cdn."),
+    `${episode}?token=private`,
+    `${episode}#x`,
+    episode.replace("https://", "https://user:secret@"),
+    episode.replace("/anime/", ":444/anime/"),
+    `${anime}/0`,
+    `${anime}/1/2`,
+    `${anime}/%31`,
+    `${anime}/5987\n`,
+  ])
+    assert.equal(animeUnityPageUrl(value), undefined, value);
 });
 
 test("AnimeUnity uses its moved origin for browsing and legacy saved episode playback", async () => {
@@ -46,24 +90,47 @@ test("AnimeUnity uses its moved origin for browsing and legacy saved episode pla
     assert.equal(isAnimeUnityHost(host), true);
     assert.equal(animeUnityPageUrl(`https://${host}/anime/12-one-piece/5987`)?.href, episode);
   }
-  for (const host of ["animeunity.to.evil.example", "cdn.animeunity.to", "notanimeunity.to"]) assert.equal(isAnimeUnityHost(host), false);
+  for (const host of ["animeunity.to.evil.example", "cdn.animeunity.to", "notanimeunity.to"])
+    assert.equal(isAnimeUnityHost(host), false);
   const calls: Call[] = [];
   await browseAnimeUnity({}, undefined, fixture(archiveHtml([row]), calls));
-  await browseAnimeUnity({ url: "https://www.animeunity.so/archivio?title=naruto" }, undefined, fixture(archiveHtml([row]), calls));
-  await browseAnimeUnity({ url: "https://www.animeunity.so/anime/12-one-piece" }, undefined, fixture(titleHtml(), calls));
-  await resolveAnimeUnityLink("https://www.animeunity.so/anime/12-one-piece/5987", undefined, playback(playerHtml, manifest, calls));
-  assert.deepEqual(calls.slice(0, 4).map(call => call.url), [
-    "https://www.animeunity.to/archivio",
-    "https://www.animeunity.to/archivio?title=naruto",
-    "https://www.animeunity.to/anime/12-one-piece",
-    "https://www.animeunity.to/anime/12-one-piece/5987",
-  ]);
-  assert.equal((calls[4]!.init!.headers as Record<string, string>).Referer, "https://www.animeunity.to/");
+  await browseAnimeUnity(
+    { url: "https://www.animeunity.so/archivio?title=naruto" },
+    undefined,
+    fixture(archiveHtml([row]), calls),
+  );
+  await browseAnimeUnity(
+    { url: "https://www.animeunity.so/anime/12-one-piece" },
+    undefined,
+    fixture(titleHtml(), calls),
+  );
+  await resolveAnimeUnityLink(
+    "https://www.animeunity.so/anime/12-one-piece/5987",
+    undefined,
+    playback(playerHtml, manifest, calls),
+  );
+  assert.deepEqual(
+    calls.slice(0, 4).map((call) => call.url),
+    [
+      "https://www.animeunity.to/archivio",
+      "https://www.animeunity.to/archivio?title=naruto",
+      "https://www.animeunity.to/anime/12-one-piece",
+      "https://www.animeunity.to/anime/12-one-piece/5987",
+    ],
+  );
+  assert.equal(
+    (calls[4]!.init!.headers as Record<string, string>).Referer,
+    "https://www.animeunity.to/",
+  );
 });
 
 test("catalogue and search read only public collection metadata", async () => {
   const calls: Call[] = [];
-  const page = await browseAnimeUnity({ query: "one & piece" }, undefined, fixture(archiveHtml([row, { ...row, id: 20, slug: "../../bad" }]), calls));
+  const page = await browseAnimeUnity(
+    { query: "one & piece" },
+    undefined,
+    fixture(archiveHtml([row, { ...row, id: 20, slug: "../../bad" }]), calls),
+  );
   assert.equal(new URL(calls[0]!.url).pathname, "/archivio");
   assert.equal(new URL(calls[0]!.url).searchParams.get("title"), "one & piece");
   assert.equal(page.item, undefined);
@@ -76,22 +143,28 @@ test("catalogue and search read only public collection metadata", async () => {
 
 const tracker = "https://domains-tracker.server66.workers.dev/get";
 const moved = "https://www.animeunity.test";
-const recoveryFixture = (handle: (call: Call) => Response | Promise<Response>, calls: Call[] = []) => (async (input: RequestInfo | URL, init?: RequestInit) => {
-  const call = { url: String(input), init };
-  calls.push(call);
-  assert.equal(init?.credentials, "omit");
-  assert.ok(init?.signal);
-  return handle(call);
-}) as typeof fetch;
+const recoveryFixture = (
+  handle: (call: Call) => Response | Promise<Response>,
+  calls: Call[] = [],
+) =>
+  (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const call = { url: String(input), init };
+    calls.push(call);
+    assert.equal(init?.credentials, "omit");
+    assert.ok(init?.signal);
+    return handle(call);
+  }) as typeof fetch;
 
 test("a domain redirect heals browsing, search pagination and saved title requests", async () => {
   const calls: Call[] = [];
-  const request = recoveryFixture(call => {
+  const request = recoveryFixture((call) => {
     if (call.url.startsWith("https://vixcloud.cc/")) {
-      if (call.url.includes("/embed/")) assert.equal(new Headers(call.init?.headers).get("referer"), `${moved}/`);
+      if (call.url.includes("/embed/"))
+        assert.equal(new Headers(call.init?.headers).get("referer"), `${moved}/`);
       return new Response(call.url.includes("/embed/") ? playerHtml : manifest);
     }
-    if (call.url.startsWith(transport)) return new Response(null, { status: 302, headers: { Location: moved } });
+    if (call.url.startsWith(transport))
+      return new Response(null, { status: 302, headers: { Location: moved } });
     assert.ok(call.url.startsWith(moved));
     if (call.init?.method === "POST") {
       const headers = new Headers(call.init.headers);
@@ -99,40 +172,82 @@ test("a domain redirect heals browsing, search pagination and saved title reques
       assert.equal(headers.get("cookie"), "animeunity_session=anonymous");
       return new Response(JSON.stringify({ records: [row], tot: 31 }));
     }
-    return call.url.includes("/anime/") ? new Response(titleHtml()) : new Response(archiveHtml([row], 31), { headers: cookies });
+    return call.url.includes("/anime/")
+      ? new Response(titleHtml())
+      : new Response(archiveHtml([row], 31), { headers: cookies });
   }, calls);
   assert.equal((await browseAnimeUnity({}, undefined, request)).items[0]?.url, anime);
-  assert.equal((await browseAnimeUnity({ query: "naruto", cursor: "30" }, undefined, request)).items.length, 1);
-  assert.equal((await browseAnimeUnity({ url: "https://animeunity.so/anime/12-one-piece" }, undefined, request)).items.length, 2);
-  assert.equal((await resolveAnimeUnityLink(episode, undefined, request)).metadata.title, "One Piece — Episode 1");
+  assert.equal(
+    (await browseAnimeUnity({ query: "naruto", cursor: "30" }, undefined, request)).items.length,
+    1,
+  );
+  assert.equal(
+    (
+      await browseAnimeUnity(
+        { url: "https://animeunity.so/anime/12-one-piece" },
+        undefined,
+        request,
+      )
+    ).items.length,
+    2,
+  );
+  assert.equal(
+    (await resolveAnimeUnityLink(episode, undefined, request)).metadata.title,
+    "One Piece — Episode 1",
+  );
   const before = calls.length;
-  await assert.rejects(() => animeUnityText(`${transport}/archivio/get-animes`, undefined, request, { method: "POST", headers: { Referer: `${transport}/archivio`, Cookie: "animeunity_session=old" } }), /changed this page/);
+  await assert.rejects(
+    () =>
+      animeUnityText(`${transport}/archivio/get-animes`, undefined, request, {
+        method: "POST",
+        headers: { Referer: `${transport}/archivio`, Cookie: "animeunity_session=old" },
+      }),
+    /changed this page/,
+  );
   assert.equal(calls.length, before);
-  assert.deepEqual(calls.slice(0, 4).map(call => [call.url, call.init?.redirect]), [
-    [`${transport}/archivio`, "error"], [`${transport}/archivio`, "manual"],
-    [`${moved}/archivio`, "manual"], [`${moved}/archivio`, "error"],
-  ]);
-  assert.equal(calls.some(call => call.url === tracker), false);
+  assert.deepEqual(
+    calls.slice(0, 4).map((call) => [call.url, call.init?.redirect]),
+    [
+      [`${transport}/archivio`, "error"],
+      [`${transport}/archivio`, "manual"],
+      [`${moved}/archivio`, "manual"],
+      [`${moved}/archivio`, "error"],
+    ],
+  );
+  assert.equal(
+    calls.some((call) => call.url === tracker),
+    false,
+  );
 });
 
 test("a dead origin recovers from the tracker's AnimeUnity entry only after validating the catalogue", async () => {
   const calls: Call[] = [];
-  const request = recoveryFixture(call => {
+  const request = recoveryFixture((call) => {
     if (call.url.startsWith(transport)) throw new TypeError("getaddrinfo ENOTFOUND");
-    if (call.url === tracker) return new Response(JSON.stringify({ animeunity: { full_url: `${moved}/` } }));
+    if (call.url === tracker)
+      return new Response(JSON.stringify({ animeunity: { full_url: `${moved}/` } }));
     assert.equal(new URL(call.url).origin, moved);
     return new Response(archiveHtml([row]));
   }, calls);
   assert.equal((await browseAnimeUnity({ query: "naruto" }, undefined, request)).items.length, 1);
   assert.equal((await browseAnimeUnity({}, undefined, request)).items.length, 1);
-  assert.equal(calls.filter(call => call.url === tracker).length, 1);
-  assert.ok(calls.some(call => call.url === `${moved}/archivio?title=naruto`));
+  assert.equal(calls.filter((call) => call.url === tracker).length, 1);
+  assert.ok(calls.some((call) => call.url === `${moved}/archivio?title=naruto`));
 });
 
 test("invalid redirects and tracker addresses are never fetched", async () => {
-  for (const candidate of ["https://animeunity.to.evil.example", "https://127.0.0.1", "https://cdn.animeunity.to", "http://animeunity.test", "https://user:secret@animeunity.test", "https://animeunity.test:444", "https://animeunity.test/?token=private"]) {
-    const request = recoveryFixture(call => {
-      if (call.url.startsWith(transport)) return new Response(null, { status: 302, headers: { Location: candidate } });
+  for (const candidate of [
+    "https://animeunity.to.evil.example",
+    "https://127.0.0.1",
+    "https://cdn.animeunity.to",
+    "http://animeunity.test",
+    "https://user:secret@animeunity.test",
+    "https://animeunity.test:444",
+    "https://animeunity.test/?token=private",
+  ]) {
+    const request = recoveryFixture((call) => {
+      if (call.url.startsWith(transport))
+        return new Response(null, { status: 302, headers: { Location: candidate } });
       assert.equal(call.url, tracker);
       return new Response(JSON.stringify({ animeunity: { full_url: candidate } }));
     });
@@ -143,16 +258,30 @@ test("invalid redirects and tracker addresses are never fetched", async () => {
 test("catalogue pagination follows the public CSRF protocol with temporary anonymous cookies", async () => {
   const calls: Call[] = [];
   const firstRows = Array.from({ length: 30 }, (_, index) => ({ ...row, id: index + 1 }));
-  const request = fixture(call => {
-    if (call.init?.method !== "POST") return new Response(archiveHtml(firstRows, 31), { headers: cookies });
+  const request = fixture((call) => {
+    if (call.init?.method !== "POST")
+      return new Response(archiveHtml(firstRows, 31), { headers: cookies });
     assert.equal(call.url, `${transport}/archivio/get-animes`);
     const headers = call.init.headers as Record<string, string>;
     assert.equal(headers.Cookie, "animeunity_session=anonymous");
     assert.equal(headers["X-CSRF-TOKEN"], "JgDTH2JZ5KXR9AIq1112AtObea7nh6PpxOtkxioi");
-    assert.deepEqual(JSON.parse(String(call.init.body)), { title: "one piece", offset: 30, type: false, year: false, order: false, status: false, genres: false, dubbed: false, season: false });
+    assert.deepEqual(JSON.parse(String(call.init.body)), {
+      title: "one piece",
+      offset: 30,
+      type: false,
+      year: false,
+      order: false,
+      status: false,
+      genres: false,
+      dubbed: false,
+      season: false,
+    });
     return JSON.stringify({ records: [row], tot: 31 });
   }, calls);
-  assert.equal((await browseAnimeUnity({ query: "one piece" }, undefined, request)).nextCursor, "30");
+  assert.equal(
+    (await browseAnimeUnity({ query: "one piece" }, undefined, request)).nextCursor,
+    "30",
+  );
   const next = await browseAnimeUnity({ query: "one piece", cursor: "30" }, undefined, request);
   assert.equal(next.items.length, 1);
   assert.equal(next.nextCursor, undefined);
@@ -162,9 +291,16 @@ test("catalogue pagination follows the public CSRF protocol with temporary anony
 test("title rows carry ordered episode identities, exact known indices and parent metadata", async () => {
   const page = await browseAnimeUnity({ url: anime }, undefined, fixture(titleHtml()));
   assert.equal(page.item?.kind, "collection");
-  assert.deepEqual(page.items.map(item => item.url), [episode, `${anime}/5988`]);
+  assert.deepEqual(
+    page.items.map((item) => item.url),
+    [episode, `${anime}/5988`],
+  );
   assert.deepEqual(page.items[1]?.collection, { title: "One Piece", url: anime, index: 1 });
-  const direct = await browseAnimeUnity({ url: `${anime}/5988` }, undefined, fixture(titleHtml([ep(), ep(2)], 2, ep(2))));
+  const direct = await browseAnimeUnity(
+    { url: `${anime}/5988` },
+    undefined,
+    fixture(titleHtml([ep(), ep(2)], 2, ep(2))),
+  );
   assert.equal(direct.item?.kind, "media");
   assert.equal(direct.item?.title, "One Piece — Episode 2");
   assert.deepEqual(direct.items, [direct.item]);
@@ -173,41 +309,108 @@ test("title rows carry ordered episode identities, exact known indices and paren
 
 test("queue lists collect bounded ranges and never silently truncate a long anime", async () => {
   const rows = Array.from({ length: 120 }, (_, index) => ep(index + 1));
-  const page = await loadAnimeUnityList(anime, undefined, fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 122, episodes: [ep(121), ep(122)] }) : titleHtml(rows, 122)));
+  const page = await loadAnimeUnityList(
+    anime,
+    undefined,
+    fixture((call) =>
+      call.url.includes("/info_api/")
+        ? JSON.stringify({ episodes_count: 122, episodes: [ep(121), ep(122)] })
+        : titleHtml(rows, 122),
+    ),
+  );
   assert.equal(page.items.length, 122);
   assert.equal(page.items.at(-1)?.collection?.index, 121);
   const calls: Call[] = [];
-  await assert.rejects(() => loadAnimeUnityList(anime, undefined, fixture(titleHtml(rows, 1180), calls)), /more than 500/);
+  await assert.rejects(
+    () => loadAnimeUnityList(anime, undefined, fixture(titleHtml(rows, 1180), calls)),
+    /more than 500/,
+  );
   assert.equal(calls.length, 1);
 });
 
 test("unpublished episodes and malformed title identities cannot enter playable lists", async () => {
-  const title = await animeUnityTitle(anime, undefined, fixture(titleHtml([ep(), ep(2, { public: 0, link: "private-file.mkv" })])));
-  assert.deepEqual(title.episodes.map(row => row.id), [5987]);
+  const title = await animeUnityTitle(
+    anime,
+    undefined,
+    fixture(titleHtml([ep(), ep(2, { public: 0, link: "private-file.mkv" })])),
+  );
+  assert.deepEqual(
+    title.episodes.map((row) => row.id),
+    [5987],
+  );
   assert.equal(JSON.stringify(title).includes("private-file.mkv"), false);
-  const page = await loadAnimeUnityList(anime, undefined, fixture(titleHtml([ep(), ep(2, { public: 0 })])));
-  assert.deepEqual(page.items.map(item => item.url), [episode]);
-  await assert.rejects(() => animeUnityTitle(`${anime}/5988`, undefined, fixture(titleHtml([ep(), ep(2, { public: 0 })], 2, ep(2, { public: 0 })))), /does not have this episode/);
-  await assert.rejects(() => animeUnityTitle(anime, undefined, fixture(titleHtml([ep()], 1, ep(), { id: 999 }))), /changed this page/);
-  const long = await browseAnimeUnity({ url: anime }, undefined, fixture(titleHtml([ep()], 1, ep(), { title_eng: "x".repeat(200) })));
+  const page = await loadAnimeUnityList(
+    anime,
+    undefined,
+    fixture(titleHtml([ep(), ep(2, { public: 0 })])),
+  );
+  assert.deepEqual(
+    page.items.map((item) => item.url),
+    [episode],
+  );
+  await assert.rejects(
+    () =>
+      animeUnityTitle(
+        `${anime}/5988`,
+        undefined,
+        fixture(titleHtml([ep(), ep(2, { public: 0 })], 2, ep(2, { public: 0 }))),
+      ),
+    /does not have this episode/,
+  );
+  await assert.rejects(
+    () => animeUnityTitle(anime, undefined, fixture(titleHtml([ep()], 1, ep(), { id: 999 }))),
+    /changed this page/,
+  );
+  const long = await browseAnimeUnity(
+    { url: anime },
+    undefined,
+    fixture(titleHtml([ep()], 1, ep(), { title_eng: "x".repeat(200) })),
+  );
   assert.equal(long.items[0]?.title.length, 200);
 });
 
 test("invalid URL targets, cursors and queries fail before requests", async () => {
   let calls = 0;
-  const never = (async () => { calls++; throw new Error("Unexpected request"); }) as typeof fetch;
-  for (const request of [{ url: "https://evil.example/archivio" }, { url: `${animeUnityOrigin}/embed-url/5987` }, { url: `${transport}/archivio?token=secret` }, { url: anime, cursor: "2" }, { url: episode, cursor: "121" }, { cursor: "https://evil.example" }, { query: "x" }, { cursor: "100001" }]) await assert.rejects(() => browseAnimeUnity(request, undefined, never));
+  const never = (async () => {
+    calls++;
+    throw new Error("Unexpected request");
+  }) as typeof fetch;
+  for (const request of [
+    { url: "https://evil.example/archivio" },
+    { url: `${animeUnityOrigin}/embed-url/5987` },
+    { url: `${transport}/archivio?token=secret` },
+    { url: anime, cursor: "2" },
+    { url: episode, cursor: "121" },
+    { cursor: "https://evil.example" },
+    { query: "x" },
+    { cursor: "100001" },
+  ])
+    await assert.rejects(() => browseAnimeUnity(request, undefined, never));
   await assert.rejects(() => loadAnimeUnityList(`${transport}/archivio`, undefined, never));
   assert.equal(calls, 0);
 });
 
 const playerHtml = `<script>window.masterPlaylist = { params: { 'token': 'aff47512f4e237ec21d794b0d15b03c7', 'expires': '1797414595', 'asn': '', }, url: 'https://vixcloud.cc/playlist/304645?b=1', }</script>`;
-const manifest = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480\nhttps://vixcloud.cc/playlist/304645?type=video\n";
-const playback = (html = playerHtml, hls = manifest, calls: Call[] = []) => fixture(call => call.url.startsWith(`${transport}/anime/`) ? titleHtml() : call.url.startsWith("https://vixcloud.cc/embed/") ? html : hls, calls);
+const manifest =
+  "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480\nhttps://vixcloud.cc/playlist/304645?type=video\n";
+const playback = (html = playerHtml, hls = manifest, calls: Call[] = []) =>
+  fixture(
+    (call) =>
+      call.url.startsWith(`${transport}/anime/`)
+        ? titleHtml()
+        : call.url.startsWith("https://vixcloud.cc/embed/")
+          ? html
+          : hls,
+    calls,
+  );
 
 test("Vixcloud resolution copies the public playlist protocol and retains episode metadata", async () => {
   const calls: Call[] = [];
-  const media = await resolveAnimeUnityLink(episode, undefined, playback(playerHtml, manifest, calls));
+  const media = await resolveAnimeUnityLink(
+    episode,
+    undefined,
+    playback(playerHtml, manifest, calls),
+  );
   const url = new URL(media.url);
   assert.equal(url.pathname, "/playlist/304645");
   assert.equal(url.searchParams.get("token"), "aff47512f4e237ec21d794b0d15b03c7");
@@ -224,42 +427,117 @@ test("Vixcloud resolution copies the public playlist protocol and retains episod
 
 test("playback follows the Vixcloud domain published by AnimeUnity and pins the playlist to it", async () => {
   for (const host of ["vixcloud.co", "vixcloud.test"]) {
-    const request = fixture(call => call.url.startsWith(transport) ? titleHtml().replaceAll("vixcloud.cc", host)
-      : call.url.includes("/embed/") ? playerHtml.replaceAll("vixcloud.cc", host) : manifest.replaceAll("vixcloud.cc", host));
-    assert.equal(new URL((await resolveAnimeUnityLink(episode, undefined, request)).url).hostname, host);
+    const request = fixture((call) =>
+      call.url.startsWith(transport)
+        ? titleHtml().replaceAll("vixcloud.cc", host)
+        : call.url.includes("/embed/")
+          ? playerHtml.replaceAll("vixcloud.cc", host)
+          : manifest.replaceAll("vixcloud.cc", host),
+    );
+    assert.equal(
+      new URL((await resolveAnimeUnityLink(episode, undefined, request)).url).hostname,
+      host,
+    );
   }
   for (const host of ["vixcloud.cc.evil.example", "cdn.vixcloud.cc", "localhost"]) {
-    await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, fixture(titleHtml().replaceAll("vixcloud.cc", host))), /changed its player/);
+    await assert.rejects(
+      () =>
+        resolveAnimeUnityLink(
+          episode,
+          undefined,
+          fixture(titleHtml().replaceAll("vixcloud.cc", host)),
+        ),
+      /changed its player/,
+    );
   }
-  await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(playerHtml.replaceAll("vixcloud.cc", "vixcloud.co"))), /changed its player/);
+  await assert.rejects(
+    () =>
+      resolveAnimeUnityLink(
+        episode,
+        undefined,
+        playback(playerHtml.replaceAll("vixcloud.cc", "vixcloud.co")),
+      ),
+    /changed its player/,
+  );
 });
 
 test("changed player fields, foreign playlists and non-HLS responses fail closed", async () => {
-  for (const html of [playerHtml.replace("/playlist/304645", "/playlist/999"), playerHtml.replace("vixcloud.cc/playlist", "evil.example/playlist"), playerHtml.replace("aff47512f4e237ec21d794b0d15b03c7", "'+runCode()+'"), playerHtml.replace("'asn': ''", "'arbitrary': 'secret'"), "<script>window.masterPlaylist = eval('remote')</script>"]) await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(html)), /changed its player/);
-  await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(playerHtml, "<html>Challenge</html>")), /direct stream is unavailable/);
+  for (const html of [
+    playerHtml.replace("/playlist/304645", "/playlist/999"),
+    playerHtml.replace("vixcloud.cc/playlist", "evil.example/playlist"),
+    playerHtml.replace("aff47512f4e237ec21d794b0d15b03c7", "'+runCode()+'"),
+    playerHtml.replace("'asn': ''", "'arbitrary': 'secret'"),
+    "<script>window.masterPlaylist = eval('remote')</script>",
+  ])
+    await assert.rejects(
+      () => resolveAnimeUnityLink(episode, undefined, playback(html)),
+      /changed its player/,
+    );
+  await assert.rejects(
+    () => resolveAnimeUnityLink(episode, undefined, playback(playerHtml, "<html>Challenge</html>")),
+    /direct stream is unavailable/,
+  );
   const calls: Call[] = [];
-  await assert.rejects(() => resolveAnimeUnityLink(anime, undefined, playback(playerHtml, manifest, calls)), /Choose an episode/);
+  await assert.rejects(
+    () => resolveAnimeUnityLink(anime, undefined, playback(playerHtml, manifest, calls)),
+    /Choose an episode/,
+  );
   assert.equal(calls.length, 0);
 });
 
 test("existing AnimeUnity saves match browsed identities and toggle without duplicates", async () => {
   const providers = createProviders({ databasePath: ":memory:" });
-  const later = createForLater({ databasePath: ":memory:", onChange() {}, lookup: async () => { throw new Error("unused"); }, prepare: async () => {}, reservePlay: () => 0, enqueue() {} });
-  const send = (path: string, body?: unknown, method = body ? "POST" : "GET") => new Request(`http://localhost${path}`, { method, ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
+  const later = createForLater({
+    databasePath: ":memory:",
+    onChange() {},
+    lookup: async () => {
+      throw new Error("unused");
+    },
+    prepare: async () => {},
+    reservePlay: () => 0,
+    enqueue() {},
+  });
+  const send = (path: string, body?: unknown, method = body ? "POST" : "GET") =>
+    new Request(`http://localhost${path}`, {
+      method,
+      ...(body
+        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        : {}),
+    });
   const legacyAnime = "https://www.animeunity.so/anime/12-one-piece";
   const legacyEpisode = `${legacyAnime}/5987`;
   try {
-    await providers.handle(send("/api/providers/favorites", { item: { provider: "animeunity", kind: "collection", title: "One Piece", url: legacyAnime } }));
-    await later.handle(send("/api/for-later", { reference: { kind: "web", title: "Episode 1", url: legacyEpisode } }));
-    const collection = (await browseAnimeUnity({}, undefined, fixture(archiveHtml([row])))).items[0]!;
-    const media = (await browseAnimeUnity({ url: collection.url }, undefined, fixture(titleHtml()))).items[0]!;
-    const favorites = async () => (await (await providers.handle(send("/api/providers/favorites"))).json()).favorites;
+    await providers.handle(
+      send("/api/providers/favorites", {
+        item: { provider: "animeunity", kind: "collection", title: "One Piece", url: legacyAnime },
+      }),
+    );
+    await later.handle(
+      send("/api/for-later", {
+        reference: { kind: "web", title: "Episode 1", url: legacyEpisode },
+      }),
+    );
+    const collection = (await browseAnimeUnity({}, undefined, fixture(archiveHtml([row]))))
+      .items[0]!;
+    const media = (await browseAnimeUnity({ url: collection.url }, undefined, fixture(titleHtml())))
+      .items[0]!;
+    const favorites = async () =>
+      (await (await providers.handle(send("/api/providers/favorites"))).json()).favorites;
     const saved = async () => (await (await later.handle(send("/api/for-later"))).json()).items;
     assert.equal(collection.id, providerItemId("animeunity", legacyAnime));
     assert.equal((await favorites())[0].id, collection.id);
     assert.equal((await saved())[0].url, media.url);
     await providers.handle(send("/api/providers/favorites", { item: collection }));
-    assert.equal((await later.handle(send("/api/for-later", { reference: { kind: "web", title: media.title, url: media.url } }))).status, 200);
+    assert.equal(
+      (
+        await later.handle(
+          send("/api/for-later", {
+            reference: { kind: "web", title: media.title, url: media.url },
+          }),
+        )
+      ).status,
+      200,
+    );
     assert.equal((await favorites()).length, 1);
     assert.equal((await saved()).length, 1);
     await providers.handle(send(`/api/providers/favorites/${collection.id}`, undefined, "DELETE"));
@@ -267,9 +545,13 @@ test("existing AnimeUnity saves match browsed identities and toggle without dupl
     assert.equal((await favorites()).length, 0);
     assert.equal((await saved()).length, 0);
     await providers.handle(send("/api/providers/favorites", { item: collection }));
-    await later.handle(send("/api/for-later", { reference: { kind: "web", title: media.title, url: media.url } }));
+    await later.handle(
+      send("/api/for-later", { reference: { kind: "web", title: media.title, url: media.url } }),
+    );
     assert.equal((await favorites()).length, 1);
     assert.equal((await saved()).length, 1);
-  } finally { providers.close(); later.close(); }
+  } finally {
+    providers.close();
+    later.close();
+  }
 });
-

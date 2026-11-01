@@ -1,31 +1,63 @@
 import { useState, useSyncExternalStore } from "react";
-import { defaultNativeInputBuffer, isCaptureRatePreference, isNativeInputBufferPreference, isNativeInputChannelPreference } from "../shared/audio-settings";
+import {
+  defaultNativeInputBuffer,
+  isCaptureRatePreference,
+  isNativeInputBufferPreference,
+  isNativeInputChannelPreference,
+} from "../shared/audio-settings";
 
-function storedPreference<T extends string>(key: string, valid: (value: unknown) => value is T, fallback: T) {
+function storedPreference<T extends string>(
+  key: string,
+  valid: (value: unknown) => value is T,
+  fallback: T,
+) {
   const listeners = new Set<() => void>();
   const read = (): T => {
-    try { const value = localStorage.getItem(key); return valid(value) ? value : fallback; }
-    catch { return fallback; }
+    try {
+      const value = localStorage.getItem(key);
+      return valid(value) ? value : fallback;
+    } catch {
+      return fallback;
+    }
   };
   const subscribe = (listener: () => void) => {
-    listeners.add(listener); window.addEventListener("storage", listener);
-    return () => { listeners.delete(listener); window.removeEventListener("storage", listener); };
+    listeners.add(listener);
+    window.addEventListener("storage", listener);
+    return () => {
+      listeners.delete(listener);
+      window.removeEventListener("storage", listener);
+    };
   };
   function usePreference() {
     const value = useSyncExternalStore(subscribe, read, () => fallback);
     const [error, setError] = useState<string>();
     const save = (next: string) => {
       if (!valid(next)) return;
-      try { localStorage.setItem(key, next); setError(undefined); listeners.forEach(listener => listener()); }
-      catch { setError("Couldn’t save this device’s audio preference. Allow local storage and try again."); }
+      try {
+        localStorage.setItem(key, next);
+        setError(undefined);
+        listeners.forEach((listener) => listener());
+      } catch {
+        setError(
+          "Couldn’t save this device’s audio preference. Allow local storage and try again.",
+        );
+      }
     };
     return { value, save, error };
   }
   return { read, usePreference };
 }
 const capture = storedPreference("couch.live-capture-rate", isCaptureRatePreference, "auto");
-const nativeBuffer = storedPreference("couch.live-native-input-buffer", isNativeInputBufferPreference, defaultNativeInputBuffer);
-const nativeChannels = storedPreference("couch.live-native-input-channels", isNativeInputChannelPreference, "1/2");
+const nativeBuffer = storedPreference(
+  "couch.live-native-input-buffer",
+  isNativeInputBufferPreference,
+  defaultNativeInputBuffer,
+);
+const nativeChannels = storedPreference(
+  "couch.live-native-input-channels",
+  isNativeInputChannelPreference,
+  "1/2",
+);
 export const useNativeInputChannelPreference = nativeChannels.usePreference;
 export const readNativeInputBufferPreference = nativeBuffer.read;
 export const useNativeInputBufferPreference = nativeBuffer.usePreference;

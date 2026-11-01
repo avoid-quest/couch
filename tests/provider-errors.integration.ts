@@ -7,51 +7,108 @@ import { providerJson } from "../src/server/providers/http";
 
 test("a safe extraction error survives the catalog", async () => {
   const message = "This isn't available in your region.";
-  const catalog = createBandcampCatalog(async () => { throw new ExtractionError(message); });
-  const providers = createProviders({ databasePath: ":memory:", browse: { bandcamp: catalog.browse } as Parameters<typeof createProviders>[0]["browse"] });
+  const catalog = createBandcampCatalog(async () => {
+    throw new ExtractionError(message);
+  });
+  const providers = createProviders({
+    databasePath: ":memory:",
+    browse: { bandcamp: catalog.browse } as Parameters<typeof createProviders>[0]["browse"],
+  });
   try {
-    const response = await providers.handle(new Request("http://localhost/api/providers/bandcamp/items?url=https%3A%2F%2Fartist.bandcamp.com%2Ftrack%2Ftitle"));
+    const response = await providers.handle(
+      new Request(
+        "http://localhost/api/providers/bandcamp/items?url=https%3A%2F%2Fartist.bandcamp.com%2Ftrack%2Ftitle",
+      ),
+    );
     assert.equal(response.status, 502);
     assert.equal((await response.json()).error, message);
-  } finally { providers.close(); }
+  } finally {
+    providers.close();
+  }
 });
 
-for (const error of [new Error("fetch failed: https://media.example/stream?signature=PRIVATE"), Object.assign(new Error("https://media.example/?token=PRIVATE"), { name: "ExtractionError" })]) {
+for (const error of [
+  new Error("fetch failed: https://media.example/stream?signature=PRIVATE"),
+  Object.assign(new Error("https://media.example/?token=PRIVATE"), { name: "ExtractionError" }),
+]) {
   test("unknown exceptions and lookalikes stay generic; failures are retried", async () => {
     let calls = 0;
     const catalog = createBandcampCatalog(async () => {
       if (++calls < 3) throw error;
-      return JSON.stringify({ title: "Recovered", vcodec: "none", acodec: "mp3", url: "https://audio.example/track.mp3" });
+      return JSON.stringify({
+        title: "Recovered",
+        vcodec: "none",
+        acodec: "mp3",
+        url: "https://audio.example/track.mp3",
+      });
     });
-    const providers = createProviders({ databasePath: ":memory:", browse: { bandcamp: catalog.browse } as Parameters<typeof createProviders>[0]["browse"] });
-    const request = () => new Request("http://localhost/api/providers/bandcamp/items?url=https%3A%2F%2Fartist.bandcamp.com%2Ftrack%2Ftitle");
+    const providers = createProviders({
+      databasePath: ":memory:",
+      browse: { bandcamp: catalog.browse } as Parameters<typeof createProviders>[0]["browse"],
+    });
+    const request = () =>
+      new Request(
+        "http://localhost/api/providers/bandcamp/items?url=https%3A%2F%2Fartist.bandcamp.com%2Ftrack%2Ftitle",
+      );
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         const response = await providers.handle(request());
         assert.equal(response.status, 502);
-        assert.deepEqual(await response.json(), { error: "Couldn't complete this request. Try again." });
+        assert.deepEqual(await response.json(), {
+          error: "Couldn't complete this request. Try again.",
+        });
       }
       assert.equal((await providers.handle(request())).status, 200);
       assert.equal(calls, 3);
-    } finally { providers.close(); }
+    } finally {
+      providers.close();
+    }
   });
 }
 
 test("a provider fetch timeout gets safe copy", async () => {
-  const providers = createProviders({ databasePath: ":memory:", browse: { youtube: async () => { await providerJson("https://private.example/catalog", {}, (async () => { throw new DOMException("https://private.example/?token=PRIVATE", "TimeoutError"); }) as typeof fetch); return { items: [] }; } } as Parameters<typeof createProviders>[0]["browse"] });
+  const providers = createProviders({
+    databasePath: ":memory:",
+    browse: {
+      youtube: async () => {
+        await providerJson("https://private.example/catalog", {}, (async () => {
+          throw new DOMException("https://private.example/?token=PRIVATE", "TimeoutError");
+        }) as typeof fetch);
+        return { items: [] };
+      },
+    } as Parameters<typeof createProviders>[0]["browse"],
+  });
   try {
-    const response = await providers.handle(new Request("http://localhost/api/providers/youtube/items"));
+    const response = await providers.handle(
+      new Request("http://localhost/api/providers/youtube/items"),
+    );
     assert.equal(response.status, 502);
-    assert.deepEqual(await response.json(), { error: "The provider took too long to respond. Try again." });
-  } finally { providers.close(); }
+    assert.deepEqual(await response.json(), {
+      error: "The provider took too long to respond. Try again.",
+    });
+  } finally {
+    providers.close();
+  }
 });
 
-for (const declared of [false, true]) test(`provider JSON bounds a ${declared ? "declared" : "chunked"} response and cancels its body`, async () => {
-  let cancelled = false;
-  const request = (async () => new Response(new ReadableStream({
-    start(controller) { controller.enqueue(new Uint8Array(4 * 1024 * 1024 + 1)); },
-    cancel() { cancelled = true; },
-  }), { headers: declared ? { "Content-Length": "9999999" } : {} })) as typeof fetch;
-  await assert.rejects(providerJson("https://provider.example/catalog", {}, request), /The provider returned too much data\./);
-  assert.equal(cancelled, true);
-});
+for (const declared of [false, true])
+  test(`provider JSON bounds a ${declared ? "declared" : "chunked"} response and cancels its body`, async () => {
+    let cancelled = false;
+    const request = (async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(4 * 1024 * 1024 + 1));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { headers: declared ? { "Content-Length": "9999999" } : {} },
+      )) as typeof fetch;
+    await assert.rejects(
+      providerJson("https://provider.example/catalog", {}, request),
+      /The provider returned too much data\./,
+    );
+    assert.equal(cancelled, true);
+  });

@@ -12,7 +12,7 @@ if (!process.env.COUCH_TEST_FFMPEG && !Bun.which("ffmpeg")) {
 
 const names = process.argv.slice(2);
 const files = names.length
-  ? names.map(name => `tests/${name}.integration.ts`)
+  ? names.map((name) => `tests/${name}.integration.ts`)
   : [...new Bun.Glob("tests/*.integration.ts").scanSync()];
 const out = "build/integration";
 rmSync(out, { recursive: true, force: true });

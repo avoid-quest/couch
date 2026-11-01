@@ -2,7 +2,12 @@ import { AppWindow, Cable, Monitor, Volume2, type LucideIcon } from "lucide-reac
 import type { ClientSessionState } from "@/session/session";
 import type { LiveRoute } from "@/session/live-route";
 import type { CaptureKind, CaptureSource } from "../../../shared/capture";
-import { defaultLiveFrameRate, type LiveSelection, type LiveVideoFrameRate, type LiveVideoQuality } from "../../../shared/live-input";
+import {
+  defaultLiveFrameRate,
+  type LiveSelection,
+  type LiveVideoFrameRate,
+  type LiveVideoQuality,
+} from "../../../shared/live-input";
 import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
 // Sources and their capture variants (docs/live-inputs.md). The dialog offers source choices first; Live is an
@@ -21,59 +26,165 @@ export type ShareKind = {
 };
 
 export const shareKinds: ShareKind[] = [
-  { id: "screen", label: "Screen", description: "Share an entire display.", icon: Monitor, capture: "screen", pictures: "screen" },
-  { id: "window", label: "Window", description: "Share one app window.", icon: AppWindow, capture: "screen", pictures: "window" },
-  { id: "sound", label: "System audio", description: "Share this computer's sound without video.", icon: Volume2, capture: "system-audio" },
-  { id: "microphone", label: "Audio input", description: "Share a microphone, line input or audio interface.", icon: Cable, capture: "microphone", inputs: true },
-  { id: "live-audio", label: "Live audio", description: "Share a microphone, line input or audio interface.", icon: Cable, capture: "microphone", inputs: true, intent: "live" },
+  {
+    id: "screen",
+    label: "Screen",
+    description: "Share an entire display.",
+    icon: Monitor,
+    capture: "screen",
+    pictures: "screen",
+  },
+  {
+    id: "window",
+    label: "Window",
+    description: "Share one app window.",
+    icon: AppWindow,
+    capture: "screen",
+    pictures: "window",
+  },
+  {
+    id: "sound",
+    label: "System audio",
+    description: "Share this computer's sound without video.",
+    icon: Volume2,
+    capture: "system-audio",
+  },
+  {
+    id: "microphone",
+    label: "Audio input",
+    description: "Share a microphone, line input or audio interface.",
+    icon: Cable,
+    capture: "microphone",
+    inputs: true,
+  },
+  {
+    id: "live-audio",
+    label: "Live audio",
+    description: "Share a microphone, line input or audio interface.",
+    icon: Cable,
+    capture: "microphone",
+    inputs: true,
+    intent: "live",
+  },
 ];
 
 /** The kind a running share was started as, by how it captures. */
-export const shareKindOf = (capture: CaptureKind, surface?: LiveSelection["surface"], intent?: "relaxed" | "live") =>
-  intent === "live" ? shareKinds.find(kind => kind.intent === "live")! : shareKinds.find(kind => !kind.intent && kind.capture === capture && (!kind.pictures || kind.pictures === (surface === "window" ? "window" : "screen"))) ?? shareKinds[0]!;
+export const shareKindOf = (
+  capture: CaptureKind,
+  surface?: LiveSelection["surface"],
+  intent?: "relaxed" | "live",
+) =>
+  intent === "live"
+    ? shareKinds.find((kind) => kind.intent === "live")!
+    : (shareKinds.find(
+        (kind) =>
+          !kind.intent &&
+          kind.capture === capture &&
+          (!kind.pictures || kind.pictures === (surface === "window" ? "window" : "screen")),
+      ) ?? shareKinds[0]!);
 
-export const qualityLabels: Record<LiveVideoQuality, string> = { "720p": "720p, less bandwidth", "1080p": "1080p, balanced", original: "Original resolution" };
+export const qualityLabels: Record<LiveVideoQuality, string> = {
+  "720p": "720p, less bandwidth",
+  "1080p": "1080p, balanced",
+  original: "Original resolution",
+};
 // The most frames a second the picture asks for; the screen and the encoder may give fewer.
-export const frameRateLabels: Record<LiveVideoFrameRate, string> = { 30: "30 FPS", 60: "60 FPS", 120: "120 FPS" };
+export const frameRateLabels: Record<LiveVideoFrameRate, string> = {
+  30: "30 FPS",
+  60: "60 FPS",
+  120: "120 FPS",
+};
 
 /** Why this browser can't share a kind, in today's words; nothing when it can. */
 export function unavailable(kind: ShareKind, browser: { media: boolean; display: boolean }) {
   if (!browser.media) return "Open Couch over HTTPS or on localhost to share this device.";
-  if (kind.capture !== "microphone" && !browser.display) return "This browser can share audio inputs. Use the desktop app to share a screen or system audio.";
+  if (kind.capture !== "microphone" && !browser.display)
+    return "This browser can share audio inputs. Use the desktop app to share a screen or system audio.";
 }
 
 /**
  * The capture a choice asks for. In the desktop app a picture is the chosen screen or window, and System audio takes
  * the first screen's capture for its sound, keeping the picture private; a browser opens its own picker.
  */
-export function selectionOf(kind: ShareKind, choice: { source?: CaptureSource; sources?: CaptureSource[]; audioDeviceId?: string; quality: LiveVideoQuality; frameRate?: LiveVideoFrameRate; sound: boolean }): LiveSelection {
-  const source = kind.pictures ? choice.source : choice.sources?.find(item => item.kind === "screen");
+export function selectionOf(
+  kind: ShareKind,
+  choice: {
+    source?: CaptureSource;
+    sources?: CaptureSource[];
+    audioDeviceId?: string;
+    quality: LiveVideoQuality;
+    frameRate?: LiveVideoFrameRate;
+    sound: boolean;
+  },
+): LiveSelection {
+  const source = kind.pictures
+    ? choice.source
+    : choice.sources?.find((item) => item.kind === "screen");
   return {
     kind: kind.capture,
-    ...kind.intent ? { intent: kind.intent } : {},
-    ...kind.capture !== "microphone" && source ? { sourceId: source.id } : {},
-    ...kind.pictures ? { videoQuality: choice.quality, videoFrameRate: choice.frameRate ?? defaultLiveFrameRate, includeAudio: choice.sound, surface: kind.pictures === "screen" ? "monitor" as const : "window" as const } : {},
-    ...kind.inputs && choice.audioDeviceId && choice.audioDeviceId !== "default" ? { audioDeviceId: choice.audioDeviceId } : {},
+    ...(kind.intent ? { intent: kind.intent } : {}),
+    ...(kind.capture !== "microphone" && source ? { sourceId: source.id } : {}),
+    ...(kind.pictures
+      ? {
+          videoQuality: choice.quality,
+          videoFrameRate: choice.frameRate ?? defaultLiveFrameRate,
+          includeAudio: choice.sound,
+          surface: kind.pictures === "screen" ? ("monitor" as const) : ("window" as const),
+        }
+      : {}),
+    ...(kind.inputs && choice.audioDeviceId && choice.audioDeviceId !== "default"
+      ? { audioDeviceId: choice.audioDeviceId }
+      : {}),
   };
 }
 
 /** Play on's devices for a share: every other online device that lets others use its screen or speakers. */
 export const shareTargets = (state: ClientSessionState | null | undefined, here: string) =>
-  (state?.devices ?? []).filter(device => device.id !== here && device.online && (device.sharing?.audio || device.sharing?.video));
+  (state?.devices ?? []).filter(
+    (device) =>
+      device.id !== here && device.online && (device.sharing?.audio || device.sharing?.video),
+  );
 
 /** A device watching or hearing this device's share, and how it gets it. */
-export type Viewer = { device: DeviceSummary; playbackId: string; picture: boolean; sound: boolean; playing: boolean; behind: boolean; delivery?: PlaybackSummary["delivery"]; delayActive?: boolean; error?: string };
+export type Viewer = {
+  device: DeviceSummary;
+  playbackId: string;
+  picture: boolean;
+  sound: boolean;
+  playing: boolean;
+  behind: boolean;
+  delivery?: PlaybackSummary["delivery"];
+  delayActive?: boolean;
+  error?: string;
+};
 /** Every online device the share plays on, in each playback that plays it; the publisher never plays its own (docs/live-inputs.md). */
-export function viewersOf(state: ClientSessionState | null | undefined, sourceId: string): Viewer[] {
+export function viewersOf(
+  state: ClientSessionState | null | undefined,
+  sourceId: string,
+): Viewer[] {
   const viewers = new Map<string, Viewer>();
   // A channel the capture lacks plays nothing there, as Where it plays counts it.
-  const source = state?.liveSources?.find(item => item.id === sourceId);
-  for (const playback of state?.playbacks ?? []) if (playback.liveSourceId === sourceId) for (const output of playback.outputs) {
-    const device = state?.devices?.find(item => item.id === output.deviceId);
-    const picture = output.picture && source?.video !== false, sound = output.sound && source?.audio !== false;
-    // An offline device keeps its output in the playback (Where it plays says Offline) but watches nothing.
-    if (device?.online && (picture || sound)) viewers.set(device.id, { device, playbackId: playback.id, picture, sound, playing: playback.status === "playing", behind: !!output.buffered, delivery: playback.delivery, delayActive: output.delayActive, error: output.error });
-  }
+  const source = state?.liveSources?.find((item) => item.id === sourceId);
+  for (const playback of state?.playbacks ?? [])
+    if (playback.liveSourceId === sourceId)
+      for (const output of playback.outputs) {
+        const device = state?.devices?.find((item) => item.id === output.deviceId);
+        const picture = output.picture && source?.video !== false,
+          sound = output.sound && source?.audio !== false;
+        // An offline device keeps its output in the playback (Where it plays says Offline) but watches nothing.
+        if (device?.online && (picture || sound))
+          viewers.set(device.id, {
+            device,
+            playbackId: playback.id,
+            picture,
+            sound,
+            playing: playback.status === "playing",
+            behind: !!output.buffered,
+            delivery: playback.delivery,
+            delayActive: output.delayActive,
+            error: output.error,
+          });
+      }
   return [...viewers.values()];
 }
 
@@ -83,10 +194,14 @@ export function viewersOf(state: ClientSessionState | null | undefined, sourceId
  */
 export function viewerLine(viewer: Viewer, route: LiveRoute | undefined) {
   if (viewer.error) return `Can't play: ${viewer.error}`;
-  const channels = viewer.picture && viewer.sound ? "Picture and sound" : viewer.picture ? "Picture" : "Sound";
+  const channels =
+    viewer.picture && viewer.sound ? "Picture and sound" : viewer.picture ? "Picture" : "Sound";
   if (viewer.behind) return `${channels}, behind`;
   // Core's delivery wins over absent or stale WebRTC candidate statistics.
-  if (viewer.delivery === "scheduled") return viewer.sound ? `${channels}, ${viewer.delayActive ? "in sync" : "connecting"}` : channels;
+  if (viewer.delivery === "scheduled")
+    return viewer.sound
+      ? `${channels}, ${viewer.delayActive ? "in sync" : "connecting"}`
+      : channels;
   if (viewer.delivery && viewer.delivery !== "webrtc") return channels;
   return route ? `${channels}, ${route === "relay" ? "through the relay" : "direct"}` : channels;
 }

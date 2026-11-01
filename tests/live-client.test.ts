@@ -8,7 +8,11 @@ const desktop = `{
   async prepareCapture(selection) { prepared.push(selection); },
 }`;
 const check = (source: string, couchApp = "undefined") => {
-  const result = spawnSync(process.execPath, ["-e", `
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
     globalThis.window = new EventTarget();
@@ -108,12 +112,16 @@ const check = (source: string, couchApp = "undefined") => {
     session.close();
     assert.equal(timers.size, 0, "closing a session retires its connection deadline");
     assert.equal(windowClosed.size, 0, "a closed session stops following the window");
-  `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
+  `,
+    ],
+    { cwd: new URL("../", import.meta.url), encoding: "utf8" },
+  );
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 };
 
-test("a receiver keeps only the channels Core routed to its output", () => check(`
+test("a receiver keeps only the channels Core routed to its output", () =>
+  check(`
   const received = output => {
     session.play(direct({ liveOutput: { ...output, volume: 75 }, livePeerId: String(peers.length) }));
     const tracks = { picture: track("video"), sound: track("audio"), data: track("data") };
@@ -138,7 +146,8 @@ test("a receiver keeps only the channels Core routed to its output", () => check
   assert.ok(both.kept.every(item => item.stopped));
 `));
 
-test("a receiver that doesn't connect within 10 seconds, or fails, asks Core to relay its source and keeps buffering", () => check(`
+test("a receiver that doesn't connect within 10 seconds, or fails, asks Core to relay its source and keeps buffering", () =>
+  check(`
   session.play(direct());
   advance(9999);
   assert.equal(unreachable().length, 0);
@@ -156,7 +165,8 @@ test("a receiver that doesn't connect within 10 seconds, or fails, asks Core to 
   assert.equal(unreachable().length, 2, "each peer is reported once");
 `));
 
-test("a publisher that can't negotiate a peer reports it instead of dropping it silently", () => check(`
+test("a publisher that can't negotiate a peer reports it instead of dropping it silently", () =>
+  check(`
   const source = await session.start({ kind: "screen" });
   RTCPeerConnection.prototype.createOffer = async () => { throw new Error("No codec in common."); };
   session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
@@ -166,7 +176,8 @@ test("a publisher that can't negotiate a peer reports it instead of dropping it 
   assert.equal(recorders.length, 0, "nothing records until Core asks");
 `));
 
-test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () => check(`
+test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () =>
+  check(`
   const source = await session.start({ kind: "screen" });
   assert.equal(uploads.length, 0, "Publish starts no recording");
   requestUpload(source.id);
@@ -195,7 +206,8 @@ test("Core's request starts one ordered recording, and its release or Core closi
   assert.equal(commands.some(action => action.type === "endLive"), false);
 `));
 
-test("upload backpressure stops the upload instead of growing an unbounded queue, and sharing continues", () => check(`
+test("upload backpressure stops the upload instead of growing an unbounded queue, and sharing continues", () =>
+  check(`
   const source = await session.start({ kind: "screen" });
   requestUpload(source.id);
   await flush();
@@ -211,7 +223,8 @@ test("upload backpressure stops the upload instead of growing an unbounded queue
   assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: failures[0].message }]);
 `));
 
-test("a source Core removed reports failure and releases capture", () => check(`
+test("a source Core removed reports failure and releases capture", () =>
+  check(`
   await session.start({ kind: "screen" });
   session.observe([]);
   assert.equal(failures.length, 1);
@@ -223,7 +236,8 @@ test("a source Core removed reports failure and releases capture", () => check(`
   assert.equal(failures.length, 1, "an explicit Stop sharing is not a failure");
 `));
 
-test("receiver pacing cancels pending setup on Stop and falls back to the original track after worker failure", () => check(`
+test("receiver pacing cancels pending setup on Stop and falls back to the original track after worker failure", () =>
+  check(`
   const workers = [], generated = [];
   globalThis.MediaStreamTrackProcessor = class { readable = new ReadableStream(); };
   globalThis.MediaStreamTrackGenerator = class {
@@ -256,7 +270,9 @@ test("receiver pacing cancels pending setup on Stop and falls back to the origin
   assert.equal(unreachable().length, 0, "pacing failure need not abandon a working peer");
 `));
 
-test("the desktop app is told which source to prepare and whether its sound is included", () => check(`
+test("the desktop app is told which source to prepare and whether its sound is included", () =>
+  check(
+    `
   for (const selection of [{ kind: "screen", sourceId: "screen:1:0" }, { kind: "screen", sourceId: "window:2:0", includeAudio: false }, { kind: "system-audio", sourceId: "screen:1:0", includeAudio: false }, { kind: "microphone" }]) {
     await session.start(selection);
     await session.end();
@@ -268,9 +284,12 @@ test("the desktop app is told which source to prepare and whether its sound is i
     { kind: "microphone", sourceId: undefined, audio: true },
   ]);
   assert.deepEqual(captureRequests.slice(0, 3).map(request => !!request.audio), [true, false, true]);
-`, desktop));
+`,
+    desktop,
+  ));
 
-test("system audio retains only a small idle picture and never sends its video track", () => check(`
+test("system audio retains only a small idle picture and never sends its video track", () =>
+  check(`
   const source = await session.start({ kind: "system-audio" });
   requestUpload(source.id);
   assert.equal(source.audio, true);
@@ -283,7 +302,8 @@ test("system audio retains only a small idle picture and never sends its video t
   assert.ok(captures[0].getTracks().every(track => track.stopped));
 `));
 
-test("choosing an audio input releases its permission probe and captures the selected device", () => check(`
+test("choosing an audio input releases its permission probe and captures the selected device", () =>
+  check(`
   assert.deepEqual(await session.audioInputs(), [{ kind: "audioinput", deviceId: "interface", label: "USB interface" }]);
   assert.ok(captures[0].getTracks().every(track => track.stopped));
   assert.equal(commands.length, 0, "listing devices must not publish capture");
@@ -292,7 +312,8 @@ test("choosing an audio input releases its permission probe and captures the sel
   await assert.rejects(session.audioInputs(), /Stop sharing/);
 `));
 
-test("leaving a publishing page ends capture before its control socket closes", () => check(`
+test("leaving a publishing page ends capture before its control socket closes", () =>
+  check(`
   const source = await session.start({ kind: "screen" });
   window.dispatchEvent(new Event("pagehide"));
   await flush();
@@ -303,7 +324,9 @@ test("leaving a publishing page ends capture before its control socket closes", 
   assert.equal(commands.filter(action => action.type === "endLive").length, 1);
 `));
 
-test("closing the desktop window ends this device's sharing, while its playback and Couch continue", () => check(`
+test("closing the desktop window ends this device's sharing, while its playback and Couch continue", () =>
+  check(
+    `
   session.play(direct());
   const receiving = peers[0];
   const source = await session.start({ kind: "screen" });
@@ -330,4 +353,6 @@ test("closing the desktop window ends this device's sharing, while its playback 
   assert.deepEqual(commands.filter(action => action.type === "endLive").map(action => action.sourceId), [source.id, again.id]);
   assert.ok(captures[1].getTracks().every(track => track.stopped));
   assert.equal(prepared.at(-1), null, "no capture grant stays armed");
-`, desktop));
+`,
+    desktop,
+  ));

@@ -10,53 +10,99 @@ import { build, mergeConfig } from "vite";
 import electron from "electron";
 import config from "../vite.config";
 
-const directory = resolve(process.argv[2] ?? ".artifacts/video"), outDir = join(directory, "dist");
-if (existsSync(join(directory, "result.json"))) throw new Error("Choose a fresh evidence directory; previous runs must be retained");
-const argument = (name: string, fallback: number) => Number(process.argv.find(value => value.startsWith(`--${name}=`))?.split("=")[1] ?? fallback);
-const seconds = argument("seconds", 10), warmup = argument("warmup", 3), rounds = argument("rounds", 3), assertFps = argument("assert-fps", 0);
+const directory = resolve(process.argv[2] ?? ".artifacts/video"),
+  outDir = join(directory, "dist");
+if (existsSync(join(directory, "result.json")))
+  throw new Error("Choose a fresh evidence directory; previous runs must be retained");
+const argument = (name: string, fallback: number) =>
+  Number(process.argv.find((value) => value.startsWith(`--${name}=`))?.split("=")[1] ?? fallback);
+const seconds = argument("seconds", 10),
+  warmup = argument("warmup", 3),
+  rounds = argument("rounds", 3),
+  assertFps = argument("assert-fps", 0);
 const maxDropped = argument("max-dropped", assertFps ? 1 : 100);
 const frameRate = argument("fps", 60);
 if (![30, 60, 120].includes(frameRate)) throw new Error("Choose --fps=30, 60 or 120");
-const quality = process.argv.find(value => value.startsWith("--quality="))?.slice(10) ?? "1080p";
+const quality = process.argv.find((value) => value.startsWith("--quality="))?.slice(10) ?? "1080p";
 if (!["720p", "1080p", "original"].includes(quality)) throw new Error("Unknown capture quality");
-const codec = process.argv.find(value => value.startsWith("--codec="))?.slice(8);
-const hint = process.argv.find(value => value.startsWith("--hint="))?.slice(7);
+const codec = process.argv.find((value) => value.startsWith("--codec="))?.slice(8);
+const hint = process.argv.find((value) => value.startsWith("--hint="))?.slice(7);
 const bitrate = argument("bitrate", 0);
 const jitter = argument("jitter", 0);
 const sound = process.argv.includes("--sound");
-const encoderFps = argument("encoder-fps", 0), audioJitter = argument("audio-jitter", 0);
-const receivers = argument("receivers", 1), bandwidth = argument("bandwidth", 0);
+const encoderFps = argument("encoder-fps", 0),
+  audioJitter = argument("audio-jitter", 0);
+const receivers = argument("receivers", 1),
+  bandwidth = argument("bandwidth", 0);
 if (![1, 2].includes(receivers)) throw new Error("Choose --receivers=1 or 2");
-const diagnostics = process.argv.includes("--diagnostics"), bitrateAtOffer = process.argv.includes("--bitrate-at-offer");
-const modes = (process.argv.find(value => value.startsWith("--modes="))?.slice(8) ?? "playback,controls,live").split(",");
-if (modes.some(mode => !["playback", "controls", "live"].includes(mode))) throw new Error("Unknown video mode");
+const diagnostics = process.argv.includes("--diagnostics"),
+  bitrateAtOffer = process.argv.includes("--bitrate-at-offer");
+const modes = (
+  process.argv.find((value) => value.startsWith("--modes="))?.slice(8) ?? "playback,controls,live"
+).split(",");
+if (modes.some((mode) => !["playback", "controls", "live"].includes(mode)))
+  throw new Error("Unknown video mode");
 const media = process.env.COUCH_PERF_MEDIA;
 if (!media) throw new Error("Set COUCH_PERF_MEDIA to a local video fixture");
 const mediaFile = `/benchmark${extname(media)}`;
 mkdirSync(directory, { recursive: true });
 const entry = resolve(`src/client/__video-performance-${process.pid}.html`);
 const fixtureArguments = `${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)}, ${bitrate}, ${jitter}, ${diagnostics}, ${bitrateAtOffer}, ${sound}, ${encoderFps}, ${audioJitter}`;
-const sourceHashes = Object.fromEntries(["src/client/session/live.ts", "src/client/session/live-video.ts", "src/client/session/live-video-pacer.ts", "src/client/session/live-video-pacer-worker.ts", "tests/video-performance.browser.ts", "tests/video-performance.native.ts"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")]));
-writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; window.nativePresentation = ${process.argv.includes("--native-presentation")}; window.probeFrames = ${process.argv.includes("--frames")}; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${fixtureArguments}, ${receivers}); window.prepareVideoReceiver = bridge => prepareVideo('live', ${fixtureArguments}, 1, bridge);</script></body></html>`);
-try { await build(mergeConfig(config({ command: "build", mode: "production" }), { build: { outDir, rollupOptions: { input: entry } }, logLevel: "error" })); }
-finally { rmSync(entry); }
+const sourceHashes = Object.fromEntries(
+  [
+    "src/client/session/live.ts",
+    "src/client/session/live-video.ts",
+    "src/client/session/live-video-pacer.ts",
+    "src/client/session/live-video-pacer-worker.ts",
+    "tests/video-performance.browser.ts",
+    "tests/video-performance.native.ts",
+  ].map((path) => [path, createHash("sha256").update(readFileSync(path)).digest("hex")]),
+);
+writeFileSync(
+  entry,
+  `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; window.nativePresentation = ${process.argv.includes("--native-presentation")}; window.probeFrames = ${process.argv.includes("--frames")}; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${fixtureArguments}, ${receivers}); window.prepareVideoReceiver = bridge => prepareVideo('live', ${fixtureArguments}, 1, bridge);</script></body></html>`,
+);
+try {
+  await build(
+    mergeConfig(config({ command: "build", mode: "production" }), {
+      build: { outDir, rollupOptions: { input: entry } },
+      logLevel: "error",
+    }),
+  );
+} finally {
+  rmSync(entry);
+}
 copyFileSync(media, join(outDir, mediaFile));
-writeFileSync(join(outDir, "source.html"), `<!doctype html><title>Couch benchmark source</title><style>html,body{margin:0;background:black}video{width:100vw;height:100vh;object-fit:fill}</style><video src="${mediaFile}" muted autoplay loop></video>${sound ? `<script>const audio = new AudioContext(), oscillator = audio.createOscillator(), gain = audio.createGain(); oscillator.frequency.value = 997; gain.gain.value = .2; oscillator.connect(gain).connect(audio.destination); oscillator.start();</script>` : ""}${diagnostics ? `<script>
+writeFileSync(
+  join(outDir, "source.html"),
+  `<!doctype html><title>Couch benchmark source</title><style>html,body{margin:0;background:black}video{width:100vw;height:100vh;object-fit:fill}</style><video src="${mediaFile}" muted autoplay loop></video>${sound ? `<script>const audio = new AudioContext(), oscillator = audio.createOscillator(), gain = audio.createGain(); oscillator.frequency.value = 997; gain.gain.value = .2; oscillator.connect(gain).connect(audio.destination); oscillator.start();</script>` : ""}${
+    diagnostics
+      ? `<script>
 const video = document.querySelector('video'), timings = [], dimensions = new Set();
 let sampling = false, before, preWarmup;
 const health = () => { const q = video.getVideoPlaybackQuality(); return { time: performance.now(), width: video.videoWidth, height: video.videoHeight, totalFrames: q.totalVideoFrames, droppedFrames: q.droppedVideoFrames }; };
 const frame = (now, m) => { dimensions.add(m.width + 'x' + m.height); if (sampling && timings.length < 4096) timings.push({ now, presentationTime: m.presentationTime, expectedDisplayTime: m.expectedDisplayTime, mediaTime: m.mediaTime, presentedFrames: m.presentedFrames, width: m.width, height: m.height }); video.requestVideoFrameCallback(frame); };
 video.requestVideoFrameCallback(frame);
 window.sourceProbe = { prepare() { preWarmup = health(); }, begin() { before = health(); sampling = true; }, finish() { sampling = false; return { preWarmup, before, after: health(), timings, dimensions: [...dimensions], timingTruncated: timings.length === 4096 }; } };
-</script>` : ""}`);
-const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
-  const path = resolve(outDir, "." + decodeURIComponent(new URL(request.url).pathname));
-  if (!path.startsWith(outDir + sep)) return new Response(null, { status: 404 });
-  const file = Bun.file(path); return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
-} });
+</script>`
+      : ""
+  }`,
+);
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  async fetch(request) {
+    const path = resolve(outDir, "." + decodeURIComponent(new URL(request.url).pathname));
+    if (!path.startsWith(outDir + sep)) return new Response(null, { status: 404 });
+    const file = Bun.file(path);
+    return (await file.exists()) ? new Response(file) : new Response(null, { status: 404 });
+  },
+});
 const origin = `http://127.0.0.1:${server.port}`;
 const probe = join(directory, "probe.cjs");
-writeFileSync(probe, `
+writeFileSync(
+  probe,
+  `
 const { app, BrowserWindow, contentTracing, desktopCapturer, screen } = require('electron');
 const { writeFileSync } = require('node:fs');
 app.setPath('userData', ${JSON.stringify(join(directory, "data"))});
@@ -175,11 +221,27 @@ app.whenReady().then(async () => {
   writeFileSync(${JSON.stringify(join(directory, "result.json"))}, JSON.stringify(result, null, 2));
   app.exit(code);
 });
-`);
-const env = { ...process.env, COUCH_DATA_DIR: join(directory, "data"), COUCH_PORT: String(server.port) };
+`,
+);
+const env = {
+  ...process.env,
+  COUCH_DATA_DIR: join(directory, "data"),
+  COUCH_PORT: String(server.port),
+};
 delete env.ELECTRON_RUN_AS_NODE;
 const child = Bun.spawn([electron, probe], { env, stdout: "inherit", stderr: "inherit" });
 writeFileSync(join(directory, "launched-pid"), String(child.pid));
-const timeout = setTimeout(() => { console.error("Video benchmark timed out"); child.kill(); }, 60_000 + rounds * modes.length * (warmup + seconds + 20) * 1000);
-try { process.exitCode = await child.exited; console.log(`Evidence: ${join(directory, "result.json")}`); }
-finally { clearTimeout(timeout); server.stop(true); }
+const timeout = setTimeout(
+  () => {
+    console.error("Video benchmark timed out");
+    child.kill();
+  },
+  60_000 + rounds * modes.length * (warmup + seconds + 20) * 1000,
+);
+try {
+  process.exitCode = await child.exited;
+  console.log(`Evidence: ${join(directory, "result.json")}`);
+} finally {
+  clearTimeout(timeout);
+  server.stop(true);
+}

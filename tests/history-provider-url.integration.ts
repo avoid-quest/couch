@@ -7,14 +7,48 @@ import type { QueueEntry } from "../src/shared/protocol";
 const mediaId = `media:${"a".repeat(64)}`;
 async function history(source: string, kind?: QueueEntry["kind"], live = false) {
   const store = openStore(":memory:");
-  store.saveProgress("household", { mediaId, title: "Known film", position: 183, duration: 1000, watched: false, lastPlayedAt: 1 },
-    { id: "entry", source, title: "Known film", kind, live, thumbnail: "https://art.example/poster.png" });
-  const catalog = createCatalog({ radio: {} as Parameters<typeof createCatalog>[0]["radio"], viewing: { store, session: { state: { activeProfile: { id: "household", name: "Household" }, queue: [], currentEntryId: null } } as Viewing } });
+  store.saveProgress(
+    "household",
+    {
+      mediaId,
+      title: "Known film",
+      position: 183,
+      duration: 1000,
+      watched: false,
+      lastPlayedAt: 1,
+    },
+    {
+      id: "entry",
+      source,
+      title: "Known film",
+      kind,
+      live,
+      thumbnail: "https://art.example/poster.png",
+    },
+  );
+  const catalog = createCatalog({
+    radio: {} as Parameters<typeof createCatalog>[0]["radio"],
+    viewing: {
+      store,
+      session: {
+        state: {
+          activeProfile: { id: "household", name: "Household" },
+          queue: [],
+          currentEntryId: null,
+        },
+      } as Viewing,
+    },
+  });
   try {
-    const response = await catalog.handle(new Request("http://couch.local/api/progress/history"), false);
+    const response = await catalog.handle(
+      new Request("http://couch.local/api/progress/history"),
+      false,
+    );
     assert.equal(response.status, 200);
     return (await response.json()).items[0];
-  } finally { store.close(); }
+  } finally {
+    store.close();
+  }
 }
 
 for (const url of [
@@ -27,13 +61,14 @@ for (const url of [
   "https://animesaturn.ro/example-episode-2/",
   "https://www.animeunity.so/anime/12-one-piece/5987",
   "https://ww8.123moviesfree.net/season/example-season-1-123/?episode=2",
-]) test(`history exposes only the public provider page: ${url}`, async () => {
-  const item = await history(`web:${url}`);
-  assert.equal(item.url, url);
-  assert.equal(item.position, 183);
-  assert.equal(item.mediaId, mediaId);
-  assert.equal(item.source, undefined);
-});
+])
+  test(`history exposes only the public provider page: ${url}`, async () => {
+    const item = await history(`web:${url}`);
+    assert.equal(item.url, url);
+    assert.equal(item.position, 183);
+    assert.equal(item.mediaId, mediaId);
+    assert.equal(item.source, undefined);
+  });
 
 for (const source of [
   "https://media.example/movie.mp4?signature=PRIVATE",
@@ -53,18 +88,31 @@ for (const source of [
   "web:https://user:password@www.youtube.com/watch?v=abcdefghijk",
   "web:https://www.youtube.com:444/watch?v=abcdefghijk",
   "web:https://www.youtube.com/watch?v=abcdefghijk#PRIVATE",
-  "https://www.youtube.com/watch?v=abcdefghijk", "radio:station", "iptv:channel", "local-file",
-]) test(`history does not expose private or unsupported source ${source.split('?')[0]}`, async () => {
-  const item = await history(source);
-  assert.equal(item.url, undefined);
-  assert.equal(item.source, undefined);
-  assert.ok(!JSON.stringify(item).includes("PRIVATE"));
-});
+  "https://www.youtube.com/watch?v=abcdefghijk",
+  "radio:station",
+  "iptv:channel",
+  "local-file",
+])
+  test(`history does not expose private or unsupported source ${source.split("?")[0]}`, async () => {
+    const item = await history(source);
+    assert.equal(item.url, undefined);
+    assert.equal(item.source, undefined);
+    assert.ok(!JSON.stringify(item).includes("PRIVATE"));
+  });
 
 test("known public URL variations expose canonical provider identity", async () => {
-  assert.equal((await history("web:https://youtu.be/abcdefghijk")).url, "https://www.youtube.com/watch?v=abcdefghijk");
-  assert.equal((await history("web:https://raiplay.it/video/2026/09/episode.json")).url, "https://www.raiplay.it/video/2026/09/episode.html");
-  assert.equal((await history("web:https://www.animeunity.to/anime/12-one-piece/5987")).url, "https://www.animeunity.so/anime/12-one-piece/5987");
+  assert.equal(
+    (await history("web:https://youtu.be/abcdefghijk")).url,
+    "https://www.youtube.com/watch?v=abcdefghijk",
+  );
+  assert.equal(
+    (await history("web:https://raiplay.it/video/2026/09/episode.json")).url,
+    "https://www.raiplay.it/video/2026/09/episode.html",
+  );
+  assert.equal(
+    (await history("web:https://www.animeunity.to/anime/12-one-piece/5987")).url,
+    "https://www.animeunity.so/anime/12-one-piece/5987",
+  );
 });
 
 test("live and radio history cannot expose a finite provider identity", async () => {

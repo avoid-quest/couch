@@ -8,41 +8,150 @@ import { providerCollectionCursor } from "@/collection-pagination";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { HitTile, SourcesUnanswered } from "@/sections/find/SearchPanel";
-import { providerNames, SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
+import {
+  providerNames,
+  SearchOnlineResults,
+  type SearchResultSummary,
+} from "@/sections/find/SearchOnlineResults";
 import type { CollectionLink, MediaCollection } from "../../shared/media";
 import { providerForUrl, type ProviderId, type ProviderItem } from "../../shared/providers";
 
 /** A YouTube video in no list is still its channel's: its Videos tab, the page the channel's own Videos link opens. */
-const channelVideos = (creator?: CollectionLink): ProviderItem | undefined => creator && providerForUrl(creator.url) === "youtube" && /^\/(?:channel\/|@|c\/|user\/)[^/]+\/?$/.test(new URL(creator.url).pathname)
-  ? { id: creator.url, provider: "youtube", title: creator.title, url: `${creator.url.replace(/\/$/, "")}/videos`, kind: "collection" } : undefined;
+const channelVideos = (creator?: CollectionLink): ProviderItem | undefined =>
+  creator &&
+  providerForUrl(creator.url) === "youtube" &&
+  /^\/(?:channel\/|@|c\/|user\/)[^/]+\/?$/.test(new URL(creator.url).pathname)
+    ? {
+        id: creator.url,
+        provider: "youtube",
+        title: creator.title,
+        url: `${creator.url.replace(/\/$/, "")}/videos`,
+        kind: "collection",
+      }
+    : undefined;
 
 /** What sits near an item in its list: its collection, else its YouTube channel's videos, else its source's home. */
-export function RelatedCollection({ collection, creator, currentUrl, currentTitle, provider }: { collection?: MediaCollection; creator?: CollectionLink; currentUrl?: string; currentTitle?: string; provider?: ProviderId }) {
+export function RelatedCollection({
+  collection,
+  creator,
+  currentUrl,
+  currentTitle,
+  provider,
+}: {
+  collection?: MediaCollection;
+  creator?: CollectionLink;
+  currentUrl?: string;
+  currentTitle?: string;
+  provider?: ProviderId;
+}) {
   const channel = collection ? undefined : channelVideos(creator);
-  const target = collectionLinks(collection).at(-1) ?? channel ?? (provider ? { id: provider, provider, title: providerNames[provider], url: "", kind: "collection" as const } : undefined);
-  return target && <RelatedItems key={`${target.provider}:${target.url}`} target={target} collection={collection} more={!!channel} currentUrl={currentUrl} currentTitle={currentTitle} />;
+  const target =
+    collectionLinks(collection).at(-1) ??
+    channel ??
+    (provider
+      ? {
+          id: provider,
+          provider,
+          title: providerNames[provider],
+          url: "",
+          kind: "collection" as const,
+        }
+      : undefined);
+  return (
+    target && (
+      <RelatedItems
+        key={`${target.provider}:${target.url}`}
+        target={target}
+        collection={collection}
+        more={!!channel}
+        currentUrl={currentUrl}
+        currentTitle={currentTitle}
+      />
+    )
+  );
 }
 
-function RelatedItems({ target, collection, more, currentUrl, currentTitle }: { target: ProviderItem; collection?: MediaCollection; more: boolean; currentUrl?: string; currentTitle?: string }) {
+function RelatedItems({
+  target,
+  collection,
+  more,
+  currentUrl,
+  currentTitle,
+}: {
+  target: ProviderItem;
+  collection?: MediaCollection;
+  more: boolean;
+  currentUrl?: string;
+  currentTitle?: string;
+}) {
   const { credentials, available, openProvider, section } = useShell();
   const { connected, run, videoQualityPreference } = useSessionGate();
   const [summary, setSummary] = useState<SearchResultSummary | null>(null);
   const report = useCallback((_: string, summary: SearchResultSummary) => setSummary(summary), []);
   const hits = summary?.hits ?? [];
-  const isCurrent = (hit: typeof hits[number]) => currentUrl ? hit.url === currentUrl : !!currentTitle && hit.title === currentTitle;
-  const occurrenceIndex = collection?.index == null ? -1 : hits.findIndex(hit => isCurrent(hit) && hit.context?.url === collection.url && hit.context.index === collection.index);
+  const isCurrent = (hit: (typeof hits)[number]) =>
+    currentUrl ? hit.url === currentUrl : !!currentTitle && hit.title === currentTitle;
+  const occurrenceIndex =
+    collection?.index == null
+      ? -1
+      : hits.findIndex(
+          (hit) =>
+            isCurrent(hit) &&
+            hit.context?.url === collection.url &&
+            hit.context.index === collection.index,
+        );
   const currentIndex = occurrenceIndex < 0 ? hits.findIndex(isCurrent) : occurrenceIndex;
   const start = Math.max(0, currentIndex - 2);
-  const nearby = hits.slice(start, start + 5).filter((hit, index) => occurrenceIndex < 0 ? !isCurrent(hit) : start + index !== occurrenceIndex).slice(0, 4);
+  const nearby = hits
+    .slice(start, start + 5)
+    .filter((hit, index) =>
+      occurrenceIndex < 0 ? !isCurrent(hit) : start + index !== occurrenceIndex,
+    )
+    .slice(0, 4);
   const cursor = collection ? providerCollectionCursor(target.provider, collection) : undefined;
   const title = collection || more ? `More from ${target.title}` : `Browse ${target.title}`;
-  return <section aria-label={title} hidden={!!summary && !summary.loading && !summary.error && !nearby.length} className="mt-10 min-w-0 space-y-4">
-    <SearchOnlineResults provider={target.provider} query="" url={target.url} cursor={cursor} paged onResults={report} onOpenCollection={openProvider} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
-    {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this list.</p>}
-    {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}
-    <Shelf title={title} href={keepSection(collectionLocation(target), section)}>
-      {nearby.map(hit => <li key={hit.id} className="flex shrink-0"><HitTile hit={hit} shape={tileShape(hit.source, !!hit.context)} pageFirst={false} showCollection={false} /></li>)}
-    </Shelf>
-    <SourcesUnanswered summaries={summary ? [[target.title, summary]] : []} />
-  </section>;
+  return (
+    <section
+      aria-label={title}
+      hidden={!!summary && !summary.loading && !summary.error && !nearby.length}
+      className="mt-10 min-w-0 space-y-4"
+    >
+      <SearchOnlineResults
+        provider={target.provider}
+        query=""
+        url={target.url}
+        cursor={cursor}
+        paged
+        onResults={report}
+        onOpenCollection={openProvider}
+        origin={credentials.origin}
+        token={credentials.token}
+        connected={connected}
+        canPlay={available}
+        active
+        onCommand={run}
+        quality={videoQualityPreference.quality}
+        onEnqueued={() => {}}
+      />
+      {!connected && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Connect to Couch to load this list.
+        </p>
+      )}
+      {summary?.loading && !hits.length && <MediaRowsSkeleton compact count={4} />}
+      <Shelf title={title} href={keepSection(collectionLocation(target), section)}>
+        {nearby.map((hit) => (
+          <li key={hit.id} className="flex shrink-0">
+            <HitTile
+              hit={hit}
+              shape={tileShape(hit.source, !!hit.context)}
+              pageFirst={false}
+              showCollection={false}
+            />
+          </li>
+        ))}
+      </Shelf>
+      <SourcesUnanswered summaries={summary ? [[target.title, summary]] : []} />
+    </section>
+  );
 }

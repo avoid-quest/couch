@@ -1,13 +1,20 @@
 import { expect, test } from "bun:test";
 import { prepareCaptureAudio } from "../src/client/session/capture-audio";
-import { isNativeChannelMap, isNativeInputChannelPreference, nativeInputChannelMap, nativeInputChannelOptions, nativeInputChannelPreference } from "../src/shared/audio-settings";
+import {
+  isNativeChannelMap,
+  isNativeInputChannelPreference,
+  nativeInputChannelMap,
+  nativeInputChannelOptions,
+  nativeInputChannelPreference,
+} from "../src/shared/audio-settings";
 
 test("native inputs offer adjacent stereo pairs and individual mono channels", () => {
   expect(nativeInputChannelOptions(4)).toEqual(["1/2", "3/4", "1", "2", "3", "4"]);
   expect(nativeInputChannelOptions(3)).toEqual(["1/2", "1", "2", "3"]);
   expect(nativeInputChannelMap("3/4")).toEqual([2, 3]);
   expect(nativeInputChannelMap("2")).toEqual([1]);
-  for (const value of ["0", "01", "1/02", "2/3", "1/1", "1/3", "1/2/3", "-1", "NaN", "1.5", ""]) expect(isNativeInputChannelPreference(value)).toBe(false);
+  for (const value of ["0", "01", "1/02", "2/3", "1/1", "1/3", "1/2/3", "-1", "NaN", "1.5", ""])
+    expect(isNativeInputChannelPreference(value)).toBe(false);
   expect(isNativeChannelMap([2, 3], 3)).toBe(false);
   expect(isNativeChannelMap([1], 2)).toBe(false);
   expect(nativeInputChannelPreference("3/4", 4)).toBe("3/4");
@@ -18,11 +25,35 @@ test("native inputs offer adjacent stereo pairs and individual mono channels", (
 test("a browser ignoring the requested rate fails before upload and closes the probe", async () => {
   const original = Object.getOwnPropertyDescriptor(globalThis, "MediaStreamTrackProcessor");
   const observed = { closed: 0, canceled: 0 };
-  Object.defineProperty(globalThis, "MediaStreamTrackProcessor", { configurable: true, value: class {
-    readable = new ReadableStream({ start(controller) { controller.enqueue({ timestamp: performance.now() * 1000, sampleRate: 48000, numberOfChannels: 2, numberOfFrames: 128, close() { observed.closed++; } }); }, cancel() { observed.canceled++; } });
-  } });
+  Object.defineProperty(globalThis, "MediaStreamTrackProcessor", {
+    configurable: true,
+    value: class {
+      readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue({
+            timestamp: performance.now() * 1000,
+            sampleRate: 48000,
+            numberOfChannels: 2,
+            numberOfFrames: 128,
+            close() {
+              observed.closed++;
+            },
+          });
+        },
+        cancel() {
+          observed.canceled++;
+        },
+      });
+    },
+  });
   try {
-    await expect(prepareCaptureAudio({} as MediaStreamTrack, true, 44100)).rejects.toThrow("48000 Hz instead of 44100 Hz");
-    expect(observed.closed).toBe(1); expect(observed.canceled).toBe(1);
-  } finally { if (original) Object.defineProperty(globalThis, "MediaStreamTrackProcessor", original); else Reflect.deleteProperty(globalThis, "MediaStreamTrackProcessor"); }
+    await expect(prepareCaptureAudio({} as MediaStreamTrack, true, 44100)).rejects.toThrow(
+      "48000 Hz instead of 44100 Hz",
+    );
+    expect(observed.closed).toBe(1);
+    expect(observed.canceled).toBe(1);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "MediaStreamTrackProcessor", original);
+    else Reflect.deleteProperty(globalThis, "MediaStreamTrackProcessor");
+  }
 });

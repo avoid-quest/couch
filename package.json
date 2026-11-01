@@ -1,8 +1,7 @@
 {
   "name": "couch",
-  "productName": "Couch",
-  "identifier": "quest.avoid.couch",
   "version": "0.4.0",
+  "private": true,
   "description": "A media player everyone shares",
   "homepage": "https://couch.avoid.quest",
   "license": "MIT",
@@ -10,14 +9,12 @@
     "name": "avoid-quest",
     "email": "support@avoid.quest"
   },
-  "main": "build/main.mjs",
-  "desktopName": "couch.desktop",
-  "private": true,
+  "workspaces": [
+    ".",
+    "apps/*"
+  ],
   "type": "module",
-  "engines": {
-    "bun": ">=1.4.4",
-    "node": ">=24"
-  },
+  "main": "build/main.mjs",
   "scripts": {
     "dev": "bun run --parallel server:dev client:dev",
     "server:dev": "bun scripts/core.ts --watch",
@@ -32,10 +29,12 @@
     "web:deploy": "bun run --cwd apps/web deploy",
     "test": "bun test --isolate",
     "test:integration": "bun scripts/test-integration.ts",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
     "lint": "oxlint --deny-warnings",
     "knip": "knip --no-config-hints",
     "prepare": "git config core.hooksPath .githooks",
-    "check": "bun run lint && bun run typecheck && bun run knip && bun run test"
+    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run knip && bun run test"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -73,6 +72,7 @@
     "knip": "^6.44.1",
     "lucide-react": "^1.63.0",
     "mpegts.js": "^1.8.2",
+    "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
     "qrcode.react": "^4.2.0",
     "radix-ui": "^1.8.1",
@@ -89,10 +89,10 @@
     "vite-plugin-pwa": "^2.0.0",
     "ws": "^8.22.0"
   },
-  "workspaces": [
-    ".",
-    "apps/*"
-  ],
+  "engines": {
+    "bun": ">=1.4.4",
+    "node": ">=24"
+  },
   "build": {
     "appId": "quest.avoid.couch",
     "artifactName": "Couch-${version}-${arch}.${ext}",
@@ -185,5 +185,8 @@
       "repo": "couch"
     },
     "afterPack": "./scripts/after-pack.ts"
-  }
+  },
+  "desktopName": "couch.desktop",
+  "identifier": "quest.avoid.couch",
+  "productName": "Couch"
 }

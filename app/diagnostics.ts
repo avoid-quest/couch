@@ -4,7 +4,11 @@ import { host, redact } from "../packaging/tv/redact.js";
 // evidence does: URLs contribute only their host.
 export const diagnosticHost: (source: string) => string = host;
 
-export function appDiagnostic(component: "main" | "renderer" | "update", level: "info" | "warning" | "error", message: unknown) {
+export function appDiagnostic(
+  component: "main" | "renderer" | "update",
+  level: "info" | "warning" | "error",
+  message: unknown,
+) {
   return `${new Date().toISOString()} ${component} ${level}: ${redact(message)}`;
 }
 

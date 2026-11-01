@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
 const check = (source: string) => {
-  const result = spawnSync(process.execPath, ["-e", `
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
     import assert from "node:assert/strict";
     const values = new Map();
     globalThis.window = new EventTarget();
@@ -11,18 +15,23 @@ const check = (source: string) => {
     globalThis.history = { state: null, replaceState: (_state, _title, value) => { globalThis.location = new URL(value, location); } };
     const details = name => ({ name, urls: [], player: "idle" });
     ${source}
-  `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
+  `,
+    ],
+    { cwd: new URL("../", import.meta.url), encoding: "utf8" },
+  );
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 };
 
-test("the browser migrates its old current connection into its known servers", () => check(`
+test("the browser migrates its old current connection into its known servers", () =>
+  check(`
   values.set("couch.connection", JSON.stringify({ origin: location.origin, details: details("Living room") }));
   const connections = await import("./src/client/session/connection.ts");
   assert.deepEqual(connections.knownConnections(), [{ origin: location.origin, name: "Living room" }]);
 `));
 
-test("a deliberate switch carries only public labels, leaving credentials and keys in storage", () => check(`
+test("a deliberate switch carries only public labels, leaving credentials and keys in storage", () =>
+  check(`
   values.set("couch.remote-token", "pairing-secret");
   values.set("sendspin-identity-sk", "device-secret");
   values.set("couch.device-name", "Laptop");
@@ -42,7 +51,8 @@ test("a deliberate switch carries only public labels, leaving credentials and ke
   assert.equal(values.get("sendspin-identity-sk"), "device-secret");
 `));
 
-test("an unsaved page adds only itself and cannot rename this browser", () => check(`
+test("an unsaved page adds only itself and cannot rename this browser", () =>
+  check(`
   values.set("couch.device-name", "Laptop");
   const planted = [{ origin: "http://evil.local:4100", name: "Kitchen" }, { origin: "http://two.local:4100", name: "Living room" }];
   location.hash = new URLSearchParams({ couches: JSON.stringify(planted), "device-name": "Renamed" }).toString();
@@ -55,7 +65,8 @@ test("an unsaved page adds only itself and cannot rename this browser", () => ch
   assert.equal(location.hash, "");
 `));
 
-test("a link from anywhere but a listed Couch cannot plant saved servers", () => check(`
+test("a link from anywhere but a listed Couch cannot plant saved servers", () =>
+  check(`
   globalThis.document = { referrer: "http://elsewhere.example/" };
   location.hash = new URLSearchParams({ couches: JSON.stringify([{ origin: "http://evil.local:4100", name: "Living room" }]) }).toString();
   const connections = await import("./src/client/session/connection.ts");
@@ -63,7 +74,8 @@ test("a link from anywhere but a listed Couch cannot plant saved servers", () =>
   assert.equal(location.hash, "");
 `));
 
-test("malformed server hints cannot add credentials, paths or non-HTTP destinations", () => check(`
+test("malformed server hints cannot add credentials, paths or non-HTTP destinations", () =>
+  check(`
   globalThis.document = { referrer: "http://two.local:4100/" };
   const labels = [null, { origin: "javascript:alert(1)", name: "Bad" }, { origin: "http://user:password@one.local:4100", name: "Bad" }, { origin: "http://one.local:4100/path", name: "Bad" }, { origin: "http://two.local:4100", name: "Kitchen", token: "discarded" }];
   location.hash = new URLSearchParams({ couches: JSON.stringify(labels) }).toString();

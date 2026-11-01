@@ -3,9 +3,11 @@ import type { NavigationKey } from "../shared/protocol";
 import { isTvPresentation } from "./session/presentation";
 import { startHold } from "./hold";
 
-const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
-const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
-const localOnly = '[data-tv-local-only], .tv-local-only';
+const focusable =
+  'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
+const portals =
+  '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
+const localOnly = "[data-tv-local-only], .tv-local-only";
 const toaster = "[data-sonner-toaster]";
 const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]';
 let remoteNavigation = false;
@@ -16,24 +18,41 @@ function adjust(fader: HTMLElement | null) {
   adjusting = fader;
   fader?.setAttribute("data-adjusting", "");
 }
-const rendered = (element: HTMLElement) => !element.closest('[hidden]')
-  && element.closest(portals)?.getAttribute("data-state") !== "closed"
-  && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
-const visible = (element: HTMLElement) => rendered(element) && !element.closest('[inert], [aria-hidden="true"]')
-  && !element.matches(':disabled, [aria-disabled="true"]');
-const lastVisible = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
-const navigationScope = () => lastVisible(portals) ?? lastVisible("[data-tv-navigation-scope]")
-  ?? document.querySelector<HTMLElement>(".watch-mode") ?? document.body;
+const rendered = (element: HTMLElement) =>
+  !element.closest("[hidden]") &&
+  element.closest(portals)?.getAttribute("data-state") !== "closed" &&
+  element.getClientRects().length > 0 &&
+  getComputedStyle(element).visibility !== "hidden";
+const visible = (element: HTMLElement) =>
+  rendered(element) &&
+  !element.closest('[inert], [aria-hidden="true"]') &&
+  !element.matches(':disabled, [aria-disabled="true"]');
+const lastVisible = (selector: string) =>
+  [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
+const navigationScope = () =>
+  lastVisible(portals) ??
+  lastVisible("[data-tv-navigation-scope]") ??
+  document.querySelector<HTMLElement>(".watch-mode") ??
+  document.body;
 // A toast's action is reached only by Up past the top (moveFocus), never in passing.
-const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElement>(focusable)].filter(element => visible(element)
-  && !element.closest(toaster) && (!remoteNavigation || !element.closest(localOnly))
-  && !element.matches('[role="tablist"], [role="tabpanel"]')
-  && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
+const controlsIn = (scope: HTMLElement) =>
+  [...scope.querySelectorAll<HTMLElement>(focusable)].filter(
+    (element) =>
+      visible(element) &&
+      !element.closest(toaster) &&
+      (!remoteNavigation || !element.closest(localOnly)) &&
+      !element.matches('[role="tablist"], [role="tabpanel"]') &&
+      (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')),
+  );
 // With nothing focused (after a page change), the first key starts in the page, not on the header.
-const entry = (controls: HTMLElement[]) => controls.find(element => element.matches("[data-page-first]")) ?? controls.find(element => element.closest("[data-page]")) ?? controls[0];
+const entry = (controls: HTMLElement[]) =>
+  controls.find((element) => element.matches("[data-page-first]")) ??
+  controls.find((element) => element.closest("[data-page]")) ??
+  controls[0];
 
 // A slider is placed by its whole track, not by its thumb, which moves with the value.
-const box = (element: Element) => (element.closest('[data-slot="slider"]') ?? element).getBoundingClientRect();
+const box = (element: Element) =>
+  (element.closest('[data-slot="slider"]') ?? element).getBoundingClientRect();
 
 function focus(element: HTMLElement | undefined) {
   if (!element) return;
@@ -43,7 +62,9 @@ function focus(element: HTMLElement | undefined) {
 
 /** Use the same enabled, visible controls for page entry as for D-pad movement. */
 export function focusPageControl(scope: HTMLElement) {
-  focus(entry(controlsIn(scope)) ?? scope.querySelector<HTMLElement>('h1[tabindex="-1"]') ?? undefined);
+  focus(
+    entry(controlsIn(scope)) ?? scope.querySelector<HTMLElement>('h1[tabindex="-1"]') ?? undefined,
+  );
 }
 
 function moveFocus(key: string) {
@@ -51,98 +72,167 @@ function moveFocus(key: string) {
   const controls = controlsIn(scope);
   const active = document.activeElement;
   // Any arrow leaves a toast's action; sonner returns focus to where it came from.
-  if (active instanceof HTMLElement && active.closest(toaster)) { active.blur(); return; }
-  if (!(active instanceof HTMLElement) || !scope.contains(active) || !visible(active) || active === scope
-    || remoteNavigation && active.closest(localOnly)) {
+  if (active instanceof HTMLElement && active.closest(toaster)) {
+    active.blur();
+    return;
+  }
+  if (
+    !(active instanceof HTMLElement) ||
+    !scope.contains(active) ||
+    !visible(active) ||
+    active === scope ||
+    (remoteNavigation && active.closest(localOnly))
+  ) {
     focus(entry(controls));
     return;
   }
   if (key === "ArrowDown" && active.closest(".app-header-controls")) {
-    const first = [...scope.querySelectorAll<HTMLElement>("[data-page-first]")].find(element => visible(element) && (!remoteNavigation || !element.closest(localOnly)));
-    if (first) { focus(first); return; }
+    const first = [...scope.querySelectorAll<HTMLElement>("[data-page-first]")].find(
+      (element) => visible(element) && (!remoteNavigation || !element.closest(localOnly)),
+    );
+    if (first) {
+      focus(first);
+      return;
+    }
   }
   if (key === "ArrowDown" && active.closest(".player-page [role=slider]")) {
     const play = scope.querySelector<HTMLElement>(".player-page [data-play-button]");
-    if (play && visible(play)) { focus(play); return; }
+    if (play && visible(play)) {
+      focus(play);
+      return;
+    }
   }
   // Rails enter their content regardless of the selected section's height.
   // Geometric neighbours alone can strand a lower rail item beside a short page.
   const page = active.closest("[data-page]");
   const content = page?.querySelector<HTMLElement>("[data-nav-content]");
   if (key === "ArrowRight" && active.closest("[data-nav-rail]") && content) {
-    focus(entry(controls.filter(element => content.contains(element))));
+    focus(entry(controls.filter((element) => content.contains(element))));
     return;
   }
   const from = box(active);
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
   const own = active.closest(navigationRow);
   const row = key === "ArrowRight" ? own : null;
-  const destinations = row ? controls.filter(element => row.contains(element))
-    : !horizontal && content?.contains(active) ? controls.filter(element => !element.closest("[data-nav-rail]")) : controls;
+  const destinations = row
+    ? controls.filter((element) => row.contains(element))
+    : !horizontal && content?.contains(active)
+      ? controls.filter((element) => !element.closest("[data-nav-rail]"))
+      : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
-  const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
+  const cx = from.x + from.width / 2,
+    cy = from.y + from.height / 2;
   // How far a box starts past the active's top (Up) or bottom (Down) edge.
-  const past = (to: DOMRect) => sign < 0 ? from.top - to.bottom : to.top - from.bottom;
+  const past = (to: DOMRect) => (sign < 0 ? from.top - to.bottom : to.top - from.bottom);
   // Measure sideways between edges, so a wide row stays in line with a short title. Keep this penalty when
   // comparing row edges too, so a rail beside the rows cannot win on its nearer edge alone.
   const sideways = (to: DOMRect) => {
-    const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
+    const gap = horizontal
+      ? Math.max(to.top - from.bottom, from.top - to.bottom)
+      : Math.max(to.left - from.right, from.left - to.right);
     return gap < 0 ? 0 : gap * 2 + 1000;
   };
   // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
-  const bar = key === "ArrowUp" ? ".app-header-controls" : key === "ArrowDown" ? ".app-footer" : null;
+  const bar =
+    key === "ArrowUp" ? ".app-header-controls" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
   // A footer inside the page ([data-nav-footer], the update review's actions) sticks to its container's end, so Down
   // reaches it after the container's controls that scroll beneath it.
-  const below = (element: HTMLElement) => { const to = box(element); return to.y + to.height / 2 > cy + 1; };
+  const below = (element: HTMLElement) => {
+    const to = box(element);
+    return to.y + to.height / 2 > cy + 1;
+  };
   const last = (element: HTMLElement) => {
     if (later && element.closest(later)) return true;
     const footer = key === "ArrowDown" ? element.closest<HTMLElement>("[data-nav-footer]") : null;
-    return !!footer && !footer.contains(active) && destinations.some(other => !footer.contains(other) && footer.parentElement!.contains(other) && below(other));
+    return (
+      !!footer &&
+      !footer.contains(active) &&
+      destinations.some(
+        (other) => !footer.contains(other) && footer.parentElement!.contains(other) && below(other),
+      )
+    );
   };
-  const candidates = destinations.filter(element => element !== active).map(element => {
-    const to = box(element);
-    const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
-    const forward = (horizontal ? dx : dy) * sign;
-    const penalty = sideways(to);
-    // Up and Down reach a control in the active's own row only past its edge and in line with it: a wrapped line,
-    // Continue's Details under its tile, a device's Sync line under its row. Never one beside it, though a shorter or
-    // taller caption moves that one's centre.
-    // Left/Right stay on the same visual line. A sideways distance penalty alone
-    // can still choose a completely unrelated shelf when there is no neighbour.
-    const beside = horizontal ? to.bottom <= from.top || to.top >= from.bottom
-      : !!own?.contains(element) && (past(to) < 0 || penalty > 0);
-    return { element, forward, beside, score: forward + penalty + (last(element) ? 100_000 : 0) };
-  }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
+  const candidates = destinations
+    .filter((element) => element !== active)
+    .map((element) => {
+      const to = box(element);
+      const dx = to.x + to.width / 2 - cx,
+        dy = to.y + to.height / 2 - cy;
+      const forward = (horizontal ? dx : dy) * sign;
+      const penalty = sideways(to);
+      // Up and Down reach a control in the active's own row only past its edge and in line with it: a wrapped line,
+      // Continue's Details under its tile, a device's Sync line under its row. Never one beside it, though a shorter or
+      // taller caption moves that one's centre.
+      // Left/Right stay on the same visual line. A sideways distance penalty alone
+      // can still choose a completely unrelated shelf when there is no neighbour.
+      const beside = horizontal
+        ? to.bottom <= from.top || to.top >= from.bottom
+        : !!own?.contains(element) && (past(to) < 0 || penalty > 0);
+      return { element, forward, beside, score: forward + penalty + (last(element) ? 100_000 : 0) };
+    })
+    .filter((candidate) => candidate.forward > 1 && !candidate.beside)
+    .sort((a, b) => a.score - b.score);
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
   // score. The header and the footer still come last: the page scrolls under the sticky header.
-  const reach = !horizontal && (own || content?.contains(active)) ? candidates.map(candidate => {
-    const row = candidate.element.closest<HTMLElement>(navigationRow);
-    const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
-    const sameColumn = content?.contains(active) && content.contains(candidate.element);
-    return { row: unit, edge: Math.max(0, past(to)) + (sameColumn ? 0 : sideways(to)) + (last(candidate.element) ? 100_000 : 0) };
-  }) : [];
-  const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
+  const reach =
+    !horizontal && (own || content?.contains(active))
+      ? candidates.map((candidate) => {
+          const row = candidate.element.closest<HTMLElement>(navigationRow);
+          const unit = row && !row.contains(active) ? row : null,
+            to = box(unit ?? candidate.element);
+          const sameColumn = content?.contains(active) && content.contains(candidate.element);
+          return {
+            row: unit,
+            edge:
+              Math.max(0, past(to)) +
+              (sameColumn ? 0 : sideways(to)) +
+              (last(candidate.element) ? 100_000 : 0),
+          };
+        })
+      : [];
+  const nearest = reach.reduce<number>(
+    (best, unit, index) => (unit.edge < reach[best]!.edge ? index : best),
+    0,
+  );
   const next = reach[nearest]?.row;
-  const best = next ? candidates.find(candidate => next.contains(candidate.element)) : candidates[nearest];
-  const rail = key === "ArrowLeft" && content?.contains(active) && !content.contains(best?.element ?? null)
-    ? controls.find(element => element.matches('[data-nav-rail] [aria-current="page"]')) : undefined;
+  const best = next
+    ? candidates.find((candidate) => next.contains(candidate.element))
+    : candidates[nearest];
+  const rail =
+    key === "ArrowLeft" && content?.contains(active) && !content.contains(best?.element ?? null)
+      ? controls.find((element) => element.matches('[data-nav-rail] [aria-current="page"]'))
+      : undefined;
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
-  const tab = key === "ArrowUp" && later && best?.element.closest(later)
-    ? [...scope.querySelectorAll<HTMLElement>('.app-header-controls [aria-current="page"]')].find(visible) : undefined;
+  const tab =
+    key === "ArrowUp" && later && best?.element.closest(later)
+      ? [...scope.querySelectorAll<HTMLElement>('.app-header-controls [aria-current="page"]')].find(
+          visible,
+        )
+      : undefined;
   // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
   // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
-  const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(element => visible(element) && (!remoteNavigation || !element.closest(localOnly))) : undefined;
+  const toast =
+    key === "ArrowUp" && !best
+      ? [
+          ...scope.querySelectorAll<HTMLElement>(
+            `${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`,
+          ),
+        ].find((element) => visible(element) && (!remoteNavigation || !element.closest(localOnly)))
+      : undefined;
   focus(rail ?? tab ?? best?.element ?? toast);
 }
 
 /** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */
-const openItemMenu = (target: HTMLElement) => target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+const openItemMenu = (target: HTMLElement) =>
+  target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
 
 function sendKey(target: HTMLElement, key: string) {
   const code = key === " " ? "Space" : key;
-  target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
+  target.dispatchEvent(
+    new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }),
+  );
   target.dispatchEvent(new KeyboardEvent("keyup", { key, code, bubbles: true, cancelable: true }));
 }
 
@@ -151,7 +241,13 @@ function sendKey(target: HTMLElement, key: string) {
 export function applyTvNavigation(key: NavigationKey) {
   if (key === "home" || key === "info") return false;
   // A nested Radix portal can aria-hide its parent dialog without closing it.
-  if (key !== "back" && [...document.querySelectorAll<HTMLElement>(portals)].some(element => element.closest(localOnly) && rendered(element))) return true;
+  if (
+    key !== "back" &&
+    [...document.querySelectorAll<HTMLElement>(portals)].some(
+      (element) => element.closest(localOnly) && rendered(element),
+    )
+  )
+    return true;
   // A held OK ("menu") opens a focused item's menu; on anything else it is OK.
   const ok = key === "select" || key === "menu";
   const previous = remoteNavigation;
@@ -159,21 +255,38 @@ export function applyTvNavigation(key: NavigationKey) {
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
-    if (key !== "back" && (scope.querySelector("[data-player-band=hidden]") || document.activeElement?.matches("[data-player-surface]"))) {
-      sendKey(document.body, ok ? "Enter" : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key]);
+    if (
+      key !== "back" &&
+      (scope.querySelector("[data-player-band=hidden]") ||
+        document.activeElement?.matches("[data-player-surface]"))
+    ) {
+      sendKey(
+        document.body,
+        ok
+          ? "Enter"
+          : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key],
+      );
       return true;
     }
-    let target = document.activeElement instanceof HTMLElement && scope.contains(document.activeElement) && visible(document.activeElement)
-      ? document.activeElement : null;
+    let target =
+      document.activeElement instanceof HTMLElement &&
+      scope.contains(document.activeElement) &&
+      visible(document.activeElement)
+        ? document.activeElement
+        : null;
     if (key !== "back" && target?.closest(localOnly)) {
       if (ok) return true;
       const tablist = target.closest('[role="tablist"]');
       if (tablist && target.matches('[role="tab"]') && (key === "left" || key === "right")) {
         const tabs = [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')];
-        const index = tabs.indexOf(target), direction = key === "left" ? -1 : 1;
+        const index = tabs.indexOf(target),
+          direction = key === "left" ? -1 : 1;
         for (let step = 1; step < tabs.length; step++) {
           const candidate = tabs[(index + direction * step + tabs.length) % tabs.length]!;
-          if (visible(candidate) && !candidate.closest(localOnly)) { focus(candidate); return true; }
+          if (visible(candidate) && !candidate.closest(localOnly)) {
+            focus(candidate);
+            return true;
+          }
         }
       }
       target = null;
@@ -191,14 +304,30 @@ export function applyTvNavigation(key: NavigationKey) {
       sendKey(target, "ContextMenu");
       openItemMenu(target);
     } else if (ok) {
-      if (target.closest('[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"], [aria-roledescription="sortable"]')) sendKey(target, "Enter");
+      if (
+        target.closest(
+          '[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"], [aria-roledescription="sortable"]',
+        )
+      )
+        sendKey(target, "Enter");
       else target.click();
     } else {
-      const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];
+      const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[
+        key
+      ];
       const slider = target.closest('[role="slider"]');
-      const crossSlider = slider && (slider.getAttribute("aria-orientation") === "vertical"
-        ? key === "left" || key === "right" : key === "up" || key === "down");
-      if (crossSlider || target.closest('[role="combobox"][aria-expanded="false"], input:not([role="combobox"]), textarea, [contenteditable="true"]')) moveFocus(arrow);
+      const crossSlider =
+        slider &&
+        (slider.getAttribute("aria-orientation") === "vertical"
+          ? key === "left" || key === "right"
+          : key === "up" || key === "down");
+      if (
+        crossSlider ||
+        target.closest(
+          '[role="combobox"][aria-expanded="false"], input:not([role="combobox"]), textarea, [contenteditable="true"]',
+        )
+      )
+        moveFocus(arrow);
       else sendKey(target, arrow);
     }
     return true;
@@ -217,7 +346,8 @@ export function useNavigation(onBack: () => void) {
     // pickers, menus, dialogs and slider adjustment all receive the same Back.
     const normalizeBack = (event: KeyboardEvent) => {
       if (event.key !== "BrowserBack" || !isTvPresentation() || event.defaultPrevented) return;
-      event.preventDefault(); event.stopPropagation();
+      event.preventDefault();
+      event.stopPropagation();
       sendKey(event.target instanceof HTMLElement ? event.target : document.body, "Escape");
     };
     // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
@@ -227,7 +357,15 @@ export function useNavigation(onBack: () => void) {
     // moves on with every arrow too, until OK hands it the keys along it; OK, Back or leaving it hands
     // them back, as TV equalisers do.
     const leave = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const tv = isTvPresentation();
       const slider = target?.closest<HTMLElement>('[role="slider"]');
@@ -235,56 +373,116 @@ export function useNavigation(onBack: () => void) {
       const fader = tv && (upright || slider?.closest("[data-volume]")) ? slider! : null;
       const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
       const radio = target?.closest<HTMLElement>('[role="radio"]');
-      const radios = [...radio?.closest('[role="radiogroup"]')?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []].filter(visible);
-      if (fader && (event.key === "Enter" || event.key === "Escape" && adjusting === fader)) adjust(adjusting === fader ? null : fader);
-      else if (event.key.startsWith("Arrow") && (radio && radios.at(event.key === "ArrowDown" || event.key === "ArrowRight" ? -1 : 0) === radio
-        || fader && !(vertical === upright && adjusting === fader)
-        || tv && vertical && (slider && !fader || target?.matches('input:not([role="combobox"]), input[role="combobox"][aria-expanded="false"]'))
-        || tv && target?.matches('button[role="combobox"][aria-expanded="false"], button[aria-haspopup="menu"][aria-expanded="false"]'))) moveFocus(event.key);
+      const radios = [
+        ...(radio
+          ?.closest('[role="radiogroup"]')
+          ?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []),
+      ].filter(visible);
+      if (fader && (event.key === "Enter" || (event.key === "Escape" && adjusting === fader)))
+        adjust(adjusting === fader ? null : fader);
+      else if (
+        event.key.startsWith("Arrow") &&
+        ((radio &&
+          radios.at(event.key === "ArrowDown" || event.key === "ArrowRight" ? -1 : 0) === radio) ||
+          (fader && !(vertical === upright && adjusting === fader)) ||
+          (tv &&
+            vertical &&
+            ((slider && !fader) ||
+              target?.matches(
+                'input:not([role="combobox"]), input[role="combobox"][aria-expanded="false"]',
+              ))) ||
+          (tv &&
+            target?.matches(
+              'button[role="combobox"][aria-expanded="false"], button[aria-haspopup="menu"][aria-expanded="false"]',
+            )))
+      )
+        moveFocus(event.key);
       else return;
       event.preventDefault();
       event.stopPropagation();
     };
-    const release = (event: FocusEvent) => { if (event.target === adjusting) adjust(null); };
+    const release = (event: FocusEvent) => {
+      if (event.target === adjusting) adjust(null);
+    };
     // On the TV, OK on an item with a menu acts on release and, held, opens its menu, as on Apple TV and Android TV.
     // Repeats while it is held are dropped, so they never reach the menu that opened under them.
     let press: { target: HTMLElement; hold: ReturnType<typeof startHold> } | null = null;
     const okDown = (event: KeyboardEvent) => {
       if (event.key !== "Enter") return;
-      if (press && event.repeat) { event.preventDefault(); event.stopPropagation(); return; }
-      press?.hold.release(); press = null; // Its keyup went missing, as when the window lost focus.
-      const target = event.target instanceof HTMLElement && event.target.matches("[data-item-menu]:not(:disabled)") ? event.target : null;
-      if (!target || !isTvPresentation() || event.repeat || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (press && event.repeat) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      press?.hold.release();
+      press = null; // Its keyup went missing, as when the window lost focus.
+      const target =
+        event.target instanceof HTMLElement &&
+        event.target.matches("[data-item-menu]:not(:disabled)")
+          ? event.target
+          : null;
+      if (
+        !target ||
+        !isTvPresentation() ||
+        event.repeat ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
       event.preventDefault();
       press = { target, hold: startHold(() => openItemMenu(target)) };
     };
     const okUp = (event: KeyboardEvent) => {
       if (event.key !== "Enter" || !press) return;
-      event.preventDefault(); event.stopPropagation();
+      event.preventDefault();
+      event.stopPropagation();
       const { target, hold } = press;
       press = null;
       if (hold.release()) target.click();
     };
     const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (event.key === "Escape" || isTvPresentation() && event.key === "BrowserBack") {
+      if (event.key === "Escape" || (isTvPresentation() && event.key === "BrowserBack")) {
         if (lastVisible(portals)) return;
         event.preventDefault();
         // Back on a toast's action leaves it, as sonner returns focus to where it came from.
-        if (target?.closest(toaster)) { target.blur(); return; }
-        const localBack = [...navigationScope().querySelectorAll<HTMLButtonElement>("[data-back]")].find(visible);
+        if (target?.closest(toaster)) {
+          target.blur();
+          return;
+        }
+        const localBack = [
+          ...navigationScope().querySelectorAll<HTMLButtonElement>("[data-back]"),
+        ].find(visible);
         // The component restores focus after its own navigation has committed.
         if (localBack) localBack.click();
         else back();
         return;
       }
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-      if (target?.isContentEditable || target?.closest('input, textarea, select, video, audio, [role="combobox"], [role="listbox"], [role="menu"], [role="slider"]')) return;
+      if (
+        target?.isContentEditable ||
+        target?.closest(
+          'input, textarea, select, video, audio, [role="combobox"], [role="listbox"], [role="menu"], [role="slider"]',
+        )
+      )
+        return;
       if (!isTvPresentation() && window.getSelection()?.isCollapsed === false) return;
       // Off the TV, the player's picture keeps its arrows for its shortcuts, even where one can't act (live media can't seek).
       if (!isTvPresentation() && target?.matches("[data-player-surface]")) return;
-      if (target?.closest('[role="tablist"]') && ["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      if (target?.closest('[role="tablist"]') && ["ArrowLeft", "ArrowRight"].includes(event.key))
+        return;
       event.preventDefault();
       moveFocus(event.key);
     };

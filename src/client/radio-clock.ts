@@ -7,16 +7,22 @@ export function useRadioClock(guides: RadioGuide[] = [], programme?: RadioProgra
   const progressNow = useDurationClock(!!programme || guides.length > 0);
   const [boundaryNow, tick] = useState(Date.now);
   const now = Date.now();
-  let next = Infinity, previous = -Infinity;
+  let next = Infinity,
+    previous = -Infinity;
   const deadline = (at?: number) => {
     if (at === undefined) return;
     if (at > now) next = Math.min(next, at);
     else previous = Math.max(previous, at);
   };
-  deadline(programme?.expiresAt); deadline(programme?.start); deadline(programme?.end);
+  deadline(programme?.expiresAt);
+  deadline(programme?.start);
+  deadline(programme?.end);
   for (const guide of guides) {
     deadline(guide.live?.expiresAt);
-    for (const show of guide.programmes) { deadline(show.start); deadline(show.end); }
+    for (const show of guide.programmes) {
+      deadline(show.start);
+      deadline(show.end);
+    }
   }
   useEffect(() => {
     tick(Date.now());

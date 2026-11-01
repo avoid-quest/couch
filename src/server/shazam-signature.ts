@@ -35,7 +35,8 @@ type Peak = { pass: number; magnitude: number; bin: number };
 const f32 = Math.fround;
 const frequencyNeighbors = [-10, -7, -4, -3, 1, 2, 5, 8];
 const timeNeighbors = [-53, -45, 165, 172, 179, 186, 193, 200, 214, 221, 228, 235, 242, 249];
-const magnitude = (power: number) => f32(f32(Math.max(f32(Math.log(power)), 1 / 64) * f32(1477.3)) + 6144);
+const magnitude = (power: number) =>
+  f32(f32(Math.max(f32(Math.log(power)), 1 / 64) * f32(1477.3)) + 6144);
 
 function encode(peaks: Peak[][], samples: number): string {
   const parts: Buffer[] = [];
@@ -43,7 +44,8 @@ function encode(peaks: Peak[][], samples: number): string {
     const entries = peaks[band]!;
     if (!entries.length) continue;
     const data = Buffer.alloc(entries.length * 10);
-    let offset = 0, previousPass = 0;
+    let offset = 0,
+      previousPass = 0;
     for (const peak of entries) {
       if (peak.pass - previousPass >= 255) {
         data[offset++] = 255;
@@ -60,7 +62,7 @@ function encode(peaks: Peak[][], samples: number): string {
     const header = Buffer.alloc(8);
     header.writeUInt32LE(0x60030040 + band);
     header.writeUInt32LE(offset, 4);
-    parts.push(header, data.subarray(0, offset), Buffer.alloc((4 - offset % 4) % 4));
+    parts.push(header, data.subarray(0, offset), Buffer.alloc((4 - (offset % 4)) % 4));
   }
   const header = Buffer.alloc(56);
   header.writeUInt32LE(0xcafe2580);
@@ -77,38 +79,58 @@ function encode(peaks: Peak[][], samples: number): string {
 }
 
 /** PCM16LE, mono, 16 kHz only. FFmpeg owns decoding and resampling before this boundary. */
-export async function generateShazamSignature(pcm: Buffer, signal?: AbortSignal): Promise<{ uri: string; samplems: number; peakCount: number }> {
+export async function generateShazamSignature(
+  pcm: Buffer,
+  signal?: AbortSignal,
+): Promise<{ uri: string; samplems: number; peakCount: number }> {
   signal?.throwIfAborted();
-  if (!pcm.length || pcm.length % 2 || pcm.length > 12 * 16000 * 2) throw new RangeError("Expected at most 12 seconds of mono 16 kHz PCM16LE audio.");
+  if (!pcm.length || pcm.length % 2 || pcm.length > 12 * 16000 * 2)
+    throw new RangeError("Expected at most 12 seconds of mono 16 kHz PCM16LE audio.");
   const samples = pcm.length / 2;
-  const ring = new Int16Array(2048), windowed = new Float32Array(2048);
-  const fft = new FFT(2048), spectrum = new Float64Array(4096);
+  const ring = new Int16Array(2048),
+    windowed = new Float32Array(2048);
+  const fft = new FFT(2048),
+    spectrum = new Float64Array(4096);
   const outputs = Array.from({ length: 256 }, () => new Float32Array(1025));
   const spreadOutputs = Array.from({ length: 256 }, () => new Float32Array(1025));
   const peaks: Peak[][] = [[], [], [], []];
-  let ringIndex = 0, fftIndex = 0, spreadIndex = 0, passes = 0;
+  let ringIndex = 0,
+    fftIndex = 0,
+    spreadIndex = 0,
+    passes = 0;
 
   for (let sample = 0; sample + 128 <= samples; sample += 128) {
     // Core also clocks playback and serves streams; leave it available while fingerprinting.
-    if (sample && sample % (128 * 128) === 0) { await setImmediate(); signal?.throwIfAborted(); }
-    for (let index = 0; index < 128; index++) ring[ringIndex + index] = pcm.readInt16LE((sample + index) * 2);
+    if (sample && sample % (128 * 128) === 0) {
+      await setImmediate();
+      signal?.throwIfAborted();
+    }
+    for (let index = 0; index < 128; index++)
+      ring[ringIndex + index] = pcm.readInt16LE((sample + index) * 2);
     ringIndex = (ringIndex + 128) & 2047;
-    for (let index = 0; index < 2048; index++) windowed[index] = ring[(index + ringIndex) & 2047]! * hanningWindow[index]!;
+    for (let index = 0; index < 2048; index++)
+      windowed[index] = ring[(index + ringIndex) & 2047]! * hanningWindow[index]!;
     fft.realTransform(spectrum, windowed);
     const power = outputs[fftIndex]!;
     for (let index = 0; index <= 1024; index++) {
-      const real = f32(spectrum[index * 2]!), imaginary = f32(spectrum[index * 2 + 1]!);
-      power[index] = Math.max(f32(f32(f32(real * real) + f32(imaginary * imaginary)) / 131072), 1e-10);
+      const real = f32(spectrum[index * 2]!),
+        imaginary = f32(spectrum[index * 2 + 1]!);
+      power[index] = Math.max(
+        f32(f32(f32(real * real) + f32(imaginary * imaginary)) / 131072),
+        1e-10,
+      );
     }
     fftIndex = (fftIndex + 1) & 255;
 
     // Spread each peak across frequency and time before finding local maxima.
     const spread = spreadOutputs[spreadIndex]!;
     spread.set(power);
-    for (let index = 0; index <= 1022; index++) spread[index] = Math.max(spread[index]!, spread[index + 1]!, spread[index + 2]!);
+    for (let index = 0; index <= 1022; index++)
+      spread[index] = Math.max(spread[index]!, spread[index + 1]!, spread[index + 2]!);
     for (const previous of [1, 3, 6]) {
       const earlier = spreadOutputs[(spreadIndex - previous) & 255]!;
-      for (let index = 0; index <= 1024; index++) earlier[index] = Math.max(earlier[index]!, spread[index]!);
+      for (let index = 0; index <= 1024; index++)
+        earlier[index] = Math.max(earlier[index]!, spread[index]!);
     }
     spreadIndex = (spreadIndex + 1) & 255;
     if (++passes < 46) continue;
@@ -119,22 +141,47 @@ export async function generateShazamSignature(pcm: Buffer, signal?: AbortSignal)
       const value = earlierPower[bin]!;
       if (value < 1 / 64 || value < earlierSpread[bin - 1]!) continue;
       let neighbor = 0;
-      for (const offset of frequencyNeighbors) neighbor = Math.max(neighbor, earlierSpread[bin + offset]!);
+      for (const offset of frequencyNeighbors)
+        neighbor = Math.max(neighbor, earlierSpread[bin + offset]!);
       if (value <= neighbor) continue;
-      for (const offset of timeNeighbors) neighbor = Math.max(neighbor, spreadOutputs[(spreadIndex + offset) & 255]![bin - 1]!);
+      for (const offset of timeNeighbors)
+        neighbor = Math.max(neighbor, spreadOutputs[(spreadIndex + offset) & 255]![bin - 1]!);
       if (value <= neighbor) continue;
 
-      const peak = magnitude(value), before = magnitude(earlierPower[bin - 1]!), after = magnitude(earlierPower[bin + 1]!);
+      const peak = magnitude(value),
+        before = magnitude(earlierPower[bin - 1]!),
+        after = magnitude(earlierPower[bin + 1]!);
       const variation = f32(f32(f32(peak * 2) - before) - after);
       const correction = f32(f32(f32(after - before) * 32) / variation);
       // Rust float-to-integer casts truncate and saturate; NaN converts to zero.
-      const correctionInt = Math.max(-2147483648, Math.min(2147483647, Math.trunc(correction) || 0));
+      const correctionInt = Math.max(
+        -2147483648,
+        Math.min(2147483647, Math.trunc(correction) || 0),
+      );
       const correctedBin = (bin * 64 + correctionInt) & 65535;
       const hz = Math.trunc(correctedBin * (16000 / 2 / 1024 / 64));
-      const band = hz >= 250 && hz < 520 ? 0 : hz >= 520 && hz < 1450 ? 1 : hz >= 1450 && hz < 3500 ? 2 : hz >= 3500 && hz <= 5500 ? 3 : -1;
-      if (band !== -1) peaks[band]!.push({ pass: passes - 46, magnitude: Math.min(65535, Math.max(0, Math.trunc(peak))), bin: correctedBin });
+      const band =
+        hz >= 250 && hz < 520
+          ? 0
+          : hz >= 520 && hz < 1450
+            ? 1
+            : hz >= 1450 && hz < 3500
+              ? 2
+              : hz >= 3500 && hz <= 5500
+                ? 3
+                : -1;
+      if (band !== -1)
+        peaks[band]!.push({
+          pass: passes - 46,
+          magnitude: Math.min(65535, Math.max(0, Math.trunc(peak))),
+          bin: correctedBin,
+        });
     }
   }
   signal?.throwIfAborted();
-  return { uri: encode(peaks, samples), samplems: Math.trunc(f32(f32(samples / 16000) * 1000)), peakCount: peaks.reduce((sum, band) => sum + band.length, 0) };
+  return {
+    uri: encode(peaks, samples),
+    samplems: Math.trunc(f32(f32(samples / 16000) * 1000)),
+    peakCount: peaks.reduce((sum, band) => sum + band.length, 0),
+  };
 }

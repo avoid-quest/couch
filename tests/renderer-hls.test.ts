@@ -4,7 +4,11 @@ import { spawnSync } from "node:child_process";
 // Load the real renderer in a fresh browser-shaped environment for each case.
 // Mock only the browser and decoder boundaries, not the renderer's engine choice.
 const check = (source: string, realPictureClock = false) => {
-  const result = spawnSync(process.execPath, ["-e", `
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
     mock.module("./src/client/session/sendspin.ts", () => ({ soundClock: () => clockSample }));
@@ -128,12 +132,16 @@ const check = (source: string, realPictureClock = false) => {
     const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
     ${source}
     disconnect();
-  `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
+  `,
+    ],
+    { cwd: new URL("../", import.meta.url), encoding: "utf8" },
+  );
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 };
 
-test("16 subtitle tracks and HLS initialization do not flood Core with identical reports", () => check(`
+test("16 subtitle tracks and HLS initialization do not flood Core with identical reports", () =>
+  check(`
   const subtitles = Array.from({ length: 16 }, (_, index) => ({ source: "https://couch.example/" + index + ".vtt", title: "Captions " + index, language: "en" }));
   let changes = 0;
   video.textTracks.addEventListener("change", () => { changes++; if (video.duration === 60) video.currentTime += .001; });
@@ -172,7 +180,8 @@ test("16 subtitle tracks and HLS initialization do not flood Core with identical
   }
 `));
 
-test("report deduplication preserves position ticks, controls, failures and new subscribers", () => check(`
+test("report deduplication preserves position ticks, controls, failures and new subscribers", () =>
+  check(`
   let now = 0;
   Object.defineProperty(performance, "now", { value: () => now });
   load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
@@ -202,7 +211,8 @@ test("report deduplication preserves position ticks, controls, failures and new 
   assert.deepEqual(reconnected, [reports.at(-1)], "a new connection receives even an unchanged state");
 `));
 
-test("external subtitles remain the only visible captions and Off disables them all", () => check(`
+test("external subtitles remain the only visible captions and Off disables them all", () =>
+  check(`
   for (const subtitles of ["off", "on"]) {
     load({ subtitles: [{ source: "https://couch.example/english.vtt", title: "English", language: "en" }], preferences: { subtitles, subtitleLanguage: "en" } });
     await flush();
@@ -221,7 +231,8 @@ test("external subtitles remain the only visible captions and Off disables them 
   assert.ok(video.textTracks.some(track => track.kind === "captions"), "streams without external subtitles keep their in-band captions");
 `));
 
-test("blocked audio is replayed when the shell subscribes again after recovery", () => check(`
+test("blocked audio is replayed when the shell subscribes again after recovery", () =>
+  check(`
   const { onBlocked, waitForTap } = await import("./src/client/session/renderer.ts");
   waitForTap(() => {});
   const first = [], recovered = [];
@@ -236,7 +247,8 @@ test("blocked audio is replayed when the shell subscribes again after recovery",
   stop();
 `));
 
-test("a direct stream bound before its tracks arrive plays once they do, unless it was paused", () => check(`
+test("a direct stream bound before its tracks arrive plays once they do, unless it was paused", () =>
+  check(`
   // As in Chromium, binding a stream loads it again and pauses the element.
   let bound;
   const binds = [];
@@ -253,7 +265,8 @@ test("a direct stream bound before its tracks arrive plays once they do, unless 
   assert.equal(video.paused, true);
 `));
 
-test("stream errors report through Now Playing and cannot damage a replacement stream or HLS load", () => check(`
+test("stream errors report through Now Playing and cannot damage a replacement stream or HLS load", () =>
+  check(`
   const first = new MediaStream([{ kind: "audio" }]);
   attachStream({ type: "load", playbackId: "same", source: "" }, first);
   streamChanged("same", first, "connection failed");
@@ -271,7 +284,8 @@ test("stream errors report through Now Playing and cannot damage a replacement s
   assert.equal(video.muted, true);
 `));
 
-test("Couch-hosted HLS uses hls.js even when the browser also advertises native HLS", () => check(`
+test("Couch-hosted HLS uses hls.js even when the browser also advertises native HLS", () =>
+  check(`
   for (const options of [{}, { source: "https://couch.example/channel", hls: true }]) {
     load(options);
     assert.equal(video.src, "", "do not start the native pipeline before checking MSE");
@@ -283,7 +297,8 @@ test("Couch-hosted HLS uses hls.js even when the browser also advertises native 
   assert.equal(decoders.length, 2);
 `));
 
-test("cross-origin HLS keeps native playback and its existing decoder fallback", () => check(`
+test("cross-origin HLS keeps native playback and its existing decoder fallback", () =>
+  check(`
   load({ source: "https://station.example/stream.m3u8" });
   await flush();
   assert.equal(decoders.length, 0);
@@ -296,7 +311,8 @@ test("cross-origin HLS keeps native playback and its existing decoder fallback",
   assert.equal(decoders[0].media, video);
 `));
 
-test("native HLS failure reports an error instead of retrying the same native source", () => check(`
+test("native HLS failure reports an error instead of retrying the same native source", () =>
+  check(`
   mse = false;
   load();
   await flush();
@@ -308,7 +324,8 @@ test("native HLS failure reports an error instead of retrying the same native so
   assert.equal(reports.at(-1).error, video.error.message);
 `));
 
-test("an asynchronous HLS load cannot replace or fail a newer ordinary load", () => check(`
+test("an asynchronous HLS load cannot replace or fail a newer ordinary load", () =>
+  check(`
   load();
   load({ playbackId: "new", source: "https://couch.example/movie.mp4" });
   await flush();
@@ -318,7 +335,8 @@ test("an asynchronous HLS load cannot replace or fail a newer ordinary load", ()
   assert.equal(reports.at(-1).error, null);
 `));
 
-test("replacing compressed split audio disposes its graph and restores native media elements", () => check(`
+test("replacing compressed split audio disposes its graph and restores native media elements", () =>
+  check(`
   load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", compressor: { enabled: true, threshold: -24, ratio: 4, attack: 10, release: 250, knee: 9, gain: 0 } });
   await flush();
   assert.equal(contexts[0].source.element, audio, "compression processes the selected audio rendition");
@@ -339,8 +357,8 @@ test("replacing compressed split audio disposes its graph and restores native me
   assert.equal(reports.at(-1).playbackId, "replacement");
 `));
 
-
-test("muted scheduled pictures do not load a redundant audio rendition", () => check(`
+test("muted scheduled pictures do not load a redundant audio rendition", () =>
+  check(`
   load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", follow: { group: "g", pts: false }, output: { picture: true, sound: false }, preferences: { speed: 1.25 } });
   await flush();
   assert.equal(video.src, "https://couch.example/movie.mp4");
@@ -352,7 +370,9 @@ test("muted scheduled pictures do not load a redundant audio rendition", () => c
   assert.equal(reports.at(-1).speed, 1.25, "corrective rate must never become programme speed");
 `));
 
-test("HLS reports measured source PTS mapping and destroyed callbacks cannot alter replacement", () => check(`
+test("HLS reports measured source PTS mapping and destroyed callbacks cannot alter replacement", () =>
+  check(
+    `
   video.readyState = HTMLMediaElement.HAVE_METADATA;
   clockSample = { position: 112, speed: 1 };
   load({ paused: true, follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "one" } } });
@@ -374,14 +394,19 @@ test("HLS reports measured source PTS mapping and destroyed callbacks cannot alt
   first.emit(Hls.Events.LEVEL_LOADED, {});
   assert.equal(reports.at(-1).error, null);
   assert.equal(video.src, "https://couch.example/movie.mp4");
-`, true));
+`,
+    true,
+  ));
 
-for (const mpegts of [false, true]) test(`${mpegts ? "MPEG-TS" : "native HLS"} Core-paused picture follows running group transport without mapped seeks`, () => check(`
+for (const mpegts of [false, true])
+  test(`${mpegts ? "MPEG-TS" : "native HLS"} Core-paused picture follows running group transport without mapped seeks`, () =>
+    check(
+      `
   mse = false;
   assert.ok(window.MediaSource, "native fallback must work even with an unsupported MSE implementation");
   clockSample = { position: 999, speed: 1.5 };
   // Core's screenLoad always sends paused:true; the programme clock owns transport.
-  load({ ${mpegts ? 'source: "https://couch.example/channel.ts", mpegts: true,' : ''}
+  load({ ${mpegts ? 'source: "https://couch.example/channel.ts", mpegts: true,' : ""}
     paused: true, output: { picture: true, sound: false }, preferences: { speed: 1.25 },
     follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: ${mpegts ? '"unavailable"' : '"hls"'}, generation: "one" } } });
   await flush();
@@ -414,4 +439,6 @@ for (const mpegts of [false, true]) test(`${mpegts ? "MPEG-TS" : "native HLS"} C
   assert.equal(video.playbackRate, .75);
   assert.equal(reports.at(-1).speed, .75);
   assert.equal(video.currentTime, 17, "resume does not invent a PTS offset or seek");
-`, true));
+`,
+      true,
+    ));

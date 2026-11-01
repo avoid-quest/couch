@@ -11,31 +11,54 @@ async function until(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
   while (!predicate()) {
     assert.ok(Date.now() < deadline, "FFmpeg did not start within five seconds");
-    await new Promise(resolve => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
   }
 }
 
-test("retired FFmpeg stderr, error and close cannot change the replacement programme", async t => {
+test("retired FFmpeg stderr, error and close cannot change the replacement programme", async (t) => {
   const cp = process.getBuiltinModule("node:child_process");
-  const children: (ChildProcess & { stdout: PassThrough; stderr: PassThrough; stdio: PassThrough[] })[] = [];
+  const children: (ChildProcess & {
+    stdout: PassThrough;
+    stderr: PassThrough;
+    stdio: PassThrough[];
+  })[] = [];
   const spawn = cp.spawn;
   cp.spawn = (() => {
-    const child = Object.assign(new ChildProcess(), { stdout: new PassThrough(), stderr: new PassThrough(), stdio: [new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()], kill: () => true });
-    children.push(child); return child;
+    const child = Object.assign(new ChildProcess(), {
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      stdio: [new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()],
+      kill: () => true,
+    });
+    children.push(child);
+    return child;
   }) as typeof spawn;
   syncBuiltinESMExports();
   const source = createServer((_request, response) => response.end("synthetic source"));
-  await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
-  const states: PlayerState[] = [], errors: string[] = [];
+  await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+  const states: PlayerState[] = [],
+    errors: string[] = [];
   let requested = 0;
-  const audio = createScheduledAudio({ name: "Run ownership", admit: () => false, changed() {}, ffmpeg: async () => { queueMicrotask(() => requested++); return "synthetic-ffmpeg"; }, logError: (_id, _source, error) => errors.push(error) });
-  const group = audio.group("programme", state => states.push(state));
+  const audio = createScheduledAudio({
+    name: "Run ownership",
+    admit: () => false,
+    changed() {},
+    ffmpeg: async () => {
+      queueMicrotask(() => requested++);
+      return "synthetic-ffmpeg";
+    },
+    logError: (_id, _source, error) => errors.push(error),
+  });
+  const group = audio.group("programme", (state) => states.push(state));
   t.after(async () => {
-    group.close(); const closing = audio.close();
+    group.close();
+    const closing = audio.close();
     for (const child of children) child.emit("close", 0);
     await closing;
-    cp.spawn = spawn; syncBuiltinESMExports();
-    source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve()));
+    cp.spawn = spawn;
+    syncBuiltinESMExports();
+    source.closeAllConnections();
+    await new Promise<void>((resolve) => source.close(() => resolve()));
   });
   const url = `http://127.0.0.1:${(source.address() as { port: number }).port}/input`;
   group.members([{ deviceId: "unconnected", level: 100 }]);
@@ -48,7 +71,8 @@ test("retired FFmpeg stderr, error and close cannot change the replacement progr
   group.send({ type: "load", playbackId: "B", source: url, radio: true });
   await until(() => requested >= 2 && children.length >= 2);
   children[0]!.stderr.write("Duration: 00:09:59.00\n");
-  children[0]!.emit("error", new Error("retired error")); children[0]!.emit("close", 1);
+  children[0]!.emit("error", new Error("retired error"));
+  children[0]!.emit("close", 1);
   group.members([{ deviceId: "unconnected", level: 80 }]);
   assert.equal(states.at(-1)!.playbackId, "B");
   assert.equal(states.at(-1)!.duration, null, "A's late Duration must not become B's duration");

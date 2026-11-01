@@ -15,23 +15,34 @@ export type Light = { key: string; a: Rgb; b: Rgb; room: Rgb; deep: Rgb; tone: R
 /** What a read learns of a picture: its light, if it has colour, and whether its edges are see-through (a logo). */
 export type Art = { light: Light | null; clear: boolean };
 
-const linear = (channel: number) => { const value = channel / 255; return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4; };
+const linear = (channel: number) => {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+};
 // Rounded down, so a colour never ends brighter than asked.
-const encoded = (value: number) => Math.floor(255 * (value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055) + 1e-9);
+const encoded = (value: number) =>
+  Math.floor(
+    255 * (value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055) + 1e-9,
+  );
 /** WCAG relative luminance. */
-export const luminance = ([r, g, b]: Rgb) => 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+export const luminance = ([r, g, b]: Rgb) =>
+  0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
 /** WCAG contrast ratio between two colours. */
-export const contrast = (one: Rgb, two: Rgb) => { const [high, low] = [luminance(one), luminance(two)].sort((x, y) => y - x); return (high! + 0.05) / (low! + 0.05); };
+export const contrast = (one: Rgb, two: Rgb) => {
+  const [high, low] = [luminance(one), luminance(two)].sort((x, y) => y - x);
+  return (high! + 0.05) / (low! + 0.05);
+};
 
 /**
  * The colour at a luminance: its hue and saturation kept, its light scaled in linear light (so it reads as the same
  * colour, dimmer). A colour that can't reach it (a deep blue) stays as bright as it can.
  */
 function atLuminance(colour: Rgb, target: number): Rgb {
-  const channels = colour.map(linear), current = luminance(colour);
+  const channels = colour.map(linear),
+    current = luminance(colour);
   if (current <= 0) return [0, 0, 0];
   const scale = Math.min(target / current, 1 / Math.max(...channels));
-  return channels.map(value => encoded(Math.min(1, value * scale))) as unknown as Rgb;
+  return channels.map((value) => encoded(Math.min(1, value * scale))) as unknown as Rgb;
 }
 
 /**
@@ -40,13 +51,16 @@ function atLuminance(colour: Rgb, target: number): Rgb {
  * text, so it stays dark enough for muted ink (#a3a3a3) to keep 7:1 too (0.416 / 7 − 0.05 = 0.0094), with room for
  * the backlight's last trace where text comes near the artwork.
  */
-export const peak = 0.07, haze = 0.004;
+export const peak = 0.07,
+  haze = 0.004;
 /**
  * The room may lie under any text, so muted ink (#bdbdbd, luminance .509) keeps 7:1 over its brightest colour
  * (.559 / 7 − .05 = .03), with room to spare; its second colour is deeper still. The bar's tone is mixed into glass
  * over a dimmed backdrop, and the bar's ink is checked over white behind it (docs/design.md, Glass).
  */
-export const roomPeak = 0.022, deepPeak = 0.01, tonePeak = 0.03;
+export const roomPeak = 0.022,
+  deepPeak = 0.01,
+  tonePeak = 0.03;
 
 /**
  * The two colours of a picture's pixels (RGBA, as getImageData gives them): the strongest hue, by how vivid its pixels
@@ -55,38 +69,76 @@ export const roomPeak = 0.022, deepPeak = 0.01, tonePeak = 0.03;
  */
 function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
   const bins = Array.from({ length: 12 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
-  let grey = { weight: 0, r: 0, g: 0, b: 0 }, coloured = 0;
+  let grey = { weight: 0, r: 0, g: 0, b: 0 },
+    coloured = 0;
   for (let index = 0; index + 3 < pixels.length; index += 4) {
-    const r = pixels[index]!, g = pixels[index + 1]!, b = pixels[index + 2]!, alpha = pixels[index + 3]!;
-    const max = Math.max(r, g, b), min = Math.min(r, g, b), value = max / 255, chroma = (max - min) / 255;
+    const r = pixels[index]!,
+      g = pixels[index + 1]!,
+      b = pixels[index + 2]!,
+      alpha = pixels[index + 3]!;
+    const max = Math.max(r, g, b),
+      min = Math.min(r, g, b),
+      value = max / 255,
+      chroma = (max - min) / 255;
     if (alpha < 128 || value < 0.08 || min > 240) continue;
-    if (chroma < 0.08) { grey = { weight: grey.weight + 1, r: grey.r + r, g: grey.g + g, b: grey.b + b }; continue; }
-    const hue = max === r ? ((g - b) / (max - min) + 6) % 6 : max === g ? (b - r) / (max - min) + 2 : (r - g) / (max - min) + 4;
-    const bin = bins[Math.floor(hue * 2) % 12]!, weight = chroma * value;
+    if (chroma < 0.08) {
+      grey = { weight: grey.weight + 1, r: grey.r + r, g: grey.g + g, b: grey.b + b };
+      continue;
+    }
+    const hue =
+      max === r
+        ? ((g - b) / (max - min) + 6) % 6
+        : max === g
+          ? (b - r) / (max - min) + 2
+          : (r - g) / (max - min) + 4;
+    const bin = bins[Math.floor(hue * 2) % 12]!,
+      weight = chroma * value;
     coloured++;
-    bin.weight += weight; bin.r += r * weight; bin.g += g * weight; bin.b += b * weight;
+    bin.weight += weight;
+    bin.r += r * weight;
+    bin.g += g * weight;
+    bin.b += b * weight;
   }
-  const mean = (bin: { weight: number; r: number; g: number; b: number }): Rgb => [bin.r / bin.weight, bin.g / bin.weight, bin.b / bin.weight];
-  const ranked = bins.map((bin, index) => ({ bin, index })).filter(({ bin }) => bin.weight > 0).sort((x, y) => y.bin.weight - x.bin.weight);
+  const mean = (bin: { weight: number; r: number; g: number; b: number }): Rgb => [
+    bin.r / bin.weight,
+    bin.g / bin.weight,
+    bin.b / bin.weight,
+  ];
+  const ranked = bins
+    .map((bin, index) => ({ bin, index }))
+    .filter(({ bin }) => bin.weight > 0)
+    .sort((x, y) => y.bin.weight - x.bin.weight);
   const first = ranked[0];
   // A picture with hardly any colour (a black-and-white photo, a white cover) lights in its own grey.
-  if (!first || coloured < (coloured + grey.weight) * 0.1) return grey.weight ? [mean(grey), mean(grey)] : null;
-  const apart = (index: number) => Math.min(Math.abs(index - first.index), 12 - Math.abs(index - first.index)) >= 2;
-  const second = ranked.find(({ bin, index }) => apart(index) && bin.weight >= first.bin.weight * 0.15) ?? first;
+  if (!first || coloured < (coloured + grey.weight) * 0.1)
+    return grey.weight ? [mean(grey), mean(grey)] : null;
+  const apart = (index: number) =>
+    Math.min(Math.abs(index - first.index), 12 - Math.abs(index - first.index)) >= 2;
+  const second =
+    ranked.find(({ bin, index }) => apart(index) && bin.weight >= first.bin.weight * 0.15) ?? first;
   return [mean(first.bin), mean(second.bin)];
 }
 
 /** Light from two picked colours: the first as the backlight, the second as the haze. */
-export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({ key, a: atLuminance(a, peak), b: atLuminance(b, haze), room: atLuminance(a, roomPeak), deep: atLuminance(b, deepPeak), tone: atLuminance(a, tonePeak) });
+export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({
+  key,
+  a: atLuminance(a, peak),
+  b: atLuminance(b, haze),
+  room: atLuminance(a, roomPeak),
+  deep: atLuminance(b, deepPeak),
+  tone: atLuminance(a, tonePeak),
+});
 
 /** A picture whose edge is mostly see-through (a logo on nothing) stands without a shadow, which would outline its box. */
 function clearEdges(pixels: ArrayLike<number>, side = 16) {
-  let edge = 0, clear = 0;
-  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
-    if (x && y && x < side - 1 && y < side - 1) continue;
-    edge++;
-    if (pixels[(y * side + x) * 4 + 3]! < 128) clear++;
-  }
+  let edge = 0,
+    clear = 0;
+  for (let y = 0; y < side; y++)
+    for (let x = 0; x < side; x++) {
+      if (x && y && x < side - 1 && y < side - 1) continue;
+      edge++;
+      if (pixels[(y * side + x) * 4 + 3]! < 128) clear++;
+    }
   return clear > edge / 2;
 }
 
@@ -98,7 +150,10 @@ const pending = new Map<string, Promise<Art | null>>();
 
 /** The picture's bytes: through Core, which reads hosts that don't allow a page to (CORS); a blob: is the page's own. */
 const picture = async (src: string, credentials: ApiCredentials | null | undefined) =>
-  (src.startsWith("blob:") || !credentials ? await fetch(src, { referrerPolicy: "no-referrer" }) : await apiFetch(credentials, `/api/artwork?${new URLSearchParams({ url: src })}`)).blob();
+  (src.startsWith("blob:") || !credentials
+    ? await fetch(src, { referrerPolicy: "no-referrer" })
+    : await apiFetch(credentials, `/api/artwork?${new URLSearchParams({ url: src })}`)
+  ).blob();
 
 /**
  * The picture's light and edges: one read per address, apart from the shown image, so the picture on screen is never
@@ -117,10 +172,21 @@ export function readArt(src: string, credentials?: ApiCredentials | null): Promi
         const context = canvas.getContext("2d", { willReadFrequently: true });
         if (!context) return null;
         context.drawImage(bitmap, 0, 0, size, size);
-        const pixels = context.getImageData(0, 0, size, size).data, picked = pickLight(pixels);
+        const pixels = context.getImageData(0, 0, size, size).data,
+          picked = pickLight(pixels);
         return { light: picked && lightFrom(src, picked), clear: clearEdges(pixels, size) };
-      } finally { bitmap.close(); }
-    })().then(art => { if (art) cache.set(src, art); return art; }, () => null).finally(() => pending.delete(src));
+      } finally {
+        bitmap.close();
+      }
+    })()
+      .then(
+        (art) => {
+          if (art) cache.set(src, art);
+          return art;
+        },
+        () => null,
+      )
+      .finally(() => pending.delete(src));
     pending.set(src, read);
   }
   return read;

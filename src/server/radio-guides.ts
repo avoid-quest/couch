@@ -2,7 +2,15 @@ import type { RadioPlaylist, RadioScheduleEntry, RadioStation } from "../shared/
 import { GuideError, guideFetch, guideLimits, parseGuidePrograms } from "./iptv-feeds";
 
 /** One bounded, shared guide fetch per source, including failed reads. */
-export function createRadioGuides({ fetch: request, signal, now = Date.now }: { fetch: typeof fetch; signal: AbortSignal; now?: () => number }) {
+export function createRadioGuides({
+  fetch: request,
+  signal,
+  now = Date.now,
+}: {
+  fetch: typeof fetch;
+  signal: AbortSignal;
+  now?: () => number;
+}) {
   type Result = { programmes: Map<string, RadioScheduleEntry[]>; retryAt: number };
   const cache = new Map<string, Result>();
   const pending = new Map<string, Promise<Result>>();
@@ -16,10 +24,25 @@ export function createRadioGuides({ fetch: request, signal, now = Date.now }: { 
       const existing = pending.get(key);
       if (existing) return existing;
       const work = (async () => {
-        let result: Result = { programmes: cached?.programmes ?? new Map(), retryAt: now() + 60_000 };
+        let result: Result = {
+          programmes: cached?.programmes ?? new Map(),
+          retryAt: now() + 60_000,
+        };
         try {
-          const response = await guideFetch(url, guideLimits.xmlBytes, request, AbortSignal.any([signal, AbortSignal.timeout(10_000)]), source.guideUrl ? undefined : new URL(url).origin);
-          const rows = parseGuidePrograms(Buffer.from(response.bytes).toString("utf8"), stations.flatMap(station => station.tvgId ? [{ id: station.id, tvgId: station.tvgId }] : []), { partial: true, base: response.url });
+          const response = await guideFetch(
+            url,
+            guideLimits.xmlBytes,
+            request,
+            AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+            source.guideUrl ? undefined : new URL(url).origin,
+          );
+          const rows = parseGuidePrograms(
+            Buffer.from(response.bytes).toString("utf8"),
+            stations.flatMap((station) =>
+              station.tvgId ? [{ id: station.id, tvgId: station.tvgId }] : [],
+            ),
+            { partial: true, base: response.url },
+          );
           const programmes = new Map<string, RadioScheduleEntry[]>();
           for (const row of rows.sort((a, b) => a.start - b.start)) {
             if (row.end <= now() || row.start > now() + 24 * 60 * 60_000) continue;

@@ -3,7 +3,12 @@ import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
 import type { MessageBoxOptions, Session, WebContents } from "electron";
 
-const bundle = await Bun.build({ entrypoints: ["app/capture.ts"], target: "node", format: "cjs", external: ["electron"] });
+const bundle = await Bun.build({
+  entrypoints: ["app/capture.ts"],
+  target: "node",
+  format: "cjs",
+  external: ["electron"],
+});
 if (!bundle.success) throw new Error("Capture module did not build.");
 const code = await bundle.outputs[0]!.text();
 type Check = NonNullable<Parameters<Session["setPermissionCheckHandler"]>[0]>;
@@ -13,7 +18,12 @@ const screen = { id: "screen:1:0", name: "Studio display", kind: "screen" };
 
 type Prompt = (options: MessageBoxOptions) => Promise<{ response: number }>;
 
-function harness(platform = "darwin", version = "14.2", microphone: () => Promise<boolean> = async () => true, prompt: Prompt = async () => ({ response: 1 })) {
+function harness(
+  platform = "darwin",
+  version = "14.2",
+  microphone: () => Promise<boolean> = async () => true,
+  prompt: Prompt = async () => ({ response: 1 }),
+) {
   let now = 1000;
   let check!: Check, request!: Request, display!: Display;
   let url = "http://localhost:4100";
@@ -23,43 +33,100 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
   const list = [screen, { id: "window:2:0", name: "Music app" }];
   const module = { exports: {} as typeof import("../app/capture") };
   runInNewContext(code, {
-    module, exports: module.exports, URL, AbortController, Date: { now: () => now },
+    module,
+    exports: module.exports,
+    URL,
+    AbortController,
+    Date: { now: () => now },
     process: { platform, getSystemVersion: () => version },
     require: () => ({
-      BrowserWindow: { fromWebContents: (from: unknown) => from === contents ? window : null },
-      dialog: { showMessageBox(parent: unknown, options: MessageBoxOptions) { prompts.push({ parent, options }); return prompt(options); } },
+      BrowserWindow: { fromWebContents: (from: unknown) => (from === contents ? window : null) },
+      dialog: {
+        showMessageBox(parent: unknown, options: MessageBoxOptions) {
+          prompts.push({ parent, options });
+          return prompt(options);
+        },
+      },
       desktopCapturer: { getSources: async () => list },
       systemPreferences: { askForMediaAccess: microphone, getMediaAccessStatus: () => "granted" },
-      session: { defaultSession: {
-        setPermissionCheckHandler(handler: Check) { check = handler; },
-        setPermissionRequestHandler(handler: Request) { request = handler; },
-        setDisplayMediaRequestHandler(handler: Display) { display = handler; },
-      } },
+      session: {
+        defaultSession: {
+          setPermissionCheckHandler(handler: Check) {
+            check = handler;
+          },
+          setPermissionRequestHandler(handler: Request) {
+            request = handler;
+          },
+          setDisplayMediaRequestHandler(handler: Display) {
+            display = handler;
+          },
+        },
+      },
     }),
   });
-  const capture = module.exports.createCapture(() => contents, () => url, "http://localhost:4100");
+  const capture = module.exports.createCapture(
+    () => contents,
+    () => url,
+    "http://localhost:4100",
+  );
   capture.install();
   return {
-    capture, contents, window, prompts,
-    expire() { now += 30_001; },
-    navigate(next: string) { contents.mainFrame.url = next; },
-    selectCouch(next: string) { url = next; },
-    check(permission: Parameters<Check>[1], overrides: Partial<Parameters<Check>[3]> = {}, requester = contents, origin = url) {
+    capture,
+    contents,
+    window,
+    prompts,
+    expire() {
+      now += 30_001;
+    },
+    navigate(next: string) {
+      contents.mainFrame.url = next;
+    },
+    selectCouch(next: string) {
+      url = next;
+    },
+    check(
+      permission: Parameters<Check>[1],
+      overrides: Partial<Parameters<Check>[3]> = {},
+      requester = contents,
+      origin = url,
+    ) {
       return check(requester, permission, origin, { isMainFrame: true, ...overrides });
     },
-    request(permission: Parameters<Request>[1], mediaTypes: ("audio" | "video")[], isMainFrame = true, requester = contents) {
+    request(
+      permission: Parameters<Request>[1],
+      mediaTypes: ("audio" | "video")[],
+      isMainFrame = true,
+      requester = contents,
+    ) {
       let granted = false;
-      request(requester, permission, result => { granted = result; }, { isMainFrame, requestingUrl: url, mediaTypes });
+      request(
+        requester,
+        permission,
+        (result) => {
+          granted = result;
+        },
+        { isMainFrame, requestingUrl: url, mediaTypes },
+      );
       return granted;
     },
     // Resolves with Main's single answer, which may wait for the owner.
     display(overrides: Partial<Parameters<Display>[0]> = {}) {
       return new Promise<Parameters<Parameters<Display>[1]>[0] | null>((resolve, reject) => {
         let answers = 0;
-        display({ frame: contents.mainFrame, securityOrigin: url, userGesture: true, videoRequested: true, audioRequested: true, ...overrides }, streams => {
-          if (++answers > 1) reject(new Error("Main answered a display request twice."));
-          resolve(streams);
-        });
+        display(
+          {
+            frame: contents.mainFrame,
+            securityOrigin: url,
+            userGesture: true,
+            videoRequested: true,
+            audioRequested: true,
+            ...overrides,
+          },
+          (streams) => {
+            if (++answers > 1) reject(new Error("Main answered a display request twice."));
+            resolve(streams);
+          },
+        );
       });
     },
   };
@@ -67,7 +134,10 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
 
 test("a selected display grants one local request with system audio", async () => {
   const h = harness();
-  expect(await h.capture.sources()).toEqual([screen, { id: "window:2:0", name: "Music app", kind: "window" }]);
+  expect(await h.capture.sources()).toEqual([
+    screen,
+    { id: "window:2:0", name: "Music app", kind: "window" },
+  ]);
   expect(h.check("display-capture")).toBe(false);
   await h.capture.prepare({ kind: "system-audio", sourceId: screen.id });
   expect(h.check("display-capture")).toBe(true);
@@ -91,8 +161,12 @@ test("capture preparation never grants another origin, frame, camera or app wind
   await h.capture.prepare({ kind: "screen", sourceId: screen.id, audio: true });
   expect(h.check("display-capture", { isMainFrame: false })).toBe(false);
   expect(h.check("display-capture", {}, h.contents, "https://foreign.example")).toBe(false);
-  expect(h.check("display-capture", {}, { mainFrame: h.contents.mainFrame } as WebContents)).toBe(false);
-  expect(await h.display({ frame: { url: h.contents.mainFrame.url } as typeof h.contents.mainFrame })).toBeNull();
+  expect(h.check("display-capture", {}, { mainFrame: h.contents.mainFrame } as WebContents)).toBe(
+    false,
+  );
+  expect(
+    await h.display({ frame: { url: h.contents.mainFrame.url } as typeof h.contents.mainFrame }),
+  ).toBeNull();
   expect(await h.display()).toEqual({ video: screen, audio: "loopback" });
   // A screen's sound is part of the selection, never just of the page's request.
   for (const audio of [false, undefined]) {
@@ -116,7 +190,11 @@ test("capture preparation never grants another origin, frame, camera or app wind
 });
 
 test("cancel, expiry and navigation revoke display selections", async () => {
-  for (const revoke of [(h: ReturnType<typeof harness>) => h.capture.prepare(null), (h: ReturnType<typeof harness>) => h.expire(), (h: ReturnType<typeof harness>) => h.capture.clear()]) {
+  for (const revoke of [
+    (h: ReturnType<typeof harness>) => h.capture.prepare(null),
+    (h: ReturnType<typeof harness>) => h.expire(),
+    (h: ReturnType<typeof harness>) => h.capture.clear(),
+  ]) {
     const h = harness();
     await h.capture.sources();
     await h.capture.prepare({ kind: "screen", sourceId: screen.id });
@@ -139,8 +217,13 @@ test("a saved Couch address grants its window's origin and nothing else", async 
   await h.capture.prepare({ kind: "screen", sourceId: screen.id, audio: true });
   expect(h.check("display-capture", {}, h.contents, "https://couch.local:4100")).toBe(true);
   expect(h.check("display-capture", {}, h.contents, "https://foreign.example")).toBe(false);
-  expect(h.check("display-capture", { isMainFrame: false }, h.contents, "https://couch.local:4100")).toBe(false);
-  expect(await h.display({ securityOrigin: "https://couch.local:4100" })).toEqual({ video: screen, audio: "loopback" });
+  expect(
+    h.check("display-capture", { isMainFrame: false }, h.contents, "https://couch.local:4100"),
+  ).toBe(false);
+  expect(await h.display({ securityOrigin: "https://couch.local:4100" })).toEqual({
+    video: screen,
+    audio: "loopback",
+  });
   h.navigate("https://other-couch.local:4100/");
   await expect(h.capture.prepare({ kind: "microphone" })).rejects.toThrow("this computer's Couch");
   for (const saved of [null, "not an address"]) {
@@ -155,7 +238,12 @@ test("a saved Couch address grants its window's origin and nothing else", async 
 
 test("another Couch's page gets the microphone only after this computer's owner allows it, each time", async () => {
   let answer = 0;
-  const h = harness("darwin", "14.2", async () => true, async () => ({ response: answer }));
+  const h = harness(
+    "darwin",
+    "14.2",
+    async () => true,
+    async () => ({ response: answer }),
+  );
   // This computer's own Couch shares as before, without a prompt.
   await h.capture.prepare({ kind: "microphone" });
   expect(h.request("media", ["audio"])).toBe(true);
@@ -175,7 +263,9 @@ test("another Couch's page gets the microphone only after this computer's owner 
   expect(h.request("media", ["audio"])).toBe(true);
   expect(h.request("media", ["video"])).toBe(false);
   expect(h.request("media", ["audio"], false)).toBe(false);
-  expect(h.check("media", { mediaType: "audio" }, h.contents, "https://foreign.example")).toBe(false);
+  expect(h.check("media", { mediaType: "audio" }, h.contents, "https://foreign.example")).toBe(
+    false,
+  );
   await h.capture.prepare(null);
   expect(h.request("media", ["audio"])).toBe(false);
   await h.capture.prepare({ kind: "microphone" });
@@ -198,7 +288,12 @@ test("another Couch's page gets a screen, window or this computer's audio only a
   const h = remote(async () => ({ response: answer }));
   await h.capture.sources();
   // The page's own name for a source is ignored; Main names it from its own list.
-  await h.capture.prepare({ kind: "screen", sourceId: screen.id, audio: true, name: "Couch's preview" } as never);
+  await h.capture.prepare({
+    kind: "screen",
+    sourceId: screen.id,
+    audio: true,
+    name: "Couch's preview",
+  } as never);
   expect(h.prompts).toEqual([]);
   expect(await h.display({ userGesture: false })).toBeNull();
   expect(h.prompts).toEqual([]);
@@ -208,7 +303,11 @@ test("another Couch's page gets a screen, window or this computer's audio only a
   expect(options.message).toContain("“Studio display”");
   expect([options.defaultId, options.cancelId]).toEqual([0, 0]);
   // A denied request leaves nothing to open or ask about again.
-  expect([h.check("display-capture"), h.check("media"), h.request("media", [])]).toEqual([false, false, false]);
+  expect([h.check("display-capture"), h.check("media"), h.request("media", [])]).toEqual([
+    false,
+    false,
+    false,
+  ]);
   expect(await h.display()).toBeNull();
   expect(h.prompts).toHaveLength(1);
 
@@ -221,7 +320,9 @@ test("another Couch's page gets a screen, window or this computer's audio only a
 
   // Without the sound in the selection, the prompt and the grant are the picture only.
   await h.capture.prepare({ kind: "screen", sourceId: "window:2:0" });
-  expect(await h.display()).toEqual({ video: { id: "window:2:0", name: "Music app", kind: "window" } });
+  expect(await h.display()).toEqual({
+    video: { id: "window:2:0", name: "Music app", kind: "window" },
+  });
   await h.capture.prepare({ kind: "screen", sourceId: screen.id, audio: true });
   expect(await h.display({ audioRequested: false })).toEqual({ video: screen });
 
@@ -234,7 +335,11 @@ test("another Couch's page gets a screen, window or this computer's audio only a
   expect(h.prompts).toHaveLength(asked);
 
   // A selection that doesn't say what it shares arms nothing.
-  for (const selection of [{ kind: "screen", sourceId: screen.id, audio: "yes" }, { kind: "system-audio", sourceId: screen.id, audio: false }, { kind: "screen", sourceId: "screen:9:0", audio: true }]) {
+  for (const selection of [
+    { kind: "screen", sourceId: screen.id, audio: "yes" },
+    { kind: "system-audio", sourceId: screen.id, audio: false },
+    { kind: "screen", sourceId: "screen:9:0", audio: true },
+  ]) {
     await expect(h.capture.prepare(selection)).rejects.toThrow();
     expect(h.check("display-capture")).toBe(false);
     expect(await h.display()).toBeNull();
@@ -245,26 +350,43 @@ test("another Couch's page gets a screen, window or this computer's audio only a
 test("a display prompt answered after cancel, Close, navigation, a new request or another Couch grants nothing", async () => {
   type Harness = ReturnType<typeof harness>;
   const revocations: [string, (h: Harness) => unknown, boolean][] = [
-    ["cancel or Close", h => h.capture.prepare(null), true],
-    ["navigation", h => h.capture.clear(), true],
-    ["a new request", h => h.capture.prepare({ kind: "screen", sourceId: "window:2:0", audio: true }), true],
-    ["the page leaving that Couch", h => h.navigate("https://foreign.example/"), false],
-    ["another Couch", h => h.selectCouch("https://other-couch.local:4100"), false],
+    ["cancel or Close", (h) => h.capture.prepare(null), true],
+    ["navigation", (h) => h.capture.clear(), true],
+    [
+      "a new request",
+      (h) => h.capture.prepare({ kind: "screen", sourceId: "window:2:0", audio: true }),
+      true,
+    ],
+    ["the page leaving that Couch", (h) => h.navigate("https://foreign.example/"), false],
+    ["another Couch", (h) => h.selectCouch("https://other-couch.local:4100"), false],
   ];
   for (const [name, revoke, closesPrompt] of revocations) {
     let answer!: (answer: { response: number }) => void;
-    const h = remote(() => new Promise(resolve => { answer = resolve; }));
+    const h = remote(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
     await h.capture.sources();
     await h.capture.prepare({ kind: "screen", sourceId: screen.id, audio: true });
     const requesting = h.display();
     // While the owner decides, nothing is open and a second request is refused at once.
-    expect([h.check("display-capture"), h.check("media"), h.request("media", [])]).toEqual([false, false, false]);
+    expect([h.check("display-capture"), h.check("media"), h.request("media", [])]).toEqual([
+      false,
+      false,
+      false,
+    ]);
     expect(await h.display()).toBeNull();
     await revoke(h);
     expect([name, h.prompts[0]!.options.signal!.aborted]).toEqual([name, closesPrompt]);
     answer({ response: 1 });
     expect([name, await requesting]).toEqual([name, null]);
-    expect([name, h.check("media"), h.check("display-capture", {}, h.contents, "https://couch.local:4100")]).toEqual([name, false, name === "a new request"]);
+    expect([
+      name,
+      h.check("media"),
+      h.check("display-capture", {}, h.contents, "https://couch.local:4100"),
+    ]).toEqual([name, false, name === "a new request"]);
   }
 });
 
@@ -275,17 +397,24 @@ test("native capture consumes only a fresh local microphone grant, once", async 
   h.capture.consumeMicrophone();
   expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
   expect(h.request("media", ["audio"])).toBe(false);
-  await h.capture.prepare({ kind: "microphone" }); h.expire();
+  await h.capture.prepare({ kind: "microphone" });
+  h.expire();
   expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
-  h.selectCouch("https://remote.example"); h.navigate("https://remote.example");
+  h.selectCouch("https://remote.example");
+  h.navigate("https://remote.example");
   await h.capture.prepare({ kind: "microphone" });
   expect(() => h.capture.consumeMicrophone()).toThrow("No current local microphone");
 });
 
 test("the hidden browser capture frame receives only its owner's temporary microphone grant", async () => {
   const h = harness();
-  const helper = () => Object.assign(new EventEmitter(), { mainFrame: { url: "http://localhost:4100/capture-audio.html", detached: false }, isDestroyed: () => false });
-  const target = helper(), other = helper();
+  const helper = () =>
+    Object.assign(new EventEmitter(), {
+      mainFrame: { url: "http://localhost:4100/capture-audio.html", detached: false },
+      isDestroyed: () => false,
+    });
+  const target = helper(),
+    other = helper();
   const contents = target as unknown as WebContents;
   expect(() => h.capture.delegateMicrophone(contents)).toThrow("No current microphone");
   await h.capture.prepare({ kind: "microphone" });

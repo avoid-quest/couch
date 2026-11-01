@@ -6,4 +6,5 @@ export const remoteFields = {
 export type RemoteFieldKind = keyof typeof remoteFields;
 export type TextFocus = { kind: RemoteFieldKind; token: string; value: string };
 export type RemoteTextField = TextFocus & { label: string; maxLength: number; submit: boolean };
-export const isRemoteField = (kind: unknown): kind is RemoteFieldKind => typeof kind === "string" && Object.hasOwn(remoteFields, kind);
+export const isRemoteField = (kind: unknown): kind is RemoteFieldKind =>
+  typeof kind === "string" && Object.hasOwn(remoteFields, kind);

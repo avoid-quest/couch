@@ -12,24 +12,56 @@ const m3u = readFileSync("tests/fixtures/radio/community.m3u", "utf8");
 const xml = readFileSync("tests/fixtures/radio/community.xml", "utf8");
 
 test("generic source-scoped guides, explicit override, favourites, directory tags and no-guide sources survive reload", async () => {
-  const realNow = Date.now; Date.now = () => Date.parse("2026-10-24T23:45:00Z");
+  const realNow = Date.now;
+  Date.now = () => Date.parse("2026-10-24T23:45:00Z");
   const scratch = mkdtempSync(join(tmpdir(), "couch-radio-guides-"));
   const calls: string[] = [];
-  const request: typeof fetch = async input => {
-    const url = String(input); calls.push(url);
+  const request: typeof fetch = async (input) => {
+    const url = String(input);
+    calls.push(url);
     if (url === avoidRadioPlaylistUrl) return new Response("#EXTM3U\n");
-    if (url.includes(".api.radio-browser.info")) return Response.json([{ stationuuid: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa", name: "Directory", url: "https://audio.example/dir", tags: "Jazz, jazz ,Talk,Deep House", bitrate: 128 }]);
+    if (url.includes(".api.radio-browser.info"))
+      return Response.json([
+        {
+          stationuuid: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+          name: "Directory",
+          url: "https://audio.example/dir",
+          tags: "Jazz, jazz ,Talk,Deep House",
+          bitrate: 128,
+        },
+      ]);
     if (url.includes("bad-guide") && url.endsWith(".xml")) return new Response("broken guide");
-    if (url.endsWith(".xml")) return new Response(url.includes("override") ? xml.replaceAll("Night Shift", "Other programme") : xml);
-    return new Response(url.includes("no-guide") ? m3u.replace(' x-tvg-url="guide.xml"', '') : m3u);
+    if (url.endsWith(".xml"))
+      return new Response(
+        url.includes("override") ? xml.replaceAll("Night Shift", "Other programme") : xml,
+      );
+    return new Response(url.includes("no-guide") ? m3u.replace(' x-tvg-url="guide.xml"', "") : m3u);
   };
-  let radio = createRadio({ databasePath: join(scratch, "couch.sqlite"), fetch: request, discover: async () => ["https://fixture.api.radio-browser.info"] });
+  let radio = createRadio({
+    databasePath: join(scratch, "couch.sqlite"),
+    fetch: request,
+    discover: async () => ["https://fixture.api.radio-browser.info"],
+  });
   try {
-    const first = await radio.addPlaylist({ name: "Community", url: "https://community.example/list.m3u" });
-    const second = await radio.addPlaylist({ name: "Other", url: "https://other.example/list.m3u", guideUrl: "https://override.example/schedule.xml" });
-    const bare = await radio.addPlaylist({ name: "No guide", url: "https://no-guide.example/list.m3u" });
-    const failedGuide = await radio.addPlaylist({ name: "Bad guide", url: "https://bad-guide.example/list.m3u" });
-    const one = radio.playlistStations({ playlistId: first.id })[0]!, two = radio.playlistStations({ playlistId: second.id })[0]!;
+    const first = await radio.addPlaylist({
+      name: "Community",
+      url: "https://community.example/list.m3u",
+    });
+    const second = await radio.addPlaylist({
+      name: "Other",
+      url: "https://other.example/list.m3u",
+      guideUrl: "https://override.example/schedule.xml",
+    });
+    const bare = await radio.addPlaylist({
+      name: "No guide",
+      url: "https://no-guide.example/list.m3u",
+    });
+    const failedGuide = await radio.addPlaylist({
+      name: "Bad guide",
+      url: "https://bad-guide.example/list.m3u",
+    });
+    const one = radio.playlistStations({ playlistId: first.id })[0]!,
+      two = radio.playlistStations({ playlistId: second.id })[0]!;
     assert.notEqual(one.id, two.id);
     radio.saveFavorite(one);
     const guides = await radio.programmes();
@@ -44,33 +76,69 @@ test("generic source-scoped guides, explicit override, favourites, directory tag
     const capturedAt = Date.now();
     Date.now = () => Date.parse("2026-10-25T00:45:00Z");
     assert.equal((await radio.metadata.get(one.id, one.url)).programme, null);
-    assert.equal((await radio.metadata.get(one.id, one.url, undefined, capturedAt)).programme?.title, "Night Shift", "Recognition keeps the programme at capture time after its slot ends");
+    assert.equal(
+      (await radio.metadata.get(one.id, one.url, undefined, capturedAt)).programme?.title,
+      "Night Shift",
+      "Recognition keeps the programme at capture time after its slot ends",
+    );
     Date.now = () => capturedAt;
     const [directory] = await radio.search({ q: "Directory" });
     assert.deepEqual(directory!.tags, ["Jazz", "Talk", "Deep House"]);
     radio.saveFavorite(directory);
     await radio.refreshPlaylist(first.id);
-    assert.equal(radio.favorites().find(item => item.id === one.id)?.id, one.id);
-    radio.close(); radio = createRadio({ databasePath: join(scratch, "couch.sqlite"), fetch: request });
-    assert.equal(radio.favorites().find(item => item.id === one.id)?.sourceId, first.id);
-    assert.deepEqual(radio.favorites().find(item => item.id === directory!.id)?.tags, directory!.tags);
-    assert.equal(radio.playlists().find(item => item.id === second.id)?.guideUrl, "https://override.example/schedule.xml");
+    assert.equal(radio.favorites().find((item) => item.id === one.id)?.id, one.id);
+    radio.close();
+    radio = createRadio({ databasePath: join(scratch, "couch.sqlite"), fetch: request });
+    assert.equal(radio.favorites().find((item) => item.id === one.id)?.sourceId, first.id);
+    assert.deepEqual(
+      radio.favorites().find((item) => item.id === directory!.id)?.tags,
+      directory!.tags,
+    );
+    assert.equal(
+      radio.playlists().find((item) => item.id === second.id)?.guideUrl,
+      "https://override.example/schedule.xml",
+    );
     radio.removePlaylist(first.id);
     assert.equal(radio.getPlayable(one.id).source, one.url);
-    assert.equal(radio.favorites().some(item => item.id === one.id), true);
-  } finally { radio.close(); Date.now = realNow; rmSync(scratch, { recursive: true, force: true }); }
+    assert.equal(
+      radio.favorites().some((item) => item.id === one.id),
+      true,
+    );
+  } finally {
+    radio.close();
+    Date.now = realNow;
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test("existing JSON enrichment works without a guide and pairing/authority still protect guide configuration", async () => {
-  const now = Date.now(); let metadataCalls = 0;
-  const radio = createRadio({ databasePath: ":memory:", fetch: async input => {
-    const url = String(input);
-    if (url.includes("/api/radio-metadata")) {
-      metadataCalls++;
-      return Response.json({ ok: true, data: { title: "Live show", genre: "Soul", artist: "Host", album: "Series", streamUrl: "https://audio.example/live", resolvedUrl: "https://wrong.example/not-playback", sampledAt: now, expiresAt: now + 60_000 } });
-    }
-    return new Response('#EXTM3U\n#EXTINF:-1 tvg-id="immutable-id",Station\nhttps://audio.example/live\n');
-  } });
+  const now = Date.now();
+  let metadataCalls = 0;
+  const radio = createRadio({
+    databasePath: ":memory:",
+    fetch: async (input) => {
+      const url = String(input);
+      if (url.includes("/api/radio-metadata")) {
+        metadataCalls++;
+        return Response.json({
+          ok: true,
+          data: {
+            title: "Live show",
+            genre: "Soul",
+            artist: "Host",
+            album: "Series",
+            streamUrl: "https://audio.example/live",
+            resolvedUrl: "https://wrong.example/not-playback",
+            sampledAt: now,
+            expiresAt: now + 60_000,
+          },
+        });
+      }
+      return new Response(
+        '#EXTM3U\n#EXTINF:-1 tvg-id="immutable-id",Station\nhttps://audio.example/live\n',
+      );
+    },
+  });
   try {
     const catalog = await radio.avoid();
     const item = catalog.stations[0]!;
@@ -82,30 +150,90 @@ test("existing JSON enrichment works without a guide and pairing/authority still
     const settings = createRadioSettings(radio);
     const get = () => new Request("http://couch.local/api/radio/programmes");
     assert.equal((await settings.handle(get(), () => null)).status, 401);
-    assert.equal((await settings.handle(get(), () => ({ device: null, authority: "controller", claimAvailable: false }))).status, 200);
-    const post = () => new Request("http://couch.local/api/radio/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Bad", url: "https://example.com/list", guideUrl: "file:///etc/passwd" }) });
-    assert.equal((await settings.handle(post(), () => ({ device: null, authority: "controller", claimAvailable: false }))).status, 403);
-    assert.equal((await settings.handle(post(), () => ({ device: null, authority: "host", claimAvailable: false }))).status, 400);
-  } finally { radio.close(); }
+    assert.equal(
+      (
+        await settings.handle(get(), () => ({
+          device: null,
+          authority: "controller",
+          claimAvailable: false,
+        }))
+      ).status,
+      200,
+    );
+    const post = () =>
+      new Request("http://couch.local/api/radio/playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Bad",
+          url: "https://example.com/list",
+          guideUrl: "file:///etc/passwd",
+        }),
+      });
+    assert.equal(
+      (
+        await settings.handle(post(), () => ({
+          device: null,
+          authority: "controller",
+          claimAvailable: false,
+        }))
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await settings.handle(post(), () => ({
+          device: null,
+          authority: "host",
+          claimAvailable: false,
+        }))
+      ).status,
+      400,
+    );
+  } finally {
+    radio.close();
+  }
 });
 
 test("browsing and playback preserve live shows inside broad guide slots, then fall back on expiry", async () => {
   const realNow = Date.now;
-  const sampledAt = Date.parse("2026-10-23T18:00:00Z"), expiresAt = sampledAt + 60_000;
-  let clock = sampledAt, metadataCalls = 0;
+  const sampledAt = Date.parse("2026-10-23T18:00:00Z"),
+    expiresAt = sampledAt + 60_000;
+  let clock = sampledAt,
+    metadataCalls = 0;
   Date.now = () => clock;
   const titles = ["سراب / Sarab – whybc", "Memory Archive w/ FDG (R)"];
   const slots = ["Rotation", "Programming 22.10.26 (2)"];
-  const radio = createRadio({ databasePath: ":memory:", fetch: async input => {
-    const url = new URL(String(input));
-    if (url.pathname === "/api/radio-metadata") {
-      metadataCalls++;
-      const index = Number(url.searchParams.get("stationId")!.slice(-1));
-      return Response.json({ ok: true, data: { title: titles[index], artworkUrl: `https://example.com/live-${index}.jpg`, stationDescription: "Live episode description", genre: "Experimental", artist: "Live host", streamUrl: `https://audio.example/${index}`, sampledAt, expiresAt } });
-    }
-    if (url.pathname.endsWith(".xml")) return new Response(`<tv>${slots.map((title, i) => `<programme channel="community-${i}" start="20261023030000 +0000" stop="20261024030000 +0000"><title>${title}</title><desc>Schedule description</desc><category>Talk</category><icon src="https://example.com/slot.jpg"/></programme>`).join("")}</tv>`);
-    return new Response(`#EXTM3U x-tvg-url="guide.xml"\n${slots.map((_, i) => `#EXTINF:-1 tvg-id="community-${i}",Community ${i}\nhttps://audio.example/${i}\n`).join("")}`);
-  } });
+  const radio = createRadio({
+    databasePath: ":memory:",
+    fetch: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/radio-metadata") {
+        metadataCalls++;
+        const index = Number(url.searchParams.get("stationId")!.slice(-1));
+        return Response.json({
+          ok: true,
+          data: {
+            title: titles[index],
+            artworkUrl: `https://example.com/live-${index}.jpg`,
+            stationDescription: "Live episode description",
+            genre: "Experimental",
+            artist: "Live host",
+            streamUrl: `https://audio.example/${index}`,
+            sampledAt,
+            expiresAt,
+          },
+        });
+      }
+      if (url.pathname.endsWith(".xml"))
+        return new Response(
+          `<tv>${slots.map((title, i) => `<programme channel="community-${i}" start="20261023030000 +0000" stop="20261024030000 +0000"><title>${title}</title><desc>Schedule description</desc><category>Talk</category><icon src="https://example.com/slot.jpg"/></programme>`).join("")}</tv>`,
+        );
+      return new Response(
+        `#EXTM3U x-tvg-url="guide.xml"\n${slots.map((_, i) => `#EXTINF:-1 tvg-id="community-${i}",Community ${i}\nhttps://audio.example/${i}\n`).join("")}`,
+      );
+    },
+  });
   try {
     const { stations } = await radio.avoid();
     const guides = await radio.programmes();
@@ -131,15 +259,28 @@ test("browsing and playback preserve live shows inside broad guide slots, then f
     assert.equal(fallback.artist, undefined);
     assert.equal(fallback.start, Date.parse("2026-10-23T03:00:00Z"));
     assert.equal(fallback.end, Date.parse("2026-10-24T03:00:00Z"));
-  } finally { radio.close(); Date.now = realNow; }
+  } finally {
+    radio.close();
+    Date.now = realNow;
+  }
 });
 
 test("an existing installation adds guide columns without changing saved station identities", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "couch-radio-upgrade-"));
   const databasePath = join(scratch, "couch.sqlite");
-  const saved = { id: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa", name: "Saved station", url: "https://audio.example/saved", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
+  const saved = {
+    id: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+    name: "Saved station",
+    url: "https://audio.example/saved",
+    homepage: null,
+    countryCode: "IT",
+    codec: "MP3",
+    bitrate: 128,
+  };
   const db = new Database(databasePath);
-  db.exec("CREATE TABLE radio_playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, updated_at INTEGER, error TEXT); CREATE TABLE radio_favorites (id TEXT PRIMARY KEY, station TEXT NOT NULL)");
+  db.exec(
+    "CREATE TABLE radio_playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, updated_at INTEGER, error TEXT); CREATE TABLE radio_favorites (id TEXT PRIMARY KEY, station TEXT NOT NULL)",
+  );
   db.query("INSERT INTO radio_favorites VALUES (?, ?)").run(saved.id, JSON.stringify(saved));
   db.close();
   const radio = createRadio({ databasePath });
@@ -148,5 +289,8 @@ test("an existing installation adds guide columns without changing saved station
     assert.deepEqual(await radio.getStation(saved.id), saved);
     assert.equal(radio.getPlayable(saved.id).source, saved.url);
     assert.deepEqual(radio.playlists(), []);
-  } finally { radio.close(); rmSync(scratch, { recursive: true, force: true }); }
+  } finally {
+    radio.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });

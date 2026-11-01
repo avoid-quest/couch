@@ -10,26 +10,55 @@ import type { SourceSettingsProps } from "@/components/sourceTypes";
 
 export function IptvSettings({ credentials, connected, canManage }: SourceSettingsProps) {
   const queryClient = useQueryClient();
-  const page = useQuery({ ...iptvSourcesQuery(credentials ?? { origin: "", token: "" }), enabled: !!credentials && connected && canManage });
+  const page = useQuery({
+    ...iptvSourcesQuery(credentials ?? { origin: "", token: "" }),
+    enabled: !!credentials && connected && canManage,
+  });
   const cancellation = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     cancellation.current = controller;
     return () => controller.abort();
   }, [credentials, connected, canManage]);
-  const request = useCallback<GuideRequest>(async (path, init = {}) => {
-    if (!credentials) throw new Error("Couldn't update Live TV.");
-    const signal = AbortSignal.any([...(init.signal ? [init.signal] : []), ...(cancellation.current ? [cancellation.current.signal] : [])]);
-    const response = await iptvRequest(credentials, path, { ...init, signal });
-    if (init.method) await queryClient.invalidateQueries({ queryKey: ["iptv"] });
-    return response;
-  }, [credentials, queryClient]);
+  const request = useCallback<GuideRequest>(
+    async (path, init = {}) => {
+      if (!credentials) throw new Error("Couldn't update Live TV.");
+      const signal = AbortSignal.any([
+        ...(init.signal ? [init.signal] : []),
+        ...(cancellation.current ? [cancellation.current.signal] : []),
+      ]);
+      const response = await iptvRequest(credentials, path, { ...init, signal });
+      if (init.method) await queryClient.invalidateQueries({ queryKey: ["iptv"] });
+      return response;
+    },
+    [credentials, queryClient],
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-8" data-tv-local-only>
-      {page.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void page.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+      {page.error && (
+        <Alert variant="destructive">
+          <AlertDescription>Couldn't load Live TV sources.</AlertDescription>
+          <AlertAction>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!connected}
+              onClick={() => void page.refetch()}
+            >
+              {TRY_AGAIN}
+            </Button>
+          </AlertAction>
+        </Alert>
+      )}
       {credentials && connected && canManage && page.isPending && <SettingsRowsSkeleton />}
-      {credentials && (!canManage || page.data) && <GuideSources connected={connected && canManage} request={request} sources={page.data?.sources ?? []} />}
+      {credentials && (!canManage || page.data) && (
+        <GuideSources
+          connected={connected && canManage}
+          request={request}
+          sources={page.data?.sources ?? []}
+        />
+      )}
     </div>
   );
 }

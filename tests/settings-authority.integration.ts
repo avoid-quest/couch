@@ -14,64 +14,156 @@ async function fixture(options: { nativeTvMode?: (enabled: boolean) => Promise<v
   const databasePath = join(directory, "couch.sqlite");
   const store = openStore(databasePath, true);
   // The first paired device is the admin; the next is a controller.
-  const adminId = Identity.generate().peerId, admin = store.pair(adminId, "Phone");
+  const adminId = Identity.generate().peerId,
+    admin = store.pair(adminId, "Phone");
   const controller = store.pair(Identity.generate().peerId, "Laptop");
   store.close();
-  const hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: 0, ...options });
-  const post = (path: string, bearer: string, body: unknown) => fetch(`${hub.origin}${path}`, { method: "POST", headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return { hub, admin, adminId, controller, post, close: async () => { await hub.close(); await rm(directory, { recursive: true, force: true }); } };
+  const hub = await createHub({
+    databasePath,
+    hostToken,
+    hostname: "127.0.0.1",
+    port: 0,
+    ...options,
+  });
+  const post = (path: string, bearer: string, body: unknown) =>
+    fetch(`${hub.origin}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  return {
+    hub,
+    admin,
+    adminId,
+    controller,
+    post,
+    close: async () => {
+      await hub.close();
+      await rm(directory, { recursive: true, force: true });
+    },
+  };
 }
 
 test("an admin switches TV mode through the Couch app; others can't", async () => {
   const requests: boolean[] = [];
-  const f = await fixture({ nativeTvMode: async enabled => { requests.push(enabled); } });
+  const f = await fixture({
+    nativeTvMode: async (enabled) => {
+      requests.push(enabled);
+    },
+  });
   try {
-    assert.equal((await fetch(`${f.hub.origin}/api/connection`).then(response => response.json())).tvModeChangeable, true);
-    assert.equal((await f.post("/api/settings/tv-mode", "unpaired", { enabled: true })).status, 401);
-    assert.equal((await f.post("/api/settings/tv-mode", f.controller, { enabled: true })).status, 403);
+    assert.equal(
+      (await fetch(`${f.hub.origin}/api/connection`).then((response) => response.json()))
+        .tvModeChangeable,
+      true,
+    );
+    assert.equal(
+      (await f.post("/api/settings/tv-mode", "unpaired", { enabled: true })).status,
+      401,
+    );
+    assert.equal(
+      (await f.post("/api/settings/tv-mode", f.controller, { enabled: true })).status,
+      403,
+    );
     assert.equal((await f.post("/api/settings/tv-mode", f.admin, { enabled: "yes" })).status, 400);
     assert.deepEqual(requests, [], "refused requests never reach the app");
     const admitted = await f.post("/api/settings/tv-mode", f.admin, { enabled: true });
     assert.equal(admitted.status, 200);
     assert.deepEqual(await admitted.json(), { enabled: true });
-    assert.equal((await f.post("/api/settings/tv-mode", hostToken, { enabled: false })).status, 200);
+    assert.equal(
+      (await f.post("/api/settings/tv-mode", hostToken, { enabled: false })).status,
+      200,
+    );
     assert.deepEqual(requests, [true, false]);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 });
 
 test("Share on network is admin-managed, and a demoted admin loses it", async () => {
   const f = await fixture();
   try {
-    assert.deepEqual(await (await fetch(`${f.hub.origin}/api/settings/sharing`, { headers: { Authorization: `Bearer ${f.controller}` } })).json(), { enabled: true }, "every paired device reads it");
-    assert.equal((await f.post("/api/settings/sharing", f.controller, { enabled: false })).status, 403);
-    assert.equal((await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "controller" })).status, 200);
+    assert.deepEqual(
+      await (
+        await fetch(`${f.hub.origin}/api/settings/sharing`, {
+          headers: { Authorization: `Bearer ${f.controller}` },
+        })
+      ).json(),
+      { enabled: true },
+      "every paired device reads it",
+    );
+    assert.equal(
+      (await f.post("/api/settings/sharing", f.controller, { enabled: false })).status,
+      403,
+    );
+    assert.equal(
+      (await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "controller" })).status,
+      200,
+    );
     assert.equal((await f.post("/api/settings/sharing", f.admin, { enabled: false })).status, 403);
-    assert.equal((await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "administrator" })).status, 200);
+    assert.equal(
+      (await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "administrator" })).status,
+      200,
+    );
     const off = await f.post("/api/settings/sharing", f.admin, { enabled: false });
     assert.equal(off.status, 200);
     assert.deepEqual(await off.json(), { enabled: false });
-    assert.equal((await f.post("/api/settings/sharing", f.admin, { enabled: true })).status, 503, "only the host turns sharing back on");
+    assert.equal(
+      (await f.post("/api/settings/sharing", f.admin, { enabled: true })).status,
+      503,
+      "only the host turns sharing back on",
+    );
     assert.equal((await f.post("/api/settings/sharing", hostToken, { enabled: true })).status, 200);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 });
 
 test("Live audio settings are the host's and admins': controllers can't read or change them", async () => {
   const f = await fixture();
   const path = "/api/settings/live-audio";
-  const read = (token: string) => fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  const read = (token: string) =>
+    fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   try {
-    assert.equal((await f.post(path, "unpaired", { settings: { codec: "pcm", minBufferMs: 400 } })).status, 401);
-    assert.equal((await f.post(path, f.controller, { settings: { codec: "pcm", minBufferMs: 400 } })).status, 403);
+    assert.equal(
+      (await f.post(path, "unpaired", { settings: { codec: "pcm", minBufferMs: 400 } })).status,
+      401,
+    );
+    assert.equal(
+      (await f.post(path, f.controller, { settings: { codec: "pcm", minBufferMs: 400 } })).status,
+      403,
+    );
     assert.equal((await read(f.controller)).status, 403);
-    assert.equal((await read(f.admin).then(response => response.json())).minBufferMs, 150, "a refused change leaves the default");
-    for (const settings of [{ codec: "pcm", minBufferMs: -1 }, { codec: "pcm", minBufferMs: 5001 }, { codec: "flac", minBufferMs: 250 }, null])
+    assert.equal(
+      (await read(f.admin).then((response) => response.json())).minBufferMs,
+      150,
+      "a refused change leaves the default",
+    );
+    for (const settings of [
+      { codec: "pcm", minBufferMs: -1 },
+      { codec: "pcm", minBufferMs: 5001 },
+      { codec: "flac", minBufferMs: 250 },
+      null,
+    ])
       assert.equal((await f.post(path, f.admin, { settings })).status, 400);
     const saved = await f.post(path, f.admin, { settings: { codec: "pcm", minBufferMs: 400 } });
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { codec: "pcm", minBufferMs: 400 });
-    assert.equal((await f.post(path, hostToken, { settings: { codec: "opus", minBufferMs: 400 } })).status, 200);
-    assert.equal((await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "controller" })).status, 200);
-    assert.equal((await f.post(path, f.admin, { settings: { codec: "pcm", minBufferMs: 400 } })).status, 403, "a demoted admin loses them");
-    assert.equal((await read(hostToken).then(response => response.json())).codec, "opus");
-  } finally { await f.close(); }
+    assert.equal(
+      (await f.post(path, hostToken, { settings: { codec: "opus", minBufferMs: 400 } })).status,
+      200,
+    );
+    assert.equal(
+      (await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "controller" })).status,
+      200,
+    );
+    assert.equal(
+      (await f.post(path, f.admin, { settings: { codec: "pcm", minBufferMs: 400 } })).status,
+      403,
+      "a demoted admin loses them",
+    );
+    assert.equal((await read(hostToken).then((response) => response.json())).codec, "opus");
+  } finally {
+    await f.close();
+  }
 });

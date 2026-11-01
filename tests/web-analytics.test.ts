@@ -1,10 +1,15 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { ALL } from "../apps/web/src/pages/u/[...path]";
 
-afterEach(() => { mock.restore(); });
+afterEach(() => {
+  mock.restore();
+});
 
 function proxy(path: string, init?: RequestInit) {
-  return ALL({ params: { path }, request: new Request(`https://couch.avoid.quest/u/${path}`, init) } as Parameters<typeof ALL>[0]);
+  return ALL({
+    params: { path },
+    request: new Request(`https://couch.avoid.quest/u/${path}`, init),
+  } as Parameters<typeof ALL>[0]);
 }
 
 test("the tracker stays on the fixed upstream and caches no cookies", async () => {
@@ -13,9 +18,13 @@ test("the tracker stays on the fixed upstream and caches no cookies", async () =
     const headers = new Headers(init?.headers);
     expect(headers.has("cookie")).toBe(false);
     expect(headers.has("authorization")).toBe(false);
-    return new Response("window.umami = {};", { headers: { "Content-Type": "application/javascript", "Set-Cookie": "session=private" } });
+    return new Response("window.umami = {};", {
+      headers: { "Content-Type": "application/javascript", "Set-Cookie": "session=private" },
+    });
   });
-  const response = await proxy("script.js", { headers: { Cookie: "private", Authorization: "Bearer private" } });
+  const response = await proxy("script.js", {
+    headers: { Cookie: "private", Authorization: "Bearer private" },
+  });
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("window.umami = {};");
   expect(response.headers.get("Content-Type")).toBe("application/javascript");
@@ -25,17 +34,36 @@ test("the tracker stays on the fixed upstream and caches no cookies", async () =
 });
 
 test("download events preserve target OS, format, channel and session metadata with the trusted visitor IP", async () => {
-  const event = { type: "event", payload: { website: "90980392-7c3c-43f4-96c2-cff6645daa5a", name: "download", data: { os: "linux", format: "deb", channel: "preview" }, ip: "spoofed" } };
+  const event = {
+    type: "event",
+    payload: {
+      website: "90980392-7c3c-43f4-96c2-cff6645daa5a",
+      name: "download",
+      data: { os: "linux", format: "deb", channel: "preview" },
+      ip: "spoofed",
+    },
+  };
   spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
     const request = new Request(url, init);
     expect(request.url).toBe("https://umami.net-work.studio/api/send");
     expect(request.headers.get("user-agent")).toBe("Visitor browser");
-    expect(await request.json()).toEqual({ ...event, payload: { ...event.payload, ip: "2001:db8::42" } });
+    expect(await request.json()).toEqual({
+      ...event,
+      payload: { ...event.payload, ip: "2001:db8::42" },
+    });
     return Response.json({ cache: "next-session-token" });
   });
   const response = await proxy("api/send", {
-    method: "POST", body: JSON.stringify(event),
-    headers: { "Content-Type": "application/json", "User-Agent": "Visitor browser", "CF-Connecting-IP": "2001:db8::42", "x-umami-cache": "session-token", "x-umami-website-id": event.payload.website, "x-umami-hostname": "couch.avoid.quest" },
+    method: "POST",
+    body: JSON.stringify(event),
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Visitor browser",
+      "CF-Connecting-IP": "2001:db8::42",
+      "x-umami-cache": "session-token",
+      "x-umami-website-id": event.payload.website,
+      "x-umami-hostname": "couch.avoid.quest",
+    },
   });
   expect(response.status).toBe(200);
   expect(response.headers.get("Cache-Control")).toBe("no-store");
@@ -47,7 +75,14 @@ test("without Cloudflare's header the proxy removes client-supplied IPs", async 
     expect(await new Request(url, init).json()).toEqual({ type: "event", payload: { url: "/" } });
     return Response.json({});
   });
-  expect((await proxy("api/send", { method: "POST", body: JSON.stringify({ type: "event", payload: { url: "/", ip: "spoofed" } }) })).status).toBe(200);
+  expect(
+    (
+      await proxy("api/send", {
+        method: "POST",
+        body: JSON.stringify({ type: "event", payload: { url: "/", ip: "spoofed" } }),
+      })
+    ).status,
+  ).toBe(200);
 });
 
 test("unrelated APIs, unsupported methods and invalid events never reach Umami", async () => {
@@ -65,7 +100,9 @@ test("unrelated APIs, unsupported methods and invalid events never reach Umami",
 });
 
 test("upstream errors and redirects are uncached and cannot redirect the browser off-origin", async () => {
-  const upstream = spyOn(globalThis, "fetch").mockResolvedValue(new Response("Unavailable", { status: 503 }));
+  const upstream = spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("Unavailable", { status: 503 }),
+  );
   const failed = await proxy("script.js");
   expect(failed.status).toBe(503);
   expect(failed.headers.get("Cache-Control")).toBe("no-store");

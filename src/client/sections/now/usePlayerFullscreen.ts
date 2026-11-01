@@ -26,15 +26,18 @@ export function usePlayerFullscreen() {
       // Fullscreen the document so portaled playback sheets stay available.
       else {
         await window.couchApp?.playerFullscreen?.(true);
-        try { await document.documentElement.requestFullscreen(); }
-        catch (reason) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (reason) {
           await window.couchApp?.playerFullscreen?.(false);
           throw reason;
         }
       }
     } catch (reason) {
       failed("Couldn't change fullscreen.", reason);
-    } finally { setPending(false); }
+    } finally {
+      setPending(false);
+    }
   };
 
   return { supported, fullscreen, pending: pending || nativePending, toggle };

@@ -18,33 +18,62 @@ type Options = {
 // processes ten times a second around the clock. PipeWire-Pulse understands
 // the PulseAudio event subscription protocol.
 function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => void } {
-  if (!hasPulseTools()) { queueMicrotask(onExit); return { stop() {} }; }
-  const child = spawn("/usr/bin/pactl", ["subscribe"], { env: environment(), stdio: ["ignore", "pipe", "ignore"] });
+  if (!hasPulseTools()) {
+    queueMicrotask(onExit);
+    return { stop() {} };
+  }
+  const child = spawn("/usr/bin/pactl", ["subscribe"], {
+    env: environment(),
+    stdio: ["ignore", "pipe", "ignore"],
+  });
   let exited = false;
-  const exit = () => { if (!exited) { exited = true; onExit(); } };
+  const exit = () => {
+    if (!exited) {
+      exited = true;
+      onExit();
+    }
+  };
   child.once("error", exit);
   // A recovered server may send no events until its next change. Refresh on
   // every new subscription so fixing the audio session also clears stale errors.
   child.once("spawn", onEvent);
   // PipeWire-Pulse restarting ends the stream; onExit resubscribes.
-  createInterface({ input: child.stdout }).on("line", line => { if (/on (sink|source|card|server) #/.test(line)) onEvent(); }).once("close", exit);
+  createInterface({ input: child.stdout })
+    .on("line", (line) => {
+      if (/on (sink|source|card|server) #/.test(line)) onEvent();
+    })
+    .once("close", exit);
   return { stop: () => child.kill() };
 }
 
 // The TV's own volume keys raise sound when they turn it up or unmute it.
-export const soundRaised = (before: SoundRouteState | undefined, after: SoundRouteState) => !after.muted && after.volume !== null && before?.volume != null && (after.volume > before.volume || before.muted);
+export const soundRaised = (before: SoundRouteState | undefined, after: SoundRouteState) =>
+  !after.muted &&
+  after.volume !== null &&
+  before?.volume != null &&
+  (after.volume > before.volume || before.muted);
 
 export function createSoundRouting(options: Options) {
   const backend = pulseRouting();
   let selected = options.saved();
-  let snapshot: SoundRouteState = { selectedOutput: selected, observedOutput: null, volume: null, muted: false, error: "Checking the TV audio session." };
-  let closed = false, busy = false, changing = false;
+  let snapshot: SoundRouteState = {
+    selectedOutput: selected,
+    observedOutput: null,
+    volume: null,
+    muted: false,
+    error: "Checking the TV audio session.",
+  };
+  let closed = false,
+    busy = false,
+    changing = false;
   const publish = (value: SoundRouteState) => {
     if (closed) return;
     if (JSON.stringify(snapshot) === JSON.stringify(value)) return;
-    snapshot = value; options.changed(value);
+    snapshot = value;
+    options.changed(value);
   };
-  const output = (inventory: SoundInventory, name = selected) => inventory.outputs.find(output => output.id === name && output.availability !== "unavailable");
+  const output = (inventory: SoundInventory, name = selected) =>
+    inventory.outputs.find((output) => output.id === name && output.availability !== "unavailable");
   const lost = (message: string) => {
     if (closed) return;
     publish({ ...snapshot, observedOutput: null, volume: null, error: message });
@@ -52,8 +81,14 @@ export function createSoundRouting(options: Options) {
   };
   const profileFor = (inventory: SoundInventory, name: string) => {
     const card = output(inventory, name)?.card;
-    const profile = inventory.profiles?.find(profile => profile.card === card && profile.active);
-    return profile ? { card: profile.card, profile: profile.id, ...(profile.bluetoothAddress ? { bluetoothAddress: profile.bluetoothAddress } : {}) } : null;
+    const profile = inventory.profiles?.find((profile) => profile.card === card && profile.active);
+    return profile
+      ? {
+          card: profile.card,
+          profile: profile.id,
+          ...(profile.bluetoothAddress ? { bluetoothAddress: profile.bluetoothAddress } : {}),
+        }
+      : null;
   };
   const refresh = async () => {
     let inventory = await backend.inventory();
@@ -61,67 +96,127 @@ export function createSoundRouting(options: Options) {
     if (!selected) {
       const initial = output(inventory, inventory.defaultOutput);
       if (!initial) throw new Error("No available system output.");
-      options.save(initial.id, profileFor(inventory, initial.id)); selected = initial.id;
+      options.save(initial.id, profileFor(inventory, initial.id));
+      selected = initial.id;
     }
     const savedProfile = options.savedProfile?.();
-    if (!output(inventory) && savedProfile && inventory.profiles?.some(profile => profile.card === savedProfile.card && profile.id === savedProfile.profile && profile.available && !profile.active)) {
+    if (
+      !output(inventory) &&
+      savedProfile &&
+      inventory.profiles?.some(
+        (profile) =>
+          profile.card === savedProfile.card &&
+          profile.id === savedProfile.profile &&
+          profile.available &&
+          !profile.active,
+      )
+    ) {
       lost("Restoring the saved audio output. Resume playback when it becomes available.");
       await backend.profile(savedProfile.card, savedProfile.profile);
       inventory = await backend.inventory();
     }
     const sink = output(inventory);
-    if (!sink) { lost("The selected audio output is unavailable. Reconnect it or choose another output, then resume playback."); return; }
-    if (sink.testBlocked) { lost("This audio server couples stream and system volume. Disable flat volumes before playback."); return; }
+    if (!sink) {
+      lost(
+        "The selected audio output is unavailable. Reconnect it or choose another output, then resume playback.",
+      );
+      return;
+    }
+    if (sink.testBlocked) {
+      lost(
+        "This audio server couples stream and system volume. Disable flat volumes before playback.",
+      );
+      return;
+    }
     // Older selections may have saved only the sink name before its card metadata was available.
-    const missingProfile = options.savedProfile && !savedProfile ? profileFor(inventory, sink.id) : null;
+    const missingProfile =
+      options.savedProfile && !savedProfile ? profileFor(inventory, sink.id) : null;
     if (missingProfile) options.save(sink.id, missingProfile);
     // Ubuntu's volume keys address its default sink. Reconcile that default
     // after restart/hotplug so those keys still control the saved TV output.
     if (inventory.defaultOutput !== selected) await backend.default(selected!);
     const observed = await backend.route();
     if (closed) return;
-    if (observed && observed !== selected) { lost("Couch left the selected audio output. Playback stopped. Choose an output and resume explicitly."); return; }
-    publish({ selectedOutput: selected, observedOutput: observed, volume: sink.volume, muted: sink.muted, error: null });
+    if (observed && observed !== selected) {
+      lost(
+        "Couch left the selected audio output. Playback stopped. Choose an output and resume explicitly.",
+      );
+      return;
+    }
+    publish({
+      selectedOutput: selected,
+      observedOutput: observed,
+      volume: sink.volume,
+      muted: sink.muted,
+      error: null,
+    });
   };
   const check = async () => {
     pollWhileActive();
     if (busy || closed) return;
     busy = true;
-    try { await refresh(); }
-    catch (error) { lost(error instanceof SoundError ? error.message : "Couldn't verify the audio output. Playback stopped."); }
-    finally { busy = false; }
+    try {
+      await refresh();
+    } catch (error) {
+      lost(
+        error instanceof SoundError
+          ? error.message
+          : "Couldn't verify the audio output. Playback stopped.",
+      );
+    } finally {
+      busy = false;
+    }
   };
   const mutate = async (work: () => Promise<void>) => {
     while (busy && !closed) await sleep(10);
     if (closed) throw new ControllerError("The audio session is closing.", 503);
     busy = true;
-    try { await work(); await refresh(); }
-    finally { busy = false; }
+    try {
+      await work();
+      await refresh();
+    } finally {
+      busy = false;
+    }
   };
   const select = async (name: string, inventory: SoundInventory, authorize: () => void) => {
-    if (!output(inventory, name)) throw new ControllerError("That audio output is unavailable.", 409);
-    if (output(inventory, name)?.testBlocked) throw new ControllerError("This audio server couples stream and system volume. Disable flat volumes before selecting this output.", 409);
+    if (!output(inventory, name))
+      throw new ControllerError("That audio output is unavailable.", 409);
+    if (output(inventory, name)?.testBlocked)
+      throw new ControllerError(
+        "This audio server couples stream and system volume. Disable flat volumes before selecting this output.",
+        409,
+      );
     const previous = selected;
-    const hadStream = await backend.route(); authorize();
+    const hadStream = await backend.route();
+    authorize();
     try {
       changing = true;
       await backend.move(name);
       if (hadStream) {
         const deadline = Date.now() + 2_000;
-        while (await backend.route() !== name) {
-          if (closed || Date.now() >= deadline) throw new ControllerError("The audio server did not confirm the requested playback route.", 503);
+        while ((await backend.route()) !== name) {
+          if (closed || Date.now() >= deadline)
+            throw new ControllerError(
+              "The audio server did not confirm the requested playback route.",
+              503,
+            );
           await sleep(50);
         }
       }
       authorize();
       await backend.default(name);
-      if ((await backend.inventory()).defaultOutput !== name) throw new ControllerError("The audio server did not confirm the default output.", 503);
-      authorize(); options.save(name, profileFor(inventory, name)); selected = name;
+      if ((await backend.inventory()).defaultOutput !== name)
+        throw new ControllerError("The audio server did not confirm the default output.", 503);
+      authorize();
+      options.save(name, profileFor(inventory, name));
+      selected = name;
     } catch (error) {
       if (previous) await backend.move(previous).catch(() => {});
       if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
       throw error;
-    } finally { changing = false; }
+    } finally {
+      changing = false;
+    }
   };
   let fallback: ReturnType<typeof setInterval> | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
@@ -130,12 +225,20 @@ export function createSoundRouting(options: Options) {
   const pollWhileActive = () => {
     const wanted = !closed && options.active();
     if (!!fallback === wanted) return;
-    if (wanted) { fallback = setInterval(() => void check(), 5_000); fallback.unref?.(); }
-    else { clearInterval(fallback); fallback = undefined; }
+    if (wanted) {
+      fallback = setInterval(() => void check(), 5_000);
+      fallback.unref?.();
+    } else {
+      clearInterval(fallback);
+      fallback = undefined;
+    }
   };
   const wake = () => {
     if (closed || debounce) return;
-    debounce = setTimeout(() => { debounce = undefined; void check(); }, 250);
+    debounce = setTimeout(() => {
+      debounce = undefined;
+      void check();
+    }, 250);
     debounce.unref?.();
   };
   const listen = () => {
@@ -143,68 +246,119 @@ export function createSoundRouting(options: Options) {
     subscription = pactlSubscribe(wake, () => {
       subscription = undefined;
       wake();
-      if (!closed) { respawn = setTimeout(listen, 5_000); respawn.unref?.(); }
+      if (!closed) {
+        respawn = setTimeout(listen, 5_000);
+        respawn.unref?.();
+      }
     });
   };
   void check();
   listen();
   return {
-    get state() { const address = options.savedProfile?.()?.bluetoothAddress; return { ...snapshot, ...(address ? { selectedBluetoothAddress: address } : {}) }; },
+    get state() {
+      const address = options.savedProfile?.()?.bluetoothAddress;
+      return { ...snapshot, ...(address ? { selectedBluetoothAddress: address } : {}) };
+    },
     check,
     prepare() {
-      if (changing || closed || !selected || snapshot.error) throw new ControllerError(snapshot.error || "The audio output is changing. Try again.", 409);
+      if (changing || closed || !selected || snapshot.error)
+        throw new ControllerError(
+          snapshot.error || "The audio output is changing. Try again.",
+          409,
+        );
       return selected;
     },
     async select(name: unknown, authorize: () => void) {
-      if (typeof name !== "string" || !name || name.length > 512) throw new ControllerError("Choose an available output.", 400);
-      await mutate(async () => { const inventory = await backend.inventory(); authorize(); await select(name, inventory, authorize); });
+      if (typeof name !== "string" || !name || name.length > 512)
+        throw new ControllerError("Choose an available output.", 400);
+      await mutate(async () => {
+        const inventory = await backend.inventory();
+        authorize();
+        await select(name, inventory, authorize);
+      });
     },
     async profile(value: unknown, authorize: () => void) {
-      if (!value || typeof value !== "object" || !("card" in value) || !("profile" in value)) throw new ControllerError("Choose an available audio output profile.", 400);
+      if (!value || typeof value !== "object" || !("card" in value) || !("profile" in value))
+        throw new ControllerError("Choose an available audio output profile.", 400);
       await mutate(async () => {
-        const inventory = await backend.inventory(); authorize();
-        const requested = inventory.profiles?.find(profile => profile.card === value.card && profile.id === value.profile && profile.available && profile.selectable);
+        const inventory = await backend.inventory();
+        authorize();
+        const requested = inventory.profiles?.find(
+          (profile) =>
+            profile.card === value.card &&
+            profile.id === value.profile &&
+            profile.available &&
+            profile.selectable,
+        );
         if (!requested) throw new ControllerError("That output profile is unavailable.", 409);
-        const previous = inventory.profiles?.find(profile => profile.card === requested.card && profile.active);
-        if (options.active()) options.lost("The audio output is changing. Resume playback after the output is ready.");
+        const previous = inventory.profiles?.find(
+          (profile) => profile.card === requested.card && profile.active,
+        );
+        if (options.active())
+          options.lost("The audio output is changing. Resume playback after the output is ready.");
         changing = true;
         try {
           await backend.profile(requested.card, requested.id);
           const deadline = Date.now() + 2_000;
           let updated = await backend.inventory();
-          while (!updated.profiles?.some(profile => profile.card === requested.card && profile.id === requested.id && profile.active) || !updated.outputs.some(output => output.card === requested.card && output.availability !== "unavailable")) {
-            if (closed || Date.now() >= deadline) throw new ControllerError("The selected profile did not produce an available output.", 503);
-            await sleep(50); updated = await backend.inventory();
+          while (
+            !updated.profiles?.some(
+              (profile) =>
+                profile.card === requested.card && profile.id === requested.id && profile.active,
+            ) ||
+            !updated.outputs.some(
+              (output) => output.card === requested.card && output.availability !== "unavailable",
+            )
+          ) {
+            if (closed || Date.now() >= deadline)
+              throw new ControllerError(
+                "The selected profile did not produce an available output.",
+                503,
+              );
+            await sleep(50);
+            updated = await backend.inventory();
           }
           authorize();
-          const sink = updated.outputs.find(output => output.card === requested.card && output.availability !== "unavailable")!;
+          const sink = updated.outputs.find(
+            (output) => output.card === requested.card && output.availability !== "unavailable",
+          )!;
           await select(sink.id, updated, authorize);
         } catch (error) {
           if (previous) await backend.profile(previous.card, previous.id).catch(() => {});
           if (selected) await backend.move(selected).catch(() => {});
-          if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
+          if (inventory.defaultOutput)
+            await backend.default(inventory.defaultOutput).catch(() => {});
           throw error;
-        } finally { changing = false; }
+        } finally {
+          changing = false;
+        }
       });
     },
     async volume(volume: number, authorize: () => void) {
       await mutate(async () => {
-        const inventory = await backend.inventory(); authorize();
-        if (!selected || !output(inventory)) throw new ControllerError("The selected output is unavailable.", 409);
+        const inventory = await backend.inventory();
+        authorize();
+        if (!selected || !output(inventory))
+          throw new ControllerError("The selected output is unavailable.", 409);
         await backend.volume(selected, volume);
       });
     },
     async mute(muted: boolean, authorize: () => void) {
       await mutate(async () => {
-        const inventory = await backend.inventory(); authorize();
-        if (!selected || !output(inventory)) throw new ControllerError("The selected output is unavailable.", 409);
+        const inventory = await backend.inventory();
+        authorize();
+        if (!selected || !output(inventory))
+          throw new ControllerError("The selected output is unavailable.", 409);
         await backend.mute(selected, muted);
       });
     },
     close() {
       closed = true;
-      clearInterval(fallback); clearTimeout(debounce); clearTimeout(respawn);
-      subscription?.stop(); subscription = undefined;
+      clearInterval(fallback);
+      clearTimeout(debounce);
+      clearTimeout(respawn);
+      subscription?.stop();
+      subscription = undefined;
     },
   };
 }

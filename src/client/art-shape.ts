@@ -11,7 +11,12 @@ import { savedSourceLabel } from "./saved-source";
 export type ArtShape = "poster" | "square" | "video" | "round";
 export type ArtKind = "media" | "episode" | "collection" | "channel" | "station";
 
-export const artAspect = { poster: "aspect-[2/3]", square: "aspect-square", video: "aspect-video", round: "aspect-square rounded-full" } as const satisfies Record<ArtShape, string>;
+export const artAspect = {
+  poster: "aspect-[2/3]",
+  square: "aspect-square",
+  video: "aspect-video",
+  round: "aspect-square rounded-full",
+} as const satisfies Record<ArtShape, string>;
 
 // The catalogues' films and series come as posters; their episodes are frames from the episode.
 const catalogues = new Set(["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"]);
@@ -28,10 +33,24 @@ export function artShape(source: string | undefined, kind: ArtKind = "media"): A
 }
 
 /** A provider's item by its kind; `source` is the provider's name. */
-export const providerItemShape = (source: string, item: Pick<ProviderItem, "kind" | "collection">) =>
-  artShape(source, item.kind === "channel" ? "channel" : item.kind === "collection" ? "collection" : item.collection ? "episode" : "media");
-export const historyShape = (item: HistoryItem) => artShape(item.sourceLabel, item.collection ? "episode" : "media");
-export const savedShape = (item: ForLaterItem) => artShape(savedSourceLabel(item), item.collection ? "episode" : "media");
+export const providerItemShape = (
+  source: string,
+  item: Pick<ProviderItem, "kind" | "collection">,
+) =>
+  artShape(
+    source,
+    item.kind === "channel"
+      ? "channel"
+      : item.kind === "collection"
+        ? "collection"
+        : item.collection
+          ? "episode"
+          : "media",
+  );
+export const historyShape = (item: HistoryItem) =>
+  artShape(item.sourceLabel, item.collection ? "episode" : "media");
+export const savedShape = (item: ForLaterItem) =>
+  artShape(savedSourceLabel(item), item.collection ? "episode" : "media");
 
 /** The shape most of a shelf's or a list's items have; a tie keeps the first item's. */
 export function majorityShape(shapes: readonly ArtShape[], fallback: ArtShape = "video"): ArtShape {
@@ -43,4 +62,5 @@ export function majorityShape(shapes: readonly ArtShape[], fallback: ArtShape = 
 }
 
 /** Square and round art are the same picture, so one never letterboxes in the other's frame. */
-export const fillsFrame = (own: ArtShape, frame: ArtShape) => own === frame || own !== "poster" && own !== "video" && frame !== "poster" && frame !== "video";
+export const fillsFrame = (own: ArtShape, frame: ArtShape) =>
+  own === frame || (own !== "poster" && own !== "video" && frame !== "poster" && frame !== "video");

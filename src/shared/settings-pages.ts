@@ -8,8 +8,16 @@ export const settingsPages = {
   playback: { owner: "couch", label: "Playback", path: "/settings/couch/playback" },
   sources: { owner: "couch", label: "Sources", path: "/settings/couch/sources" },
   "source-iptv": { owner: "couch", label: "Live TV", path: "/settings/couch/sources/live-tv" },
-  "source-radio": { owner: "couch", label: "Radio playlists", path: "/settings/couch/sources/radio" },
-  "source-streaming-community": { owner: "couch", label: "StreamingCommunity", path: "/settings/couch/sources/streaming-community" },
+  "source-radio": {
+    owner: "couch",
+    label: "Radio playlists",
+    path: "/settings/couch/sources/radio",
+  },
+  "source-streaming-community": {
+    owner: "couch",
+    label: "StreamingCommunity",
+    path: "/settings/couch/sources/streaming-community",
+  },
   sound: { owner: "couch", label: "Sound", path: "/settings/couch/sound" },
   display: { owner: "couch", label: "TV", path: "/settings/couch/tv" },
   updates: { owner: "couch", label: "Updates", path: "/settings/couch/updates" },
@@ -46,5 +54,8 @@ export const settingsAliases: Record<string, SettingsPage> = {
 };
 
 export const settingsPageForPath = (pathname: string): SettingsPage | null =>
-  (Object.keys(settingsPages) as SettingsPage[]).find(page => settingsPages[page].path === pathname.replace(/\/$/, "")) ?? null;
-export const settingsPagePath = (page: SettingsPage | null) => page ? settingsPages[page].path : "/settings";
+  (Object.keys(settingsPages) as SettingsPage[]).find(
+    (page) => settingsPages[page].path === pathname.replace(/\/$/, ""),
+  ) ?? null;
+export const settingsPagePath = (page: SettingsPage | null) =>
+  page ? settingsPages[page].path : "/settings";

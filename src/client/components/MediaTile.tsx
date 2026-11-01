@@ -12,15 +12,27 @@ import { useArtwork, useItemLight } from "./AmbientLight";
 import { useRelatedMenu, type Related } from "./MediaContext";
 
 // A channel keeps its circle in a frame of another shape: as large as the frame's shorter side, centred.
-const roundInFrame = "mx-auto aspect-square! h-auto! w-[min(100%,var(--tile-art))]! rounded-full object-cover";
+const roundInFrame =
+  "mx-auto aspect-square! h-auto! w-[min(100%,var(--tile-art))]! rounded-full object-cover";
 /** A media item's shape (art-shape.ts): an episode is a frame, the rest go by their source. */
-export const tileShape = (source: string | undefined, episode: boolean) => artShape(source, episode ? "episode" : "media");
+export const tileShape = (source: string | undefined, episode: boolean) =>
+  artShape(source, episode ? "episode" : "media");
 // A tile's artwork height by its shelf's shape, so posters, frames and squares carry about the same weight and a shelf
 // shows four to seven of them across a desktop; a frame on a 320px phone stays narrower than the column, so the next
 // tile peeks.
-const tileHeight = { poster: "[--tile-art:15rem]", square: "[--tile-art:10.5rem]", video: "[--tile-art:min(9rem,calc((100vw_-_2*var(--gutter))*.5))]", round: "[--tile-art:9rem]" } as const satisfies Record<ArtShape, string>;
+const tileHeight = {
+  poster: "[--tile-art:15rem]",
+  square: "[--tile-art:10.5rem]",
+  video: "[--tile-art:min(9rem,calc((100vw_-_2*var(--gutter))*.5))]",
+  round: "[--tile-art:9rem]",
+} as const satisfies Record<ArtShape, string>;
 // Its width follows from that height, set outright so the caption wraps at the artwork's edge.
-const tileWidth = { poster: "w-[calc(var(--tile-art)*2/3)]", square: "w-(--tile-art)", video: "w-[calc(var(--tile-art)*16/9)]", round: "w-(--tile-art)" } as const satisfies Record<ArtShape, string>;
+const tileWidth = {
+  poster: "w-[calc(var(--tile-art)*2/3)]",
+  square: "w-(--tile-art)",
+  video: "w-[calc(var(--tile-art)*16/9)]",
+  round: "w-(--tile-art)",
+} as const satisfies Record<ArtShape, string>;
 
 /**
  * One media item as a picture with a caption: its artwork at its true shape, how far it got as a line along the
@@ -30,7 +42,26 @@ const tileWidth = { poster: "w-[calc(var(--tile-art)*2/3)]", square: "w-(--tile-
  * also rings it. The shadcn catalog has no media tile and Card breaks Flat, so it is the smallest Button composition.
  * `className` sizes the tile, such as its artwork's height (`--tile-art`).
  */
-export function MediaTile({ title, meta, related, thumbnail, shape, own = shape, fit, logo = false, natural = false, progress, dim = false, source, className, href, onClick, disabled, menu = [], ...props }: {
+export function MediaTile({
+  title,
+  meta,
+  related,
+  thumbnail,
+  shape,
+  own = shape,
+  fit,
+  logo = false,
+  natural = false,
+  progress,
+  dim = false,
+  source,
+  className,
+  href,
+  onClick,
+  disabled,
+  menu = [],
+  ...props
+}: {
   title: string;
   meta?: string;
   /** Where it leads (its source, creator, series, station), as "Go to …" verbs at the end of its menu. */
@@ -61,32 +92,103 @@ export function MediaTile({ title, meta, related, thumbnail, shape, own = shape,
   const light = useItemLight(thumbnail);
   const mark = useArtwork(logo ? thumbnail : undefined);
   const [artRef, ratio] = useArtRatio(natural ? thumbnail : undefined, shapeRatio[own]);
-  const body = <>
-    <span data-tile-art data-own={own} className={cn("relative block h-(--tile-art) overflow-hidden rounded-md bg-background has-[img:not([data-loaded])]:bg-muted", artAspect[shape], tileWidth[shape], !fillsFrame(own, shape) && "rounded-none", own === "round" && shape !== "round" && "flex items-center", logo && mark?.clear !== false && "bg-neutral-500 [&>img]:bg-transparent [&>img]:p-3", dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale")}>
-      <MediaArtwork thumbnail={thumbnail} title={title} className={cn("aspect-auto size-full bg-background", shape === "round" && fillsFrame(own, shape) && "rounded-full", fit === "contain" || !natural && (logo || !fillsFrame(own, shape)) ? "object-contain" : "object-cover", own === "round" && shape !== "round" && roundInFrame)} />
-      {progress != null && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-white/25"><span className="block h-full bg-white" style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }} /></span>}
-      <ArtLevel level={level} className="size-8 text-base" />
-    </span>
-    {/* The title and its meta line, as wide as the artwork and wrapped whole (a shelf's tiles keep their own heights); nothing under them. */}
-    <span data-tile-caption className="relative grid w-0 min-w-full content-start gap-caption">
-      <span className="min-w-0 text-body font-medium text-pretty wrap-anywhere">{title}</span>
-      {meta && <span data-tile-meta className="min-w-0 text-meta text-pretty wrap-anywhere text-muted-foreground">{meta}</span>}
-    </span>
-  </>;
-  return <div ref={natural ? artRef : undefined} data-tile data-natural={natural || undefined} style={natural ? { "--tile-ratio": ratio } as CSSProperties : undefined} data-tile-shape={shape} {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus} className={cn("relative flex w-fit flex-col", tileHeight[shape], options.item.className, className)}>
-    <Button variant="ghost" data-media-tile {...options.target} asChild={!!href && !disabled} disabled={disabled} className="peer h-auto w-min text-foreground flex-col items-stretch justify-start gap-3 rounded-none border-0 p-0 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent disabled:opacity-50" {...props} onClick={event => {
-      if (href && onClick) {
-        if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-      }
-      onClick?.(event);
-    }}>
-      {href && !disabled ? <a href={detailHref(href)}>{body}</a> : body}
-    </Button>
-    {/* A "…" can't sit inside the tile's button, so it lies over the artwork's upper corner. A pointer sees it while it is over the tile or focus is in it (index.css); touch always does. On the TV it
+  const body = (
+    <>
+      <span
+        data-tile-art
+        data-own={own}
+        className={cn(
+          "relative block h-(--tile-art) overflow-hidden rounded-md bg-background has-[img:not([data-loaded])]:bg-muted",
+          artAspect[shape],
+          tileWidth[shape],
+          !fillsFrame(own, shape) && "rounded-none",
+          own === "round" && shape !== "round" && "flex items-center",
+          logo && mark?.clear !== false && "bg-neutral-500 [&>img]:bg-transparent [&>img]:p-3",
+          dim && "[&>.media-artwork]:brightness-50 [&>.media-artwork]:grayscale",
+        )}
+      >
+        <MediaArtwork
+          thumbnail={thumbnail}
+          title={title}
+          className={cn(
+            "aspect-auto size-full bg-background",
+            shape === "round" && fillsFrame(own, shape) && "rounded-full",
+            fit === "contain" || (!natural && (logo || !fillsFrame(own, shape)))
+              ? "object-contain"
+              : "object-cover",
+            own === "round" && shape !== "round" && roundInFrame,
+          )}
+        />
+        {progress != null && (
+          <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
+            <span
+              className="block h-full bg-white"
+              style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }}
+            />
+          </span>
+        )}
+        <ArtLevel level={level} className="size-8 text-base" />
+      </span>
+      {/* The title and its meta line, as wide as the artwork and wrapped whole (a shelf's tiles keep their own heights); nothing under them. */}
+      <span data-tile-caption className="relative grid w-0 min-w-full content-start gap-caption">
+        <span className="min-w-0 text-body font-medium text-pretty wrap-anywhere">{title}</span>
+        {meta && (
+          <span
+            data-tile-meta
+            className="min-w-0 text-meta text-pretty wrap-anywhere text-muted-foreground"
+          >
+            {meta}
+          </span>
+        )}
+      </span>
+    </>
+  );
+  return (
+    <div
+      ref={natural ? artRef : undefined}
+      data-tile
+      data-natural={natural || undefined}
+      style={natural ? ({ "--tile-ratio": ratio } as CSSProperties) : undefined}
+      data-tile-shape={shape}
+      {...options.item}
+      onPointerEnter={light.onPointerEnter}
+      onFocus={light.onFocus}
+      className={cn(
+        "relative flex w-fit flex-col",
+        tileHeight[shape],
+        options.item.className,
+        className,
+      )}
+    >
+      <Button
+        variant="ghost"
+        data-media-tile
+        {...options.target}
+        asChild={!!href && !disabled}
+        disabled={disabled}
+        className="peer h-auto w-min text-foreground flex-col items-stretch justify-start gap-3 rounded-none border-0 p-0 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent disabled:opacity-50"
+        {...props}
+        onClick={(event) => {
+          if (href && onClick) {
+            if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+              return;
+            event.preventDefault();
+          }
+          onClick?.(event);
+        }}
+      >
+        {href && !disabled ? <a href={detailHref(href)}>{body}</a> : body}
+      </Button>
+      {/* A "…" can't sit inside the tile's button, so it lies over the artwork's upper corner. A pointer sees it while it is over the tile or focus is in it (index.css); touch always does. On the TV it
         shows on the focused tile and is no focus stop, so Up and Down still go shelf to shelf and a held OK opens the menu, unless
         the press is disabled (nothing can play): then it is the tile's one stop, so its other verbs stay in reach. */}
-    <ItemMenu data-tile-menu menu={options} title={title} tabIndex={isTvPresentation() && !disabled ? -1 : undefined}
-      className="absolute top-1.5 right-1.5 size-8 bg-black/65 text-white backdrop-blur-sm hover:bg-black/85 hover:text-white touch:size-11" />
-  </div>;
+      <ItemMenu
+        data-tile-menu
+        menu={options}
+        title={title}
+        tabIndex={isTvPresentation() && !disabled ? -1 : undefined}
+        className="absolute top-1.5 right-1.5 size-8 bg-black/65 text-white backdrop-blur-sm hover:bg-black/85 hover:text-white touch:size-11"
+      />
+    </div>
+  );
 }

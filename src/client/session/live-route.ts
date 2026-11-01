@@ -5,8 +5,18 @@ export type LiveRoute = "direct" | "relay";
 // candidate is the TURN relay's.
 export function routeOf(stats: RTCStatsReport): LiveRoute | undefined {
   let pair: { localCandidateId?: string; remoteCandidateId?: string } | undefined;
-  stats.forEach(entry => { if (entry.type === "transport" && entry.selectedCandidatePairId) pair ??= stats.get(entry.selectedCandidatePairId); });
-  stats.forEach(entry => { if (entry.type === "candidate-pair" && entry.nominated && entry.state === "succeeded") pair ??= entry; });
+  stats.forEach((entry) => {
+    if (entry.type === "transport" && entry.selectedCandidatePairId)
+      pair ??= stats.get(entry.selectedCandidatePairId);
+  });
+  stats.forEach((entry) => {
+    if (entry.type === "candidate-pair" && entry.nominated && entry.state === "succeeded")
+      pair ??= entry;
+  });
   if (!pair) return undefined;
-  return [pair.localCandidateId, pair.remoteCandidateId].some(id => id && stats.get(id)?.candidateType === "relay") ? "relay" : "direct";
+  return [pair.localCandidateId, pair.remoteCandidateId].some(
+    (id) => id && stats.get(id)?.candidateType === "relay",
+  )
+    ? "relay"
+    : "direct";
 }

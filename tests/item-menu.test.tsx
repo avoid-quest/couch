@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { startHold } from "../src/client/hold";
 
-const wait = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 test("a press released before the hold acts once on release; one held opens the menu once and doesn't act", async () => {
   let held = 0;

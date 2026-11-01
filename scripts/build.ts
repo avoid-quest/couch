@@ -4,7 +4,13 @@ import { buildApp, buildCore, coreBundle } from "./core";
 
 const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
 const dirty = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim() !== "";
-const buildInfo = JSON.stringify({ version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, dataFormat: 1, packaged: false });
+const buildInfo = JSON.stringify({
+  version,
+  revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null,
+  dirty,
+  dataFormat: 1,
+  packaged: false,
+});
 await Bun.write("build/build-info.json", buildInfo);
 
 // One client graph: Vite emits dist, which Core serves from disk to every
@@ -12,4 +18,6 @@ await Bun.write("build/build-info.json", buildInfo);
 await viteBuild();
 await buildCore(buildInfo);
 await buildApp();
-console.log(`Built the frontend into dist, Core into ${coreBundle} and the app into build/main.mjs`);
+console.log(
+  `Built the frontend into dist, Core into ${coreBundle} and the app into build/main.mjs`,
+);

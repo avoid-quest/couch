@@ -7,7 +7,11 @@ import { build } from "../package.json";
 
 // electron-builder loads afterPack with Node, whose loader, unlike Bun's, needs each import's extension.
 test("Node loads the afterPack hook as electron-builder does", () => {
-  const builder = dirname(createRequire(Bun.resolveSync("electron-builder/package.json", import.meta.dir)).resolve("app-builder-lib/package.json"));
+  const builder = dirname(
+    createRequire(Bun.resolveSync("electron-builder/package.json", import.meta.dir)).resolve(
+      "app-builder-lib/package.json",
+    ),
+  );
   const script = `require(${JSON.stringify(join(builder, "helpers/dynamic-import.js"))}).dynamicImportMaybe(${JSON.stringify(resolve(build.afterPack))}).then(hook => process.exit(typeof (hook.default ?? hook) === "function" ? 0 : 2))`;
   const result = Bun.spawnSync(["node", "-e", script], { stderr: "pipe" });
   expect(result.stderr.toString()).toBe("");
@@ -25,19 +29,38 @@ test("Mac update metadata merges architectures and the updater selects the match
   const { findFile } = await import("electron-updater/out/providers/Provider.js");
   const directory = await mkdtemp(join(tmpdir(), "couch-mac-feed-"));
   try {
-    for (const [channel, version] of [["latest", "1.0.0"], ["preview", "1.1.0-preview.1"]]) {
+    for (const [channel, version] of [
+      ["latest", "1.0.0"],
+      ["preview", "1.1.0-preview.1"],
+    ]) {
       const file = join(directory, `${channel}-mac.yml`);
-      const expected = ["x64", "arm64"].flatMap(arch => ["dmg", "zip"].map(ext => `Couch-${version}-${arch}.${ext}`));
+      const expected = ["x64", "arm64"].flatMap((arch) =>
+        ["dmg", "zip"].map((ext) => `Couch-${version}-${arch}.${ext}`),
+      );
       const tasks = expected.map((url, index) => ({
-        file, arch: index < 2 ? 1 : 3,
+        file,
+        arch: index < 2 ? 1 : 3,
         publishConfiguration: { provider: "github", owner: "avoid-quest", repo: "couch", channel },
-        info: { version, files: [{ url, sha512: `hash-${index}`, size: index + 100 }], path: url, sha512: `hash-${index}` },
+        info: {
+          version,
+          files: [{ url, sha512: `hash-${index}`, size: index + 100 }],
+          path: url,
+          sha512: `hash-${index}`,
+        },
       }));
       await writeUpdateInfoFiles(tasks, { emitArtifactCreated: async () => {} });
       const info = load(await readFile(file, "utf8"));
-      expect(info.files.map((entry: { url: string }) => entry.url).sort()).toEqual(expected.toSorted());
-      const files = info.files.map((entry: { url: string; sha512: string }) => ({ url: new URL(entry.url, "https://example.com/"), info: entry }));
-      for (const [arm, arch] of [[false, "x64"], [true, "arm64"]] as const) {
+      expect(info.files.map((entry: { url: string }) => entry.url).sort()).toEqual(
+        expected.toSorted(),
+      );
+      const files = info.files.map((entry: { url: string; sha512: string }) => ({
+        url: new URL(entry.url, "https://example.com/"),
+        info: entry,
+      }));
+      for (const [arm, arch] of [
+        [false, "x64"],
+        [true, "arm64"],
+      ] as const) {
         const selected = findFile(MacUpdater.filterFilesForArch(files, arm), "zip", ["pkg", "dmg"]);
         expect(selected?.url.pathname).toBe(`/Couch-${version}-${arch}.zip`);
       }

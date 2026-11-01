@@ -7,7 +7,8 @@ lockfile.
 
 ```sh
 bun install --frozen-lockfile   # also installs the pre-commit hook (.githooks)
-bun run check     # oxlint, typecheck, knip (unused files, exports, dependencies), unit tests
+bun run check     # oxfmt, oxlint, typecheck, knip (unused files, exports, dependencies), unit tests
+bun run fmt       # format everything with oxfmt
 bun run build
 ```
 

@@ -10,5 +10,7 @@ export function sourceLabel(source: string) {
     if (url.protocol === "live:") return "Shared source";
     const provider = providerForUrl(url.href);
     return provider ? providerNames[provider] : url.hostname.replace(/^www\./, "") || "Media";
-  } catch { return "Media"; }
+  } catch {
+    return "Media";
+  }
 }

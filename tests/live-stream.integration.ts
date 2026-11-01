@@ -10,27 +10,78 @@ import { createLiveStreams } from "../src/server/live-stream";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const hasFfmpeg = spawnSync(ffmpeg, ["-version"], { stdio: "ignore" }).status === 0;
-const run = (args: string[]) => new Promise<Buffer>((resolve, reject) => execFile(ffmpeg, args, { encoding: "buffer", maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+const run = (args: string[]) =>
+  new Promise<Buffer>((resolve, reject) =>
+    execFile(ffmpeg, args, { encoding: "buffer", maxBuffer: 8 * 1024 * 1024 }, (error, stdout) =>
+      error ? reject(error) : resolve(stdout),
+    ),
+  );
 const decodedFrames = (input: Buffer) => {
-  const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-an", "-vf", "scale=2:2", "-pix_fmt", "gray", "-fps_mode", "passthrough", "-f", "rawvideo", "pipe:1"], { input });
+  const decoded = spawnSync(
+    ffmpeg,
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-i",
+      "pipe:0",
+      "-map",
+      "0:v:0",
+      "-an",
+      "-vf",
+      "scale=2:2",
+      "-pix_fmt",
+      "gray",
+      "-fps_mode",
+      "passthrough",
+      "-f",
+      "rawvideo",
+      "pipe:1",
+    ],
+    { input },
+  );
   assert.equal(decoded.status, 0, String(decoded.stderr));
   return decoded.stdout.length / 4;
 };
 const videoPts = (input: Buffer) => {
-  const probe = spawnSync(ffmpeg, ["-hide_banner", "-copyts", "-i", "pipe:0", "-map", "0:v:0", "-vf", "showinfo", "-frames:v", "1", "-f", "null", "-"], { input });
+  const probe = spawnSync(
+    ffmpeg,
+    [
+      "-hide_banner",
+      "-copyts",
+      "-i",
+      "pipe:0",
+      "-map",
+      "0:v:0",
+      "-vf",
+      "showinfo",
+      "-frames:v",
+      "1",
+      "-f",
+      "null",
+      "-",
+    ],
+    { input },
+  );
   assert.equal(probe.status, 0, String(probe.stderr));
-  const match = /Parsed_showinfo[^\n]+n:\s*0\s+pts:\s*\d+\s+pts_time:([\d.]+)/.exec(String(probe.stderr));
+  const match = /Parsed_showinfo[^\n]+n:\s*0\s+pts:\s*\d+\s+pts_time:([\d.]+)/.exec(
+    String(probe.stderr),
+  );
   assert.ok(match, "the picture must retain its MPEG-TS presentation clock");
   return Number(match[1]);
 };
 async function until(check: () => Promise<boolean>, timeout = 10_000) {
   const deadline = Date.now() + timeout;
-  while (!await check()) { if (Date.now() > deadline) throw new Error("Live input did not reach the expected state."); await new Promise(resolve => setTimeout(resolve, 25)); }
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error("Live input did not reach the expected state.");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 async function fixture(t: TestContext) {
   // Observe the real encoder without a POSIX shell wrapper, so Windows runs it too.
-  const spawn = childProcess.spawn, encoders: { pid: number | undefined; directory: string }[] = [];
+  const spawn = childProcess.spawn,
+    encoders: { pid: number | undefined; directory: string }[] = [];
   t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
     const child = spawn(...args);
     if (args[0] === ffmpeg) encoders.push({ pid: child.pid, directory: String(args[2]?.cwd) });
@@ -38,7 +89,10 @@ async function fixture(t: TestContext) {
   });
   syncBuiltinESMExports();
   const failures: string[] = [];
-  const streams = createLiveStreams({ ffmpeg: async () => ffmpeg, failed: (_sourceId, error) => failures.push(error) });
+  const streams = createLiveStreams({
+    ffmpeg: async () => ffmpeg,
+    failed: (_sourceId, error) => failures.push(error),
+  });
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: 65_536 });
   await once(server, "listening");
   const clients: WebSocket[] = [];
@@ -49,9 +103,9 @@ async function fixture(t: TestContext) {
     const client = new WebSocket(`ws://127.0.0.1:${address.port}`);
     clients.push(client);
     const messages: { type: string; error?: string }[] = [];
-    client.on("message", data => messages.push(JSON.parse(String(data))));
+    client.on("message", (data) => messages.push(JSON.parse(String(data))));
     await once(client, "open");
-    const [socket] = await connected as [WebSocket];
+    const [socket] = (await connected) as [WebSocket];
     const accepted = streams.accept(sourceId, socket);
     if (!accepted) socket.close();
     return { client, socket, messages, accepted };
@@ -60,8 +114,9 @@ async function fixture(t: TestContext) {
     await streams.close();
     for (const client of clients) client.terminate();
     for (const socket of server.clients) socket.terminate();
-    await new Promise<void>(resolve => server.close(() => resolve()));
-    t.mock.restoreAll(); syncBuiltinESMExports();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
   });
   return { streams, upload, failures, encoders };
 }
@@ -69,140 +124,388 @@ async function fixture(t: TestContext) {
 // MediaRecorder's timeslices form one recording, not independently playable
 // files. Feed continuous WebM in many small ordered WebSocket frames and leave
 // the upload open: HLS must become playable before EOF.
-test("one continuous upload becomes bounded HLS with real audio and video before EOF", { skip: !hasFfmpeg, timeout: 25_000 }, async t => {
-  const f = await fixture(t);
-  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=10", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-t", "18", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", "10", "-c:a", "libopus", "-f", "webm", "pipe:1"]);
-  await f.streams.start("screen", { audio: true, video: true });
-  const uploader = await f.upload("screen");
-  assert.equal(uploader.accepted, true);
-  for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
-  await f.streams.ready("screen", AbortSignal.timeout(10_000));
-  await until(async () => uploader.messages.some(message => message.type === "ready"));
-  assert.equal(uploader.client.readyState, WebSocket.OPEN);
-  let playlist = "";
-  await until(async () => {
-    playlist = await (await f.streams.response("screen", "stream.m3u8")).text();
-    return Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(playlist)?.[1]) > 5;
-  });
-  const segments = playlist.split("\n").filter(line => line.endsWith(".ts"));
-  assert.ok(segments.length > 0 && segments.length <= 8);
-  assert.equal((await f.streams.response("screen", "segment-000000000.ts")).status, 404);
-  assert.equal((await f.streams.response("screen", "../stream.m3u8")).status, 404);
-  assert.equal((await f.streams.response("screen", "stream.m3u8.tmp")).status, 404);
-  const segment = await f.streams.response("screen", segments.at(-1)!);
-  assert.equal(segment.status, 200);
-  assert.equal(segment.headers.get("cache-control"), "no-store");
-  const bytes = Buffer.from(await segment.arrayBuffer());
-  assert.equal(decodedFrames(bytes), 10, "Lower capture rates must not be raised");
-  const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes });
-  assert.equal(decoded.status, 0, String(decoded.stderr));
-  for (const rendition of ["audio", "video"] as const) {
-    const filtered = await (await f.streams.response("screen", "stream.m3u8", rendition)).text();
-    const name = filtered.split("\n").filter(line => line.endsWith(".ts")).at(-1)!;
-    const input = Buffer.from(await (await f.streams.response("screen", name, rendition)).arrayBuffer());
-    const included = rendition === "audio" ? "a" : "v", excluded = rendition === "audio" ? "v" : "a";
-    assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", `0:${included}:0`, "-f", "null", "-"], { input }).status, 0);
-    assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", `0:${excluded}:0`, "-f", "null", "-"], { input }).status, 0, `${rendition} output must omit the unselected captured track`);
-    if (rendition === "video") {
-      const combined = Buffer.from(await (await f.streams.response("screen", name)).arrayBuffer());
-      assert.equal(videoPts(input), videoPts(combined), "In sync picture must keep Core's exact source PTS");
+test(
+  "one continuous upload becomes bounded HLS with real audio and video before EOF",
+  { skip: !hasFfmpeg, timeout: 25_000 },
+  async (t) => {
+    const f = await fixture(t);
+    const recording = await run([
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc2=size=320x180:rate=10",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=880:sample_rate=48000",
+      "-t",
+      "18",
+      "-c:v",
+      "libvpx",
+      "-deadline",
+      "realtime",
+      "-cpu-used",
+      "8",
+      "-g",
+      "10",
+      "-c:a",
+      "libopus",
+      "-f",
+      "webm",
+      "pipe:1",
+    ]);
+    await f.streams.start("screen", { audio: true, video: true });
+    const uploader = await f.upload("screen");
+    assert.equal(uploader.accepted, true);
+    for (let at = 0; at < recording.length; at += 16_384)
+      uploader.client.send(recording.subarray(at, at + 16_384));
+    await f.streams.ready("screen", AbortSignal.timeout(10_000));
+    await until(async () => uploader.messages.some((message) => message.type === "ready"));
+    assert.equal(uploader.client.readyState, WebSocket.OPEN);
+    let playlist = "";
+    await until(async () => {
+      playlist = await (await f.streams.response("screen", "stream.m3u8")).text();
+      return Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(playlist)?.[1]) > 5;
+    });
+    const segments = playlist.split("\n").filter((line) => line.endsWith(".ts"));
+    assert.ok(segments.length > 0 && segments.length <= 8);
+    assert.equal((await f.streams.response("screen", "segment-000000000.ts")).status, 404);
+    assert.equal((await f.streams.response("screen", "../stream.m3u8")).status, 404);
+    assert.equal((await f.streams.response("screen", "stream.m3u8.tmp")).status, 404);
+    const segment = await f.streams.response("screen", segments.at(-1)!);
+    assert.equal(segment.status, 200);
+    assert.equal(segment.headers.get("cache-control"), "no-store");
+    const bytes = Buffer.from(await segment.arrayBuffer());
+    assert.equal(decodedFrames(bytes), 10, "Lower capture rates must not be raised");
+    const decoded = spawnSync(
+      ffmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        "pipe:0",
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0",
+        "-f",
+        "null",
+        "-",
+      ],
+      { input: bytes },
+    );
+    assert.equal(decoded.status, 0, String(decoded.stderr));
+    for (const rendition of ["audio", "video"] as const) {
+      const filtered = await (await f.streams.response("screen", "stream.m3u8", rendition)).text();
+      const name = filtered
+        .split("\n")
+        .filter((line) => line.endsWith(".ts"))
+        .at(-1)!;
+      const input = Buffer.from(
+        await (await f.streams.response("screen", name, rendition)).arrayBuffer(),
+      );
+      const included = rendition === "audio" ? "a" : "v",
+        excluded = rendition === "audio" ? "v" : "a";
+      assert.equal(
+        spawnSync(
+          ffmpeg,
+          [
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "pipe:0",
+            "-map",
+            `0:${included}:0`,
+            "-f",
+            "null",
+            "-",
+          ],
+          { input },
+        ).status,
+        0,
+      );
+      assert.notEqual(
+        spawnSync(
+          ffmpeg,
+          [
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "pipe:0",
+            "-map",
+            `0:${excluded}:0`,
+            "-f",
+            "null",
+            "-",
+          ],
+          { input },
+        ).status,
+        0,
+        `${rendition} output must omit the unselected captured track`,
+      );
+      if (rendition === "video") {
+        const combined = Buffer.from(
+          await (await f.streams.response("screen", name)).arrayBuffer(),
+        );
+        assert.equal(
+          videoPts(input),
+          videoPts(combined),
+          "In sync picture must keep Core's exact source PTS",
+        );
+      }
     }
-  }
-  assert.deepEqual(f.failures, []);
-  assert.equal(f.encoders.length, 1, "one real encoder serves every rendition");
-  const encoder = f.encoders[0]!;
-  assert.ok(encoder.pid);
-  f.streams.end("screen");
-  await f.streams.close();
-  assert.equal((await f.streams.response("screen", "stream.m3u8")).status, 404);
-  await assert.rejects(access(join(encoder.directory, "av")));
-  assert.throws(() => process.kill(encoder.pid!, 0), { code: "ESRCH" });
-});
+    assert.deepEqual(f.failures, []);
+    assert.equal(f.encoders.length, 1, "one real encoder serves every rendition");
+    const encoder = f.encoders[0]!;
+    assert.ok(encoder.pid);
+    f.streams.end("screen");
+    await f.streams.close();
+    assert.equal((await f.streams.response("screen", "stream.m3u8")).status, 404);
+    await assert.rejects(access(join(encoder.directory, "av")));
+    assert.throws(() => process.kill(encoder.pid!, 0), { code: "ESRCH" });
+  },
+);
 
-for (const rate of [10, 60]) test(`misleading WebM metadata preserves ${rate} captured frames per second`, { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
-  const f = await fixture(t);
-  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", `testsrc2=size=160x90:rate=${rate}`, "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", String(rate), "-c:a", "libopus", "-f", "webm", "pipe:1"]);
-  // A MediaRecorder WebM can advertise 1000 fps while delivering fewer timestamped
-  // frames per second. Change only the Matroska DefaultDuration element; every
-  // packet and its audio/video timestamps remain those of the real recording.
-  const duration = recording.indexOf(Buffer.from("23e383", "hex"));
-  assert.ok(duration > 0);
-  const size = recording[duration + 3]! & 0x7f;
-  assert.ok(size === 3 || size === 4);
-  assert.equal(recording.readUIntBE(duration + 4, size), Math.floor(1_000_000_000 / rate));
-  recording.writeUIntBE(1_000_000, duration + 4, size);
-  assert.equal(decodedFrames(recording), rate * 4);
-  await f.streams.start("misleading-fps", { audio: true, video: true });
-  const uploader = await f.upload("misleading-fps");
-  for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
-  await f.streams.ready("misleading-fps", AbortSignal.timeout(10_000));
-  const playlist = await (await f.streams.response("misleading-fps", "stream.m3u8")).text();
-  const name = playlist.split("\n").find(line => line.endsWith(".ts"))!;
-  const seconds = Number(/#EXTINF:([\d.]+)/.exec(playlist)?.[1]);
-  const segment = Buffer.from(await (await f.streams.response("misleading-fps", name)).arrayBuffer());
-  const frames = decodedFrames(segment);
-  assert.ok(Math.abs(frames - seconds * rate) <= 1, `${frames} encoded frames in a ${seconds}s HLS segment must retain ${rate} fps without duplication`);
-  const timing = spawnSync(ffmpeg, ["-hide_banner", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-vf", "showinfo", "-af", "ashowinfo", "-fps_mode", "passthrough", "-f", "null", "-"], { input: segment });
-  assert.equal(timing.status, 0, String(timing.stderr));
-  const output = String(timing.stderr);
-  const videoPts = [...output.matchAll(/Parsed_showinfo[^\n]+n:\s*\d+\s+pts:\s*\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
-  const audioPts = [...output.matchAll(/Parsed_ashowinfo[^\n]+n:\d+\s+pts:\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
-  assert.ok(videoPts.length > 1 && audioPts.length > 1, "Both encoded tracks must retain timestamps");
-  assert.ok(Math.abs(videoPts[0]! - audioPts[0]!) < 0.05, `Picture and sound must start within 50 ms: video ${videoPts[0]}, audio ${audioPts[0]}`);
-  assert.ok(Math.abs(videoPts.at(-1)! - audioPts.at(-1)!) < 1 / rate + 0.025, "Picture and sound must finish within a video frame plus one AAC frame");
-  assert.ok(Math.abs(videoPts.at(-1)! - videoPts[0]! - (seconds - 1 / rate)) < 0.02, "The frame limit must preserve the one-second media timeline");
-  t.diagnostic(`${frames} frames/${seconds}s; video PTS ${videoPts[0]}–${videoPts.at(-1)}, audio PTS ${audioPts[0]}–${audioPts.at(-1)}`);
-});
+for (const rate of [10, 60])
+  test(
+    `misleading WebM metadata preserves ${rate} captured frames per second`,
+    { skip: !hasFfmpeg, timeout: 15_000 },
+    async (t) => {
+      const f = await fixture(t);
+      const recording = await run([
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        `testsrc2=size=160x90:rate=${rate}`,
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:sample_rate=48000",
+        "-t",
+        "4",
+        "-c:v",
+        "libvpx",
+        "-deadline",
+        "realtime",
+        "-cpu-used",
+        "8",
+        "-g",
+        String(rate),
+        "-c:a",
+        "libopus",
+        "-f",
+        "webm",
+        "pipe:1",
+      ]);
+      // A MediaRecorder WebM can advertise 1000 fps while delivering fewer timestamped
+      // frames per second. Change only the Matroska DefaultDuration element; every
+      // packet and its audio/video timestamps remain those of the real recording.
+      const duration = recording.indexOf(Buffer.from("23e383", "hex"));
+      assert.ok(duration > 0);
+      const size = recording[duration + 3]! & 0x7f;
+      assert.ok(size === 3 || size === 4);
+      assert.equal(recording.readUIntBE(duration + 4, size), Math.floor(1_000_000_000 / rate));
+      recording.writeUIntBE(1_000_000, duration + 4, size);
+      assert.equal(decodedFrames(recording), rate * 4);
+      await f.streams.start("misleading-fps", { audio: true, video: true });
+      const uploader = await f.upload("misleading-fps");
+      for (let at = 0; at < recording.length; at += 16_384)
+        uploader.client.send(recording.subarray(at, at + 16_384));
+      await f.streams.ready("misleading-fps", AbortSignal.timeout(10_000));
+      const playlist = await (await f.streams.response("misleading-fps", "stream.m3u8")).text();
+      const name = playlist.split("\n").find((line) => line.endsWith(".ts"))!;
+      const seconds = Number(/#EXTINF:([\d.]+)/.exec(playlist)?.[1]);
+      const segment = Buffer.from(
+        await (await f.streams.response("misleading-fps", name)).arrayBuffer(),
+      );
+      const frames = decodedFrames(segment);
+      assert.ok(
+        Math.abs(frames - seconds * rate) <= 1,
+        `${frames} encoded frames in a ${seconds}s HLS segment must retain ${rate} fps without duplication`,
+      );
+      const timing = spawnSync(
+        ffmpeg,
+        [
+          "-hide_banner",
+          "-i",
+          "pipe:0",
+          "-map",
+          "0:v:0",
+          "-map",
+          "0:a:0",
+          "-vf",
+          "showinfo",
+          "-af",
+          "ashowinfo",
+          "-fps_mode",
+          "passthrough",
+          "-f",
+          "null",
+          "-",
+        ],
+        { input: segment },
+      );
+      assert.equal(timing.status, 0, String(timing.stderr));
+      const output = String(timing.stderr);
+      const videoPts = [
+        ...output.matchAll(/Parsed_showinfo[^\n]+n:\s*\d+\s+pts:\s*\d+\s+pts_time:([\d.]+)/g),
+      ].map((match) => Number(match[1]));
+      const audioPts = [
+        ...output.matchAll(/Parsed_ashowinfo[^\n]+n:\d+\s+pts:\d+\s+pts_time:([\d.]+)/g),
+      ].map((match) => Number(match[1]));
+      assert.ok(
+        videoPts.length > 1 && audioPts.length > 1,
+        "Both encoded tracks must retain timestamps",
+      );
+      assert.ok(
+        Math.abs(videoPts[0]! - audioPts[0]!) < 0.05,
+        `Picture and sound must start within 50 ms: video ${videoPts[0]}, audio ${audioPts[0]}`,
+      );
+      assert.ok(
+        Math.abs(videoPts.at(-1)! - audioPts.at(-1)!) < 1 / rate + 0.025,
+        "Picture and sound must finish within a video frame plus one AAC frame",
+      );
+      assert.ok(
+        Math.abs(videoPts.at(-1)! - videoPts[0]! - (seconds - 1 / rate)) < 0.02,
+        "The frame limit must preserve the one-second media timeline",
+      );
+      t.diagnostic(
+        `${frames} frames/${seconds}s; video PTS ${videoPts[0]}–${videoPts.at(-1)}, audio PTS ${audioPts[0]}–${audioPts.at(-1)}`,
+      );
+    },
+  );
 
-test("duplicate, textual and disconnected uploads cannot leave a live encoder", { skip: !hasFfmpeg, timeout: 10_000 }, async t => {
-  const f = await fixture(t);
-  await f.streams.start("bad", { audio: true, video: false });
-  const first = await f.upload("bad");
-  const second = await f.upload("bad");
-  assert.equal(second.accepted, false);
-  first.client.send("not binary media");
-  await until(async () => f.failures.length === 1);
-  await assert.rejects(f.streams.ready("bad"), /stopped/);
-  assert.equal((await f.streams.response("bad", "stream.m3u8")).status, 404);
-  await f.streams.start("gone", { audio: true, video: false });
-  const gone = await f.upload("gone");
-  gone.client.close();
-  await until(async () => f.failures.length === 2);
-  assert.match(f.failures[1]!, /stopped sharing/);
-});
+test(
+  "duplicate, textual and disconnected uploads cannot leave a live encoder",
+  { skip: !hasFfmpeg, timeout: 10_000 },
+  async (t) => {
+    const f = await fixture(t);
+    await f.streams.start("bad", { audio: true, video: false });
+    const first = await f.upload("bad");
+    const second = await f.upload("bad");
+    assert.equal(second.accepted, false);
+    first.client.send("not binary media");
+    await until(async () => f.failures.length === 1);
+    await assert.rejects(f.streams.ready("bad"), /stopped/);
+    assert.equal((await f.streams.response("bad", "stream.m3u8")).status, 404);
+    await f.streams.start("gone", { audio: true, video: false });
+    const gone = await f.upload("gone");
+    gone.client.close();
+    await until(async () => f.failures.length === 2);
+    assert.match(f.failures[1]!, /stopped sharing/);
+  },
+);
 
-test("picture-only input includes a silent clock track for shared playback", { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
-  const f = await fixture(t);
-  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=10", "-t", "4", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", "10", "-an", "-f", "webm", "pipe:1"]);
-  await f.streams.start("picture", { audio: false, video: true });
-  const uploader = await f.upload("picture");
-  for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
-  await f.streams.ready("picture", AbortSignal.timeout(10_000));
-  const playlist = await (await f.streams.response("picture", "stream.m3u8")).text();
-  const name = playlist.split("\n").find(line => line.endsWith(".ts"))!;
-  const bytes = Buffer.from(await (await f.streams.response("picture", name)).arrayBuffer());
-  const audio = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "s16le", "pipe:1"], { input: bytes });
-  assert.equal(audio.status, 0, String(audio.stderr));
-  assert.ok(audio.stdout.length > 0);
-  assert.equal(audio.stdout.some(value => value !== 0), false);
-  assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"], { input: bytes }).status, 0);
-  const picture = Buffer.from(await (await f.streams.response("picture", name, "video")).arrayBuffer());
-  assert.equal(videoPts(picture), videoPts(bytes), "picture-only capture keeps Core's silent reference clock");
-  assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"], { input: picture }).status, 0);
-  assert.deepEqual(f.failures, []);
-});
+test(
+  "picture-only input includes a silent clock track for shared playback",
+  { skip: !hasFfmpeg, timeout: 15_000 },
+  async (t) => {
+    const f = await fixture(t);
+    const recording = await run([
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc2=size=320x180:rate=10",
+      "-t",
+      "4",
+      "-c:v",
+      "libvpx",
+      "-deadline",
+      "realtime",
+      "-cpu-used",
+      "8",
+      "-g",
+      "10",
+      "-an",
+      "-f",
+      "webm",
+      "pipe:1",
+    ]);
+    await f.streams.start("picture", { audio: false, video: true });
+    const uploader = await f.upload("picture");
+    for (let at = 0; at < recording.length; at += 16_384)
+      uploader.client.send(recording.subarray(at, at + 16_384));
+    await f.streams.ready("picture", AbortSignal.timeout(10_000));
+    const playlist = await (await f.streams.response("picture", "stream.m3u8")).text();
+    const name = playlist.split("\n").find((line) => line.endsWith(".ts"))!;
+    const bytes = Buffer.from(await (await f.streams.response("picture", name)).arrayBuffer());
+    const audio = spawnSync(
+      ffmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        "pipe:0",
+        "-map",
+        "0:a:0",
+        "-f",
+        "s16le",
+        "pipe:1",
+      ],
+      { input: bytes },
+    );
+    assert.equal(audio.status, 0, String(audio.stderr));
+    assert.ok(audio.stdout.length > 0);
+    assert.equal(
+      audio.stdout.some((value) => value !== 0),
+      false,
+    );
+    assert.equal(
+      spawnSync(
+        ffmpeg,
+        ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"],
+        { input: bytes },
+      ).status,
+      0,
+    );
+    const picture = Buffer.from(
+      await (await f.streams.response("picture", name, "video")).arrayBuffer(),
+    );
+    assert.equal(
+      videoPts(picture),
+      videoPts(bytes),
+      "picture-only capture keeps Core's silent reference clock",
+    );
+    assert.notEqual(
+      spawnSync(
+        ffmpeg,
+        ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"],
+        { input: picture },
+      ).status,
+      0,
+    );
+    assert.deepEqual(f.failures, []);
+  },
+);
 
-test("an input that sends no bytes expires and reports an upload error", { skip: !hasFfmpeg, timeout: 10_000 }, async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
-  const f = await fixture(t);
-  await f.streams.start("silent", { audio: true, video: false });
-  const uploader = await f.upload("silent");
-  const waiting = assert.rejects(f.streams.ready("silent"), /stopped sending media/);
-  t.mock.timers.tick(30_001);
-  await waiting;
-  await new Promise(resolve => setTimeout(resolve, 350));
-  assert.equal(f.failures.length, 1);
-  assert.match(f.failures[0]!, /stopped sending media/);
-  assert.equal(uploader.messages.filter(message => message.type === "error").length, 1);
-  await assert.rejects(f.streams.ready("silent"), /stopped/);
-});
+test(
+  "an input that sends no bytes expires and reports an upload error",
+  { skip: !hasFfmpeg, timeout: 10_000 },
+  async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+    const f = await fixture(t);
+    await f.streams.start("silent", { audio: true, video: false });
+    const uploader = await f.upload("silent");
+    const waiting = assert.rejects(f.streams.ready("silent"), /stopped sending media/);
+    t.mock.timers.tick(30_001);
+    await waiting;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    assert.equal(f.failures.length, 1);
+    assert.match(f.failures[0]!, /stopped sending media/);
+    assert.equal(uploader.messages.filter((message) => message.type === "error").length, 1);
+    await assert.rejects(f.streams.ready("silent"), /stopped/);
+  },
+);
