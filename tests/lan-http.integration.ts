@@ -24,7 +24,7 @@ test("HTTP aliases keep Couch's port when HTTPS omits its default port", () => {
   assert.equal(httpOrigin("https://couch.home:80", 80), "http://couch.home");
 });
 
-test("HTTP Off during relay startup stays HTTPS-only before and after listener publication", { skip: !candidate || process.platform === "win32", timeout: 10000 }, async t => {
+test("HTTP Off during relay startup stays HTTPS-only before and after listener publication", { skip: !candidate, timeout: 10000 }, async t => {
   const [name, entries] = candidate!;
   const { address } = selectLan({ [name]: entries }, name);
   const directory = await mkdtemp(join(tmpdir(), "couch-http-relay-start-"));
@@ -35,7 +35,7 @@ test("HTTP Off during relay startup stays HTTPS-only before and after listener p
   process.env.COUCH_LAN_INTERFACE = name; process.env.COUCH_LAN_ADDRESS = address;
   const hub = await createHub({ databasePath, hostToken, port: 0, managedLan: true, advertisedUrls: [], relayExecutable: helper.executable });
   t.after(async () => {
-    await hub.close(); await rm(directory, { recursive: true, force: true });
+    await hub.close(); await helper.close(); await rm(directory, { recursive: true, force: true });
     if (previous === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previous;
     if (previousAddress === undefined) delete process.env.COUCH_LAN_ADDRESS; else process.env.COUCH_LAN_ADDRESS = previousAddress;
   });

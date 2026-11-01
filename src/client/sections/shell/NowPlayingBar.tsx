@@ -79,6 +79,17 @@ function recoverPageFocus(page: HTMLElement, router: AnyRouter) {
   restore();
 }
 
+/** Call while a commit removes the focused control: after it, return lost focus to the
+ * same page, leaving navigation and any deliberately chosen target alone. */
+export function returnLostFocus(router: AnyRouter) {
+  const page = document.querySelector<HTMLElement>("[data-page]");
+  const location = router.state.location;
+  // The player puts focus on its own picture.
+  queueMicrotask(() => {
+    if (page?.isConnected && !page.matches('[data-page="Now"]') && router.state.location === location && document.activeElement === document.body) recoverPageFocus(page, router);
+  });
+}
+
 /** What plays, one row above the page (and the phone tab bar): its artwork and title open the player. */
 export function NowPlayingBar({ state, connected, run, onOpen }: { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean>; onOpen: (panel?: "queue") => void }) {
   const { credentials } = useShell();
@@ -87,17 +98,8 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
   const router = useRouter();
   // React focus events include this bar's portalled popovers and sheets.
   const focusWithin = useRef(false);
-  useLayoutEffect(() => () => {
-    if (!focusWithin.current) return;
-    const page = document.querySelector<HTMLElement>("[data-page]");
-    const location = router.state.location;
-    // Stop removes the focused bar. After the commit, return lost focus to the
-    // same page, leaving navigation and any deliberately chosen target alone.
-    // The player hides the bar as it opens and puts focus on its own picture.
-    queueMicrotask(() => {
-      if (page?.isConnected && !page.matches('[data-page="Now"]') && router.state.location === location && document.activeElement === document.body) recoverPageFocus(page, router);
-    });
-  }, [router]);
+  // Stop removes the focused bar; the player hides it as it opens.
+  useLayoutEffect(() => () => { if (focusWithin.current) returnLostFocus(router); }, [router]);
   const detailNavigation = useDetailNavigation();
   const programme = useStationShow();
   const player = state.player;

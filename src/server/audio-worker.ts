@@ -13,19 +13,26 @@ const pending = new Map<number, (value: unknown) => void>();
 let requestId = 0;
 const request = (type: string, data: Record<string, unknown> = {}) => new Promise<unknown>(resolve => { const id = ++requestId; pending.set(id, resolve); port.postMessage({ type, id, ...data }); });
 const registrations = new Map<string, string>();
-const notify = () => port.postMessage({ type: "status", value: engine.status() });
+const notify = () => {
+  const status = engine.status();
+  port.postMessage({ type: "status", value: { ...status, receivers: status.receivers.map(([clientId, error, group]) => [clientId, error, group, groups.get(group)?.epoch]) } });
+};
 const engine = createScheduledAudio({ serverId: workerData.serverId, privateKey: workerData.privateKey, name: workerData.name, admit: () => true, changed: notify,
+  childStarted: child => {
+    if (!child.pid) return;
+    port.postMessage({ type: "child", pid: child.pid });
+    child.once("close", () => port.postMessage({ type: "childClosed", pid: child.pid }));
+  },
   ffmpeg: async () => {
     const result = await request("ffmpeg") as { path?: string; leaseId: number; error?: string };
     if (!result.path) throw new Error(result.error);
     return { path: result.path, release: () => port.postMessage({ type: "ffmpegRelease", id: result.leaseId }) };
   },
-  logError: (id, source, error) => port.postMessage({ type: "logError", group: id, source, error }),
   saveDelay: (id, delay) => port.postMessage({ type: "delay", clientId: id, delay }),
   sourceFailed: (id, error) => port.postMessage({ type: "sourceFailed", sourceId: id, epoch: registrations.get(id), error }),
 });
 const uploads = new Map<string, import("ws").WebSocket>();
-const groups = new Map<string, ReturnType<typeof engine.group>>();
+const groups = new Map<string, { epoch: string; group: ReturnType<typeof engine.group> }>();
 const server = createServer((_req, response) => response.writeHead(404).end());
 const websocket = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024, perMessageDeflate: false });
 server.on("upgrade", (req, socket, head) => {
@@ -65,8 +72,16 @@ server.on("upgrade", (req, socket, head) => {
 port.on("message", (message: { type: string; id?: number; value?: unknown; group?: string; method?: string; args?: unknown[]; sourceId?: string; epoch?: string; packet?: CaptureAudioPacket; clientId?: string; delay?: number; details?: LiveSource }) => {
   if (message.type === "reply") { pending.get(message.id!)?.(message.value); pending.delete(message.id!); return; }
   if (message.type === "group") {
-    let group = groups.get(message.group!);
-    if (!group) { group = engine.group(message.group!, state => port.postMessage({ type: "state", group: message.group, state })); groups.set(message.group!, group); }
+    const id = message.group!, epoch = message.epoch!;
+    if (message.method === "create") {
+      groups.get(id)?.group.close();
+      const group = engine.group(id, state => port.postMessage({ type: "state", group: id, epoch, state }),
+        (source, error) => port.postMessage({ type: "logError", group: id, epoch, source, error }));
+      groups.set(id, { epoch, group }); return;
+    }
+    const entry = groups.get(id);
+    if (!entry || entry.epoch !== epoch) return;
+    const { group } = entry;
     if (message.method === "members") group.members(message.args![0] as Member[]);
     if (message.method === "screens") group.screens(message.args![0] as string[]);
     if (message.method === "send") group.send(message.args![0] as SyncedLoad | PlaybackCommand);
@@ -82,6 +97,9 @@ port.on("message", (message: { type: string; id?: number; value?: unknown; group
   else if (message.type === "end" && registrations.get(message.sourceId!) === message.epoch) { registrations.delete(message.sourceId!); const socket = uploads.get(message.sourceId!); uploads.delete(message.sourceId!); socket?.close(); engine.endSource(message.sourceId!); }
   else if (message.type === "drop") engine.drop(message.clientId!);
   else if (message.type === "setDelay") engine.setDelay(message.clientId!, message.delay!);
-  else if (message.type === "close") { for (const group of groups.values()) group.close(); engine.close(); for (const socket of websocket.clients) socket.terminate(); server.close(() => { port.close(); }); }
+  else if (message.type === "close") {
+    for (const socket of websocket.clients) socket.terminate();
+    void engine.close().then(() => server.close(() => port.close()));
+  }
 });
 server.listen(0, "127.0.0.1", () => port.postMessage({ type: "ready", port: (server.address() as { port: number }).port }));

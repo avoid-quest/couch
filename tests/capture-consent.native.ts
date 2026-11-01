@@ -40,9 +40,12 @@ import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, session, systemPr
 import { createServer } from 'node:https';
 import { writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
-const evidence = { platform: process.platform, steps: [] };
+const evidence = { platform: process.platform, steps: [], trace: [] };
 const record = () => writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringify(evidence, null, 2));
 const step = (name, value) => { evidence.steps.push({ name, ...value }); record(); return value; };
+const trace = (name, value = {}) => { evidence.trace.push({ ms: performance.now(), name, ...value }); record(); };
+const close = BrowserWindow.prototype.close;
+BrowserWindow.prototype.close = function () { trace('Close requested'); return close.call(this); };
 // Synthetic media only: Chromium's fake microphone, and no macOS privacy prompt.
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 systemPreferences.askForMediaAccess = async () => true;
@@ -78,14 +81,18 @@ const showMessageBox = dialog.showMessageBox.bind(dialog);
 dialog.showMessageBox = (parent, options) => {
   const prompt = { parent: parent === win, message: options.message, detail: options.detail, buttons: options.buttons, cancelId: options.cancelId, signal: options.signal };
   prompts.push(prompt);
+  const id = prompts.length - 1;
+  trace('prompt registered', { id, native: !answer });
+  options.signal.addEventListener('abort', () => trace('abort', { id }), { once: true });
   const reply = answer ? answer(options) : showMessageBox(parent, options);
-  return reply.then(result => (prompt.response = result.response, result));
+  return reply.then(result => { trace('dialog response', { id, response: result.response }); prompt.response = result.response; return result; });
 };
 // Main's answer to every capture preparation, whichever page asked.
 const prepared = [];
 const handle = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (channel, run) => handle(channel, channel !== 'couch:prepare-capture' ? run : async (event, selection) => {
   const result = await run(event, selection);
+  trace('preparation settled', { selection: selection?.kind ?? null, result: result.error ?? 'prepared' });
   if (selection) prepared.push(result.error ?? 'prepared');
   return result;
 });
@@ -100,6 +107,15 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
 };
 const until = async (test, label) => { for (const deadline = Date.now() + 10000; !test(); await sleep(25)) if (Date.now() > deadline) throw new Error('Timed out: ' + label); };
 async function run(w, url) {
+  let closeDeliveries = 0;
+  w.on('sheet-begin', () => { prompts.at(-1).sheetBegan = true; trace('sheet begin'); });
+  w.on('sheet-end', () => trace('sheet end'));
+  w.on('close', () => { closeDeliveries++; trace('Close delivered'); });
+  const closeWindow = async () => {
+    const before = closeDeliveries;
+    w.close();
+    await until(() => closeDeliveries > before, 'Close reaching Main');
+  };
   assert.equal(new URL(url).origin, ${JSON.stringify(remote)}, 'Client mode shows the other Couch');
   // No user gesture anywhere: the page acts by itself.
   const js = code => w.webContents.executeJavaScript(code, false);
@@ -151,15 +167,16 @@ async function run(w, url) {
   assert.equal(await microphone(), 'NotAllowedError');
 
   // The real native prompt, closed by Couch when the page cancels and when the window closes.
-  for (const [name, revoke] of [['cancel', () => js("couchApp.prepareCapture(null)")], ['Close', async () => { w.close(); }]]) {
+  for (const [name, revoke] of [['cancel', () => js("couchApp.prepareCapture(null)")], ['Close', closeWindow]]) {
     app.emit('second-instance');
     answer = null;
     const before = prepared.length, asked = prompts.length;
     await start();
     await until(() => prompts.length > asked, 'the native prompt');
-    await sleep(500);
+    if (process.platform === 'darwin') await until(() => prompts[asked].sheetBegan, 'the native sheet opening');
     await revoke();
-    const result = step('native prompt closed by ' + name, { aborted: prompts[asked].signal.aborted, prepare: await settled(before + 1), response: prompts[asked].response, microphone: await microphone() });
+    const prepare = await settled(before + 1);
+    const result = step('native prompt closed by ' + name, { aborted: prompts[asked].signal.aborted, prepare, response: prompts[asked].response, microphone: await microphone() });
     assert.equal(result.aborted, true);
     assert.equal(result.response, 0, 'the native prompt closes as Don\\'t Allow');
     assert.notEqual(result.prepare, 'prepared');
@@ -253,8 +270,8 @@ async function run(w, url) {
   const asked = prompts.length, requested = displays.length;
   await click(screen);
   await until(() => prompts.length > asked, 'the native display prompt');
-  await sleep(500);
-  w.close();
+  if (process.platform === 'darwin') await until(() => prompts[asked].sheetBegan, 'the native display sheet opening');
+  await closeWindow();
   await until(() => displays[requested]?.streams !== undefined, 'Main answering the closed prompt');
   const closed = step('native display prompt closed by Close', { aborted: prompts[asked].signal.aborted, response: prompts[asked].response, granted: displays[requested].streams, result: await js('window.__shared') });
   assert.equal(closed.aborted, true);

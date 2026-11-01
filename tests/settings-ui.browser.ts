@@ -71,8 +71,9 @@ export async function runSoundTestFocusRegression() {
     await audit.click("Stop");
     assert(document.activeElement === start && start.textContent === "Test TV speakers", "Stopping a sound test does not return to its output");
 
-    const other = document.querySelector<HTMLElement>('[data-settings-page="sound"]')!;
+    const other = [...document.querySelectorAll<HTMLElement>('[data-settings-page="sound"], [data-back]')].find(element => element.checkVisibility())!;
     other.focus();
+    assert(document.activeElement === other, "The unrelated focus target must be visible and focusable");
     audit.respond("/api/sound", { ...active, test: { ...active.test, id: "remote-test" } });
     await audit.client.refetchQueries({ queryKey: ["sound"] }); await wait();
     assert(document.activeElement === other, "A test started elsewhere steals focus");

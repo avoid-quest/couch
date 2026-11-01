@@ -13,9 +13,9 @@ async function fixture(t: TestContext) {
   process.chdir(directory);
   process.env.COUCH_DATA_DIR = directory;
   process.env.COUCH_PORT = "0";
-  let f: Awaited<ReturnType<typeof liveFixture>> | undefined;
+  let f: Awaited<ReturnType<typeof liveFixture>> | undefined, saved: ReturnType<typeof openStore> | undefined;
   t.after(async () => {
-    try { await f?.close(); } finally {
+    try { saved?.close(); await f?.close(); } finally {
       process.chdir(cwd);
       for (const [key, value] of Object.entries(previous)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
       rmSync(directory, { recursive: true, force: true });
@@ -27,8 +27,7 @@ async function fixture(t: TestContext) {
   await f.publish("event", "microphone");
   for (const receiver of [first, second]) assert.equal((await receiver.command({ type: "playLive", sourceId: "event" })).ok, true);
   await until(() => [first, second].every(receiver => !!receiver.load()?.livePeerId && receiver.state.outputs?.length === 2));
-  const saved = openStore(f.databasePath);
-  t.after(() => saved.close());
+  saved = openStore(f.databasePath);
   return { ...f, first, second, saved };
 }
 

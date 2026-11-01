@@ -4,14 +4,13 @@ import childProcess, { type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
-import { dirname, join } from "node:path";
 import WebSocket from "ws";
 import { liveFixture, until } from "./live-input.fixture";
 
 test("a last fallback receiver leaving during encoder startup never requests an upload", { timeout: 15_000 }, async t => {
   const f = await liveFixture();
   const spawn = childProcess.spawn, access = fs.access, emit = WebSocket.prototype.emit;
-  const executable = join(dirname(f.databasePath), "ffmpeg");
+  const executable = f.executable;
   let lookups = 0;
   let child: ChildProcess | undefined, directory: string | undefined, provisioned: (() => void) | undefined;
   // Release the helper lookup in the same turn as the receiver's departure.

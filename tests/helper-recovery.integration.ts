@@ -1,4 +1,5 @@
 import { test, type TestContext } from "node:test";
+import { executableName, nodeExecutables } from "./executable.fixture";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +16,7 @@ import { ExtractionError, runYtDlp } from "../src/server/yt-dlp";
 import { inspectWebMedia, resolveWebMedia } from "../src/server/web-media";
 
 // Core's helper selection and yt-dlp runs with real fixture executables in a private PATH and
-// data directory. Only GitHub (release lookups and downloads) is replaced; downloads are real
+// data directory. Node launches the executable fixtures; GitHub is replaced with real
 // zips checked against their SHA-256. No installed Couch or its data is touched.
 const video = "https://www.youtube.com/watch?v=couch";
 
@@ -54,6 +55,7 @@ if (process.argv[2] === "--version") {
 
 function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "couch-helper-recovery-"));
+  const fixtures = nodeExecutables(directory);
   const bin = join(directory, "bin"), helpers = join(directory, "helpers");
   const originalPath = process.env.PATH, originalCertificates = process.env.SSL_CERT_FILE, originalData = process.env.COUCH_DATA_DIR;
   const timers: ReturnType<typeof setInterval>[] = [], set = globalThis.setInterval;
@@ -65,11 +67,12 @@ function fixture(t: TestContext) {
     for (const [key, value] of Object.entries({ PATH: originalPath, SSL_CERT_FILE: originalCertificates, COUCH_DATA_DIR: originalData })) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
+    await fixtures.close();
     rmSync(directory, { recursive: true, force: true });
   });
   mkdirSync(bin);
-  writeFileSync(join(bin, "qjs"), "#!/bin/sh\necho 0.17.0\n", { mode: 0o755 });
-  writeFileSync(join(bin, "ffmpeg"), "#!/bin/sh\necho 'ffmpeg version 7.0'\n", { mode: 0o755 });
+  writeFileSync(join(bin, executableName("qjs")), `#!${process.execPath}\nconsole.log("0.17.0");\n`, { mode: 0o755 });
+  writeFileSync(join(bin, executableName("ffmpeg")), `#!${process.execPath}\nconsole.log("ffmpeg version 7.0");\n`, { mode: 0o755 });
   process.env.PATH = bin;
   process.env.COUCH_DATA_DIR = directory;
 
@@ -78,7 +81,7 @@ function fixture(t: TestContext) {
   // `pause` holds a release lookup until it settles; the answer is the release at that point.
   const state = { latest: null as string | null, requests: [] as string[], pause: null as Promise<void> | null };
   const release = (version: string, works: boolean | "unusable") => {
-    releases.set(version, zipSync({ "yt-dlp_linux": strToU8(program(directory, version, works)), "_internal/extractor": strToU8(`extractor ${version}`) }));
+    releases.set(version, zipSync({ [executableName("yt-dlp")]: strToU8(program(directory, version, works)), "_internal/extractor": strToU8(`extractor ${version}`) }));
     state.latest = version;
     return createHash("sha256").update(releases.get(version)!).digest("hex");
   };
@@ -88,7 +91,7 @@ function fixture(t: TestContext) {
     if (!download) await state.pause;
     if (!state.latest) throw new Error("Network unavailable");
     if (download) return new Response(releases.get(download));
-    return Response.json({ tag_name: state.latest, assets: ["yt-dlp_macos.zip", "yt-dlp_linux.zip", "yt-dlp_linux_aarch64.zip"].map(name => ({
+    return Response.json({ tag_name: state.latest, assets: ["yt-dlp_macos.zip", "yt-dlp_linux.zip", "yt-dlp_linux_aarch64.zip", "yt-dlp_win.zip", "yt-dlp_win_arm64.zip"].map(name => ({
       name, browser_download_url: `https://github.com/yt-dlp/yt-dlp/releases/download/${state.latest}/${name}`,
       digest: `sha256:${createHash("sha256").update(releases.get(state.latest!)!).digest("hex")}`,
     })) });
@@ -98,10 +101,10 @@ function fixture(t: TestContext) {
   // A copy already in Couch's cache, as an earlier Couch left it.
   const cached = (version: string, works: boolean | "unusable") => {
     mkdirSync(join(helpers, "yt-dlp", version, "_internal"), { recursive: true });
-    writeFileSync(join(helpers, "yt-dlp", version, "yt-dlp_linux"), program(directory, version, works), { mode: 0o755 });
+    writeFileSync(join(helpers, "yt-dlp", version, executableName("yt-dlp")), program(directory, version, works), { mode: 0o755 });
     writeFileSync(join(helpers, "yt-dlp", version, "_internal", "extractor"), `extractor ${version}`);
   };
-  const path = (version: string) => join(helpers, "yt-dlp", version, "yt-dlp_linux");
+  const path = (version: string) => join(helpers, "yt-dlp", version, executableName("yt-dlp"));
   const copies = () => readdirSync(join(helpers, "yt-dlp")).sort();
   const runs = () => existsSync(join(directory, "runs")) ? readFileSync(join(directory, "runs"), "utf8").trim().split("\n") : [];
   const status = () => readHelperStatus(helpers);
@@ -119,7 +122,7 @@ async function until(condition: () => boolean | Promise<boolean>, message: strin
   }
 }
 
-const options = { skip: process.platform === "win32", timeout: 20_000 };
+const options = { timeout: 20_000 };
 
 test("a runnable update that fails extraction stays selected until the operator chooses the copy that worked", options, async t => {
   const f = fixture(t);
@@ -199,7 +202,7 @@ test("offline, the newest cached copy is selected, recorded as unchecked, and th
   assert.deepEqual(status.selected["yt-dlp"], { ...status.selected["yt-dlp"], origin: "managed", version: "2026.09.01", sha256: null, latest: null, held: false });
   assert.equal(status.selected.qjs?.origin, "system");
   assert.equal(status.selected.qjs?.version, "0.17.0");
-  assert.equal(status.selected.ffmpeg?.path, join(f.directory, "bin", "ffmpeg"));
+  assert.equal(status.selected.ffmpeg?.path, join(f.directory, "bin", executableName("ffmpeg")));
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"]);
 
   // A newer release appearing doesn't change what the passive view reports as selected.
@@ -249,7 +252,7 @@ test("a missing or broken previous copy is never held, and a held copy that disa
   // A copy that no longer runs isn't offered either.
   await helpersCommand(f.helpers, ["latest"]);
   f.cached("2026.08.01", true);
-  writeFileSync(f.path("2026.08.01"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  writeFileSync(f.path("2026.08.01"), `#!${process.execPath}\nprocess.exit(1);\n`, { mode: 0o755 });
   await assert.rejects(helpersCommand(f.helpers, ["previous"]), /no earlier yt-dlp/);
   assert.equal(existsSync(join(f.helpers, "hold.json")), false);
 });
@@ -326,7 +329,7 @@ test("while PATH's yt-dlp is used, Couch keeps only its previous copy and one a 
   await until(() => f.runs().length === 2, "the extraction started on 2026.09.01");
 
   f.release("2026.10.01", true);
-  const system = join(f.directory, "bin", "yt-dlp");
+  const system = join(f.directory, "bin", executableName("yt-dlp"));
   writeFileSync(system, program(f.directory, "2026.10.01", true), { mode: 0o755 });
   assert.equal(await checkHelper("yt-dlp"), system);
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"], "the previous copy that worked, and the one in use");
@@ -529,7 +532,7 @@ test("a managed copy of PATH's version never takes the place of an earlier copy 
   assert.equal(await f.play(), "extractor 2026.09.01");
 
   // The package manager catches up with the copy Couch downloaded.
-  const system = join(f.directory, "bin", "yt-dlp");
+  const system = join(f.directory, "bin", executableName("yt-dlp"));
   writeFileSync(system, program(f.directory, "2026.09.01", true), { mode: 0o755 });
   assert.equal(await checkHelper("yt-dlp"), system);
   assert.deepEqual(f.copies(), ["2026.08.01"], "PATH provides 2026.09.01; the earlier copy that worked stays");
@@ -668,7 +671,7 @@ test("renewing a hold keeps the held copy while it runs, even when an older copy
   assert.deepEqual(f.copies(), ["2026.07.01", "2026.08.01"], "the held copy, and July as the previous copy that worked");
 
   // A held copy that no longer runs isn't renewed; the earlier copy that worked is held instead.
-  writeFileSync(f.path("2026.08.01"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  writeFileSync(f.path("2026.08.01"), `#!${process.execPath}\nprocess.exit(1);\n`, { mode: 0o755 });
   assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.07\.01, which worked before,/);
 });
 

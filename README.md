@@ -14,7 +14,7 @@ Couch is free and open source, one of the projects of
   SoundCloud, browse film, series and anime catalogues, play radio (avoid
   radio, M3U playlists, Radio Browser) or Live TV playlists with a guide, or
   paste a link from another site yt-dlp supports.
-  Everything goes into one shared Up next; save lists for later and resume
+  Each playback has its own shared Up next; save lists for later and resume
   where you left off.
 - **Play it where you want.** In **Where it plays**, give the picture to the TV
   and the sound to the kitchen laptop, or to several phones at once; their

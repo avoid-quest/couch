@@ -1,16 +1,15 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { execFile, spawnSync } from "node:child_process";
+import childProcess, { execFile, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile, access } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { access } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
+import { join } from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import { createLiveStreams } from "../src/server/live-stream";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const hasFfmpeg = spawnSync(ffmpeg, ["-version"], { stdio: "ignore" }).status === 0;
-const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const run = (args: string[]) => new Promise<Buffer>((resolve, reject) => execFile(ffmpeg, args, { encoding: "buffer", maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
 const decodedFrames = (input: Buffer) => {
   const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-an", "-vf", "scale=2:2", "-pix_fmt", "gray", "-fps_mode", "passthrough", "-f", "rawvideo", "pipe:1"], { input });
@@ -30,11 +29,16 @@ async function until(check: () => Promise<boolean>, timeout = 10_000) {
 }
 
 async function fixture(t: TestContext, executable?: () => Promise<string>) {
-  const directory = await mkdtemp(join(tmpdir(), "couch-live-stream-test-"));
-  const marker = join(directory, "encoder"), wrapper = join(directory, "ffmpeg");
-  await writeFile(wrapper, `#!/bin/sh\nprintf '%s\\n%s\\n' "$$" "$PWD/av/stream.m3u8" > ${quote(marker)}\nexec ${quote(ffmpeg)} "$@"\n`, { mode: 0o755 });
+  // Observe the real encoder without a POSIX shell wrapper, so Windows runs it too.
+  const spawn = childProcess.spawn, encoders: { pid: number | undefined; directory: string }[] = [];
+  t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
+    const child = spawn(...args);
+    if (args[0] === ffmpeg) encoders.push({ pid: child.pid, directory: String(args[2]?.cwd) });
+    return child;
+  });
+  syncBuiltinESMExports();
   const failures: string[] = [];
-  const streams = createLiveStreams({ ffmpeg: executable ?? (async () => wrapper), failed: (_sourceId, error) => failures.push(error) });
+  const streams = createLiveStreams({ ffmpeg: executable ?? (async () => ffmpeg), failed: (_sourceId, error) => failures.push(error) });
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: 65_536 });
   await once(server, "listening");
   const clients: WebSocket[] = [];
@@ -57,9 +61,9 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
     for (const client of clients) client.terminate();
     for (const socket of server.clients) socket.terminate();
     await new Promise<void>(resolve => server.close(() => resolve()));
-    await rm(directory, { recursive: true, force: true });
+    t.mock.restoreAll(); syncBuiltinESMExports();
   });
-  return { streams, upload, failures, marker };
+  return { streams, upload, failures, encoders };
 }
 
 // MediaRecorder's timeslices form one recording, not independently playable
@@ -105,12 +109,14 @@ test("one continuous upload becomes bounded HLS with real audio and video before
     }
   }
   assert.deepEqual(f.failures, []);
-  const [pid, path] = (await readFile(f.marker, "utf8")).trim().split("\n");
+  assert.equal(f.encoders.length, 1, "one real encoder serves every rendition");
+  const encoder = f.encoders[0]!;
+  assert.ok(encoder.pid);
   f.streams.end("screen");
   await f.streams.close();
   assert.equal((await f.streams.response("screen", "stream.m3u8")).status, 404);
-  await assert.rejects(access(dirname(path!)));
-  assert.throws(() => process.kill(Number(pid), 0), { code: "ESRCH" });
+  await assert.rejects(access(join(encoder.directory, "av")));
+  assert.throws(() => process.kill(encoder.pid!, 0), { code: "ESRCH" });
 });
 
 test("audio-only input uses the same HLS path without a video track", { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
@@ -159,7 +165,7 @@ for (const rate of [10, 30, 60, 120]) test(`misleading WebM metadata preserves $
   const videoPts = [...output.matchAll(/Parsed_showinfo[^\n]+n:\s*\d+\s+pts:\s*\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
   const audioPts = [...output.matchAll(/Parsed_ashowinfo[^\n]+n:\d+\s+pts:\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
   assert.ok(videoPts.length > 1 && audioPts.length > 1, "Both encoded tracks must retain timestamps");
-  assert.ok(Math.abs(videoPts[0]! - audioPts[0]!) < 0.05, "Picture and sound must start within 50 ms");
+  assert.ok(Math.abs(videoPts[0]! - audioPts[0]!) < 0.05, `Picture and sound must start within 50 ms: video ${videoPts[0]}, audio ${audioPts[0]}`);
   assert.ok(Math.abs(videoPts.at(-1)! - audioPts.at(-1)!) < 1 / rate + 0.025, "Picture and sound must finish within a video frame plus one AAC frame");
   assert.ok(Math.abs(videoPts.at(-1)! - videoPts[0]! - (seconds - 1 / rate)) < 0.02, "The frame limit must preserve the one-second media timeline");
   t.diagnostic(`${frames} frames/${seconds}s; video PTS ${videoPts[0]}–${videoPts.at(-1)}, audio PTS ${audioPts[0]}–${audioPts.at(-1)}`);
@@ -218,7 +224,7 @@ test("ending while the encoder helper is pending cannot start a process later", 
   await Promise.all([rejected, waiting]);
   pending.resolve(ffmpeg);
   await f.streams.close();
-  await assert.rejects(access(f.marker));
+  assert.equal(f.encoders.length, 0, "cancellation must not spawn an encoder");
   assert.deepEqual(f.failures, []);
 });
 

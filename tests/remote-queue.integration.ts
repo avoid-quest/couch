@@ -97,7 +97,7 @@ for (const target of [undefined, tvId]) test(`Remote plays the selected TV's Aut
     assert.equal((await f.phone.command({ type: "play", entryId: second!.id }, target)).ok, false, "Disabled Autoplay must reject Play");
     await f.phone.command({ type: "preferences", profileId, preferences: { autoplay: true } });
     const result = await f.phone.command({ type: "play", entryId: second!.id }, target);
-    assert.equal(result.ok, true, result.error);
+    assert.equal(result.ok, true, result.error ?? "");
     await until(() => f.phone.state.currentEntryId === second!.id && f.phone.state.player.status === "playing");
     assert.equal(f.tv.state.currentEntryId, second!.id);
     assert.equal(f.host.state.currentEntryId, "other");

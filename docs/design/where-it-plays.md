@@ -93,6 +93,11 @@ out). Turning off a device's last channel takes it out: each channel it plays
 here goes, so each needs its consent. A device busy elsewhere moves here.
 This device needs no consent.
 
+If preparing a synchronized screen fails, its row keeps **Can't play** and
+Core's reason while healthy outputs continue. Turn its Picture off and on,
+or play the item again, to retry. Removing the picture clears that error;
+errors from an older item, output route or tab cannot affect its replacement.
+
 **Move here** (Core's `solo`) transfers this Playback **and its queue exclusively**
 to the row's destination, retaining position, pause state and speed where the
 source supports them. Other outputs leave that Playback. On pointer layouts a
@@ -188,6 +193,10 @@ Its switch sits under the Volume while the source plays on several devices,
 or while it is on. Timestamped audio inputs and AirPlay always use scheduled
 sound, including a single listener, so they have no In sync switch. Ordinary
 picture-only groups retain a shared timeline without generating silent audio.
+
+In sync stays with the Playback's retained queue across Core restarts. Older
+saved Playbacks start with it off. Publications, admission and output assignments
+remain runtime state: retaining the preference does not restart sharing.
 
 ## The chooser
 

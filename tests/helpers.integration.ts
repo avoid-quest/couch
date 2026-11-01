@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { executableName, nodeExecutables } from "./executable.fixture";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,18 +17,20 @@ const cases: Array<{ name: string; system: string | null; cached: string | null;
   { name: "system yt-dlp meeting the latest release stays preferred", system: "2026.08.19", cached: "2026.08.20", latest: "2026.08.19", expected: "system" },
 ];
 
-// Exercise startup selection with real executable probes and a private PATH/cache.
-// Only GitHub's release lookup is replaced; no installed Couch data is touched.
-for (const scenario of cases) test(scenario.name, { skip: process.platform === "win32", timeout: 5_000 }, async t => {
+// Exercise startup selection with real Node fixture children and a private PATH/cache.
+// GitHub's release lookup is offline; no installed Couch data is touched.
+for (const scenario of cases) test(scenario.name, { timeout: 5_000 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), "couch-helpers-"));
+  const fixtures = nodeExecutables(directory);
   const bin = join(directory, "bin"), cache = join(directory, "helpers");
-  const system = join(bin, "yt-dlp"), cached = join(cache, "yt-dlp", scenario.cached ?? "unused", "yt-dlp");
+  const system = join(bin, executableName("yt-dlp")), cached = join(cache, "yt-dlp", scenario.cached ?? "unused", executableName("yt-dlp"));
   const originalPath = process.env.PATH, originalCertificates = process.env.SSL_CERT_FILE;
   const timers: ReturnType<typeof setInterval>[] = [], set = globalThis.setInterval;
   t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => {
     const timer = set(...args); timers.push(timer); return timer;
   });
-  t.after(() => {
+  t.after(async () => {
+    await fixtures.close();
     for (const timer of timers) clearInterval(timer);
     if (originalPath === undefined) delete process.env.PATH; else process.env.PATH = originalPath;
     if (originalCertificates === undefined) delete process.env.SSL_CERT_FILE; else process.env.SSL_CERT_FILE = originalCertificates;
@@ -35,10 +38,10 @@ for (const scenario of cases) test(scenario.name, { skip: process.platform === "
   });
   const executable = (path: string, version: string, broken = false) => {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `#!/bin/sh\n${broken ? "exit 1" : `printf '%s\\n' '${version}'`}\n`, { mode: 0o755 });
+    writeFileSync(path, `#!${process.execPath}\n${broken ? "process.exit(1)" : `console.log(${JSON.stringify(version)})`}\n`, { mode: 0o755 });
   };
-  executable(join(bin, "qjs"), "0.17.0");
-  executable(join(bin, "ffmpeg"), "ffmpeg version 7.0");
+  executable(join(bin, executableName("qjs")), "0.17.0");
+  executable(join(bin, executableName("ffmpeg")), "ffmpeg version 7.0");
   if (scenario.system) executable(system, scenario.system);
   if (scenario.cached) executable(cached, scenario.cached, scenario.brokenCache);
   process.env.PATH = bin;
@@ -46,7 +49,7 @@ for (const scenario of cases) test(scenario.name, { skip: process.platform === "
   t.mock.method(globalThis, "fetch", async (url: string) => {
     requests.push(url);
     if (!scenario.latest) throw new Error("Network unavailable");
-    return Response.json({ tag_name: scenario.latest, assets: ["yt-dlp_macos.zip", "yt-dlp_linux.zip", "yt-dlp_linux_aarch64.zip"].map(name => ({
+    return Response.json({ tag_name: scenario.latest, assets: ["yt-dlp_macos.zip", "yt-dlp_linux.zip", "yt-dlp_linux_aarch64.zip", "yt-dlp_win.zip", "yt-dlp_win_arm64.zip"].map(name => ({
       name, browser_download_url: `https://github.com/yt-dlp/yt-dlp/releases/download/${scenario.latest}/${name}`, digest: `sha256:${"0".repeat(64)}`,
     })) });
   });
