@@ -11,12 +11,7 @@ test("a split m3u8 pair from one master plays the master, with no separate sound
   expect(media.audioSource).toBeUndefined();
 });
 
-for (const vcodec of ["avc1", "none"]) test(`an extensionless selected HLS transport keeps its protocol, vcodec=${vcodec}`, () => {
-  const media = parseMedia({ url: "https://media.example/playlist?token=fixture", protocol: "m3u8_native", vcodec, acodec: "aac" }, "");
-  expect(media.hls).toBe(true);
-});
-
-test("an advertised HLS alternative does not change the selected progressive transport", () => {
-  const media = parseMedia({ url: "https://media.example/file", protocol: "https", vcodec: "avc1", formats: [{ protocol: "m3u8_native" }] }, "");
-  expect(media.hls).toBeUndefined();
+test("an extensionless selected HLS transport keeps its protocol", () => {
+  expect(parseMedia({ url: "https://media.example/playlist?token=fixture", protocol: "m3u8_native", vcodec: "avc1", acodec: "aac" }, "").hls).toBe(true);
+  expect(parseMedia({ url: "https://media.example/file", protocol: "https", vcodec: "avc1", formats: [{ protocol: "m3u8_native" }] }, "").hls).toBeUndefined();
 });

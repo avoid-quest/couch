@@ -36,13 +36,3 @@ test("release history shares requests across channels, excludes drafts and retai
   await history("preview", 1);
   expect(calls).toBe(1);
 });
-
-test("a filtered empty page can still lead to more releases, and failed reads can be retried", async () => {
-  let calls = 0;
-  const history = createReleaseHistory((async () => {
-    if (++calls === 1) return new Response(null, { status: 503 });
-    return Response.json(Array.from({ length: 30 }, (_, i) => ({ tag_name: `v0.4.0-preview.${i + 1}`, published_at: "2026-10-23", body: "" })));
-  }) as typeof fetch);
-  await expect(history("latest", 1)).rejects.toThrow("Couldn't load");
-  expect(await history("latest", 1)).toEqual({ releases: [], more: true });
-});

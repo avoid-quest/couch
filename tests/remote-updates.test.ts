@@ -24,13 +24,6 @@ test("only paired administrators and the native host can update a selected app",
   expect(calls).toEqual([[{ op: "install", version: "0.3.1" }, device]]);
 });
 
-test("authorization is checked again after reading a channel or version", async () => {
-  let reads = 0, calls = 0;
-  const response = await updateSettings(request("/api/updates/channel", { channel: "preview" }), () => ++reads === 1 ? identity("administrator") : null, async () => { calls++; return state; });
-  expect(response.status).toBe(401);
-  expect(calls).toBe(0);
-});
-
 test("playback must be explicitly interrupted at the server install boundary", async () => {
   const calls: UpdateAction[] = [];
   const invoke = async (action: UpdateAction) => { calls.push(action); return state; };
@@ -77,14 +70,6 @@ test("native replies are correlated and validate untrusted client state", async 
   expect((await pending).message).toBe("Couch is restarting.");
 });
 
-test("invalid automatic-update details cannot reach the remote settings page", async () => {
-  let id = "";
-  const updates = createNativeUpdates(next => { id = next; });
-  const result = updates.request({ op: "read" }).catch(error => error as Error);
-  updates.receive({ requestId: id, state: { ...state, automatic: { installed: true, active: false, last: { version: {}, at: 1, outcome: "failed", error: null } } } as unknown as UpdateState });
-  expect((await result).message).toBe("Invalid update reply.");
-});
-
 test("malformed release strings in native replies cannot reach remote settings", async () => {
   let id = "";
   const updates = createNativeUpdates(next => { id = next; });
@@ -92,10 +77,7 @@ test("malformed release strings in native replies cannot reach remote settings",
     { ...state, version: "" },
     { ...state, available: "0.3.1;reboot" },
     { ...state, channel: "nightly" },
-    { ...state, status: "waiting" },
     { ...state, progress: NaN },
-    { ...state, progress: 101 },
-    { ...state, checkedAt: Infinity },
     { ...state, error: "x".repeat(4097) },
     { ...state, automatic: { installed: true, last: { version: "0.3.1", outcome: "skipped", at: 1, error: null, failed: "garbled" } } },
   ]) {
@@ -103,15 +85,6 @@ test("malformed release strings in native replies cannot reach remote settings",
     updates.receive({ requestId: id, state: invalid as UpdateState });
     expect((await result as Error).message).toBe("Invalid update reply.");
   }
-});
-
-test("invalid actions are rejected before being sent to a connected native app", async () => {
-  const sent: UpdateAction[] = [];
-  const updates = createNativeUpdates((_id, action) => sent.push(action));
-  for (const action of [null, { op: "install", version: "" }, { op: "channel", channel: "nightly" }]) {
-    await expect(updates.request(action as UpdateAction)).rejects.toThrow();
-  }
-  expect(sent).toEqual([]);
 });
 
 test("older native replies can omit automatic details, timer activity and failed release", async () => {

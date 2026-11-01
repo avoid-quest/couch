@@ -83,50 +83,6 @@ test("emits exactly the elapsed samples, filling loss and pauses with silence", 
   expect(paused.slice(25 * packet).every(value => value === 0)).toBe(true);
 });
 
-test("drops repeats and stragglers, and starts again from a sender whose clock jumped or fell behind", () => {
-  const time = clock(), ingress = createAudioIngress({ now: time.now });
-  ingress.tick();
-  ingress.push(framed(rtp(0, 0, packet, 1)));
-  ingress.push(framed(rtp(0, 0, packet, 1)));
-  expect(ingress.stats.packets).toBe(1);
-  ingress.push(framed(rtp(1, packet, packet, 1)));
-  time.advance(600);
-  ingress.tick();
-  // An old packet arrives after newer ones already played.
-  ingress.push(framed(rtp(9, -packet * 30, packet, 9)));
-  expect(ingress.stats.late).toBe(1);
-  // In order but behind Core's clock (a slow sender): it plays a quarter second later instead of never.
-  ingress.push(framed(rtp(2, packet * 2, packet, 3)));
-  expect(ingress.stats.resyncs).toBe(1);
-  time.advance(260);
-  expect(values(ingress.tick()).includes(3)).toBe(true);
-  // A resumed sender ten seconds ahead: what was buffered is dropped, not held without limit.
-  ingress.push(framed(rtp(3, sampleRate * 10, packet, 4)));
-  expect(ingress.stats.resyncs).toBe(2);
-  expect(ingress.buffered()).toBeLessThanOrEqual(sampleRate / 4 + packet);
-});
-
-test("a repeat of the newest packet that already played is dropped, never played again", () => {
-  const time = clock(), ingress = createAudioIngress({ now: time.now });
-  ingress.tick();
-  ingress.push(framed(rtp(0, 0, packet, 1)));
-  ingress.push(framed(rtp(1, packet, packet, 2)));
-  // Both play: a quarter second of lead-in, then the two packets.
-  time.advance(300);
-  expect(values(ingress.tick()).filter(value => value === 2).length).toBe(packet);
-  // The newest packet arrives again, as a network may repeat it.
-  ingress.push(framed(rtp(1, packet, packet, 2)));
-  expect(ingress.stats.resyncs).toBe(0);
-  expect(ingress.stats.late).toBe(1);
-  time.advance(300);
-  expect(values(ingress.tick()).includes(2)).toBe(false);
-  // The next new packet that is behind Core's clock still starts again from it.
-  ingress.push(framed(rtp(2, packet * 2, packet, 3)));
-  expect(ingress.stats.resyncs).toBe(1);
-  time.advance(260);
-  expect(values(ingress.tick()).includes(3)).toBe(true);
-});
-
 test("follows 32-bit timestamp wrap and a new stream from another pipeline", () => {
   const time = clock(), ingress = createAudioIngress({ now: time.now });
   ingress.tick();

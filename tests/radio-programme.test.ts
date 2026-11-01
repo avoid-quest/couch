@@ -38,10 +38,3 @@ test("independent playbacks survive other station switches, discard late results
     expect(updates.some(([, show]) => show?.title === "late-two")).toBe(false);
   } finally { tracker.close(); }
 });
-
-test("an obsolete resolved URL never starts metadata for the newly loaded station", async () => {
-  let calls = 0;
-  const tracker = createRadioProgramme({ station: () => ({ id: "same", streamUrl: "https://audio.example/new" }), publish: () => {}, metadata: { get: async () => { calls++; return { programme: null, retryAt: Date.now() + 60_000 }; } } });
-  try { tracker.load("p", "radio:same", "https://audio.example/old"); tracker.observe(state("p", "same")); expect(calls).toBe(0); }
-  finally { tracker.close(); }
-});

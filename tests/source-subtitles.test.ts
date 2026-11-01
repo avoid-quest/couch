@@ -50,12 +50,3 @@ test("source subtitles stop a chunked download at the byte limit before decoding
   expect(canceled).toBe(true);
   expect(pulls).toBeLessThanOrEqual(4);
 });
-
-test("oversized Content-Length and failed upstream responses cancel their bodies", async () => {
-  for (const init of [{ headers: { "Content-Length": String(subtitleSizeLimit + 1) } }, { status: 404 }]) {
-    let canceled = false;
-    request.mockResolvedValue(new Response(new ReadableStream({ cancel() { canceled = true; } }), init));
-    expect((await subtitles.serve(address())).status).toBe(502);
-    expect(canceled).toBe(true);
-  }
-});

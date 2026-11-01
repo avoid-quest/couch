@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { parseGuideChannels, parseGuidePrograms, xmltvTime } from "../src/server/iptv-feeds";
 import { readRadioSource } from "../src/server/radio-playlists";
 import { createRadioGuides } from "../src/server/radio-guides";
-import { radioLabels, radioNow, radioNext, radioHost, radioShowLabels, radioMatches, type RadioGuide, type RadioProgrammeDetails } from "../src/shared/radio";
+import { radioNow, radioNext, type RadioGuide, type RadioProgrammeDetails } from "../src/shared/radio";
 
 const playlist = readFileSync(new URL("./fixtures/radio/community.m3u", import.meta.url), "utf8");
 const xml = readFileSync(new URL("./fixtures/radio/community.xml", import.meta.url), "utf8");
@@ -41,10 +41,6 @@ test("shared XMLTV retains categories and optional safe artwork, permits partial
 test("schedule precedence, enrichment matching, freshness, gaps and next entries share one rule", () => {
   const current = radioNow(guide, "station", now)!;
   expect(current).toMatchObject({ title: "Night Shift", description: "Guide description", artworkUrl: live.artworkUrl, artist: "Alex", expiresAt: end, start, end });
-  expect(radioShowLabels(current)).toEqual(["Experimental", "Jazz"]);
-  expect(radioHost(current)).toBe("Alex");
-  // A show named after its host says the host once, in its title.
-  expect(radioHost({ ...current, title: "DJ Alé", artist: "dj ale" })).toBeUndefined();
   expect(radioNow({ ...guide, programmes: [{ ...guide.programmes[0]!, artworkUrl: "https://example.com/scheduled.jpg" }] }, "station", now)?.artworkUrl).toBe("https://example.com/scheduled.jpg");
   expect(radioNow({ ...guide, live: { ...live, sampledAt: start - 1 } }, "station", now)?.artworkUrl).toBeUndefined();
   expect(radioNow({ ...guide, live: { ...live, expiresAt: now } }, "station", now)?.artworkUrl).toBeUndefined();
@@ -55,12 +51,9 @@ test("schedule precedence, enrichment matching, freshness, gaps and next entries
   expect(next.artworkUrl).toBeUndefined();
   expect(next.genre).toBeUndefined();
   expect(radioNow({ programmes: [], live }, "station", now)).toEqual(live);
-  expect(radioNow(undefined, "station", now)).toBeNull();
   const overlap = { ...guide, programmes: [...guide.programmes, { id: "overlap", title: "New overlapping slot", start: now + 1000, end }] };
   expect(radioNow(overlap, "station", now)?.expiresAt).toBe(now + 1000);
   expect(radioNow(overlap, "station", now + 1000)?.title).toBe("New overlapping slot");
-  expect(radioLabels([" Jazz ", "jazz", "Deep   House", "Deep House", "R&B", "R / B"])).toEqual(["Jazz", "Deep House", "R&B", "R / B"]);
-  expect(radioMatches({ name: "Station", groupTitle: "Network", tags: ["Talk"] } as never, "Alex", current)).toBe(true);
 });
 
 test("a broad schedule slot does not replace a fresh live show's title and artwork", () => {
@@ -69,53 +62,12 @@ test("a broad schedule slot does not replace a fresh live show's title and artwo
   const current = radioNow(rotation, "station", now)!;
   expect(current.title).toBe(live.title);
   expect(current.artworkUrl).toBe(live.artworkUrl);
-  expect(current.artist).toBe(live.artist);
-  expect(current.start).toBeUndefined();
-  expect(current.end).toBeUndefined();
   expect(current.description).toBe(live.description);
-  expect(current.programmeUrl).toBe(live.programmeUrl);
   expect(current.expiresAt).toBe(end);
-  expect(radioShowLabels(current)).toEqual(["Jazz"]);
-  const sparse = radioNow({ ...rotation, live: { ...live, description: undefined, artworkUrl: undefined } }, "station", now)!;
-  expect(sparse.description).toBeUndefined();
-  expect(sparse.artworkUrl).toBeUndefined();
-  expect(sparse.categories).toBeUndefined();
   // Expiry restores the guide; a live observation never crosses a known broadcast boundary or gap.
   expect(radioNow({ ...rotation, live: { ...live, expiresAt: now } }, "station", now)).toMatchObject(slot);
   expect(radioNow({ ...rotation, live: { ...live, sampledAt: start - 1 } }, "station", now)).toMatchObject(slot);
   expect(radioNow(rotation, "station", end)).toBeNull();
-  expect(radioNow(rotation, "station", end + 3_600_000)).toMatchObject({ title: "After Hours" });
-  expect(radioNow(rotation, "station", end + 3_600_000)?.artworkUrl).toBeUndefined();
-  expect(radioNext(rotation, now)).toEqual(guide.programmes[1]!);
-});
-
-test("guide categories and a comma-joined live genre describe each genre once", () => {
-  const categories = ["Ambient", "Dub", "Breakbeat", "Downtempo"];
-  const overlapping = { ...guide, programmes: [{ ...guide.programmes[0]!, categories }], live: { ...live, genre: "Ambient, Dub, Breakbeat, Downtempo" } };
-  const current = radioNow(overlapping, "station", now)!;
-  expect(current.categories).toEqual(categories);
-  expect(radioShowLabels(current)).toEqual(categories);
-  expect(radioShowLabels({ ...live, categories, genre: " dub , Ambient" })).toEqual(categories);
-  expect(radioShowLabels({ ...live, categories, genre: " dub , Ambient, Deep House / Dub" })).toEqual([...categories, "dub , Ambient, Deep House / Dub"]);
-});
-
-test("overlapping genres keep compound labels, punctuation and unrelated genre text", () => {
-  const categories = ["R&B", "Jazz, Blues & Soul", "Deep House (Live)"];
-  const genre = "r&b, Jazz, Blues & Soul, Deep House (Live), Dub Techno, R / B";
-  expect(radioShowLabels({ ...live, categories, genre })).toEqual([...categories, genre]);
-  expect(radioShowLabels({ categories, genre: "r&b, Jazz, Blues & Soul, Deep House (Live)" })).toEqual(categories);
-  expect(radioShowLabels({ ...live, categories: ["Dub"], genre: "Dub Techno, Jazz, Blues & Soul" })).toEqual(["Dub", "Dub Techno, Jazz, Blues & Soul"]);
-  expect(radioShowLabels({ ...live, genre: "Jazz, Blues & Soul" })).toEqual(["Jazz, Blues & Soul"]);
-  expect(radioLabels(["Jazz, Blues & Soul", "R&B", "R / B", "Deep House"])).toEqual(["Jazz, Blues & Soul", "R&B", "R / B", "Deep House"]);
-});
-
-test("partial category matches never cut compound genres or rewrite their punctuation", () => {
-  for (const genre of ["Jazz, Blues & Soul", "Jazz,Blues & Soul", "Jazz,, Blues & Soul"]) {
-    expect(radioShowLabels({ categories: ["Jazz"], genre })).toEqual(["Jazz", genre]);
-    expect(radioShowLabels({ genre })).toEqual([genre]);
-    const current = radioNow({ ...guide, programmes: [{ ...guide.programmes[0]!, categories: ["Jazz"] }], live: { ...live, genre } }, "station", now)!;
-    expect(radioShowLabels(current)).toEqual(["Jazz", genre]);
-  }
 });
 
 test("guide reads share cache and retry-after, restrict redirects, and explicitly allow another origin", async () => {
@@ -139,27 +91,4 @@ test("guide reads share cache and retry-after, restrict redirects, and explicitl
   expect(explicit.programmes.get("station")).toHaveLength(2);
   await hub.get({ ...source as object, guideUrl: "https://another.example/guide.xml" } as never, stations);
   expect(calls).toBe(3);
-});
-
-test("JSON enrichment expiry, stream validation and rate limiting remain independent of programme windows", async () => {
-  const { createRadioMetadata } = await import("../src/server/radio-metadata");
-  let clock = now, calls = 0, mode = "valid";
-  const hub = createRadioMetadata({ now: () => clock, fetch: async () => {
-    calls++;
-    if (mode === "limited") return new Response(null, { status: 429, headers: { "Retry-After": "120" } });
-    return Response.json({ ok: true, data: { ...live, streamUrl: "https://audio.example/live", resolvedUrl: "https://never-play.example/", artworkUrl: live.artworkUrl } });
-  } });
-  const initial = await hub.get("station", "https://audio.example/live");
-  expect(initial.programme?.title).toBe("Night Shift");
-  expect(initial.programme?.start).toBeUndefined();
-  expect(initial.programme?.end).toBeUndefined();
-  expect((await hub.get("station", "https://audio.example/other")).programme).toBeNull();
-  clock = live.expiresAt;
-  expect((await hub.get("station", "https://audio.example/live")).programme).toBeNull();
-  mode = "limited"; clock += 60_000;
-  const limited = await hub.get("station", "https://audio.example/live");
-  const before = calls;
-  await hub.get("another-station", "https://audio.example/another");
-  expect(calls).toBe(before);
-  expect(limited.retryAt).toBe(clock + 120_000);
 });

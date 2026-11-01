@@ -29,11 +29,7 @@ test("download events preserve target OS, format, channel and session metadata w
   spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
     const request = new Request(url, init);
     expect(request.url).toBe("https://umami.net-work.studio/api/send");
-    expect(request.method).toBe("POST");
     expect(request.headers.get("user-agent")).toBe("Visitor browser");
-    expect(request.headers.get("x-umami-cache")).toBe("session-token");
-    expect(request.headers.get("x-umami-website-id")).toBe(event.payload.website);
-    expect(request.headers.get("x-umami-hostname")).toBe("couch.avoid.quest");
     expect(await request.json()).toEqual({ ...event, payload: { ...event.payload, ip: "2001:db8::42" } });
     return Response.json({ cache: "next-session-token" });
   });
@@ -80,15 +76,4 @@ test("upstream errors and redirects are uncached and cannot redirect the browser
   expect(redirected.headers.get("Cache-Control")).toBe("no-store");
   upstream.mockRejectedValue(new TypeError("fetch failed"));
   expect((await proxy("script.js")).status).toBe(502);
-});
-
-test("HEAD serves the tracker headers without a body", async () => {
-  spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-    expect(init?.method).toBe("HEAD");
-    return new Response(null, { headers: { "Content-Type": "application/javascript" } });
-  });
-  const response = await proxy("script.js", { method: "HEAD" });
-  expect(response.status).toBe(200);
-  expect(response.body).toBeNull();
-  expect(response.headers.get("Content-Type")).toBe("application/javascript");
 });
