@@ -4,7 +4,7 @@ import { chooserFor, chooserRequest, picker, playOnTargets, reopens, soundAction
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
 import type { LiveSource } from "../src/shared/live-input";
 
-// The rules of docs/design/where-it-plays.md (src/client/session/where-it-plays.ts). "here" is this device; every other device
+// The rules in src/client/session/where-it-plays.ts. "here" is this device; every other device
 // shares its speakers and screen unless a test says otherwise.
 const here = "here";
 const shared = { audio: true, video: true };

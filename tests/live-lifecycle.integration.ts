@@ -2,17 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { test, type TestContext } from "node:test";
 import { AudioCodec, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
-import { dirname, join } from "node:path";
-import { helper, startHelpers } from "../src/server/helpers";
-import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
-
-// Keep helper status and downloads in the fixture's directory, not the working directory.
-async function liveFixture(options?: Parameters<typeof createLiveFixture>[0]) {
-  const f = await createLiveFixture(options);
-  startHelpers(join(dirname(f.databasePath), "helpers"));
-  await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
-  return f;
-}
+import { liveFixture, until } from "./live-input.fixture";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const publication = { type: "publishLive", sourceId: "concert", uploadToken: "1".repeat(64), kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" } as const;

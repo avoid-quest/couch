@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
+import { helper, startHelpers } from "../src/server/helpers";
 import { deviceId } from "../src/client/session/device-id";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
 import { executableName, nodeExecutables } from "./executable.fixture";
@@ -79,6 +80,9 @@ process.stdin.resume();
 setInterval(() => {}, 1000);
 `, { mode: 0o755 });
     process.env.PATH = `${directory}${delimiter}${previousPath ?? ""}`;
+    // Helper selection is process-global: pick this fixture's executables and keep helper files in its directory.
+    startHelpers(join(directory, "helpers"));
+    await Promise.allSettled([helper("ffmpeg"), helper("qjs"), helper("yt-dlp")]);
     const store = openStore(databasePath, true);
     const hostIdentity = { id: Identity.generate().peerId, token: "h".repeat(64) };
     let identities: { key: Identity; id: string; token: string }[];
