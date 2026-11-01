@@ -380,6 +380,8 @@ arrives, 600 ms for colour that follows what plays.
 - Routes appear immediately with cached content; artwork fades only on a cold
   load, and a Stage's object settles .75rem into place as it does (450 ms);
   the player's bands fade together with the subtitles they lift.
+- Over a playing video, moving the pointer out of the window leaves the four-second
+  controls hide timer running.
 - Opening the player fades it in over 160 ms; Back fades the restored bar in
   over the same interval. Only opacity animates, with no route snapshots or
   shared-element capture. The transport keeps its familiar positions in both
