@@ -8,6 +8,7 @@ import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 import { routeOf, type LiveRoute } from "./live-route";
+import { configureLiveVideo } from "./live-video";
 
 type Publication = { captureFormat?: AudioCaptureFormat; nativeAudioId?: string; nativeMuted?: boolean; source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; quality: LiveVideoQuality; frameRate: LiveVideoFrameRate; pictureWork?: Promise<void>; preview: MediaStream; surface?: LiveSelection["surface"]; since: number; uploadId?: string; audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>; stopAudio?: () => void; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void>; deviceId?: string };
@@ -58,6 +59,10 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       catch (cause) { throw new Error("Couldn't change the shared picture. Try a lower resolution or frame rate.", { cause }); }
       current.quality = quality;
       current.frameRate = frameRate;
+      await Promise.all([...publishers].map(([id, peer]) => peer.work = peer.work.then(async () => {
+        if (publication !== current || publishers.get(id) !== peer) return;
+        for (const sender of peer.connection.getSenders()) if (sender.track?.kind === "video") await configureLiveVideo(sender, quality, frameRate);
+      }).catch(reason => failPublisher(id, peer, reason))));
     });
   };
   const closeReceiver = () => {
@@ -122,15 +127,23 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     peer.deviceId = target.deviceId;
     publishers.set(target.peerId, peer);
     const active = () => publication === current && publishers.get(target.peerId) === peer;
-    try {
-      for (const track of current.stream.getTracks()) if (track.kind === "video" ? target.picture : target.sound) peer.connection.addTrack(track, current.stream);
-      const offer = await peer.connection.createOffer();
-      if (!active()) return;
-      await peer.connection.setLocalDescription(offer);
-      if (active()) options.send({ type: "liveSignal", peerId: target.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
-    } catch (reason) {
-      if (active()) failPublisher(target.peerId, peer, reason);
-    }
+    await (peer.work = peer.work.then(async () => {
+      try {
+        for (const track of current.stream.getTracks()) if (track.kind === "video" ? target.picture : target.sound) {
+          const sender = peer.connection.addTrack(track, current.stream);
+          if (track.kind === "video") {
+            await configureLiveVideo(sender, current.quality, current.frameRate);
+            if (!active()) return;
+          }
+        }
+        const offer = await peer.connection.createOffer();
+        if (!active()) return;
+        await peer.connection.setLocalDescription(offer);
+        if (active()) options.send({ type: "liveSignal", peerId: target.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
+      } catch (reason) {
+        if (active()) failPublisher(target.peerId, peer, reason);
+      }
+    }));
   };
   const negotiate = () => {
     negotiationTimer = undefined;
@@ -359,6 +372,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
         if (!nativeAudioId && selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
         if (selection.kind === "screen" && !videoTracks.length) throw new Error("The selected capture did not provide a screen.");
+        for (const track of videoTracks) track.contentHint = "detail";
         let audioFrames: Awaited<ReturnType<typeof prepareCaptureAudio>> | undefined;
         if (!videoTracks.length && audioTracks.length && canCaptureAudio() && options.uploadUrl) {
           try { audioFrames = await prepareCaptureAudio(audioTracks[0]!, selection.intent === "live", requestedRate, value => { captureFormat = value; }); }

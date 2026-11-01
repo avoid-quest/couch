@@ -151,6 +151,16 @@ Sheet on phones and the TV:
   screen or encoder may not reach; **Mute audio input** turns the input's track off
   (`track.enabled`), keeping the capture and its connections. Native input mute
   sends zero samples while preserving the source clock.
+- Direct picture senders have an explicit bitrate budget and frame-rate ceiling;
+  both follow Picture edits and apply to each new receiver. Text/detail and
+  resolution take priority under congestion. Codec selection and receiver
+  buffering remain automatic after the native experiments failed the drop gate
+  ([measurements](../live-sharing-performance.md#smooth-sharing-investigation-1-november-2026)).
+  The default remains 30 FPS until 1080p60 passes on Mac and Windows.
+- Minimizing, hiding or closing a shared window adds no Couch closure detection.
+  Sharing follows the original capture track’s lifetime; quitting the source app
+  or **Stop sharing** ends it. Native capture can itself end a track; this change
+  preserves that existing platform behavior.
 - Live sharing reports the delivered rate and channels, and a native input's
   device buffer when it differs from the requested **Capture buffer**.
 - One line about the relay only when a device is Behind: with no relay, that a

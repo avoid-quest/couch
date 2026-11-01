@@ -2,7 +2,8 @@
 // Use a real display to qualify hardware. xvfb-run measures software playback and capture only.
 // --screen requires a controlled 1920×1080 test display; otherwise require the generated-video window. Experimental --codec=h264, --hint=motion, --bitrate=8000000, --jitter=50 and --bare are benchmark-only.
 // --diagnostics adds bounded frame/stage probes; compare without it. --bitrate-at-offer applies the diagnostic bitrate before initial negotiation.
-import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { cpus, release } from "node:os";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { build, mergeConfig } from "vite";
@@ -10,6 +11,7 @@ import electron from "electron";
 import config from "../vite.config";
 
 const directory = resolve(process.argv[2] ?? ".artifacts/video"), outDir = join(directory, "dist");
+if (existsSync(join(directory, "result.json"))) throw new Error("Choose a fresh evidence directory; previous runs must be retained");
 const argument = (name: string, fallback: number) => Number(process.argv.find(value => value.startsWith(`--${name}=`))?.split("=")[1] ?? fallback);
 const seconds = argument("seconds", 10), warmup = argument("warmup", 3), rounds = argument("rounds", 3), assertFps = argument("assert-fps", 0);
 const maxDropped = argument("max-dropped", assertFps ? 1 : 100);
@@ -22,6 +24,9 @@ const hint = process.argv.find(value => value.startsWith("--hint="))?.slice(7);
 const bitrate = argument("bitrate", 0);
 const jitter = argument("jitter", 0);
 const sound = process.argv.includes("--sound");
+const encoderFps = argument("encoder-fps", 0);
+const receivers = argument("receivers", 1), bandwidth = argument("bandwidth", 0);
+if (![1, 2].includes(receivers)) throw new Error("Choose --receivers=1 or 2");
 const diagnostics = process.argv.includes("--diagnostics"), bitrateAtOffer = process.argv.includes("--bitrate-at-offer");
 const modes = (process.argv.find(value => value.startsWith("--modes="))?.slice(8) ?? "playback,controls,live").split(",");
 if (modes.some(mode => !["playback", "controls", "live"].includes(mode))) throw new Error("Unknown video mode");
@@ -30,7 +35,9 @@ if (!media) throw new Error("Set COUCH_PERF_MEDIA to a local video fixture");
 const mediaFile = `/benchmark${extname(media)}`;
 mkdirSync(directory, { recursive: true });
 const entry = resolve(`src/client/__video-performance-${process.pid}.html`);
-writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)}, ${bitrate}, ${jitter}, ${diagnostics}, ${bitrateAtOffer}, ${sound});</script></body></html>`);
+const fixtureArguments = `${JSON.stringify(mediaFile)}, ${frameRate}, ${JSON.stringify(quality)}, ${JSON.stringify(codec)}, ${JSON.stringify(hint)}, ${bitrate}, ${jitter}, ${diagnostics}, ${bitrateAtOffer}, ${sound}, ${encoderFps}`;
+const sourceHashes = Object.fromEntries(["src/client/session/live.ts", "src/client/session/live-video.ts", "tests/video-performance.browser.ts", "tests/video-performance.native.ts"].map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")]));
+writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="fixture"></div><script type="module">import './index.css'; import { prepareVideo } from '../../tests/video-performance.browser'; window.prepareVideo = mode => prepareVideo(mode, ${fixtureArguments}, ${receivers}); window.prepareVideoReceiver = bridge => prepareVideo('live', ${fixtureArguments}, 1, bridge);</script></body></html>`);
 try { await build(mergeConfig(config({ command: "build", mode: "production" }), { build: { outDir, rollupOptions: { input: entry } }, logLevel: "error" })); }
 finally { rmSync(entry); }
 copyFileSync(media, join(outDir, mediaFile));
@@ -56,15 +63,15 @@ app.setPath('userData', ${JSON.stringify(join(directory, "data"))});
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.whenReady().then(async () => {
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const window = new BrowserWindow({ width: 1280, height: 800, show: true, webPreferences: { backgroundThrottling: false } });
+  const window = new BrowserWindow({ width: 1280, height: 800, show: true, alwaysOnTop: ${process.argv.includes("--foreground")}, webPreferences: { backgroundThrottling: false } });
   window.webContents.on('console-message', event => { if (event.level === 'error') console.error(event.message); });
   window.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (request, done) => {
     done(new URL(request.url).origin === ${JSON.stringify(origin)} ? {} : request.resourceType === 'image' ? { redirectURL: ${JSON.stringify(origin)} + '/icons/pwa-512.png' } : { cancel: true });
   });
   const evaluate = script => window.webContents.executeJavaScript(script, true);
-  const result = { revision: ${JSON.stringify(process.env.COUCH_PERF_REVISION ?? Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim())}, versions: process.versions,
+  const result = { revision: ${JSON.stringify(process.env.COUCH_PERF_REVISION ?? Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim())}, sourceHashes: ${JSON.stringify(sourceHashes)}, versions: process.versions,
     hardware: ${JSON.stringify({ cpu: cpus()[0]?.model, logicalCores: cpus().length, os: release(), platform: process.platform })},
-    display: screen.getPrimaryDisplay(), media: ${JSON.stringify(media)}, requestedFps: ${frameRate}, quality: ${JSON.stringify(quality)}, codec: ${JSON.stringify(codec)}, hint: ${JSON.stringify(hint)}, bitrate: ${bitrate}, jitter: ${jitter}, diagnostics: ${diagnostics}, bitrateAtOffer: ${bitrateAtOffer}, sound: ${sound}, bare: ${process.argv.includes("--bare")}, seconds: ${seconds}, warmup: ${warmup}, rounds: ${rounds}, samples: [], mediaProperties: {} };
+    display: screen.getPrimaryDisplay(), media: ${JSON.stringify(media)}, requestedFps: ${frameRate}, quality: ${JSON.stringify(quality)}, codec: ${JSON.stringify(codec)}, hint: ${JSON.stringify(hint)}, bitrate: ${bitrate}, jitter: ${jitter}, encoderFps: ${encoderFps}, receivers: ${receivers}, bandwidth: ${bandwidth}, diagnostics: ${diagnostics}, bitrateAtOffer: ${bitrateAtOffer}, sound: ${sound}, bare: ${process.argv.includes("--bare")}, seconds: ${seconds}, warmup: ${warmup}, rounds: ${rounds}, samples: [], mediaProperties: {} };
   writeFileSync(${JSON.stringify(join(directory, "owned-pids.json"))}, JSON.stringify({ main: process.pid }));
   let source, code = 0;
   try {
@@ -77,6 +84,11 @@ app.whenReady().then(async () => {
       }
     });
     await window.webContents.debugger.sendCommand('Media.enable');
+    if (${bandwidth}) result.networkRules = await window.webContents.debugger.sendCommand('Network.emulateNetworkConditionsByRule', { offline: false,
+      matchedNetworkConditions: [
+        { urlPattern: ${JSON.stringify(origin + "/*")}, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
+        { urlPattern: '', latency: 0, downloadThroughput: ${bandwidth} / 8, uploadThroughput: ${bandwidth} / 8 },
+      ] });
     for (let round = 0; round < ${rounds}; round++) {
       const modes = ${JSON.stringify(modes)};
       if (round % 2) modes.reverse();
@@ -121,7 +133,7 @@ app.whenReady().then(async () => {
           before = new Map(metrics.map(item => [item.pid, item.cpu.cumulativeCPUUsage])); at = now;
           if (${diagnostics}) await evaluate('window.fixture.sample()');
         }
-        const sample = { round, receiverPid: window.webContents.getOSProcessId(), sourcePid: source?.webContents.getOSProcessId(), ...await evaluate('window.fixture.finish()'), cpu };
+        const sample = { round, receiverWindow: { visible: window.isVisible(), focused: window.isFocused(), alwaysOnTop: window.isAlwaysOnTop() }, receiverPid: window.webContents.getOSProcessId(), sourcePid: source?.webContents.getOSProcessId(), ...await evaluate('window.fixture.finish()'), cpu };
         if (${diagnostics} && source) sample.sourceCadence = await source.webContents.executeJavaScript('window.sourceProbe.finish()');
         const expected = mode === 'live' && ${JSON.stringify(quality)} === '720p' ? [1280, 720] : [1920, 1080];
         sample.expectedDimensions = expected;
@@ -133,6 +145,14 @@ app.whenReady().then(async () => {
         console.log(JSON.stringify({ round, mode, videoFps: sample.videoFps, uiFps: sample.uiFps, frameMs: sample.frameMs, droppedPercent: sample.droppedPercent,
           cpuPercent: cpu.reduce((sum, items) => sum + items.reduce((sum, item) => sum + (item.percent ?? 0), 0), 0) / cpu.length, capture: sample.after.capture, dimensionError: sample.dimensionError, errors: sample.errors }));
         if (sample.invalidDimensions || sample.errors.length || sample.after.error || sample.after.paused || sample.totalFrames <= 0 || sample.droppedPercent > ${maxDropped} || (${assertFps} && sample.videoFps < ${assertFps})) code = 1;
+        if (sample.secondary) {
+          const other = sample.secondary;
+          const pairs = [[other.before.width, other.before.height], [other.after.width, other.after.height],
+            ...[...other.beforeStats, ...other.afterStats].filter(stat => stat.kind === 'video' && stat.type === 'inbound-rtp').map(stat => [stat.frameWidth, stat.frameHeight])];
+          other.invalidDimensions = pairs.some(pair => pair[0] !== expected[0] || pair[1] !== expected[1]) || (other.dimensions ?? []).some(value => value !== expected.join('x'));
+          if (other.invalidDimensions || other.errors.length || other.after.error || other.after.paused || other.totalFrames <= 0 || other.droppedPercent > ${maxDropped} || (${assertFps} && other.videoFps < ${assertFps})) code = 1;
+          console.log(JSON.stringify({ round, receiver: 2, videoFps: other.videoFps, presentedFps: other.presentedFps, droppedPercent: other.droppedPercent, invalidDimensions: other.invalidDimensions, errors: other.errors }));
+        }
         writeFileSync(${JSON.stringify(join(directory, "result.json"))}, JSON.stringify(result, null, 2));
         if (source) { source.destroy(); source = undefined; }
       }

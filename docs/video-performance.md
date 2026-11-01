@@ -245,3 +245,44 @@ Official references checked: [screen-capture constraints](https://www.w3.org/TR/
 [WebGPU external textures](https://www.w3.org/TR/webgpu/#external-texture-creation).
 The existing unforced Electron window configuration also follows
 [t3code](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts).
+
+## Configured WebRTC candidate, 1 November 2026
+
+The branch based on audit `8bd6c873` now gives every Direct video sender an
+explicit bitrate and frame-rate ceiling before its offer. Existing senders
+update through their serialized peer work when Picture changes; late receivers
+get the current settings. At 30/60/120 FPS, 720p uses 2/4/8 Mbit/s and 1080p uses
+4/8/16 Mbit/s. Original scales with actual captured pixels up to 40 Mbit/s.
+These are per-receiver ceilings; WebRTC still controls congestion. `detail` and
+`maintain-resolution` retain readable screen content when resources run short.
+Sound, buffered delivery, pairing and capture lifetime retain their existing paths.
+The default stays **30 FPS** until native 60 FPS qualification passes on both
+Mac and Windows.
+
+[Research and evidence](live-sharing-performance.md#smooth-sharing-investigation-1-november-2026)
+cover Sunshine's capture/encoder/pacing/FEC and Moonlight's decode/presentation
+queues, plus the browser APIs and the decision to continue with WebRTC. Native
+Windows experiments with H.264 hardware preference, motion, 50/150 ms jitter
+targets and a 59 FPS encoder ceiling fail the unchanged gate; those experiments
+are not production defaults. Replacing only the encoder does not explain away
+frames lost after successful decoding.
+
+The harness additionally supports `--receivers=2` (a second iframe with its own
+production session/player and independent FPS/drop/sound checks) and
+`--bandwidth=6000000` (bits/s in each direction). The latter uses
+[CDP network rules](https://chromedevtools.github.io/devtools-protocol/tot/Network/#method-emulateNetworkConditionsByRule):
+an empty URL pattern throttles P2P while an earlier unlimited localhost rule
+keeps the generated fixture's file reads out of the bottleneck. This is same-host
+network emulation, not physical Wi-Fi or TURN qualification. Record actual RTP
+rate, codec QP and dimensions; these are quality proxies, not a perceptual
+quality score.
+
+Every sample now retains startup and warmup drops separately from steady drops,
+requested/captured/encoded/decoded/presented rates, source hashes, actual codec
+implementations and receiver visibility/focus. `--foreground` keeps the scratch
+receiver above other windows for an occlusion control; `--encoder-fps=59` and
+`--jitter=-1` (automatic buffering) are diagnostic overrides. A previous
+`result.json` makes the harness refuse to overwrite the evidence directory.
+The original ≥55 FPS / ≤1% drop gate and dimension checks remain unchanged;
+second receivers must independently meet them too. Run all timing tests
+serially, without concurrent checks/builds, and preserve failures beside reruns.

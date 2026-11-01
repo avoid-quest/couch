@@ -36,9 +36,16 @@ const check = (source: string, couchApp = "undefined") => {
       streamChanged: (id, stream, error) => streamReports.push({ id, stream, error }),
     }));
     globalThis.RTCPeerConnection = class {
-      connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = [];
+      connectionState = "new"; signalingState = "stable"; remoteDescription = null; tracks = []; candidates = []; senders = [];
       constructor(config) { this.config = config; peers.push(this); }
-      addTrack(track) { this.tracks.push(track); }
+      addTrack(track) {
+        this.tracks.push(track);
+        const sender = { track, parameters: { encodings: [{}], codecs: [], transactionId: "transaction" },
+          getParameters() { return structuredClone(this.parameters); }, async setParameters(value) { this.parameters = value; } };
+        this.senders.push(sender);
+        return sender;
+      }
+      getSenders() { return this.senders; }
       async createOffer() { return { type: "offer", sdp: "offer" }; }
       async createAnswer() { return { type: "answer", sdp: "answer" }; }
       async setLocalDescription(description) { this.localDescription = description; }
@@ -69,7 +76,7 @@ const check = (source: string, couchApp = "undefined") => {
       getVideoTracks() { return this.tracks.filter(track => track.kind === "video"); }
       addTrack(track) { this.tracks.push(track); }
     };
-    const track = kind => ({ kind, stopped: false, async applyConstraints(value) { this.constraints = value; }, stop() { this.stopped = true; }, addEventListener() {} });
+    const track = kind => ({ kind, getSettings: () => ({ width: 1920, height: 1080 }), stopped: false, async applyConstraints(value) { this.constraints = value; }, stop() { this.stopped = true; }, addEventListener() {} });
     const captureRequests = [], captures = [];
     const capture = async request => {
       captureRequests.push(request);
@@ -559,6 +566,54 @@ test("screen frame rate is selectable and survives resolution changes without re
     assert.equal(captureRequests.length, [30, 60, 120].indexOf(frameRate) + 1, "changing rate must not open the picker again");
     await session.end();
   }
+`));
+
+test("each picture sender gets a bitrate and frame ceiling before its offer, including live edits and late joins", () => check(`
+  const source = await session.start({ kind: "screen", videoFrameRate: 60 });
+  assert.equal(captures[0].getVideoTracks()[0].contentHint, "detail");
+  const announce = peers => session.receive({ type: "livePeers", sourceId: source.id, peers });
+  const target = id => ({ peerId: id, deviceId: id, picture: true, sound: true });
+  let offers = 0;
+  RTCPeerConnection.prototype.createOffer = async function() {
+    offers++;
+    const video = this.getSenders().find(sender => sender.track.kind === "video");
+    assert.equal(video.parameters.encodings[0].maxBitrate, offers === 1 ? 8000000 : 4000000);
+    assert.equal(video.parameters.encodings[0].maxFramerate, 60);
+    assert.equal(video.parameters.degradationPreference, "maintain-resolution");
+    assert.equal(video.parameters.transactionId, "transaction");
+    assert.ok(this.getSenders().find(sender => sender.track.kind === "audio").parameters.encodings.every(encoding => !encoding.maxBitrate));
+    return { type: "offer", sdp: "offer" };
+  };
+  announce([target("one")]); await flush(); await flush();
+  await session.setQuality("720p");
+  assert.equal(peers[0].getSenders()[1].parameters.encodings[0].maxBitrate, 4000000);
+  announce([target("one"), target("two")]); advance(100); await flush(); await flush();
+  await session.setFrameRate(120);
+  for (const peer of peers) {
+    const video = peer.getSenders().find(sender => sender.track.kind === "video");
+    assert.equal(video.parameters.encodings[0].maxBitrate, 8000000);
+    assert.equal(video.parameters.encodings[0].maxFramerate, 120);
+  }
+  assert.equal(offers, 2);
+  assert.equal(captureRequests.length, 1);
+`));
+
+test("failed video parameters fall back only that receiver and leave capture and audio routes alive", () => check(`
+  const add = RTCPeerConnection.prototype.addTrack;
+  RTCPeerConnection.prototype.addTrack = function(track) {
+    const sender = add.call(this, track);
+    if (track.kind === "video") sender.setParameters = async () => { throw new Error("Encoder unavailable"); };
+    return sender;
+  };
+  const source = await session.start({ kind: "screen" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [
+    { peerId: "picture", deviceId: "picture", picture: true, sound: true },
+    { peerId: "sound", deviceId: "sound", picture: false, sound: true },
+  ] });
+  await flush(); await flush();
+  assert.deepEqual(unreachable().map(message => message.peerId), ["picture"]);
+  assert.equal(peers[1].connectionState, "new");
+  assert.ok(captures[0].getTracks().every(track => !track.stopped));
 `));
 
 test("picture edits serialize, recover from rejection and leave replacement captures alone", () => check(`
