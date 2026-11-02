@@ -65,7 +65,8 @@ import { AIRPLAY_PUBLISHER, liveTitle, type LiveSource } from "../shared/live-in
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
-import { createRadio } from "./radio";
+import { createRadio, RadioError } from "./radio";
+import { isRadio } from "../shared/radio";
 import { createRadioProgramme } from "./radio-programme";
 import { createRadioRecognition } from "./radio-recognition";
 import { createRadioSettings } from "./radio-settings";
@@ -3194,7 +3195,30 @@ export async function createHub(options: HubOptions) {
   const radioRecognition = createRadioRecognition({
     databasePath: options.databasePath,
     onChange: () => invalidate("radio"),
-    station: radio.getPlayable,
+    authorizeStation: (target, actor, authorize) => {
+      if ("stationId" in target) return authorize;
+      // Look the Playback up on every check: one that ended while sampling grants nothing.
+      return () => {
+        const playback = playing(target.playbackId);
+        if (!playback) throw new RadioError("Choose a playing radio station to identify.", 404);
+        authorizePlayback(playback, authorize, actor.deviceId)();
+      };
+    },
+    station: async (target) => {
+      if ("stationId" in target)
+        return { id: target.stationId, ...radio.getPlayable(target.stationId) };
+      const playback = playing(target.playbackId);
+      const state = playback && stateOf(playback);
+      const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
+      if (!current || !isRadio(current))
+        throw new RadioError("Choose a playing radio station to identify.", 404);
+      if (current.source.startsWith("radio:")) {
+        const id = current.source.slice(6);
+        return { id, ...radio.getPlayable(id) };
+      }
+      const station = await radio.getStationByUrl(current.source);
+      return { id: station.id, source: station.url, title: station.name };
+    },
     signal: shutdown.signal,
     programme: async (id, source, sampledAt, signal) =>
       (await radio.metadata.get(id, source, signal, sampledAt)).programme?.title,

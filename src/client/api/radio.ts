@@ -19,7 +19,7 @@ const radioRequest = (credentials: ApiCredentials, path: string, init: RequestIn
 // Recognition samples a live stream before looking it up, so it needs more than a normal read's deadline.
 export const identifyRadioSong = (
   credentials: ApiCredentials,
-  stationId: string,
+  playbackId: string,
   signal: AbortSignal,
 ) =>
   apiFetch(
@@ -28,7 +28,7 @@ export const identifyRadioSong = (
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stationId }),
+      body: JSON.stringify({ playbackId }),
       signal,
     },
     60_000,

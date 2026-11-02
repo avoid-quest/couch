@@ -826,7 +826,7 @@ export function PlayerPage({
                 {separateWindow && (
                   <p className="text-sm text-muted-foreground">In a separate window</p>
                 )}
-                {radio && stationId && (
+                {radio && player?.playbackId && (
                   <RadioRecognition
                     key={JSON.stringify([
                       credentials.origin,
@@ -834,10 +834,10 @@ export function PlayerPage({
                       state?.playback,
                       player?.playbackId,
                       current.id,
-                      stationId,
+                      current.source,
                     ])}
                     credentials={credentials}
-                    stationId={stationId}
+                    playbackId={player.playbackId}
                     connected={connected}
                     controls={recognitionControls}
                   />

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import childProcess, { execFileSync } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { Resolver } from "node:dns/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
@@ -12,12 +14,64 @@ import { createPublicMediaProxy } from "../src/server/public-media-proxy";
 import { lookupPublic } from "../src/server/public-network";
 import { RadioError } from "../src/server/radio";
 import { createRadioRecognition, sampleRadio } from "../src/server/radio-recognition";
+import { authorityFixture, resultOk, until } from "./hub-authority.fixture";
+
+for (const privatePlayback of [true, false]) {
+  test(`Core rejects recognition of ${privatePlayback ? "a private Playback" : "a forged radio URL"} before sampling`, async (t) => {
+    const f = await authorityFixture(t);
+    t.after(() => f.close());
+    t.mock.method(Resolver.prototype, "resolveSrv", async () => [
+      { name: "fixture.api.radio-browser.info", port: 443, weight: 0, priority: 0 },
+    ]);
+    const phone = await f.connect();
+    const tv = await f.connect(f.devices[2]!);
+    const receiver = privatePlayback ? tv : phone;
+    resultOk(
+      await receiver.command({
+        type: "enqueue",
+        entry: {
+          id: "radio",
+          title: "Client-supplied station",
+          source: "https://example.com/couch-not-a-radio-station",
+          kind: "radio",
+        },
+        playNow: true,
+        deviceId: receiver.id,
+      }),
+    );
+    await until(() => !!receiver.state.player.playbackId);
+    const playbackId = receiver.state.player.playbackId!;
+    if (privatePlayback) {
+      resultOk(await tv.command({ type: "sharing", sharing: { audio: false, video: false } }));
+      assert.equal((await phone.command({ type: "pause", playbackId, paused: true })).ok, false);
+    }
+    let samples = 0;
+    const spawn = childProcess.spawn;
+    t.mock.method(childProcess, "spawn", (...args: Parameters<typeof spawn>) => {
+      if (args[1]?.includes("s16le")) {
+        samples++;
+        throw new Error("Untrusted recognition reached the sampler");
+      }
+      return spawn(...args);
+    });
+    syncBuiltinESMExports();
+    t.after(() => {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    });
+    const response = await f.api("/api/radio/recognize", f.devices[1]!.token, { playbackId });
+    assert.equal(response.status, privatePlayback ? 403 : 503, await response.text());
+    assert.equal(samples, 0);
+    assert.deepEqual((await (await f.api("/api/radio/recognitions")).json()).items, []);
+  });
+}
 
 const stationId = "01234567-89ab-4cde-8fab-0123456789ab";
 const source = "https://radio.example/stream";
-const station = (id: string) => {
-  if (id !== stationId) throw new RadioError("Radio station not found.", 404);
-  return { source, title: "Fixture radio" };
+const station = async (target: { stationId: string } | { playbackId: string }) => {
+  if (!("stationId" in target) || target.stationId !== stationId)
+    throw new RadioError("Radio station not found.", 404);
+  return { id: stationId, source, title: "Fixture radio" };
 };
 const post = (body: unknown = { stationId }, signal?: AbortSignal) =>
   new Request("http://localhost/api/radio/recognize", {
@@ -33,12 +87,21 @@ afterEach(() => {
   for (const close of openRecognitions) close();
 });
 function createRecognition(
-  options: Omit<Parameters<typeof createRadioRecognition>[0], "databasePath" | "onChange"> &
-    Partial<Pick<Parameters<typeof createRadioRecognition>[0], "databasePath" | "onChange">>,
+  options: Omit<
+    Parameters<typeof createRadioRecognition>[0],
+    "databasePath" | "onChange" | "authorizeStation"
+  > &
+    Partial<
+      Pick<
+        Parameters<typeof createRadioRecognition>[0],
+        "databasePath" | "onChange" | "authorizeStation"
+      >
+    >,
 ) {
   const recognition = createRadioRecognition({
     databasePath: ":memory:",
     onChange: () => {},
+    authorizeStation: (_target, _actor, authorize) => authorize,
     ...options,
   });
   const close = () => {
@@ -54,6 +117,30 @@ function createRecognition(
 }
 const history = (recognition: ReturnType<typeof createRecognition>, authorize = allow) =>
   recognition.handle(new Request("http://localhost/api/radio/recognitions"), authorize);
+
+test("a playing unsaved station can be identified and retains its name in history", async () => {
+  const playbackId = "directory-playback";
+  const track = { title: "Directory song", artist: "Artist", provider: "shazam" as const };
+  const recognition = createRecognition({
+    station: async (target) => {
+      assert.deepEqual(target, { playbackId });
+      return { id: stationId, source, title: "Unsaved directory radio" };
+    },
+    signal: new AbortController().signal,
+    sample: async (url) => {
+      assert.equal(url, source);
+      return { pcm: Buffer.from("audio"), sampledAt: 1_700_000_000_000 };
+    },
+    recognize: async () => track,
+  });
+  const response = await recognition.handle(post({ playbackId }), allow);
+  assert.equal(response.status, 200);
+  const entry = await response.json();
+  assert.deepEqual(entry.station, { id: stationId, name: "Unsaved directory radio" });
+  assert.deepEqual(entry.track, track);
+  assert.deepEqual((await (await history(recognition)).json()).items, [entry]);
+  assert.equal(JSON.stringify(entry).includes(source), false);
+});
 
 test("recognition is manual, resolves only the saved station, and returns an uncached no-match observation", async () => {
   let samples = 0,
@@ -85,6 +172,9 @@ test("recognition is manual, resolves only the saved station, and returns an unc
     {},
     { stationId, url: source },
     { stationId: 42 },
+    { playbackId: 42 },
+    { stationId, playbackId: "directory-playback" },
+    { playbackId: "directory-playback", url: source },
     { url: source },
   ]) {
     assert.equal((await recognition.handle(post(body), allow)).status, 400);
@@ -152,6 +242,59 @@ test("authorization is rechecked before recognition and before returning a recog
     });
 });
 
+for (const revokedAt of [
+  "lookup",
+  "sample",
+  "programme",
+  "fingerprint",
+  "recognize",
+  "error",
+] as const) {
+  test(`Playback programme permission is rechecked after ${revokedAt}`, async () => {
+    let permitted = true;
+    let matches = 0;
+    const revoke = () => {
+      permitted = false;
+    };
+    const recognition = createRecognition({
+      authorizeStation: (target, actor, authorize) => {
+        assert.deepEqual(target, { playbackId: "playing-radio" });
+        assert.deepEqual(actor, requester);
+        return () => {
+          authorize();
+          if (!permitted)
+            throw new ControllerError("This playback is not sharing its outputs.", 403);
+        };
+      },
+      station: async () => {
+        if (revokedAt === "lookup") revoke();
+        return { id: stationId, source, title: "Playing radio" };
+      },
+      signal: new AbortController().signal,
+      sample: async () => {
+        if (revokedAt === "sample" || revokedAt === "error") revoke();
+        if (revokedAt === "error") throw new Error("Sampling failed after consent changed");
+        return { pcm: Buffer.from("audio"), sampledAt: Date.now() };
+      },
+      programme: async () => {
+        if (revokedAt === "programme") revoke();
+        return undefined;
+      },
+      recognize: async (_pcm, _signal, _request, beforeRequest) => {
+        if (revokedAt === "fingerprint") revoke();
+        beforeRequest?.();
+        matches++;
+        if (revokedAt === "recognize") revoke();
+        return { title: "Must not escape", provider: "shazam" };
+      },
+    });
+    const response = await recognition.handle(post({ playbackId: "playing-radio" }), allow);
+    assert.equal(response.status, 403);
+    assert.equal(matches, revokedAt === "recognize" ? 1 : 0);
+    assert.deepEqual((await (await history(recognition)).json()).items, []);
+  });
+}
+
 test("history survives reopening and preserves capture-time station, programme, requester and results", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "couch-recognition-history-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -169,7 +312,7 @@ test("history survives reopening and preserves capture-time station, programme, 
   };
   const options = {
     databasePath,
-    station: () => ({ source, title }),
+    station: async () => ({ id: stationId, source, title }),
     signal: new AbortController().signal,
     onChange: () => {
       changes++;

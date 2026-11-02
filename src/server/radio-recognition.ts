@@ -144,6 +144,7 @@ export function createRadioRecognition({
   databasePath,
   onChange,
   station,
+  authorizeStation,
   programme,
   signal: shutdown,
   sample = sampleRadio,
@@ -151,7 +152,14 @@ export function createRadioRecognition({
 }: {
   databasePath: string;
   onChange: () => void;
-  station: (stationId: string) => { source: string; title: string };
+  authorizeStation: (
+    target: { stationId: string } | { playbackId: string },
+    actor: PlaybackActor,
+    authorize: () => void,
+  ) => () => void;
+  station: (
+    target: { stationId: string } | { playbackId: string },
+  ) => Promise<{ id: string; source: string; title: string }>;
   programme?: (
     stationId: string,
     source: string,
@@ -208,13 +216,27 @@ export function createRadioRecognition({
           !body ||
           typeof body !== "object" ||
           Array.isArray(body) ||
-          Object.keys(body).length !== 1 ||
-          !("stationId" in body) ||
-          typeof body.stationId !== "string" ||
-          body.stationId.length > 80
+          Object.keys(body).length !== 1
         )
-          throw new RadioError("Choose a saved radio station to identify.");
-        const { source, title } = station(body.stationId);
+          throw new RadioError("Choose a radio station to identify.");
+        let target: { stationId: string } | { playbackId: string };
+        if (
+          "stationId" in body &&
+          typeof body.stationId === "string" &&
+          body.stationId.length <= 80
+        )
+          target = { stationId: body.stationId };
+        else if (
+          "playbackId" in body &&
+          typeof body.playbackId === "string" &&
+          body.playbackId.length <= 80
+        )
+          target = { playbackId: body.playbackId };
+        else throw new RadioError("Choose a radio station to identify.");
+        authorize = authorizeStation(target, requestedBy, authorize);
+        authorize();
+        const { id, source, title } = await station(target);
+        authorize();
         const requester = { ...requestedBy };
         signal.throwIfAborted();
         if (busy)
@@ -224,7 +246,7 @@ export function createRadioRecognition({
         signal.throwIfAborted();
         authorize();
         // Programme metadata is optional; a guide outage must not lose a match.
-        const programmeTitle = await programme?.(body.stationId, source, sampledAt, signal).catch(
+        const programmeTitle = await programme?.(id, source, sampledAt, signal).catch(
           () => undefined,
         );
         signal.throwIfAborted();
@@ -236,7 +258,7 @@ export function createRadioRecognition({
           id: crypto.randomUUID(),
           track,
           sampledAt,
-          station: { id: body.stationId, name: title },
+          station: { id, name: title },
           requestedBy: requester,
           ...(programmeTitle ? { programme: programmeTitle } : {}),
         };

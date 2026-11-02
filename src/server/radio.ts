@@ -530,6 +530,27 @@ export function createRadio({
         throw new RadioError("Radio station not found. Refresh its playlist or add it again.", 404);
       return current;
     },
+    async getStationByUrl(source: string): Promise<RadioStation> {
+      assertOpen();
+      const url = httpUrl(source);
+      if (!url) throw new RadioError("Identification needs a public HTTP or HTTPS radio stream.");
+      const row = db
+        .query<{ station: string }, [string, string]>(
+          "SELECT station FROM radio_playlist_stations WHERE json_extract(station, '$.url') = ? UNION ALL SELECT station FROM radio_favorites WHERE json_extract(station, '$.url') = ? LIMIT 1",
+        )
+        .get(url, url);
+      if (row) return station(JSON.parse(row.station));
+      for (const { stations, expires } of [...cache.values()].reverse()) {
+        const found = expires > Date.now() && stations.find((station) => station.url === url);
+        if (found) return found;
+      }
+      const current = (await directoryStations(`byurl?${new URLSearchParams({ url })}`)).find(
+        (station) => station.url === url,
+      );
+      if (!current)
+        throw new RadioError("Radio station not found in the catalog or directory.", 404);
+      return current;
+    },
     favorites(): RadioStation[] {
       assertOpen();
       return db
