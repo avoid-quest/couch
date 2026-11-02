@@ -187,7 +187,7 @@ export async function prepareSeekPerformance(audioUrl?: string) {
       if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
       return { environment: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio }, phases, moves, pointerEvents, seeks: audit.actions.filter(action => action.type === 'seek'), decoding,
         frameMs: { median: all.median, p95: all.p95, max: all.max }, over60HzFloor: all.over60HzFloor,
-        meets60HzFloor: !all.over60HzFloor && !errors.length, meets120HzBudget: frames.every(frame => frame.gap <= 12.5) && !errors.length,
+        meets60HzFloor: frames.length > 0 && !all.over60HzFloor && !errors.length, meets120HzBudget: frames.length > 0 && frames.every(frame => frame.gap <= 12.5) && !errors.length,
         errors, longTasks, slowFrames: frames.filter(frame => frame.gap > 12.5) };
     },
   };

@@ -1,4 +1,4 @@
-// Real Hub/Session and IPTV resolution; only upstream HTTP is a deterministic fixture.
+// Real Hub/Session with direct HLS; only upstream HTTP is a deterministic fixture.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import https from "node:https";
