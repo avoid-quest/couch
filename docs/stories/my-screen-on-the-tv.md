@@ -33,6 +33,6 @@ video in a window.
 
 ## Known issues
 
-- System sound needs macOS 14.2+ or Windows; on Linux a share may go out
-  silently.
+- System sound needs macOS 14.2+ or Windows; on Linux, **Include system audio**
+  is off and says why.
 - Viewers aren't in step with each other; see [Watch a share together](watch-a-share-together.md).
