@@ -38,8 +38,8 @@ branch. Phones keep a bottom tab bar for thumb reach.
   Artwork colour is the only colour besides danger's red. Video keeps black bars
   and no artwork light.
 - **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
-  page, its backdrop blurred and tinted with the artwork's tone. It's the one
-  backdrop filter on a page.
+  page, its backdrop blurred and tinted with the artwork's tone. Besides the
+  player's Up next panel, it's the one backdrop filter on a page.
 - **Stage** (`components/Stage.tsx`): opens Home and every Details page
   (`DetailHeader`), reaching under the header in its picture's room. The picture
   stands whole at the right as an **object** with a shadow, or as a **mark**
@@ -71,8 +71,9 @@ alike.
 
 - **Mona Sans** (`font-display`, `font-heading`) sets display titles
   (`.display-title`), page titles and section headings, always at normal width.
-  `titleLength` steps a title's size down as it grows and `titleFit` keeps its
-  longest word on one line, so titles wrap whole instead of ellipsing.
+  `titleLength` steps a title's size down as it grows and `titleFit` sizes it so
+  its longest word usually fits one line (very wide words can still break), so
+  titles wrap whole instead of ellipsing.
 - **Inter Tight** sets everything else; metadata is small, muted and tabular.
 - Text truncates only where space is truly scarce, with the whole text on hover
   and focus.

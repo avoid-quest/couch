@@ -8,9 +8,10 @@ six-digit pairing code ([Connect a phone](usage.md#connect-a-phone)). Nothing
 needs installing; closing the browser leaves playback running.
 
 Reopen the same address in the same browser profile to reuse its pairing. Private
-browsing, another profile, cleared website data or a changed address pair again.
-Pairing again replaces that device's token and grants Controller access, even if
-it was admin.
+browsing, another profile, cleared website data or a changed address pair as a
+new device; the old one stays listed until an admin forgets it. The same browser
+pairing again replaces its token and grants Controller access, even if it was
+admin.
 
 For a separate window: Safari's **File > Add to Dock** on macOS 14+, or Edge's
 **Apps > Install this site as an app** on Windows. Chrome offers no install over

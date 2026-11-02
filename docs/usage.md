@@ -57,8 +57,8 @@ A Couch app hosts with **This computer** chosen and joins with **Another Couch**
 2. On the phone, scan the code or open the address shown. Continue past the
    browser's "not private" warning, name the device and enter the six-digit
    code. The first device you pair becomes the admin.
-3. To pair a TV, open Couch on it and scan its QR code with an admin phone, check
-   the code matches and choose **Pair**.
+3. To pair a TV, open Couch on it and scan its QR code with an admin phone (or
+   open the address it shows), check the code matches and choose **Pair**.
 
 ## Administrator access
 
@@ -67,9 +67,11 @@ sharing, the live relay, TV mode, sources, hardware and updates. Controllers
 browse and play. If no paired device is admin, **Settings → Devices & network**
 on the host shows a one-use code under **Make a device the admin**.
 
-To recover admin access without the host's screen, restart Couch locally with a
-fresh secret (32–256 hex characters), then enter it under **Admin code** on a
-paired device within ten minutes:
+To recover admin access without the host's screen, quit Couch on the host, then
+start it again with a fresh secret (32–256 hex characters) and enter that under
+**Admin code** on a paired device within ten minutes. In Bash, from a source
+checkout (the installed app reads the same variable when started from its
+executable):
 
 ```bash
 read -rsp 'Recovery secret: ' COUCH_ADMIN_RECOVERY_CODE   # e.g. from openssl rand -hex 32

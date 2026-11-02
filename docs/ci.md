@@ -58,7 +58,7 @@ workflow; leave it alone.
 |---|---|---|
 | [Check](../.github/workflows/check.yml) | `gh workflow run check.yml --ref <branch>` | Typecheck, test and build on Linux |
 | [Package](../.github/workflows/package.yml) | `gh workflow run package.yml --ref <branch>` | Tests and installers for Linux, macOS and Windows, kept 14 days as run artifacts |
-| [Release](../.github/workflows/release.yml) | `gh workflow run release.yml -f channel=preview\|production` | Publishes a preview from `main`, or promotes the latest preview |
+| [Release](../.github/workflows/release.yml) | `gh workflow run release.yml -f channel=preview` or `-f channel=production` | Publishes a preview from `main`, or promotes the latest preview |
 | [Housekeeping](../.github/workflows/housekeeping.yml) | Scheduled, Mondays | Deletes expired artifacts and unused caches |
 
 Without `--ref`, a run uses the default branch, not your work. Package gets the

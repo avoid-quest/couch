@@ -14,8 +14,8 @@ songs** with station, programme and requester as they were at the time.
   sampled. Core supplies requester and station metadata; the client can't.
 - Core opens its own connection to the station through its public-media proxy,
   decodes up to 12 s of mono 16 kHz PCM with FFmpeg, and fingerprints it in
-  memory. It sends only the fingerprint and duration to Shazam: no audio, station
-  URL or Couch identity. One identification runs at a time per Couch, with a 45 s
+  memory. It sends Shazam the fingerprint, its duration and a timestamp, no
+  audio, station URL or Couch identity; Shazam still sees Core's IP address. One identification runs at a time per Couch, with a 45 s
   deadline (20 s for the service).
 - The fingerprint port follows MIT-licensed `shazamio-core`
   ([vendor/shazam-signature](../vendor/shazam-signature/README.md)); `fft.js`

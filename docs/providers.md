@@ -1,10 +1,12 @@
 # Providers
 
 Each provider reads a public site's pages and published player protocol.
-Couch never executes a site's scripts, loads its iframes or copies its markup:
-it reads literal values from HTML and reimplements published request formats.
-Requests have fixed origins, bounded bodies, per-request timeouts and an overall
-25-second deadline, omit credentials and reject redirects unless noted. Saved
+Couch never executes a site's scripts or copies its markup: it reads literal
+values from HTML (including the player pages AnimeSaturn and AnimeUnity embed)
+and reimplements published request formats. Requests have fixed origins, bounded
+bodies, per-request timeouts and an overall 25–30 second deadline, omit
+credentials (except AnimeUnity's anonymous session cookie for paging) and reject
+redirects unless noted. Saved
 items keep canonical public page URLs, never player or signed links. Providers
 break when sites change; a failure reports an unavailable stream with
 **Try again**.

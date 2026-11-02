@@ -42,7 +42,7 @@ stop that process and relaunch with the command above.
 ## A stale permission
 
 `Failed to match existing code requirement` in the `tccd` log means the saved
-permission belongs to another signature; check `codesign --display -r -`. Reset
+permission belongs to another signature; check `codesign --display -r - "$couch_dev_app"`. Reset
 only the affected service for the development ID, then relaunch and capture:
 
 ```sh

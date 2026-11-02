@@ -41,7 +41,8 @@ localhost page only), the interface size and TV presentation.
 ## LAN and certificates
 
 The LAN reaches Core over HTTPS with a self-signed certificate (`<data>/tls`),
-so browsers get a secure context for WebCodecs, Wake Lock and the service worker.
+so browsers get a secure context for WebCodecs and Wake Lock. Browsers don't
+register a service worker over a self-signed certificate.
 Plain HTTP on the same port serves only this machine; the LAN is redirected to
 HTTPS. Reissued certificates keep their key so client pins survive. An HTTPS page
 can't load `http://` media, so Pass-through relays those streams. See
@@ -102,9 +103,10 @@ AirPlay, its sound is **Synced** (`src/server/sendspin.ts`,
 Sendspin Node SDK behind Couch token authorization, and the client plays it with
 the official player (`@sendspin/sendspin-js`).
 
-- One FFmpeg per Playback decodes the audio once and encodes once per wire
-  format: Opus in 60 ms packets, or 100 ms PCM chunks for players without Opus
-  (Firefox). Every speaker gets the same timestamped chunk and applies its own
+- For ordinary media, one FFmpeg per Playback decodes the audio once and encodes
+  once per wire format: Opus in 60 ms packets, or 100 ms PCM chunks for players
+  without Opus (Firefox). Captured sources (Live, audio inputs, AirPlay) have one
+  encoder per source with 5 ms frames ([Live audio](live-audio.md)). Every speaker gets the same timestamped chunk and applies its own
   volume and delay.
 - Pause, seek and speed restart FFmpeg where the Playback is.
 - Screens showing a synced picture fetch the video themselves, play it muted and
@@ -120,7 +122,8 @@ See [Live audio](live-audio.md).
 
 ## Shared screens and inputs
 
-Live publications belong to the publishing Device's session and end with it.
+Live publications belong to the publishing Device's session and end with it;
+AirPlay sources belong to Core and end when the sender leaves.
 Direct playback attaches a WebRTC MediaStream to the receiver's video element;
 Core only relays signaling between the exact two connections, and ICE servers
 (including TURN) go only to paired devices. Only In sync, or for a receiver that

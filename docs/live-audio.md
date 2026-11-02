@@ -29,7 +29,7 @@ defines what each playback behavior allows.
 |---|---|
 | Acquisition: timestamped f32 PCM | The browser SDK has no capture API. Main owns Live capture: the Mac native helper for **Native** inputs, a hidden capture page otherwise. |
 | Upload: validated `CaptureAudioPacket` per source epoch | The Node SDK has no public source start/end to declare a format. Publication tokens and epochs retire stale work. |
-| Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample` (44.1 kHz images 92 dB down instead of 25), Opus at 160 kbps in 5 ms frames. 5 ms steps keep capture-to-chunk delay low. |
+| Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample`, Opus at 160 kbps in 5 ms frames. 5 ms steps keep capture-to-chunk delay low. |
 | Capture-time mapping | The Node SDK timestamps at send time; Couch maps encoded offsets (with Opus pre-skip) back to measured capture blocks. |
 | Group scheduling | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, metadata and volume APIs. |
 
@@ -61,8 +61,7 @@ wrong clock still shows the right time.
   arrival/starvation statistics, so the 35 ms allowance isn't measured jitter.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.
-- **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option. PCM is about
-  1.5 Mbit/s per listener, Opus about 173 kbit/s.
+- **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.
 - On macOS, desktop listeners request Chromium's `audio-buffer-size=128`. Linux
   keeps the default until measured there; Windows keeps its device period because
   WASAPI can glitch with mismatched sizes.

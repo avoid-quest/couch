@@ -29,7 +29,7 @@ the [AirPlay receiver](airplay.md) uses. It creates the locked, unprivileged
   it again preserves administrator configuration and doesn't restart LightDM or
   logind; reboot to apply first-time session and power settings.
 - Your administrator account, password and SSH stay as they were. From SSH or
-  Ctrl+Alt+F3: `sudo couch-session logs|status|restart|diagnose`.
+  Ctrl+Alt+F3: `sudo couch-session logs`, `status`, `restart` or `diagnose`.
 - Setup checks the running app with `check-health.js`, run by the app's own Node
   (`ELECTRON_RUN_AS_NODE=1`). It reads Core's open files and sockets rather than
   `/proc/<pid>/environ`, which Electron can clear.
@@ -49,7 +49,9 @@ for a TV in **Another Couch** mode. Root installs updates:
   against the release's update file, install it and restart the app.
 - If the app doesn't pass the health check within a minute, the script
   reinstalls the previous version (`/var/lib/couch-update/installed.deb`), and
-  unattended updates skip the failed release until a newer one appears.
+  unattended updates skip the failed release until a newer one appears. If that
+  copy is missing and can't be downloaded again, the TV stays on the failed
+  version until an admin reinstalls it.
 - After each install the script runs `couch-setup --refresh`, so one
   `sudo couch-setup --tv` is enough for later releases' TV files.
 
@@ -65,7 +67,8 @@ turns unattended updates off.
 (`--json` for a `couch-evidence/1` record): package, runtime, OS, hardware, setup,
 service, health, window lifecycle, mode, helpers, display, sound and the last
 update. It changes nothing, never opens `couch.sqlite`, and leaves out keys,
-tokens, device names and source URLs ([redact.js](../packaging/tv/redact.js)).
+tokens, device names and source URLs ([redact.js](../packaging/tv/redact.js)), but
+names the displays and sound outputs.
 
 The window lifecycle comes from Main's `<data>/renderer-status.json`, trusted only
 when the running process wrote it (same PID, boot and start time): `page-loaded`,

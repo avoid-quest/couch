@@ -45,7 +45,8 @@ The publisher encodes once per receiver.
 Direct playback uses LAN STUN on Couch's port over UDP, and optionally TURN when
 the network blocks direct connections. In **Settings → Devices & network → Live
 playback relay**, **Run relay on {name}** starts the bundled relay
-(`native/live-relay`) on the hosting computer. It relays only within the selected
+(`native/live-relay`) on the hosting computer once **Share on network** has a LAN
+address. It relays only within the selected
 private IPv4 subnet, gets fresh credentials each run (only paired devices receive
 them), and restarts with new credentials when a device is unpaired. **Check
 relay** tests reachability from the device you hold only. An external TURN
@@ -72,10 +73,11 @@ Docker, `curl`, `setsid`, `openssl`, `ss` and `ip`.
 docker pull coturn/coturn:4.18.0-alpine
 bun run build
 couch_live_data=$(mktemp -d /tmp/couch-live.XXXXXX)
-COUCH_DATA_DIR=$couch_live_data COUCH_PORT=4610 scripts/live-dev.sh <LAN IPv4>
+COUCH_DATA_DIR=$couch_live_data COUCH_PORT=4610 scripts/live-dev.sh 192.168.1.20   # this machine's LAN address
 ```
 
-Open Core by IP address (`https://<ip>:4610`): a standalone Core accepts only its
-own addresses as the host. The relay listens on `COUCH_PORT + 1` over TCP and
+On the Mac, choose **Another Couch**, connect to `https://<ip>:4610` and pair;
+phones open the same address. A standalone Core accepts only its own addresses
+as the host. The relay listens on `COUCH_PORT + 1` over TCP and
 relays only to private addresses. Stop it with Ctrl-C, or `kill` the PID in
 `$couch_live_data/live-dev.pid` after checking it with `ps`.

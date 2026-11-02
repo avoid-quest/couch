@@ -23,7 +23,7 @@ copy; do not equate "on main" with "in the latest preview".
 | Phones and laptops join through a browser by scanning a QR code or typing a six-digit code; no app install | [usage](../usage.md#connect-a-phone) | The first visit shows a certificate warning; mention it in how-to copy |
 | No accounts; it runs on your own network | Pairing is per Couch, on the LAN ([architecture](../architecture.md)) | Online sources still need the internet |
 | Everyone paired can search, play, queue and control; admins manage the Couch | [usage](../usage.md#administrator-access), `src/server/devices.ts` | The first device is admin and admins can make others admin. A playback that plays only on devices keeping their outputs private can't be joined or controlled by others ([architecture](../architecture.md)) |
-| Saved lists and items; resume where you left off | [live-inputs](../live-inputs.md) (Save as list) | — |
+| Saved lists and items; resume where you left off | `src/server/playlists.ts`, `src/server/progress.ts` | — |
 | Several independent playbacks at once, each with its own Up next and devices | [architecture](../architecture.md) | — |
 | Sources: YouTube, Twitch, RaiPlay, Bandcamp, SoundCloud search, other yt-dlp links, avoid radio, radio playlists and Radio Browser, M3U Live TV with XMLTV guide | [usage](../usage.md#sources) | Per-source/device support varies: link the table |
 | Film, series and anime catalogues (StreamingCommunity, 123MoviesFree, AnimeSaturn, AnimeUnity) | [usage](../usage.md#sources) | Public copy names them by category only; their names stay in the docs. 123MoviesFree is experimental. Broader catalogue and device coverage remains unqualified; later main-only playback smokes are listed below |

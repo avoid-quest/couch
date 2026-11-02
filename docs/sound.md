@@ -10,7 +10,8 @@ On Linux, an admin chooses and tests outputs in **Settings → Sound**, through
 - Choosing an output moves the app's streams with `pactl move-sink-input`, makes
   that sink the system default and saves it in SQLite. Failure moves them back.
 - Shared volume and mute control the selected system sink; Couch keeps its own
-  stream at unity and reads the system level every half second. Legacy PulseAudio
+  stream at unity and follows the system level from Pulse events (polling every
+  five seconds as a fallback). Legacy PulseAudio
   flat-volume outputs are refused, because creating a stream could raise them.
 - A missing sink or unexpected route interrupts playback (seekable media pauses,
   live media stops); nothing resumes on its own.

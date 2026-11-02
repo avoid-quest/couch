@@ -1,8 +1,9 @@
 # LAN address
 
 **Settings → Devices & network → Share on network** opens Couch's LAN listener:
-HTTPS with its own self-signed certificate on port 4100, with plain HTTP on the
-LAN redirected there. Sharing off leaves only the loopback listener the local
+HTTPS with its own self-signed certificate on Couch's port (4100 unless
+`COUCH_PORT` changes it), with plain HTTP on the LAN redirected there unless
+**Allow HTTP connections** is on. Sharing off leaves only the loopback listener the local
 app uses. Couch never installs a proxy or DNS daemon, configures router
 forwarding or exposes itself to the internet; IP assignment, DNS and firewall
 rules belong to the network's administrator.
@@ -44,8 +45,8 @@ A name without a port (`http://couch.home`) needs a port 80 listener, which only
 redirects to HTTPS on Couch's port. The OS must allow the bind; on the Debian TV:
 
 ```sh
-echo 'net.ipv4.ip_unprivileged_port_start=80' > /etc/sysctl.d/90-couch-port80.conf
-sysctl --system
+sudo sh -c "echo 'net.ipv4.ip_unprivileged_port_start=80' > /etc/sysctl.d/90-couch-port80.conf"
+sudo sysctl --system
 ```
 
 Desktop installs can't take port 80 without privileges; include Couch's port in

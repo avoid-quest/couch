@@ -5,7 +5,7 @@ A media player everyone shares. Use the terms in [GLOSSARY.md](GLOSSARY.md).
 - **Smallest change** that does what was asked. Add tests, docs, settings or limits only when the request needs them. A number the owner gives is a target to aim for, not a gate.
 - **Ask** when the request is unclear or the work grows past it. Show options before building anything new or visual.
 - **Upstream first**: read the existing Couch code and the library's docs before writing your own. For the desktop shell, releases and repo setup, read how [t3code](https://github.com/pingdotgg/t3code) does it.
-- **Real app, real content**: check behavior by running `bun run app` with its own `COUCH_DATA_DIR` and `COUCH_PORT` and playing real media. Stop only the processes you started; leave the installed Couch (port 4100, `quest.avoid.couch` data) alone.
+- **Real app, real content**: check behavior by running `bun run app` with its own `COUCH_DATA_DIR` and `COUCH_PORT` and playing real media, plus a phone-sized browser for phone layouts. Stop only the processes you started; leave the installed Couch (port 4100, `quest.avoid.couch` data) alone.
 - **Owner only**: running workflows, tags, version bumps, publishing, deploying and merging. Do each only when the owner asks for it.
 - Notes, research, handoffs and measurements go in `.scratch/` (gitignored) or the PR body.
 - Before handing back, run `bun run typecheck` and `bun run test`.

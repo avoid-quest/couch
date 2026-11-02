@@ -13,8 +13,9 @@ AirPlay password: the **Code** below the switch, with its dashes. **New code**
 restarts AirPlay and makes every device enter it again.
 
 While a device plays, **AirPlay · {name}** leads Home's **Shared sources** and
-plays automatically on the Couch computer. Every receiver gets Couch's buffered
-stream, a few seconds behind the sender. One sender plays at a time; after it
+plays automatically on the Couch computer; other devices join it with **Play on**
+or **Where it plays**. Every receiver gets Couch's buffered stream, a few seconds
+behind the sender. One sender plays at a time; after it
 leaves, AirPlay restarts, so the Couch may briefly disappear from AirPlay lists.
 A sender that has played counts as playing, so a TV's unattended update waits.
 
