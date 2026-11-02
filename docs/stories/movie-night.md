@@ -28,5 +28,6 @@ series episode and an AnimeUnity film.
 
 ## Known issues
 
-- 123MoviesFree search works, but its film details fail (HTTP 502).
+- 123MoviesFree depends on an unreliable site: some titles fail to play when it
+  answers with errors (HTTP 502).
 - No way to mark something watched from the UI.
