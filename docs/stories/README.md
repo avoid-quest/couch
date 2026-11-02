@@ -43,9 +43,6 @@ feature or a change in behavior starts here.
 | [Make it ours](make-it-ours.md) | preview | home, group |
 | [Look after the Couch](look-after-the-couch.md) | preview | admin |
 
-Statuses checked against the code and the running app on 2 November 2026
-(`v0.4.0-preview.6`).
-
 ## Features and their story
 
 | Feature | Story |

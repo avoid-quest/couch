@@ -10,8 +10,9 @@ screen or sound.
   playlists), Twitch, RaiPlay, public Bandcamp albums and tracks, SoundCloud
   tracks, and links from other sites yt-dlp supports.
 - **StreamingCommunity, 123MoviesFree, AnimeSaturn and AnimeUnity** catalogues.
-  Couch follows StreamingCommunity when its address moves; an administrator
-  can also set it in **Settings → Sources**. See [providers](providers.md).
+  Couch follows StreamingCommunity when its address moves through a redirect or
+  its published address pages; otherwise an administrator sets the new address
+  in **Settings → Sources**. See [providers](providers.md).
 - **Radio**: avoid radio, M3U radio playlists and Radio Browser search. While a
   station plays, **Identify song** recognizes a short excerpt
   ([song recognition](radio-recognition.md)).

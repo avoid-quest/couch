@@ -72,5 +72,5 @@ A new scene starts there.
 ## How we'll know
 
 A claim moves from this page to the website only when [claims](claims.md) has
-evidence for it at the scale the copy implies. Each spec lists the evidence
-its experience needs before Couch says more about it.
+evidence for it at the scale the copy implies. Each [story](../stories/README.md)
+says what works today.

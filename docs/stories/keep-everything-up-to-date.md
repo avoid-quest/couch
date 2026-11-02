@@ -20,7 +20,8 @@ house up to date, without walking to each device.
 - One page updates the Couch, its media tools and connected apps, in a safe
   order.
 - Nothing playing is interrupted without asking.
-- An app that fails to start after updating goes back to the previous version.
+- A TV set up with the Debian appliance install goes back to the previous version
+  when an update fails to start.
 
 ## Demo
 

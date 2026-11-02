@@ -34,7 +34,7 @@ Phones and laptops that only join don't install anything.
 | Computer | Download | Needs |
 | --- | --- | --- |
 | Mac, Apple Silicon | `.dmg` | macOS 14 or later |
-| Mac, Intel | `.dmg` | macOS 13 or later |
+| Mac, Intel | `.dmg` | macOS 13 or later; some TV channels need a compatible mpv on macOS 13–14 |
 | Windows | `.exe` | Windows 11, x86_64 |
 | Linux | `.AppImage` | x86_64, FUSE 2, `libgbm1`, `pulseaudio-utils` and PulseAudio or `pipewire-pulse` |
 | Linux Mint, Ubuntu, Debian | `.deb` | x86_64; `sudo apt install ./couch_<version>_amd64.deb` installs its sound dependencies |
