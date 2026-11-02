@@ -30,6 +30,8 @@ export type CouchApp = {
   deviceSharing?(sharing?: DeviceSharing): Promise<DeviceSharing>;
   /** Capture starts only in this app's own window. Older apps lack these methods. */
   captureSources?(): Promise<CaptureSource[]>;
+  /** Whether display capture can include system audio. Older apps lack it. */
+  systemAudioCapture?: boolean;
   /** Selects one capture request; null cancels a prepared selection. */
   prepareCapture?(selection: CaptureSelection | null): Promise<void>;
   /** Desktop Live microphone capture owned by Main, independent of this page's render loop. */

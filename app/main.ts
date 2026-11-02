@@ -633,7 +633,10 @@ function createWindow() {
       preload: join(import.meta.dirname, "preload.cjs"),
       autoplayPolicy: "no-user-gesture-required",
       backgroundThrottling: false,
-      additionalArguments: tv ? ["--couch-tv-presentation"] : [],
+      additionalArguments: [
+        ...(tv ? ["--couch-tv-presentation"] : []),
+        ...(capture.systemAudio() ? ["--couch-system-audio"] : []),
+      ],
     },
   });
   if (!tv && readJson(statePath).main?.maximized) window.maximize();
