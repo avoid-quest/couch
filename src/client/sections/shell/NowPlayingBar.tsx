@@ -184,8 +184,8 @@ export function NowPlayingBar({
   );
   // The band's zones, order and sizes: what plays · Play/Pause, Stop, Next centred · Volume, Where it plays, Up next,
   // the Playback gear, then Open player in the slot where the band has fullscreen, each at the band's target
-  // (--player-target) and x; the timeline is the line along its top edge. Phones (below sm) keep Play/Pause and Open
-  // player: a minimized player needs no mixer, and the player has the rest.
+  // (--player-target) and x; the timeline is the line along its top edge. Phones (below sm) keep Play/Pause,
+  // Where it plays and Open player so choosing devices stays one tap away while browsing.
   const desktop = "max-sm:hidden";
   // The bar is the player's band, minimized: a capsule of tinted glass floating over the page, its corners and its
   // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
@@ -274,9 +274,7 @@ export function NowPlayingBar({
             run={run}
             className={livePlayback(state) ? undefined : desktop}
           />
-          {!livePlayback(state) && (
-            <WhereItPlays state={state} connected={connected} run={run} className={desktop} />
-          )}
+          {!livePlayback(state) && <WhereItPlays state={state} connected={connected} run={run} />}
           <UpNextButton state={state} className={desktop} onClick={() => onOpen("queue")} />
           {/* The player's own Playback menu, for whatever plays, here or on another device. */}
           {!livePlayback(state) && (
