@@ -10,9 +10,10 @@ songs** with station, programme and requester as they were at the time.
 
 - `POST /api/radio/recognize` takes `{ "playbackId" }` for a playing station or
   `{ "stationId" }` for a saved station. Core resolves the stream and station name
-  from its Playback or saved radio data. Public HTTP(S) streams work without
-  saving the station; private-network streams and stations needing headers or
-  sign-in can't be sampled. Core supplies requester and station metadata.
+  from its radio catalog or Radio Browser. Playback requests require programme
+  permission, which Core rechecks throughout identification. Public HTTP(S)
+  stations work without saving them; private-network streams and stations needing
+  headers or sign-in can't be sampled. Core supplies requester and station metadata.
 - Core opens its own connection to the station through its public-media proxy,
   decodes up to 12 s of mono 16 kHz PCM with FFmpeg, and fingerprints it in
   memory. It sends Shazam the fingerprint, its duration and a timestamp, no

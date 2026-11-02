@@ -67,7 +67,6 @@ import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
 import { createRadio, RadioError } from "./radio";
 import { isRadio } from "../shared/radio";
-import { radioHttpUrl, radioId } from "./radio-playlists";
 import { createRadioProgramme } from "./radio-programme";
 import { createRadioRecognition } from "./radio-recognition";
 import { createRadioSettings } from "./radio-settings";
@@ -3196,7 +3195,13 @@ export async function createHub(options: HubOptions) {
   const radioRecognition = createRadioRecognition({
     databasePath: options.databasePath,
     onChange: () => invalidate("radio"),
-    station: (target) => {
+    authorizeStation: (target, actor, authorize) => {
+      if ("stationId" in target) return authorize;
+      const playback = playing(target.playbackId);
+      if (!playback) throw new RadioError("Choose a playing radio station to identify.", 404);
+      return authorizePlayback(playback, authorize, actor.deviceId);
+    },
+    station: async (target) => {
       if ("stationId" in target)
         return { id: target.stationId, ...radio.getPlayable(target.stationId) };
       const playback = playing(target.playbackId);
@@ -3208,10 +3213,8 @@ export async function createHub(options: HubOptions) {
         const id = current.source.slice(6);
         return { id, ...radio.getPlayable(id) };
       }
-      const source = radioHttpUrl(current.source);
-      if (!source)
-        throw new RadioError("Identification needs a public HTTP or HTTPS radio stream.");
-      return { id: radioId(source), source, title: current.title };
+      const station = await radio.getStationByUrl(current.source);
+      return { id: station.id, source: station.url, title: station.name };
     },
     signal: shutdown.signal,
     programme: async (id, source, sampledAt, signal) =>

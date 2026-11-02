@@ -144,6 +144,7 @@ export function createRadioRecognition({
   databasePath,
   onChange,
   station,
+  authorizeStation,
   programme,
   signal: shutdown,
   sample = sampleRadio,
@@ -151,11 +152,14 @@ export function createRadioRecognition({
 }: {
   databasePath: string;
   onChange: () => void;
-  station: (target: { stationId: string } | { playbackId: string }) => {
-    id: string;
-    source: string;
-    title: string;
-  };
+  authorizeStation: (
+    target: { stationId: string } | { playbackId: string },
+    actor: PlaybackActor,
+    authorize: () => void,
+  ) => () => void;
+  station: (
+    target: { stationId: string } | { playbackId: string },
+  ) => Promise<{ id: string; source: string; title: string }>;
   programme?: (
     stationId: string,
     source: string,
@@ -229,7 +233,10 @@ export function createRadioRecognition({
         )
           target = { playbackId: body.playbackId };
         else throw new RadioError("Choose a radio station to identify.");
-        const { id, source, title } = station(target);
+        authorize = authorizeStation(target, requestedBy, authorize);
+        authorize();
+        const { id, source, title } = await station(target);
+        authorize();
         const requester = { ...requestedBy };
         signal.throwIfAborted();
         if (busy)
