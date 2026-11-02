@@ -11,12 +11,12 @@ import type { RadioRecognitionEntry } from "../../shared/radio-recognition";
 
 export function RadioRecognition({
   credentials,
-  stationId,
+  playbackId,
   connected,
   controls,
 }: {
   credentials: ApiCredentials;
-  stationId: string;
+  playbackId: string;
   connected: boolean;
   controls: HTMLElement | null;
 }) {
@@ -60,7 +60,7 @@ export function RadioRecognition({
     setResult(null);
     setError("");
     try {
-      const found = await identifyRadioSong(credentials, stationId, controller.signal);
+      const found = await identifyRadioSong(credentials, playbackId, controller.signal);
       if (request.current === controller && !controller.signal.aborted) {
         setResult(found);
         void client.invalidateQueries({ queryKey: radioRecognitionsQuery(credentials).queryKey });

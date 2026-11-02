@@ -15,9 +15,10 @@ import { createRadioRecognition, sampleRadio } from "../src/server/radio-recogni
 
 const stationId = "01234567-89ab-4cde-8fab-0123456789ab";
 const source = "https://radio.example/stream";
-const station = (id: string) => {
-  if (id !== stationId) throw new RadioError("Radio station not found.", 404);
-  return { source, title: "Fixture radio" };
+const station = (target: { stationId: string } | { playbackId: string }) => {
+  if (!("stationId" in target) || target.stationId !== stationId)
+    throw new RadioError("Radio station not found.", 404);
+  return { id: stationId, source, title: "Fixture radio" };
 };
 const post = (body: unknown = { stationId }, signal?: AbortSignal) =>
   new Request("http://localhost/api/radio/recognize", {
@@ -55,6 +56,30 @@ function createRecognition(
 const history = (recognition: ReturnType<typeof createRecognition>, authorize = allow) =>
   recognition.handle(new Request("http://localhost/api/radio/recognitions"), authorize);
 
+test("a playing unsaved station can be identified and retains its name in history", async () => {
+  const playbackId = "directory-playback";
+  const track = { title: "Directory song", artist: "Artist", provider: "shazam" as const };
+  const recognition = createRecognition({
+    station: (target) => {
+      assert.deepEqual(target, { playbackId });
+      return { id: stationId, source, title: "Unsaved directory radio" };
+    },
+    signal: new AbortController().signal,
+    sample: async (url) => {
+      assert.equal(url, source);
+      return { pcm: Buffer.from("audio"), sampledAt: 1_700_000_000_000 };
+    },
+    recognize: async () => track,
+  });
+  const response = await recognition.handle(post({ playbackId }), allow);
+  assert.equal(response.status, 200);
+  const entry = await response.json();
+  assert.deepEqual(entry.station, { id: stationId, name: "Unsaved directory radio" });
+  assert.deepEqual(entry.track, track);
+  assert.deepEqual((await (await history(recognition)).json()).items, [entry]);
+  assert.equal(JSON.stringify(entry).includes(source), false);
+});
+
 test("recognition is manual, resolves only the saved station, and returns an uncached no-match observation", async () => {
   let samples = 0,
     matches = 0;
@@ -85,6 +110,9 @@ test("recognition is manual, resolves only the saved station, and returns an unc
     {},
     { stationId, url: source },
     { stationId: 42 },
+    { playbackId: 42 },
+    { stationId, playbackId: "directory-playback" },
+    { playbackId: "directory-playback", url: source },
     { url: source },
   ]) {
     assert.equal((await recognition.handle(post(body), allow)).status, 400);
@@ -169,7 +197,7 @@ test("history survives reopening and preserves capture-time station, programme, 
   };
   const options = {
     databasePath,
-    station: () => ({ source, title }),
+    station: () => ({ id: stationId, source, title }),
     signal: new AbortController().signal,
     onChange: () => {
       changes++;
