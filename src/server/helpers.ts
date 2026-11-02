@@ -146,6 +146,7 @@ async function remove(name: Helper, entry: string) {
 
 // The installed copies that run, newest first. Interrupted downloads and copies that don't run are removed.
 async function installed(name: Helper) {
+  if (!root) return [];
   const directory = join(root, name);
   const entries: string[] = await readdir(directory).catch(() => []);
   // A verified copy Core was removing when it stopped goes back if it is held or being checked.
