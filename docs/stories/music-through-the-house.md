@@ -28,6 +28,4 @@ Content: an album or a station.
 
 ## Known issues
 
-- On phones, the minimized now-playing bar hides **Where it plays**: open the
-  player first.
 - Devices must allow their speakers first ([Join a Couch](join-a-couch.md)).

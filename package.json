@@ -33,7 +33,7 @@
     "fmt:check": "oxfmt --check",
     "lint": "oxlint --deny-warnings",
     "knip": "knip --no-config-hints",
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "git config core.hooksPath .githooks && git config blame.ignoreRevsFile .git-blame-ignore-revs",
     "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run knip && bun run test"
   },
   "devDependencies": {

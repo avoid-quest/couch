@@ -27,5 +27,4 @@ Needs: the Couch computer. Content: Lyl Radio or another music station.
 
 ## Known issues
 
-- Directory stations get **Identify song** only after they're saved.
 - Admins add radio playlists in **Settings → Sources → Radio**.

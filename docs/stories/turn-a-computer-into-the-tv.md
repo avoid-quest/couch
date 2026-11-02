@@ -29,8 +29,6 @@ a film and a station.
 
 ## Known issues
 
-- A TV waiting for approval stays on **Getting a code…**; **Enter a code
-  instead** works.
 - **Output**, **Test tone** and Bluetooth need Linux with PulseAudio or
   PipeWire; on Mac and Windows, pair speakers in the system.
 - Starting with the computer is set up only by the Debian appliance install
