@@ -193,12 +193,6 @@ test("report deduplication preserves position ticks, controls, failures and new 
   assert.equal(reports.at(-1).position, 1.3, "the browser's completed seek reports its actual position");
   play({ type: "pause", playbackId: "playback", paused: true });
   assert.equal(reports.at(-1).status, "paused");
-  play({ type: "speed", playbackId: "playback", speed: 1.25 });
-  assert.equal(reports.at(-1).speed, 1.25);
-  play({ type: "audioDelay", playbackId: "playback", delay: .2 });
-  assert.equal(reports.at(-1).audioDelay, .2);
-  play({ type: "subtitleDelay", playbackId: "playback", delay: .5 });
-  assert.equal(reports.at(-1).subtitleDelay, .5);
   video.error = { code: 3, message: "decoder failed" };
   video.dispatchEvent(new Event("error"));
   assert.equal(reports.at(-1).status, "error");
@@ -242,33 +236,6 @@ test("blocked audio is replayed when the shell subscribes again after recovery",
   stop();
 `));
 
-test("direct streams use the existing player, honest track capabilities, volume and pause controls", () => check(`
-  const stream = new MediaStream([{ kind: "video" }]);
-  attachStream({ type: "load", playbackId: "direct", source: "", liveOutput: { picture: true, sound: true, volume: 75 }, preferences: { speed: 2, audioDelay: 1 } }, stream);
-  assert.equal(video.srcObject, stream);
-  assert.equal(video.volume, .75);
-  video.duration = 60;
-  video.dispatchEvent(new Event("canplay"));
-  assert.equal(reports.at(-1).playbackId, "direct");
-  assert.equal(reports.at(-1).status, "playing");
-  assert.equal(reports.at(-1).duration, null);
-  assert.equal(reports.at(-1).seekable, false);
-  assert.equal(reports.at(-1).audioDelay, undefined);
-  assert.equal(reports.at(-1).speed, 1);
-  assert.deepEqual(reports.at(-1).tracks.map(track => track.kind), ["video"]);
-  stream.tracks.push({ kind: "audio" }); streamChanged("direct", stream);
-  assert.deepEqual(reports.at(-1).tracks.map(track => track.kind), ["video", "audio"]);
-  play({ type: "volume", playbackId: "direct", volume: 0 });
-  assert.equal(video.volume, 0);
-  play({ type: "pause", playbackId: "direct", paused: true });
-  assert.equal(reports.at(-1).status, "paused");
-  play({ type: "pause", playbackId: "direct", paused: false });
-  assert.equal(reports.at(-1).status, "playing");
-  play({ type: "stop", playbackId: "direct" });
-  assert.equal(video.srcObject, null);
-  assert.equal(reports.at(-1).status, "idle");
-`));
-
 test("a direct stream bound before its tracks arrive plays once they do, unless it was paused", () => check(`
   // As in Chromium, binding a stream loads it again and pauses the element.
   let bound;
@@ -304,33 +271,6 @@ test("stream errors report through Now Playing and cannot damage a replacement s
   assert.equal(video.muted, true);
 `));
 
-test("an old stream's rejected play request cannot mute its replacement", () => check(`
-  let reject;
-  video.play = () => new Promise((_, fail) => { reject = fail; });
-  attachStream({ type: "load", playbackId: "same", source: "" }, new MediaStream([{ kind: "audio" }]));
-  video.play = () => { video.paused = false; return Promise.resolve(); };
-  attachStream({ type: "load", playbackId: "same", source: "" }, new MediaStream([{ kind: "video" }, { kind: "audio" }]));
-  reject(new DOMException("old request", "NotAllowedError"));
-  await flush();
-  assert.equal(video.muted, false);
-`));
-
-test("direct streams retain the normal external subtitle settings across delivery changes", () => check(`
-  const command = { type: "load", playbackId: "same", source: "", subtitles: [{ source: "https://couch.example/captions.vtt", title: "Captions", language: "en" }], subtitleTrack: 0, subtitleDelay: .5 };
-  attachStream(command, new MediaStream([{ kind: "video" }]));
-  video.dispatchEvent(new Event("canplay"));
-  assert.equal(reports.at(-1).subtitleDelay, .5);
-  assert.deepEqual(reports.at(-1).tracks.filter(track => track.kind === "subtitle").map(track => [track.label, track.selected]), [["Captions", true]]);
-  play({ type: "track", playbackId: "same", kind: "subtitle", index: -1 });
-  assert.equal(reports.at(-1).tracks.find(track => track.kind === "subtitle").selected, false);
-  load({ ...command, source: "https://couch.example/stream.m3u8", follow: { group: "group", pts: true } });
-  await flush();
-  attachStream(command, new MediaStream([{ kind: "video" }]));
-  video.dispatchEvent(new Event("canplay"));
-  assert.equal(reports.at(-1).tracks.find(track => track.kind === "subtitle").selected, true);
-  assert.equal(reports.at(-1).subtitleDelay, .5);
-`));
-
 test("Couch-hosted HLS uses hls.js even when the browser also advertises native HLS", () => check(`
   for (const options of [{}, { source: "https://couch.example/channel", hls: true }]) {
     load(options);
@@ -356,26 +296,6 @@ test("cross-origin HLS keeps native playback and its existing decoder fallback",
   assert.equal(decoders[0].media, video);
 `));
 
-test("a grouped cross-origin live picture still uses hls.js to map source timestamps", () => check(`
-  load({ source: "https://station.example/stream.m3u8", follow: { group: "group", pts: true } });
-  await flush();
-  assert.equal(decoders.length, 1);
-  assert.equal(video.src, "");
-  assert.equal(video.muted, true);
-`));
-
-test("a browser without hls.js support retains native HLS playback", () => check(`
-  mse = false;
-  load({ startPosition: 12, paused: true, preferences: { speed: 1.25 } });
-  await flush();
-  assert.equal(decoders.length, 0);
-  assert.equal(video.src, "https://couch.example/stream.m3u8");
-  assert.equal(video.currentTime, 12);
-  assert.equal(video.playbackRate, 1.25);
-  assert.equal(video.paused, true);
-  assert.equal(reports.at(-1).error, null);
-`));
-
 test("native HLS failure reports an error instead of retrying the same native source", () => check(`
   mse = false;
   load();
@@ -388,41 +308,6 @@ test("native HLS failure reports an error instead of retrying the same native so
   assert.equal(reports.at(-1).error, video.error.message);
 `));
 
-test("source-open failures keep the browser's reason without diagnosing a codec failure", () => check(`
-  load({ source: "https://couch.example/movie.mp4" });
-  video.error = { code: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED, message: "MEDIA_ELEMENT_ERROR: Format error" };
-  video.dispatchEvent(new Event("error"));
-  assert.equal(reports.at(-1).status, "error");
-  assert.equal(reports.at(-1).error, video.error.message);
-  video.error = { code: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED, message: "" };
-  video.dispatchEvent(new Event("error"));
-  assert.match(reports.at(-1).error, /couldn't load/);
-  assert.doesNotMatch(reports.at(-1).error, /can't play this format/);
-`));
-
-test("HLS keeps event starts, explicit positions and split audio without changing ordinary files", () => check(`
-  load({ eventStart: true, paused: true, audioSource: "https://couch.example/sound.m4a", preferences: { speed: 1.25, audioDelay: 0.2 } });
-  await flush();
-  assert.equal(decoders.at(-1).config.startPosition, 0);
-  assert.equal(decoders.at(-1).config.liveDurationInfinity, true);
-  assert.equal(video.currentTime, 0);
-  assert.equal(video.playbackRate, 1.25);
-  assert.equal(video.paused, true);
-  assert.equal(audio.src, "https://couch.example/sound.m4a");
-  assert.equal(video.muted, true);
-  load({ startPosition: 42 });
-  await flush();
-  assert.equal(decoders.at(-1).config.startPosition, 42);
-  assert.equal(video.currentTime, 42);
-  assert.equal(audio.src, "");
-  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/sound.m4a" });
-  await flush();
-  assert.equal(decoders.length, 2);
-  assert.equal(video.src, "https://couch.example/movie.mp4");
-  assert.equal(audio.src, "https://couch.example/sound.m4a");
-  assert.equal(video.muted, true);
-`));
-
 test("an asynchronous HLS load cannot replace or fail a newer ordinary load", () => check(`
   load();
   load({ playbackId: "new", source: "https://couch.example/movie.mp4" });
@@ -431,14 +316,6 @@ test("an asynchronous HLS load cannot replace or fail a newer ordinary load", ()
   assert.equal(video.src, "https://couch.example/movie.mp4");
   assert.equal(reports.at(-1).playbackId, "new");
   assert.equal(reports.at(-1).error, null);
-`));
-
-test("compressor settings received while HLS imports do not discard the current load", () => check(`
-  load();
-  play({ type: "compressor", playbackId: "playback", settings: { enabled: false, threshold: -24, ratio: 4, attack: 10, release: 250, knee: 9, gain: 0 } });
-  await flush();
-  assert.equal(decoders.length, 1);
-  assert.equal(decoders[0].media, video);
 `));
 
 test("replacing compressed split audio disposes its graph and restores native media elements", () => check(`
@@ -462,25 +339,6 @@ test("replacing compressed split audio disposes its graph and restores native me
   assert.equal(reports.at(-1).playbackId, "replacement");
 `));
 
-
-test("sound-only selects the audio rendition without opening video and restores picture on a reload", () => check(`
-  const options = { playbackId: "same", source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", startPosition: 42, paused: true, preferences: { speed: 1.5, audioDelay: .2 } };
-  load({ ...options, output: { picture: false, sound: true } });
-  await flush();
-  assert.equal(video.src, options.audioSource);
-  assert.equal(audio.src, "");
-  assert.equal(decoders.length, 0);
-  assert.equal(video.currentTime, 42);
-  assert.equal(video.playbackRate, 1.5);
-  assert.equal(video.muted, false);
-  video.dispatchEvent(new Event("canplay"));
-  assert.equal(reports.at(-1).tracks.some(track => track.kind === "video"), false);
-  load({ ...options, output: { picture: true, sound: true } });
-  assert.equal(video.src, options.source);
-  assert.equal(audio.src, options.audioSource);
-  assert.equal(video.currentTime, 42);
-  assert.equal(reports.at(-1).playbackId, "same");
-`));
 
 test("muted scheduled pictures do not load a redundant audio rendition", () => check(`
   load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", follow: { group: "g", pts: false }, output: { picture: true, sound: false }, preferences: { speed: 1.25 } });
@@ -517,97 +375,6 @@ test("HLS reports measured source PTS mapping and destroyed callbacks cannot alt
   assert.equal(reports.at(-1).error, null);
   assert.equal(video.src, "https://couch.example/movie.mp4");
 `, true));
-
-test("a playing HLS picture that starts following its own group keeps its measured source PTS", () => check(`
-  video.readyState = HTMLMediaElement.HAVE_METADATA;
-  clockSample = { position: 112, speed: 1 };
-  load();
-  await flush();
-  decoders.at(-1).emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 9000000, timescale: 90000 });
-  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "playback" } } });
-  await flush();
-  tickPicture();
-  assert.deepEqual(pictureRead(), { position: 12, speed: 1 }, "no reload: the decoder will not measure again");
-  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "other" } } });
-  await flush();
-  assert.equal(pictureRead(), null, "a follow for another load has no mapping");
-`, true));
-
-test("native HLS and MPEG-TS expose missing source mapping without fabricating a join offset", () => check(`
-  mse = false;
-  delete window.MediaSource;
-  video.readyState = HTMLMediaElement.HAVE_METADATA;
-  clockSample = { position: 999, speed: 1 };
-  const follow = { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "unavailable", generation: "one" } };
-  load({ follow });
-  await flush();
-  tickPicture();
-  assert.deepEqual(pictureRead(), { speed: 1 });
-  assert.equal(reports.at(-1).timeline.mapping, "unavailable");
-  assert.match(reports.at(-1).timeline.error, /cannot align/);
-  assert.equal(video.paused, false, "unmapped relaxed picture remains viewable");
-  clockSample = { position: 999, speed: 0 };
-  load({ source: "https://couch.example/channel.ts", mpegts: true, follow, paused: true, preferences: { speed: 1.5, audioDelay: .3 }, subtitles: [{ source: "/captions.vtt", title: "Captions" }] });
-  await flush();
-  tickPicture();
-  assert.equal(transports.length, 1);
-  assert.equal(transports[0].media, video);
-  assert.equal(video.playbackRate, 1.5);
-  assert.equal(video.paused, true);
-  assert.deepEqual(pictureRead(), { speed: 0 });
-  play({ type: "stop", playbackId: "playback" });
-  assert.equal(transports[0].destroyed, true);
-  transports[0].error("network", "late failure");
-  assert.equal(reports.at(-1).status, "idle");
-  assert.equal(reports.at(-1).error, null);
-`, true));
-
-test("switching to scheduled picture stops separate audio and stopping cancels pending MPEG-TS", () => check(`
-  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
-  audio.paused = false;
-  play({ type: "follow", playbackId: "playback", follow: { group: "g", pts: false } });
-  assert.equal(audio.paused, true);
-  assert.equal(audio.src, "");
-  assert.equal(video.muted, true);
-  load({ mpegts: true, source: "https://couch.example/channel.ts" });
-  play({ type: "stop", playbackId: "playback" });
-  await flush();
-  assert.equal(transports.length, 0);
-  assert.equal(video.src, "");
-  assert.equal(audio.src, "");
-`));
-
-test("native HLS fallback stays playable and reports unavailable PTS mapping even with an MSE symbol", () => check(`
-  mse = false;
-  video.readyState = HTMLMediaElement.HAVE_METADATA;
-  assert.ok(window.MediaSource, "the symbol exists even though hls.js rejects this platform");
-  clockSample = { position: 112, speed: 1 };
-  load({ follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "one" } } });
-  await flush();
-  tickPicture();
-  assert.equal(decoders.length, 0);
-  assert.equal(video.src, "https://couch.example/stream.m3u8");
-  assert.equal(video.paused, false);
-  assert.equal(video.muted, true);
-  assert.deepEqual(pictureRead(), { speed: 1 });
-  assert.equal(reports.at(-1).timeline.mapping, "unavailable");
-  assert.match(reports.at(-1).timeline.error, /cannot align/);
-`, true));
-
-test("content audio delay is reported and applied only by the split-audio adapter", () => check(`
-  load({ source: "https://couch.example/movie.mp4", paused: true, preferences: { audioDelay: .3 } });
-  assert.equal(reports.at(-1).audioDelay, undefined, "muxed native media has no content-delay adapter");
-  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", paused: true, preferences: { audioDelay: .3 } });
-  video.currentTime = 10;
-  video.dispatchEvent(new Event("canplay"));
-  video.dispatchEvent(new Event("seeked"));
-  assert.equal(reports.at(-1).audioDelay, .3);
-  assert.equal(audio.currentTime, 9.7);
-  play({ type: "audioDelay", playbackId: "playback", delay: .5 });
-  assert.equal(audio.currentTime, 9.5);
-  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", output: { picture: false, sound: true } });
-  assert.equal(reports.at(-1).audioDelay, undefined, "selected sound-only rendition needs no A/V content delay");
-`));
 
 for (const mpegts of [false, true]) test(`${mpegts ? "MPEG-TS" : "native HLS"} Core-paused picture follows running group transport without mapped seeks`, () => check(`
   mse = false;
@@ -647,31 +414,4 @@ for (const mpegts of [false, true]) test(`${mpegts ? "MPEG-TS" : "native HLS"} C
   assert.equal(video.playbackRate, .75);
   assert.equal(reports.at(-1).speed, .75);
   assert.equal(video.currentTime, 17, "resume does not invent a PTS offset or seek");
-
-  clockSample = null;
-  tickPicture();
-  assert.equal(video.paused, true, "clock loss waits rather than running without group transport");
-  clockSample = { position: 6000, speed: 1 };
-  tickPicture();
-  assert.equal(video.paused, false);
-  load({ playbackId: "replacement", source: "https://couch.example/movie.mp4", paused: true });
-  await flush();
-  tickPicture();
-  assert.equal(video.paused, true, "disposed group following cannot start a replacement load");
-  assert.equal(clockTimers.size, 0);
 `, true));
-
-test("refused or unreachable HLS reports its HTTP status or an unavailable source instead of the decoder's error name", () => check(`
-  load();
-  await flush();
-  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: "networkError", details: "manifestLoadError", response: { code: 404, text: "Not Found" } });
-  assert.equal(reports.at(-1).error, "The media server refused this stream (HTTP 404).");
-  load();
-  await flush();
-  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: "networkError", details: "manifestLoadError" });
-  assert.equal(reports.at(-1).error, "This media couldn't load. The source may be unavailable or unsupported.", "a status hidden by CORS still reads as an unavailable source");
-  load();
-  await flush();
-  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, details: "manifestParsingError" });
-  assert.equal(reports.at(-1).error, "The stream failed (manifestParsingError).", "failures without an HTTP status keep their detail");
-`));

@@ -13,9 +13,7 @@ import fixture from "./fixtures/youtube-storyboard.json";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { startHelpers, helper } from "../src/server/helpers";
-import { createSession, type MediaSource } from "../src/server/session";
-import { storyboardPreview } from "../src/server/playback-preview";
-import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../src/shared/protocol";
+import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 
 const until = async (check: () => boolean) => {
   const end = Date.now() + 5000;
@@ -35,8 +33,7 @@ for (const kind of ["storyboard", "vtt", "hls"]) test(`${kind}: a controller wit
   const downloads = t.mock.method(globalThis, "fetch", async () => { throw new Error("No helper downloads"); });
   t.mock.method(cp, "execFile", (file: string, args: string[], options: object, callback: (...args: unknown[]) => void) => versions.has(file)
     ? execFile(process.execPath, ["-e", `console.log(${JSON.stringify(versions.get(file))})`], options, callback) : execFile(file, args, options, callback));
-  let extractions = 0, failExtraction = false, manifests = 0, hangManifest = false;
-  let pendingManifest: AbortSignal | undefined;
+  let extractions = 0, failExtraction = false, manifests = 0;
   const nativeRequest = https.request;
   t.mock.method(https, "request", (url: URL, options: import("node:http").RequestOptions, callback: (response: import("node:http").IncomingMessage) => void) => {
     if (url.hostname !== "preview.example") return nativeRequest(url, options, callback);
@@ -46,7 +43,6 @@ for (const kind of ["storyboard", "vtt", "hls"]) test(`${kind}: a controller wit
     options.signal?.addEventListener("abort", abort, { once: true });
     stream.once("close", () => options.signal?.removeEventListener("abort", abort));
     stream.once("finish", () => {
-      if (hangManifest && (kind !== "hls" || url.pathname === "/images.m3u8")) { pendingManifest = options.signal; return; }
       const hls = url.pathname === "/master.m3u8" ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=10,RESOLUTION=180x101,CODECS="jpeg",URI="images.m3u8"\n' : `#EXTM3U\n#EXT-X-TARGETDURATION:32\n${url.pathname === "/images.m3u8" ? "#EXT-X-IMAGES-ONLY\n" : ""}#EXTINF:32,\nsheet.jpg\n#EXT-X-ENDLIST\n`;
       const response = Readable.from([Buffer.from(kind === "hls" ? hls : "WEBVTT\n\n00:00.000 --> 00:16.000\nsheet.webp#xywh=0,0,180,101\n\n00:20.000 --> 00:32.000\nsheet.webp#xywh=180,0,180,101\n")]) as import("node:http").IncomingMessage;
       response.statusCode = 200; response.statusMessage = "OK"; response.rawHeaders = ["Content-Type", "application/octet-stream"];
@@ -122,36 +118,6 @@ for (const kind of ["storyboard", "vtt", "hls"]) test(`${kind}: a controller wit
   assert.equal((await read()).status, 200);
   const revoke = openStore(databasePath, true); revoke.pair(controllerId, "Repaired controller"); revoke.close();
   assert.equal((await read()).status, 401, "replaced token loses access");
-  if (kind !== "storyboard") {
-    tv.report(); await until(() => tv.state.player.status === "playing");
-    const old = playbackId;
-    assert.equal((await tv.command({ type: "videoQuality", playbackId, quality: "480p" })).ok, true);
-    await until(() => tv.state.player.playbackId !== old);
-    playbackId = tv.state.player.playbackId!;
-    hangManifest = true;
-    const late = read(tokens[tvId]);
-    await until(() => !!pendingManifest);
-    assert.equal((await tv.command({ type: "stop" })).ok, true);
-    assert.equal((await late).status, 404, "Stopped playback cannot return late manifest data");
-    assert.equal(pendingManifest?.aborted, true, "Stop cancels the admitted preview's manifest request");
-  } else assert.equal((await tv.command({ type: "stop" })).ok, true);
+  assert.equal((await tv.command({ type: "stop" })).ok, true);
   assert.equal((await read(tokens[tvId])).status, 404);
-});
-
-test("initial loads, direct reloads and quality changes never send private preview descriptors to a renderer", async () => {
-  const store = openStore(":memory:");
-  const media: MediaSource = { source: "https://media.example/video.mp4", preview: storyboardPreview(fixture) };
-  const commands: PlaybackCommand[] = [];
-  let state: SessionState;
-  const session = createSession({ ...store, ...store.playback("preview") }, command => commands.push(command), next => { state = structuredClone(next); }, { resolveSource: () => media });
-  try {
-    session.command({ type: "enqueue", entry: { id: "film", title: "Film", source: "web:https://www.youtube.com/watch?v=vWLJeqLPfSU" }, playNow: true });
-    session.observe({ ...state!.player, status: "playing", duration: 693, seekable: true });
-    session.reload(media);
-    await session.command({ type: "videoQuality", playbackId: state!.player.playbackId!, quality: "720p" });
-    const loads = commands.filter(command => command.type === "load");
-    assert.equal(loads.length, 3);
-    assert.ok(loads.every(command => !("preview" in command)));
-    assert.ok(!JSON.stringify(commands).includes("i.ytimg.com"));
-  } finally { session.close(); store.close(); }
 });

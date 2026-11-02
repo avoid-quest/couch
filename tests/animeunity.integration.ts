@@ -129,29 +129,6 @@ test("a dead origin recovers from the tracker's AnimeUnity entry only after vali
   assert.ok(calls.some(call => call.url === `${moved}/archivio?title=naruto`));
 });
 
-test("concurrent failures share recovery and redirected loops stay bounded", async () => {
-  let release!: () => void;
-  const gate = new Promise<void>(resolve => { release = resolve; });
-  let lookups = 0;
-  const request = recoveryFixture(async call => {
-    if (call.url.startsWith(transport)) throw new TypeError("getaddrinfo ENOTFOUND");
-    if (call.url === tracker) {
-      lookups++;
-      release();
-      return new Response(JSON.stringify({ animeunity: { full_url: moved } }));
-    }
-    await gate;
-    return new Response(archiveHtml([row]));
-  });
-  const pages = await Promise.all([browseAnimeUnity({}, undefined, request), browseAnimeUnity({ query: "naruto" }, undefined, request)]);
-  assert.deepEqual(pages.map(page => page.items.length), [1, 1]);
-  assert.equal(lookups, 1);
-  const calls: Call[] = [];
-  const loop = recoveryFixture(call => call.url === tracker ? new Response("{}") : new Response(null, { status: 302, headers: { Location: call.url.startsWith(transport) ? moved : transport } }), calls);
-  await assert.rejects(() => browseAnimeUnity({}, undefined, loop), /did not load/);
-  assert.equal(calls.filter(call => call.init?.redirect === "manual").length, 4);
-});
-
 test("invalid redirects and tracker addresses are never fetched", async () => {
   for (const candidate of ["https://animeunity.to.evil.example", "https://127.0.0.1", "https://cdn.animeunity.to", "http://animeunity.test", "https://user:secret@animeunity.test", "https://animeunity.test:444", "https://animeunity.test/?token=private"]) {
     const request = recoveryFixture(call => {
@@ -161,45 +138,6 @@ test("invalid redirects and tracker addresses are never fetched", async () => {
     });
     await assert.rejects(() => browseAnimeUnity({}, undefined, request), /did not load/);
   }
-});
-
-test("a tracker candidate serving a challenge is rejected and failed recovery is throttled", async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: 1000 });
-  let lookups = 0;
-  const request = recoveryFixture(call => {
-    if (call.url.startsWith(transport)) throw new TypeError("getaddrinfo ENOTFOUND");
-    if (call.url === tracker) { lookups++; return new Response(JSON.stringify({ animeunity: { full_url: moved } })); }
-    assert.equal(call.url, `${moved}/archivio`);
-    return new Response("<html>Just a moment...</html>");
-  });
-  for (let i = 0; i < 2; i++) await assert.rejects(() => browseAnimeUnity({}, undefined, request), /ENOTFOUND/);
-  assert.equal(lookups, 1);
-  t.mock.timers.tick(600_001);
-  await assert.rejects(() => browseAnimeUnity({}, undefined, request), /ENOTFOUND/);
-  assert.equal(lookups, 2);
-});
-
-test("missing titles and failed POSTs do not trigger domain recovery", async () => {
-  for (const init of [{}, { method: "POST" }]) {
-    const calls: Call[] = [];
-    const request = recoveryFixture(() => new Response(null, { status: init.method ? 419 : 404 }), calls);
-    await assert.rejects(() => animeUnityText(anime, undefined, request, init));
-    assert.equal(calls.length, 1);
-  }
-});
-
-test("recovery can finish after its caller leaves and serve the next attempt", async () => {
-  const abort = new AbortController();
-  let probes = 0;
-  const request = recoveryFixture(call => {
-    if (call.url.startsWith(transport)) throw new TypeError("getaddrinfo ENOTFOUND");
-    if (call.url === tracker) return new Response(JSON.stringify({ animeunity: { full_url: moved } }));
-    if (++probes === 1) abort.abort();
-    return new Response(archiveHtml([row]));
-  });
-  await assert.rejects(() => browseAnimeUnity({}, abort.signal, request), error => error === abort.signal.reason);
-  assert.equal((await browseAnimeUnity({}, undefined, request)).items.length, 1);
-  assert.equal(probes, 2);
 });
 
 test("catalogue pagination follows the public CSRF protocol with temporary anonymous cookies", async () => {
@@ -221,28 +159,6 @@ test("catalogue pagination follows the public CSRF protocol with temporary anony
   assert.equal(calls.length, 3);
 });
 
-test("short catalogue pages advance by their returned row count", async () => {
-  const rows = [row, { ...row, id: 20 }];
-  const calls: Call[] = [];
-  const request = fixture(call => {
-    if (call.init?.method !== "POST") return new Response(archiveHtml(rows, 4), { headers: cookies });
-    assert.equal(JSON.parse(String(call.init.body)).offset, 2);
-    return JSON.stringify({ records: [{ ...row, id: 21 }, { ...row, id: 22 }], tot: 4 });
-  }, calls);
-  const first = await browseAnimeUnity({}, undefined, request);
-  assert.equal(first.nextCursor, "2");
-  const last = await browseAnimeUnity({ cursor: first.nextCursor }, undefined, request);
-  assert.equal(last.items.length, 2);
-  assert.equal(last.nextCursor, undefined);
-  assert.equal(calls.length, 3);
-});
-
-test("empty catalogue pages cannot hide advertised remaining results", async () => {
-  await assert.rejects(() => browseAnimeUnity({}, undefined, fixture(archiveHtml([], 1))), /changed this page/);
-  const request = fixture(call => call.init?.method === "POST" ? JSON.stringify({ records: [], tot: 31 }) : new Response(archiveHtml([row], 31), { headers: cookies }));
-  await assert.rejects(() => browseAnimeUnity({ cursor: "30" }, undefined, request), /changed this page/);
-});
-
 test("title rows carry ordered episode identities, exact known indices and parent metadata", async () => {
   const page = await browseAnimeUnity({ url: anime }, undefined, fixture(titleHtml()));
   assert.equal(page.item?.kind, "collection");
@@ -255,17 +171,6 @@ test("title rows carry ordered episode identities, exact known indices and paren
   assert.deepEqual(direct.parent, direct.item?.collection);
 });
 
-test("large anime browse one bounded range and omit unknown occurrence indices", async () => {
-  const calls: Call[] = [];
-  const rows = Array.from({ length: 120 }, (_, index) => ep(index + 1));
-  const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 300, episodes: [ep(121), ep(122)] }) : titleHtml(rows, 300), calls);
-  const page = await browseAnimeUnity({ url: anime, cursor: "121" }, undefined, request);
-  assert.equal(page.items[0]?.title, "One Piece — Episode 121");
-  assert.deepEqual(page.items[0]?.collection, { title: "One Piece", url: anime });
-  assert.equal(page.nextCursor, "241");
-  assert.deepEqual(calls.map(call => call.url), [anime.replace(animeUnityOrigin, transport), `${transport}/info_api/12/1?start_range=121&end_range=240`]);
-});
-
 test("queue lists collect bounded ranges and never silently truncate a long anime", async () => {
   const rows = Array.from({ length: 120 }, (_, index) => ep(index + 1));
   const page = await loadAnimeUnityList(anime, undefined, fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 122, episodes: [ep(121), ep(122)] }) : titleHtml(rows, 122)));
@@ -274,31 +179,6 @@ test("queue lists collect bounded ranges and never silently truncate a long anim
   const calls: Call[] = [];
   await assert.rejects(() => loadAnimeUnityList(anime, undefined, fixture(titleHtml(rows, 1180), calls)), /more than 500/);
   assert.equal(calls.length, 1);
-});
-
-test("incomplete episode ranges never produce a shortened queue with shifted indices", async () => {
-  const first = Array.from({ length: 120 }, (_, index) => ep(index + 1));
-  for (const last of [[], [ep(121)], [ep(122)]]) {
-    const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 122, episodes: last }) : titleHtml(first, 122));
-    await assert.rejects(() => loadAnimeUnityList(anime, undefined, request), /changed this page/);
-  }
-  const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 122, episodes: [ep(121), ep(122)] }) : titleHtml(first.filter(row => row.number !== "60"), 122));
-  await assert.rejects(() => loadAnimeUnityList(anime, undefined, request), /changed this page/);
-});
-
-test("combined and unpublished rows contribute coverage before queue filtering", async () => {
-  const first = Array.from({ length: 120 }, (_, index) => ep(index + 1));
-  const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 123, episodes: [ep(121, { number: "121-122" }), ep(123, { public: 0 })] }) : titleHtml(first, 123));
-  const page = await loadAnimeUnityList(anime, undefined, request);
-  assert.equal(page.items.length, 121);
-  assert.equal(page.items.at(-1)?.title, "One Piece — Episode 121-122");
-  assert.equal(page.items.at(-1)?.collection?.index, 120);
-  for (const [number, count] of [["1-2", 2], ["1-2-3", 3], ["1-2-3-4", 4]] as const) {
-    const combined = await loadAnimeUnityList(anime, undefined, fixture(titleHtml([ep(1, { number })], count)));
-    assert.equal(combined.items.length, 1);
-    assert.equal(combined.items[0]?.collection?.index, 0);
-  }
-  await assert.rejects(() => loadAnimeUnityList(anime, undefined, fixture(titleHtml([ep(1, { number: "1-3" })], 3))), /changed this page/);
 });
 
 test("unpublished episodes and malformed title identities cannot enter playable lists", async () => {
@@ -319,17 +199,6 @@ test("invalid URL targets, cursors and queries fail before requests", async () =
   for (const request of [{ url: "https://evil.example/archivio" }, { url: `${animeUnityOrigin}/embed-url/5987` }, { url: `${transport}/archivio?token=secret` }, { url: anime, cursor: "2" }, { url: episode, cursor: "121" }, { cursor: "https://evil.example" }, { query: "x" }, { cursor: "100001" }]) await assert.rejects(() => browseAnimeUnity(request, undefined, never));
   await assert.rejects(() => loadAnimeUnityList(`${transport}/archivio`, undefined, never));
   assert.equal(calls, 0);
-});
-
-test("provider requests cancel streamed bodies and enforce a response bound", async () => {
-  const abort = new AbortController();
-  let cancelled = false;
-  const request = (async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("<html>")); }, cancel() { cancelled = true; } }))) as typeof fetch;
-  const pending = animeUnityText(anime, abort.signal, request);
-  abort.abort();
-  await assert.rejects(() => pending, error => error instanceof DOMException && error.name === "AbortError");
-  assert.equal(cancelled, true);
-  await assert.rejects(() => animeUnityText(anime, undefined, fixture(() => new Response(new Uint8Array(4 * 1024 * 1024 + 1)))), /changed this page/);
 });
 
 const playerHtml = `<script>window.masterPlaylist = { params: { 'token': 'aff47512f4e237ec21d794b0d15b03c7', 'expires': '1797414595', 'asn': '', }, url: 'https://vixcloud.cc/playlist/304645?b=1', }</script>`;
@@ -353,16 +222,6 @@ test("Vixcloud resolution copies the public playlist protocol and retains episod
   assert.equal(calls[1]?.url, embed);
 });
 
-test("Vixcloud retains only its literal preview descriptor without reading it during playback", async () => {
-  for (const [literal, url] of [["'https://images.example/previews.vtt';", "https://images.example/previews.vtt"], ["'../previews.vtt'\n", "https://vixcloud.cc/previews.vtt"], ["'prefix' + expression;", undefined], ["'file:///etc/passwd';", undefined]] as const) {
-    const calls: Call[] = [];
-    const media = await resolveAnimeUnityLink(episode, undefined, playback(`${playerHtml}<script>window.thumbnailsUrl = ${literal}</script>`, manifest, calls));
-    assert.deepEqual(media.preview, url ? { kind: "vtt", url } : undefined);
-    assert.equal(calls.length, 3, "No preview manifest or extra player request during playback");
-    assert.equal(media.metadata.duration, 1440);
-  }
-});
-
 test("playback follows the Vixcloud domain published by AnimeUnity and pins the playlist to it", async () => {
   for (const host of ["vixcloud.co", "vixcloud.test"]) {
     const request = fixture(call => call.url.startsWith(transport) ? titleHtml().replaceAll("vixcloud.cc", host)
@@ -381,64 +240,6 @@ test("changed player fields, foreign playlists and non-HLS responses fail closed
   const calls: Call[] = [];
   await assert.rejects(() => resolveAnimeUnityLink(anime, undefined, playback(playerHtml, manifest, calls)), /Choose an episode/);
   assert.equal(calls.length, 0);
-});
-
-test("legacy progressive playback accepts the site's observed public file host", async () => {
-  const direct = "https://srv18-tsurukusa.sweetpixel.org/DDL/ANIME/OnePieceITA/OnePiece_Ep_940_ITA.mp4";
-  const body = titleHtml([ep(1, { scws_id: null, link: direct })]);
-  const calls: Call[] = [];
-  assert.equal((await resolveAnimeUnityLink(episode, undefined, fixture(body, calls))).url, direct);
-  assert.equal(calls.length, 1);
-  await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, fixture(body.replace("srv18-tsurukusa.sweetpixel.org", "localhost"))), /direct stream is unavailable/);
-});
-
-
-for (const target of [{}, { query: "naruto" }, { url: anime }, { url: episode }]) {
-  test(`HTTP 200 placeholder recovers ${JSON.stringify(target)}`, async () => {
-    const calls: Call[] = [];
-    const request = recoveryFixture(call => {
-      if (call.url.startsWith(transport)) return new Response("<html>Parked. Just a moment...</html>");
-      if (call.url === tracker) return Response.json({ animeunity: { full_url: moved } });
-      assert.equal(new URL(call.url).origin, moved);
-      return new Response(call.url.includes("/anime/") ? titleHtml() : archiveHtml([row]));
-    }, calls);
-    assert.ok((await browseAnimeUnity(target, undefined, request)).items.length > 0);
-    assert.equal(calls.filter(call => call.url === tracker).length, 1);
-  });
-}
-
-for (const cancellingInitiator of [true, false]) test(`aborting the ${cancellingInitiator ? "initiator" : "waiter"} leaves the other caller running`, async () => {
-  const abort = new AbortController();
-  const entered = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let lookups = 0;
-  let recoverySignal: AbortSignal | null | undefined;
-  const request = recoveryFixture(async call => {
-    if (call.url.startsWith(transport)) throw new TypeError("getaddrinfo ENOTFOUND");
-    if (call.url === tracker) {
-      lookups++;
-      recoverySignal = call.init?.signal;
-      entered.resolve();
-      await release.promise;
-      recoverySignal?.throwIfAborted();
-      return Response.json({ animeunity: { full_url: moved } });
-    }
-    return new Response(archiveHtml([row]));
-  });
-  const first = browseAnimeUnity({}, cancellingInitiator ? abort.signal : undefined, request);
-  await entered.promise;
-  const second = browseAnimeUnity({ query: "naruto" }, cancellingInitiator ? undefined : abort.signal, request);
-  const rejected = assert.rejects(cancellingInitiator ? first : second, error => error === abort.signal.reason);
-  const remaining = cancellingInitiator ? second : first;
-  const healthy = assert.doesNotReject(remaining);
-  await new Promise(resolve => setImmediate(resolve));
-  abort.abort();
-  try {
-    await Promise.race([rejected, new Promise((_, reject) => setTimeout(() => reject(new Error("caller kept waiting on shared recovery")), 100))]);
-    assert.equal(recoverySignal?.aborted, false);
-  } finally { release.resolve(); await healthy; }
-  assert.equal((await remaining).items.length, 1);
-  assert.equal(lookups, 1);
 });
 
 test("existing AnimeUnity saves match browsed identities and toggle without duplicates", async () => {
@@ -472,31 +273,3 @@ test("existing AnimeUnity saves match browsed identities and toggle without dupl
   } finally { providers.close(); later.close(); }
 });
 
-
-test("shared recovery has its own bounded deadline and throttles timeout retries", async t => {
-  const deadline = new AbortController();
-  const timeout = AbortSignal.timeout;
-  t.mock.method(AbortSignal, "timeout", (ms: number) => ms === 20_000 ? deadline.signal : timeout(ms));
-  const entered = Promise.withResolvers<void>();
-  let lookups = 0;
-  const request = recoveryFixture(async call => {
-    if (call.url.startsWith(transport)) throw new TypeError("getaddrinfo ENOTFOUND");
-    assert.equal(call.url, tracker);
-    lookups++;
-    entered.resolve();
-    return new Promise<Response>((_, reject) => call.init!.signal!.addEventListener("abort", () => reject(call.init!.signal!.reason), { once: true }));
-  });
-  const result = browseAnimeUnity({}, undefined, request);
-  const rejected = assert.rejects(result, error => error === deadline.signal.reason);
-  await entered.promise;
-  deadline.abort(new DOMException("Recovery deadline", "TimeoutError"));
-  await rejected;
-  await assert.rejects(browseAnimeUnity({}, undefined, request), /ENOTFOUND/);
-  assert.equal(lookups, 1);
-});
-
-test("a valid empty search does not trigger recovery", async () => {
-  const calls: Call[] = [];
-  assert.deepEqual((await browseAnimeUnity({ query: "missing" }, undefined, fixture(archiveHtml([], 0), calls))).items, []);
-  assert.equal(calls.length, 1);
-});

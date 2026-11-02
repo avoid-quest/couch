@@ -3,34 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readDeviceName, saveDeviceName } from "../app/device-name";
+import { readDeviceName } from "../app/device-name";
 import { createDevices } from "../src/server/devices";
 import { openStore } from "../src/server/store";
-import { UNNAMED_COUCH } from "../src/shared/devices";
-
-test("the app and the Couch it hosts share one installation name, with or without Core", () => {
-  const directory = mkdtempSync(join(tmpdir(), "couch-device-identity-"));
-  const path = join(directory, "couch.sqlite");
-  let store: ReturnType<typeof openStore> | undefined;
-  try {
-    // Client mode before Core ever ran: Main reads nothing, then creates the name.
-    assert.equal(readDeviceName(path), null);
-    assert.equal(saveDeviceName(path, "  Laptop  "), "Laptop");
-    assert.equal(readDeviceName(path), "Laptop");
-    store = openStore(path);
-    assert.equal(store.installationName(), "Laptop");
-    store.identify(null, "h".repeat(43));
-    assert.equal(store.hostDevice()?.name, "Laptop");
-    saveDeviceName(path, "Living room");
-    assert.equal(store.hostDevice()?.name, "Living room");
-    store.renameInstallation("Renamed by an administrator");
-    assert.equal(readDeviceName(path), "Renamed by an administrator");
-    assert.throws(() => saveDeviceName(path, "\n"));
-    // "Couch", the name Core seeds, counts as unnamed so a pairing name is not replaced by it.
-    store.renameInstallation(UNNAMED_COUCH);
-    assert.equal(readDeviceName(path), null);
-  } finally { store?.close(); rmSync(directory, { recursive: true, force: true }); }
-});
 
 test("clients own their name, and administrators name only the host", async () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-identity-"));

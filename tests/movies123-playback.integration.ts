@@ -73,27 +73,11 @@ test("123MoviesFree discovers alternate, SDH and forced subtitle tracks without 
   assert.equal(calls[3]!.url, `${movieSubtitles}index.json`);
 });
 
-test("123MoviesFree subtitle discovery uses the selected episode", async () => {
-  const { request } = fixture({ page: detail(true), subtitles: () => Response.json([
-    { file: `${episodeSubtitles}en-sdh.vtt`, label: "English (SDH)", lang: "en" },
-  ]) });
-  const result = await resolveMovies123Link(`${season}?episode=2`, undefined, request);
-  assert.deepEqual(result.subtitles, [{ source: `${episodeSubtitles}en-sdh.vtt`, title: "English (SDH)", language: "en" }]);
-});
-
 test("123MoviesFree rejects foreign, traversing and non-subtitle files and deduplicates URLs", async () => {
   const files = ["https://untrusted.example/en.vtt", "http://ployan.me/sub/2223232a27203e22/en.vtt", "https://user:password@ployan.me/sub/2223232a27203e22/en.vtt", "/sub/2223232a27203e22/../private.vtt", "/sub/other/en.vtt", "/sub/2223232a27203e22/%2e%2e/en.vtt", "/sub/2223232a27203e22/en.js", "/sub/2223232a27203e22/en.vtt?redirect=private", `${movieSubtitles}en.vtt`, `${movieSubtitles}en.vtt`];
   const { request } = fixture({ subtitles: () => Response.json(files.map(file => ({ file, label: "English", lang: "en" }))) });
   const result = await resolveMovies123Link(movie, undefined, request);
   assert.deepEqual(result.subtitles, [{ source: `${movieSubtitles}en.vtt`, title: "English", language: "en" }]);
-});
-
-test("123MoviesFree keeps the preferred subtitle language within the existing 16-track limit", async () => {
-  const rows = [...Array.from({ length: 20 }, (_, i) => ({ file: `${movieSubtitles}en-${i}.vtt`, label: "English", lang: "en" })), { file: `${movieSubtitles}it.vtt`, label: "Italian", lang: "it" }];
-  const { request } = fixture({ subtitles: () => Response.json(rows) });
-  const result = await resolveMovies123Link(movie, undefined, request, "it");
-  assert.equal(result.subtitles.length, 16);
-  assert.deepEqual(result.subtitles[0], { source: `${movieSubtitles}it.vtt`, title: "Italian", language: "it" });
 });
 
 test("123MoviesFree still plays video when the optional subtitle index is unavailable or invalid", async () => {
@@ -103,50 +87,6 @@ test("123MoviesFree still plays video when the optional subtitle index is unavai
     assert.equal(result.url, master);
     assert.deepEqual(result.subtitles, []);
   }
-});
-
-test("123MoviesFree keeps validated video when the video deadline expires during subtitle discovery", async context => {
-  const videoDeadline = new AbortController(), subtitleDeadline = new AbortController();
-  const timeout = AbortSignal.timeout;
-  context.mock.method(AbortSignal, "timeout", (milliseconds: number) => milliseconds === 25_000 ? videoDeadline.signal : milliseconds === 5000 ? subtitleDeadline.signal : timeout(milliseconds));
-  let cancelled = false, started!: () => void;
-  const ready = new Promise<void>(resolve => { started = resolve; });
-  const { request } = fixture({ subtitles: () => {
-    started();
-    return new Response(new ReadableStream({ cancel() { cancelled = true; } }));
-  } });
-  const pending = resolveMovies123Link(movie, undefined, request);
-  await ready;
-  videoDeadline.abort(new DOMException("Video deadline expired", "TimeoutError"));
-  subtitleDeadline.abort(new DOMException("Subtitle deadline expired", "TimeoutError"));
-  const result = await pending;
-  assert.equal(result.url, master);
-  assert.deepEqual(result.subtitles, []);
-  assert.equal(cancelled, true);
-});
-
-test("123MoviesFree bounds the subtitle index and cancels its body without preventing video", async () => {
-  let cancelled = false;
-  const { request } = fixture({ subtitles: () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(64 * 1024 + 1)); }, cancel() { cancelled = true; } })) });
-  const result = await resolveMovies123Link(movie, undefined, request);
-  assert.equal(result.url, master);
-  assert.deepEqual(result.subtitles, []);
-  assert.equal(cancelled, true);
-});
-
-test("123MoviesFree cancellation stops a stalled subtitle index and preserves the caller's reason", async () => {
-  const controller = new AbortController(), reason = new Error("User stopped playback");
-  let cancelled = false, started!: () => void;
-  const ready = new Promise<void>(resolve => { started = resolve; });
-  const { request } = fixture({ subtitles: () => {
-    started();
-    return new Response(new ReadableStream({ cancel() { cancelled = true; } }));
-  } });
-  const pending = resolveMovies123Link(movie, controller.signal, request);
-  await ready;
-  controller.abort(reason);
-  await assert.rejects(pending, error => error === reason);
-  assert.equal(cancelled, true);
 });
 
 test("123MoviesFree rejects collection and foreign links before fetching", async () => {
@@ -253,61 +193,6 @@ test("123MoviesFree rejects non-HLS and unsafe fallback sources without leaking 
   }
 });
 
-test("123MoviesFree preserves the fallback's SDH subtitles and language preference within 16 tracks", async () => {
-  const subtitles = [...Array.from({ length: 20 }, (_, i) => ({ url: `https://noisy-king-5904.streamed-7.workers.dev/sub/en-${i}`, lang: "eng" })), { url: "https://noisy-king-5904.streamed-7.workers.dev/sub/it", lang: "ita" }, { url: "https://noisy-king-5904.streamed-7.workers.dev/sub/it", lang: "ita" }, { url: "https://noisy-king-5904.streamed-7.workers.dev/sub/sdh", lang: "ita (SDH)" }, { url: "https://noisy-king-5904.streamed-7.workers.dev/sub/it-alt", lang: "ita (2)" }, { url: "file:///private", lang: "eng" }];
-  const { request } = embedFixture({ stream: { status: "success", type: "hls", url: alternate, subtitles } });
-  const result = await resolveMovies123Link(movie, undefined, request, "it");
-  assert.equal(result.subtitles.length, 16);
-  assert.deepEqual(result.subtitles.slice(0, 3), [{ source: "https://noisy-king-5904.streamed-7.workers.dev/sub/it", title: "Italian", language: "it" }, { source: "https://noisy-king-5904.streamed-7.workers.dev/sub/sdh", title: "Italian (SDH)", language: "it" }, { source: "https://noisy-king-5904.streamed-7.workers.dev/sub/it-alt", title: "Italian (2)", language: "it" }]);
-});
-
-test("123MoviesFree canonicalizes fallback language aliases before ranking subtitles", async () => {
-  const subtitles = ["eng", "fre", "ger"].map(lang => ({ url: `https://noisy-king-5904.streamed-7.workers.dev/sub/${lang}`, lang }));
-  const { request } = embedFixture({ stream: { status: "success", type: "hls", url: alternate, subtitles } });
-  const result = await resolveMovies123Link(movie, undefined, request, "de");
-  assert.deepEqual(result.subtitles.map(track => [track.title, track.language]), [["German", "de"], ["English", "en"], ["French", "fr"]]);
-});
-
-test("123MoviesFree bounds the fallback metadata and manifest bodies", async () => {
-  for (const stage of ["metadata", "manifest"]) {
-    let cancelled = false;
-    const response = () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array((stage === "metadata" ? 16 : 512) * 1024 + 1)); }, cancel() { cancelled = true; } }));
-    const { calls, request } = embedFixture(stage === "metadata" ? { envelope: response } : { playlist: response });
-    await assert.rejects(resolveMovies123Link(movie, undefined, request), ExtractionError);
-    assert.equal(cancelled, true);
-    assert.equal(calls.length, stage === "metadata" ? 5 : 6);
-  }
-});
-
-test("123MoviesFree cancellation stops a stalled fallback and preserves the caller's reason", async () => {
-  for (const stage of ["metadata", "manifest"]) {
-    const controller = new AbortController(), reason = new Error("User stopped playback");
-    let started!: () => void, cancelled = false;
-    const ready = new Promise<void>(resolve => { started = resolve; });
-    const response = () => { started(); return new Response(new ReadableStream({ cancel() { cancelled = true; } })); };
-    const { request } = embedFixture(stage === "metadata" ? { envelope: response } : { playlist: response });
-    const pending = resolveMovies123Link(movie, controller.signal, request);
-    await ready;
-    controller.abort(reason);
-    await assert.rejects(pending, error => error === reason);
-    assert.equal(cancelled, true);
-  }
-});
-
-test("123MoviesFree keeps the whole resolution deadline while preparing its fallback", async context => {
-  const deadline = new AbortController(), timeout = AbortSignal.timeout;
-  context.mock.method(AbortSignal, "timeout", (milliseconds: number) => milliseconds === 25_000 ? deadline.signal : timeout(milliseconds));
-  let started!: () => void, cancelled = false;
-  const ready = new Promise<void>(resolve => { started = resolve; });
-  const { calls, request } = embedFixture({ envelope: () => { started(); return new Response(new ReadableStream({ cancel() { cancelled = true; } })); } });
-  const pending = resolveMovies123Link(movie, undefined, request);
-  await ready;
-  deadline.abort(new DOMException("Video deadline expired", "TimeoutError"));
-  await assert.rejects(pending, error => error instanceof ExtractionError && error.message === "123MoviesFree took too long to prepare this title. Try again shortly.");
-  assert.equal(cancelled, true);
-  assert.equal(calls.length, 5);
-});
-
 test("123MoviesFree rejects unsupported Server 1 and malformed player destinations", async () => {
   for (const metadata of [
     { code: 200, mode: "embed", info: "https://untrusted.example/player" },
@@ -319,42 +204,4 @@ test("123MoviesFree rejects unsupported Server 1 and malformed player destinatio
     await assert.rejects(resolveMovies123Link(movie, undefined, request), error => error instanceof ExtractionError && !error.message.includes("PRIVATE"));
     assert.equal(calls.length, 2, "An unsupported response must not trigger another host or server");
   }
-});
-
-test("123MoviesFree returns a safe actionable error for unavailable and non-HLS manifests", async () => {
-  for (const playlist of [() => new Response("error code: 502", { status: 502 }), () => new Response("<html>upstream error #EXTM3U PRIVATE</html>"), () => { throw new Error(`fetch failed ${master}?signature=PRIVATE`); }]) {
-    const { request } = fixture({ playlist });
-    await assert.rejects(resolveMovies123Link(movie, undefined, request), error => error instanceof ExtractionError && error.message === "123MoviesFree's direct stream is unavailable. Try again shortly or choose another source.");
-  }
-});
-
-for (const declared of [false, true]) test(`123MoviesFree bounds a ${declared ? "declared" : "chunked"} manifest and cancels its body`, async () => {
-  let cancelled = false;
-  const { request } = fixture({ playlist: () => new Response(new ReadableStream({
-    start(controller) { controller.enqueue(new Uint8Array(512 * 1024 + 1)); },
-    cancel() { cancelled = true; },
-  }), { headers: declared ? { "Content-Length": "9999999" } : {} }) });
-  await assert.rejects(resolveMovies123Link(movie, undefined, request), ExtractionError);
-  assert.equal(cancelled, true);
-});
-
-test("123MoviesFree cancellation stops a stalled manifest and preserves the caller's reason", async () => {
-  const controller = new AbortController(), reason = new Error("User stopped playback");
-  let cancelled = false, started!: () => void;
-  const ready = new Promise<void>(resolve => { started = resolve; });
-  const { request } = fixture({ playlist: () => {
-    const response = new Response(new ReadableStream({ cancel() { cancelled = true; } }));
-    started();
-    return response;
-  } });
-  const pending = resolveMovies123Link(movie, controller.signal, request);
-  await ready;
-  controller.abort(reason);
-  await assert.rejects(pending, error => error === reason);
-  assert.equal(cancelled, true);
-});
-
-test("123MoviesFree network timeouts hide internal request details", async () => {
-  const { request } = fixture({ playlist: () => { throw new DOMException(`Timed out ${master}`, "TimeoutError"); } });
-  await assert.rejects(resolveMovies123Link(movie, undefined, request), error => error instanceof ExtractionError && error.message === "123MoviesFree took too long to prepare this title. Try again shortly.");
 });

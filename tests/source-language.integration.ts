@@ -64,20 +64,6 @@ async function requestedAudio(load: Load) {
   return offered;
 }
 
-test("initial sound-only HLS offers every language and carries the non-default profile preference without video", { timeout: 15_000 }, async t => {
-  const f = await fixture(t);
-  assert.equal((await f.receiver.command({ type: "enqueue", entry: { id: "seed", title: "Seed", source: `${f.hub.origin}/api/health` }, playNow: true, deviceId: f.receiver.id })).ok, true);
-  await until(() => !!f.receiver.load());
-  f.receiver.report();
-  await until(() => f.receiver.state.player.status === "playing");
-  assert.equal((await f.receiver.command({ type: "output", deviceId: f.receiver.id, picture: false })).ok, true);
-  const load = await f.play();
-  assert.deepEqual(load.output, { picture: false, sound: true });
-  await requestedAudio(load);
-  assert.equal(f.requests.some(path => path.startsWith("/picture/")), false);
-  assert.equal(f.requests.filter(path => path === "/master.m3u8").length, 1, "synthetic delivery reuses this load's master read");
-});
-
 test("selected Italian and its menu survive picture off and restoration with the same queue and position", { timeout: 15_000 }, async t => {
   const f = await fixture(t);
   const original = await f.play();

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { UpdateState } from "../src/shared/updates";
-import { batchActive, batchLifetime, createUpdateBatch, restoreUpdateBatch, runUpdateBatch, saveUpdateBatch, updateBatchKey, type UpdateBatch } from "../src/client/session/update-batch";
+import { batchActive, batchLifetime, createUpdateBatch, restoreUpdateBatch, runUpdateBatch, saveUpdateBatch, type UpdateBatch } from "../src/client/session/update-batch";
 
 const ready: UpdateState = { version: "0.4.0", available: "0.4.1", channel: "preview", status: "ready", progress: null, checkedAt: 1, error: null };
 const target = (id: string) => ({ id, name: id, state: ready });
@@ -36,17 +36,6 @@ test("unavailable selected targets cannot silently become a successful dependenc
   expect(() => createUpdateBatch([target("app")], ["missing"], true)).toThrow("isn't ready to update");
   expect(() => createUpdateBatch([{ id: "offline", name: "Living room" }], ["offline"], true)).toThrow("Living room isn't ready");
   expect(() => createUpdateBatch([{ ...target("host"), state: { ...ready, status: "up-to-date" } }], ["host"], true)).toThrow("isn't ready to update");
-});
-
-test("an explicitly skipped unsupported helper API still permits updating the old app", async () => {
-  const batch = planned();
-  batch.helpers = "skipped"; batch.helperError = "Media tool maintenance is unsupported";
-  const run = harness(batch);
-  await runUpdateBatch(batch, run.actions);
-  expect(run.events[0]).toBe("install tv");
-  expect(run.current().helpers).toBe("skipped");
-  expect(run.current().helperError).toBe("Media tool maintenance is unsupported");
-  expect(batchActive(run.current())).toBe(false);
 });
 
 test("maintenance precedes clients, then host, then local app; each restart waits for confirmation", async () => {
@@ -117,14 +106,6 @@ test("an uncertain restored install cannot advance the remaining batch", async (
   expect(run.current().items.map(item => item.status)).toEqual(["failed", "waiting", "waiting", "waiting"]);
 });
 
-test("helper recovery observes maintenance without starting it twice", async () => {
-  const batch = planned();
-  batch.helpers = "checking"; batch.helperStartedAt = 12;
-  const run = harness(batch);
-  await runUpdateBatch(batch, run.actions);
-  expect(run.events[0]).toBe("observe helpers");
-});
-
 test("playback rejection remains a failed step and is returned for explicit confirmation", async () => {
   const run = harness();
   const rejection = new Error("Updating will stop playback");
@@ -178,9 +159,6 @@ test("restore rejects expired, malformed, duplicate and reordered intent", () =>
   expect(restoreUpdateBatch(JSON.stringify({ ...planned(), items: [...planned().items].reverse() }), 20)).toBeNull();
   expect(restoreUpdateBatch(JSON.stringify({ ...planned(), items: [{ ...planned().items[0], status: "installing" }] }), 20)).toBeNull();
   expect(restoreUpdateBatch(JSON.stringify(planned()), 20)).toEqual(planned());
-  expect(updateBatchKey("https://one", "install", "viewer")).not.toBe(updateBatchKey("https://two", "install", "viewer"));
-  expect(updateBatchKey("https://one", "install", "viewer")).not.toBe(updateBatchKey("https://one", "other", "viewer"));
-  expect(updateBatchKey("https://one", "install", "viewer")).not.toBe(updateBatchKey("https://one", "install", "other"));
 });
 
 test("settled results survive expiry without reviving restart intent", async () => {

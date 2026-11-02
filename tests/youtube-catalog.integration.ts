@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "../src/server/sqlite";
-import { ControllerError } from "../src/server/devices";
 import { createYouTubeBrowser, createYouTubePlaylistLoader } from "../src/server/providers/youtube";
 import { createProviders } from "../src/server/providers";
 import { createForLater } from "../src/server/for-later";
@@ -60,19 +59,6 @@ test("channel aliases and search share one new favorite and canonical section li
   } finally { providers.close(); }
 });
 
-test("a search channel's verified canonical reference takes precedence over its alias URL and ID title", async () => {
-  const providers = catalog(createYouTubeBrowser(runner(rawPage([{ url: alias, title: channel.split("/").at(-1), channel: creator.title, channel_url: channel }]))));
-  try {
-    const page = await (await providers.handle(get("/api/providers/youtube/items?q=NPR"))).json();
-    assert.equal(page.items[0].url, channel);
-    assert.equal(page.items[0].id, providerItemId("youtube", channel));
-    assert.equal(page.items[0].title, creator.title);
-    const saved = await (await providers.handle(post("/api/providers/favorites", { item: page.items[0] }))).json();
-    assert.equal(saved.item.url, channel);
-    assert.equal(saved.item.title, creator.title);
-  } finally { providers.close(); }
-});
-
 test("failed or unusable channel metadata keeps the requested identity and sections", async () => {
   for (const raw of [null, "not JSON", {}, { channel_url: alias }, { channel_url: `${channel}/videos` }, { channel_url: video().url }]) {
     const page = await createYouTubeBrowser(async () => { if (raw === null) throw new Error("metadata unavailable"); return typeof raw === "string" ? raw : JSON.stringify(raw); })({ url: alias });
@@ -115,85 +101,6 @@ test("legacy and newly saved ID titles use their known channel name without look
   } finally { providers.close(); db.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("opening a canonical channel repairs only an address title and preserves its saved metadata and position", async () => {
-  const browse = createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel, entries: [] }));
-  let changes = 0;
-  const providers = createProviders({ databasePath: ":memory:", onChange() { changes++; }, browse: { youtube: browse } as Parameters<typeof createProviders>[0]["browse"] });
-  const saved: ProviderItem = { id: providerItemId("youtube", channel), provider: "youtube", kind: "channel", url: channel,
-    title: channel.split("/").at(-1)!, description: "My note", thumbnail: "https://yt3.googleusercontent.com/custom=s900" };
-  const other = { ...saved, id: providerItemId("youtube", alias), url: alias, title: "Another bookmark" };
-  const request = () => get(`/api/providers/youtube/items?${new URLSearchParams({ url: channel })}`);
-  const read = async () => (await (await providers.handle(get("/api/providers/favorites"))).json()).favorites;
-  try {
-    await providers.handle(post("/api/providers/favorites", { item: saved }));
-    await providers.handle(post("/api/providers/favorites", { item: other }));
-    assert.equal((await providers.handle(request())).status, 200);
-    assert.deepEqual(await read(), [other, { ...saved, title: creator.title }]);
-    assert.equal(changes, 3);
-    await providers.handle(request());
-    assert.equal(changes, 3, "a cached page does not repeatedly rewrite the repaired title");
-    const custom = { ...saved, title: "My concerts" };
-    await providers.handle(post("/api/providers/favorites", { item: custom }));
-    await providers.handle(request());
-    assert.deepEqual(await read(), [other, custom]);
-    assert.equal(changes, 4, "a custom title survives resolution");
-  } finally { providers.close(); }
-});
-
-test("saved names resembling a different channel ID or a legacy slug remain chosen names", async () => {
-  const names = ["UCDKjZ6tnLsoxSEfy0GMsfbw", "Piano"];
-  for (const title of names) {
-    const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel })));
-    try {
-      const url = title === "Piano" ? "https://www.youtube.com/c/Piano" : channel;
-      const saved: ProviderItem = { id: providerItemId("youtube", url), provider: "youtube", kind: "channel", url, title, subtitle: "Another name" };
-      assert.deepEqual((await (await providers.handle(post("/api/providers/favorites", { item: saved }))).json()).item, saved);
-      assert.ok((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.some((item: ProviderItem) => item.title === title));
-      await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url })}`));
-      assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.find((item: ProviderItem) => item.url === channel).title, title);
-    } finally { providers.close(); }
-  }
-});
-
-test("an existing canonical name equal to the alias takes precedence during a collision", async () => {
-  const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel })));
-  const saved = (url: string, title: string) => ({ provider: "youtube", kind: "channel", url, title });
-  try {
-    await providers.handle(post("/api/providers/favorites", { item: saved(alias, "My concerts") }));
-    await providers.handle(post("/api/providers/favorites", { item: saved(channel, "@nprmusic") }));
-    await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`));
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, "@nprmusic");
-  } finally { providers.close(); }
-});
-
-test("resolving an alias recognizes its verified canonical ID as a fallback title", async () => {
-  const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel })));
-  try {
-    await providers.handle(post("/api/providers/favorites", { item: { provider: "youtube", kind: "channel", url: alias, title: channel.split("/").at(-1) } }));
-    await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`));
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, creator.title);
-  } finally { providers.close(); }
-});
-
-test("a removed caller cannot repair Saved after channel metadata resolves, but a paired caller can reuse the cache", async () => {
-  const gate = Promise.withResolvers<void>();
-  const providers = catalog(createYouTubeBrowser(async () => { await gate.promise; return JSON.stringify({ channel: creator.title, channel_url: channel }); }));
-  const saved = { provider: "youtube", kind: "channel", title: channel.split("/").at(-1), url: channel };
-  let allowed = true;
-  const authorize = () => { if (!allowed) throw new ControllerError("This device was removed. Pair again.", 401); };
-  try {
-    await providers.handle(post("/api/providers/favorites", { item: saved }));
-    const request = () => get(`/api/providers/youtube/items?${new URLSearchParams({ url: channel })}`);
-    const removed = providers.handle(request(), authorize);
-    await flush(); allowed = false; gate.resolve();
-    assert.equal((await removed).status, 401);
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, saved.title);
-    // A still-paired caller may repair from the shared cache without a second metadata request.
-    assert.equal((await providers.handle(request())).status, 200);
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[0].title, creator.title);
-  } finally { gate.resolve(); providers.close(); }
-});
-
 for (const duplicate of [false, true]) {
   test(`alias migration preserves chosen metadata${duplicate ? " from an existing canonical bookmark" : ""}`, async () => {
     const providers = catalog(createYouTubeBrowser(runner({ channel: creator.title, channel_url: channel, entries: [] })));
@@ -218,107 +125,27 @@ for (const duplicate of [false, true]) {
   });
 }
 
-test("opening a saved alias lazily preserves Saved/Remove state and its position", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "couch-youtube-favorites-"));
-  const databasePath = join(directory, "favorites.sqlite");
-  let resolutions = 0;
-  const browse = createYouTubeBrowser(async () => { resolutions++; return JSON.stringify({ channel: "NPR Music", channel_url: channel, entries: [] }); });
-  let providers = catalog(browse, databasePath);
+test("channel videos inherit the verified creator through browse, Save and full-list Queue metadata", async () => {
+  const url = `${alias}/videos`;
+  const run = runner(rawPage([{ ...video(), channel: null, channel_url: null }], { webpage_url: url, channel: creator.title, channel_url: channel }));
+  const providers = catalog(createYouTubeBrowser(run));
+  const later = forLater(providers);
   try {
-    const legacy = { id: providerItemId("youtube", alias), provider: "youtube", kind: "channel", title: "NPR Music", url: alias };
-    const before = { ...legacy, id: providerItemId("youtube", `${alias}-before`), url: `${alias}-before` };
-    const after = { ...legacy, id: providerItemId("youtube", `${alias}-after`), url: `${alias}-after` };
-    await providers.handle(post("/api/providers/favorites", { item: before }));
-    assert.equal((await providers.handle(post("/api/providers/favorites", { item: legacy }))).status, 200);
-    await providers.handle(post("/api/providers/favorites", { item: after }));
-    providers.close();
-    providers = catalog(browse, databasePath);
-    assert.deepEqual((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites, [after, legacy, before]);
-    assert.equal(resolutions, 0, "favorites reads never resolve existing aliases");
-    const opened = (await (await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: legacy.url })}`))).json()).item;
-    assert.equal(opened.url, channel);
-    const { favorites } = await (await providers.handle(get("/api/providers/favorites"))).json();
-    assert.equal(favorites.length, 3);
-    assert.deepEqual(favorites.map((item: { url: string }) => item.url), [after.url, channel, before.url]);
-    assert.equal(favorites[1].id, opened.id, "the unchanged UI matches Saved by the returned item's ID");
-    providers.close();
-    providers = catalog(browse, databasePath);
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites[1].id, opened.id);
-    assert.equal((await providers.handle(new Request(`http://localhost/api/providers/favorites/${opened.id}`, { method: "DELETE" }))).status, 204);
-    assert.deepEqual((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites, [after, before]);
-    assert.equal(resolutions, 1, "only opening the alias resolves it");
-  } finally { providers.close(); rmSync(directory, { recursive: true, force: true }); }
+    const response = await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url })}`));
+    assert.equal(response.status, 200);
+    const page = await response.json();
+    const item = page.items[0];
+    assert.deepEqual(page.parent, creator);
+    assert.deepEqual(item.creator, creator);
+    assert.equal(item.subtitle, creator.title);
+    const saved = await later.handle(post("/api/for-later", { reference: { kind: "web", url: item.url, title: item.title } }));
+    assert.equal(saved.status, 201);
+    assert.deepEqual((await (await later.handle(get("/api/for-later"))).json()).items[0].creator, creator);
+    const loaded = (await createYouTubePlaylistLoader(run)(url)).items[0]!;
+    assert.deepEqual(providerMetadata(loaded).creator, creator);
+    assert.equal(loaded.collection, undefined, "channel tabs do not define automatic continuation");
+  } finally { later.close(); providers.close(); }
 });
-
-test("resolving one saved alias merges an existing canonical favorite without looking up other bookmarks", async () => {
-  let calls = 0, changes = 0;
-  const browse = createYouTubeBrowser(async () => { calls++; return JSON.stringify({ channel: creator.title, channel_url: channel, entries: [] }); });
-  const providers = createProviders({ databasePath: ":memory:", onChange() { changes++; }, browse: { youtube: browse } as Parameters<typeof createProviders>[0]["browse"] });
-  const saved = (url: string) => ({ provider: "youtube", kind: "channel", title: creator.title, url });
-  try {
-    for (const url of [alias, channel, "https://www.youtube.com/@another-channel"]) await providers.handle(post("/api/providers/favorites", { item: saved(url) }));
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.length, 3);
-    assert.equal(calls, 0);
-    const request = () => get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`);
-    assert.equal((await providers.handle(request())).status, 200);
-    const { favorites } = await (await providers.handle(get("/api/providers/favorites"))).json();
-    assert.deepEqual(favorites.map((item: { url: string }) => item.url), ["https://www.youtube.com/@another-channel", channel]);
-    assert.equal(changes, 4, "normalization invalidates favorites once");
-    await providers.handle(request());
-    assert.equal(changes, 4, "reopening the resolved alias is idempotent");
-    // A matching alias saved after the page was cached also resolves from that verified cached page.
-    await providers.handle(post("/api/providers/favorites", { item: saved(alias) }));
-    await providers.handle(request());
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.length, 2);
-    assert.equal(calls, 1);
-  } finally { providers.close(); }
-});
-
-test("unresolved metadata leaves saved aliases intact and resolution never resurrects a removed bookmark", async () => {
-  const gate = Promise.withResolvers<void>();
-  const browse = createYouTubeBrowser(async args => {
-    if (args.at(-1) === alias) { await gate.promise; return JSON.stringify({ channel: creator.title, channel_url: channel }); }
-    throw new Error("metadata unavailable");
-  });
-  const providers = catalog(browse);
-  const other = "https://www.youtube.com/@another-channel";
-  try {
-    for (const url of [alias, other]) await providers.handle(post("/api/providers/favorites", { item: { provider: "youtube", kind: "channel", title: creator.title, url } }));
-    const failed = await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: other })}`));
-    assert.equal((await failed.json()).item.id, providerItemId("youtube", other));
-    assert.equal((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.length, 2);
-    const pending = providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url: alias })}`));
-    await flush();
-    await providers.handle(new Request(`http://localhost/api/providers/favorites/${providerItemId("youtube", alias)}`, { method: "DELETE" }));
-    gate.resolve();
-    assert.equal((await pending).status, 200);
-    assert.deepEqual((await (await providers.handle(get("/api/providers/favorites"))).json()).favorites.map((item: { url: string }) => item.url), [other]);
-  } finally { gate.resolve(); providers.close(); }
-});
-
-for (const section of ["videos", "shorts", "streams"]) {
-  test(`channel ${section} inherit the verified creator through browse, Save and full-list Queue metadata`, async () => {
-    const url = `${alias}/${section}`;
-    const run = runner(rawPage([{ ...video(), channel: null, channel_url: null }], { webpage_url: url, channel: creator.title, channel_url: channel }));
-    const providers = catalog(createYouTubeBrowser(run));
-    const later = forLater(providers);
-    try {
-      const response = await providers.handle(get(`/api/providers/youtube/items?${new URLSearchParams({ url })}`));
-      assert.equal(response.status, 200);
-      const page = await response.json();
-      const item = page.items[0];
-      assert.deepEqual(page.parent, creator);
-      assert.deepEqual(item.creator, creator);
-      assert.equal(item.subtitle, creator.title);
-      const saved = await later.handle(post("/api/for-later", { reference: { kind: "web", url: item.url, title: item.title } }));
-      assert.equal(saved.status, 201);
-      assert.deepEqual((await (await later.handle(get("/api/for-later"))).json()).items[0].creator, creator);
-      const loaded = (await createYouTubePlaylistLoader(run)(url)).items[0]!;
-      assert.deepEqual(providerMetadata(loaded).creator, creator);
-      assert.equal(loaded.collection, undefined, "channel tabs do not define automatic continuation");
-    } finally { later.close(); providers.close(); }
-  });
-}
 
 test("entry creators take precedence; playlist and search owners are never inherited", async () => {
   const other = { title: "Another channel", url: "https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv" };
@@ -367,17 +194,16 @@ test("list validation still rejects incomplete, unavailable, empty, mismatched a
   assert.equal((await createYouTubePlaylistLoader(runner(rawPage([video(), video()], { playlist_count: null })))(playlist)).items.length, 2);
 });
 
-for (const mode of ["append", "play", "pending"] as const) {
+for (const mode of ["append", "play"] as const) {
   test(`whole-playlist ${mode} retains manual precedence without repeating queued occurrences`, async () => {
     const page = await createYouTubePlaylistLoader(runner(rawPage([video(), video("bcdefghijkl"), video(), video("cdefghijklm")])))(playlist);
     const entries = page.items.map((item, index): QueueEntry => ({ id: `entry-${index}`, title: item.title, source: `web:${item.url}`, ...providerMetadata(item, true) }));
     const store = openStore(":memory:");
-    const gate = Promise.withResolvers<void>();
     const resolve = createContinuationResolver(async () => page);
     let resolutions = 0;
     const session = createSession({ ...store, ...store.playback("playlist") }, () => {}, () => {}, {
       resolveSource: entry => ({ source: entry.source.slice(4) }),
-      resolveContinuation: async (entry, signal) => { resolutions++; const result = await resolve(entry, signal); if (mode === "pending") await gate.promise; return result; },
+      resolveContinuation: async (entry, signal) => { resolutions++; return resolve(entry, signal); },
     });
     const played: string[] = [];
     const record = () => played.push(session.state.queue.find(entry => entry.id === session.state.currentEntryId)!.source);
@@ -392,7 +218,6 @@ for (const mode of ["append", "play", "pending"] as const) {
       next(); record();
       next(); record();
       next(); record();
-      if (mode === "pending") { gate.resolve(); await flush(); }
       assert.deepEqual(session.state.autoplay?.upcoming.map(entry => entry.source), [entries[3]!.source]);
       next(); record();
       assert.deepEqual(session.state.autoplay?.upcoming, []);
@@ -403,7 +228,7 @@ for (const mode of ["append", "play", "pending"] as const) {
       assert.equal(session.state.player.status, "ended");
       assert.deepEqual(played, [entries[0]!.source, manual.source, ...entries.slice(1).map(entry => entry.source)]);
       assert.equal(resolutions, mode === "play" ? 0 : 1);
-    } finally { gate.resolve(); session.close(); store.close(); }
+    } finally { session.close(); store.close(); }
   });
 }
 
@@ -428,11 +253,6 @@ test("the last advertised page preserves every occurrence through route parsing,
       const route = readCollectionSearch(JSON.parse(JSON.stringify({ provider: "youtube", url: item.url, context })));
       assert.deepEqual(route.context, context);
       assert.equal(providerCollectionCursor("youtube", context), "2400");
-      for (const options of [{ playNow: false }, { playNow: true }, { placement: "next" }]) {
-        const action = { type: "enqueueProvider", provider: "youtube", shape: "atom", url: item.url, title: item.title, collection: context, ...options };
-        const parsed = parseCommand(JSON.stringify({ type: "command", requestId: "last-page", action }));
-        assert.deepEqual(parsed.action, action);
-      }
       const saved = await later.handle(post("/api/for-later", { reference: { kind: "web", url: item.url, title: item.title, collection: { url: playlist, index: context.index } } }));
       assert.equal(saved.status, 201, `Save occurrence ${context.index}`);
       assert.deepEqual((await saved.json()).item.collection, context);

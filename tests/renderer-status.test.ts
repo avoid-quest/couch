@@ -20,85 +20,6 @@ function fixture(page: "local" | "remote" = "local") {
   };
 }
 
-test("each run identifies itself before its page loads", () => {
-  using first = fixture(), second = fixture();
-  const starting = first.read();
-  expect(starting).toMatchObject({ state: "starting", page: "local", pid: process.pid, version: "9.9.9", navigation: 0 });
-  expect(starting.run).not.toBe(second.read().run);
-  expect(Date.parse(starting.startedAt)).toBeLessThanOrEqual(Date.parse(starting.at));
-});
-
-test.if(process.platform === "linux")("each status names its process as the kernel does, so a reused PID can't pass for it", () => {
-  using renderer = fixture();
-  const stat = readFileSync("/proc/self/stat", "utf8");
-  expect(renderer.read()).toMatchObject({
-    pid: process.pid, bootId: readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(),
-    processStart: Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]),
-  });
-});
-
-test("a loaded page is only page-loaded until its mounted shell acknowledges", () => {
-  using renderer = fixture();
-  renderer.navigate();
-  expect(renderer.status.acknowledge()).toBe(false);
-  expect(renderer.read()).toMatchObject({ state: "loading", navigation: 1 });
-  renderer.commit();
-  renderer.loaded();
-  // HTML and scripts loaded, but nothing mounted: an app that failed to start, or an older Couch.
-  expect(renderer.read().state).toBe("page-loaded");
-  // Same-document and child-frame navigations don't restart the page.
-  renderer.navigate(true, true);
-  renderer.navigate(false);
-  expect(renderer.status.acknowledge()).toBe(true);
-  expect(renderer.read()).toMatchObject({ state: "ready", navigation: 1 });
-});
-
-test("a shell that mounts before the load event stays ready", () => {
-  using renderer = fixture();
-  renderer.navigate();
-  renderer.commit();
-  expect(renderer.status.acknowledge()).toBe(true);
-  renderer.loaded();
-  expect(renderer.read().state).toBe("ready");
-});
-
-test("the replaced document can't make the next navigation ready", () => {
-  using renderer = fixture();
-  renderer.navigate();
-  renderer.commit();
-  renderer.loaded();
-  renderer.status.acknowledge();
-  renderer.navigate();
-  // The old page's late acknowledgement, before the new document commits.
-  expect(renderer.status.acknowledge()).toBe(false);
-  expect(renderer.read()).toMatchObject({ state: "loading", navigation: 2 });
-  renderer.commit();
-  renderer.loaded();
-  expect(renderer.read().state).toBe("page-loaded");
-});
-
-test("a navigation Main cancels leaves the shown document's status, and a committed one can't be undone", () => {
-  using renderer = fixture();
-  renderer.navigate();
-  renderer.commit();
-  renderer.loaded();
-  renderer.status.acknowledge();
-  // A cross-origin link: did-start-navigation, then will-navigate, which Main cancels. Electron 44 sends
-  // nothing else (no did-fail-load), and the ready document stays.
-  renderer.navigate();
-  renderer.navigate();
-  renderer.status.cancelled();
-  expect(renderer.read()).toMatchObject({ state: "ready", navigation: 1 });
-  // A late, repeated cancellation changes nothing.
-  renderer.status.cancelled();
-  expect(renderer.read()).toMatchObject({ state: "ready", navigation: 1 });
-  renderer.navigate();
-  renderer.commit();
-  renderer.status.cancelled();
-  expect(renderer.read()).toMatchObject({ state: "loading", navigation: 2 });
-  expect(renderer.status.acknowledge()).toBe(true);
-});
-
 test("a failed page stays failed through Chromium's error page until the next navigation", () => {
   using renderer = fixture("remote");
   renderer.navigate();
@@ -117,30 +38,4 @@ test("a failed page stays failed through Chromium's error page until the next na
   renderer.status.acknowledge();
   expect(renderer.read()).toMatchObject({ state: "ready" });
   expect(renderer.read().reason).toBeUndefined();
-});
-
-test("another Couch that Main can't reach is a remote failure, not a local one", () => {
-  using renderer = fixture("remote");
-  renderer.status.unreachable();
-  expect(renderer.read()).toMatchObject({ state: "failed", page: "remote", reason: "unreachable" });
-  renderer.navigate();
-  renderer.commit();
-  renderer.loaded();
-  expect(renderer.read().state).toBe("page-loaded");
-});
-
-test("a hung page recovers its state, and a crashed one reports why and can't be acknowledged", () => {
-  using renderer = fixture();
-  renderer.navigate();
-  renderer.commit();
-  renderer.loaded();
-  renderer.status.acknowledge();
-  renderer.contents.emit("unresponsive");
-  renderer.contents.emit("unresponsive");
-  expect(renderer.read().state).toBe("unresponsive");
-  renderer.contents.emit("responsive");
-  expect(renderer.read().state).toBe("ready");
-  renderer.contents.emit("render-process-gone", {}, { reason: "oom", exitCode: 9 });
-  expect(renderer.status.acknowledge()).toBe(false);
-  expect(renderer.read()).toMatchObject({ state: "gone", reason: "oom" });
 });

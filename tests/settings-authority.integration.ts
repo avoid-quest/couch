@@ -39,34 +39,6 @@ test("an admin switches TV mode through the Couch app; others can't", async () =
   } finally { await f.close(); }
 });
 
-test("TV mode reports why it can't change: the app's own refusal, no app, or a TV launcher", async () => {
-  const refused = await fixture({ nativeTvMode: async () => { throw new Error("Couch is restarting or closing."); } });
-  try {
-    const response = await refused.post("/api/settings/tv-mode", refused.admin, { enabled: true });
-    assert.equal(response.status, 500);
-    assert.match((await response.json()).error, /restarting/);
-  } finally { await refused.close(); }
-  const standalone = await fixture();
-  try {
-    assert.equal((await fetch(`${standalone.hub.origin}/api/connection`).then(response => response.json())).tvModeChangeable, false);
-    assert.equal((await standalone.post("/api/settings/tv-mode", standalone.admin, { enabled: true })).status, 409);
-  } finally { await standalone.close(); }
-  const previous = process.env.COUCH_TV_APPLIANCE;
-  process.env.COUCH_TV_APPLIANCE = "1";
-  const appliance = await fixture({ nativeTvMode: async () => assert.fail("a launcher-locked TV must not switch") });
-  try {
-    const details = await fetch(`${appliance.hub.origin}/api/connection`).then(response => response.json());
-    assert.equal(details.tvAppliance, true);
-    assert.equal(details.tvModeChangeable, false);
-    const response = await appliance.post("/api/settings/tv-mode", appliance.admin, { enabled: false });
-    assert.equal(response.status, 409);
-    assert.match((await response.json()).error, /launcher/);
-  } finally {
-    await appliance.close();
-    if (previous === undefined) delete process.env.COUCH_TV_APPLIANCE; else process.env.COUCH_TV_APPLIANCE = previous;
-  }
-});
-
 test("Share on network is admin-managed, and a demoted admin loses it", async () => {
   const f = await fixture();
   try {

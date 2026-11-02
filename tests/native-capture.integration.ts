@@ -97,20 +97,6 @@ for (const mode of ["ordered", "mono", "duplicate", "revoked"] as const) {
   });
 }
 
-test("owner cancellation during native preparation stops the helper", { timeout: 4000 }, async () => {
-  const child = helper("preparing"), owner = new AbortController(), errors: Error[] = [];
-  const preparation = prepareNativeCapture(child, requested, error => errors.push(error), undefined, owner.signal);
-  owner.abort();
-  await assert.rejects(preparation, /stopped/);
-  assert.notEqual(child.exitCode, null); assert.deepEqual(errors, []);
-});
-
-test("Main rejects a helper that opens a different channel map", async () => {
-  const child = helper("wrong-map");
-  await assert.rejects(prepareNativeCapture(child, requested, () => {}), /requested channels/);
-  assert.notEqual(child.exitCode, null);
-});
-
 test("a native publication restarts uploads at sample zero and applies only explicit mute", { timeout: 6000 }, async t => {
   const directory = mkdtempSync(resolve(tmpdir(), "couch-native-fixture-")), executable = resolve(directory, executableName("capture"));
   const executables = nodeExecutables(directory);

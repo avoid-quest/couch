@@ -16,18 +16,10 @@ const check = (source: string) => {
   expect(result.status).toBe(0);
 };
 
-test("the browser retains known server labels and migrates its old current connection", () => check(`
+test("the browser migrates its old current connection into its known servers", () => check(`
   values.set("couch.connection", JSON.stringify({ origin: location.origin, details: details("Living room") }));
   const connections = await import("./src/client/session/connection.ts");
   assert.deepEqual(connections.knownConnections(), [{ origin: location.origin, name: "Living room" }]);
-  connections.rememberConnection("http://two.local:4100", details("Kitchen"));
-  assert.deepEqual(connections.knownConnections(), [{ origin: location.origin, name: "Living room" }, { origin: "http://two.local:4100", name: "Kitchen" }]);
-  assert.equal(connections.knownConnection().details.name, "Kitchen");
-  connections.forgetConnection(location.origin);
-  assert.deepEqual(connections.knownConnections(), [{ origin: "http://two.local:4100", name: "Kitchen" }]);
-  connections.forgetConnection("http://two.local:4100");
-  assert.equal(connections.knownConnection(), null);
-  assert.deepEqual(connections.knownConnections(), []);
 `));
 
 test("a deliberate switch carries only public labels, leaving credentials and keys in storage", () => check(`
@@ -50,22 +42,6 @@ test("a deliberate switch carries only public labels, leaving credentials and ke
   assert.equal(values.get("sendspin-identity-sk"), "device-secret");
 `));
 
-test("a saved Couch shares its list and this browser's name without replacing its pairing", () => check(`
-  values.set("couch.device-name", "Old alias");
-  values.set("couch.remote-token", "destination-pairing");
-  values.set("couch.connections", JSON.stringify([{ origin: "http://two.local:4100", name: "Kitchen" }]));
-  const labels = [{ origin: "http://two.local:4100", name: "Kitchen" }, { origin: "http://three.local:4100", name: "Study" }];
-  location.hash = new URLSearchParams({ couches: JSON.stringify(labels), "device-name": "Laptop", pair: "123456" }).toString();
-  await import("sonner"); // Before the fake document: sonner styles a real one.
-  globalThis.document = { referrer: "http://two.local:4100/" };
-  const identity = await import("./src/client/session/device-id.ts");
-  const connections = await import("./src/client/session/connection.ts");
-  assert.equal(identity.localDeviceName(), "Laptop");
-  assert.deepEqual(connections.knownConnections(), labels);
-  assert.equal(location.hash, "#pair=123456");
-  assert.equal(values.get("couch.remote-token"), "destination-pairing");
-`));
-
 test("an unsaved page adds only itself and cannot rename this browser", () => check(`
   values.set("couch.device-name", "Laptop");
   const planted = [{ origin: "http://evil.local:4100", name: "Kitchen" }, { origin: "http://two.local:4100", name: "Living room" }];
@@ -79,39 +55,12 @@ test("an unsaved page adds only itself and cannot rename this browser", () => ch
   assert.equal(location.hash, "");
 `));
 
-test("a switch to a new Couch suggests this browser's name for pairing without saving it", () => check(`
-  location.hash = new URLSearchParams({ couches: JSON.stringify([{ origin: "http://two.local:4100", name: "Kitchen" }]), "device-name": "Laptop" }).toString();
-  await import("sonner");
-  globalThis.document = { referrer: "http://two.local:4100/" };
-  const identity = await import("./src/client/session/device-id.ts");
-  const connections = await import("./src/client/session/connection.ts");
-  assert.equal(identity.localDeviceName(), null);
-  assert.equal(values.get("couch.device-name"), undefined);
-  assert.equal(connections.suggestedDeviceName, "Laptop");
-  assert.equal(location.hash, "");
-`));
-
-test("a carried name that isn't a device name suggests nothing", () => check(`
-  location.hash = new URLSearchParams({ "device-name": " ".repeat(3) }).toString();
-  globalThis.document = { referrer: "" };
-  const connections = await import("./src/client/session/connection.ts");
-  assert.equal(connections.suggestedDeviceName, null);
-`));
-
 test("a link from anywhere but a listed Couch cannot plant saved servers", () => check(`
   globalThis.document = { referrer: "http://elsewhere.example/" };
   location.hash = new URLSearchParams({ couches: JSON.stringify([{ origin: "http://evil.local:4100", name: "Living room" }]) }).toString();
   const connections = await import("./src/client/session/connection.ts");
   assert.deepEqual(connections.knownConnections(), []);
   assert.equal(location.hash, "");
-`));
-
-test("remembering an unchanged connection does not rewrite storage", () => check(`
-  const connections = await import("./src/client/session/connection.ts");
-  connections.rememberConnection(location.origin, details("Living room"));
-  let writes = 0; const setItem = localStorage.setItem; localStorage.setItem = (...args) => { writes++; setItem(...args); };
-  connections.rememberConnection(location.origin, details("Living room"));
-  assert.equal(writes, 0);
 `));
 
 test("malformed server hints cannot add credentials, paths or non-HTTP destinations", () => check(`

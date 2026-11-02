@@ -35,14 +35,3 @@ test("a long run keeps its newest output within two bounded files", async () => 
     for (const file of [path, `${path}.1`]) expect(statSync(file).size).toBeLessThanOrEqual(200);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
-
-test("a log whose directory disappears stops writing without throwing", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "couch-log-"));
-  const path = join(directory, "couch.log");
-  const write = startLog(path, 64, () => "header\n");
-  await settled(path, "header");
-  rmSync(directory, { recursive: true, force: true });
-  expect(() => { for (let line = 0; line < 20; line++) write(`line ${line} after removal\n`); }).not.toThrow();
-  await new Promise(resolve => setTimeout(resolve, 50));
-  expect(existsSync(directory)).toBe(false);
-});

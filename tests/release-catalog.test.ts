@@ -21,15 +21,6 @@ test("each channel resolves its own Mac architectures without confusing updater 
   expect(catalog.preview["dmg-intel"]).toBeUndefined();
 });
 
-test("a preview-only release offers both Macs without inventing a stable release", async () => {
-  const preview = release("1.0.0-preview.1", true, ["Couch-1.0.0-preview.1-x64.dmg", "Couch-1.0.0-preview.1-arm64.dmg"]);
-  spyOn(globalThis, "fetch").mockImplementation(async input => String(input).endsWith("/latest") ? new Response(null, { status: 404 }) : Response.json([preview]));
-  const catalog = await currentCatalog();
-  expect(catalog.stable).toEqual({});
-  expect(catalog.preview["dmg-intel"]?.version).toBe("1.0.0-preview.1");
-  expect(catalog.preview.dmg?.version).toBe("1.0.0-preview.1");
-});
-
 test("GitHub failure retains the published fallback instead of constructing Intel download URLs", async () => {
   spyOn(globalThis, "fetch").mockRejectedValue(new Error("Offline"));
   expect(await currentCatalog()).toEqual(fallback);

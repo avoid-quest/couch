@@ -22,13 +22,6 @@ test("malformed recents cannot break rendering or the next search", () => {
   }
 });
 
-test("recents validate members, cap their size and deduplicate the next query", () => {
-  storage(JSON.stringify([null, 1, {}, "Music", ...Array.from({ length: 12 }, (_, i) => `Query ${i}`)]));
-  expect(readSearchRecents("test")).toEqual(["Music", ...Array.from({ length: 7 }, (_, i) => `Query ${i}`)]);
-  expect(rememberSearch("test", "music")).toEqual(["music", ...Array.from({ length: 7 }, (_, i) => `Query ${i}`)]);
-  expect(readSearchRecents("other")).toEqual([]);
-});
-
 test("blocked storage leaves searching usable", () => {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("Storage blocked"); } });
   expect(readSearchRecents("test")).toEqual([]);

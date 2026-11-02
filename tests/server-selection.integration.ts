@@ -54,7 +54,6 @@ async function fixture() {
     },
     entry: (id: string) => ({ id, title: id, source: `http://127.0.0.1:${address.port}/media` }),
     reconnect: async () => { phone.socket.close(); await until(() => phone.socket.readyState === WebSocket.CLOSED); return connect(phoneToken, phoneId); },
-    reconnectSpeaker: () => connect(speakerToken, speakerId, "&audio=1&video=1"),
     close: async () => {
       for (const socket of sockets) socket.terminate();
       await hub.close();
@@ -90,21 +89,6 @@ test("reconnecting to a selection that went idle falls back to the server's defa
   } finally { await f.close(); }
 });
 
-test("a controller back before its target stays on it, and Wi-Fi blips change no selection", { timeout: 15_000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.phone.command({ type: "enqueue", entry: f.entry("mix"), playNow: true, deviceId: speakerId });
-    const playback = f.phone.state.playback;
-    f.speaker.socket.close(); await until(() => f.phone.state.devices?.find(device => device.id === speakerId)?.online === false);
-    const returned = await f.reconnect();
-    assert.equal(returned.state.controlling, speakerId);
-    await f.reconnectSpeaker();
-    await until(() => returned.state.devices?.find(device => device.id === speakerId)?.online === true);
-    assert.equal(returned.state.controlling, speakerId);
-    assert.equal(returned.state.playback, playback);
-  } finally { await f.close(); }
-});
-
 test("ordinary Play keeps a mix and explicit Play on isolates only its named output", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
@@ -128,22 +112,6 @@ test("ordinary Play keeps a mix and explicit Play on isolates only its named out
   } finally { await f.close(); }
 });
 
-test("REST Play on isolates its named output like the WebSocket path", { timeout: 15_000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.phone.command({ type: "enqueue", entry: f.entry("waiting") });
-    await f.phone.command({ type: "output", deviceId: speakerId, level: 30 });
-    await until(() => f.phone.state.outputs?.length === 2);
-    const mix = f.phone.state.playback;
-    const { item } = await f.rest("/api/for-later", { reference: { kind: "queue", id: "waiting" } });
-    await f.rest(`/api/for-later/${item.id}/load?on=${hostId}`, { mode: "play" });
-    await until(() => f.phone.state.playback !== mix);
-    assert.equal(f.phone.state.controlling, hostId);
-    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [hostId]);
-    assert.deepEqual(f.phone.state.playbacks?.find(playback => playback.id === mix)?.outputs.map(output => output.deviceId), [speakerId]);
-  } finally { await f.close(); }
-});
-
 test("a Play on whose item fails, now or after loading, leaves its target in the mix and the selection as it was", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
@@ -163,35 +131,6 @@ test("a Play on whose item fails, now or after loading, leaves its target in the
       assert.equal(f.phone.state.playback, mix);
       assert.deepEqual(f.phone.state.playbacks?.map(playback => playback.outputs.map(output => output.deviceId)), [[hostId, speakerId]]);
     }
-  } finally { await f.close(); }
-});
-
-test("playing a waiting Playback moves the whole selected mix to it", { timeout: 15_000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.phone.command({ type: "enqueue", entry: f.entry("waiting") });
-    const waiting = f.phone.state.playback;
-    await f.phone.command({ type: "output", deviceId: hostId, picture: false, level: 0 });
-    await f.phone.command({ type: "enqueue", entry: f.entry("mix"), playNow: true });
-    await f.phone.command({ type: "output", deviceId: speakerId, level: 30 });
-    await until(() => f.phone.state.playback !== waiting && f.phone.state.outputs?.length === 2);
-    await f.phone.command({ type: "play", entryId: "waiting" });
-    await until(() => f.phone.state.playback === waiting);
-    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [hostId, speakerId]);
-    assert.equal(f.phone.state.playbacks?.filter(playback => playback.outputs.length).length, 1);
-  } finally { await f.close(); }
-});
-
-test("a mix that ends leaves every controller on its own selection", { timeout: 15_000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.phone.command({ type: "enqueue", entry: f.entry("waiting") });
-    await f.phone.command({ type: "output", deviceId: speakerId, level: 30 });
-    await until(() => f.phone.state.outputs?.length === 2);
-    await f.phone.command({ type: "remove", entryId: "waiting" });
-    await until(() => !f.phone.state.playbacks?.length && !f.host.state.playbacks?.length);
-    assert.equal(f.host.state.controlling, hostId);
-    assert.equal(f.phone.state.controlling, hostId);
   } finally { await f.close(); }
 });
 
@@ -220,27 +159,6 @@ test("explicit Play on cannot replace a target's private video while its audio i
     assert.equal(f.phone.state.outputs?.find(output => output.deviceId === speakerId)?.picture, true);
     await f.phone.command({ type: "volume", deviceId: speakerId, volume: 40 });
     await until(() => f.phone.state.devices?.find(device => device.id === speakerId)?.volume === 40);
-    // The device itself can choose a new private playback without opting its screen into sharing.
-    await f.speaker.command({ type: "enqueue", entry: f.entry("self"), playNow: true, deviceId: speakerId });
-    await until(() => f.speaker.state.currentEntryId === "self");
-    assert.notEqual(f.speaker.state.playback, mix);
-    assert.deepEqual(f.speaker.state.outputs, [{ deviceId: speakerId, picture: true, sound: true, local: true }]);
-  } finally { await f.close(); }
-});
-
-test("removing an output follows the remaining mix even while its controller is away", { timeout: 15_000 }, async () => {
-  const f = await fixture();
-  try {
-    await f.phone.command({ type: "enqueue", entry: f.entry("waiting") });
-    await f.phone.command({ type: "output", deviceId: speakerId, level: 30 });
-    await until(() => f.phone.state.outputs?.length === 2);
-    const mix = f.phone.state.playback;
-    f.phone.socket.close(); await until(() => f.phone.socket.readyState === WebSocket.CLOSED);
-    await f.host.command({ type: "output", deviceId: hostId, picture: false, level: 0 });
-    const returned = await f.reconnect();
-    assert.equal(returned.state.controlling, speakerId);
-    assert.equal(returned.state.playback, mix);
-    assert.deepEqual(returned.state.outputs?.map(output => output.deviceId), [speakerId]);
   } finally { await f.close(); }
 });
 

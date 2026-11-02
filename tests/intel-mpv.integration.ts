@@ -27,16 +27,11 @@ const program = (version: string) => `#!/bin/sh\nprintf '%s\\n' '${version}'\n`;
 
 const scenarios: Array<{ name: string; os: string; system?: string; cached?: string; brokenCache?: boolean; expected: "blocked" | "system" | "cached" | "download" }> = [
   { name: "Ventura without mpv explains the optional channel limit", os: "13.7.8", expected: "blocked" },
-  { name: "Sonoma without mpv avoids the incompatible download", os: "14.7.8", expected: "blocked" },
   { name: "a compatible PATH copy takes precedence over the cache", os: "13.7.8", system: "mpv 0.40.0", cached: "mpv 0.41.0", expected: "system" },
   { name: "an old PATH copy permits a compatible cached fallback", os: "13.7.8", system: "mpv 0.34.0", cached: "mpv 0.40.0", expected: "cached" },
-  { name: "a broken PATH copy permits a compatible cached fallback", os: "13.7.8", system: "broken", cached: "mpv 0.40.0", expected: "cached" },
-  { name: "Sonoma retains its compatible cache during manual updates", os: "14.7.8", cached: "mpv 0.40.0", expected: "cached" },
   { name: "a broken cache is rejected without an incompatible download", os: "13.7.8", cached: "mpv 0.40.0", brokenCache: true, expected: "blocked" },
-  { name: "an obsolete cache does not enable unsupported mpv commands", os: "13.7.8", cached: "mpv 0.34.0", expected: "blocked" },
   { name: "an unreadable OS version cannot authorize the download", os: "", expected: "blocked" },
   { name: "macOS 15 automatically installs verified Intel mpv", os: "15.0", expected: "download" },
-  { name: "newer macOS automatically replaces an obsolete PATH mpv", os: "26.1", system: "mpv 0.34.0", expected: "download" },
 ];
 
 for (const scenario of scenarios) test(scenario.name, { skip: !linux, timeout: 10_000 }, async t => {

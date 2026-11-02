@@ -17,17 +17,15 @@ process across files, so module mocks can interfere.
 
 ### Integration tests
 
-`tests/*.integration.ts` run on Core's runtime, Node. Build Core and the audio
-worker first (`bun run build`), then:
+`tests/*.integration.ts` run on Core's runtime, Node:
 
 ```sh
-bun build tests/<name>.integration.ts --target=node --outfile=build/<name>.integration.mjs
-COUCH_DATA_DIR="$(mktemp -d)" node --test build/<name>.integration.mjs
+bun run test:integration                 # all of them
+bun run test:integration live-input lan-http   # just these
 ```
 
-- FFmpeg must be on `PATH` or set as `COUCH_TEST_FFMPEG`; the Live and
-  scheduled-audio integrations fail without it.
-- The relay integrations need Go on `PATH` and `bun scripts/build-relay.ts` first.
+- FFmpeg must be on `PATH` or set as `COUCH_TEST_FFMPEG`.
+- `live-relay` needs the relay built first: `bun scripts/build-relay.ts`, with Go on `PATH`.
 - `tests/couch-setup.integration.ts` and `tests/tv-diagnose.integration.ts` run
   their root cases in an unprivileged user namespace (`unshare -r`) and skip where
   the machine forbids one; a skip isn't coverage.

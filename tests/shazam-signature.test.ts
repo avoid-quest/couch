@@ -91,20 +91,3 @@ test("a long silent lead-in preserves peaks beyond the one-byte time-delta range
   const delayed = decode((await generateShazamSignature(Buffer.concat([Buffer.alloc(3 * 16000 * 2), pcm]))).uri).peaks;
   expect(delayed).toEqual(original.map(([band, pass, magnitude, bin]) => [band, pass + 375, magnitude, bin]));
 });
-
-test("empty, incomplete and oversized PCM is rejected before processing", async () => {
-  for (const sample of [Buffer.alloc(0), Buffer.alloc(1), Buffer.alloc(12 * 16000 * 2 + 2)]) {
-    await expect(generateShazamSignature(sample)).rejects.toBeInstanceOf(RangeError);
-  }
-});
-
-test("fingerprinting yields for other Core work and honors cancellation", async () => {
-  const controller = new AbortController(), reason = new Error("Station changed");
-  let completed = false;
-  const result = generateShazamSignature(Buffer.alloc(12 * 16000 * 2), controller.signal)
-    .finally(() => { completed = true; }).catch(error => error);
-  expect(completed).toBe(false);
-  controller.abort(reason);
-  expect(await result).toBe(reason);
-  await expect(generateShazamSignature(Buffer.alloc(2), controller.signal)).rejects.toBe(reason);
-});

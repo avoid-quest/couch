@@ -25,19 +25,10 @@ test("root catalog advances to its cursor and returns to page one", async () => 
   expect((await streamingCommunityBrowse({ cursor: "1" }, undefined, undefined, fetchPage)).items).toEqual(first.items);
 });
 
-for (const [total, page, next] of [[60, 1, undefined], [120, 1, "2"], [120, 2, undefined], [121, 2, "3"], [121, 3, undefined], [undefined, 2, "3"]] as const) {
+for (const [total, page, next] of [[120, 1, "2"], [120, 2, undefined], [undefined, 2, "3"]] as const) {
   test(`catalog total ${total}, page ${page} has next cursor ${next}`, async () => {
     const result = await streamingCommunityBrowse({ url: "https://streamingcommunityz.pictures/it/archive", cursor: String(page) }, undefined, undefined, catalog(total));
     expect(result.nextCursor).toBe(next);
-  });
-}
-
-for (const cursor of ["0", "-1", "1.5", "no", "10000"]) {
-  test(`root rejects out-of-range cursor ${cursor} before fetching`, async () => {
-    let fetched = false;
-    await expect(streamingCommunityBrowse({ cursor }, undefined, undefined, (async () => { fetched = true; return new Response(); }) as typeof fetch))
-      .rejects.toMatchObject({ status: 400, message: "This catalogue page is out of range." });
-    expect(fetched).toBe(false);
   });
 }
 

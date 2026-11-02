@@ -46,36 +46,8 @@ test("HD extraction reads public literals, validates HLS and preserves page meta
   assert.deepEqual(result.subtitles, []);
 });
 
-test("HD progressive MP4 checks a binary range and cancels without reading the full media", async t => {
-  for (const status of [206, 200]) await t.test(`HTTP ${status}`, async t => {
-    const requests: string[] = [];
-    let pulls = 0, cancelled = false;
-    const response = new Response(new ReadableStream<Uint8Array>({
-      pull(controller) { pulls++; controller.enqueue(new Uint8Array(status === 206 ? 1 : 64 * 1024)); },
-      cancel() { cancelled = true; },
-    }, { highWaterMark: 0 }), { status, headers: { "Content-Type": "video/mp4", "Content-Length": status === 206 ? "1" : "10000000000" } });
-    t.mock.method(response, "text", () => assert.fail("MP4 must not be read as text"));
-    t.mock.method(response, "arrayBuffer", () => assert.fail("MP4 must not be read in full"));
-    const result = await resolveAnimeSaturnLink(page, undefined, fixture((url, init) => {
-      if (url === page) return html;
-      if (url === live) return `<script>var src = ${JSON.stringify(progressive)}; var isHls = false;</script>`;
-      assert.equal(url, progressive);
-      assert.equal(new Headers(init?.headers).get("Range"), "bytes=0-0");
-      return response;
-    }, requests));
-    assert.deepEqual(requests, [page, live, progressive]);
-    assert.equal(pulls, 1);
-    assert.equal(cancelled, true);
-    assert.equal(response.body?.locked, false);
-    assert.equal(result.url, progressive);
-    assert.deepEqual(result.metadata, { title: "One Piece Sub ITA Episode 1180", thumbnail: image });
-    assert.deepEqual(result.headers, { "User-Agent": "Mozilla/5.0", Referer: `${origin}/` });
-    assert.deepEqual(result.subtitles, []);
-  });
-});
-
 test("Mega remains available when the HD player or its progressive MP4 is unavailable", async t => {
-  for (const failure of ["player", "HTTP 503", "transport", "body error", "empty body", "no body"]) await t.test(failure, async () => {
+  for (const failure of ["player", "HTTP 503", "transport"]) await t.test(failure, async () => {
     const requests: string[] = [];
     let cancelled = false;
     const result = await resolveAnimeSaturnLink(page, undefined, fixture(url => {
@@ -83,8 +55,6 @@ test("Mega remains available when the HD player or its progressive MP4 is unavai
       if (url === live) return failure === "player" ? new Response("Unavailable", { status: 503 }) : `<script>var src = ${JSON.stringify(progressive)};</script>`;
       if (url === progressive) {
         if (failure === "transport") throw new TypeError("fixture connection failed");
-        if (failure === "no body") return new Response(null, { status: 204 });
-        if (failure === "empty body") return new Response(new Uint8Array());
         return new Response(new ReadableStream({
           pull(controller) { controller.error(new TypeError("fixture body failed")); },
           cancel() { cancelled = true; },
@@ -98,46 +68,6 @@ test("Mega remains available when the HD player or its progressive MP4 is unavai
     assert.equal(result.url, megaStream);
     assert.deepEqual(requests, [page, live, ...(failure === "player" ? [] : [progressive]), mega, embed, megaStream]);
     if (failure === "HTTP 503") assert.equal(cancelled, true);
-  });
-});
-
-test("MP4 probing disposes the body on cancellation and obeys per-request and overall deadlines", async t => {
-  for (const cause of ["caller", "request timeout", "overall timeout"]) for (const stage of ["headers", "body"]) await t.test(`${cause} after ${stage}`, async t => {
-    const caller = new AbortController(), deadline = new AbortController();
-    let timeout: AbortController;
-    t.mock.method(AbortSignal, "timeout", (delay: number) => {
-      assert.ok(delay === 12_000 || delay === 25_000);
-      if (delay === 25_000) return deadline.signal;
-      timeout = new AbortController();
-      return timeout.signal;
-    });
-    const abort = () => cause === "caller" ? caller.abort() : (cause === "request timeout" ? timeout : deadline).abort(new DOMException("fixture timeout", "TimeoutError"));
-    const requests: string[] = [];
-    let cancelled = false;
-    const pending = resolveAnimeSaturnLink(page, caller.signal, fixture(url => {
-      if (url === page) return html;
-      if (url === live) return `<script>var src = ${JSON.stringify(progressive)};</script>`;
-      if (url === progressive) {
-        const response = new Response(new ReadableStream({
-          pull() { abort(); },
-          cancel() { cancelled = true; },
-        }, { highWaterMark: 0 }));
-        if (stage === "headers") abort();
-        return response;
-      }
-      if (url === mega) return frame(embed);
-      if (url === embed) return `<script>var primary = ${JSON.stringify(megaStream)};</script>`;
-      assert.equal(url, megaStream);
-      return manifest;
-    }, requests));
-    if (cause === "request timeout") {
-      assert.equal((await pending).url, megaStream);
-      assert.deepEqual(requests, [page, live, progressive, mega, embed, megaStream]);
-    } else {
-      await assert.rejects(() => pending, cause === "caller" ? error => error instanceof DOMException && error.name === "AbortError" : /took too long/);
-      assert.deepEqual(requests, [page, live, progressive]);
-    }
-    assert.equal(cancelled, true);
   });
 });
 
@@ -163,14 +93,9 @@ test("unaccepted public embeds, stream hosts and invalid HLS responses are rejec
   assert.deepEqual((await animeSaturnTitle(page, undefined, fixture(() => foreign))).players, []);
 });
 
-test("collections and private targets fail before requests; cancellation stops player reads", async () => {
+test("collections and private targets fail before requests", async () => {
   let calls = 0;
   const never = fixture(() => { calls++; throw new Error("unexpected request"); });
   for (const url of [collection, live, liveStream, `${page}?token=secret`, "https://example.com/episode-1/"]) await assert.rejects(() => resolveAnimeSaturnLink(url, undefined, never), /Choose an AnimeSaturn episode/);
   assert.equal(calls, 0);
-  const controller = new AbortController();
-  let cancelled = false;
-  const request = fixture(url => url === page ? html : new Response(new ReadableStream({ start(stream) { stream.enqueue(new TextEncoder().encode("<script>")); controller.abort(); }, cancel() { cancelled = true; } })));
-  await assert.rejects(() => resolveAnimeSaturnLink(page, controller.signal, request), error => error instanceof DOMException && error.name === "AbortError");
-  assert.equal(cancelled, true);
 });

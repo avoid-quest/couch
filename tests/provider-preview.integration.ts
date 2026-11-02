@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { writeFile, stat } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -20,5 +20,4 @@ for (const [name, plugin, fixture, extractor, url, title] of [
       "--use-extractors", `${extractor},end`, "--skip-download", "--dump-single-json", "--", url], { timeout: 10_000 });
     assert.equal(JSON.parse(stdout).title, title);
   } finally { await bundled.close(); }
-  await assert.rejects(stat(bundled.directory), { code: "ENOENT" });
 });

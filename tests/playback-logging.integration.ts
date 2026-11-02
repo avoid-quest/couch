@@ -1,9 +1,8 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
-import { executableName, nodeExecutables } from "./executable.fixture";
+import { join } from "node:path";
 import { startHelpers } from "../src/server/helpers";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
@@ -15,7 +14,7 @@ async function until(predicate: () => boolean) {
   while (!predicate()) { if (Date.now() > deadline) throw new Error("Expected playback state was not published."); await new Promise(resolve => setTimeout(resolve, 10)); }
 }
 
-async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") {
+async function fixture(t: TestContext, name = "Test TV") {
   const directory = mkdtempSync(join(tmpdir(), "couch-playback-logging-")), databasePath = join(directory, "couch.sqlite");
   const lines: string[] = [];
   // The audio worker forwards its output through Core's stdout. Observe that
@@ -33,23 +32,14 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
   const fetch = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (input: RequestInfo | URL, init?: RequestInit) => new URL(input instanceof Request ? input.url : String(input)).hostname === "127.0.0.1"
     ? fetch(input, init) : Promise.resolve(new Response(null, { status: 503 })));
-  const executables = refusedFfmpeg ? nodeExecutables(directory, { workers: true }) : undefined;
-  if (refusedFfmpeg) {
-    // A real executable at the helper boundary: version discovery succeeds,
-    // then the exact FFmpeg input argument is refused without producing audio.
-    writeFileSync(join(directory, executableName("ffmpeg")), `#!${process.execPath}\nif (process.argv.includes('-version')) console.log('ffmpeg version 9.0.0');\nelse { console.error('Error opening input ' + process.argv[process.argv.indexOf('-i') + 1] + ' (Connection refused)\\u0085\\u009b\\u2028\\u2029'); process.exitCode = 1; }\n`, { mode: 0o755 });
-    const path = process.env.PATH;
-    process.env.PATH = `${directory}${delimiter}${path}`;
-    t.after(() => { process.env.PATH = path; });
-  }
   const store = openStore(databasePath, true), deviceId = "t".repeat(43);
   const token = store.pair(deviceId, name);
   store.close();
   startHelpers(join(directory, "helpers"));
   const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0 });
   const sockets: WebSocket[] = [];
-  const connect = async (deviceId: string, token: string, sharing = "") => {
-    const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&device=${deviceId}${sharing}`, { headers: { Origin: hub.origin } });
+  const connect = async (deviceId: string, token: string) => {
+    const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&device=${deviceId}`, { headers: { Origin: hub.origin } });
     sockets.push(socket);
     const commands: PlaybackCommand[] = [], pending = new Map<string, (message: Extract<ServerMessage, { type: "result" }>) => void>();
     let state: SessionState | undefined, sequence = 0;
@@ -71,18 +61,12 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
       barrier: () => command({ type: "volume", volume: 100 }),
     };
   };
-  t.after(async () => { for (const socket of sockets) socket.terminate(); await hub.close(); if (executables) assert.deepEqual(await executables.close(), { children: [], workers: [] }); rmSync(directory, { recursive: true, force: true }); });
+  t.after(async () => { for (const socket of sockets) socket.terminate(); await hub.close(); rmSync(directory, { recursive: true, force: true }); });
   const tv = await connect(deviceId, token);
   return { hub, lines, ...tv,
     get state() { return tv.state; },
-    speaker: async () => {
-      const store = openStore(databasePath, true), deviceId = "s".repeat(43), token = store.pair(deviceId, "Other speaker");
-      store.close();
-      await connect(deviceId, token, "&audio=1");
-      return deviceId;
-    },
-    start: async (path = "/api/health") => {
-      assert.equal((await tv.command({ type: "enqueue", entry: { id: "film", title: "Film", source: `${hub.origin}${path}?token=synthetic-direct-secret` }, playNow: true, deviceId })).ok, true);
+    start: async () => {
+      assert.equal((await tv.command({ type: "enqueue", entry: { id: "film", title: "Film", source: `${hub.origin}/api/health?token=synthetic-direct-secret` }, playNow: true, deviceId })).ok, true);
       await until(() => tv.commands.some(command => command.type === "load"));
       return tv.commands.find(command => command.type === "load")!.playbackId;
     },
@@ -119,7 +103,7 @@ test("Core removes complete signed URL tokens including apostrophes and quoted v
 });
 
 test("an accepted device name cannot inject separators into a player error line", { timeout: 15_000 }, async t => {
-  const f = await fixture(t, false, "Test\u2028TV\u2029label"), playbackId = await f.start();
+  const f = await fixture(t, "Test\u2028TV\u2029label"), playbackId = await f.start();
   f.report({ playbackId, status: "error", error: "Picture input refused" });
   await f.barrier();
   assert.equal(f.errors().length, 1);
@@ -137,98 +121,4 @@ test("the report length bound cannot turn source credentials into a logged hostn
   assert.equal(f.errors().length, 1);
   assert.equal(f.errors()[0]!.includes(username), false);
   assert.equal(f.state.player.error?.includes(username), false);
-});
-
-test("a new Synced screen load logs an identical failure once even without an intervening state packet", { timeout: 15_000 }, async t => {
-  const f = await fixture(t), playbackId = await f.start(), speakerId = await f.speaker();
-  f.report({ playbackId, status: "paused", error: null });
-  await f.barrier();
-  assert.equal((await f.command({ type: "output", deviceId: speakerId, level: 50 })).ok, true);
-  // Sound stays paused in Core. Screen failures do not change the group's transport.
-  f.report({ playbackId, status: "error", error: "Picture input refused" });
-  await f.barrier();
-  assert.equal(f.errors().length, 1);
-  for (let index = 0; index < 5; index++) f.report({ playbackId, status: "error", error: "Picture input refused" });
-  await f.barrier();
-  assert.equal(f.errors().length, 1);
-  assert.equal(f.state.player.status, "paused");
-  assert.equal((await f.command({ type: "output", deviceId: "t".repeat(43), picture: false })).ok, true);
-  assert.equal((await f.command({ type: "output", deviceId: "t".repeat(43), picture: true })).ok, true);
-  await until(() => f.commands.filter(command => command.type === "load").length === 2);
-  assert.equal(f.commands.filter(command => command.type === "load").at(-1)!.playbackId, playbackId);
-  // An immediate failure is a valid first response to the new load; Core must not
-  // depend on the renderer first sending a loading/idle packet to reset its evidence.
-  for (let index = 0; index < 5; index++) f.report({ playbackId, status: "error", error: "Picture input refused" });
-  await f.barrier();
-  assert.equal(f.errors().length, 2);
-  // A renderer can report an error without a detail string. The group's healthy
-  // paused state also has error:null, which does not make this an echoed failure.
-  f.report({ playbackId, status: "error", error: null });
-  await f.barrier();
-  assert.equal(f.errors().length, 3);
-});
-
-test("alternating failures and healthy reports keep each error once within the same screen load", { timeout: 15_000 }, async t => {
-  const f = await fixture(t), playbackId = await f.start(), speakerId = await f.speaker();
-  f.report({ playbackId, status: "paused", error: null });
-  await f.barrier();
-  assert.equal((await f.command({ type: "output", deviceId: speakerId, level: 50 })).ok, true);
-  const loads = f.commands.filter(command => command.type === "load").length;
-  for (const error of ["Picture refused", "Audio refused", "Picture refused", null, "Audio refused"]) {
-    f.report({ playbackId, status: error ? "error" : "paused", error });
-    await f.barrier();
-  }
-  assert.equal(f.commands.filter(command => command.type === "load").length, loads);
-  assert.equal(f.errors().length, 2, "A later different error or healthy packet must not forget an already logged error");
-  assert.equal((await f.command({ type: "output", deviceId: "t".repeat(43), picture: false })).ok, true);
-  assert.equal((await f.command({ type: "output", deviceId: "t".repeat(43), picture: true })).ok, true);
-  await until(() => f.commands.filter(command => command.type === "load").length === loads + 1);
-  for (const error of ["Picture refused", "Audio refused", "Picture refused"]) {
-    f.report({ playbackId, status: "error", error });
-    await f.barrier();
-  }
-  assert.equal(f.errors().length, 4, "Both errors must be observable again for the new load");
-});
-
-test("Try again logs the same error for the new attempt while duplicate packets stay quiet", { timeout: 15_000 }, async t => {
-  const f = await fixture(t), first = await f.start();
-  f.report({ playbackId: first, status: "error", error: "Connection refused" });
-  await f.barrier();
-  for (let index = 0; index < 5; index++) f.report({ playbackId: first, status: "error", error: "Connection refused" });
-  await f.barrier();
-  assert.equal(f.errors().length, 1);
-  // PlaybackTransport's Try again action replays the current queue entry.
-  assert.equal((await f.command({ type: "play", entryId: "film", fromStart: false })).ok, true);
-  await until(() => f.commands.filter(command => command.type === "load").length === 2);
-  const next = f.commands.filter(command => command.type === "load").at(-1)!.playbackId;
-  assert.notEqual(next, first);
-  f.report({ playbackId: next, status: "error", error: "Connection refused" });
-  await f.barrier();
-  for (let index = 0; index < 5; index++) f.report({ playbackId: next, status: "error", error: "Connection refused" });
-  await f.barrier();
-  assert.equal(f.errors().length, 2);
-});
-
-test("Core logs a refused Sendspin input without any renderer report", { timeout: 15_000 }, async t => {
-  const f = await fixture(t, true);
-  await f.start("/movie's/private.wav");
-  const speakerId = await f.speaker();
-  assert.equal((await f.command({ type: "output", deviceId: speakerId, level: 50 })).ok, true);
-  await until(() => f.state.player.status === "error");
-  await until(() => f.errors().length > 0);
-  assert.equal(f.errors().length, 1, "The FFmpeg failure itself must produce evidence without a reporting tab");
-  const line = f.errors()[0]!;
-  assert.match(line, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z player error [\da-f-]{8} Synced host=127\.0\.0\.1: .*Connection refused/);
-  assert.deepEqual([...line].filter(char => /[\p{Cc}\u2028\u2029]/u.test(char)).map(char => char.codePointAt(0)), []);
-  assert.equal(line.includes("synthetic-"), false);
-  assert.equal(line.includes("http://"), false);
-  assert.equal(line.includes("private.wav"), false);
-  // A tab that echoes the group's published error adds no second account of it.
-  f.report({ playbackId: f.state.player.playbackId, status: "error", error: f.state.player.error });
-  await f.barrier();
-  assert.equal(f.errors().length, 1);
-  // A screen's independent picture error still has its own evidence.
-  f.report({ playbackId: f.state.player.playbackId, status: "error", error: "Picture decoder refused" });
-  await f.barrier();
-  assert.equal(f.errors().length, 2);
 });

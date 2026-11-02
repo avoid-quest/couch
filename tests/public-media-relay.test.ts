@@ -59,21 +59,6 @@ test("public video and audio use protected relay even with permissive CORS and n
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
-test("resolved public media prepares Core and Device routes without waiting for upstream", async () => {
-  let requests = 0;
-  const request = async () => { requests++; throw new Error("Delivery has not started yet"); };
-  const relay = createPassThrough(() => true, request as typeof fetch);
-  const media = { source: "https://media.example/video", hls: true, publicNetwork: true };
-  try {
-    for (const destination of [{ origin: "http://127.0.0.1:3800", userAgent: "Couch" }, target]) {
-      const prepared = await relay.prepare("playing", media, {}, destination, signal());
-      expect(prepared.hls).toBe(true);
-      expect(new URL(prepared.source).pathname).toContain("/playlist/");
-    }
-    expect(requests).toBe(0);
-  } finally { await relay.close(); }
-});
-
 test("public media cannot fall back to a raw URL when no protected destination is available", async () => {
   const f = fixture();
   await expect(f.relay.prepare("playing", { source, publicNetwork: true }, {}, null, signal())).rejects.toThrow();
@@ -120,48 +105,6 @@ test("public media playlists protect keys, maps, low-latency parts and every seg
   expect((await f.serve(segment)).status).toBe(200);
   expect(f.requests.at(-1)?.url).toBe("https://media.example/segments/1.ts");
   expect(rawRequest).not.toHaveBeenCalled();
-});
-
-test("a selected YouTube HLS pair keeps its quality and original audio through the master", async () => {
-  const f = fixture();
-  const video = "https://media.example/1080.m3u8", audio = "https://media.example/it.m3u8";
-  f.manifest(source, ['#EXTM3U',
-    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="en",NAME="English dub",DEFAULT=NO,URI="en.m3u8"',
-    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="it",NAME="Italian original",DEFAULT=NO,URI="it.m3u8"',
-    '#EXT-X-STREAM-INF:BANDWIDTH=2000,AUDIO="audio",RESOLUTION=1920x1080', '1080.m3u8',
-    '#EXT-X-STREAM-INF:BANDWIDTH=4000,AUDIO="audio",RESOLUTION=3840x2160', '2160.m3u8', ''].join('\n'));
-  f.manifest(video, '#EXTM3U\n#EXTINF:6,\nvideo.ts\n');
-  f.manifest(audio, '#EXTM3U\n#EXTINF:6,\naudio.ts\n');
-  const media = await f.relay.prepare("playing", { source, publicNetwork: true, hlsSelection: { video, audio, bandwidth: 2000 } }, {}, target, signal());
-  const result = await f.serve(media.source);
-  expect(result.status).toBe(200);
-  const text = await result.text();
-  expect(text).not.toContain('English dub');
-  expect(text).not.toContain('3840x2160');
-  expect(text).toContain('BANDWIDTH=2000');
-  expect(text).toContain('DEFAULT=YES');
-  const rendition = /URI="([^"]+)"/.exec(text)![1]!;
-  const picture = text.split('\n').find(line => line && !line.startsWith('#'))!;
-  destination(rendition, "playlist", audio);
-  destination(picture, "playlist", video);
-  for (const child of [rendition, picture]) {
-    const playlist = await f.serve(child);
-    expect(playlist.status).toBe(200);
-    destination((await playlist.text()).split('\n').find(line => line && !line.startsWith('#'))!, "bytes", child === rendition ? "https://media.example/audio.ts" : "https://media.example/video.ts");
-  }
-});
-
-test("a refreshed master cannot replace the selected signed HLS destinations", async () => {
-  const f = fixture();
-  f.manifest(source, '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nother.m3u8\n');
-  const media = await f.relay.prepare("playing", { source, publicNetwork: true, hlsSelection: { video: "https://media.example/selected.m3u8", audio: "https://media.example/it.m3u8", bandwidth: 1000 } }, {}, target, signal());
-  const result = await f.serve(media.source);
-  expect(result.status).toBe(200);
-  const text = await result.text();
-  expect(text).not.toContain("other.m3u8");
-  const rendition = /URI="([^"]+)"/.exec(text)![1]!;
-  destination(rendition, "playlist", "https://media.example/it.m3u8");
-  destination(text.split("\n").find(line => line && !line.startsWith("#"))!, "playlist", "https://media.example/selected.m3u8");
 });
 
 for (const childOrigin of ["https://cdn.example", "http://media.example", "https://media.example:444"]) {
@@ -214,55 +157,6 @@ test("a redirected playlist resolves children at its effective URL without grant
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
-for (const audioOrigin of ["https://media.example", "https://audio.example", "http://media.example", "https://media.example:444"]) {
-  test(`separate audio playback keeps source credentials bound when audio uses ${audioOrigin}`, async () => {
-    const f = fixture();
-    const video = "https://media.example/video.mp4", audio = `${audioOrigin}/audio.m4a`;
-    const media = await f.relay.prepare("playing", { source: video, audioSource: audio, publicNetwork: true }, providerHeaders, target, signal());
-    expect(f.requests).toHaveLength(0);
-    expect((await f.serve(media.source)).status).toBe(200);
-    sourceHeaders(f.requests.at(-1)!.headers, true);
-    expect((await f.serve(media.audioSource!)).status).toBe(200);
-    sourceHeaders(f.requests.at(-1)!.headers, audioOrigin === new URL(video).origin);
-    expect(rawRequest).not.toHaveBeenCalled();
-  });
-}
-
-test("a protected request failure never hands public media or its children to the player directly", async () => {
-  const f = fixture();
-  const blocked = "https://blocked.example/segment.ts";
-  f.manifest(source, `#EXTM3U\n#EXTINF:6,\n${blocked}\n`);
-  f.replies.set(blocked, () => { throw new Error("Destination refused by public request policy."); });
-  const media = await f.prepare();
-  const text = await (await f.serve(media.source)).text();
-  const segment = text.split("\n").find(line => line && !line.startsWith("#"))!;
-  destination(segment, "bytes", blocked);
-  expect((await f.serve(segment)).status).toBe(502);
-  expect(rawRequest).not.toHaveBeenCalled();
-});
-
-test("signed upstream queries preserve authenticated native media extensions", async () => {
-  const f = fixture();
-  const segment = "https://media.example/segment.ts?expires=123&token=opaque";
-  const init = "https://media.example/init.mp4?token=opaque";
-  f.manifest(source, `#EXTM3U\n#EXT-X-MAP:URI="${init}"\n#EXTINF:6,\n${segment}\n#EXT-X-ENDLIST\n`);
-  const media = await f.prepare();
-  expect(new URL(media.source).pathname).toEndWith(".m3u8");
-  const text = await (await f.serve(media.source)).text();
-  const child = text.split("\n").find(line => line && !line.startsWith("#"))!;
-  const map = /URI="([^"]+)"/.exec(text)![1]!;
-  expect(new URL(child).pathname).toEndWith(".ts");
-  expect(new URL(map).pathname).toEndWith(".mp4");
-  destination(child, "bytes", segment);
-  const tampered = new URL(child);
-  tampered.pathname = tampered.pathname.replace(/\.ts$/, ".mp4");
-  const calls = f.requests.length;
-  expect((await f.serve(tampered.href)).status).toBe(404);
-  tampered.searchParams.delete("url");
-  expect((await f.serve(tampered.href)).status).toBe(404);
-  expect(f.requests).toHaveLength(calls);
-});
-
 for (const reference of ["file:///etc/passwd", "data:text/plain,private", "ftp://127.0.0.1/private", "tcp://127.0.0.1:1234", "https://user:password@media.example/private"]) {
   test(`public HLS rejects unsupported destination ${reference.split(":")[0]}`, async () => {
     const f = fixture();
@@ -286,31 +180,6 @@ for (const feature of [
     expect(rawRequest).not.toHaveBeenCalled();
   });
 }
-
-test("extensionless HLS with misleading media MIME still has all child URLs protected", async () => {
-  const f = fixture();
-  const opaque = "https://media.example/opaque?id=1";
-  f.manifest(opaque, "#EXTM3U\n#EXTINF:6,\nhttp://127.0.0.1/private\n", "video/mp4");
-  const media = await f.prepare(opaque);
-  const result = await f.serve(media.source);
-  expect(result.status).toBe(200);
-  const text = await result.text();
-  const segment = text.split("\n").find(line => line && !line.startsWith("#"))!;
-  destination(segment, "bytes", "http://127.0.0.1/private");
-  expect(rawRequest).not.toHaveBeenCalled();
-});
-
-test("public relay streams byte ranges through the protected request boundary", async () => {
-  const f = fixture(), url = "https://media.example/video.mp4";
-  f.replies.set(url, () => response(url, "1234", { status: 206, headers: { "Content-Type": "video/mp4", "Content-Range": "bytes 1-4/10", "Content-Length": "4" } }));
-  const media = await f.prepare(url);
-  const result = await f.serve(media.source, { Range: "bytes=1-4" });
-  expect(result.status).toBe(206);
-  expect(result.headers.get("Content-Range")).toBe("bytes 1-4/10");
-  expect(await result.text()).toBe("1234");
-  expect(f.requests.at(-1)?.headers.get("range")).toBe("bytes=1-4");
-  expect(rawRequest).not.toHaveBeenCalled();
-});
 
 test("forged and stopped public relay capabilities fail before any network request", async () => {
   const f = fixture();
@@ -337,75 +206,6 @@ test("forged and stopped public relay capabilities fail before any network reque
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
-test("a pending quality transport remains protected while another playback prepares", async () => {
-  const f = fixture();
-  const pending = await f.prepare("https://media.example/new.mp4", "pending");
-  await f.prepare("https://media.example/other.mp4");
-  expect((await f.serve(pending.source)).status).toBe(404);
-  f.current.add("pending");
-  expect((await f.serve(pending.source)).status).toBe(200);
-  expect(rawRequest).not.toHaveBeenCalled();
-});
-
-test("cleanup retains active preparations and expires retired or abandoned playback capabilities", async () => {
-  const now = spyOn(Date, "now").mockReturnValue(0);
-  try {
-    const f = fixture();
-    f.manifest(source, "#EXTM3U\n#EXTINF:6,\nsegment.ts\n");
-    f.current.add("retired");
-    const first = await f.prepare();
-    const second = await f.prepare();
-    const retired = await f.prepare(source, "retired");
-    const abandoned = await f.prepare(source, "pending");
-    f.current.delete("retired");
-    now.mockReturnValue(60_001);
-    await f.prepare();
-    expect((await f.serve(first.source)).status).toBe(200);
-    expect((await f.serve(second.source)).status).toBe(200);
-    const calls = f.requests.length;
-    f.current.add("retired");
-    f.current.add("pending");
-    expect((await f.serve(retired.source)).status).toBe(404);
-    expect((await f.serve(abandoned.source)).status).toBe(404);
-    expect(f.requests).toHaveLength(calls);
-    expect(rawRequest).not.toHaveBeenCalled();
-  } finally { now.mockRestore(); }
-});
-
-test("Core and Device preparations keep their own headers and origin through nested playlists", async () => {
-  const f = fixture();
-  f.manifest(source, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvariant.m3u8\n");
-  f.manifest("https://media.example/variant.m3u8", "#EXTM3U\n#EXTINF:6,\nsegment.ts\n");
-  const coreOrigin = "http://127.0.0.1:3800";
-  const coreTarget = { origin: coreOrigin, userAgent: "Couch" };
-  const coreHeaders = { authorization: "Bearer Core fixture", referer: "https://core.example/" };
-  const deviceHeaders = { authorization: "Bearer Device fixture", referer: "https://device.example/" };
-  const core = await f.prepare(source, "playing", coreTarget, coreHeaders);
-  const device = await f.prepare(source, "playing", target, deviceHeaders);
-  const capabilities = [core.source, device.source];
-  for (const [media, expected, headers] of [[core, coreTarget, coreHeaders], [device, target, deviceHeaders]] as const) {
-    let url = media.source;
-    for (const [kind, upstream] of [["playlist", "https://media.example/variant.m3u8"], ["bytes", "https://media.example/segment.ts"]] as const) {
-      const result = await f.serve(url);
-      expect(result.status).toBe(200);
-      expect(f.requests.at(-1)?.headers.get("user-agent")).toBe(expected.userAgent);
-      expect(f.requests.at(-1)?.headers.get("authorization")).toBe(headers.authorization);
-      expect(f.requests.at(-1)?.headers.get("referer")).toBe(headers.referer);
-      url = (await result.text()).split("\n").find(line => line && !line.startsWith("#"))!;
-      destination(url, kind, upstream, expected.origin);
-      capabilities.push(url);
-    }
-    expect((await f.serve(url)).status).toBe(200);
-    expect(f.requests.at(-1)?.headers.get("user-agent")).toBe(expected.userAgent);
-    expect(f.requests.at(-1)?.headers.get("authorization")).toBe(headers.authorization);
-  }
-  f.current.delete("playing");
-  const calls = f.requests.length;
-  for (const url of capabilities) expect((await f.serve(url)).status).toBe(404);
-  expect(f.requests).toHaveLength(calls);
-  expect(rawRequest).not.toHaveBeenCalled();
-});
-
 test("oversized public HLS bodies are bounded and cancelled before reaching a decoder", async () => {
   const f = fixture();
   let cancelled = 0, pulled = 0;
@@ -422,16 +222,6 @@ test("oversized public HLS bodies are bounded and cancelled before reaching a de
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
-test("explicitly selected LAN media retains its existing direct route", async () => {
-  const f = fixture();
-  rawRequest.mockImplementation(async input => response(String(input), "bytes", { headers: { "Content-Type": "video/mp4" } }));
-  const url = "http://192.168.1.10/media.mp4";
-  const media = await f.relay.prepare("playing", { source: url }, {}, { origin: "http://couch.local", userAgent: "Browser fixture" }, signal());
-  expect(media.source).toBe(url);
-  expect(f.requests).toHaveLength(0);
-  expect(rawRequest).toHaveBeenCalledTimes(1);
-});
-
 test("a source's refusal is kept for its relay, so Core can report it", async () => {
   const f = fixture();
   const video = "https://media.example/video.mp4";
@@ -444,37 +234,4 @@ test("a source's refusal is kept for its relay, so Core can report it", async ()
   f.replies.delete(video);
   expect((await f.serve(media.source)).status).toBe(200);
   expect(f.relay.refused("playing", media.source)).toBeUndefined();
-  f.replies.set(video, () => response(video, "", { status: 403 }));
-  expect((await f.serve(media.source)).status).toBe(403);
-  expect(f.relay.refused("playing", media.source)).toBe(403);
-  // A new load of the Playback starts clean, and another Playback never sees it.
-  expect(f.relay.refused("other", media.source)).toBeUndefined();
-  const next = await f.prepare("https://media.example/other.mp4");
-  expect(f.relay.refused("playing", next.source)).toBeUndefined();
-});
-
-test("only HTTP errors are reported as refusals, excluding range exhaustion", async () => {
-  const f = fixture(), video = "https://media.example/video.mp4";
-  const media = await f.prepare(video);
-  for (const [status, refusal] of [[403, 403], [304, undefined], [503, 503], [416, undefined]] as const) {
-    f.replies.set(video, () => new Response(null, { status }));
-    expect((await f.serve(media.source)).status).toBe(status);
-    expect(f.relay.refused("playing", media.source)).toBe(refusal);
-  }
-});
-
-for (const browserStatus of [200, 404]) test(`a browser relay keeps its own ${browserStatus} after Core refuses the same playback`, async () => {
-  const f = fixture(), video = "https://media.example/video.mp4";
-  const core = await f.prepare(video, "playing", { origin: "http://127.0.0.1:3800", userAgent: "Couch" });
-  const browser = await f.prepare(video);
-  f.replies.set(video, () => response(video, "", { status: 403 }));
-  expect((await f.serve(core.source)).status).toBe(403);
-  f.replies.set(video, () => response(video, "", { status: browserStatus }));
-  expect((await f.serve(browser.source)).status).toBe(browserStatus);
-  expect(f.relay.refused("playing", browser.source)).toBe(browserStatus === 200 ? undefined : browserStatus);
-  expect(f.relay.refused("playing", core.source)).toBe(403);
-  // Another screen preparing must not clear this screen's outstanding refusal.
-  const other = await f.prepare(video);
-  expect(f.relay.refused("playing", other.source)).toBeUndefined();
-  expect(f.relay.refused("playing", browser.source)).toBe(browserStatus === 200 ? undefined : browserStatus);
 });

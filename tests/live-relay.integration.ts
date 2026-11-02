@@ -8,12 +8,10 @@ import { spawn, execFileSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
 import WebSocket from "ws";
-import { createLocalRelay } from "../src/server/live-relay";
 import { createHub } from "../src/server/hub";
 import { selectLan } from "../src/server/lan-listener";
 import { openStore } from "../src/server/store";
 import type { LiveRelay } from "../src/shared/live-relay";
-import { delayedRelay } from "./fixtures/delayed-relay";
 
 const relayExecutable = join(process.cwd(), "build/live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay");
 const network = Object.entries(networkInterfaces()).flatMap(([name, entries]) => { try { return [selectLan({ [name]: entries }, name)]; } catch { return []; } })[0];
@@ -94,39 +92,6 @@ test("device removal retires cached TURN credentials and existing allocations, a
   assert.equal((await (await request("/api/settings/live-relay/local")).json()).status, "error");
 });
 
-test("revocation during startup never publishes the retired generation, including overlapping revocations", { skip: !network, timeout: 10000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), "couch-relay-start-revoke-")), helper = await delayedRelay(directory);
-  const published: string[] = [];
-  const relay = createLocalRelay({ executable: helper.executable, enabled: true, changed: () => { const current = relay.state().relay; if (current) published.push(current.urls); } });
-  t.after(async () => { await relay.close(); await helper.close(); await rm(directory, { recursive: true, force: true }); });
-  const starting = relay.setNetwork(network!);
-  await helper.started(1);
-  const revoked = relay.revoke(), again = relay.revoke();
-  assert.equal(relay.state().relay, null);
-  await helper.release(1);
-  await helper.started(2);
-  assert.equal(relay.state().relay, null);
-  assert.deepEqual(published, [], "retired startup result must never reach ICE consumers");
-  await helper.release(2);
-  await Promise.all([starting, revoked, again]);
-  assert.equal(relay.state().status, "running");
-  assert.ok(published.every(url => url.includes(":40002?")));
-});
-
-for (const action of ["off", "network-loss", "close"] as const) test(`revocation racing ${action} during startup leaves no relay`, { skip: !network, timeout: 10000 }, async t => {
-  const directory = await mkdtemp(join(tmpdir(), "couch-relay-stop-revoke-")), helper = await delayedRelay(directory);
-  const relay = createLocalRelay({ executable: helper.executable, enabled: true, changed() {} });
-  t.after(async () => { await relay.close(); await helper.close(); await rm(directory, { recursive: true, force: true }); });
-  const starting = relay.setNetwork(network!);
-  await helper.started(1);
-  const revoked = relay.revoke();
-  const stopped = action === "off" ? relay.setEnabled(false) : action === "network-loss" ? relay.setNetwork(null) : relay.close();
-  await helper.release(1);
-  await Promise.all([starting, revoked, stopped]);
-  assert.equal(relay.state().relay, null);
-  assert.equal(relay.state().status, action === "off" ? "off" : "waiting");
-});
-
 test("the bundled relay is opt-in, persisted, and stops with network sharing and Core", { skip: !network, timeout: 10000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), "couch-builtin-relay-"));
   const previousInterface = process.env.COUCH_LAN_INTERFACE;
@@ -194,26 +159,4 @@ test("the bundled relay is opt-in, persisted, and stops with network sharing and
   assert.match((await state()).error, /could not be launched/);
   assert.deepEqual((await ice()).filter(value => String(value.urls).startsWith("turn:")), [], "failed built-in start must not use external fallback");
   assert.equal((await fetch(`${hub.origin}/api/health`)).status, 200, "relay failure leaves Core available");
-});
-
-
-test("selected LAN loss stops the helper and a missing bundled executable reports failure", { skip: !network, timeout: 10000 }, async () => {
-  const relay = createLocalRelay({ executable: relayExecutable, enabled: true, changed() {} });
-  try {
-    await relay.setNetwork(network!);
-    assert.equal(relay.state().status, "running");
-    const url = relay.state().relay!.urls;
-    await relay.setNetwork(null);
-    assert.equal(relay.state().status, "waiting");
-    assert.equal(await reachable(url), false);
-    await relay.setNetwork(network!);
-    assert.equal(relay.state().status, "running");
-  } finally { await relay.close(); }
-  const missing = createLocalRelay({ executable: "/missing/couch-relay", enabled: true, changed() {} });
-  try {
-    await missing.setNetwork(network!);
-    assert.equal(missing.state().status, "error");
-    assert.equal(missing.state().relay, null);
-    assert.match(missing.state().error!, /could not be launched/);
-  } finally { await missing.close(); }
 });

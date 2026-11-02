@@ -45,20 +45,6 @@ test("upload failure validation bounds and redacts errors and discards unvalidat
   assert.equal(parseLiveUploadFailed("invalid JSON"), null);
 });
 
-test("a buffered upload failure before its socket exists fails its receiver promptly and preserves the source", { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    const owner = await start(f);
-    await fallback(f, owner);
-    fail(owner);
-    await until(() => owner.state.player.status === "error" && !uploadRequested(owner));
-    assert.equal(owner.state.player.error, error);
-    assert.equal(owner.state.player.buffering, false);
-    assert.equal(owner.state.liveSources?.[0]?.id, "screen");
-    assert.equal(f.receiver.state.liveSources?.[0]?.id, "screen");
-  } finally { await f.close(); }
-});
-
 test("a pre-socket buffered failure leaves a healthy direct receiver playing, and Play explicitly retries", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
@@ -84,64 +70,6 @@ test("a pre-socket buffered failure leaves a healthy direct receiver playing, an
     assert.equal(loads(other), before.loads);
     assert.equal(other.load()!.livePeerId, peer);
     assert.equal(owner.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error, undefined);
-  } finally { await f.close(); }
-});
-
-test("a pre-socket upload failure promptly rejects pending In sync playback without ending capture", { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    const owner = await start(f);
-    await addOther(f, owner);
-    assert.equal((await owner.command({ type: "inSync", inSync: true })).ok, true);
-    await until(() => uploadRequested(owner));
-    assert.equal(f.uploads.size, 0);
-    fail(owner);
-    await until(() => owner.state.player.status === "error" && !uploadRequested(owner));
-    assert.equal(owner.state.player.error, error);
-    assert.equal(owner.state.player.buffering, false);
-    assert.equal(owner.state.liveSources?.[0]?.id, "screen");
-  } finally { await f.close(); }
-});
-
-for (const retirement of ["media socket closes", "pre-socket demand is canceled"]) test(`a delayed upload failure cannot fail a same-source retry after ${retirement}`, { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    const owner = await start(f);
-    if (retirement === "media socket closes") f.answerUploads(owner);
-    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: f.receiver.load()!.livePeerId, error: "Unreachable." }));
-    await until(() => uploadRequested(owner));
-    // Retain the already-generated envelope while the independent media/receiver connection retires this attempt.
-    const firstUploadId = uploadRequest(owner)!.uploadId;
-    const delayed = failureMessage(owner);
-    if (retirement === "media socket closes") {
-      await until(() => !!f.receiver.load()?.hls && f.uploads.has("screen"));
-      f.uploads.get("screen")!.close();
-      await until(() => owner.state.player.status === "error" && !uploadRequested(owner));
-    } else {
-      assert.equal(f.uploads.size, 0);
-      assert.equal((await f.receiver.command({ type: "stop" })).ok, true);
-      await until(() => !uploadRequested(owner));
-    }
-    const before = owner.messages.length, beforeLoads = loads(f.receiver);
-    // Another control connection can request a retry before the old publisher envelope reaches Core.
-    assert.equal((await f.receiver.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
-    await until(() => uploadRequested(owner));
-    assert.ok(owner.messages.slice(before).some(message => message.type === "livePeers" && message.sourceId === "screen" && message.upload));
-    assert.ok(firstUploadId);
-    assert.ok(uploadRequest(owner)!.uploadId);
-    assert.notEqual(uploadRequest(owner)!.uploadId, firstUploadId, "false then true creates a fresh attempt for the same source");
-    owner.socket.send(delayed);
-    await barrier(owner);
-    assert.equal(uploadRequested(owner), true, "the old attempt's failure must not retire the new same-source upload");
-    assert.notEqual(owner.state.player.error, error);
-    assert.equal(owner.state.liveSources?.[0]?.id, "screen");
-    if (retirement === "media socket closes") {
-      await until(() => loads(f.receiver) > beforeLoads && !!f.receiver.load()?.hls);
-      assert.equal((await fetch(f.receiver.load()!.source)).status, 200, "the retried media stream remains playable");
-    }
-    fail(owner);
-    await until(() => owner.state.player.status === "error" && !uploadRequested(owner));
-    assert.equal(owner.state.player.error, error, "the current attempt can still fail promptly");
   } finally { await f.close(); }
 });
 

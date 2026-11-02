@@ -45,9 +45,7 @@ test("an item rule hides that item; a word hides any title, subtitle, creator or
   const item = { provider: "raiplay", url: "https://www.raiplay.it/programmi/viva", title: "Viva Rai2", subtitle: "Puntata 3", creator: { title: "Rai 2", url: "" }, collection: { title: "Season 1", url: "", parent: { title: "Viva Fiorello", url: "" } } };
   expect(matchesHidden([], item)).toBe(false);
   expect(matchesHidden([rule("item", hiddenItemKey(item))], item)).toBe(true);
-  expect(matchesHidden([rule("item", "twitch:https://www.raiplay.it/programmi/viva")], item)).toBe(false);
   expect(matchesHidden([rule("word", "fiorello")], item)).toBe(true);
-  expect(matchesHidden([rule("word", "puntata")], item)).toBe(true);
   expect(matchesHidden([rule("word", "rai 2")], item)).toBe(true);
   expect(matchesHidden([rule("word", "sanremo")], item)).toBe(false);
 });

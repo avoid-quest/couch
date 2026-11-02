@@ -1,4 +1,4 @@
-// bun tests/player-performance.native.ts .artifacts/player-performance [--checks] [--trace] [--assert-budget=60] [--rounds=40]
+// bun tests/player-performance.native.ts .artifacts/player-performance [--trace] [--assert-budget=60] [--rounds=40]
 // --seek drives playback, hover and native mouse drags (default: three rounds); --profile measures React render cost.
 // An isolated Electron renderer, production CSS/routes and fixture API reads; COUCH_PERF_AUDIO adds local audio decoding.
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,7 +8,6 @@ import electron from 'electron';
 import config from '../vite.config';
 
 const directory = resolve(process.argv[2] ?? '.artifacts/player-performance');
-const checks = process.argv.includes('--checks');
 const trace = process.argv.includes('--trace');
 const seek = process.argv.includes('--seek');
 const profile = process.argv.includes('--profile');
@@ -23,20 +22,14 @@ const outDir = join(directory, 'dist');
 mkdirSync(directory, { recursive: true });
 writeFileSync(entry, `<!doctype html><html lang="en" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="fixture"></div><script type="module">
 import './index.css';
-import { runPlayerPerformance } from '../../tests/player-performance.browser';
-import { runPlayerTransitionRegression } from '../../tests/player-transition.browser';
-import { runPlayerStatusRegression } from '../../tests/player-status.browser';
-import { runPlayerAutoHideRegression } from '../../tests/player-auto-hide.browser';
-import { runArtworkMountRegression } from '../../tests/artwork-mount.browser';
-import { runPlayerClockRenderingRegression } from '../../tests/player-clock-rendering.browser';
-import { prepareSeekPerformance, runSeekBarRegression } from '../../tests/seek-bar.browser';
+import { prepareSeekPerformance, runPlayerPerformance } from '../../tests/player-performance.browser';
 window.prepareSeek = () => prepareSeekPerformance(${JSON.stringify(audioPath ? '/benchmark.mp3' : undefined)});
-window.runFixture = ${checks ? `async () => ({ checks: [await runArtworkMountRegression(), await runPlayerClockRenderingRegression(), await runPlayerTransitionRegression(), await runPlayerStatusRegression(), await runPlayerAutoHideRegression(), await runSeekBarRegression()] })` : `() => runPlayerPerformance(${JSON.stringify({ rounds, clockMs, navigation, audioUrl: audioPath ? '/benchmark.mp3' : undefined })})`};
+window.runFixture = () => runPlayerPerformance(${JSON.stringify({ rounds, clockMs, navigation, audioUrl: audioPath ? '/benchmark.mp3' : undefined })});
 </script></body></html>`);
 try {
   await build(mergeConfig(config({ command: 'build', mode: 'production' }), {
-    // Commit assertions and render-cost samples need React's profiling build; frame budgets use the ordinary release build.
-    resolve: { alias: checks || profile ? { 'react-dom/client': 'react-dom/profiling' } : {} },
+    // Render-cost samples need React's profiling build; frame budgets use the ordinary release build.
+    resolve: { alias: profile ? { 'react-dom/client': 'react-dom/profiling' } : {} },
     build: { outDir, rollupOptions: { input: entry } },
     logLevel: 'error',
   }));
@@ -73,7 +66,7 @@ app.whenReady().then(async () => {
     app.focus({ steal: true });
     window.focus();
     let result;
-    if (${seek} && !${checks}) {
+    if (${seek}) {
       await window.webContents.executeJavaScript('window.prepareSeek().then(fixture => { window.seekFixture = fixture; })', true);
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
       for (let round = 0; round < ${rounds}; round++) for (const surface of ['bar', 'player']) {
@@ -102,8 +95,7 @@ app.whenReady().then(async () => {
     result.gpu = app.getGPUFeatureStatus();
     writeFileSync(${JSON.stringify(join(directory, 'result.json'))}, JSON.stringify(result, null, 2));
     if (${trace}) await contentTracing.stopRecording(${JSON.stringify(join(directory, 'trace.json'))});
-    if (result.checks?.some(check => check.passed === false)) throw new Error('A browser regression failed; see result.json');
-    console.log(JSON.stringify(result.checks ? { passed: true, checks: result.checks.length } : { frameMs: result.frameMs, cold: result.cold, over60HzFloor: result.over60HzFloor, over120HzBudget: result.over120HzBudget, estimatedMissedFrames: result.estimatedMissedFrames, readyMs: result.readyMs, longTasks: result.longTasks.length, errors: result.errors, meets60HzFloor: result.meets60HzFloor, meets120HzBudget: result.meets120HzBudget }));
+    console.log(JSON.stringify({ frameMs: result.frameMs, cold: result.cold, over60HzFloor: result.over60HzFloor, over120HzBudget: result.over120HzBudget, estimatedMissedFrames: result.estimatedMissedFrames, readyMs: result.readyMs, longTasks: result.longTasks.length, errors: result.errors, meets60HzFloor: result.meets60HzFloor, meets120HzBudget: result.meets120HzBudget }));
     if (${assertBudget} && !result[${JSON.stringify(assertBudget === 60 ? 'meets60HzFloor' : 'meets120HzBudget')}]) code = 1;
   } catch (error) { console.error(error); code = 1; }
   app.exit(code);

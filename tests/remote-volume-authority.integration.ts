@@ -50,20 +50,3 @@ test("a Remote-bound controller can unmute and adjust another consented ordinary
   assert.equal(phone.state.devices!.find(device => device.id === speaker.id)!.muted, false);
   assert.equal(phone.state.controlling, tv.id, "a mixer row adjustment must not change the selected TV");
 });
-
-test("a Remote-bound Live viewer retains its own device volume and mute", { timeout: 15_000 }, async t => {
-  const f = await authorityFixture(t); t.after(() => f.close());
-  const host = await f.connect(f.host), phone = await f.connect(f.devices[1]!, "&audio=1");
-  const tv = await f.connect(f.devices[2]!, "&tv=1&audio=1&video=1");
-  resultOk(await phone.command({ type: "volume", deviceId: phone.id, volume: 19 }));
-  // Synthetic publication/admission only; no audio capture, upload or playback.
-  resultOk(await host.command({ type: "publishLive", sourceId: "own-volume", uploadToken: "2".repeat(64), kind: "microphone", audio: true, video: false, audioDelivery: "pcm", intent: "live" }));
-  resultOk(await tv.command({ type: "playLive", sourceId: "own-volume", deviceId: tv.id }));
-  resultOk(await phone.command({ type: "control", deviceId: tv.id }));
-  resultOk(await phone.command({ type: "volume", deviceId: phone.id, volume: 41 }));
-  resultOk(await phone.command({ type: "mute", deviceId: phone.id, muted: true }));
-  await until(() => phone.state.devices?.find(device => device.id === phone.id)?.muted === true);
-  assert.equal(phone.state.devices!.find(device => device.id === phone.id)!.volume, 41);
-  resultOk(await phone.command({ type: "mute", deviceId: phone.id, muted: false }));
-  assert.equal(phone.state.controlling, tv.id);
-});

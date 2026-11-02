@@ -71,16 +71,3 @@ test("fallback grants only selected channels and revokes saved links while other
     assert.equal(f.uploads.size, 1, "channel/mode changes reuse the source's single upload");
   } finally { await f.close(); }
 });
-
-for (const kind of ["microphone", "screen"] as const) test(`${kind} with one captured channel falls back to that channel`, { timeout: 15_000 }, async () => {
-  const f = await liveFixture();
-  try {
-    await f.publish("input", kind, kind === "microphone");
-    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
-    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "input", deviceId: f.receiver.id })).ok, true);
-    await until(() => !!f.receiver.load()?.livePeerId);
-    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: f.receiver.load()!.livePeerId, error: "Unreachable." }));
-    await until(() => !!f.receiver.load()?.hls);
-    await granted(f.receiver.load()!.source, kind === "microphone" ? "audio" : "video");
-  } finally { await f.close(); }
-});

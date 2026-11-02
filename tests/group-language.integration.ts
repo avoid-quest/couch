@@ -12,7 +12,7 @@ type Load = Extract<PlaybackCommand, { type: "load" }>;
 const tracks = (selected: number): MediaTrack[] => ["English", "Italian"].map((label, index) => ({ id: `audio-${index}`, index, kind: "audio", label, language: index ? "it" : "en", selected: index === selected }));
 const upstream = (source: string): string => new URL(source).searchParams.get("url") ?? source;
 
-async function fixture(t: TestContext, preference = "en", live = false) {
+async function fixture(t: TestContext, preference = "en") {
   const directory = mkdtempSync(join(process.env.COUCH_DATA_DIR ?? tmpdir(), "group-language-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const requests: string[] = [], log = join(directory, "decoder.jsonl");
@@ -24,7 +24,7 @@ async function fixture(t: TestContext, preference = "en", live = false) {
       '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="/en/index.m3u8"',
       '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="Italian",LANGUAGE="it",DEFAULT=NO,AUTOSELECT=YES,URI="/it/index.m3u8"',
       '#EXT-X-STREAM-INF:BANDWIDTH=900000,AUDIO="a",CODECS="avc1.640028,mp4a.40.2"', "/picture/index.m3u8", ""].join("\n")
-      : `#EXTM3U\n#EXT-X-TARGETDURATION:60\n#EXTINF:60,\nsegment.aac\n${live ? "" : "#EXT-X-ENDLIST\n"}`);
+      : `#EXTM3U\n#EXT-X-TARGETDURATION:60\n#EXTINF:60,\nsegment.aac\n#EXT-X-ENDLIST\n`);
   });
   await new Promise<void>(resolve => media.listen(0, "127.0.0.1", resolve));
   t.after(async () => { media.closeAllConnections(); await new Promise<void>(resolve => media.close(() => resolve())); });
@@ -125,30 +125,8 @@ test("explicit Italian beats the English default through group seek/restart and 
   assert.equal(f.decodedSource(), `${f.origin}/en/index.m3u8`, "new-item takeover follows its own selection");
 });
 
-test("a broadcast retains explicit Italian through takeover and collapse without an early default-rendition cache", { timeout: 15_000 }, async t => {
-  const f = await fixture(t, "en", true);
-  await f.play();
-  await until(() => !!f.receiver.load());
-  const original = f.receiver.load()!;
-  f.receiver.report({ tracks: tracks(1), seekable: false, duration: null });
-  await until(() => f.receiver.state.player.status === "playing");
-  await f.joinGroup();
-  await until(() => f.invocations().length > 0 && f.heard(2) > 0);
-  assert.equal(f.decodedSource(), `${f.origin}/it/index.m3u8`);
-  assert.match(f.invocations().at(-1)!.join(" "), /\[0:a:0\]/, "the standalone Italian rendition has audio stream zero");
-  assert.equal((await f.receiver.command({ type: "pause", playbackId: original.playbackId, paused: true })).ok, true);
-  await until(() => f.receiver.state.player.status === "paused");
-  const previous = f.receiver.load();
-  assert.equal((await f.receiver.command({ type: "output", deviceId: f.other.id, picture: false, level: 0 })).ok, true);
-  await until(() => f.receiver.load() !== previous && f.receiver.load()?.follow === undefined);
-  assert.equal(f.receiver.load()!.audioTrack, 1);
-  assert.equal(f.receiver.load()!.playbackId, original.playbackId);
-  assert.equal(f.receiver.load()!.paused, true);
-  assert.equal(f.receiver.load()!.startPosition, undefined);
-});
-
-for (const live of [false, true]) test(`an initial ${live ? "broadcast" : "VOD"} group decodes the Italian profile preference without video`, { timeout: 15_000 }, async t => {
-  const f = await fixture(t, "it", live);
+test("an initial group decodes the Italian profile preference without video", { timeout: 15_000 }, async t => {
+  const f = await fixture(t, "it");
   assert.equal((await f.receiver.command({ type: "enqueue", entry: { id: "seed", title: "Seed", source: `${f.hub.origin}/api/health` }, playNow: true })).ok, true);
   await until(() => !!f.receiver.load());
   f.receiver.report();

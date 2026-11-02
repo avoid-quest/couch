@@ -30,7 +30,8 @@
     "web:dev": "bun run --cwd apps/web dev",
     "web:build": "bun run --cwd apps/web build",
     "web:deploy": "bun run --cwd apps/web deploy",
-    "test": "bun test --isolate"
+    "test": "bun test --isolate",
+    "test:integration": "bun scripts/test-integration.ts"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",

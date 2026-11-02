@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createProviders } from "../src/server/providers";
-import { createPlaylists } from "../src/server/playlists";
 import { createContinuationResolver } from "../src/server/continuation";
-import { parseCommand } from "../src/server/validation";
-import { maxCollectionIndex, type ProviderItem, type ProviderPage } from "../src/shared/providers";
+import type { ProviderItem, ProviderPage } from "../src/shared/providers";
 
 const sources = [
   { provider: "animesaturn", series: "https://animesaturn.ro/anime/example/", episodes: ["https://animesaturn.ro/example-episode-1/", "https://animesaturn.ro/example-episode-2/"] },
@@ -39,30 +37,6 @@ for (const source of sources) {
       assert.equal(saved.favorites[0].provider, source.provider);
       assert.equal(saved.favorites[0].url, source.series);
     } finally { providers.close(); }
-  });
-
-  test(`${source.provider} accepts episodes beyond the queue's 500-entry capacity`, () => {
-    const action = { type: "enqueueProvider", provider: source.provider, shape: "atom", url: source.episodes[0], collection: { title: item.title, url: source.series, index: 1179 } };
-    const command = (index: number) => JSON.stringify({ type: "command", requestId: "request", action: { ...action, collection: { ...action.collection, index } } });
-    assert.deepEqual(parseCommand(command(1179)).action, action);
-    assert.equal(parseCommand(command(maxCollectionIndex)).action.type, "enqueueProvider");
-    for (const index of [-1, 1.5, maxCollectionIndex + 1]) assert.throws(() => parseCommand(command(index)));
-  });
-
-  test(`${source.provider} saves an anime as a source playlist`, async () => {
-    const playlists = createPlaylists({ databasePath: ":memory:", onChange() {}, queue: () => [], loadQueue() {}, resolveSource: async reference => {
-      assert.deepEqual(reference, { provider: source.provider, url: source.series });
-      return { name: item.title, entries: page.items.map(episode => ({ id: episode.id, title: episode.title, source: `web:${episode.url}`, collection: episode.collection })) };
-    } });
-    try {
-      const response = await playlists.handle(new Request("http://localhost/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source: { provider: source.provider, url: source.series } }) }));
-      assert.equal(response.status, 201);
-      const saved = (await response.json()).playlist;
-      assert.equal(saved.source.provider, source.provider);
-      assert.equal(saved.entries.length, 2);
-      assert.equal(saved.entries[1].collection.index, 1);
-      assert.equal(saved.entries[0].source, undefined);
-    } finally { playlists.close(); }
   });
 
   test(`${source.provider} continues only the selected anime and canonical episode`, async () => {

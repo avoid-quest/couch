@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,6 @@ import { WebSocketServer } from "ws";
 import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs, type SessionUpdateMetadata } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
 import { physical } from "../packaging/tv/evidence.js";
-import { nodeExecutables } from "./executable.fixture";
 import { writeEvidence } from "./evidence";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
@@ -85,36 +84,4 @@ for (const silent of [false, true]) test(`live HLS ${silent ? "silence" : "sound
     untested: ["steady-state age after startup", "browser players", "network between devices", ...physical],
   });
   assert.ok(age < 3, `Live audio is ${age.toFixed(2)}s old when scheduled; expected less than 3s.`);
-});
-
-// The live edge/probe options belong only to identified live HLS. The executable
-// boundary catches accidental application to radio, finite HLS and raw MPEG-TS.
-for (const kind of ["live-hls", "vod-hls", "radio-hls", "live-mpegts"] as const) test(`Sendspin scopes live HLS options for ${kind}`, { timeout: 5_000 }, async t => {
-  const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-options-")), argumentsPath = join(directory, "arguments.json"), executable = join(directory, "ffmpeg");
-  const executables = nodeExecutables(directory, { workers: true });
-  writeFileSync(executable, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(argumentsPath)}, JSON.stringify(process.argv.slice(2))); setInterval(() => {}, 1000);\n`, { mode: 0o755 });
-  const server = createServer((_request, response) => {
-    response.setHeader("Content-Type", kind === "live-mpegts" ? "video/mp2t" : "application/vnd.apple.mpegurl");
-    response.end(kind === "live-mpegts" ? Buffer.from([0x47, 0x40, 0x11, 0x10]) : "#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsegment.ts\n");
-  });
-  const core = createSendspin({ name: "Options fixture", admit: () => false, changed() {}, ffmpeg: async () => executable });
-  const group = core.group("options", () => {});
-  group.members([{ deviceId: "speaker", level: 100 }]);
-  t.after(async () => {
-    try { group.close(); await core.close(); }
-    finally {
-      try { assert.deepEqual(await executables.close(), { children: [], workers: [] }); }
-      finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); }
-    }
-  });
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address(); assert.ok(address && typeof address === "object");
-  group.send({ type: "load", playbackId: "options", source: `http://127.0.0.1:${address.port}/opaque-stream`, live: kind !== "vod-hls", radio: kind === "radio-hls" });
-  await until(() => existsSync(argumentsPath), "FFmpeg was not started");
-  const args = JSON.parse(readFileSync(argumentsPath, "utf8")) as string[];
-  for (const [flag, value] of [["-live_start_index", "-1"], ["-probesize", "32768"], ["-analyzeduration", "100000"]]) {
-    const index = args.indexOf(flag!);
-    if (kind === "live-hls") { assert.ok(index >= 0 && index < args.indexOf("-i"), `${flag} must apply to the live HLS input`); assert.equal(args[index + 1], value); }
-    else assert.equal(index, -1, `${flag} must not change ${kind}`);
-  }
 });

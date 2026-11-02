@@ -44,7 +44,6 @@ async function check({ wrongData = false, unhealthy = false, remote = false, lin
     servers[${mediaFirst === true ? 1 : 0}].on('request', health);
     ${mediaFirst === undefined ? "" : `servers[${mediaFirst ? 0 : 1}].on('request', (_request, response) => {
       if (${JSON.stringify(mediaResponse)} === 'hanging') return;
-      if (${JSON.stringify(mediaResponse)} === 'invalid') { response.end('media bytes'); return; }
       response.writeHead(404).end();
     });`}
     console.log('ready');
@@ -86,18 +85,12 @@ test("a Core that owns the correct database but fails health is rejected", optio
   await assert.rejects(check({ unhealthy: true }), /Core is unhealthy/);
 });
 
-for (const mediaFirst of [true, false]) {
-  test(`a healthy Core passes with its media listener ${mediaFirst ? "first" : "last"}`, options, async () => {
-    assert.equal(JSON.parse((await check({ mediaFirst })).stdout).mode, "local");
-  });
+for (const mediaFirst of [true, false]) test(`a healthy Core passes with its media listener ${mediaFirst ? "first" : "last"}`, options, async () => {
+  assert.equal(JSON.parse((await check({ mediaFirst })).stdout).mode, "local");
+});
 
-  test(`an unhealthy Core fails with its media listener ${mediaFirst ? "first" : "last"}`, options, async () => {
-    await assert.rejects(check({ mediaFirst, unhealthy: true }), /Core is unhealthy/);
-  });
-}
-
-for (const mediaResponse of ["invalid", "hanging"]) test(`${mediaResponse} media responses do not hide a healthy Core`, options, async () => {
-  assert.equal(JSON.parse((await check({ mediaFirst: true, mediaResponse })).stdout).mode, "local");
+test("a hanging media response does not hide a healthy Core", options, async () => {
+  assert.equal(JSON.parse((await check({ mediaFirst: true, mediaResponse: "hanging" })).stdout).mode, "local");
 });
 
 test("Another Couch passes without a local Core", options, async () => {

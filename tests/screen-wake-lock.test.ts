@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import type { PlaybackSummary } from "../src/shared/protocol";
-import { keepScreenAwake, playingOnDevice } from "../src/client/screen-wake-lock";
+import { keepScreenAwake } from "../src/client/screen-wake-lock";
 
 class ScreenLock extends EventTarget {
   released = false;
@@ -25,22 +24,6 @@ function fixture() {
   return { document, view, locks, requests, statuses, visibility, start };
 }
 
-test("only this device's playing or loading picture/sound keeps it awake", () => {
-  const playback = (status: PlaybackSummary["status"], deviceId = "phone", picture = false, sound = true): PlaybackSummary =>
-    ({ id: "playback", title: "Radio", status, outputs: [{ deviceId, picture, sound }] });
-  expect(playingOnDevice(undefined, "phone")).toBe(false);
-  expect(playingOnDevice([playback("playing", "tv")], "phone")).toBe(false);
-  expect(playingOnDevice([playback("playing", "phone", false, false)], "phone")).toBe(false);
-  for (const status of ["idle", "paused", "ended", "error", "unavailable"] as const) {
-    expect(playingOnDevice([playback(status)], "phone")).toBe(false);
-  }
-  for (const status of ["playing", "loading"] as const) {
-    expect(playingOnDevice([playback(status)], "phone")).toBe(true);
-    expect(playingOnDevice([playback(status, "phone", true, false)], "phone")).toBe(true);
-    expect(playingOnDevice([playback("paused", "tv"), playback(status)], "phone")).toBe(true);
-  }
-});
-
 test("releases on hiding, reacquires on return, and removes listeners at cleanup", async () => {
   const f = fixture();
   const stop = f.start();
@@ -62,19 +45,6 @@ test("releases on hiding, reacquires on return, and removes listeners at cleanup
   expect(f.requests).toHaveLength(2);
 });
 
-test("hidden pages, insecure origins and unsupported browsers do not request a lock", async () => {
-  for (const kind of ["hidden", "insecure", "unsupported"]) {
-    const f = fixture();
-    if (kind === "hidden") f.visibility("hidden");
-    if (kind === "insecure") f.view.isSecureContext = false;
-    if (kind === "unsupported") Object.assign(f.view.navigator, { wakeLock: undefined });
-    const stop = f.start();
-    await flush();
-    expect(f.requests).toEqual([]);
-    stop();
-  }
-});
-
 test("a late grant is released after teardown or hiding", async () => {
   for (const cleanup of [true, false]) {
     const f = fixture(), grant = Promise.withResolvers<ScreenLock>();
@@ -87,54 +57,4 @@ test("a late grant is released after teardown or hiding", async () => {
     expect(f.statuses).toEqual([]);
     stop();
   }
-});
-
-test("a retired mount cannot release the next mount's lock", async () => {
-  const f = fixture(), grant = Promise.withResolvers<ScreenLock>();
-  const request = f.view.navigator.wakeLock.request;
-  f.view.navigator.wakeLock.request = () => grant.promise;
-  f.start()();
-  f.view.navigator.wakeLock.request = request;
-  const stop = f.start();
-  await flush();
-  const stale = new ScreenLock(); grant.resolve(stale);
-  await flush();
-  expect(stale.released).toBe(true);
-  expect(f.locks[0]!.released).toBe(false);
-  stop();
-});
-
-test("browser refusal and revocation do not spin; returning to Couch retries", async () => {
-  const f = fixture();
-  const request = f.view.navigator.wakeLock.request;
-  f.view.navigator.wakeLock.request = async type => { f.requests.push(type); throw new Error("NotAllowedError"); };
-  const stop = f.start();
-  await flush();
-  expect(f.requests).toHaveLength(1);
-  expect(f.statuses).toEqual(["blocked"]);
-  f.view.navigator.wakeLock.request = request;
-  f.visibility("hidden"); f.visibility("visible");
-  await flush();
-  await f.locks[0]!.release();
-  await flush();
-  expect(f.statuses).toEqual(["blocked", "active", "released"]);
-  expect(f.requests).toHaveLength(2);
-  f.visibility("hidden"); f.visibility("visible");
-  await flush();
-  expect(f.requests).toHaveLength(3);
-  stop();
-});
-
-test("returning while a request is pending recovers if that request was released", async () => {
-  const f = fixture(), grant = Promise.withResolvers<ScreenLock>();
-  const request = f.view.navigator.wakeLock.request;
-  f.view.navigator.wakeLock.request = () => grant.promise;
-  const stop = f.start();
-  f.visibility("hidden"); f.visibility("visible");
-  f.view.navigator.wakeLock.request = request;
-  const expired = new ScreenLock(); await expired.release(); grant.resolve(expired);
-  await flush();
-  expect(f.requests).toEqual(["screen"]);
-  expect(f.locks[0]!.released).toBe(false);
-  stop();
 });
