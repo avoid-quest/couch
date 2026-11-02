@@ -160,7 +160,10 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   } = useSessionGate();
   const navigate = useNavigate();
   const here = deviceId();
-  const kinds = shareKinds.filter((kind) => !kind.intent);
+  const systemAudio = couchApp?.systemAudioCapture !== false;
+  const kinds = shareKinds.filter(
+    (kind) => !kind.intent && (kind.capture !== "system-audio" || systemAudio),
+  );
   const browser = {
     media: !!navigator.mediaDevices?.getUserMedia,
     display: !!navigator.mediaDevices?.getDisplayMedia,
@@ -185,7 +188,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     setAudioDeviceId(kind.intent === "live" ? "" : "default");
   }, [kind.id]);
   const [targets, setTargets] = useState<string[]>([]);
-  const [sound, setSound] = useState(true);
+  const [sound, setSound] = useState(systemAudio);
   const [quality, setQuality] = useState<LiveVideoQuality>("1080p");
   const [metadata, setMetadata] = useState<LiveMetadata>({});
   const [frameRate, setFrameRate] = useState<LiveVideoFrameRate>(defaultLiveFrameRate);
@@ -594,15 +597,17 @@ function ShareForm({ onDone }: { onDone: () => void }) {
             label={couchApp?.captureSources ? "Include system audio" : "Include audio"}
             htmlFor="live-include-audio"
             description={
-              couchApp?.captureSources
-                ? "Everything this computer plays, even when sharing one window."
-                : "Enable audio in the browser's picker when offered."
+              !systemAudio
+                ? "System audio sharing isn't supported by this desktop app. Share without sound or choose an audio input."
+                : couchApp?.captureSources
+                  ? "Everything this computer plays, even when sharing one window."
+                  : "Enable audio in the browser's picker when offered."
             }
           >
             <Switch
               id="live-include-audio"
               checked={sound}
-              disabled={pending}
+              disabled={pending || !systemAudio}
               onCheckedChange={setSound}
             />
           </Row>

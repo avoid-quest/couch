@@ -159,6 +159,7 @@ export function createCapture(
   };
   return {
     clear,
+    systemAudio,
     /** Transfers the current local owner's microphone grant to its owned native session. */
     consumeMicrophone() {
       const grant = prepared();
@@ -260,11 +261,15 @@ export function createCapture(
       ) {
         throw new Error("Choose what to share.");
       }
-      if (choice.kind === "system-audio" && !systemAudio())
+      if (
+        (choice.kind === "system-audio" || (choice.kind === "screen" && choice.audio)) &&
+        !systemAudio()
+      )
         throw new Error(
-          process.platform === "darwin"
-            ? "PC audio sharing requires macOS 14.2 or later. You can still share a screen or an audio input."
-            : "PC audio capture is not available on this system. Choose an audio input instead.",
+          (process.platform === "darwin"
+            ? "System audio sharing requires macOS 14.2 or later."
+            : "System audio sharing isn't supported by this desktop app.") +
+            " Turn off Include system audio to share without sound, or choose an audio input.",
         );
       const requesting = origin()!;
       if (choice.kind === "microphone" && requesting !== localOrigin) {

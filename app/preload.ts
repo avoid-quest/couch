@@ -154,6 +154,7 @@ if (captureId) {
     deviceName: (name) => call("device-name", name),
     deviceSharing: (sharing) => call("device-sharing", sharing),
     captureSources: () => call("capture-sources"),
+    systemAudioCapture: process.argv.includes("--couch-system-audio"),
     prepareCapture: (selection) => call("prepare-capture", selection),
     liveAudio: (action) => call("live-audio", action),
     nativeAudioInputs: () => call("native-audio-inputs"),

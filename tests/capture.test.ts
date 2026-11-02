@@ -155,6 +155,23 @@ test("a selected display grants one local request with system audio", async () =
   expect(h.prompts).toEqual([]);
 });
 
+test("unsupported system audio never silently grants a screen without its requested sound", async () => {
+  for (const [platform, version] of [
+    ["linux", ""],
+    ["darwin", "14.1"],
+  ]) {
+    const h = harness(platform, version);
+    await h.capture.sources();
+    for (const kind of ["screen", "system-audio"]) {
+      await expect(h.capture.prepare({ kind, sourceId: screen.id, audio: true })).rejects.toThrow();
+      expect(h.check("display-capture")).toBe(false);
+      expect(await h.display()).toBeNull();
+    }
+    await h.capture.prepare({ kind: "screen", sourceId: screen.id, audio: false });
+    expect(await h.display()).toEqual({ video: screen });
+  }
+});
+
 test("capture preparation never grants another origin, frame, camera or app window", async () => {
   const h = harness();
   await h.capture.sources();
