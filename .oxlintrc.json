@@ -1,9 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": [
-    "src/client/routeTree.gen.ts",
-    "vendor/**"
-  ],
+  "ignorePatterns": ["src/client/routeTree.gen.ts", "vendor/**"],
   "rules": {
     "no-control-regex": "off",
     "unicorn/no-useless-spread": "off",
@@ -11,9 +8,7 @@
   },
   "overrides": [
     {
-      "files": [
-        "tests/**"
-      ],
+      "files": ["tests/**"],
       "rules": {
         "typescript/no-this-alias": "off"
       }

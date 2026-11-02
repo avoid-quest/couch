@@ -5,8 +5,16 @@ import { isNativeHost } from "./session/native-context";
 // only clicked through (#644 ticket 8), and the rejection is ignored.
 export function registerAppShellWorker(document: Document = window.document) {
   const view = document.defaultView;
-  if (import.meta.env.DEV || isNativeHost() || !view?.isSecureContext || !("serviceWorker" in view.navigator)) return false;
-  const register = () => { void view.navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {}); };
+  if (
+    import.meta.env.DEV ||
+    isNativeHost() ||
+    !view?.isSecureContext ||
+    !("serviceWorker" in view.navigator)
+  )
+    return false;
+  const register = () => {
+    void view.navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+  };
   if (document.readyState === "complete") register();
   else view.addEventListener("load", register, { once: true });
   return true;

@@ -9,10 +9,14 @@ const optedIn = () => {
   try {
     if (choice) sessionStorage.setItem("couch.tv-presentation", choice);
     return sessionStorage.getItem("couch.tv-presentation") === "1";
-  } catch { return choice === "1"; }
+  } catch {
+    return choice === "1";
+  }
 };
 
 // The one answer to "is this the TV presentation?", fixed for the page's life: the Couch app's TV window, or a tab
 // that opted in, which then tells Core it is a TV like that window does.
-const tv = couchApp?.tvPresentation === true || typeof COUCH_TV_OVERRIDE !== "undefined" && COUCH_TV_OVERRIDE && optedIn();
+const tv =
+  couchApp?.tvPresentation === true ||
+  (typeof COUCH_TV_OVERRIDE !== "undefined" && COUCH_TV_OVERRIDE && optedIn());
 export const isTvPresentation = () => tv;

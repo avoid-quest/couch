@@ -16,5 +16,7 @@ test("the Sendspin server keeps its SDK identity when Couch restarts", () => {
     const next = openStore(path);
     expect(Identity.fromPrivateB64u(next.sendspinPrivateKey()).peerId).toBe(publicId);
     next.close();
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

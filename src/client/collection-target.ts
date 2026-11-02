@@ -10,8 +10,21 @@ export function collectionLinks(collection?: PlaybackCollection): ProviderItem[]
   const url = new URL(collection.url);
   if (!parent && provider === "streamingcommunity" && /\/season-\d+$/.test(url.pathname)) {
     url.pathname = url.pathname.replace(/\/season-\d+$/, "");
-    parent = { title: collection.title.replace(/\s+-\s+Season \d+$/i, "") || "Series", url: url.href };
+    parent = {
+      title: collection.title.replace(/\s+-\s+Season \d+$/i, "") || "Series",
+      url: url.href,
+    };
   }
-  return [...(parent && parent.url !== collection.url && providerForUrl(parent.url) === provider ? [parent] : []), collection]
-    .map(link => ({ id: link.url, url: link.url, title: link.title, provider, kind: "collection" }));
+  return [
+    ...(parent && parent.url !== collection.url && providerForUrl(parent.url) === provider
+      ? [parent]
+      : []),
+    collection,
+  ].map((link) => ({
+    id: link.url,
+    url: link.url,
+    title: link.title,
+    provider,
+    kind: "collection",
+  }));
 }

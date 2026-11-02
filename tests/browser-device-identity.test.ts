@@ -2,12 +2,16 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
 const check = (source: string) => {
-  const result = spawnSync(process.execPath, ["-e", source], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
+  const result = spawnSync(process.execPath, ["-e", source], {
+    cwd: new URL("../", import.meta.url),
+    encoding: "utf8",
+  });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 };
 
-test("full storage keeps the SDK identity stable", () => check(`
+test("full storage keeps the SDK identity stable", () =>
+  check(`
   import assert from "node:assert/strict";
   const values = new Map();
   globalThis.window = new EventTarget();
@@ -18,7 +22,8 @@ test("full storage keeps the SDK identity stable", () => check(`
   assert.equal(identity.deviceId(), loadSendspinClientIdentity(identity.storage).clientId);
 `));
 
-test("the Couch app shares one choice from Main with every Couch it joins", () => check(`
+test("the Couch app shares one choice from Main with every Couch it joins", () =>
+  check(`
   import assert from "node:assert/strict";
   const values = new Map([["couch.device-sharing", JSON.stringify({ audio: true, video: true })]]);
   let saved = { audio: true, video: false };

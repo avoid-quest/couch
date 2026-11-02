@@ -17,8 +17,18 @@ export function MediaList({ className, ...props }: ComponentProps<"ul">) {
 
 // The thumbnail column by the list's shape, each about as tall as the others: a compact row's square is 4rem.
 const rowArt = {
-  compact: { video: "[--row-art:6rem]", square: "[--row-art:3.5rem]", round: "[--row-art:3.5rem]", poster: "[--row-art:2.5rem]" },
-  regular: { video: "[--row-art:5rem] @md:[--row-art:6rem]", square: "[--row-art:3rem] @md:[--row-art:3.5rem]", round: "[--row-art:3rem] @md:[--row-art:3.5rem]", poster: "[--row-art:2.25rem] @md:[--row-art:2.5rem]" },
+  compact: {
+    video: "[--row-art:6rem]",
+    square: "[--row-art:3.5rem]",
+    round: "[--row-art:3.5rem]",
+    poster: "[--row-art:2.5rem]",
+  },
+  regular: {
+    video: "[--row-art:5rem] @md:[--row-art:6rem]",
+    square: "[--row-art:3rem] @md:[--row-art:3.5rem]",
+    round: "[--row-art:3rem] @md:[--row-art:3.5rem]",
+    poster: "[--row-art:2.25rem] @md:[--row-art:2.5rem]",
+  },
 } as const satisfies Record<string, Record<ArtShape, string>>;
 
 type Props = {
@@ -59,42 +69,187 @@ type Props = {
  * Media row: thumbnail, title, meta and the length bar, as one target whose press does its main verb; its other
  * verbs wait in its menu, behind a "…" at its end, and on its page. Used by Search, Saved, Home's board and its own pages; Up next has its own compact rows.
  */
-export function MediaRow({ art, shape: frame, own, artFit = "cover", title, meta, related, children, description, primary, menu = [], actions, compact = false, pageFirst = false, number, source, className, ...props }: Props) {
+export function MediaRow({
+  art,
+  shape: frame,
+  own,
+  artFit = "cover",
+  title,
+  meta,
+  related,
+  children,
+  description,
+  primary,
+  menu = [],
+  actions,
+  compact = false,
+  pageFirst = false,
+  number,
+  source,
+  className,
+  ...props
+}: Props) {
   const options = useItemMenu([...menu, ...useRelatedMenu(related)]);
   const level = useLevel(source);
-  const light = useItemLight(item => item.querySelector<HTMLImageElement>("[data-row-art] img")?.currentSrc || undefined);
+  const light = useItemLight(
+    (item) => item.querySelector<HTMLImageElement>("[data-row-art] img")?.currentSrc || undefined,
+  );
   const { on } = usePlayOn();
   const shape = frame ?? (compact ? "square" : "video");
-  const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
-  const body = <>
-    {number != null ? <span className="flex w-full items-baseline gap-4"><span className="min-w-0 flex-1 text-body text-pretty break-words">{title}</span>{meta && <span className="shrink-0 text-meta text-muted-foreground tabular-nums">{meta}</span>}</span>
-      : <span className="w-full text-body font-medium text-pretty break-words">{title}</span>}
-    {meta && number == null && <span className="w-full text-meta text-pretty break-words text-muted-foreground">{meta}</span>}
-    {children}
-    {description && <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-meta text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
-  </>;
+  const label =
+    primary &&
+    (primary.label === "Play" || primary.label === "Resume"
+      ? on(`${primary.label} ${title}`)
+      : `${primary.label} ${title}`);
+  const body = (
+    <>
+      {number != null ? (
+        <span className="flex w-full items-baseline gap-4">
+          <span className="min-w-0 flex-1 text-body text-pretty break-words">{title}</span>
+          {meta && (
+            <span className="shrink-0 text-meta text-muted-foreground tabular-nums">{meta}</span>
+          )}
+        </span>
+      ) : (
+        <span className="w-full text-body font-medium text-pretty break-words">{title}</span>
+      )}
+      {meta && number == null && (
+        <span className="w-full text-meta text-pretty break-words text-muted-foreground">
+          {meta}
+        </span>
+      )}
+      {children}
+      {description && (
+        <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-meta text-muted-foreground group-focus-visible/main:line-clamp-none">
+          {description}
+        </span>
+      )}
+    </>
+  );
   // A pointer over the row lights its artwork, as a tile's (index.css); nothing tints the row.
-  return <Item asChild size="xs" className={cn("relative grid gap-y-1 rounded-none border-0 border-b border-border/40 px-0 py-3", number != null ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1" : compact ? cn("gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.compact[shape], actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : art ? cn("gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]", rowArt.regular[shape], actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]") : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"), className)}>
-    <li data-nav-row {...props} {...options.item} onPointerEnter={light.onPointerEnter} onFocus={light.onFocus}>
-      {/* The artwork is a larger pointer target for the main verb, as the now-playing bar's is. */}
-      {/* A tracklist's playing track shows the level in place of its number. */}
-      {number != null && <span aria-hidden="true" className="flex justify-end self-start pt-1.5 text-right text-sm leading-6 text-muted-foreground tabular-nums">{level ? <Level moving={level === "moving"} className="mt-1.5 text-xs text-foreground" /> : number}</span>}
-      {art && <ItemMedia data-row-art aria-hidden={!!primary || undefined} onClick={primary?.disabled ? undefined : primary?.onClick} className={cn("relative w-full self-start overflow-hidden rounded-sm bg-muted *:size-full *:rounded-[inherit]", primary && !primary.disabled && "cursor-pointer", artAspect[shape], artFit === "contain" || own && !fillsFrame(own, shape) ? "[&_img]:object-contain" : "[&_img]:object-cover", own === "round" && shape !== "round" && "[&_.media-artwork]:mx-auto [&_.media-artwork]:aspect-square [&_.media-artwork]:w-auto [&_.media-artwork]:rounded-full [&_img]:object-cover")}>{art}<ArtLevel level={level} className="size-6! text-xs" /></ItemMedia>}
-      {/* The "…" ends the main verb's line, so it keeps the trailing end on every screen and width. */}
-      <div className="relative flex min-w-0 items-start gap-1">
-        <div className="min-w-0 flex-1">
-        {primary ? <Button asChild={!!primary.href && !primary.disabled} variant="ghost" data-play data-page-first={pageFirst || undefined} {...options.target} aria-label={label} title={label !== `${primary.label} ${title}` ? label : undefined} disabled={primary.disabled} onClick={event => {
-          if (primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
-          if (primary.href) event.preventDefault();
-          primary.onClick();
-        }}
-          className="group/main h-auto w-full min-w-0 rounded-md text-foreground flex-col items-start justify-center gap-caption self-stretch px-2.5 py-1.5 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent">
-          {primary.href && !primary.disabled ? <a href={detailHref(primary.href)}>{body}</a> : body}
-        </Button> : <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-caption px-2.5 py-1.5">{body}</div>}
+  return (
+    <Item
+      asChild
+      size="xs"
+      className={cn(
+        "relative grid gap-y-1 rounded-none border-0 border-b border-border/40 px-0 py-3",
+        number != null
+          ? "grid-cols-[2rem_minmax(0,1fr)] gap-x-2 py-1"
+          : compact
+            ? cn(
+                "gap-x-3 grid-cols-[var(--row-art)_minmax(0,1fr)]",
+                rowArt.compact[shape],
+                actions && "grid-cols-[var(--row-art)_minmax(0,1fr)_auto]",
+              )
+            : art
+              ? cn(
+                  "gap-x-4 grid-cols-[var(--row-art)_minmax(0,1fr)]",
+                  rowArt.regular[shape],
+                  actions && "@3xl:grid-cols-[var(--row-art)_minmax(0,1fr)_auto]",
+                )
+              : cn("gap-x-4 grid-cols-1", actions && "@3xl:grid-cols-[minmax(0,1fr)_auto]"),
+        className,
+      )}
+    >
+      <li
+        data-nav-row
+        {...props}
+        {...options.item}
+        onPointerEnter={light.onPointerEnter}
+        onFocus={light.onFocus}
+      >
+        {/* The artwork is a larger pointer target for the main verb, as the now-playing bar's is. */}
+        {/* A tracklist's playing track shows the level in place of its number. */}
+        {number != null && (
+          <span
+            aria-hidden="true"
+            className="flex justify-end self-start pt-1.5 text-right text-sm leading-6 text-muted-foreground tabular-nums"
+          >
+            {level ? (
+              <Level moving={level === "moving"} className="mt-1.5 text-xs text-foreground" />
+            ) : (
+              number
+            )}
+          </span>
+        )}
+        {art && (
+          <ItemMedia
+            data-row-art
+            aria-hidden={!!primary || undefined}
+            onClick={primary?.disabled ? undefined : primary?.onClick}
+            className={cn(
+              "relative w-full self-start overflow-hidden rounded-sm bg-muted *:size-full *:rounded-[inherit]",
+              primary && !primary.disabled && "cursor-pointer",
+              artAspect[shape],
+              artFit === "contain" || (own && !fillsFrame(own, shape))
+                ? "[&_img]:object-contain"
+                : "[&_img]:object-cover",
+              own === "round" &&
+                shape !== "round" &&
+                "[&_.media-artwork]:mx-auto [&_.media-artwork]:aspect-square [&_.media-artwork]:w-auto [&_.media-artwork]:rounded-full [&_img]:object-cover",
+            )}
+          >
+            {art}
+            <ArtLevel level={level} className="size-6! text-xs" />
+          </ItemMedia>
+        )}
+        {/* The "…" ends the main verb's line, so it keeps the trailing end on every screen and width. */}
+        <div className="relative flex min-w-0 items-start gap-1">
+          <div className="min-w-0 flex-1">
+            {primary ? (
+              <Button
+                asChild={!!primary.href && !primary.disabled}
+                variant="ghost"
+                data-play
+                data-page-first={pageFirst || undefined}
+                {...options.target}
+                aria-label={label}
+                title={label !== `${primary.label} ${title}` ? label : undefined}
+                disabled={primary.disabled}
+                onClick={(event) => {
+                  if (
+                    primary.href &&
+                    (event.button ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey)
+                  )
+                    return;
+                  if (primary.href) event.preventDefault();
+                  primary.onClick();
+                }}
+                className="group/main h-auto w-full min-w-0 rounded-md text-foreground flex-col items-start justify-center gap-caption self-stretch px-2.5 py-1.5 text-left font-normal whitespace-normal hover:bg-transparent active:bg-transparent"
+              >
+                {primary.href && !primary.disabled ? (
+                  <a href={detailHref(primary.href)}>{body}</a>
+                ) : (
+                  body
+                )}
+              </Button>
+            ) : (
+              <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-caption px-2.5 py-1.5">
+                {body}
+              </div>
+            )}
+          </div>
+          <ItemMenu data-row-menu menu={options} title={title} className="mt-1.5" />
         </div>
-        <ItemMenu data-row-menu menu={options} title={title} className="mt-1.5" />
-      </div>
-      {actions && <ItemActions className={compact ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center" : cn("flex-wrap gap-0.5 motion-safe:transition-opacity @3xl:row-start-1 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 @3xl:col-start-auto")}>{actions}</ItemActions>}
-    </li>
-  </Item>;
+        {actions && (
+          <ItemActions
+            className={
+              compact
+                ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center"
+                : cn(
+                    "flex-wrap gap-0.5 motion-safe:transition-opacity @3xl:row-start-1 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100",
+                    art && "col-start-2 @3xl:col-start-auto",
+                  )
+            }
+          >
+            {actions}
+          </ItemActions>
+        )}
+      </li>
+    </Item>
+  );
 }

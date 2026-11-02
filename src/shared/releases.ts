@@ -4,7 +4,8 @@ export type ReleaseHistory = { releases: ReleaseNotes[]; more: boolean };
 /** Couch releases use x.y.z or x.y.z-preview.n; stable follows its previews. */
 export function compareUpdateVersions(a: string, b: string) {
   const parts = (value: string) => value.split(/\.|-preview\./).map(Number);
-  const left = parts(a), right = parts(b);
+  const left = parts(a),
+    right = parts(b);
   for (let i = 0; i < 3; i++) {
     const difference = (left[i] ?? 0) - (right[i] ?? 0);
     if (difference) return difference;

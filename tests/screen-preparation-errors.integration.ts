@@ -8,10 +8,18 @@ import { executableName } from "./executable.fixture";
 import type { ServerMessage } from "../src/shared/protocol";
 
 async function fixture(t: TestContext) {
-  const f = await liveFixture({ extraDevices: 1 }), directory = dirname(f.executable);
-  const failure = join(directory, "fail-picture"), runs = join(directory, "picture-runs.jsonl");
-  writeFileSync(join(directory, executableName("qjs")), `#!${process.execPath}\nconsole.log('0.17.0');\n`, { mode: 0o755 });
-  writeFileSync(join(directory, executableName("yt-dlp")), `#!${process.execPath}
+  const f = await liveFixture({ extraDevices: 1 }),
+    directory = dirname(f.executable);
+  const failure = join(directory, "fail-picture"),
+    runs = join(directory, "picture-runs.jsonl");
+  writeFileSync(
+    join(directory, executableName("qjs")),
+    `#!${process.execPath}\nconsole.log('0.17.0');\n`,
+    { mode: 0o755 },
+  );
+  writeFileSync(
+    join(directory, executableName("yt-dlp")),
+    `#!${process.execPath}
 const fs = require('node:fs');
 if (process.argv.includes('--version')) { console.log('2026.10.21'); process.exit(0); }
 const format = process.argv[process.argv.indexOf('--format') + 1] || '';
@@ -23,45 +31,112 @@ const video = {url:'https://media.invalid/picture.mp4',vcodec:'avc1.640028',acod
 const audio = {url:'https://media.invalid/sound.m4a',vcodec:'none',acodec:'mp4a.40.2',protocol:'https'};
 const sound = format.replace(/^\\(/, '').startsWith('ba[');
 console.log(JSON.stringify({id:'fixture',title:'Programme',duration:60,formats:[video,audio],requested_formats:picture?[video]:sound?[audio]:[video,audio]}));
-`, { mode: 0o755 });
+`,
+    { mode: 0o755 },
+  );
   startHelpers(join(directory, "helpers"));
   await Promise.all([helper("yt-dlp"), helper("qjs"), helper("ffmpeg")]);
   t.after(async () => {
-    assert.deepEqual(await f.close(), { children: [], workers: [] }, "all owned children and workers retire before forced cleanup");
+    assert.deepEqual(
+      await f.close(),
+      { children: [], workers: [] },
+      "all owned children and workers retire before forced cleanup",
+    );
   });
-  const other = await f.connect(2, "&audio=1"), screen = await f.connect(3, "&video=1&vp9=1");
-  assert.equal((await f.receiver.command({ type: "enqueueWeb", entryId: "programme", url: "https://www.youtube.com/watch?v=abcdefghijk", playNow: true })).ok, true);
+  const other = await f.connect(2, "&audio=1"),
+    screen = await f.connect(3, "&video=1&vp9=1");
+  assert.equal(
+    (
+      await f.receiver.command({
+        type: "enqueueWeb",
+        entryId: "programme",
+        url: "https://www.youtube.com/watch?v=abcdefghijk",
+        playNow: true,
+      })
+    ).ok,
+    true,
+  );
   await until(() => !!f.receiver.load());
   f.receiver.report({ status: "playing", duration: 60 });
-  await f.speaker(1); await f.speaker(2);
-  assert.equal((await f.receiver.command({ type: "output", deviceId: other.id, level: 80 })).ok, true);
-  await until(() => f.heard(1) > 0 && f.heard(2) > 0 && f.receiver.state.player.status === "playing");
+  await f.speaker(1);
+  await f.speaker(2);
+  assert.equal(
+    (await f.receiver.command({ type: "output", deviceId: other.id, level: 80 })).ok,
+    true,
+  );
+  await until(
+    () => f.heard(1) > 0 && f.heard(2) > 0 && f.receiver.state.player.status === "playing",
+  );
   return {
-    ...f, screen, other,
-    pictures: () => existsSync(runs) ? readFileSync(runs, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line) as { picture: boolean }).filter(run => run.picture) : [],
-    fail: () => writeFileSync(failure, ""), recover: () => rmSync(failure, { force: true }),
+    ...f,
+    screen,
+    other,
+    pictures: () =>
+      existsSync(runs)
+        ? readFileSync(runs, "utf8")
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { picture: boolean })
+            .filter((run) => run.picture)
+        : [],
+    fail: () => writeFileSync(failure, ""),
+    recover: () => rmSync(failure, { force: true }),
   };
 }
 
-const loads = (messages: ServerMessage[]) => messages.filter(message => message.type === "player" && message.command.type === "load").length;
+const loads = (messages: ServerMessage[]) =>
+  messages.filter((message) => message.type === "player" && message.command.type === "load").length;
 
-test("a screen preparation failure stays on that output while healthy sound continues, and picture retry clears it", { timeout: 20_000 }, async t => {
-  const f = await fixture(t), before = f.heard(2);
-  f.fail();
-  assert.equal((await f.receiver.command({ type: "output", deviceId: f.screen.id, picture: true })).ok, true);
-  await until(() => !!f.receiver.state.outputs?.find(output => output.deviceId === f.screen.id)?.error);
-  assert.equal(f.receiver.state.outputs!.find(output => output.deviceId === f.screen.id)!.error, "Couldn't open this page. It may be unsupported.", "retain the resolver's public error rather than exposing raw extractor diagnostics");
-  assert.equal(f.receiver.state.player.error, null);
-  assert.equal(f.receiver.state.player.status, "playing");
-  await until(() => f.heard(2) > before);
-  assert.equal(f.receiver.state.outputs!.find(output => output.deviceId === f.other.id)!.error, undefined);
-  const attempts = f.pictures().length;
-  assert.equal((await f.receiver.command({ type: "inSync", inSync: false })).ok, true);
-  assert.equal(f.pictures().length, attempts, "unrelated reconciliation retains the actionable error instead of retrying silently");
-  f.recover();
-  assert.equal((await f.receiver.command({ type: "output", deviceId: f.screen.id, picture: false })).ok, true);
-  assert.equal(f.receiver.state.outputs?.find(output => output.deviceId === f.screen.id)?.error, undefined);
-  assert.equal((await f.receiver.command({ type: "output", deviceId: f.screen.id, picture: true })).ok, true);
-  await until(() => loads(f.screen.messages) === 1);
-  assert.equal(f.receiver.state.outputs?.find(output => output.deviceId === f.screen.id)?.error, undefined);
-});
+test(
+  "a screen preparation failure stays on that output while healthy sound continues, and picture retry clears it",
+  { timeout: 20_000 },
+  async (t) => {
+    const f = await fixture(t),
+      before = f.heard(2);
+    f.fail();
+    assert.equal(
+      (await f.receiver.command({ type: "output", deviceId: f.screen.id, picture: true })).ok,
+      true,
+    );
+    await until(
+      () => !!f.receiver.state.outputs?.find((output) => output.deviceId === f.screen.id)?.error,
+    );
+    assert.equal(
+      f.receiver.state.outputs!.find((output) => output.deviceId === f.screen.id)!.error,
+      "Couldn't open this page. It may be unsupported.",
+      "retain the resolver's public error rather than exposing raw extractor diagnostics",
+    );
+    assert.equal(f.receiver.state.player.error, null);
+    assert.equal(f.receiver.state.player.status, "playing");
+    await until(() => f.heard(2) > before);
+    assert.equal(
+      f.receiver.state.outputs!.find((output) => output.deviceId === f.other.id)!.error,
+      undefined,
+    );
+    const attempts = f.pictures().length;
+    assert.equal((await f.receiver.command({ type: "inSync", inSync: false })).ok, true);
+    assert.equal(
+      f.pictures().length,
+      attempts,
+      "unrelated reconciliation retains the actionable error instead of retrying silently",
+    );
+    f.recover();
+    assert.equal(
+      (await f.receiver.command({ type: "output", deviceId: f.screen.id, picture: false })).ok,
+      true,
+    );
+    assert.equal(
+      f.receiver.state.outputs?.find((output) => output.deviceId === f.screen.id)?.error,
+      undefined,
+    );
+    assert.equal(
+      (await f.receiver.command({ type: "output", deviceId: f.screen.id, picture: true })).ok,
+      true,
+    );
+    await until(() => loads(f.screen.messages) === 1);
+    assert.equal(
+      f.receiver.state.outputs?.find((output) => output.deviceId === f.screen.id)?.error,
+      undefined,
+    );
+  },
+);

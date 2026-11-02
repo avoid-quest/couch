@@ -2,13 +2,26 @@ import type { InterfaceSize } from "./appearance";
 import type { ConnectionInfo, PlayerState } from "./protocol";
 import type { DeviceSharing } from "./device-sharing";
 import type { UpdateAction, UpdateChannel, UpdateState } from "./updates";
-import type { AudioCaptureFormat, CaptureKind, CaptureSelection, CaptureSource, LiveAudioAction, LiveAudioError, NativeAudioInput } from "./capture";
+import type {
+  AudioCaptureFormat,
+  CaptureKind,
+  CaptureSelection,
+  CaptureSource,
+  LiveAudioAction,
+  LiveAudioError,
+  NativeAudioInput,
+} from "./capture";
 
 export type { UpdateAction, UpdateState, UpdateTarget } from "./updates";
 
 // The Couch app's preload (app/preload.ts) gives its window this bridge to Main (app/main.ts).
 // Full mode ("local") hosts Couch on this computer; Client mode ("remote") shows another Couch.
-export type AppMode = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
+export type AppMode = {
+  mode: "local" | "remote" | null;
+  address: string | null;
+  targets: string[];
+  localSetupComplete: boolean;
+};
 export type CouchApp = {
   tvPresentation: boolean;
   /** Reads, or saves, this computer's name; null until it has one. Older apps lack it. */
@@ -29,7 +42,11 @@ export type CouchApp = {
   openCaptureSettings?(kind: CaptureKind): Promise<void>;
   mode(): Promise<AppMode>;
   // null: the window is loading the chosen Couch.
-  choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;
+  choose(
+    mode: "local" | "remote",
+    address: string | null,
+    confirm: boolean,
+  ): Promise<AppMode | null>;
   forget(address: string): Promise<AppMode | null>;
   completeLocalSetup(): Promise<AppMode>;
   connection(): Promise<ConnectionInfo>;

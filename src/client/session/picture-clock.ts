@@ -5,7 +5,11 @@ import { setTimingsrc } from "timingsrc";
 // synchroniser #640 used: timingsrc nudges the playback rate for small drift and seeks for large
 // drift (stepwise on Safari). Omit position when the renderer cannot map source PTS;
 // that picture still follows programme transport without claiming alignment.
-export function followClock(video: HTMLVideoElement, read: () => { position?: number; speed: number } | null, start: () => void) {
+export function followClock(
+  video: HTMLVideoElement,
+  read: () => { position?: number; speed: number } | null,
+  start: () => void,
+) {
   const timing = new TimingObject();
   let detach: (() => void) | undefined;
   const refresh = () => {
@@ -30,5 +34,8 @@ export function followClock(video: HTMLVideoElement, read: () => { position?: nu
   };
   refresh();
   const timer = setInterval(refresh, 250);
-  return () => { clearInterval(timer); detach?.(); };
+  return () => {
+    clearInterval(timer);
+    detach?.();
+  };
 }

@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
 test("mpv cancels pending loads on close or replacement and preserves selected channels and speed", () => {
-  const result = spawnSync(process.execPath, ["-e", `
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
     import { mock, spyOn } from "bun:test";
     import assert from "node:assert/strict";
     import { EventEmitter } from "node:events";
@@ -28,7 +32,10 @@ test("mpv cancels pending loads on close or replacement and preserves selected c
     player.send({...load,output:{picture:true,sound:false}});pending.shift()("mpv");await settle();
     assert.ok(launches[1].includes("--aid=no"));
     player.close();
-  `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
+  `,
+    ],
+    { cwd: new URL("../", import.meta.url), encoding: "utf8" },
+  );
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 });

@@ -10,12 +10,22 @@ import { promisify } from "node:util";
 const checker = resolve("packaging/tv/check-health.js");
 const options = { skip: process.platform !== "linux", timeout: 10_000 };
 
-async function check({ wrongData = false, unhealthy = false, remote = false, linkedData = false, mediaFirst = undefined as boolean | undefined, mediaResponse = "missing" } = {}) {
+async function check({
+  wrongData = false,
+  unhealthy = false,
+  remote = false,
+  linkedData = false,
+  mediaFirst = undefined as boolean | undefined,
+  mediaResponse = "missing",
+} = {}) {
   const directory = await mkdtemp(join(tmpdir(), "couch-tv-health-"));
   const database = join(directory, "couch.sqlite");
   await writeFile(database, "");
   await writeFile(join(directory, "other.sqlite"), "");
-  await writeFile(join(directory, "operating-mode.json"), JSON.stringify({ mode: remote ? "remote" : "local" }));
+  await writeFile(
+    join(directory, "operating-mode.json"),
+    JSON.stringify({ mode: remote ? "remote" : "local" }),
+  );
   if (linkedData) await symlink(directory, `${directory}-link`);
   // Electron's runtime environment need not be visible in /proc/<pid>/environ.
   // The child owns a real database descriptor and HTTP socket, as Core does.
@@ -42,22 +52,35 @@ async function check({ wrongData = false, unhealthy = false, remote = false, lin
       .map(fields => parseInt(fields[1].split(':')[1], 16));
     servers.sort((a, b) => ports.indexOf(a.address().port) - ports.indexOf(b.address().port));
     servers[${mediaFirst === true ? 1 : 0}].on('request', health);
-    ${mediaFirst === undefined ? "" : `servers[${mediaFirst ? 0 : 1}].on('request', (_request, response) => {
+    ${
+      mediaFirst === undefined
+        ? ""
+        : `servers[${mediaFirst ? 0 : 1}].on('request', (_request, response) => {
       if (${JSON.stringify(mediaResponse)} === 'hanging') return;
       response.writeHead(404).end();
-    });`}
+    });`
+    }
     console.log('ready');
   `;
-  const parent = remote ? "console.log('ready'); setInterval(() => {}, 1000);" : `
+  const parent = remote
+    ? "console.log('ready'); setInterval(() => {}, 1000);"
+    : `
     import { spawn } from 'node:child_process';
     const child = spawn(process.execPath, ['--input-type=module', '-e', ${JSON.stringify(child)}, '--', 'node.mojom.NodeService'], { env: { ELECTRON_RUN_AS_NODE: '1' } });
     child.stdout.once('data', () => console.log('ready'));
     process.on('SIGTERM', () => { child.kill(); child.once('exit', () => process.exit()); });
   `;
-  const app = spawn(process.execPath, ["--input-type=module", "-e", parent], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "inherit"] });
+  const app = spawn(process.execPath, ["--input-type=module", "-e", parent], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
   try {
     await once(app.stdout!, "data");
-    return await promisify(execFile)(process.execPath, [checker, String(app.pid), linkedData ? `${directory}-link` : directory], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 5000 });
+    return await promisify(execFile)(
+      process.execPath,
+      [checker, String(app.pid), linkedData ? `${directory}-link` : directory],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 5000 },
+    );
   } finally {
     const exited = once(app, "exit");
     app.kill();
@@ -67,11 +90,15 @@ async function check({ wrongData = false, unhealthy = false, remote = false, lin
   }
 }
 
-test("a healthy Core passes when its runtime environment is absent from proc", options, async () => {
-  const result = JSON.parse((await check()).stdout);
-  assert.equal(result.mode, "local");
-  assert.ok(result.corePid > 0);
-});
+test(
+  "a healthy Core passes when its runtime environment is absent from proc",
+  options,
+  async () => {
+    const result = JSON.parse((await check()).stdout);
+    assert.equal(result.mode, "local");
+    assert.ok(result.corePid > 0);
+  },
+);
 
 test("the check follows an administrator's data-directory symlink", options, async () => {
   assert.equal(JSON.parse((await check({ linkedData: true })).stdout).mode, "local");
@@ -85,12 +112,20 @@ test("a Core that owns the correct database but fails health is rejected", optio
   await assert.rejects(check({ unhealthy: true }), /Core is unhealthy/);
 });
 
-for (const mediaFirst of [true, false]) test(`a healthy Core passes with its media listener ${mediaFirst ? "first" : "last"}`, options, async () => {
-  assert.equal(JSON.parse((await check({ mediaFirst })).stdout).mode, "local");
-});
+for (const mediaFirst of [true, false])
+  test(
+    `a healthy Core passes with its media listener ${mediaFirst ? "first" : "last"}`,
+    options,
+    async () => {
+      assert.equal(JSON.parse((await check({ mediaFirst })).stdout).mode, "local");
+    },
+  );
 
 test("a hanging media response does not hide a healthy Core", options, async () => {
-  assert.equal(JSON.parse((await check({ mediaFirst: true, mediaResponse: "hanging" })).stdout).mode, "local");
+  assert.equal(
+    JSON.parse((await check({ mediaFirst: true, mediaResponse: "hanging" })).stdout).mode,
+    "local",
+  );
 });
 
 test("Another Couch passes without a local Core", options, async () => {

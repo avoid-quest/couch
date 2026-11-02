@@ -11,5 +11,9 @@ export function LiveClock({ startedAt }: { startedAt?: number }) {
     const timer = setInterval(() => setNow(coreNow()), 1000);
     return () => clearInterval(timer);
   }, [startedAt]);
-  return <span className="whitespace-nowrap tabular-nums">Live{startedAt === undefined ? "" : ` · ${formatDuration((now - startedAt) / 1000)}`}</span>;
+  return (
+    <span className="whitespace-nowrap tabular-nums">
+      Live{startedAt === undefined ? "" : ` · ${formatDuration((now - startedAt) / 1000)}`}
+    </span>
+  );
 }

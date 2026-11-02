@@ -13,38 +13,82 @@ import { createSoundRouting } from "../src/server/sound-routing";
 function audioSession(t: TestContext) {
   let failure: "ENOENT" | "ECONNREFUSED" | "invalid" | null = "ENOENT";
   const subscribers: Array<EventEmitter & { stdout: PassThrough; kill: () => void }> = [];
-  const readdir = fs.readdirSync, exists = fs.existsSync;
-  t.mock.method(fs, "existsSync", path => path === "/usr/bin/pactl" ? failure !== "ENOENT" : exists(path));
-  t.mock.method(fs, "readdirSync", (path, ...args) => path === "/proc" ? [] : readdir(path, ...args));
+  const readdir = fs.readdirSync,
+    exists = fs.existsSync;
+  t.mock.method(fs, "existsSync", (path) =>
+    path === "/usr/bin/pactl" ? failure !== "ENOENT" : exists(path),
+  );
+  t.mock.method(fs, "readdirSync", (path, ...args) =>
+    path === "/proc" ? [] : readdir(path, ...args),
+  );
   t.mock.timers.enable({ apis: ["setTimeout"] });
   t.mock.method(childProcess, "execFile", (_file, args, _options, callback) => {
     const failed = failure;
     queueMicrotask(() => {
-      if (failed === "ENOENT" || failed === "ECONNREFUSED") return callback(Object.assign(new Error("private subprocess detail"), { code: failed }), "");
-      const value = args.includes("sinks") ? [{ index: 1, name: "speakers", volume: { left: { value: 32768 } } }] : [];
-      callback(null, failed === "invalid" ? "private invalid response" : args[0] === "get-default-sink" ? "speakers" : JSON.stringify(value));
+      if (failed === "ENOENT" || failed === "ECONNREFUSED")
+        return callback(
+          Object.assign(new Error("private subprocess detail"), { code: failed }),
+          "",
+        );
+      const value = args.includes("sinks")
+        ? [{ index: 1, name: "speakers", volume: { left: { value: 32768 } } }]
+        : [];
+      callback(
+        null,
+        failed === "invalid"
+          ? "private invalid response"
+          : args[0] === "get-default-sink"
+            ? "speakers"
+            : JSON.stringify(value),
+      );
     });
   });
   t.mock.method(childProcess, "spawn", () => {
-    const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), kill() { this.stdout.end(); } });
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new PassThrough(),
+      kill() {
+        this.stdout.end();
+      },
+    });
     subscribers.push(child);
     queueMicrotask(() => {
       if (failure === "ENOENT") child.emit("error", new Error("missing pactl"));
-      else { child.emit("spawn"); if (failure) child.stdout.end(); }
+      else {
+        child.emit("spawn");
+        if (failure) child.stdout.end();
+      }
     });
     return child;
   });
   syncBuiltinESMExports();
-  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
-  return { subscribers, set: (value: typeof failure) => { failure = value; } };
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  return {
+    subscribers,
+    set: (value: typeof failure) => {
+      failure = value;
+    },
+  };
 }
 
-const flush = async () => { for (let i = 0; i < 10; i++) await setImmediate(); };
+const flush = async () => {
+  for (let i = 0; i < 10; i++) await setImmediate();
+};
 
-test("a repaired audio session clears the startup failure without a server event", async t => {
+test("a repaired audio session clears the startup failure without a server event", async (t) => {
   const session = audioSession(t);
   let saved: string | null = null;
-  const routing = createSoundRouting({ saved: () => saved, save: output => { saved = output; }, active: () => false, lost: () => assert.fail("idle playback was interrupted"), changed() {} });
+  const routing = createSoundRouting({
+    saved: () => saved,
+    save: (output) => {
+      saved = output;
+    },
+    active: () => false,
+    lost: () => assert.fail("idle playback was interrupted"),
+    changed() {},
+  });
   t.after(() => routing.close());
   await flush();
   assert.ok(routing.state.error);
@@ -59,11 +103,21 @@ test("a repaired audio session clears the startup failure without a server event
   assert.equal(routing.prepare(), "speakers");
 });
 
-test("audio session loss interrupts playback and recovery preserves its saved output", async t => {
+test("audio session loss interrupts playback and recovery preserves its saved output", async (t) => {
   const session = audioSession(t);
   session.set(null);
-  let active = true, interruptions = 0;
-  const routing = createSoundRouting({ saved: () => "speakers", save: () => assert.fail("saved output changed"), active: () => active, lost: () => { interruptions++; active = false; }, changed() {} });
+  let active = true,
+    interruptions = 0;
+  const routing = createSoundRouting({
+    saved: () => "speakers",
+    save: () => assert.fail("saved output changed"),
+    active: () => active,
+    lost: () => {
+      interruptions++;
+      active = false;
+    },
+    changed() {},
+  });
   t.after(() => routing.close());
   await flush();
   assert.equal(routing.state.error, null);

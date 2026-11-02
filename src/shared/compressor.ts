@@ -9,17 +9,28 @@ export const compressorParameters = {
 } as const;
 export type CompressorParameter = keyof typeof compressorParameters;
 export type CompressorSettings = { enabled: boolean } & Record<CompressorParameter, number>;
-export const defaultCompressor: Readonly<CompressorSettings> = Object.freeze({ enabled: false, threshold: -18, ratio: 3, attack: 10, release: 250, knee: 9, gain: 0 });
+export const defaultCompressor: Readonly<CompressorSettings> = Object.freeze({
+  enabled: false,
+  threshold: -18,
+  ratio: 3,
+  attack: 10,
+  release: 250,
+  knee: 9,
+  gain: 0,
+});
 
 export function isCompressorPatch(value: unknown): value is Partial<CompressorSettings> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const entries = Object.entries(value);
-  return entries.length > 0 && entries.every(([key, value]) => {
-    if (key === "enabled") return typeof value === "boolean";
-    if (!Object.hasOwn(compressorParameters, key)) return false;
-    const { min, max } = compressorParameters[key as CompressorParameter];
-    return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
-  });
+  return (
+    entries.length > 0 &&
+    entries.every(([key, value]) => {
+      if (key === "enabled") return typeof value === "boolean";
+      if (!Object.hasOwn(compressorParameters, key)) return false;
+      const { min, max } = compressorParameters[key as CompressorParameter];
+      return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+    })
+  );
 }
 
 // FFmpeg and mpv share libavfilter. No lookahead/normalizer or additional process is needed.

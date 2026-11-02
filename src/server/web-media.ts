@@ -21,50 +21,93 @@ import { vttPreview, type PreviewInput } from "./preview-manifest";
 import { hlsPreview } from "./hls-preview";
 import type { CollectionLink } from "../shared/media";
 
-export type WebMediaMetadata = { creator?: CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
+export type WebMediaMetadata = {
+  creator?: CollectionLink;
+  title?: string;
+  thumbnail?: string;
+  duration?: number;
+  live?: boolean;
+};
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { preview?: PreviewInput; publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; hls?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = {
+  preview?: PreviewInput;
+  publicNetwork?: boolean;
+  source: string;
+  audioSource?: string;
+  hlsSelection?: { video: string; audio: string; bandwidth: number };
+  audioOnly?: boolean;
+  hls?: boolean;
+  subtitles?: ExternalSubtitle[];
+  headers?: Record<string, string>;
+  metadata?: WebMediaMetadata;
+  expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> };
+};
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
-const object = (value: unknown): value is Metadata => typeof value === "object" && value !== null && !Array.isArray(value);
+const object = (value: unknown): value is Metadata =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function mediaUrl(value: unknown): string {
-  if (typeof value !== "string" || value.length > 8192 || !/^https?:\/\//i.test(value) || /[\u0000-\u0020\u007f\\]/.test(value)) throw new Error("Web media must use an HTTP or HTTPS URL without embedded credentials.");
+  if (
+    typeof value !== "string" ||
+    value.length > 8192 ||
+    !/^https?:\/\//i.test(value) ||
+    /[\u0000-\u0020\u007f\\]/.test(value)
+  )
+    throw new Error("Web media must use an HTTP or HTTPS URL without embedded credentials.");
   const url = new URL(value);
-  if (url.username || url.password) throw new Error("Web media must use an HTTP or HTTPS URL without embedded credentials.");
+  if (url.username || url.password)
+    throw new Error("Web media must use an HTTP or HTTPS URL without embedded credentials.");
   return url.href;
 }
 
 function headers(value: unknown): Record<string, string> {
   if (value === undefined || value === null) return {};
-  if (!object(value) || Object.keys(value).length > 64) throw new Error("The website returned invalid media headers.");
+  if (!object(value) || Object.keys(value).length > 64)
+    throw new Error("The website returned invalid media headers.");
   const result: Record<string, string> = {};
   let size = 0;
   for (const [name, field] of Object.entries(value)) {
-    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) || typeof field !== "string" || /[\u0000-\u001f\u007f]/.test(field)) throw new Error("The website returned invalid media headers.");
+    if (
+      !/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) ||
+      typeof field !== "string" ||
+      /[\u0000-\u001f\u007f]/.test(field)
+    )
+      throw new Error("The website returned invalid media headers.");
     size += Buffer.byteLength(name) + Buffer.byteLength(field);
     if (size > 16 * 1024) throw new Error("The website returned too many media headers.");
     const key = name.toLowerCase();
     if (["host", "content-length", "transfer-encoding", "connection"].includes(key)) continue;
-    if (result[key] !== undefined && result[key] !== field) throw new Error("The website returned conflicting media headers.");
+    if (result[key] !== undefined && result[key] !== field)
+      throw new Error("The website returned conflicting media headers.");
     result[key] = field;
   }
   return result;
 }
 
 function selectedSource(info: Metadata): string {
-  if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
-  if (info.protocol !== undefined && !["http", "https", "m3u8", "m3u8_native"].includes(String(info.protocol))) throw new Error("This website's media transport is not supported yet.");
+  if (info.has_drm === true)
+    throw new Error("This item requires DRM playback, which is not supported.");
+  if (
+    info.protocol !== undefined &&
+    !["http", "https", "m3u8", "m3u8_native"].includes(String(info.protocol))
+  )
+    throw new Error("This website's media transport is not supported yet.");
   return mediaUrl(info.url);
 }
 
 function parseInfo(output: string): Metadata {
   let info: unknown;
-  try { info = JSON.parse(output); } catch { throw new Error("yt-dlp returned invalid media information. Update yt-dlp and try again."); }
+  try {
+    info = JSON.parse(output);
+  } catch {
+    throw new Error("yt-dlp returned invalid media information. Update yt-dlp and try again.");
+  }
   if (!object(info)) throw new Error("yt-dlp returned invalid media information.");
-  if (info._type === "playlist" || info._type === "multi_video" || info.entries !== undefined) throw new Error("Open a specific video or track. Webpage playlists are not supported yet.");
+  if (info._type === "playlist" || info._type === "multi_video" || info.entries !== undefined)
+    throw new Error("Open a specific video or track. Webpage playlists are not supported yet.");
   return info;
 }
 
@@ -73,62 +116,132 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
   const creator = mediaCreator(info);
   if (creator) metadata.creator = creator;
   if (typeof info.title === "string") {
-    const title = info.title.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200);
+    const title = info.title
+      .replace(/[\u0000-\u001f\u007f]/g, " ")
+      .trim()
+      .slice(0, 200);
     if (title) metadata.title = title;
   }
   if (typeof info.thumbnail === "string") {
-    try { metadata.thumbnail = mediaUrl(info.thumbnail); } catch { /* An invalid thumbnail must not prevent playback. */ }
+    try {
+      metadata.thumbnail = mediaUrl(info.thumbnail);
+    } catch {
+      /* An invalid thumbnail must not prevent playback. */
+    }
   }
-  if (typeof info.duration === "number" && Number.isFinite(info.duration) && info.duration >= 0 && info.duration <= Number.MAX_SAFE_INTEGER) metadata.duration = info.duration;
+  if (
+    typeof info.duration === "number" &&
+    Number.isFinite(info.duration) &&
+    info.duration >= 0 &&
+    info.duration <= Number.MAX_SAFE_INTEGER
+  )
+    metadata.duration = info.duration;
   if (typeof info.is_live === "boolean") metadata.live = info.is_live;
   else if (info.live_status === "is_live") metadata.live = true;
-  else if (["not_live", "was_live", "post_live", "is_upcoming"].includes(String(info.live_status))) metadata.live = false;
+  else if (["not_live", "was_live", "post_live", "is_upcoming"].includes(String(info.live_status)))
+    metadata.live = false;
   return metadata;
 }
 
 // yt-dlp drops the formats it sees are DRM, but Vimeo's FairPlay keys show only in its media playlists.
 async function rejectDrm(info: Metadata, signal?: AbortSignal) {
-  const stream = (Array.isArray(info.requested_formats) ? info.requested_formats : [info]).find(stream => object(stream) && String(stream.protocol).startsWith("m3u8"));
+  const stream = (Array.isArray(info.requested_formats) ? info.requested_formats : [info]).find(
+    (stream) => object(stream) && String(stream.protocol).startsWith("m3u8"),
+  );
   if (!stream) return;
-  const playlist = await publicFetch(mediaUrl(stream.url), { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).then(response => response.text()).catch(() => "");
-  if (/#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(playlist)) throw new Error("This item requires DRM playback, which is not supported.");
+  const playlist = await publicFetch(mediaUrl(stream.url), {
+    signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]),
+  })
+    .then((response) => response.text())
+    .catch(() => "");
+  if (
+    /#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(
+      playlist,
+    )
+  )
+    throw new Error("This item requires DRM playback, which is not supported.");
 }
 
 export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
-  if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
+  if (info.has_drm === true)
+    throw new Error("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
-  if (!Array.isArray(selected) || !selected.length || selected.length > 2 || !selected.every(object)) throw new Error("The website returned an unsupported combination of media streams.");
+  if (
+    !Array.isArray(selected) ||
+    !selected.length ||
+    selected.length > 2 ||
+    !selected.every(object)
+  )
+    throw new Error("The website returned an unsupported combination of media streams.");
   let source: string;
   let audioSource: string | undefined;
   let hlsSelection: WebMediaSource["hlsSelection"];
   let subtitles = sourceSubtitles(info, subtitleLanguage);
   if (selected.length === 1) source = selectedSource(selected[0]!);
   else {
-    const video = selected.find(stream => stream.vcodec !== "none");
-    const audio = selected.find(stream => stream.vcodec === "none" && stream.acodec !== "none");
-    if (!video || !audio) throw new Error("The website returned an unsupported combination of media streams.");
+    const video = selected.find((stream) => stream.vcodec !== "none");
+    const audio = selected.find((stream) => stream.vcodec === "none" && stream.acodec !== "none");
+    if (!video || !audio)
+      throw new Error("The website returned an unsupported combination of media streams.");
     source = selectedSource(video);
     audioSource = selectedSource(audio);
     // hls.js plays an HLS master's picture, sound and subtitles together; an <audio> can't play its sound rendition (StreamingCommunity).
-    if ([video, audio].every(stream => String(stream.protocol).startsWith("m3u8")) && typeof video.manifest_url === "string" && video.manifest_url === audio.manifest_url) {
+    if (
+      [video, audio].every((stream) => String(stream.protocol).startsWith("m3u8")) &&
+      typeof video.manifest_url === "string" &&
+      video.manifest_url === audio.manifest_url
+    ) {
       // Preserve YouTube's selected quality and original audio in its master,
       // which also offers other qualities and dubbed languages.
       if (info.extractor === "youtube") {
-        const bandwidth = Math.ceil((Number(video.tbr ?? 0) + Number(audio.tbr ?? audio.abr ?? 0)) * 1000);
-        hlsSelection = { video: source, audio: audioSource, bandwidth: Number.isSafeInteger(bandwidth) && bandwidth > 0 ? bandwidth : 1 };
+        const bandwidth = Math.ceil(
+          (Number(video.tbr ?? 0) + Number(audio.tbr ?? audio.abr ?? 0)) * 1000,
+        );
+        hlsSelection = {
+          video: source,
+          audio: audioSource,
+          bandwidth: Number.isSafeInteger(bandwidth) && bandwidth > 0 ? bandwidth : 1,
+        };
       } else subtitles = [];
       source = mediaUrl(video.manifest_url);
       audioSource = undefined;
     }
   }
   const metadata = publicMetadata(info);
-  const video = selected.find(stream => stream.vcodec !== "none");
-  const hls = video && String(video.protocol).startsWith("m3u8") ? hlsPreview(video.manifest_url ?? source, undefined, typeof video.manifest_url === "string" && video.manifest_url !== video.url ? { url: String(video.url) } : undefined) : undefined;
-  const preview = info.is_live === true || info.live_status === "is_live" ? undefined : storyboardPreview(info) ?? vttPreview(info.couch_preview_vtt) ?? hls;
-  return { source, ...(String((video ?? selected[0]!).protocol).startsWith("m3u8") ? { hls: true } : {}), ...(preview ? { preview } : {}), ...(audioSource ? { audioSource } : {}), ...(hlsSelection ? { hlsSelection } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  const video = selected.find((stream) => stream.vcodec !== "none");
+  const hls =
+    video && String(video.protocol).startsWith("m3u8")
+      ? hlsPreview(
+          video.manifest_url ?? source,
+          undefined,
+          typeof video.manifest_url === "string" && video.manifest_url !== video.url
+            ? { url: String(video.url) }
+            : undefined,
+        )
+      : undefined;
+  const preview =
+    info.is_live === true || info.live_status === "is_live"
+      ? undefined
+      : (storyboardPreview(info) ?? vttPreview(info.couch_preview_vtt) ?? hls);
+  return {
+    source,
+    ...(String((video ?? selected[0]!).protocol).startsWith("m3u8") ? { hls: true } : {}),
+    ...(preview ? { preview } : {}),
+    ...(audioSource ? { audioSource } : {}),
+    ...(hlsSelection ? { hlsSelection } : {}),
+    ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}),
+    ...(subtitles.length ? { subtitles } : {}),
+    ...(Object.keys(metadata).length ? { metadata } : {}),
+  };
 }
 
-const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
+const languageName = (code: string) => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
 
 // One file per language, as yt-dlp chose it (--sub-format). Subtitles inside an HLS playlist play in hls.js instead.
 // The profile's language and the video's own come first. At most 16: Chromium reports two track
@@ -136,28 +249,64 @@ const languageName = (code: string) => { try { return new Intl.DisplayNames(["en
 function sourceSubtitles(info: Metadata, preferred: string): ExternalSubtitle[] {
   if (!object(info.requested_subtitles)) return [];
   const rank = (language = "") => {
-    const at = [preferred, info.language].findIndex(wanted => typeof wanted === "string" && !!wanted && language.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2)));
+    const at = [preferred, info.language].findIndex(
+      (wanted) =>
+        typeof wanted === "string" &&
+        !!wanted &&
+        language.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2)),
+    );
     return at < 0 ? 2 : at;
   };
-  return Object.entries(info.requested_subtitles).flatMap(([language, subtitle]) => {
-    if (!object(subtitle) || !["vtt", "srt"].includes(String(subtitle.ext)) || String(subtitle.protocol).startsWith("m3u8")) return [];
-    try { return [{ source: sourceSubtitle(mediaUrl(subtitle.url)), title: typeof subtitle.name === "string" ? subtitle.name.slice(0, 100) : languageName(language), language: language.slice(0, 35) }]; } catch { return []; }
-  }).sort((a, b) => rank(a.language) - rank(b.language)).slice(0, 16);
+  return Object.entries(info.requested_subtitles)
+    .flatMap(([language, subtitle]) => {
+      if (
+        !object(subtitle) ||
+        !["vtt", "srt"].includes(String(subtitle.ext)) ||
+        String(subtitle.protocol).startsWith("m3u8")
+      )
+        return [];
+      try {
+        return [
+          {
+            source: sourceSubtitle(mediaUrl(subtitle.url)),
+            title:
+              typeof subtitle.name === "string"
+                ? subtitle.name.slice(0, 100)
+                : languageName(language),
+            language: language.slice(0, 35),
+          },
+        ];
+      } catch {
+        return [];
+      }
+    })
+    .sort((a, b) => rank(a.language) - rank(b.language))
+    .slice(0, 16);
 }
 
 // Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it).
 const playable = "[protocol!*=dash]";
 
-function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean, output?: SelectedChannels): string {
-  if (!["best", "1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
+function formatSelector(
+  quality: VideoQuality,
+  youtube: boolean,
+  vp9: boolean,
+  output?: SelectedChannels,
+): string {
+  if (!["best", "1080p", "720p", "480p"].includes(quality))
+    throw new Error("Choose an available video quality.");
   const filter = youtube || quality === "best" ? "" : `[height<=?${quality.slice(0, -1)}]`;
   // YouTube labels its DASH MP4 files as HTTPS. WebKit cannot play those video
   // files natively, even with H.264; HLS and progressive MP4 remain eligible.
   const transport = youtube && !vp9 ? `${playable}[container!=?mp4_dash]` : playable;
-  const soundOnly = output?.picture === false && output.sound, pictureOnly = output?.picture && !output.sound;
-  if (!youtube || vp9) return soundOnly ? `ba${transport}/b${filter}${transport}`
-    : pictureOnly ? `bv${filter}${transport}/b${filter}${transport}`
-    : `bv*${filter}${transport}+ba${transport}/b${filter}${transport}`;
+  const soundOnly = output?.picture === false && output.sound,
+    pictureOnly = output?.picture && !output.sound;
+  if (!youtube || vp9)
+    return soundOnly
+      ? `ba${transport}/b${filter}${transport}`
+      : pictureOnly
+        ? `bv${filter}${transport}/b${filter}${transport}`
+        : `bv*${filter}${transport}+ba${transport}/b${filter}${transport}`;
   // Filter every branch, including muxed fallback and separate audio. A codec preference
   // can still select an incompatible stream when no H.264/AAC format exists.
   const codecs = "[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']";
@@ -167,100 +316,233 @@ function formatSelector(quality: VideoQuality, youtube: boolean, vp9: boolean, o
   const aac = `ba${playable}${codecs}`;
   const sound = `(${hls}[language_preference>=10]/${aac}[language_preference>=10]/${hls}/${aac})`;
   const muxed = `b${filter}${transport}${codecs}`;
-  return soundOnly ? `${sound}/${muxed}` : pictureOnly ? `bv${filter}${transport}${codecs}/${muxed}` : `bv*${filter}${transport}${codecs}+${sound}/${muxed}`;
+  return soundOnly
+    ? `${sound}/${muxed}`
+    : pictureOnly
+      ? `bv${filter}${transport}${codecs}/${muxed}`
+      : `bv*${filter}${transport}${codecs}+${sound}/${muxed}`;
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = "", playbackId?: string, output?: SelectedChannels): Promise<WebMediaSource> {
+  return async function resolveWebMedia(
+    url: string,
+    signal?: AbortSignal,
+    quality: VideoQuality = "auto",
+    streamingCommunityOrigin?: string,
+    vp9 = true,
+    subtitleLanguage = "",
+    playbackId?: string,
+    output?: SelectedChannels,
+  ): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
-    const direct: (Awaited<ReturnType<typeof resolveMovies123Link>> & { preview?: PreviewInput }) | undefined = isMovies123Host(host) ? await resolveMovies123Link(source, signal, publicFetch, subtitleLanguage)
-      : isAnimeSaturnHost(host) ? await resolveAnimeSaturnLink(source, signal)
-      : isAnimeUnityHost(host) ? await resolveAnimeUnityLink(source, signal) : undefined;
+    const direct:
+      | (Awaited<ReturnType<typeof resolveMovies123Link>> & { preview?: PreviewInput })
+      | undefined = isMovies123Host(host)
+      ? await resolveMovies123Link(source, signal, publicFetch, subtitleLanguage)
+      : isAnimeSaturnHost(host)
+        ? await resolveAnimeSaturnLink(source, signal)
+        : isAnimeUnityHost(host)
+          ? await resolveAnimeUnityLink(source, signal)
+          : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     // yt-dlp's res uses the smaller dimension, including portrait Shorts.
     const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
     // Fresh YouTube URLs can answer 403 before they are usable. Let yt-dlp check
     // downloadability before Core hands the selected streams to a player.
-    const selection = youtube ? ["--check-formats", "--format-sort", `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`] : [];
+    const selection = youtube
+      ? [
+          "--check-formats",
+          "--format-sort",
+          `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`,
+        ]
+      : [];
     // Bandcamp also offers free downloads: its best audio can be ALAC or AIFF,
     // which Chromium can't play. Keep browser-compatible lossless formats eligible.
-    const format = providerForUrl(source) === "bandcamp" ? `ba${playable}[acodec~='^(mp3|aac|flac|wav)$']` : formatSelector(selectedQuality, youtube, vp9, output);
-    const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
+    const format =
+      providerForUrl(source) === "bandcamp"
+        ? `ba${playable}[acodec~='^(mp3|aac|flac|wav)$']`
+        : formatSelector(selectedQuality, youtube, vp9, output);
+    const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => [
+      "--add-headers",
+      `${name}:${value}`,
+    ]);
     // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
-    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", format, ...selection, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async extracted => {
-      const info = parseInfo(extracted);
-      // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
-      // maximum instead; formats with no known dimensions remain eligible.
-      if (youtube && selectedQuality !== "best") {
-        const selected = Array.isArray(info.requested_formats) ? info.requested_formats : [info];
-        for (const stream of selected) {
-          if (!object(stream) || stream.vcodec === "none") continue;
-          const dimensions = [stream.width, stream.height].filter((size): size is number => typeof size === "number" && size > 0);
-          if (dimensions.length && Math.min(...dimensions) > Number(selectedQuality.slice(0, -1))) throw new ExtractionError("This website offers no format Couch can play yet.");
+    return resolveWithYtDlp(
+      [
+        "--no-playlist",
+        "--playlist-items",
+        "1",
+        "--dump-single-json",
+        "--format",
+        format,
+        ...selection,
+        ...sourceHeaders,
+        "--write-subs",
+        "--sub-langs",
+        "all,-live_chat",
+        "--sub-format",
+        "vtt/srt",
+        "--",
+        direct?.url ?? streamingCommunity ?? source,
+      ],
+      { ...options, signal, plugin },
+      plugin ?? providerForUrl(source) ?? "other",
+      async (extracted) => {
+        const info = parseInfo(extracted);
+        // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
+        // maximum instead; formats with no known dimensions remain eligible.
+        if (youtube && selectedQuality !== "best") {
+          const selected = Array.isArray(info.requested_formats) ? info.requested_formats : [info];
+          for (const stream of selected) {
+            if (!object(stream) || stream.vcodec === "none") continue;
+            const dimensions = [stream.width, stream.height].filter(
+              (size): size is number => typeof size === "number" && size > 0,
+            );
+            if (dimensions.length && Math.min(...dimensions) > Number(selectedQuality.slice(0, -1)))
+              throw new ExtractionError("This website offers no format Couch can play yet.");
+          }
         }
-      }
-      if (info._has_drm === true) await rejectDrm(info, signal);
-      const media = parseMedia(info, subtitleLanguage);
-      // Audio selected for an output does not make a video item intrinsically
-      // audio-only. Picture can be restored with another preparation of this item.
-      if (output?.picture === false && output.sound && media.audioOnly) media.audioOnly = Array.isArray(info.formats) && info.formats.length > 0 && info.formats.every(format => object(format) && format.vcodec === "none") || undefined;
-      media.publicNetwork = true;
-      if (direct) {
-        media.metadata = { ...media.metadata, ...direct.metadata };
-        media.preview = media.metadata.live ? undefined : direct.preview ?? media.preview;
-        if (direct.subtitles?.length) media.subtitles = direct.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
-      }
-      try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
-      if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
-      logMediaResolution(playbackId, info, media.headers);
-      // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
-      // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
-      // its own headers, opens the master playlist instead.
-      if (media.metadata?.live && !media.audioSource && typeof info.manifest_url === "string" && String(info.protocol).startsWith("m3u8")) {
-        const response = await publicFetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
-        await response?.body?.cancel();
-        if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
-      }
-      const transport = new URL(media.source);
-      const at = Number(transport.searchParams.get("ts")) * 1000;
-      // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
-      // fresh resolution of the same track returns the same media. Other 4xx errors
-      // and providers do not establish transport expiry.
-      if (host.endsWith(".bandcamp.com") && info.extractor === "Bandcamp" && info.format_id === "mp3-128" && !media.audioSource && !media.metadata?.live && transport.protocol === "https:" && /^t\d+\.bcbits\.com$/.test(transport.hostname) && transport.pathname.startsWith('/stream/') && Number.isSafeInteger(at) && at > 0) {
-        media.expiry = { at, recover: async cancellation => {
-          if (Date.now() < at) return null;
-          cancellation.throwIfAborted();
-          const response = await publicFetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
-          await response.body?.cancel();
-          cancellation.throwIfAborted();
-          if (response.status !== 410) return null;
-          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage, playbackId, output);
-          const replacement = new URL(fresh.source);
-          if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
-          return fresh;
-        } };
-      }
-      return media;
-    });
+        if (info._has_drm === true) await rejectDrm(info, signal);
+        const media = parseMedia(info, subtitleLanguage);
+        // Audio selected for an output does not make a video item intrinsically
+        // audio-only. Picture can be restored with another preparation of this item.
+        if (output?.picture === false && output.sound && media.audioOnly)
+          media.audioOnly =
+            (Array.isArray(info.formats) &&
+              info.formats.length > 0 &&
+              info.formats.every((format) => object(format) && format.vcodec === "none")) ||
+            undefined;
+        media.publicNetwork = true;
+        if (direct) {
+          media.metadata = { ...media.metadata, ...direct.metadata };
+          media.preview = media.metadata.live ? undefined : (direct.preview ?? media.preview);
+          if (direct.subtitles?.length)
+            media.subtitles = direct.subtitles.map((track) => ({
+              ...track,
+              source: sourceSubtitle(track.source),
+            }));
+        }
+        try {
+          media.headers = headers(info.http_headers);
+        } catch {
+          /* Invalid headers only cost a relay its extra headers. */
+        }
+        if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
+        logMediaResolution(playbackId, info, media.headers);
+        // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
+        // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
+        // its own headers, opens the master playlist instead.
+        if (
+          media.metadata?.live &&
+          !media.audioSource &&
+          typeof info.manifest_url === "string" &&
+          String(info.protocol).startsWith("m3u8")
+        ) {
+          const response = await publicFetch(media.source, {
+            signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]),
+          }).catch(() => null);
+          await response?.body?.cancel();
+          if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
+        }
+        const transport = new URL(media.source);
+        const at = Number(transport.searchParams.get("ts")) * 1000;
+        // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
+        // fresh resolution of the same track returns the same media. Other 4xx errors
+        // and providers do not establish transport expiry.
+        if (
+          host.endsWith(".bandcamp.com") &&
+          info.extractor === "Bandcamp" &&
+          info.format_id === "mp3-128" &&
+          !media.audioSource &&
+          !media.metadata?.live &&
+          transport.protocol === "https:" &&
+          /^t\d+\.bcbits\.com$/.test(transport.hostname) &&
+          transport.pathname.startsWith("/stream/") &&
+          Number.isSafeInteger(at) &&
+          at > 0
+        ) {
+          media.expiry = {
+            at,
+            recover: async (cancellation) => {
+              if (Date.now() < at) return null;
+              cancellation.throwIfAborted();
+              const response = await publicFetch(media.source, {
+                headers: { ...media.headers, Range: "bytes=0-0" },
+                redirect: "error",
+                signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]),
+              }).catch(() => {
+                throw new Error("Couldn't confirm the stream expired. Play it again.");
+              });
+              await response.body?.cancel();
+              cancellation.throwIfAborted();
+              if (response.status !== 410) return null;
+              const fresh = await resolveWebMedia(
+                source,
+                cancellation,
+                quality,
+                streamingCommunityOrigin,
+                vp9,
+                subtitleLanguage,
+                playbackId,
+                output,
+              );
+              const replacement = new URL(fresh.source);
+              if (
+                replacement.origin !== transport.origin ||
+                replacement.pathname !== transport.pathname ||
+                fresh.metadata?.duration !== media.metadata?.duration ||
+                fresh.source === media.source ||
+                !fresh.expiry ||
+                fresh.expiry.at <= Date.now()
+              )
+                throw new Error("Stream expired. Play it again.");
+              return fresh;
+            },
+          };
+        }
+        return media;
+      },
+    );
   };
 }
 
 function createWebMediaInspector(options: ResolverOptions = {}) {
-  return async function inspectWebMedia(url: string, signal?: AbortSignal, streamingCommunityOrigin?: string): Promise<WebMediaMetadata> {
+  return async function inspectWebMedia(
+    url: string,
+    signal?: AbortSignal,
+    streamingCommunityOrigin?: string,
+  ): Promise<WebMediaMetadata> {
     const source = mediaUrl(url);
     const host = new URL(source).hostname;
-    const inspectTitle = isMovies123Host(host) ? movies123Title : isAnimeSaturnHost(host) ? animeSaturnTitle : isAnimeUnityHost(host) ? animeUnityTitle : undefined;
+    const inspectTitle = isMovies123Host(host)
+      ? movies123Title
+      : isAnimeSaturnHost(host)
+        ? animeSaturnTitle
+        : isAnimeUnityHost(host)
+          ? animeUnityTitle
+          : undefined;
     if (inspectTitle) {
       const { title, thumbnail, duration } = (await inspectTitle(source, signal)).item;
       return { title, thumbnail, duration };
     }
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--ignore-no-formats-error", "--", streamingCommunity ?? source], { ...options, signal, plugin: streamingCommunity ? "streamingcommunity" : undefined });
+    const output = await runYtDlp(
+      [
+        "--no-playlist",
+        "--playlist-items",
+        "1",
+        "--dump-single-json",
+        "--ignore-no-formats-error",
+        "--",
+        streamingCommunity ?? source,
+      ],
+      { ...options, signal, plugin: streamingCommunity ? "streamingcommunity" : undefined },
+    );
     return publicMetadata(parseInfo(output));
   };
 }

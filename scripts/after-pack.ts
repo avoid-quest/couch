@@ -10,6 +10,10 @@ export default async function afterPack(context: AfterPackContext) {
   const resources = context.packager.getResourcesDir(context.appOutDir);
   await buildRelay(context.electronPlatformName, Arch[context.arch], join(resources, "live-relay"));
   await buildAirPlay(context.electronPlatformName, Arch[context.arch], join(resources, "airplay"));
-  await buildLiveAudio(context.electronPlatformName, Arch[context.arch], join(resources, "live-audio"));
+  await buildLiveAudio(
+    context.electronPlatformName,
+    Arch[context.arch],
+    join(resources, "live-audio"),
+  );
   await buildQuickJS(context.electronPlatformName, Arch[context.arch], join(resources, "quickjs"));
 }

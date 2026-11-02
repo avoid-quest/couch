@@ -12,8 +12,22 @@ export function SearchPage() {
   const navigate = useNavigate();
   // The destination's URL changes before this page unmounts. Keep the query and scope of this route match.
   const { searchState } = useRouteContext({ from: "/search" });
-  return <section data-page="Search">
-    <PageHeader title="Search results" hidden />
-    <SearchPanel onOpenCollection={shell.openProvider} onManageSources={() => void navigate({ to: "/settings/couch/sources" })} searchState={searchState} onSearchChange={changeSearch} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Search"} />
-  </section>;
+  return (
+    <section data-page="Search">
+      <PageHeader title="Search results" hidden />
+      <SearchPanel
+        onOpenCollection={shell.openProvider}
+        onManageSources={() => void navigate({ to: "/settings/couch/sources" })}
+        searchState={searchState}
+        onSearchChange={changeSearch}
+        onCommand={run}
+        defaultQuality={videoQualityPreference.quality}
+        origin={credentials.origin}
+        token={credentials.token}
+        connected={connected}
+        canPlay={available}
+        active={section === "Search"}
+      />
+    </section>
+  );
 }

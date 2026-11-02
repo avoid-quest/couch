@@ -15,7 +15,10 @@ test("a channel list keeps playable channels and counts those needing headers or
     "relative/three.m3u8",
   ].join("\n");
   const { channels, skipped } = parseGuideChannels(list, "source", "https://example.com/list.m3u");
-  expect(channels.map(channel => [channel.tvgId, channel.streamUrl])).toEqual([["one", "https://example.com/one.m3u8"], ["three", "https://example.com/relative/three.m3u8"]]);
+  expect(channels.map((channel) => [channel.tvgId, channel.streamUrl])).toEqual([
+    ["one", "https://example.com/one.m3u8"],
+    ["three", "https://example.com/relative/three.m3u8"],
+  ]);
   expect(skipped).toEqual({ headers: 1, duplicates: 1 });
 });
 
@@ -27,9 +30,13 @@ test("optional malformed categories do not discard radio or television programme
   </tv>`;
   for (const partial of [false, true]) {
     const programmes = parseGuidePrograms(xml, [{ id: "station", tvgId: "one" }], { partial });
-    expect(programmes.map(programme => programme.title)).toEqual(["Morning", "Next"]);
+    expect(programmes.map((programme) => programme.title)).toEqual(["Morning", "Next"]);
     expect(programmes[0]!.categories).toEqual(["Jazz", "Experimental"]);
     expect(programmes[1]!.categories).toBeUndefined();
   }
-  expect(() => parseGuidePrograms(xml.replace("<title>Morning</title>", ""), [{ id: "station", tvgId: "one" }])).toThrow("text fields");
+  expect(() =>
+    parseGuidePrograms(xml.replace("<title>Morning</title>", ""), [
+      { id: "station", tvgId: "one" },
+    ]),
+  ).toThrow("text fields");
 });

@@ -1,4 +1,9 @@
-import { createRootRouteWithContext, Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  Link,
+  useRouter,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DeviceIdentity } from "../../shared/devices";
 import { useEffect } from "react";
@@ -11,8 +16,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 function RootError({ error, reset }: ErrorComponentProps) {
   return (
     <main id="main" className="px-(--gutter) py-6">
-      <Alert variant="destructive"><AlertDescription>{error instanceof Error ? error.message : String(error)}</AlertDescription>
-        <div className="col-span-full flex flex-wrap gap-2"><Button variant="ghost" size="sm" onClick={reset}>Try again</Button><Button variant="ghost" size="sm" asChild><Link to="/">Back to Couch</Link></Button></div>
+      <Alert variant="destructive">
+        <AlertDescription>
+          {error instanceof Error ? error.message : String(error)}
+        </AlertDescription>
+        <div className="col-span-full flex flex-wrap gap-2">
+          <Button variant="ghost" size="sm" onClick={reset}>
+            Try again
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/">Back to Couch</Link>
+          </Button>
+        </div>
       </Alert>
     </main>
   );
@@ -21,12 +36,25 @@ function RootError({ error, reset }: ErrorComponentProps) {
 // Unknown addresses behave like the old client: land on Home.
 function NotFound() {
   const router = useRouter();
-  useEffect(() => { router.history.replace("/"); }, []);
+  useEffect(() => {
+    router.history.replace("/");
+  }, []);
   return null;
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: DeviceIdentity | null; localHost: boolean; connected: boolean }>()({
-  component: () => <UpdateCenterProvider><RemotePlayerSession><AppShell /></RemotePlayerSession></UpdateCenterProvider>,
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+  identity: DeviceIdentity | null;
+  localHost: boolean;
+  connected: boolean;
+}>()({
+  component: () => (
+    <UpdateCenterProvider>
+      <RemotePlayerSession>
+        <AppShell />
+      </RemotePlayerSession>
+    </UpdateCenterProvider>
+  ),
   errorComponent: RootError,
   notFoundComponent: NotFound,
 });

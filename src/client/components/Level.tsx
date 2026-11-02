@@ -14,7 +14,18 @@ export function Level({ moving, className }: { moving: boolean; className?: stri
     if (!moving || !level || still?.matches) return;
     return step(level);
   }, [moving]);
-  return <span ref={root} aria-hidden="true" data-level={moving ? "moving" : "flat"} className={cn("level", className)}><span /><span /><span /></span>;
+  return (
+    <span
+      ref={root}
+      aria-hidden="true"
+      data-level={moving ? "moving" : "flat"}
+      className={cn("level", className)}
+    >
+      <span />
+      <span />
+      <span />
+    </span>
+  );
 }
 
 /*
@@ -23,18 +34,27 @@ export function Level({ moving, className }: { moving: boolean; className?: stri
  * glass blurs what lies under it again on each of those frames; eight steps keep the bars alive for a fraction of that.
  * Each bar rises and falls at its own pace (seconds per rise and fall) from its own start.
  */
-const paces = [{ period: 1.8, phase: 0 }, { period: 1.28, phase: .23 }, { period: 2.2, phase: .23 }];
+const paces = [
+  { period: 1.8, phase: 0 },
+  { period: 1.28, phase: 0.23 },
+  { period: 2.2, phase: 0.23 },
+];
 const levels = new Set<HTMLElement>();
 let clock: ReturnType<typeof setInterval> | undefined;
 // Reduced motion, asked on every step, so turning it on while something plays holds the bars still at once.
-const still = typeof matchMedia === "undefined" ? undefined : matchMedia("(prefers-reduced-motion: reduce)");
-const height = (seconds: number, { period, phase }: { period: number; phase: number }) => .25 + .75 * (.5 - .5 * Math.cos(2 * Math.PI * (seconds / period + phase)));
+const still =
+  typeof matchMedia === "undefined" ? undefined : matchMedia("(prefers-reduced-motion: reduce)");
+const height = (seconds: number, { period, phase }: { period: number; phase: number }) =>
+  0.25 + 0.75 * (0.5 - 0.5 * Math.cos(2 * Math.PI * (seconds / period + phase)));
 function tick() {
   const seconds = performance.now() / 1000;
-  for (const level of levels) for (const [index, bar] of [...level.children].entries()) {
-    if (still?.matches) (bar as HTMLElement).style.removeProperty("transform");
-    else (bar as HTMLElement).style.transform = `scaleY(${height(seconds, paces[index]!).toFixed(2)})`;
-  }
+  for (const level of levels)
+    for (const [index, bar] of [...level.children].entries()) {
+      if (still?.matches) (bar as HTMLElement).style.removeProperty("transform");
+      else
+        (bar as HTMLElement).style.transform =
+          `scaleY(${height(seconds, paces[index]!).toFixed(2)})`;
+    }
 }
 function step(level: HTMLElement) {
   levels.add(level);
@@ -43,7 +63,10 @@ function step(level: HTMLElement) {
   return () => {
     levels.delete(level);
     for (const bar of level.children) (bar as HTMLElement).style.removeProperty("transform");
-    if (!levels.size) { clearInterval(clock); clock = undefined; }
+    if (!levels.size) {
+      clearInterval(clock);
+      clock = undefined;
+    }
   };
 }
 
@@ -58,7 +81,22 @@ export function useLevel(sources: string | readonly (string | undefined)[] | und
  * The level on a playing item's artwork: a black square in its bottom-left corner with the bars in white, flat like
  * every other surface. `className` sizes it. Only while sound comes out: a paused chip's flat bars read as a "…".
  */
-export function ArtLevel({ level, className }: { level: "moving" | "flat" | null; className?: string }) {
+export function ArtLevel({
+  level,
+  className,
+}: {
+  level: "moving" | "flat" | null;
+  className?: string;
+}) {
   if (level !== "moving") return null;
-  return <span className={cn("absolute bottom-0 left-0 z-10 grid size-7 place-items-center bg-background text-sm text-foreground", className)}><Level moving /></span>;
+  return (
+    <span
+      className={cn(
+        "absolute bottom-0 left-0 z-10 grid size-7 place-items-center bg-background text-sm text-foreground",
+        className,
+      )}
+    >
+      <Level moving />
+    </span>
+  );
 }

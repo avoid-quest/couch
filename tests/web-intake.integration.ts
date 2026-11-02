@@ -14,34 +14,64 @@ import type { Action, ServerMessage, SessionState } from "../src/shared/protocol
 
 // Real Core intake, Session and extractor subprocesses; only the helper executable and
 // renderer are fixtures. Each run owns its database, helper directory and loopback port.
-const hostId = "h".repeat(43), hostToken = "h".repeat(64);
+const hostId = "h".repeat(43),
+  hostToken = "h".repeat(64);
 const video = (id: string) => `https://www.youtube.com/watch?v=${id}`;
 const options = { timeout: 15_000 };
 async function until(predicate: () => boolean, message: string) {
   const deadline = Date.now() + 5_000;
-  while (!predicate()) { assert.ok(Date.now() < deadline, message); await new Promise(resolve => setTimeout(resolve, 10)); }
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, message);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), "couch-web-intake-")), bin = join(directory, "bin"), helpers = join(directory, "helpers");
+  const directory = mkdtempSync(join(tmpdir(), "couch-web-intake-")),
+    bin = join(directory, "bin"),
+    helpers = join(directory, "helpers");
   const runsFile = join(directory, "runs");
-  const before = { PATH: process.env.PATH, COUCH_DATA_DIR: process.env.COUCH_DATA_DIR, SSL_CERT_FILE: process.env.SSL_CERT_FILE };
+  const before = {
+    PATH: process.env.PATH,
+    COUCH_DATA_DIR: process.env.COUCH_DATA_DIR,
+    SSL_CERT_FILE: process.env.SSL_CERT_FILE,
+  };
   const fixtures = nodeExecutables(directory);
   mkdirSync(bin);
-  process.env.PATH = bin; process.env.COUCH_DATA_DIR = directory;
-  const timers: ReturnType<typeof setInterval>[] = [], interval = globalThis.setInterval;
-  t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const timer = interval(...args); timers.push(timer); return timer; });
-  t.mock.method(globalThis, "fetch", async () => { throw new Error("Offline fixture"); });
+  process.env.PATH = bin;
+  process.env.COUCH_DATA_DIR = directory;
+  const timers: ReturnType<typeof setInterval>[] = [],
+    interval = globalThis.setInterval;
+  t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => {
+    const timer = interval(...args);
+    timers.push(timer);
+    return timer;
+  });
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("Offline fixture");
+  });
   let upstreamRequests = 0;
   const request = https.request;
   t.mock.method(https, "request", (...args: Parameters<typeof https.request>) => {
-    if (String(args[0]).startsWith("https://example.com/")) { upstreamRequests++; throw new Error("The receiver has not requested media yet"); }
+    if (String(args[0]).startsWith("https://example.com/")) {
+      upstreamRequests++;
+      throw new Error("The receiver has not requested media yet");
+    }
     return request(...args);
   });
   syncBuiltinESMExports();
-  for (const [name, version] of [["qjs", "0.17.0"], ["ffmpeg", "ffmpeg version 9.0.2"]]) {
-    writeFileSync(join(bin, executableName(name!)), `#!${process.execPath}\nconsole.log(${JSON.stringify(version)});\n`, { mode: 0o755 });
+  for (const [name, version] of [
+    ["qjs", "0.17.0"],
+    ["ffmpeg", "ffmpeg version 9.0.2"],
+  ]) {
+    writeFileSync(
+      join(bin, executableName(name!)),
+      `#!${process.execPath}\nconsole.log(${JSON.stringify(version)});\n`,
+      { mode: 0o755 },
+    );
   }
-  writeFileSync(join(bin, executableName("yt-dlp")), `#!${process.execPath}
+  writeFileSync(
+    join(bin, executableName("yt-dlp")),
+    `#!${process.execPath}
 const fs = process.getBuiltinModule("node:fs");
 if (process.argv.includes("--version")) console.log("2026.10.21");
 else {
@@ -50,69 +80,143 @@ else {
   const metadata = {title:"Title " + url.slice(-11), duration:60, thumbnail:"https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", channel:"Channel", channel_url:"https://www.youtube.com/@fixture"};
   setTimeout(() => console.log(JSON.stringify({url:"https://example.com/video.mp4", protocol:"https", ...metadata})), inspect ? 10 : 50);
 }
-`, { mode: 0o755 });
+`,
+    { mode: 0o755 },
+  );
   startHelpers(helpers);
   await Promise.all([helper("yt-dlp"), helper("qjs"), helper("ffmpeg")]);
-  const hub = await createHub({ databasePath: join(directory, "couch.sqlite"), hostToken, hostname: "127.0.0.1", port: 0, streamingCommunityFetch: async () => new Response("", { status: 503 }) });
-  const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${hostToken}&device=${hostId}&tv=1`, { headers: { Origin: hub.origin } });
-  let state: SessionState | undefined, sequence = 0;
+  const hub = await createHub({
+    databasePath: join(directory, "couch.sqlite"),
+    hostToken,
+    hostname: "127.0.0.1",
+    port: 0,
+    streamingCommunityFetch: async () => new Response("", { status: 503 }),
+  });
+  const socket = new WebSocket(
+    `${hub.origin.replace("http:", "ws:")}/api/ws?token=${hostToken}&device=${hostId}&tv=1`,
+    { headers: { Origin: hub.origin } },
+  );
+  let state: SessionState | undefined,
+    sequence = 0;
   const pending = new Map<string, (result: Extract<ServerMessage, { type: "result" }>) => void>();
-  socket.onmessage = event => {
+  socket.onmessage = (event) => {
     const message = JSON.parse(String(event.data)) as ServerMessage;
     if (message.type === "state") state = message.state;
-    if (message.type === "result") { pending.get(message.requestId)?.(message); pending.delete(message.requestId); }
-    if (message.type === "text") socket.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok: true }));
-    if (message.type === "player" && message.command.type === "load") socket.send(JSON.stringify({ type: "player", state: { playbackId: message.command.playbackId, status: "playing", position: 0, duration: 60, volume: 80, seekable: true, buffering: false, error: null, speed: 1, tracks: [], audioDelay: 0, subtitleDelay: 0 } }));
+    if (message.type === "result") {
+      pending.get(message.requestId)?.(message);
+      pending.delete(message.requestId);
+    }
+    if (message.type === "text")
+      socket.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok: true }));
+    if (message.type === "player" && message.command.type === "load")
+      socket.send(
+        JSON.stringify({
+          type: "player",
+          state: {
+            playbackId: message.command.playbackId,
+            status: "playing",
+            position: 0,
+            duration: 60,
+            volume: 80,
+            seekable: true,
+            buffering: false,
+            error: null,
+            speed: 1,
+            tracks: [],
+            audioDelay: 0,
+            subtitleDelay: 0,
+          },
+        }),
+      );
   };
   t.after(async () => {
-    socket.terminate(); await hub.close();
+    socket.terminate();
+    await hub.close();
     for (const timer of timers) clearInterval(timer);
     await updateStatus(helpers, () => {});
-    t.mock.restoreAll(); syncBuiltinESMExports();
-    for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+    for (const [key, value] of Object.entries(before)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     await fixtures.close();
     rmSync(directory, { recursive: true, force: true });
   });
   await until(() => !!state, "Core published its state");
   return {
-    get state() { return state!; },
-    get upstreamRequests() { return upstreamRequests; },
-    runs: (): { inspect: boolean; url: string }[] => existsSync(runsFile) ? readFileSync(runsFile, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [],
+    get state() {
+      return state!;
+    },
+    get upstreamRequests() {
+      return upstreamRequests;
+    },
+    runs: (): { inspect: boolean; url: string }[] =>
+      existsSync(runsFile)
+        ? readFileSync(runsFile, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+        : [],
     command: async (action: Action) => {
       const requestId = String(++sequence);
-      const result = await new Promise<Extract<ServerMessage, { type: "result" }>>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Core did not answer")), 3_000);
-        pending.set(requestId, result => { clearTimeout(timer); resolve(result); });
-        socket.send(JSON.stringify({ type: "command", requestId, action }));
-      });
+      const result = await new Promise<Extract<ServerMessage, { type: "result" }>>(
+        (resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("Core did not answer")), 3_000);
+          pending.set(requestId, (result) => {
+            clearTimeout(timer);
+            resolve(result);
+          });
+          socket.send(JSON.stringify({ type: "command", requestId, action }));
+        },
+      );
       assert.equal(result.ok, true, result.ok ? undefined : result.error);
     },
   };
 }
 
-for (const intake of ["enqueueWeb", "enqueueProvider"] as const) test(`${intake} Play extracts once and retains title, artwork and creator`, options, async t => {
-  const f = await fixture(t), url = video("abcdefghijk");
-  await f.command(intake === "enqueueWeb" ? { type: intake, entryId: "playing", url, playNow: true } : { type: intake, provider: "youtube", shape: "atom", url, playNow: true });
-  await until(() => f.state.player.status === "playing", "pasted video played");
-  const entry = f.state.queue[0]!;
-  assert.equal(entry.title, "Title abcdefghijk");
-  assert.equal(entry.duration, 60);
-  assert.equal(entry.thumbnail, "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg");
-  assert.deepEqual(entry.creator, { title: "Channel", url: "https://www.youtube.com/@fixture" });
-  assert.deepEqual(f.runs(), [{ inspect: false, url }]);
-  assert.equal(f.upstreamRequests, 0, "Core dispatches the resolved media without discarded delivery probes");
-});
+for (const intake of ["enqueueWeb", "enqueueProvider"] as const)
+  test(
+    `${intake} Play extracts once and retains title, artwork and creator`,
+    options,
+    async (t) => {
+      const f = await fixture(t),
+        url = video("abcdefghijk");
+      await f.command(
+        intake === "enqueueWeb"
+          ? { type: intake, entryId: "playing", url, playNow: true }
+          : { type: intake, provider: "youtube", shape: "atom", url, playNow: true },
+      );
+      await until(() => f.state.player.status === "playing", "pasted video played");
+      const entry = f.state.queue[0]!;
+      assert.equal(entry.title, "Title abcdefghijk");
+      assert.equal(entry.duration, 60);
+      assert.equal(entry.thumbnail, "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg");
+      assert.deepEqual(entry.creator, {
+        title: "Channel",
+        url: "https://www.youtube.com/@fixture",
+      });
+      assert.deepEqual(f.runs(), [{ inspect: false, url }]);
+      assert.equal(
+        f.upstreamRequests,
+        0,
+        "Core dispatches the resolved media without discarded delivery probes",
+      );
+    },
+  );
 
-test("a queued link is inspected immediately without starting playback", options, async t => {
-  const f = await fixture(t), url = video("abcdefghijk");
+test("a queued link is inspected immediately without starting playback", options, async (t) => {
+  const f = await fixture(t),
+    url = video("abcdefghijk");
   await f.command({ type: "enqueueWeb", entryId: "queued", url });
   await until(() => f.state.queue[0]?.title === "Title abcdefghijk", "queue title resolved");
   assert.equal(f.state.player.status, "idle");
   assert.deepEqual(f.runs(), [{ inspect: true, url }]);
 });
 
-test("playback metadata does not replace a supplied title", options, async t => {
-  const f = await fixture(t), url = video("abcdefghijk");
+test("playback metadata does not replace a supplied title", options, async (t) => {
+  const f = await fixture(t),
+    url = video("abcdefghijk");
   await f.command({ type: "enqueueWeb", entryId: "named", url, title: "My title", playNow: true });
   await until(() => f.state.player.status === "playing", "named item played");
   assert.equal(f.state.queue[0]?.title, "My title");

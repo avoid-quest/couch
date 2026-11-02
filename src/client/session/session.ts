@@ -1,13 +1,25 @@
 import { dismissPlaybackFeedback, failed, notice } from "../toasts";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
+import type {
+  Action,
+  ClientMessage,
+  NavigationKey,
+  PlayerMessage,
+  ServerMessage,
+  SessionState,
+} from "../../shared/protocol";
 import type { ConnectionDetails, DeviceIdentity } from "../../shared/devices";
 import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
-import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
+import {
+  deviceId,
+  loadLocalDeviceSharing,
+  localDeviceSharing,
+  subscribeDeviceIdentity,
+} from "./device-id";
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
@@ -21,16 +33,34 @@ export type ClientPlayerState = Omit<SessionState["player"], "position" | "durat
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
 export type Credentials = { origin: string; token: string; installationId?: string };
-export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
-type Pending = { resolve: () => void; reject: (error: Error) => void; timer?: ReturnType<typeof setTimeout> };
-const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
+export type ConnectionStatus =
+  | "connecting"
+  | "syncing"
+  | "connected"
+  | "reconnecting"
+  | "server-unavailable"
+  | "pairing-required"
+  | "connection-rejected"
+  | "build-mismatch";
+type Pending = {
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timer?: ReturnType<typeof setTimeout>;
+};
+const sameCredentials = (a: Credentials | null, b: Credentials | null) =>
+  a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
 // getRandomValues works in any context, secure or not.
 export function createId() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
+export function useSession(
+  credentials: Credentials | null,
+  onNavigation?: (key: NavigationKey) => void,
+) {
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -50,29 +80,45 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const live = useRef<ReturnType<typeof createLiveSession> | null>(null);
   const [localLiveSourceId, setLocalLiveSourceId] = useState<string | null>(null);
 
-  const command = useCallback((action: Action, targetDeviceId?: string) => {
-    const connection = socket.current;
-    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("Reconnecting. Try again in a moment."));
-    }
-    return new Promise<void>((resolve, reject) => {
-      const requestId = createId();
-      const deadline = replyDeadline(action);
-      const timer = deadline === undefined ? undefined : setTimeout(() => {
-        pending.current.delete(requestId);
-        reject(new Error("No reply from Couch. Check before retrying."));
-      }, deadline);
-      pending.current.set(requestId, { resolve, reject, timer });
-      const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
-      try {
-        connection.send(JSON.stringify(message));
-      } catch (error) {
-        clearTimeout(timer);
-        pending.current.delete(requestId);
-        reject(error);
+  const command = useCallback(
+    (action: Action, targetDeviceId?: string) => {
+      const connection = socket.current;
+      if (
+        !sameCredentials(credentials, currentCredentials.current) ||
+        !sameCredentials(credentials, socketCredentials.current) ||
+        !ready.current ||
+        connection?.readyState !== WebSocket.OPEN
+      ) {
+        return Promise.reject(new Error("Reconnecting. Try again in a moment."));
       }
-    });
-  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+      return new Promise<void>((resolve, reject) => {
+        const requestId = createId();
+        const deadline = replyDeadline(action);
+        const timer =
+          deadline === undefined
+            ? undefined
+            : setTimeout(() => {
+                pending.current.delete(requestId);
+                reject(new Error("No reply from Couch. Check before retrying."));
+              }, deadline);
+        pending.current.set(requestId, { resolve, reject, timer });
+        const message: ClientMessage = {
+          type: "command",
+          requestId,
+          action,
+          ...(targetDeviceId ? { targetDeviceId } : {}),
+        };
+        try {
+          connection.send(JSON.stringify(message));
+        } catch (error) {
+          clearTimeout(timer);
+          pending.current.delete(requestId);
+          reject(error);
+        }
+      });
+    },
+    [credentials?.origin, credentials?.token, credentials?.installationId],
+  );
 
   useEffect(() => {
     setState(null);
@@ -98,15 +144,47 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     // The socket's URL carries the sharing it opened with; only a later change is sent.
     let advertised: DeviceSharing | undefined;
     const advertiseSharing = () => {
-      const connection = socket.current, sharing = localDeviceSharing();
-      if (connection?.readyState === WebSocket.OPEN && sameCredentials(credentials, socketCredentials.current) && (sharing.audio !== advertised?.audio || sharing.video !== advertised?.video)) {
+      const connection = socket.current,
+        sharing = localDeviceSharing();
+      if (
+        connection?.readyState === WebSocket.OPEN &&
+        sameCredentials(credentials, socketCredentials.current) &&
+        (sharing.audio !== advertised?.audio || sharing.video !== advertised?.video)
+      ) {
         advertised = sharing;
-        connection.send(JSON.stringify({ type: "command", requestId: createId(), action: { type: "sharing", sharing } } satisfies ClientMessage));
+        connection.send(
+          JSON.stringify({
+            type: "command",
+            requestId: createId(),
+            action: { type: "sharing", sharing },
+          } satisfies ClientMessage),
+        );
       }
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
-    const reportPlayback = () => { void couchApp?.reportPlayback?.(publishing ? "playing" : ["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; publishing = false; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, credentials, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const reportPlayback = () => {
+      void couchApp
+        ?.reportPlayback?.(
+          publishing
+            ? "playing"
+            : ["loading", "playing", "paused"].includes(syncedStatus)
+              ? syncedStatus
+              : rendererStatus,
+        )
+        .catch(() => {});
+    };
+    const stopPlayback = () => {
+      textInput?.close();
+      textInput = undefined;
+      live.current?.close();
+      live.current = null;
+      publishing = false;
+      setLocalLiveSourceId(null);
+      stopRendering?.();
+      listen(false, false, credentials, "Couch");
+      rendererStatus = syncedStatus = "idle";
+      reportPlayback();
+    };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -116,8 +194,21 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       pending.current.clear();
     };
 
-    const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { authenticate = false; ready.current = false; observation.current = null; setClock(emptyPlaybackClock); setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
+    const retryLater = () => {
+      retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000));
+    };
+    const pairingRequired = () => {
+      authenticate = false;
+      ready.current = false;
+      observation.current = null;
+      setClock(emptyPlaybackClock);
+      setState(null);
+      setIdentity(null);
+      setCredentialRejected(true);
+      setStatus("pairing-required");
+      rejectPending();
+      void connect();
+    };
     const connect = async () => {
       if (disposed) return;
       clearTimeout(retry);
@@ -131,17 +222,33 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
         if (!response.ok) throw new Error("Server unavailable");
-        const next = await response.json() as ConnectionDetails;
+        const next = (await response.json()) as ConnectionDetails;
         if (disposed) return;
         setConnectionDetails({ origin, details: next });
-        if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
+        if (
+          authenticate &&
+          credentials?.installationId &&
+          next.installationId !== credentials.installationId
+        ) {
+          pairingRequired();
+          return;
+        }
         if (authenticate && credentials) {
           const asset = buildKey(loadedBuild);
           if (asset) {
-            const response = await fetch(`${origin}/api/build`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+            const response = await fetch(`${origin}/api/build`, {
+              headers: { Authorization: `Bearer ${credentials.token}` },
+              signal,
+            });
             if (disposed) return;
-            if (response.status === 401) { pairingRequired(); return; }
-            if (response.status === 403) { setStatus("connection-rejected"); return; }
+            if (response.status === 401) {
+              pairingRequired();
+              return;
+            }
+            if (response.status === 403) {
+              setStatus("connection-rejected");
+              return;
+            }
             if (!response.ok) throw new Error("Server unavailable");
             const current = buildKey(await response.json());
             if (disposed) return;
@@ -153,32 +260,65 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
                   sessionStorage.setItem(key, current);
                   location.reload();
                 }
-              } catch { /* Keep the refresh prompt when browser storage is unavailable. */ }
+              } catch {
+                /* Keep the refresh prompt when browser storage is unavailable. */
+              }
               return;
             }
-            try { sessionStorage.removeItem(`couch.asset-refresh:${origin}`); } catch { /* Storage is optional after the build matches. */ }
+            try {
+              sessionStorage.removeItem(`couch.asset-refresh:${origin}`);
+            } catch {
+              /* Storage is optional after the build matches. */
+            }
           }
-          const response = await fetch(`${origin}/api/devices/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+          const response = await fetch(`${origin}/api/devices/me`, {
+            headers: { Authorization: `Bearer ${credentials.token}` },
+            signal,
+          });
           if (disposed) return;
-          if (response.status === 401) { pairingRequired(); return; }
-          if (response.status === 403) { setStatus("connection-rejected"); return; }
+          if (response.status === 401) {
+            pairingRequired();
+            return;
+          }
+          if (response.status === 403) {
+            setStatus("connection-rejected");
+            return;
+          }
           if (!response.ok) throw new Error("Server unavailable");
-          const caller = await response.json() as DeviceIdentity;
+          const caller = (await response.json()) as DeviceIdentity;
           if (disposed) return;
           setIdentity(caller);
           setCredentialRejected(false);
-          const ice = await fetch(`${origin}/api/live/ice-servers`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal, redirect: "error" });
+          const ice = await fetch(`${origin}/api/live/ice-servers`, {
+            headers: { Authorization: `Bearer ${credentials.token}` },
+            signal,
+            redirect: "error",
+          });
           if (disposed) return;
-          if (ice.status === 401) { pairingRequired(); return; }
-          if (ice.status === 403) { setStatus("connection-rejected"); return; }
+          if (ice.status === 401) {
+            pairingRequired();
+            return;
+          }
+          if (ice.status === 403) {
+            setStatus("connection-rejected");
+            return;
+          }
           if (!ice.ok) throw new Error("Server unavailable");
-          iceServers = await ice.json() as RTCIceServer[];
+          iceServers = (await ice.json()) as RTCIceServer[];
         }
       } catch {
-        if (!disposed) { setStatus("server-unavailable"); retryLater(); }
+        if (!disposed) {
+          setStatus("server-unavailable");
+          retryLater();
+        }
         return;
       }
-      if (!authenticate || !credentials) { setStatus("pairing-required"); attempt = 0; retry = setTimeout(() => void connect(), 5_000); return; }
+      if (!authenticate || !credentials) {
+        setStatus("pairing-required");
+        attempt = 0;
+        retry = setTimeout(() => void connect(), 5_000);
+        return;
+      }
       await loadLocalDeviceSharing().catch(() => {});
       if (disposed) return;
       const url = new URL("/api/ws", origin);
@@ -186,7 +326,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
       advertised = localDeviceSharing();
-      for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
+      for (const capability of ["audio", "video"] as const)
+        if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
       if (couchApp?.update) url.searchParams.set("updates", "1");
       if (isTvPresentation()) url.searchParams.set("tv", "1");
@@ -196,17 +337,26 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       let baseline = false;
       socket.current = connection;
       socketCredentials.current = credentials;
-      const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
+      const isCurrent = () =>
+        !disposed &&
+        socket.current === connection &&
+        sameCredentials(credentials, currentCredentials.current);
       handshake = setTimeout(() => connection.close(), 8_000);
 
       connection.onopen = () => {
         if (!isCurrent()) return;
         setStatus("syncing");
         advertiseSharing();
-        if (isTvPresentation()) textInput = connectRemoteText(field => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textFocus", field })); });
-        stopRendering = connectRenderer(state => {
-          rendererStatus = state.status; reportPlayback();
-          if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
+        if (isTvPresentation())
+          textInput = connectRemoteText((field) => {
+            if (isCurrent() && connection.readyState === WebSocket.OPEN)
+              connection.send(JSON.stringify({ type: "textFocus", field }));
+          });
+        stopRendering = connectRenderer((state) => {
+          rendererStatus = state.status;
+          reportPlayback();
+          if (connection.readyState === WebSocket.OPEN)
+            connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
         const uploadUrl = (sourceId: string, key: string, uploadId?: string) => {
           const upload = new URL("/api/live/upload", origin);
@@ -217,7 +367,26 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (uploadId) upload.searchParams.set("uploadId", uploadId);
           return upload.href;
         };
-        live.current = createLiveSession({ iceServers, send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, command: action => command(action), upload: (sourceId, key) => new WebSocket(uploadUrl(sourceId, key)), uploadUrl, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) { publishing = !!source; setLocalLiveSourceId(source?.id ?? null); reportPlayback(); } } });
+        live.current = createLiveSession({
+          iceServers,
+          send: (message) => {
+            if (isCurrent() && connection.readyState === WebSocket.OPEN)
+              connection.send(JSON.stringify(message));
+          },
+          command: (action) => command(action),
+          upload: (sourceId, key) => new WebSocket(uploadUrl(sourceId, key)),
+          uploadUrl,
+          failed: (error) => {
+            if (isCurrent()) failed(error.message);
+          },
+          published: (source) => {
+            if (isCurrent()) {
+              publishing = !!source;
+              setLocalLiveSourceId(source?.id ?? null);
+              reportPlayback();
+            }
+          },
+        });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -232,48 +401,103 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           // A result can precede its snapshot: retain confirmation for the destination it names.
           const previous = observation.current;
           // The first idle Queue creates a playback without replacing an item or destination.
-          if (previous && (previous.controlling !== message.state.controlling || previous.playback !== null && previous.playback !== message.state.playback || previous.currentEntryId !== message.state.currentEntryId)) dismissPlaybackFeedback(message.state.controlling);
+          if (
+            previous &&
+            (previous.controlling !== message.state.controlling ||
+              (previous.playback !== null && previous.playback !== message.state.playback) ||
+              previous.currentEntryId !== message.state.currentEntryId)
+          )
+            dismissPlaybackFeedback(message.state.controlling);
           // This notice precedes the snapshot that closes the receiver. React may batch the two states.
           const activity = message.state.activity;
-          if (activity && activity.id !== previous?.activity?.id && (activity.kind === "sharing-stopped" && activity.actor.deviceId !== deviceId() || activity.kind === "listener-removed" && activity.target === deviceId())) notice(activity.text);
+          if (
+            activity &&
+            activity.id !== previous?.activity?.id &&
+            ((activity.kind === "sharing-stopped" && activity.actor.deviceId !== deviceId()) ||
+              (activity.kind === "listener-removed" && activity.target === deviceId()))
+          )
+            notice(activity.text);
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
           live.current?.observe(message.state.liveSources ?? []);
-          syncedStatus = message.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === deviceId() && output.sound))?.status ?? "idle";
+          syncedStatus =
+            message.state.playbacks?.find((playback) =>
+              playback.outputs.some((output) => output.deviceId === deviceId() && output.sound),
+            )?.status ?? "idle";
           reportPlayback();
           const { position, duration, ...player } = message.state.player;
           setState({ ...message.state, player });
           setClock({ playbackId: player.playbackId, position, duration });
           setStatus("connected");
         } else if (message.type === "clock") {
-          if (!(message.playbackId === null || typeof message.playbackId === "string")
-            || typeof message.position !== "number" || !Number.isFinite(message.position)
-            || !(message.duration === null || typeof message.duration === "number" && Number.isFinite(message.duration))) {
+          if (
+            !(message.playbackId === null || typeof message.playbackId === "string") ||
+            typeof message.position !== "number" ||
+            !Number.isFinite(message.position) ||
+            !(
+              message.duration === null ||
+              (typeof message.duration === "number" && Number.isFinite(message.duration))
+            )
+          ) {
             connection.close(4002, "Invalid response");
             return;
           }
           if (!baseline) return;
           const previous = observation.current;
           if (previous?.player.playbackId !== message.playbackId) return;
-          observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
-          setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
+          observation.current = {
+            ...previous,
+            player: { ...previous.player, position: message.position, duration: message.duration },
+          };
+          setClock({
+            playbackId: message.playbackId,
+            position: message.position,
+            duration: message.duration,
+          });
         } else if (message.type === "time") {
-          if (typeof message.now !== "number" || !Number.isFinite(message.now)) { connection.close(4002, "Invalid response"); return; }
+          if (typeof message.now !== "number" || !Number.isFinite(message.now)) {
+            connection.close(4002, "Invalid response");
+            return;
+          }
           setCoreTime(message.now);
         } else if (message.type === "updates" && couchApp?.update) {
-          const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
-          void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
+          const reply = (value: object) => {
+            if (isCurrent() && connection.readyState === WebSocket.OPEN)
+              connection.send(
+                JSON.stringify({ type: "updates", requestId: message.requestId, ...value }),
+              );
+          };
+          void couchApp.update(message.action).then(
+            (state) => reply({ state }),
+            (error: Error) => reply({ error: error.message }),
+          );
         } else if (message.type === "player") {
           if (!live.current?.play(message.command)) play(message.command);
-        } else if (message.type === "livePeers" || message.type === "liveSignal" || message.type === "liveIceServers") {
+        } else if (
+          message.type === "livePeers" ||
+          message.type === "liveSignal" ||
+          message.type === "liveIceServers"
+        ) {
           live.current?.receive(message);
         } else if (message.type === "sendspin") {
-          listen(message.listen, message.watch, credentials, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch", message.live);
+          listen(
+            message.listen,
+            message.watch,
+            credentials,
+            observation.current?.devices?.find((device) => device.id === deviceId())?.name ??
+              "Couch",
+            message.live,
+          );
         } else if (message.type === "text") {
-          void (textInput?.receive(message) ?? Promise.resolve(false)).then(ok => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok })); });
+          void (textInput?.receive(message) ?? Promise.resolve(false)).then((ok) => {
+            if (isCurrent() && connection.readyState === WebSocket.OPEN)
+              connection.send(
+                JSON.stringify({ type: "textResult", requestId: message.requestId, ok }),
+              );
+          });
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {
@@ -286,7 +510,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         }
       };
       connection.onerror = () => connection.close();
-      connection.onclose = event => {
+      connection.onclose = (event) => {
         if (!isCurrent()) return;
         // Retire the socket now, not only on effect cleanup or replacement.
         // Captured callbacks from a closed/revoked connection must stay stale.
@@ -298,7 +522,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         observation.current = null;
         setClock(emptyPlaybackClock);
         rejectPending();
-        if (event.code === 4001) { pairingRequired(); return; }
+        if (event.code === 4001) {
+          pairingRequired();
+          return;
+        }
         setStatus("reconnecting");
         retryLater();
       };
@@ -307,7 +534,15 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     const wake = (event: Event) => {
       // Only advance a queued disconnected retry. Closing a healthy socket also
       // cancels its Controller's Bluetooth operation and pending commands.
-      if (disposed || !authenticate || !credentials || !sameCredentials(credentials, currentCredentials.current) || retry === undefined || document.visibilityState !== "visible") return;
+      if (
+        disposed ||
+        !authenticate ||
+        !credentials ||
+        !sameCredentials(credentials, currentCredentials.current) ||
+        retry === undefined ||
+        document.visibilityState !== "visible"
+      )
+        return;
       if (event.type === "pageshow" && !(event as PageTransitionEvent).persisted) return;
       void connect();
     };
@@ -335,12 +570,26 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   const current = sameCredentials(owner, credentials);
   const snapshot = current ? state : null;
-  const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
+  const connectionStatus: ConnectionStatus = current
+    ? status
+    : credentials
+      ? "connecting"
+      : "pairing-required";
   const origin = credentials?.origin ?? location.origin;
   const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;
   const installationName = snapshot?.installationName;
   const player = snapshot?.player.status;
-  const details = useMemo(() => publicDetails ? { ...publicDetails, name: installationName ?? publicDetails.name, player: player ?? publicDetails.player } : null, [publicDetails, installationName, player]);
+  const details = useMemo(
+    () =>
+      publicDetails
+        ? {
+            ...publicDetails,
+            name: installationName ?? publicDetails.name,
+            player: player ?? publicDetails.player,
+          }
+        : null,
+    [publicDetails, installationName, player],
+  );
 
   useEffect(() => {
     if (credentials && details) rememberConnection(origin, details);
@@ -353,51 +602,113 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     const controller = new AbortController();
     void (async () => {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
-      const discovery = await fetch(`${credentials.origin}/api/connection`, { signal, redirect: "error" });
+      const discovery = await fetch(`${credentials.origin}/api/connection`, {
+        signal,
+        redirect: "error",
+      });
       if (!discovery.ok) return;
-      const next = await discovery.json() as ConnectionDetails;
-      if (controller.signal.aborted || !sameCredentials(credentials, currentCredentials.current)) return;
+      const next = (await discovery.json()) as ConnectionDetails;
+      if (controller.signal.aborted || !sameCredentials(credentials, currentCredentials.current))
+        return;
       setConnectionDetails({ origin: credentials.origin, details: next });
-      if (credentials.installationId && next.installationId !== credentials.installationId) { socket.current?.close(4001, "Pair again"); return; }
-      const response = await fetch(`${credentials.origin}/api/devices/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+      if (credentials.installationId && next.installationId !== credentials.installationId) {
+        socket.current?.close(4001, "Pair again");
+        return;
+      }
+      const response = await fetch(`${credentials.origin}/api/devices/me`, {
+        headers: { Authorization: `Bearer ${credentials.token}` },
+        signal,
+      });
       if (controller.signal.aborted) return;
-      if (response.status === 401) { socket.current?.close(4001, "Pair again"); return; }
+      if (response.status === 401) {
+        socket.current?.close(4001, "Pair again");
+        return;
+      }
       if (!response.ok) return;
-      const caller = await response.json() as DeviceIdentity;
-      if (!controller.signal.aborted && sameCredentials(credentials, currentCredentials.current)) setIdentity(caller);
+      const caller = (await response.json()) as DeviceIdentity;
+      if (!controller.signal.aborted && sameCredentials(credentials, currentCredentials.current))
+        setIdentity(caller);
     })().catch(() => {});
     return () => controller.abort();
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.devices]);
+  }, [
+    credentials?.origin,
+    credentials?.token,
+    credentials?.installationId,
+    current,
+    status,
+    state?.versions?.devices,
+  ]);
 
   // Command/Undo readers see observations synchronously, before React commits a tick.
-  const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  const readObservation = useCallback(
+    () =>
+      sameCredentials(credentials, currentCredentials.current) &&
+      sameCredentials(credentials, socketCredentials.current) &&
+      ready.current
+        ? observation.current
+        : null,
+    [credentials?.origin, credentials?.token, credentials?.installationId],
+  );
 
   const reconnect = useCallback(() => {
     ready.current = false;
     setStatus("reconnecting");
-    setReconnectAttempt(attempt => attempt + 1);
+    setReconnectAttempt((attempt) => attempt + 1);
   }, []);
 
   const startLive = useCallback((selection: LiveSelection) => {
-    if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before sharing a live input."));
+    if (!ready.current || !live.current)
+      return Promise.reject(new Error("Reconnect before sharing a live input."));
     return live.current.start(selection);
   }, []);
   const liveAudioInputs = useCallback((native = false) => {
-    if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before choosing an audio input."));
+    if (!ready.current || !live.current)
+      return Promise.reject(new Error("Reconnect before choosing an audio input."));
     return live.current.audioInputs(native);
   }, []);
   const endLive = useCallback(() => live.current?.end() ?? Promise.resolve(), []);
   // What this device shares, and what changes while it does (sections/share).
-  const liveSharing = useMemo(() => ({
-    current: () => live.current?.sharing() ?? null,
-    setQuality: (quality: LiveVideoQuality) => live.current?.setQuality(quality) ?? Promise.resolve(),
-    setFrameRate: (frameRate: LiveVideoFrameRate) => live.current?.setFrameRate(frameRate) ?? Promise.resolve(),
-    setMuted: (muted: boolean) => live.current?.setMuted(muted),
-    setCaptureInput: (action: Parameters<ReturnType<typeof createLiveSession>["setCaptureInput"]>[0]) => live.current?.setCaptureInput(action) ?? Promise.resolve(),
-    routes: () => live.current?.routes() ?? Promise.resolve({}),
-  }), []);
+  const liveSharing = useMemo(
+    () => ({
+      current: () => live.current?.sharing() ?? null,
+      setQuality: (quality: LiveVideoQuality) =>
+        live.current?.setQuality(quality) ?? Promise.resolve(),
+      setFrameRate: (frameRate: LiveVideoFrameRate) =>
+        live.current?.setFrameRate(frameRate) ?? Promise.resolve(),
+      setMuted: (muted: boolean) => live.current?.setMuted(muted),
+      setCaptureInput: (
+        action: Parameters<ReturnType<typeof createLiveSession>["setCaptureInput"]>[0],
+      ) => live.current?.setCaptureInput(action) ?? Promise.resolve(),
+      routes: () => live.current?.routes() ?? Promise.resolve({}),
+    }),
+    [],
+  );
 
-
-
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, liveAudioInputs, liveSharing, localLiveSourceId: current ? localLiveSourceId : null };
+  return {
+    clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock,
+    readObservation,
+    state: snapshot,
+    status: connectionStatus,
+    details,
+    identity: current ? identity : null,
+    playerStatus:
+      connectionStatus === "connected"
+        ? snapshot?.player.status
+        : connectionStatus === "pairing-required"
+          ? publicDetails?.player
+          : undefined,
+    pairingRequired: !credentials || (current && credentialRejected),
+    reachable:
+      connectionStatus === "connected" ||
+      connectionStatus === "pairing-required" ||
+      connectionStatus === "connection-rejected",
+    connected: connectionStatus === "connected" && !!credentials,
+    command,
+    reconnect,
+    startLive,
+    endLive,
+    liveAudioInputs,
+    liveSharing,
+    localLiveSourceId: current ? localLiveSourceId : null,
+  };
 }

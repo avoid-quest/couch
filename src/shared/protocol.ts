@@ -17,20 +17,73 @@ export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
 export type PlaybackCollection = MediaCollection;
-export type QueueEntry = { creator?: CollectionLink; subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; liveSourceId?: string; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
-export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
+export type QueueEntry = {
+  creator?: CollectionLink;
+  subtitle?: string;
+  description?: string;
+  id: string;
+  title: string;
+  source: string;
+  thumbnail?: string;
+  duration?: number;
+  live?: boolean;
+  liveSourceId?: string;
+  quality?: VideoQuality;
+  automaticTitle?: boolean;
+  kind?: "radio";
+  addedBy?: PlaybackActor;
+  collection?: PlaybackCollection;
+};
+export type MediaTrack = {
+  id: string;
+  index: number;
+  kind: "video" | "audio" | "subtitle";
+  label: string;
+  language: string;
+  selected: boolean;
+};
 // Runtime selection intent carried between renderers and the scheduled decoder.
 export type AudioSelection = Pick<MediaTrack, "index" | "language" | "label">;
 type Chapter = { title: string; position: number };
-export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; autoplay?: boolean };
-export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
+export type ProfilePlaybackPreferences = {
+  audioLanguage: string;
+  subtitleLanguage: string;
+  subtitles: "auto" | "off";
+  speed: number;
+  autoplay?: boolean;
+};
+export type PlaybackPreferences = {
+  profile: ProfilePlaybackPreferences;
+  device: { audioDelay: number };
+};
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
-export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "hidden" | "devices" | "settings" | "sound" | "bluetooth" | "display";
+export type Domain =
+  | "progress"
+  | "radio"
+  | "iptv"
+  | "providers"
+  | "playlists"
+  | "for-later"
+  | "hidden"
+  | "devices"
+  | "settings"
+  | "sound"
+  | "bluetooth"
+  | "display";
 // "menu" is OK held, which opens a focused item's menu.
-export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "menu" | "back" | "home" | "info";
+export type NavigationKey =
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "select"
+  | "menu"
+  | "back"
+  | "home"
+  | "info";
 
 // The shared capture lead and the Receiver whose declaration raised it, retained until input restart.
 export type LiveLead = { ms: number; deviceId?: string };
@@ -59,15 +112,55 @@ export type PlayerState = {
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
 // buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
 // error: that buffered stream failed, so the live input doesn't reach it this item.
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string };
+export type Output = {
+  deviceId: string;
+  picture: boolean;
+  sound: boolean;
+  delay?: number;
+  delayActive?: boolean;
+  local?: boolean;
+  buffered?: boolean;
+  error?: string;
+};
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; liveLead?: LiveLead; choosing?: number; held?: Output; inSync?: boolean; intent?: "relaxed" | "live"; delivery?: "direct" | "scheduled" | "webrtc" | "mpv" };
-export type PlaybackControls = { programme: boolean; queue: boolean; seek: boolean; speed: boolean; audioDelay: boolean; subtitleDelay: boolean; leave: boolean };
+export type PlaybackSummary = {
+  id: string;
+  title: string | null;
+  status: PlayerState["status"];
+  outputs: Output[];
+  hostOnly?: boolean;
+  audioOnly?: boolean;
+  liveSourceId?: string;
+  liveLead?: LiveLead;
+  choosing?: number;
+  held?: Output;
+  inSync?: boolean;
+  intent?: "relaxed" | "live";
+  delivery?: "direct" | "scheduled" | "webrtc" | "mpv";
+};
+export type PlaybackControls = {
+  programme: boolean;
+  queue: boolean;
+  seek: boolean;
+  speed: boolean;
+  audioDelay: boolean;
+  subtitleDelay: boolean;
+  leave: boolean;
+};
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
-export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
+export type DeviceSummary = {
+  id: string;
+  name: string;
+  online: boolean;
+  updates?: boolean;
+  tv?: boolean;
+  sharing?: DeviceSharing;
+  volume: number;
+  muted: boolean;
+};
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 // controlling: this server's selected output Device (the server's own by default), whose Playback is in view.
@@ -77,7 +170,12 @@ export type SessionState = {
   textField?: RemoteTextField | null;
   queue: QueueEntry[];
   // upcoming: the first entries Autoplay will play after Up next, in order.
-  autoplay?: { enabled: boolean; contextTitle: string | null; upcoming: QueueEntry[]; pending?: boolean };
+  autoplay?: {
+    enabled: boolean;
+    contextTitle: string | null;
+    upcoming: QueueEntry[];
+    pending?: boolean;
+  };
   queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
   // An explicit Play's picture intent; stable across quality/transport reloads, null on Next/retry.
@@ -94,7 +192,13 @@ export type SessionState = {
   devices?: DeviceSummary[];
   liveSources?: LiveSource[];
   // target: the one Device a listener-removed notice is for.
-  activity?: { id: string; actor: PlaybackActor; text: string; kind?: "sharing-stopped" | "listener-removed"; target?: string };
+  activity?: {
+    id: string;
+    actor: PlaybackActor;
+    text: string;
+    kind?: "sharing-stopped" | "listener-removed";
+    target?: string;
+  };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;
@@ -116,13 +220,32 @@ export type SessionState = {
 };
 
 export type Action =
-  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: CaptureKind; audio: boolean; video: boolean; name?: string; intent?: "relaxed" | "live"; audioDelivery?: "pcm"; metadata?: LiveMetadata }
+  | {
+      type: "publishLive";
+      sourceId: string;
+      uploadToken: string;
+      kind: CaptureKind;
+      audio: boolean;
+      video: boolean;
+      name?: string;
+      intent?: "relaxed" | "live";
+      audioDelivery?: "pcm";
+      metadata?: LiveMetadata;
+    }
   | { type: "updateLiveMetadata"; sourceId: string; metadata: LiveMetadata }
   | { type: "endLive"; sourceId: string }
   | { type: "leave"; playbackId: string }
   // The host or an administrator removes a Live audio listener from a Playback (its PlaybackSummary id).
   | { type: "removeLiveListener"; playbackId: string; deviceId: string }
-  | { type: "playLive"; sourceId: string; deviceId?: string; playNow?: boolean; placement?: "next"; picture?: boolean; sound?: boolean }
+  | {
+      type: "playLive";
+      sourceId: string;
+      deviceId?: string;
+      playNow?: boolean;
+      placement?: "next";
+      picture?: boolean;
+      sound?: boolean;
+    }
   // The controlled Playback's live inputs play in sync on its devices, buffered, or directly on each.
   | { type: "inSync"; inSync: boolean }
   | { type: "compressor"; playbackId: string; settings: Partial<CompressorSettings> }
@@ -133,9 +256,40 @@ export type Action =
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
   // With playNow, deviceId plays on that Device, which this window then controls.
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
-  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; fromStart?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection; deviceId?: string }
-  | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next"; deviceId?: string }
-  | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next"; deviceId?: string }
+  | {
+      type: "enqueueProvider";
+      provider: ProviderId;
+      url: string;
+      shape: MediaShape;
+      title?: string;
+      thumbnail?: string;
+      playNow?: boolean;
+      fromStart?: boolean;
+      quality?: VideoQuality;
+      placement?: "next";
+      collection?: PlaybackCollection;
+      deviceId?: string;
+    }
+  | {
+      type: "enqueueRadio";
+      stationId: string;
+      entryId: string;
+      playNow?: boolean;
+      placement?: "next";
+      deviceId?: string;
+    }
+  | {
+      type: "enqueueWeb";
+      entryId: string;
+      url: string;
+      title?: string;
+      thumbnail?: string;
+      quality?: VideoQuality;
+      playNow?: boolean;
+      fromStart?: boolean;
+      placement?: "next";
+      deviceId?: string;
+    }
   | { type: "remove"; entryId: string }
   | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
@@ -148,7 +302,12 @@ export type Action =
   | { type: "mute"; muted: boolean; deviceId?: string }
   | { type: "volume"; volume: number; deviceId?: string }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
-  | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" }
+  | {
+      type: "savePlaybackDefault";
+      profileId: string;
+      playbackId: string;
+      setting: "audio" | "subtitles" | "speed";
+    }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
   | { type: "audioDelay"; playbackId: string; delay: number }
@@ -164,7 +323,12 @@ export type Action =
   // Device's sound out, more sets its volume and puts its sound in.
   | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
 
-export type ClientMessage = { type: "command"; requestId: string; action: Action; targetDeviceId?: string };
+export type ClientMessage = {
+  type: "command";
+  requestId: string;
+  action: Action;
+  targetDeviceId?: string;
+};
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
@@ -184,19 +348,55 @@ export type ServerMessage =
   | { type: "player"; command: PlaybackCommand }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
-  | { type: "sendspin"; listen: boolean; watch: boolean; live?: LiveAudioSettings & { sourceId: string } }
+  | {
+      type: "sendspin";
+      listen: boolean;
+      watch: boolean;
+      live?: LiveAudioSettings & { sourceId: string };
+    }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 // A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the
 // clock is the source's own timestamps (live), else the item's position.
-export type Follow = { group: string; pts: boolean; timeline?: { kind: "position" | "source-pts"; generation: string; mapping: "hls" | "media" | "unavailable" } };
+export type Follow = {
+  group: string;
+  pts: boolean;
+  timeline?: {
+    kind: "position" | "source-pts";
+    generation: string;
+    mapping: "hls" | "media" | "unavailable";
+  };
+};
 export type PlaybackCommand =
   | { type: "audioPause" }
   // eventStart: an HLS EVENT playlist starts at its first segment instead of the live edge.
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
   // hls: Pass-through found an HLS playlist, which hls.js plays where the engine can't.
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow; liveSourceId?: string; livePeerId?: string; liveOutput?: { picture: boolean; sound: boolean; volume: number }; output?: { picture: boolean; sound: boolean }; compressor?: CompressorSettings }
+  | {
+      type: "load";
+      playbackId: string;
+      source: string;
+      audioSource?: string;
+      startPosition?: number;
+      paused?: boolean;
+      preferences?: ProfilePlaybackPreferences & { audioDelay: number };
+      subtitles?: ExternalSubtitle[];
+      radio?: boolean;
+      eventStart?: boolean;
+      mpegts?: boolean;
+      mpv?: boolean;
+      hls?: boolean;
+      audioTrack?: number;
+      subtitleTrack?: number;
+      subtitleDelay?: number;
+      follow?: Follow;
+      liveSourceId?: string;
+      livePeerId?: string;
+      liveOutput?: { picture: boolean; sound: boolean; volume: number };
+      output?: { picture: boolean; sound: boolean };
+      compressor?: CompressorSettings;
+    }
   | { type: "follow"; playbackId: string; follow: Follow | null; compressor?: CompressorSettings }
   | { type: "compressor"; playbackId: string; settings: CompressorSettings }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
@@ -217,8 +417,12 @@ export type ConnectionInfo = {
 };
 
 // Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
-export type AppMessage = { type: "display"; requestId: string; state?: DisplayState; error?: string }
-  | { type: "updates"; requestId: string; state?: UpdateState; error?: string } | { type: "tvMode"; requestId: string; error?: string } | { type: "renamed" } | { type: "shutdown" };
+export type AppMessage =
+  | { type: "display"; requestId: string; state?: DisplayState; error?: string }
+  | { type: "updates"; requestId: string; state?: UpdateState; error?: string }
+  | { type: "tvMode"; requestId: string; error?: string }
+  | { type: "renamed" }
+  | { type: "shutdown" };
 export type CoreMessage =
   | { type: "ready"; origin: string; urls: string[]; pairingCode: string }
   | { type: "addresses"; urls: string[] }

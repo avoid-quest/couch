@@ -28,13 +28,40 @@ export function DevicesPage() {
   const { connected, details, host, identity, remoteControlEnabled, state } = useSessionGate();
   const scope = useSettingsScope();
   const urls = host?.urls ?? details?.urls ?? (credentials ? [credentials.origin] : []);
-  return <SettingsLayout section="devices">
-    {identity && credentials && <DevicesSettings credentials={credentials} connected={connected} urls={urls} identity={identity} remoteControlEnabled={remoteControlEnabled}
-      administratorClaimed={state?.administratorClaimed !== false} hostName={scope.couch}
-      online={new Set(state?.devices?.filter(device => device.online).map(device => device.id))} tvs={new Set(state?.devices?.filter(device => device.tv).map(device => device.id))} hostTv={!!(details?.tvAppliance ?? details?.tvPresentation)} />}
-    {credentials && <NetworkSettings credentials={credentials} connected={connected} urls={urls} remoteControlEnabled={remoteControlEnabled}
-      managedLan={details?.lanError !== undefined} lanError={details?.lanError} device={scope.device} couch={scope.couch} host={scope.host} administrator={scope.administrator} />}
-  </SettingsLayout>;
+  return (
+    <SettingsLayout section="devices">
+      {identity && credentials && (
+        <DevicesSettings
+          credentials={credentials}
+          connected={connected}
+          urls={urls}
+          identity={identity}
+          remoteControlEnabled={remoteControlEnabled}
+          administratorClaimed={state?.administratorClaimed !== false}
+          hostName={scope.couch}
+          online={
+            new Set(state?.devices?.filter((device) => device.online).map((device) => device.id))
+          }
+          tvs={new Set(state?.devices?.filter((device) => device.tv).map((device) => device.id))}
+          hostTv={!!(details?.tvAppliance ?? details?.tvPresentation)}
+        />
+      )}
+      {credentials && (
+        <NetworkSettings
+          credentials={credentials}
+          connected={connected}
+          urls={urls}
+          remoteControlEnabled={remoteControlEnabled}
+          managedLan={details?.lanError !== undefined}
+          lanError={details?.lanError}
+          device={scope.device}
+          couch={scope.couch}
+          host={scope.host}
+          administrator={scope.administrator}
+        />
+      )}
+    </SettingsLayout>
+  );
 }
 
 // Playback preferences belong to the active watching profile; any paired device changes them.
@@ -44,26 +71,54 @@ export function PlaybackPage() {
   const { administrator } = useSettingsScope();
   const profile = state?.activeProfile;
   const preferences = state?.preferences;
-  const chooser = useMutation({ mutationFn: (enabled: boolean) => run({ type: "askEveryDevice", enabled }) });
-  return <SettingsLayout section="playback">
-    <SettingsSection>
-      {profile && preferences && credentials && <PlaybackPreferences controls={state?.controls} key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={run} />}
-      <SettingsRow label="Ask every device where a shared source plays" htmlFor="ask-every-device"
-        description={`Off: only the device that pressed Play asks.${administrator ? "" : ` ${ADMIN_ONLY}`}`}>
-        <Switch id="ask-every-device" checked={chooser.isPending ? chooser.variables : state?.askEveryDevice ?? false} disabled={!administrator || !connected || chooser.isPending} onCheckedChange={enabled => chooser.mutate(enabled)} />
-      </SettingsRow>
-    </SettingsSection>
-  </SettingsLayout>;
+  const chooser = useMutation({
+    mutationFn: (enabled: boolean) => run({ type: "askEveryDevice", enabled }),
+  });
+  return (
+    <SettingsLayout section="playback">
+      <SettingsSection>
+        {profile && preferences && credentials && (
+          <PlaybackPreferences
+            controls={state?.controls}
+            key={profile.id}
+            profile={profile}
+            preferences={preferences}
+            connected={connected}
+            onCommand={run}
+          />
+        )}
+        <SettingsRow
+          label="Ask every device where a shared source plays"
+          htmlFor="ask-every-device"
+          description={`Off: only the device that pressed Play asks.${administrator ? "" : ` ${ADMIN_ONLY}`}`}
+        >
+          <Switch
+            id="ask-every-device"
+            checked={chooser.isPending ? chooser.variables : (state?.askEveryDevice ?? false)}
+            disabled={!administrator || !connected || chooser.isPending}
+            onCheckedChange={(enabled) => chooser.mutate(enabled)}
+          />
+        </SettingsRow>
+      </SettingsSection>
+    </SettingsLayout>
+  );
 }
 
 export function SourcesPage({ section }: { section: SettingsPage }) {
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   const { administrator } = useSettingsScope();
-  const source = section.startsWith("source-") ? section.slice(7) as SourceKind : undefined;
-  return <SettingsLayout section={section}>
-    <SettingsSources canManage={administrator} connected={connected} credentials={credentials} source={source} />
-  </SettingsLayout>;
+  const source = section.startsWith("source-") ? (section.slice(7) as SourceKind) : undefined;
+  return (
+    <SettingsLayout section={section}>
+      <SettingsSources
+        canManage={administrator}
+        connected={connected}
+        credentials={credentials}
+        source={source}
+      />
+    </SettingsLayout>
+  );
 }
 
 // The Couch's speakers, Bluetooth ones included. Reading them needs an admin too, so others see what each row does.
@@ -71,19 +126,37 @@ export function SoundPage() {
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   const { couch, administrator } = useSettingsScope();
-  return <SettingsLayout section="sound">
-    {!administrator ? <>
-      <SettingsSection><SettingsRow label="Output" description={`The speakers ${couch} plays through. ${ADMIN_ONLY}`} /></SettingsSection>
-      <SettingsSection title="Test & delay">
-        <SettingsRow label="Audio delay" description={ADMIN_ONLY} />
-        <SettingsRow label="Test tone" description={ADMIN_ONLY} />
-      </SettingsSection>
-      <SettingsSection><SettingsRow label="Bluetooth" description={`Pair, connect or forget ${couch}'s Bluetooth speakers. ${ADMIN_ONLY}`} /></SettingsSection>
-    </> : credentials && <>
-      <SoundSettings credentials={credentials} connected={connected} hostName={couch} />
-      <BluetoothSettings credentials={credentials} connected={connected} />
-    </>}
-  </SettingsLayout>;
+  return (
+    <SettingsLayout section="sound">
+      {!administrator ? (
+        <>
+          <SettingsSection>
+            <SettingsRow
+              label="Output"
+              description={`The speakers ${couch} plays through. ${ADMIN_ONLY}`}
+            />
+          </SettingsSection>
+          <SettingsSection title="Test & delay">
+            <SettingsRow label="Audio delay" description={ADMIN_ONLY} />
+            <SettingsRow label="Test tone" description={ADMIN_ONLY} />
+          </SettingsSection>
+          <SettingsSection>
+            <SettingsRow
+              label="Bluetooth"
+              description={`Pair, connect or forget ${couch}'s Bluetooth speakers. ${ADMIN_ONLY}`}
+            />
+          </SettingsSection>
+        </>
+      ) : (
+        credentials && (
+          <>
+            <SoundSettings credentials={credentials} connected={connected} hostName={couch} />
+            <BluetoothSettings credentials={credentials} connected={connected} />
+          </>
+        )
+      )}
+    </SettingsLayout>
+  );
 }
 
 // The TV the Couch runs on: its mode, startup, screen and shared text size.
@@ -92,17 +165,53 @@ export function DisplayPage() {
   const { connected, details, state, tvPresentation } = useSessionGate();
   const { couch, administrator } = useSettingsScope();
   const appliance = details?.tvAppliance ?? details?.tvPresentation;
-  return <SettingsLayout section="display">
-    {(credentials && (details?.tvModeChangeable || details?.tvAppliance) || appliance) && <SettingsSection>
-      {credentials && (details?.tvModeChangeable || details?.tvAppliance) && <TvModeSettings key={String(details.tvPresentation)} credentials={credentials} connected={connected}
-        administrator={administrator} couch={couch} enabled={!!details.tvPresentation} locked={!!details.tvAppliance} />}
-      {appliance && (administrator && credentials ? <StartupSettings credentials={credentials} connected={connected} /> : <SettingsRow label="Start on boot" description={ADMIN_ONLY} />)}
-    </SettingsSection>}
-    {details?.tvPresentation && <>
-      {!administrator ? <SettingsSection><SettingsRow label="Screen" description={ADMIN_ONLY} /></SettingsSection> : credentials && <DisplaySettings title="Screen" credentials={credentials} connected={connected} />}
-      {state?.appearance && <SettingsSection>
-        <TvInterfaceSize appearance={state.appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} />
-      </SettingsSection>}
-    </>}
-  </SettingsLayout>;
+  return (
+    <SettingsLayout section="display">
+      {((credentials && (details?.tvModeChangeable || details?.tvAppliance)) || appliance) && (
+        <SettingsSection>
+          {credentials && (details?.tvModeChangeable || details?.tvAppliance) && (
+            <TvModeSettings
+              key={String(details.tvPresentation)}
+              credentials={credentials}
+              connected={connected}
+              administrator={administrator}
+              couch={couch}
+              enabled={!!details.tvPresentation}
+              locked={!!details.tvAppliance}
+            />
+          )}
+          {appliance &&
+            (administrator && credentials ? (
+              <StartupSettings credentials={credentials} connected={connected} />
+            ) : (
+              <SettingsRow label="Start on boot" description={ADMIN_ONLY} />
+            ))}
+        </SettingsSection>
+      )}
+      {details?.tvPresentation && (
+        <>
+          {!administrator ? (
+            <SettingsSection>
+              <SettingsRow label="Screen" description={ADMIN_ONLY} />
+            </SettingsSection>
+          ) : (
+            credentials && (
+              <DisplaySettings title="Screen" credentials={credentials} connected={connected} />
+            )
+          )}
+          {state?.appearance && (
+            <SettingsSection>
+              <TvInterfaceSize
+                appearance={state.appearance}
+                credentials={credentials}
+                connected={connected}
+                administrator={administrator}
+                native={tvPresentation}
+              />
+            </SettingsSection>
+          )}
+        </>
+      )}
+    </SettingsLayout>
+  );
 }

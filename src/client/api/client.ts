@@ -1,13 +1,23 @@
-
 // Playback commands remain on the session WebSocket. Query owns server reads;
 // SessionGate owns and retires its QueryClient when connection/authority changes.
 export type ApiCredentials = { origin: string; token: string };
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number, readonly body: Record<string, unknown> = {}) { super(message); }
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: Record<string, unknown> = {},
+  ) {
+    super(message);
+  }
 }
 
-export async function apiFetch({ origin, token }: ApiCredentials, path: string, init: RequestInit = {}, timeoutMs = 15_000) {
+export async function apiFetch(
+  { origin, token }: ApiCredentials,
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = 15_000,
+) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -23,8 +33,31 @@ export async function apiFetch({ origin, token }: ApiCredentials, path: string, 
 }
 
 // JSON request helpers keep call sites to the path and body.
-export const apiJson = <T,>(credentials: ApiCredentials, path: string, init?: RequestInit, timeoutMs?: number) =>
-  apiFetch(credentials, path, init, timeoutMs).then(response => (response.status === 204 ? undefined : response.json()) as Promise<T>);
+export const apiJson = <T>(
+  credentials: ApiCredentials,
+  path: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+) =>
+  apiFetch(credentials, path, init, timeoutMs).then(
+    (response) => (response.status === 204 ? undefined : response.json()) as Promise<T>,
+  );
 
-export const apiSend = <T = unknown,>(credentials: ApiCredentials, path: string, body?: unknown, method = "POST", timeoutMs?: number) =>
-  apiJson<T>(credentials, path, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) }, timeoutMs);
+export const apiSend = <T = unknown>(
+  credentials: ApiCredentials,
+  path: string,
+  body?: unknown,
+  method = "POST",
+  timeoutMs?: number,
+) =>
+  apiJson<T>(
+    credentials,
+    path,
+    {
+      method,
+      ...(body === undefined
+        ? {}
+        : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    },
+    timeoutMs,
+  );

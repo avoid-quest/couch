@@ -20,7 +20,10 @@ const buildInfo = (() => {
 })();
 // index.html preloads the latin Inter Tight and Mona Sans so the first paint is in them. The build resolves those paths to
 // the assets the stylesheet uses; the dev server serves them where the stylesheet asks, under /@fs/.
-const fonts = ["node_modules/@fontsource-variable/inter-tight/files/inter-tight-latin-wght-normal.woff2", "node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-wdth-normal.woff2"];
+const fonts = [
+  "node_modules/@fontsource-variable/inter-tight/files/inter-tight-latin-wght-normal.woff2",
+  "node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-wdth-normal.woff2",
+];
 export default defineConfig(({ command }) => ({
   clearScreen: false,
   root: "src/client",
@@ -29,10 +32,25 @@ export default defineConfig(({ command }) => ({
   base: "/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
-    tanstackRouter({ autoCodeSplitting: true, routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
+    tanstackRouter({
+      autoCodeSplitting: true,
+      routesDirectory: "./routes",
+      generatedRouteTree: "./routeTree.gen.ts",
+    }),
     react(),
     tailwindcss(),
-    { name: "couch-font-preload", apply: "serve", transformIndexHtml: { order: "pre", handler: html => fonts.reduce((html, font) => html.replace(`../../${font}`, `/@fs${realpathSync(font)}`), html) } },
+    {
+      name: "couch-font-preload",
+      apply: "serve",
+      transformIndexHtml: {
+        order: "pre",
+        handler: (html) =>
+          fonts.reduce(
+            (html, font) => html.replace(`../../${font}`, `/@fs${realpathSync(font)}`),
+            html,
+          ),
+      },
+    },
     // App-shell precache only (#338): the generated worker precaches the build's
     // static assets and leaves every API and WebSocket request on the network.
     // Registration is manual in the client entry so the app window never
@@ -53,22 +71,33 @@ export default defineConfig(({ command }) => ({
         icons: [
           { src: "icons/pwa-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/pwa-512.png", sizes: "512x512", type: "image/png" },
-          { src: "icons/pwa-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          {
+            src: "icons/pwa-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
       },
       workbox: {
         navigateFallback: "/index.html",
-        navigateFallbackAllowlist: [...new Set(frontendPaths)].map(path => new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?.*)?$`)),
+        navigateFallbackAllowlist: [...new Set(frontendPaths)].map(
+          (path) => new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?.*)?$`),
+        ),
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
       },
     }),
   ],
   define: {
-    "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version, revision: null, dataFormat: 1, packaged: false }) : buildInfo),
+    COUCH_BUILD_INFO: JSON.stringify(
+      command === "serve"
+        ? JSON.stringify({ version, revision: null, dataFormat: 1, packaged: false })
+        : buildInfo,
+    ),
     // Lets a browser tab opt into the TV presentation (src/client/session/presentation.ts) in development
     // and scratch builds only; a release build leaves the override out.
-    "COUCH_TV_OVERRIDE": JSON.stringify(command === "serve" || process.env.COUCH_TV_OVERRIDE === "1"),
+    COUCH_TV_OVERRIDE: JSON.stringify(command === "serve" || process.env.COUCH_TV_OVERRIDE === "1"),
   },
   // Browser clients are same-origin with Core; the dev proxy supplies that
   // origin so `vite` (and browser-driven loops) pair with `bun run server:dev`.
@@ -85,9 +114,18 @@ export default defineConfig(({ command }) => ({
         headers: { origin: `http://127.0.0.1:${process.env.COUCH_PORT ?? 4100}` },
         // src/client/api/*.ts modules are served from the same URL prefix as
         // the backend; only forward requests that are not module files.
-        bypass: request => (/\.(ts|tsx|js|jsx|css|png|svg|woff2?)(\?|$)/.test(request.url ?? "") ? request.url : undefined),
+        bypass: (request) =>
+          /\.(ts|tsx|js|jsx|css|png|svg|woff2?)(\?|$)/.test(request.url ?? "")
+            ? request.url
+            : undefined,
       },
     },
   },
-  build: { outDir: "../../dist", emptyOutDir: true, rolldownOptions: { input: { main: "src/client/index.html", capture: "src/client/capture-audio.html" } } },
+  build: {
+    outDir: "../../dist",
+    emptyOutDir: true,
+    rolldownOptions: {
+      input: { main: "src/client/index.html", capture: "src/client/capture-audio.html" },
+    },
+  },
 }));

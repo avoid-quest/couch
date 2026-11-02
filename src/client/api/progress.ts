@@ -6,14 +6,23 @@ import { apiJson, apiSend, type ApiCredentials } from "./client";
 export const historyQuery = (credentials: ApiCredentials, provider?: string) =>
   queryOptions({
     queryKey: ["progress", "history", provider ?? "all"] as const,
-    queryFn: ({ signal }) => apiJson<{ items: HistoryItem[] }>(credentials, `/api/progress/history?limit=40${provider ? `&provider=${provider}` : ""}`, { signal }),
+    queryFn: ({ signal }) =>
+      apiJson<{ items: HistoryItem[] }>(
+        credentials,
+        `/api/progress/history?limit=40${provider ? `&provider=${provider}` : ""}`,
+        { signal },
+      ),
     staleTime: 30_000,
   });
 
 type Removal = { undoToken?: string; expiresAt?: number };
 const progressPath = (mediaId: string) => `/api/progress/${encodeURIComponent(mediaId)}`;
-const updateProgress = (credentials: ApiCredentials, mediaId: string, body: { watched?: boolean; clearResume?: true }) =>
-  apiSend<Removal>(credentials, progressPath(mediaId), body, "POST", 10_000);
-export const removeFromContinue = (credentials: ApiCredentials, mediaId: string) => updateProgress(credentials, mediaId, { clearResume: true });
+const updateProgress = (
+  credentials: ApiCredentials,
+  mediaId: string,
+  body: { watched?: boolean; clearResume?: true },
+) => apiSend<Removal>(credentials, progressPath(mediaId), body, "POST", 10_000);
+export const removeFromContinue = (credentials: ApiCredentials, mediaId: string) =>
+  updateProgress(credentials, mediaId, { clearResume: true });
 export const undoProgressAction = (credentials: ApiCredentials, undoToken: string) =>
   apiSend(credentials, "/api/progress/undo", { token: undoToken });

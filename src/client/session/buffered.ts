@@ -7,7 +7,8 @@ const listeners = new Set<() => void>();
 
 // The end of the buffered range holding `time`; null in a gap or with nothing loaded.
 export function bufferedEnd(ranges: Pick<TimeRanges, "length" | "start" | "end">, time: number) {
-  for (let index = 0; index < ranges.length; index++) if (ranges.start(index) <= time && time <= ranges.end(index)) return ranges.end(index);
+  for (let index = 0; index < ranges.length; index++)
+    if (ranges.start(index) <= time && time <= ranges.end(index)) return ranges.end(index);
   return null;
 }
 
@@ -19,6 +20,15 @@ export function setBuffered(next: typeof loaded) {
   for (const listener of listeners) listener();
 }
 
-const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
 export const useBufferedEnd = (playbackId: string | null | undefined) =>
-  useSyncExternalStore(subscribe, () => playbackId && loaded?.playbackId === playbackId ? loaded.end : null, () => null);
+  useSyncExternalStore(
+    subscribe,
+    () => (playbackId && loaded?.playbackId === playbackId ? loaded.end : null),
+    () => null,
+  );

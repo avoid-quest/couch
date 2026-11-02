@@ -7,11 +7,16 @@ afterEach(() => {
   else Reflect.deleteProperty(globalThis, "localStorage");
 });
 const storage = (value: string | null) => {
-  const data = new Map<string, string>(value === null ? [] : [["couch.search-recents:test", value]]);
-  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
-    getItem: (key: string) => data.get(key) ?? null,
-    setItem: (key: string, value: string) => data.set(key, value),
-  } });
+  const data = new Map<string, string>(
+    value === null ? [] : [["couch.search-recents:test", value]],
+  );
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => data.set(key, value),
+    },
+  });
 };
 
 test("malformed recents cannot break rendering or the next search", () => {
@@ -23,7 +28,12 @@ test("malformed recents cannot break rendering or the next search", () => {
 });
 
 test("blocked storage leaves searching usable", () => {
-  Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("Storage blocked"); } });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      throw new Error("Storage blocked");
+    },
+  });
   expect(readSearchRecents("test")).toEqual([]);
   expect(rememberSearch("test", "New query")).toEqual(["New query"]);
 });

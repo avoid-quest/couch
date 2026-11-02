@@ -11,20 +11,36 @@ export const coreBundle = "build/core.mjs";
 // replaces the running audio worker after worker-only edits.
 export async function buildCore(identity?: string) {
   let workerChanged = false;
-  for (const [entry, output] of [["src/server/audio-worker.ts", "build/audio-worker.mjs"], ["src/main.ts", coreBundle]] as const) {
-    const result = await Bun.build({ entrypoints: [entry], target: "node", format: "esm", ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
+  for (const [entry, output] of [
+    ["src/server/audio-worker.ts", "build/audio-worker.mjs"],
+    ["src/main.ts", coreBundle],
+  ] as const) {
+    const result = await Bun.build({
+      entrypoints: [entry],
+      target: "node",
+      format: "esm",
+      ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}),
+    });
     if (!result.success) throw new AggregateError(result.logs, `${entry} build failed`);
     const bundle = await result.outputs[0]!.text();
-    const changed = bundle !== await readFile(output, "utf8").catch(() => null);
-    if (changed || output === coreBundle && workerChanged) await Bun.write(output, bundle);
+    const changed = bundle !== (await readFile(output, "utf8").catch(() => null));
+    if (changed || (output === coreBundle && workerChanged)) await Bun.write(output, bundle);
     if (output !== coreBundle) workerChanged = changed;
   }
 }
 
 // Electron's main process (ESM) and the window's sandboxed preload (CommonJS).
 export async function buildApp() {
-  for (const [entry, format, output] of [["app/main.ts", "esm", "build/main.mjs"], ["app/preload.ts", "cjs", "build/preload.cjs"]] as const) {
-    const result = await Bun.build({ entrypoints: [entry], target: "node", format, external: ["electron"] });
+  for (const [entry, format, output] of [
+    ["app/main.ts", "esm", "build/main.mjs"],
+    ["app/preload.ts", "cjs", "build/preload.cjs"],
+  ] as const) {
+    const result = await Bun.build({
+      entrypoints: [entry],
+      target: "node",
+      format,
+      external: ["electron"],
+    });
     if (!result.success) throw new AggregateError(result.logs, `${entry} build failed`);
     await Bun.write(output, await result.outputs[0]!.text());
   }
@@ -34,7 +50,7 @@ export function watchCore() {
   let timer: ReturnType<typeof setTimeout> | undefined;
   watch("src", { recursive: true }, () => {
     clearTimeout(timer);
-    timer = setTimeout(() => buildCore().catch(error => console.error(error)), 100);
+    timer = setTimeout(() => buildCore().catch((error) => console.error(error)), 100);
   });
 }
 
@@ -43,7 +59,9 @@ if (import.meta.main) {
   await buildCore();
   if (process.argv.includes("--watch")) {
     watchCore();
-    const node = Bun.spawn(["node", "--watch", coreBundle], { stdio: ["inherit", "inherit", "inherit"] });
+    const node = Bun.spawn(["node", "--watch", coreBundle], {
+      stdio: ["inherit", "inherit", "inherit"],
+    });
     process.exit(await node.exited);
   }
 }

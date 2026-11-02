@@ -4,7 +4,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
-import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
+import {
+  AudioCodec,
+  Identity,
+  PlayerCommand,
+  Roles,
+  SendspinClient,
+} from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { streamingCommunityOrigin } from "../src/shared/streamingcommunity";
@@ -15,105 +21,191 @@ const originalFetch = globalThis.fetch;
 before(() => {
   globalThis.fetch = (async (input, init) => {
     if (String(input) === streamingCommunityOrigin) {
-      const response = new Response('<div data-page="{&quot;component&quot;:&quot;Home&quot;,&quot;props&quot;:{}}"></div>');
+      const response = new Response(
+        '<div data-page="{&quot;component&quot;:&quot;Home&quot;,&quot;props&quot;:{}}"></div>',
+      );
       Object.defineProperty(response, "url", { value: streamingCommunityOrigin });
       return response;
     }
     return originalFetch(input, init);
   }) as typeof fetch;
 });
-after(() => { globalThis.fetch = originalFetch; });
+after(() => {
+  globalThis.fetch = originalFetch;
+});
 
 async function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), "couch-consent-restart-")), databasePath = join(directory, "couch.sqlite");
+  const directory = mkdtempSync(join(tmpdir(), "couch-consent-restart-")),
+    databasePath = join(directory, "couch.sqlite");
   const store = openStore(databasePath, true);
-  const identities = [70, 40].map(volume => {
-    const key = Identity.generate(), id = key.peerId, token = store.pair(id, `Device ${volume}`);
+  const identities = [70, 40].map((volume) => {
+    const key = Identity.generate(),
+      id = key.peerId,
+      token = store.pair(id, `Device ${volume}`);
     store.saveDeviceSound(id, { volume });
     return { key, id, token };
   });
   store.close();
   let hub: Awaited<ReturnType<typeof createHub>>;
-  const sockets: WebSocket[] = [], speakers: SendspinClient[] = [];
-  const connect = async (identity: typeof identities[number]) => {
-    const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${identity.token}&device=${identity.id}&audio=1&video=1`, { headers: { Origin: hub.origin } });
+  const sockets: WebSocket[] = [],
+    speakers: SendspinClient[] = [];
+  const connect = async (identity: (typeof identities)[number]) => {
+    const socket = new WebSocket(
+      `${hub.origin.replace("http:", "ws:")}/api/ws?token=${identity.token}&device=${identity.id}&audio=1&video=1`,
+      { headers: { Origin: hub.origin } },
+    );
     sockets.push(socket);
-    const messages: ServerMessage[] = [], pending = new Map<string, (message: Extract<ServerMessage, { type: "result" }>) => void>();
-    let state: SessionState | undefined, sequence = 0;
+    const messages: ServerMessage[] = [],
+      pending = new Map<string, (message: Extract<ServerMessage, { type: "result" }>) => void>();
+    let state: SessionState | undefined,
+      sequence = 0;
     await new Promise<void>((resolve, reject) => {
       socket.once("error", reject);
-      socket.onmessage = event => {
+      socket.onmessage = (event) => {
         const message = JSON.parse(String(event.data)) as ServerMessage;
         messages.push(message);
-        if (message.type === "state") { state = message.state; resolve(); }
-        if (message.type === "result") { pending.get(message.requestId)?.(message); pending.delete(message.requestId); }
+        if (message.type === "state") {
+          state = message.state;
+          resolve();
+        }
+        if (message.type === "result") {
+          pending.get(message.requestId)?.(message);
+          pending.delete(message.requestId);
+        }
       };
     });
-    return { ...identity, socket, messages, get state() { return state!; }, command: (action: Action) => new Promise<void>((resolve, reject) => {
-      const requestId = String(++sequence);
-      pending.set(requestId, result => result.ok ? resolve() : reject(new Error(result.error)));
-      socket.send(JSON.stringify({ type: "command", requestId, action }));
-    }) };
+    return {
+      ...identity,
+      socket,
+      messages,
+      get state() {
+        return state!;
+      },
+      command: (action: Action) =>
+        new Promise<void>((resolve, reject) => {
+          const requestId = String(++sequence);
+          pending.set(requestId, (result) =>
+            result.ok ? resolve() : reject(new Error(result.error)),
+          );
+          socket.send(JSON.stringify({ type: "command", requestId, action }));
+        }),
+    };
   };
   const start = async () => {
-    hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: Number(process.env.COUCH_PORT ?? 0) });
+    hub = await createHub({
+      databasePath,
+      hostToken: "h".repeat(64),
+      hostname: "127.0.0.1",
+      port: Number(process.env.COUCH_PORT ?? 0),
+    });
     return Promise.all(identities.map(connect));
   };
   const stop = async () => {
-    await Promise.all(speakers.splice(0).map(speaker => speaker.disconnect()));
+    await Promise.all(speakers.splice(0).map((speaker) => speaker.disconnect()));
     for (const socket of sockets.splice(0)) socket.terminate();
     await hub.close();
   };
-  return { devices: await start(),
-    queue: (id: string, deviceId?: string): Action => ({ type: "enqueue", entry: { id, title: id, source: `${hub.origin}/api/health` }, deviceId, playNow: !!deviceId }),
+  return {
+    devices: await start(),
+    queue: (id: string, deviceId?: string): Action => ({
+      type: "enqueue",
+      entry: { id, title: id, source: `${hub.origin}/api/health` },
+      deviceId,
+      playNow: !!deviceId,
+    }),
     speaker: async (index: number) => {
-      const identity = identities[index]!, levels: number[] = [];
+      const identity = identities[index]!,
+        levels: number[] = [];
       const client = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], {
-        playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.VOLUME] },
+        playerSupport: {
+          supported_formats: [
+            { codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 },
+          ],
+          buffer_capacity: 512 * 1024,
+          supported_commands: [PlayerCommand.VOLUME],
+        },
       });
       speakers.push(client);
-      client.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!); });
-      await client.connect(`${hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`, { timeoutMs: 3_000 });
+      client.addServerCommandListener((command) => {
+        if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!);
+      });
+      await client.connect(
+        `${hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`,
+        { timeoutMs: 3_000 },
+      );
       return levels;
     },
-    restart: async () => { await stop(); return start(); },
-    close: async () => { await stop(); rmSync(directory, { recursive: true, force: true }); },
+    restart: async () => {
+      await stop();
+      return start();
+    },
+    close: async () => {
+      await stop();
+      rmSync(directory, { recursive: true, force: true });
+    },
   };
 }
 
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 3_000;
-  while (!predicate()) { if (Date.now() > deadline) throw new Error("Expected wire state was not published."); await new Promise(resolve => setTimeout(resolve, 10)); }
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("Expected wire state was not published.");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 const directLevel = (messages: ServerMessage[]) => {
-  const message = messages.findLast(message => message.type === "player" && message.command.type === "volume");
-  return message?.type === "player" && message.command.type === "volume" ? message.command.volume : undefined;
+  const message = messages.findLast(
+    (message) => message.type === "player" && message.command.type === "volume",
+  );
+  return message?.type === "player" && message.command.type === "volume"
+    ? message.command.volume
+    : undefined;
 };
 
 async function pause(device: Awaited<ReturnType<typeof fixture>>["devices"][number]) {
-  await until(() => device.messages.some(message => message.type === "player" && message.command.type === "load"));
-  device.socket.send(JSON.stringify({ type: "player", state: { ...device.state.player, status: "paused", duration: 100, seekable: true, speed: 1, buffering: false } }));
+  await until(() =>
+    device.messages.some((message) => message.type === "player" && message.command.type === "load"),
+  );
+  device.socket.send(
+    JSON.stringify({
+      type: "player",
+      state: {
+        ...device.state.player,
+        status: "paused",
+        duration: 100,
+        seekable: true,
+        speed: 1,
+        buffering: false,
+      },
+    }),
+  );
   await until(() => device.state.player.status === "paused");
 }
 
-test("new private speaker keeps its own level after Core restart", { timeout: 12_000 }, async () => {
-  const f = await fixture();
-  try {
-    const original = f.devices[0]!;
-    await original.command(f.queue("saved"));
-    await original.command({ type: "allSpeakers", level: 20 });
-    const [a, b] = await f.restart();
-    await a!.command({ type: "play", entryId: "saved" });
-    await until(() => directLevel(a!.messages) === 14);
-    await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
-    await b!.command(f.queue("next", a!.id));
-    await pause(a!);
-    await b!.command({ type: "output", deviceId: b!.id, level: 40 });
-    const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
-    await until(() => levels.every(wire => wire.length > 0));
-    assert.equal(levels[1]!.at(-1), 40);
-    assert.equal(levels[0]!.at(-1), 14);
-    assert.equal(b!.state.mixTrim, 20);
-  } finally { await f.close(); }
-});
+test(
+  "new private speaker keeps its own level after Core restart",
+  { timeout: 12_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      const original = f.devices[0]!;
+      await original.command(f.queue("saved"));
+      await original.command({ type: "allSpeakers", level: 20 });
+      const [a, b] = await f.restart();
+      await a!.command({ type: "play", entryId: "saved" });
+      await until(() => directLevel(a!.messages) === 14);
+      await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
+      await b!.command(f.queue("next", a!.id));
+      await pause(a!);
+      await b!.command({ type: "output", deviceId: b!.id, level: 40 });
+      const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
+      await until(() => levels.every((wire) => wire.length > 0));
+      assert.equal(levels[1]!.at(-1), 40);
+      assert.equal(levels[0]!.at(-1), 14);
+      assert.equal(b!.state.mixTrim, 20);
+    } finally {
+      await f.close();
+    }
+  },
+);

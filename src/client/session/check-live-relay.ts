@@ -10,17 +10,35 @@ export async function checkLiveRelay(relay: LiveRelay, signal?: AbortSignal): Pr
         clearTimeout(timeout);
         signal?.removeEventListener("abort", abort);
         connection.onicecandidate = connection.onicegatheringstatechange = null;
-        if (error) reject(error); else resolve();
+        if (error) reject(error);
+        else resolve();
       };
       const abort = () => finish(new Error("Relay check canceled."));
-      const unavailable = () => finish(new Error("Couldn't reach the relay with these credentials. Check its address, username, password and network access."));
+      const unavailable = () =>
+        finish(
+          new Error(
+            "Couldn't reach the relay with these credentials. Check its address, username, password and network access.",
+          ),
+        );
       const timeout = setTimeout(unavailable, 10_000);
       signal?.addEventListener("abort", abort, { once: true });
-      if (signal?.aborted) { abort(); return; }
-      connection.onicecandidate = event => { if (event.candidate?.type === "relay") finish(); };
-      connection.onicegatheringstatechange = () => { if (connection.iceGatheringState === "complete") unavailable(); };
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      connection.onicecandidate = (event) => {
+        if (event.candidate?.type === "relay") finish();
+      };
+      connection.onicegatheringstatechange = () => {
+        if (connection.iceGatheringState === "complete") unavailable();
+      };
       connection.createDataChannel("relay-check");
-      void connection.createOffer().then(offer => connection.setLocalDescription(offer)).catch(unavailable);
+      void connection
+        .createOffer()
+        .then((offer) => connection.setLocalDescription(offer))
+        .catch(unavailable);
     });
-  } finally { connection.close(); }
+  } finally {
+    connection.close();
+  }
 }

@@ -14,34 +14,16 @@
         "tests/*.browser.{ts,tsx}",
         "tests/fixtures/*.ts"
       ],
-      "project": [
-        "src/**/*.{ts,tsx}",
-        "app/**/*.ts",
-        "scripts/**/*.ts",
-        "tests/**/*.{ts,tsx}"
-      ],
-      "ignore": [
-        "src/client/routeTree.gen.ts"
-      ],
-      "ignoreBinaries": [
-        "go",
-        "mkfifo",
-        "setpriv",
-        "unshare"
-      ]
+      "project": ["src/**/*.{ts,tsx}", "app/**/*.ts", "scripts/**/*.ts", "tests/**/*.{ts,tsx}"],
+      "ignore": ["src/client/routeTree.gen.ts"],
+      "ignoreBinaries": ["go", "mkfifo", "setpriv", "unshare"]
     },
     "apps/web": {
-      "ignoreDependencies": [
-        "tailwindcss"
-      ]
+      "ignoreDependencies": ["tailwindcss"]
     }
   },
   "ignoreIssues": {
-    "src/client/components/ui/**": [
-      "exports"
-    ]
+    "src/client/components/ui/**": ["exports"]
   },
-  "ignoreDependencies": [
-    "app-builder-lib"
-  ]
+  "ignoreDependencies": ["app-builder-lib"]
 }

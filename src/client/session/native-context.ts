@@ -1,9 +1,10 @@
-
 export type { AppMode } from "../../shared/app-bridge";
 import type { CouchApp } from "../../shared/app-bridge";
 
 declare global {
-  interface Window { couchApp?: CouchApp }
+  interface Window {
+    couchApp?: CouchApp;
+  }
 }
 
 // The Couch app's preload (app/preload.ts) adds this bridge to its own window only.

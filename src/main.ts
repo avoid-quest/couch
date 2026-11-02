@@ -17,14 +17,26 @@ if (process.argv.includes("--version")) {
 }
 // Recovery for the media helpers, run as the account Couch runs as with its COUCH_DATA_DIR (src/server/helpers.ts).
 if (process.argv[2] === "--helpers") {
-  try { console.log(await helpersCommand(join(process.env.COUCH_DATA_DIR ?? ".data", "helpers"), process.argv.slice(3))); }
-  catch (error) { console.error((error as Error).message); process.exit(1); }
+  try {
+    console.log(
+      await helpersCommand(
+        join(process.env.COUCH_DATA_DIR ?? ".data", "helpers"),
+        process.argv.slice(3),
+      ),
+    );
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
   process.exit(0);
 }
 
 // Inside the Couch app, Core runs in Electron's utilityProcess and talks to
 // Main over its parent port. `node build/core.mjs` runs it standalone.
-type ParentPort = { postMessage(message: CoreMessage): void; on(event: "message", listener: (event: { data: AppMessage }) => void): void };
+type ParentPort = {
+  postMessage(message: CoreMessage): void;
+  on(event: "message", listener: (event: { data: AppMessage }) => void): void;
+};
 const app = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
 const native = !!app;
 const allowLanHttp = process.env.COUCH_ALLOW_HTTP === "1";
@@ -33,13 +45,20 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 const liveTurn = liveTurnFromEnvironment(process.env);
 delete process.env.COUCH_LIVE_TURN_CREDENTIAL;
-if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The Couch app must supply its private token");
+if (native && !process.env.COUCH_HOST_TOKEN)
+  throw new Error("The Couch app must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
 
 const bluetooth = native && process.platform === "linux" ? linuxBluetooth() : undefined;
-const nativeDisplay = createNativeDisplay(app && ((requestId, action) => app.postMessage({ type: "display", requestId, action })));
-const nativeUpdates = createNativeUpdates(app && ((requestId, action) => app.postMessage({ type: "updates", requestId, action })));
-const nativeTvMode = createNativeTvMode(app && ((requestId, enabled) => app.postMessage({ type: "tvMode", requestId, enabled })));
+const nativeDisplay = createNativeDisplay(
+  app && ((requestId, action) => app.postMessage({ type: "display", requestId, action })),
+);
+const nativeUpdates = createNativeUpdates(
+  app && ((requestId, action) => app.postMessage({ type: "updates", requestId, action })),
+);
+const nativeTvMode = createNativeTvMode(
+  app && ((requestId, enabled) => app.postMessage({ type: "tvMode", requestId, enabled })),
+);
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
@@ -48,7 +67,7 @@ const helperUpdates = createHelperUpdates(join(dataDir, "helpers"));
 const hub = await createHub({
   managedLan: native || allowLanHttp,
   allowLanHttp,
-  onAddresses: urls => app?.postMessage({ type: "addresses", urls }),
+  onAddresses: (urls) => app?.postMessage({ type: "addresses", urls }),
   remoteControlEnabled: !native,
   native,
   helperUpdates,
@@ -60,13 +79,28 @@ const hub = await createHub({
   databasePath: join(dataDir, "couch.sqlite"),
   adminRecoveryCode,
   liveTurn,
-  relayExecutable: process.env.COUCH_RELAY_PATH ?? join(import.meta.dirname, "live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay"),
-  airplayExecutable: process.env.COUCH_AIRPLAY_PATH ?? join(import.meta.dirname, "airplay", "uxplay"),
+  relayExecutable:
+    process.env.COUCH_RELAY_PATH ??
+    join(
+      import.meta.dirname,
+      "live-relay",
+      process.platform === "win32" ? "couch-relay.exe" : "couch-relay",
+    ),
+  airplayExecutable:
+    process.env.COUCH_AIRPLAY_PATH ?? join(import.meta.dirname, "airplay", "uxplay"),
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
-  advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
+  advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
 });
 
-if (app) app.postMessage({ type: "ready", origin: hub.origin, urls: hub.urls, pairingCode: hub.pairingCode });
+if (app)
+  app.postMessage({
+    type: "ready",
+    origin: hub.origin,
+    urls: hub.urls,
+    pairingCode: hub.pairingCode,
+  });
 else {
   console.error(`Couch: ${hub.urls.join(" · ")}`);
   console.error(`Pairing code: ${hub.pairingCode}`);
@@ -80,7 +114,11 @@ async function close() {
   nativeUpdates.close();
   nativeTvMode.close();
   bluetooth?.close();
-  try { await hub.close(); } finally { process.exit(0); }
+  try {
+    await hub.close();
+  } finally {
+    process.exit(0);
+  }
 }
 process.on("SIGINT", close);
 process.on("SIGTERM", close);

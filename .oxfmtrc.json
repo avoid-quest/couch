@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "**/*.md",
+    "bun.lock",
+    "src/client/routeTree.gen.ts",
+    "src/client/public/**",
+    "tests/fixtures/**",
+    "vendor/**",
+    "packaging/**",
+    "native/**"
+  ]
+}

@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
-import { Slider as SliderPrimitive } from "radix-ui"
+import * as React from "react";
+import { cn } from "@/lib/utils";
+import { Slider as SliderPrimitive } from "radix-ui";
 
 function Slider({
   className,
@@ -17,14 +17,9 @@ function Slider({
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root> & { buffered?: number | null }) {
   const _values = React.useMemo(
-    () =>
-      Array.isArray(value)
-        ? value
-        : Array.isArray(defaultValue)
-          ? defaultValue
-          : [min, max],
-    [value, defaultValue, min, max]
-  )
+    () => (Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min, max]),
+    [value, defaultValue, min, max],
+  );
 
   return (
     <SliderPrimitive.Root
@@ -35,7 +30,7 @@ function Slider({
       max={max}
       className={cn(
         "group/slider relative flex w-full cursor-pointer touch-none items-center touch:min-h-11 select-none data-disabled:cursor-default data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col",
-        className
+        className,
       )}
       {...props}
     >
@@ -43,7 +38,15 @@ function Slider({
         data-slot="slider-track"
         className="relative grow overflow-hidden rounded-full bg-muted data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
       >
-        {buffered != null && <div data-slot="slider-buffered" className="absolute inset-y-0 left-0 bg-foreground/35" style={{ width: `${Math.min(100, Math.max(0, (buffered - min) / (max - min) * 100))}%` }} />}
+        {buffered != null && (
+          <div
+            data-slot="slider-buffered"
+            className="absolute inset-y-0 left-0 bg-foreground/35"
+            style={{
+              width: `${Math.min(100, Math.max(0, ((buffered - min) / (max - min)) * 100))}%`,
+            }}
+          />
+        )}
         <SliderPrimitive.Range
           data-slot="slider-range"
           className="absolute bg-primary select-none data-horizontal:h-full data-vertical:w-full"
@@ -60,7 +63,7 @@ function Slider({
         />
       ))}
     </SliderPrimitive.Root>
-  )
+  );
 }
 
-export { Slider }
+export { Slider };

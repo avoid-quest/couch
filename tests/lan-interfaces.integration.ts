@@ -8,11 +8,22 @@ import { promisify } from "node:util";
 import { lanInterfacePriorities } from "../src/server/lan-interfaces";
 import { selectLan } from "../src/server/lan-listener";
 
-const entry: NetworkInterfaceInfo = { address: "192.168.1.20", family: "IPv4", internal: false, netmask: "255.255.255.0", cidr: "192.168.1.20/24", mac: "00:11:22:33:44:55" };
+const entry: NetworkInterfaceInfo = {
+  address: "192.168.1.20",
+  family: "IPv4",
+  internal: false,
+  netmask: "255.255.255.0",
+  cidr: "192.168.1.20/24",
+  mac: "00:11:22:33:44:55",
+};
 function platform(t: TestContext, value: NodeJS.Platform) {
   const descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
   Object.defineProperty(process, "platform", { value });
-  t.after(() => { Object.defineProperty(process, "platform", descriptor); t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => {
+    Object.defineProperty(process, "platform", descriptor);
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
 }
 function command(t: TestContext, file: string, output: string | Error) {
   const original = childProcess.execFile;
@@ -23,51 +34,117 @@ function command(t: TestContext, file: string, output: string | Error) {
     if (output instanceof Error) throw output;
     return { stdout: output, stderr: "" };
   };
-  childProcess.execFile = Object.assign(run, { [promisify.custom]: run }) as unknown as typeof childProcess.execFile;
-  t.after(() => { childProcess.execFile = original; syncBuiltinESMExports(); });
+  childProcess.execFile = Object.assign(run, {
+    [promisify.custom]: run,
+  }) as unknown as typeof childProcess.execFile;
+  t.after(() => {
+    childProcess.execFile = original;
+    syncBuiltinESMExports();
+  });
   syncBuiltinESMExports();
 }
 
-for (const wireless of [1, 9]) test(`Windows hardware information handles renamed adapters and Wi-Fi medium ${wireless}`, async t => {
-  platform(t, "win32");
-  command(t, "powershell.exe", JSON.stringify([
-    { Name: "Ethernet", HardwareInterface: false, NdisPhysicalMedium: 14, InterfaceType: 6 },
-    { Name: "A radio", HardwareInterface: true, NdisPhysicalMedium: wireless, InterfaceType: 71 },
-    { Name: "Z câblé", HardwareInterface: true, NdisPhysicalMedium: 14, InterfaceType: 6 },
-  ]));
-  const priorities = await lanInterfacePriorities();
-  assert.equal(selectLan({ Ethernet: [entry], "A radio": [entry], "Z câblé": [entry] }, undefined, undefined, priorities).name, "Z câblé");
-  assert.equal(selectLan({ Ethernet: [entry], "A radio": [entry] }, undefined, undefined, priorities).name, "A radio");
-});
-
-test("macOS uses hardware ports so Wi-Fi on en0 follows USB Ethernet", async t => {
-  platform(t, "darwin");
-  command(t, "/usr/sbin/networksetup", "Hardware Port: Wi-Fi\nDevice: en0\nEthernet Address: 00:11:22:33:44:55\n\nHardware Port: USB 10/100/1000 LAN\nDevice: en7\nEthernet Address: 00:11:22:33:44:66\n\nHardware Port: Thunderbolt Bridge\nDevice: bridge0\n");
-  const priorities = await lanInterfacePriorities();
-  assert.equal(selectLan({ en0: [entry], bridge0: [entry], en7: [entry] }, undefined, undefined, priorities).name, "en7");
-  assert.equal(selectLan({ bridge0: [entry], en0: [entry] }, undefined, undefined, priorities).name, "en0");
-});
-
-for (const devtype of [true, false]) test(`Linux identifies wireless hardware ${devtype ? "with" : "without"} DEVTYPE=wlan`, async t => {
-  platform(t, "linux");
-  t.mock.method(fs, "readdir", async () => ["a-radio", "office", "guest", "gone"]);
-  t.mock.method(fs, "realpath", async path => {
-    const name = String(path).split("/").at(-1);
-    if (name === "gone") throw new Error("adapter removed");
-    return `/sys/devices/${name === "guest" ? "virtual" : "pci0000:00"}/net/${name}`;
+for (const wireless of [1, 9])
+  test(`Windows hardware information handles renamed adapters and Wi-Fi medium ${wireless}`, async (t) => {
+    platform(t, "win32");
+    command(
+      t,
+      "powershell.exe",
+      JSON.stringify([
+        { Name: "Ethernet", HardwareInterface: false, NdisPhysicalMedium: 14, InterfaceType: 6 },
+        {
+          Name: "A radio",
+          HardwareInterface: true,
+          NdisPhysicalMedium: wireless,
+          InterfaceType: 71,
+        },
+        { Name: "Z câblé", HardwareInterface: true, NdisPhysicalMedium: 14, InterfaceType: 6 },
+      ]),
+    );
+    const priorities = await lanInterfacePriorities();
+    assert.equal(
+      selectLan(
+        { Ethernet: [entry], "A radio": [entry], "Z câblé": [entry] },
+        undefined,
+        undefined,
+        priorities,
+      ).name,
+      "Z câblé",
+    );
+    assert.equal(
+      selectLan({ Ethernet: [entry], "A radio": [entry] }, undefined, undefined, priorities).name,
+      "A radio",
+    );
   });
-  t.mock.method(fs, "readFile", async path => String(path).endsWith("/type") ? "1\n" : devtype && String(path).includes("/a-radio/") ? "DEVTYPE=wlan\nINTERFACE=a-radio\n" : "INTERFACE=office\n");
-  t.mock.method(fs, "access", async path => { if (!String(path).endsWith("/a-radio/wireless")) throw new Error("not wireless"); });
-  syncBuiltinESMExports();
+
+test("macOS uses hardware ports so Wi-Fi on en0 follows USB Ethernet", async (t) => {
+  platform(t, "darwin");
+  command(
+    t,
+    "/usr/sbin/networksetup",
+    "Hardware Port: Wi-Fi\nDevice: en0\nEthernet Address: 00:11:22:33:44:55\n\nHardware Port: USB 10/100/1000 LAN\nDevice: en7\nEthernet Address: 00:11:22:33:44:66\n\nHardware Port: Thunderbolt Bridge\nDevice: bridge0\n",
+  );
   const priorities = await lanInterfacePriorities();
-  assert.equal(selectLan({ "a-radio": [entry], guest: [entry], office: [entry] }, undefined, undefined, priorities).name, "office");
-  assert.equal(selectLan({ guest: [entry], "a-radio": [entry] }, undefined, undefined, priorities).name, "a-radio");
-  assert.equal(priorities.has("gone"), false);
+  assert.equal(
+    selectLan({ en0: [entry], bridge0: [entry], en7: [entry] }, undefined, undefined, priorities)
+      .name,
+    "en7",
+  );
+  assert.equal(
+    selectLan({ bridge0: [entry], en0: [entry] }, undefined, undefined, priorities).name,
+    "en0",
+  );
 });
 
-for (const output of [new Error("PowerShell unavailable"), "invalid JSON"]) test(`missing adapter details still allow automatic LAN selection: ${String(output)}`, async t => {
-  platform(t, "win32");
-  command(t, "powershell.exe", output);
-  const priorities = await lanInterfacePriorities();
-  assert.equal(selectLan({ "vEthernet (WSL)": [entry], "Wi-Fi": [entry], Ethernet: [entry] }, undefined, undefined, priorities).name, "Ethernet");
-});
+for (const devtype of [true, false])
+  test(`Linux identifies wireless hardware ${devtype ? "with" : "without"} DEVTYPE=wlan`, async (t) => {
+    platform(t, "linux");
+    t.mock.method(fs, "readdir", async () => ["a-radio", "office", "guest", "gone"]);
+    t.mock.method(fs, "realpath", async (path) => {
+      const name = String(path).split("/").at(-1);
+      if (name === "gone") throw new Error("adapter removed");
+      return `/sys/devices/${name === "guest" ? "virtual" : "pci0000:00"}/net/${name}`;
+    });
+    t.mock.method(fs, "readFile", async (path) =>
+      String(path).endsWith("/type")
+        ? "1\n"
+        : devtype && String(path).includes("/a-radio/")
+          ? "DEVTYPE=wlan\nINTERFACE=a-radio\n"
+          : "INTERFACE=office\n",
+    );
+    t.mock.method(fs, "access", async (path) => {
+      if (!String(path).endsWith("/a-radio/wireless")) throw new Error("not wireless");
+    });
+    syncBuiltinESMExports();
+    const priorities = await lanInterfacePriorities();
+    assert.equal(
+      selectLan(
+        { "a-radio": [entry], guest: [entry], office: [entry] },
+        undefined,
+        undefined,
+        priorities,
+      ).name,
+      "office",
+    );
+    assert.equal(
+      selectLan({ guest: [entry], "a-radio": [entry] }, undefined, undefined, priorities).name,
+      "a-radio",
+    );
+    assert.equal(priorities.has("gone"), false);
+  });
+
+for (const output of [new Error("PowerShell unavailable"), "invalid JSON"])
+  test(`missing adapter details still allow automatic LAN selection: ${String(output)}`, async (t) => {
+    platform(t, "win32");
+    command(t, "powershell.exe", output);
+    const priorities = await lanInterfacePriorities();
+    assert.equal(
+      selectLan(
+        { "vEthernet (WSL)": [entry], "Wi-Fi": [entry], Ethernet: [entry] },
+        undefined,
+        undefined,
+        priorities,
+      ).name,
+      "Ethernet",
+    );
+  });

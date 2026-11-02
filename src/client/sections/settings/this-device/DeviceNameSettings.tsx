@@ -19,13 +19,43 @@ export function DeviceNameSettings() {
     event.preventDefault();
     if (!saving.isPending) saving.mutate(name.trim());
   }
-  return <>
-    <SettingsRow label="Name" htmlFor="local-device-name" description={localHost ? "Also this Couch's name on every device." : "Used with every Couch this device joins."}>
-      <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
-        <Input data-remote-field="device-name" id="local-device-name" className="min-w-0 flex-1" value={name} placeholder={localHost ? state?.installationName : undefined} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={saving.isPending} />
-        <Button type="submit" variant="outline" disabled={saving.isPending || !name.trim() || name.trim() === savedName}>{saving.isPending ? "Saving…" : "Save"}</Button>
-      </form>
-    </SettingsRow>
-    {saving.error && <Alert variant="destructive"><AlertDescription>{saving.error.message || "Couldn't save the name."}</AlertDescription></Alert>}
-  </>;
+  return (
+    <>
+      <SettingsRow
+        label="Name"
+        htmlFor="local-device-name"
+        description={
+          localHost
+            ? "Also this Couch's name on every device."
+            : "Used with every Couch this device joins."
+        }
+      >
+        <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
+          <Input
+            data-remote-field="device-name"
+            id="local-device-name"
+            className="min-w-0 flex-1"
+            value={name}
+            placeholder={localHost ? state?.installationName : undefined}
+            onChange={(event) => setDraft(event.target.value)}
+            maxLength={60}
+            required
+            disabled={saving.isPending}
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={saving.isPending || !name.trim() || name.trim() === savedName}
+          >
+            {saving.isPending ? "Saving…" : "Save"}
+          </Button>
+        </form>
+      </SettingsRow>
+      {saving.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{saving.error.message || "Couldn't save the name."}</AlertDescription>
+        </Alert>
+      )}
+    </>
+  );
 }

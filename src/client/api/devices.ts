@@ -8,7 +8,10 @@ export const devicesQuery = (credentials: ApiCredentials) =>
   queryOptions({
     staleTime: 30_000,
     queryKey: ["devices", "list"],
-    queryFn: ({ signal }) => apiJson<{ devices: Device[] }>(credentials, "/api/devices", { signal }).then(value => value.devices),
+    queryFn: ({ signal }) =>
+      apiJson<{ devices: Device[] }>(credentials, "/api/devices", { signal }).then(
+        (value) => value.devices,
+      ),
     retry: false,
   });
 
@@ -18,7 +21,12 @@ export const pairingCodeQuery = (credentials: ApiCredentials) =>
     queryKey: ["devices", "pairing-code"],
     gcTime: 0,
     queryFn: async ({ signal }) => {
-      const { code } = await apiJson<{ code: string }>(credentials, "/api/devices/pairing-code", { signal }, 10_000);
+      const { code } = await apiJson<{ code: string }>(
+        credentials,
+        "/api/devices/pairing-code",
+        { signal },
+        10_000,
+      );
       if (!/^\d{6}$/.test(code)) throw new Error("Pairing code unavailable");
       return code;
     },
@@ -28,6 +36,7 @@ export const pairingCodeQuery = (credentials: ApiCredentials) =>
 export const claimCodeQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["devices", "claim-code"],
-    queryFn: ({ signal }) => apiJson<{ code: string }>(credentials, "/api/devices/claim-code", { signal }),
+    queryFn: ({ signal }) =>
+      apiJson<{ code: string }>(credentials, "/api/devices/claim-code", { signal }),
     retry: false,
   });

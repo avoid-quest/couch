@@ -17,21 +17,43 @@ test("clients own their name, and administrators name only the host", async () =
     assert.equal(store.identify(clientToken, "c".repeat(43)), true);
     assert.equal(store.deviceForToken(clientToken)?.name, "Laptop");
     const devices = createDevices({ store, onChange: () => {} });
-    const send = (path: string, name: string, token: string) => devices.handle(new Request(`http://localhost${path}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
-    }), () => {
-      const device = store.deviceForToken(token)!;
-      return { device, authority: device.role === "administrator" ? "administrator" : "controller", claimAvailable: false };
-    });
+    const send = (path: string, name: string, token: string) =>
+      devices.handle(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }),
+        () => {
+          const device = store.deviceForToken(token)!;
+          return {
+            device,
+            authority: device.role === "administrator" ? "administrator" : "controller",
+            claimAvailable: false,
+          };
+        },
+      );
     assert.equal((await send("/api/settings", "Denied", clientToken)).status, 403);
     assert.equal((await send("/api/settings", "Headless Couch", adminToken)).status, 200);
     assert.equal(store.installationName(), "Headless Couch");
     store.identify(null, "h".repeat(43));
     assert.equal(store.hostDevice()?.name, "Headless Couch");
-    assert.equal((await send(`/api/devices/${"c".repeat(43)}/name`, "Per-server alias", adminToken)).status, 403);
-    assert.equal((await send(`/api/devices/${"h".repeat(43)}/name`, "Second route", adminToken)).status, 403);
-    assert.equal((await send(`/api/devices/${"c".repeat(43)}/name`, "Office laptop", clientToken)).status, 200);
+    assert.equal(
+      (await send(`/api/devices/${"c".repeat(43)}/name`, "Per-server alias", adminToken)).status,
+      403,
+    );
+    assert.equal(
+      (await send(`/api/devices/${"h".repeat(43)}/name`, "Second route", adminToken)).status,
+      403,
+    );
+    assert.equal(
+      (await send(`/api/devices/${"c".repeat(43)}/name`, "Office laptop", clientToken)).status,
+      200,
+    );
     assert.equal(store.deviceForToken(clientToken)?.name, "Office laptop");
     assert.equal(readDeviceName(join(directory, "couch.sqlite")), "Headless Couch");
-  } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

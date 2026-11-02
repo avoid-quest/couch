@@ -5,9 +5,12 @@ import { couchApp } from "./session/native-context";
 // and bounds the diagnostic. Leave other arguments and error reporting intact.
 if (couchApp) {
   const error = console.error.bind(console);
-  console.error = (...values: unknown[]) => error(...values.map(value => {
-    if (!(value instanceof DOMException)) return value;
-    const stack = "stack" in value && typeof value.stack === "string" ? `\n${value.stack}` : "";
-    return `${value.name}: ${value.message}${stack}`;
-  }));
+  console.error = (...values: unknown[]) =>
+    error(
+      ...values.map((value) => {
+        if (!(value instanceof DOMException)) return value;
+        const stack = "stack" in value && typeof value.stack === "string" ? `\n${value.stack}` : "";
+        return `${value.name}: ${value.message}${stack}`;
+      }),
+    );
 }

@@ -4,6 +4,14 @@ const holdDelay = 500;
 /** A press that acts when released or, held for holdDelay, runs onHold once; release() ends it and says whether it was short. */
 export function startHold(onHold: () => void, delay = holdDelay) {
   let held = false;
-  const timer = setTimeout(() => { held = true; onHold(); }, delay);
-  return { release: () => { clearTimeout(timer); return !held; } };
+  const timer = setTimeout(() => {
+    held = true;
+    onHold();
+  }, delay);
+  return {
+    release: () => {
+      clearTimeout(timer);
+      return !held;
+    },
+  };
 }
