@@ -3,7 +3,7 @@ import { couchApp } from "./native-context";
 // Vite defines it: true only in scratch builds (COUCH_TV_OVERRIDE=1) and the dev server, so release builds drop the override.
 declare const COUCH_TV_OVERRIDE: boolean;
 
-// A browser tab opts in with ?tv=1 and out with ?tv=0; the choice lasts for the tab's reloads (docs/design/tv.md).
+// A browser tab opts in with ?tv=1 and out with ?tv=0; the choice lasts for the tab's reloads (docs/design.md, See the TV in a browser).
 const optedIn = () => {
   const choice = new URLSearchParams(location.search).get("tv");
   try {

@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+version: 1
+reviews:
+  custom_rules:
+    - name: Coding standards
+      description: Review the change against CODING_STANDARDS.md. Leave out requests for more tests, docs or comments unless a standard asks for them.
+      file_paths:
+        - CODING_STANDARDS.md

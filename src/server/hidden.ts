@@ -7,7 +7,7 @@ import { ControllerError, settingField } from "./devices";
 const limit = 1000;
 const text = (value: unknown, max: number) => typeof value === "string" && !/[\u0000-\u001f\u007f]/.test(value) ? value.trim().slice(0, max) : "";
 
-/** The Couch's hidden items and words, shared by every paired device (docs/design/browse.md, Hide). */
+/** The Couch's hidden items and words, shared by every paired device. */
 export function createHidden({ databasePath, onChange }: { databasePath: string; onChange: () => void }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath);

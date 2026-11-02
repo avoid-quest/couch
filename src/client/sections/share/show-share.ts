@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { useSessionGate } from "@/session/session-context";
 
-// Whether the header shows Share, saved per device (docs/design/share.md). Until it is chosen, a TV hides it and every
+// Whether the header shows Share, saved per device. Until it is chosen, a TV hides it and every
 // other device shows it.
 const storageKey = "couch.show-share";
 const listeners = new Set<() => void>();

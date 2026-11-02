@@ -1,7 +1,7 @@
 import type { ClientSessionState } from "./session";
 import type { Action, DeviceSummary, Output } from "../../shared/protocol";
 
-// Where it plays' rules, without React (docs/design/where-it-plays.md): which devices the picker lists and in what
+// Where it plays' rules, without React: which devices the picker lists and in what
 // order, what each row says, which controls it offers, and when the chooser opens. Core decides; these rules
 // offer only what Core would accept, so a control is never enabled for a change Core refuses.
 

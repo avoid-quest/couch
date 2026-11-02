@@ -72,8 +72,7 @@ export async function healStreamingCommunityOrigin(store: { streamingCommunityOr
   return check;
 }
 
-// Catalogue client over StreamingCommunity's Inertia web pages (see
-// docs/research/2026-09-16-streamingcommunity-catalogue.md). Metadata only:
+// Catalogue client over StreamingCommunity's Inertia web pages. Metadata only:
 // playback stays with the pasted-link pipeline and its yt-dlp plugin.
 const locale = "it";
 const pageSize = 60;
