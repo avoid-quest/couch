@@ -254,7 +254,8 @@ export function SessionGate({
   useEffect(() => {
     if (!connected || !state) {
       revisions.current = null;
-      void queryClient.cancelQueries();
+      // Pairing requests must run before there is an authenticated session.
+      if (!pairingRequired) void queryClient.cancelQueries();
       return;
     }
     const previous = revisions.current;
@@ -269,7 +270,7 @@ export function SessionGate({
         }
       }
     revisions.current = { client: queryClient, versions };
-  }, [versions, connected, !!state, queryClient]);
+  }, [versions, connected, !!state, queryClient, pairingRequired]);
 
   useInterfaceSize(state?.appearance);
 
