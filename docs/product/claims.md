@@ -8,11 +8,11 @@ release audit of 29 October 2026 (git history) checks main `8beabc5`, including
 the differences between published builds and newly merged work. It excludes
 qualification of Live audio mode.
 
-**Release state, checked 2026-10-29.** The latest published build is
-[`v0.4.0-preview.5`](https://github.com/avoid-quest/couch/releases/tag/v0.4.0-preview.5),
-from `73668e3`. Main `8beabc5` includes later work that is not in that build.
-No published stable release was found. Recheck releases before changing public
-copy; do not equate "on main" with "in the latest preview".
+**Release state, checked 2026-11-02.** The latest published build is
+[`v0.4.0-preview.6`](https://github.com/avoid-quest/couch/releases/tag/v0.4.0-preview.6),
+the same commit as main (`8f05dc31`). No stable release exists. Recheck releases
+before changing public copy; "on main" is not "in the latest preview". The
+[stories](../stories/README.md) record what each journey does today.
 
 ## In the latest preview
 
@@ -39,7 +39,7 @@ copy; do not equate "on main" with "in the latest preview".
 | Free and open source (MIT); forks and contributions welcome | `LICENSE`, `package.json` `license` | The UxPlay patch is GPL-3.0-or-later; dependencies keep their own licences |
 | Updates itself; admins update connected Couch apps from a phone | #878, [usage](../usage.md#run-from-source) | — |
 
-## On main after preview.5
+## Added in preview.6
 
 | Claim | Evidence | Public wording limits |
 | --- | --- | --- |
@@ -47,11 +47,12 @@ copy; do not equate "on main" with "in the latest preview".
 | Screen/window sharing offers independent resolution and 30/60/120 FPS targets, default 60 | #941, #940, #948 | Targets, not locked rates. Historical software/native failures remain in the 29 October audit (git history); final paced Windows and Mac runs (#948) pass the controlled 1080p60 gate, and the tested Mac 120 Hz chain passes ≥110 FPS. Native Linux GPU sharing, multiple physical receivers, Windows 120 Hz and physical/acoustic A/V remain unqualified |
 | External media avoids discarded preparation requests; YouTube can use the existing Node runtime | #944 | The controlled delay experiment and individual provider samples do not guarantee internet startup times or improvements for every source |
 | Playback delivery and controls are decided by Core | #918, #919; [delivery ADR](../adr/0002-playback-delivery-and-authority.md) | A private playback does not give every paired device transport control. Live audio mode is excluded from this audit; its existence on main is not venue or latency qualification |
+| Live audio: share an audio input from the Couch computer; guests join, set their own volume and leave | [The gig in your ears](../stories/the-gig-in-your-ears.md), #919, #920 | Starts only in the desktop app on the Couch computer. No latency, audience-size or venue claim; in-step listening across phones over Wi-Fi is unmeasured |
 
 ## Historical live-audio experiments
 
-The following predates the Live audio work merged after preview.5. It remains
-historical evidence, not a description of current main or a release guarantee.
+The following predates Live audio in preview.6. It remains historical
+evidence, not a description of current behavior or a release guarantee.
 
 | Claim | Evidence | Status |
 | --- | --- | --- |
@@ -64,7 +65,7 @@ Never publish the lab's numbers as targets or results.
 
 - Live sound: a stereo input on the Couch computer heard through attendees'
   phones, laptops, headphones and speakers, close to live and in step. See
-  [live sound](specs/live-sound.md).
+  [The gig in your ears](../stories/the-gig-in-your-ears.md).
 - Several sound cards or input pairs, more than two channels, and routing
   them (choosing one audio input already exists).
 - Expert audio settings (buffers, lead, output compensation) with sensible
@@ -79,7 +80,7 @@ Never publish the lab's numbers as targets or results.
 | "Zero latency", "real-time", any ms figure | Unmeasured for products; lab figures are test settings |
 | "Perfect sync", "sample-accurate" | Synchronization is software-clocked; physical skew isn't measured across devices |
 | "Concert-ready", "for venues", attendee counts | No Wi-Fi, scale or multi-receiver measurement |
-| "Stage monitoring", speaker arrays | Out of scope (see [live sound](specs/live-sound.md#scope)) |
+| "Stage monitoring", speaker arrays | Out of scope (see [what Couch is not](vision.md#what-couch-is-not)) |
 | "Local files", "your library", Jellyfin | Removed ([usage](../usage.md#sources)) |
 | "Stable", "1.0" | No stable release exists; say "in preview" |
 

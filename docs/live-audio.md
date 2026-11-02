@@ -6,8 +6,8 @@ official SDKs: `@sendspin/sendspin-js` in browsers and
 presentation timestamps, group membership and authorization; the SDKs own the
 connection, Noise encryption, clock sync, decoding, buffering, correction and
 reconnection. Don't reach into SDK internals, intercept its transport or parse
-its logs. The [capability contract](product/specs/audio-video-use-cases.md)
-defines what each playback behavior allows.
+its logs. What people do with it is in
+[The gig in your ears](stories/the-gig-in-your-ears.md).
 
 ## Connection and identity
 

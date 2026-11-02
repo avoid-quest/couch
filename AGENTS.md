@@ -2,6 +2,7 @@
 
 A media player everyone shares. Use the terms in [GLOSSARY.md](GLOSSARY.md).
 
+- **Stories first**: a new feature or a change in behavior starts from its story in [docs/stories/](docs/stories/README.md). Update the journey, get the owner's OK, then build; the PR updates the story's status and known issues.
 - **Smallest change** that does what was asked. Add tests, docs, settings or limits only when the request needs them. A number the owner gives is a target to aim for, not a gate.
 - **Ask** when the request is unclear or the work grows past it. Show options before building anything new or visual.
 - **Upstream first**: read the existing Couch code and the library's docs before writing your own. For the desktop shell, releases and repo setup, read how [t3code](https://github.com/pingdotgg/t3code) does it.
@@ -13,6 +14,7 @@ A media player everyone shares. Use the terms in [GLOSSARY.md](GLOSSARY.md).
 
 ## Where to look
 
+- [docs/stories/](docs/stories/README.md): what people do with Couch, each journey and its status.
 - [docs/architecture.md](docs/architecture.md): how Core, the client and the app fit together.
 - [docs/usage.md](docs/usage.md): running from source, data directories, the installed app's logs.
 - [docs/ci.md](docs/ci.md): integration tests, workflows, packaging and releases.

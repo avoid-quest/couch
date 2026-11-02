@@ -18,8 +18,8 @@ scale and with a different demand on time.
 | Who chooses | Everyone on the couch | The player | The sound desk |
 | What plays where | The TV, the kitchen laptop, a phone | The player's screen on the TV and on friends' laptops | Everyone's phones and headphones |
 | What matters | Easy, shared, reliable | Fast, picture and sound together | Close to live, in step, good sound, keeps going |
-| Spec | [Shared playback](specs/shared-playback.md) | [Share live](specs/share-live.md) | [Live sound](specs/live-sound.md) |
-| Today | In preview | In preview | Experimental |
+| Stories | [Everyone adds to Up next](../stories/everyone-adds-to-up-next.md), [Music through the house](../stories/music-through-the-house.md) | [My screen on the TV](../stories/my-screen-on-the-tv.md) | [The gig in your ears](../stories/the-gig-in-your-ears.md) |
+| Today | In preview | In preview | In preview |
 
 The scenes differ mostly in how they treat time:
 
@@ -40,32 +40,23 @@ the local Wi-Fi, scan a code, and hear the show on their own phones,
 headphones, laptops or speakers: close to live, in step with each other,
 sounding good, and coming back quickly if Wi-Fi drops.
 
-The path, in order, without dates:
+Live audio is in preview: one input on the Couch computer, heard by guests who
+join with their phones. The path from there, in order, without dates:
 
-1. One stereo input, delivered directly to listening devices, stable for a
-   whole set. *(Lab work under way.)*
-2. Two or more listening devices measured in step, then over Wi-Fi.
-3. Live sound as a choice in Couch, with sensible defaults.
-4. Expert audio settings, modelled on what music software does well:
+1. Two or more listening devices measured in step over Wi-Fi, for a whole set.
+2. Expert audio settings, modelled on what music software does well:
    understandable defaults, then real controls for buffer and delay, showing
    what each one costs.
-5. More inputs, more channels, choosing and routing them.
+3. More inputs, more channels, choosing and routing them
+   ([Pick my language at a talk](../stories/my-language-at-a-talk.md)).
 
 The same work should make shared screens playable in step, not only fast.
 
-## Suggested, not decided
+## Every scene is a story
 
-Scenes the same grammar would fit. They are proposals for discussion, not
-product intent:
-
-- **Music through the house:** one radio station in step in every room, from
-  the devices already there. Mostly possible today.
-- **Talks and lectures:** a speaker's microphone in the headphones of people
-  who need it louder or closer, an accessibility case for live sound.
-- **Silent disco or listening party:** live sound with headphones only, where
-  being close to live matters more than being in step.
-- **Interpretation:** several inputs as language channels, once Couch has
-  more than one input.
+Each thing people do with Couch, from music through the house to a talk with
+interpreters, is a [story](../stories/README.md) with its journey and status.
+A new scene starts there.
 
 ## What Couch is not
 
@@ -81,5 +72,5 @@ product intent:
 ## How we'll know
 
 A claim moves from this page to the website only when [claims](claims.md) has
-evidence for it at the scale the copy implies. Each spec lists the evidence
-its experience needs before Couch says more about it.
+evidence for it at the scale the copy implies. Each [story](../stories/README.md)
+says what works today.
