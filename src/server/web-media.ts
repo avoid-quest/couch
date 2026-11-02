@@ -19,8 +19,9 @@ import type { SelectedChannels } from "./source-preparation";
 import { storyboardPreview } from "./playback-preview";
 import { vttPreview, type PreviewInput } from "./preview-manifest";
 import { hlsPreview } from "./hls-preview";
+import type { CollectionLink } from "../shared/media";
 
-export type WebMediaMetadata = { creator?: import("../shared/media").CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
+export type WebMediaMetadata = { creator?: CollectionLink; title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
 export type WebMediaSource = { preview?: PreviewInput; publicNetwork?: boolean; source: string; audioSource?: string; hlsSelection?: { video: string; audio: string; bandwidth: number }; audioOnly?: boolean; hls?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
@@ -230,7 +231,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
       // fresh resolution of the same track returns the same media. Other 4xx errors
       // and providers do not establish transport expiry.
-      if (host.endsWith(".bandcamp.com") && info.extractor === "Bandcamp" && info.format_id === "mp3-128" && !media.audioSource && !media.metadata?.live && transport.protocol === "https:" && /^t\d+\.bcbits\.com$/.test(transport.hostname) && /^\/stream\//.test(transport.pathname) && Number.isSafeInteger(at) && at > 0) {
+      if (host.endsWith(".bandcamp.com") && info.extractor === "Bandcamp" && info.format_id === "mp3-128" && !media.audioSource && !media.metadata?.live && transport.protocol === "https:" && /^t\d+\.bcbits\.com$/.test(transport.hostname) && transport.pathname.startsWith('/stream/') && Number.isSafeInteger(at) && at > 0) {
         media.expiry = { at, recover: async cancellation => {
           if (Date.now() < at) return null;
           cancellation.throwIfAborted();
@@ -249,7 +250,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
   };
 }
 
-export function createWebMediaInspector(options: ResolverOptions = {}) {
+function createWebMediaInspector(options: ResolverOptions = {}) {
   return async function inspectWebMedia(url: string, signal?: AbortSignal, streamingCommunityOrigin?: string): Promise<WebMediaMetadata> {
     const source = mediaUrl(url);
     const host = new URL(source).hostname;

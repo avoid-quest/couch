@@ -80,13 +80,14 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
     if (next) sessions.set(clientId, next); else sessions.delete(clientId);
     return true;
   };
+  const validTiming = (ms: number) => Number.isInteger(ms) && ms >= 0 && ms <= 5000;
   const hooks: SendspinSessionHooks = {
     onFormatChanged: session => { for (const group of groups) group.formatChanged(session); },
     onIdentified: session => { const clientId = session.getClientId()!; identified.add(session); if (select(clientId)) { for (const group of groups) group.joined(clientId); options.changed(); } },
     onPlayerState: (_session, update) => {
       // The SDK exposes declarations unchanged. Reject invalid timing in the
       // socket's dispatch boundary before it can poison a shared capture timeline.
-      if ([update.minBufferMs, update.staticDelayMs].some(value => value !== undefined && (!Number.isInteger(value) || value < 0 || value > 5000))) throw new Error("Invalid Sendspin player timing.");
+      if ([update.minBufferMs, update.staticDelayMs].some(value => value !== undefined && !validTiming(value))) throw new Error("Invalid Sendspin player timing.");
       const clientId = _session.getClientId()!;
       if (sessions.get(clientId) !== _session) return;
       const delayChanged = update.staticDelayMs !== undefined && delays.get(clientId) !== update.staticDelayMs;
@@ -109,7 +110,9 @@ export function createScheduledAudio(options: { serverId?: string; privateKey?: 
       const minimum = load?.captureIntent === "live" ? 0 : leadUs / 1000;
       return members.reduce<LiveLead>((lead, member) => {
         const timing = sessions.get(member.deviceId)?.getPlayerTiming();
-        const ms = Math.max(minimum, timing?.minBufferMs ?? 0) + (timing?.staticDelayMs ?? 0);
+        // The SDK keeps a declaration before onPlayerState rejects it, so read only valid ones.
+        const declared = (value?: number) => value !== undefined && validTiming(value) ? value : 0;
+        const ms = Math.max(minimum, declared(timing?.minBufferMs)) + declared(timing?.staticDelayMs);
         return ms > lead.ms ? { ms, deviceId: member.deviceId } : lead;
       }, { ms: minimum });
     };

@@ -9,6 +9,7 @@ import type { WebMediaSource } from "./web-media";
 import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 import { queueCursorIndex } from "../shared/queue";
+import type { SoundRouteState } from "../shared/sound";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"> & { title?: string };
 export type MediaSource = { preview?: WebMediaSource["preview"]; audioManifest?: { url: string; text: string }; credentialOrigin?: string; liveSourceId?: string; publicNetwork?: boolean; audioOnly?: boolean; hasAudio?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; hlsSelection?: WebMediaSource["hlsSelection"]; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
@@ -532,7 +533,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
 
   return {
     audioSelection: () => audioSelection,
-    updateSystemAudio(audio: import("../shared/sound").SoundRouteState) {
+    updateSystemAudio(audio: SoundRouteState) {
       state.systemAudio = audio;
       if (audio.volume !== null) state.player.volume = audio.volume;
       if (admitted()) invalidate("sound"); else broadcast();

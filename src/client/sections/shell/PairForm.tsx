@@ -12,7 +12,7 @@ import { suggestedDeviceName } from "@/session/connection";
 import { deviceName } from "@/copy";
 import { defaultDeviceName } from "../../../shared/devices";
 
-export async function requestPairing(origin: string, code: string, name: string, hostName?: string) {
+async function requestPairing(origin: string, code: string, name: string, hostName?: string) {
   const id = deviceId();
   const response = await fetch(`${origin}/api/pair`, {
     method: "POST",

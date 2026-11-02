@@ -102,7 +102,7 @@ type MixerProps = Props & { tv?: boolean; order?: Order; filter?: Filter | null;
  * shared source waiting for receivers, "Choose where {title} plays"), In sync where it applies, the counts, then the
  * rows, the playback's devices first and the rest after a hairline, offline ones folded into one line.
  */
-export function Mixer({ state, connected, run, tv = false, order, filter = null, query = "", onFilter, onQuery, close }: MixerProps) {
+function Mixer({ state, connected, run, tv = false, order, filter = null, query = "", onFilter, onQuery, close }: MixerProps) {
   if (livePlayback(state)) {
     return <div className="grid gap-3">
       <div data-nav-row className="flex items-center gap-2"><PlaybackVolume state={state} connected={connected} run={run} />{close}</div>

@@ -10,9 +10,8 @@ import { notice } from "../toasts";
 import { errorText, useSessionGate } from "./session-context";
 import { batchActive, batchLifetime, createUpdateBatch, restartTimeout, restoreUpdateBatch, runUpdateBatch, saveUpdateBatch, updateBatchKey, type UpdateBatch } from "./update-batch";
 
-export type { UpdateBatch } from "./update-batch";
 export type UpdateCenterTarget = { id: string; name: string; tv: boolean; local: boolean; state?: UpdateState; error?: string };
-export type UpdateCenterValue = {
+type UpdateCenterValue = {
   targets: UpdateCenterTarget[];
   // An admin of the connected server: its media tools run with every update.
   canMaintain: boolean;

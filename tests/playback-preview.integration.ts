@@ -14,6 +14,7 @@ import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { startHelpers, helper } from "../src/server/helpers";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import type { IncomingMessage, RequestOptions } from "node:http";
 
 const until = async (check: () => boolean) => {
   const end = Date.now() + 5000;
@@ -35,7 +36,7 @@ for (const kind of ["storyboard", "vtt", "hls"]) test(`${kind}: a controller wit
     ? execFile(process.execPath, ["-e", `console.log(${JSON.stringify(versions.get(file))})`], options, callback) : execFile(file, args, options, callback));
   let extractions = 0, failExtraction = false, manifests = 0;
   const nativeRequest = https.request;
-  t.mock.method(https, "request", (url: URL, options: import("node:http").RequestOptions, callback: (response: import("node:http").IncomingMessage) => void) => {
+  t.mock.method(https, "request", (url: URL, options: RequestOptions, callback: (response: IncomingMessage) => void) => {
     if (url.hostname !== "preview.example") return nativeRequest(url, options, callback);
     if (kind !== "hls" || (options.headers as Record<string, string>).accept === "application/vnd.apple.mpegurl") manifests++;
     const stream = new PassThrough({ autoDestroy: false });
@@ -44,7 +45,7 @@ for (const kind of ["storyboard", "vtt", "hls"]) test(`${kind}: a controller wit
     stream.once("close", () => options.signal?.removeEventListener("abort", abort));
     stream.once("finish", () => {
       const hls = url.pathname === "/master.m3u8" ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=10,RESOLUTION=180x101,CODECS="jpeg",URI="images.m3u8"\n' : `#EXTM3U\n#EXT-X-TARGETDURATION:32\n${url.pathname === "/images.m3u8" ? "#EXT-X-IMAGES-ONLY\n" : ""}#EXTINF:32,\nsheet.jpg\n#EXT-X-ENDLIST\n`;
-      const response = Readable.from([Buffer.from(kind === "hls" ? hls : "WEBVTT\n\n00:00.000 --> 00:16.000\nsheet.webp#xywh=0,0,180,101\n\n00:20.000 --> 00:32.000\nsheet.webp#xywh=180,0,180,101\n")]) as import("node:http").IncomingMessage;
+      const response = Readable.from([Buffer.from(kind === "hls" ? hls : "WEBVTT\n\n00:00.000 --> 00:16.000\nsheet.webp#xywh=0,0,180,101\n\n00:20.000 --> 00:32.000\nsheet.webp#xywh=180,0,180,101\n")]) as IncomingMessage;
       response.statusCode = 200; response.statusMessage = "OK"; response.rawHeaders = ["Content-Type", "application/octet-stream"];
       response.headers = { "content-type": "application/octet-stream" };
       Object.defineProperty(response, "socket", { value: { remoteAddress: "93.184.216.34" } });

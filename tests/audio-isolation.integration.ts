@@ -6,6 +6,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { AudioCodec, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node-sendspin";
 import { createScheduledAudio } from "../src/server/scheduled-audio";
 import { createSendspin } from "../src/server/sendspin";
+import type { Socket } from "node:net";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check: () => boolean) => { const deadline = Date.now() + 5000; while (!check()) { if (Date.now() > deadline) throw new Error("Expected audio state did not arrive"); await sleep(10); } };
@@ -14,7 +15,7 @@ test("a non-finite player timing declaration cannot crash the shared audio worke
   const errors: string[] = [], frames: number[] = [];
   const audio = createSendspin({ name: "Timing isolation", admit: () => true, changed() {}, ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg" });
   const server = createServer();
-  server.on("upgrade", (request, socket, head) => audio.upgrade(request, socket as import("node:net").Socket, head));
+  server.on("upgrade", (request, socket, head) => audio.upgrade(request, socket as Socket, head));
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`;
   const healthy = new SendspinClient("healthy", "Healthy", [Roles.PLAYER], { playerSupport: {

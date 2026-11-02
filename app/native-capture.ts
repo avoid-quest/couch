@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
-import type { NativeChannelMap } from "../src/shared/capture";
+import type { NativeBufferFrames, NativeChannelMap } from "../src/shared/capture";
 
 // capture-queue.h's CaptureError codes, in the words a sharer sees. The log keeps the helper's raw event.
 const captureErrors: Record<number, string> = {
@@ -17,7 +17,7 @@ export type NativeCaptureFormat = {
   sampleRate: 44100 | 48000;
   channels: 1 | 2;
   channelMap: NativeChannelMap;
-  requestedCallbackFrames: import("../src/shared/capture").NativeBufferFrames;
+  requestedCallbackFrames: NativeBufferFrames;
   ownerHalBufferFrames: number;
   nominalRate: number;
   reportedInputLatencyMs: number;
@@ -163,7 +163,7 @@ export async function prepareNativeCapture(child: ChildProcessWithoutNullStreams
           for (let i = 0; i < 5; i++) {
             const clientUs = await clock();
             const serverUs = await new Promise<number>((resolve, reject) => {
-              const finish = (error?: Error, value?: number) => { clearTimeout(timer); connection.off("message", message); connection.off("close", disconnected); error ? reject(error) : resolve(value!); };
+              const finish = (error?: Error, value?: number) => { clearTimeout(timer); connection.off("message", message); connection.off("close", disconnected); if (error) reject(error); else resolve(value!); };
               const disconnected = () => finish(new Error("The capture clock connection closed."));
               const timer = setTimeout(() => finish(new Error("The capture clock exchange timed out.")), 2000);
               const message = (data: WebSocket.RawData) => {

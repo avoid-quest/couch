@@ -3,8 +3,9 @@ import type { SoundState, SoundTest } from "../shared/sound";
 import { ControllerError, settingField } from "./devices";
 import { pulseSound, SoundError, type SoundProcess } from "./sound-pulse";
 import { ADMIN_ONLY } from "./messages";
+import type { createSoundRouting } from "./sound-routing";
 
-type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; idle: () => boolean };
+type Options = { routing?: ReturnType<typeof createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; idle: () => boolean };
 export function createSound(options: Options) {
   const backend = pulseSound();
   let test: SoundTest | null = null;

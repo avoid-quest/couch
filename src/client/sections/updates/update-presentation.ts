@@ -16,7 +16,7 @@ export const updateBusy = (state?: UpdateState) => !!state && ["checking", "down
 export const updateReady = (state?: UpdateState) => state?.status === "ready" && !!state.available;
 /** The one Updates page each viewer gets: an admin updates the Couch's apps, anyone else only this app; a browser has none. */
 export const updatesPage = (administrator: boolean): SettingsPage | null => administrator ? "updates" : couchApp?.updates ? "device-updates" : null;
-export const activePlayback = (status: string) => ["loading", "playing", "paused"].includes(status);
+const activePlayback = (status: string) => ["loading", "playing", "paused"].includes(status);
 
 /** A server restart affects every playback, not only the one this viewer controls. */
 export function updateInterrupts(state: (Pick<SessionState, "playbacks" | "outputs" | "liveSources"> & { player: Pick<SessionState["player"], "status"> }) | null | undefined, ids: string[], viewer: string, localHost = false) {

@@ -31,7 +31,11 @@
     "web:build": "bun run --cwd apps/web build",
     "web:deploy": "bun run --cwd apps/web deploy",
     "test": "bun test --isolate",
-    "test:integration": "bun scripts/test-integration.ts"
+    "test:integration": "bun scripts/test-integration.ts",
+    "lint": "oxlint --deny-warnings",
+    "knip": "knip --no-config-hints",
+    "prepare": "git config core.hooksPath .githooks",
+    "check": "bun run lint && bun run typecheck && bun run knip && bun run test"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -66,8 +70,10 @@
     "hls.js": "^1.7.4",
     "image-size": "^2.0.4",
     "input-otp": "^1.5.0",
+    "knip": "^6.44.1",
     "lucide-react": "^1.63.0",
     "mpegts.js": "^1.8.2",
+    "oxlint": "^1.90.0",
     "qrcode.react": "^4.2.0",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",

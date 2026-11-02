@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import cp from "node:child_process";
 import dns from "node:dns";
-import { isIP } from "node:net";
+import { isIP, type AddressInfo } from "node:net";
 import { syncBuiltinESMExports } from "node:module";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -259,7 +259,7 @@ test("Web playback selection and safe extraction errors", async t => {
       else { response.writeHead(200, { "Content-Length": "1024" }); response.end(Buffer.alloc(1024)); }
     });
     await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve));
-    const port = (upstream.address() as import("node:net").AddressInfo).port;
+    const port = (upstream.address() as AddressInfo).port;
     const proxy = await createPublicMediaProxy(new AbortController().signal, undefined, async hostname => {
       assert.equal(hostname, "media.example");
       return [{ address: "127.0.0.1", family: 4 }];

@@ -46,9 +46,11 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS]) test(`live ${codec} share
   // A nonzero source timestamp catches pictures incorrectly anchored to zero. The
   // fixture has real video and stereo audio in the same MPEG-TS presentation clock.
   execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=10", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "12", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-g", "10", "-c:a", "aac", "-ac", "2", "-output_ts_offset", "7", "-f", "hls", "-hls_time", "1", "-hls_list_size", "0", "-hls_segment_filename", join(directory, "segment%d.ts"), join(directory, "index.m3u8")], { stdio: "pipe" });
-  const probe = spawnSync(ffmpeg, ["-hide_banner", "-copyts", "-i", join(directory, "segment0.ts"), "-vf", "showinfo", "-af", "ashowinfo", "-frames:v", "1", "-frames:a", "1", "-f", "null", "-"], { encoding: "utf8" });
-  assert.equal(probe.status, 0, probe.stderr);
-  const firstPts = (filter: string) => {
+  // One probe per stream: a joint probe can stop at the first video frame before audio's is logged.
+  const firstPts = (filter: "showinfo" | "ashowinfo") => {
+    const stream = filter === "showinfo" ? "v" : "a";
+    const probe = spawnSync(ffmpeg, ["-hide_banner", "-copyts", "-i", join(directory, "segment0.ts"), "-map", `0:${stream}`, `-${stream}f`, filter, `-frames:${stream}`, "1", "-f", "null", "-"], { encoding: "utf8" });
+    assert.equal(probe.status, 0, probe.stderr);
     const match = new RegExp(`Parsed_${filter}.*?\\bn:\\s*0\\s.*?pts_time:([\\d.]+)`).exec(probe.stderr);
     assert.ok(match, `Missing ${filter} source timestamp`);
     return Number(match[1]);

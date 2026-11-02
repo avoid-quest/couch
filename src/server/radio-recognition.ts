@@ -129,7 +129,8 @@ export function createRadioRecognition({ databasePath, onChange, station, progra
         db.query("INSERT INTO radio_recognitions (id, sampledAt, entry) VALUES (?, ?, ?)").run(entry.id, sampledAt, JSON.stringify(entry));
         onChange();
         return respond(entry);
-      } catch (error) {
+      } catch (caught) {
+        let error = caught;
         try { authorize(); } catch (rejected) { error = rejected; }
         if (error instanceof ControllerError || error instanceof RadioError || error instanceof SongRecognitionError) return respond({ error: error.message }, error.status);
         if (signal.aborted) return respond({ error: signal.reason?.name === "TimeoutError" ? "Identification took too long. Try again." : "Identification canceled." }, signal.reason?.name === "TimeoutError" ? 504 : 499);

@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { createServer } from "node:http";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, type WebSocket } from "ws";
 import { createScheduledAudio } from "./scheduled-audio";
 import { acceptCaptureUpload } from "./capture-ingest";
 import type { CaptureAudioPacket } from "./capture-audio";
@@ -31,7 +31,7 @@ const engine = createScheduledAudio({ serverId: workerData.serverId, privateKey:
   saveDelay: (id, delay) => port.postMessage({ type: "delay", clientId: id, delay }),
   sourceFailed: (id, error) => port.postMessage({ type: "sourceFailed", sourceId: id, epoch: registrations.get(id), error }),
 });
-const uploads = new Map<string, import("ws").WebSocket>();
+const uploads = new Map<string, WebSocket>();
 const groups = new Map<string, { epoch: string; group: ReturnType<typeof engine.group> }>();
 const server = createServer((_req, response) => response.writeHead(404).end());
 const websocket = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024, perMessageDeflate: false });

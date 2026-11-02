@@ -36,7 +36,7 @@ function storedCredentials(): Credentials | null {
   }
 }
 
-export function dispatchTvRoute(key: "home" | "info") {
+function dispatchTvRoute(key: "home" | "info") {
   const dispatch = (remaining: number) => {
     const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
     const open = [...document.querySelectorAll<HTMLElement>(portals)].some(element => element.getAttribute("data-state") !== "closed" && element.getClientRects().length > 0);

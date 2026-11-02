@@ -14,6 +14,6 @@ export function StatusLine({ busy = false, actions, children, className }: { bus
 }
 
 /** Filled while connected, hollow while not. */
-export function StatusDot({ connected }: { connected: boolean }) {
+function StatusDot({ connected }: { connected: boolean }) {
   return <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full border border-current", connected && "bg-current")} />;
 }

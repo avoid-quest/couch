@@ -3,7 +3,7 @@ import { useRadioClock } from "@/radio-clock";
 import { useEffect } from "react";
 import type { ClientSessionState } from "@/session/session";
 
-export function nativeWindowTitle(state: ClientSessionState | null, connected: boolean, fallbackName?: string, now = Date.now()) {
+function nativeWindowTitle(state: ClientSessionState | null, connected: boolean, fallbackName?: string, now = Date.now()) {
   const name = state?.installationName ?? fallbackName;
   const current = connected && state?.player.playbackId && ["loading", "playing", "paused"].includes(state.player.status)
     ? state.queue.find(entry => entry.id === state.currentEntryId) : null;

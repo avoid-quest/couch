@@ -27,7 +27,7 @@ export const contrast = (one: Rgb, two: Rgb) => { const [high, low] = [luminance
  * The colour at a luminance: its hue and saturation kept, its light scaled in linear light (so it reads as the same
  * colour, dimmer). A colour that can't reach it (a deep blue) stays as bright as it can.
  */
-export function atLuminance(colour: Rgb, target: number): Rgb {
+function atLuminance(colour: Rgb, target: number): Rgb {
   const channels = colour.map(linear), current = luminance(colour);
   if (current <= 0) return [0, 0, 0];
   const scale = Math.min(target / current, 1 / Math.max(...channels));
@@ -53,7 +53,7 @@ export const roomPeak = 0.022, deepPeak = 0.01, tonePeak = 0.03;
  * are, and the strongest hue at least 60° from it (else the first again). Near-black, near-white and transparent
  * pixels carry no light; a picture of only those gives none, and one under a tenth coloured lights in its grey.
  */
-export function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
+function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
   const bins = Array.from({ length: 12 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
   let grey = { weight: 0, r: 0, g: 0, b: 0 }, coloured = 0;
   for (let index = 0; index + 3 < pixels.length; index += 4) {
@@ -80,7 +80,7 @@ export function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
 export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({ key, a: atLuminance(a, peak), b: atLuminance(b, haze), room: atLuminance(a, roomPeak), deep: atLuminance(b, deepPeak), tone: atLuminance(a, tonePeak) });
 
 /** A picture whose edge is mostly see-through (a logo on nothing) stands without a shadow, which would outline its box. */
-export function clearEdges(pixels: ArrayLike<number>, side = 16) {
+function clearEdges(pixels: ArrayLike<number>, side = 16) {
   let edge = 0, clear = 0;
   for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) {
     if (x && y && x < side - 1 && y < side - 1) continue;

@@ -6,11 +6,13 @@ Use the latest stable Bun (1.4.4+, see `engines`), Node 24+ and the committed
 lockfile.
 
 ```sh
-bun install --frozen-lockfile
-bun run typecheck
-bun run test      # unit tests, each file isolated from other files' mocks and globals
+bun install --frozen-lockfile   # also installs the pre-commit hook (.githooks)
+bun run check     # oxlint, typecheck, knip (unused files, exports, dependencies), unit tests
 bun run build
 ```
+
+The pre-commit hook runs the same checks except the tests. `bun run test` runs
+unit tests alone, each file isolated from other files' mocks and globals.
 
 Run one unit file with `bun run test <path>`. Plain `bun test` shares one
 process across files, so module mocks can interfere.
@@ -54,7 +56,7 @@ workflow; leave it alone.
 
 | Workflow | Start it with | It does |
 |---|---|---|
-| [Check](../.github/workflows/check.yml) | `gh workflow run check.yml --ref <branch>` | Typecheck, test and build on Linux |
+| [Check](../.github/workflows/check.yml) | `gh workflow run check.yml --ref <branch>` | `bun run check` and build on Linux |
 | [Package](../.github/workflows/package.yml) | `gh workflow run package.yml --ref <branch>` | Tests and installers for Linux, macOS and Windows, kept 14 days as run artifacts |
 | [Release](../.github/workflows/release.yml) | `gh workflow run release.yml -f channel=preview` or `-f channel=production` | Publishes a preview from `main`, or promotes the latest preview |
 | [Housekeeping](../.github/workflows/housekeeping.yml) | Scheduled, Mondays | Deletes expired artifacts and unused caches |

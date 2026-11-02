@@ -287,7 +287,7 @@ function PairingPage({ status }: { status: ReactNode }) {
   </Onboarding>;
 }
 
-export function ShellChrome({ children }: PropsWithChildren) {
+function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const shortcutsOpener = useRef<HTMLElement>(null);
@@ -386,7 +386,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   );
 }
 
-export function AppPage({ children }: PropsWithChildren) {
+function AppPage({ children }: PropsWithChildren) {
   const { nativeHost, tvPresentation } = useSessionGate();
   const props = { className: "app-page flex min-w-0 flex-1 flex-col", "data-scroll-restoration-id": "app-page" };
   return nativeHost && !tvPresentation && !/Mac/.test(navigator.platform)

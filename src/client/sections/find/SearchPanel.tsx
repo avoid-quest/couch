@@ -314,7 +314,7 @@ export const HitList = memo(function HitList({ hits, label, compact = false, cur
   </div>;
 });
 
-export function MoreResults({ summaries }: { summaries: Entry[] }) {
+function MoreResults({ summaries }: { summaries: Entry[] }) {
   const more = summaries.filter(([, summary]) => summary.more);
   return more.length ? <div className="flex flex-wrap gap-2">{more.map(([source, summary]) => <Button key={source} variant="outline" className="h-auto min-h-8 max-w-full whitespace-normal" disabled={summary.moreDisabled} onClick={summary.more}>More from {source}</Button>)}</div> : null;
 }

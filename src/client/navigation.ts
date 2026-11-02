@@ -138,9 +138,9 @@ function moveFocus(key: string) {
 }
 
 /** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */
-export const openItemMenu = (target: HTMLElement) => target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+const openItemMenu = (target: HTMLElement) => target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
 
-export function sendKey(target: HTMLElement, key: string) {
+function sendKey(target: HTMLElement, key: string) {
   const code = key === " " ? "Space" : key;
   target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
   target.dispatchEvent(new KeyboardEvent("keyup", { key, code, bubbles: true, cancelable: true }));

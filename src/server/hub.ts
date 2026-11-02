@@ -14,7 +14,7 @@ import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import { hostname as machineName, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { isIP } from "node:net";
-import type { Action, Domain, Output, PlaybackActor, PlaybackClock, PlaybackCommand, PlaybackSummary, PlayerState, QueueEntry, ServerMessage, SessionState } from "../shared/protocol";
+import type { Action, Domain, Follow, Output, PlaybackActor, PlaybackClock, PlaybackCommand, PlaybackSummary, PlayerState, QueueEntry, ServerMessage, SessionState } from "../shared/protocol";
 import type { WatchingProfile } from "../shared/viewing";
 import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality } from "../shared/providers";
 import { createSession, type MediaSource } from "./session";
@@ -23,7 +23,7 @@ import { openStore } from "./store";
 import { parseCommand, parseLiveFailed, parseLiveSignal, parseLiveUploadFailed, parsePlayer } from "./validation";
 import { createLiveInputs } from "./live-input";
 import { createAirPlay } from "./airplay";
-import { AIRPLAY_PUBLISHER, liveTitle } from "../shared/live-input";
+import { AIRPLAY_PUBLISHER, liveTitle, type LiveSource } from "../shared/live-input";
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
@@ -381,7 +381,7 @@ export async function createHub(options: HubOptions) {
   // The capturing Device controls its source but never receives it: a synchronized speaker there needs the
   // native route that docs/live-inputs.md describes as a prototype. Its other playback is unaffected.
   const capturing = (playback: Playback, deviceId: string) => live.source(sourceOf(playback) ?? "")?.deviceId === deviceId;
-  const prepareOutput = (output: Pick<Output, "deviceId" | "sound">, source?: import("../shared/live-input").LiveSource) => systemAudio && output.deviceId === hostId() && output.sound && source?.audio !== false && source?.deviceId !== output.deviceId ? soundRouting!.prepare() : "";
+  const prepareOutput = (output: Pick<Output, "deviceId" | "sound">, source?: LiveSource) => systemAudio && output.deviceId === hostId() && output.sound && source?.audio !== false && source?.deviceId !== output.deviceId ? soundRouting!.prepare() : "";
   const sharingSource = (deviceId: string) => `${nameOf(deviceId)} is sharing this source. Choose where it plays.`;
   const requireReceiver = (playback: Playback, deviceId: string) => {
     if (capturing(playback, deviceId)) throw new ControllerError(sharingSource(deviceId), 409);
@@ -678,7 +678,7 @@ export async function createHub(options: HubOptions) {
     playback.session.reload();
   };
   // The clock a screen of this Playback follows: the source's timestamps for a live item.
-  const followOf = (playback: Playback): import("../shared/protocol").Follow => ({ group: playback.id, pts: !!playback.media?.live,
+  const followOf = (playback: Playback): Follow => ({ group: playback.id, pts: !!playback.media?.live,
     timeline: { kind: playback.media?.live ? "source-pts" : "position", generation: playback.loaded?.playbackId ?? stateOf(playback).player.playbackId ?? playback.id, mapping: playback.media?.live ? playback.loaded?.mpegts || !sourceOf(playback) && (!members(playback).length || playback.media.hasAudio === false) ? "unavailable" : "hls" : "media" } });
   // Synced picture (#644 ticket 11): each picture Device's newest tab shows the current item as
   // resolved for its own engine and origin, muted, following the group's clock. Nothing else moves.

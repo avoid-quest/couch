@@ -1,4 +1,4 @@
-import type { AudioCaptureFormat, LiveAudioAction } from "../../shared/capture";
+import type { AudioInput, AudioCaptureFormat, LiveAudioAction } from "../../shared/capture";
 import { readCaptureRatePreference, readNativeInputBufferPreference } from "../audio-settings";
 import { captureSampleRate, liveCaptureConstraints, nativeInputBufferFrames } from "../../shared/audio-settings";
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
@@ -340,7 +340,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       } catch (reason) { failReceiver(current, reason); }
       return true;
     },
-    async audioInputs(live = false): Promise<import("../../shared/capture").AudioInput[]> {
+    async audioInputs(live = false): Promise<AudioInput[]> {
       if (closed || starting || publication) throw new Error("Stop sharing before choosing another audio input.");
       starting = true;
       const attempt = ++generation;

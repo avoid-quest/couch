@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, type ChildProcess, type ExecFileOptions, type SpawnOptions } from "node:child_process";
+import type { WorkerOptions } from "node:worker_threads";
 
 export const executableName = (name: string) => name + (process.platform === "win32" && !name.endsWith(".exe") ? ".exe" : "");
 
@@ -21,14 +22,14 @@ function redirect(directory: string, journal: string, native?: { path: string; t
     if (!source.startsWith(`#!${process.execPath}\n`) && !source.startsWith("#!couch-test-node\n")) return [file, args] as const;
     return [process.execPath, ["--input-type=commonjs", "--eval", source.replace(/^#![^\n]*\n/, ""), "--", file, ...args]] as const;
   };
-  const record = (child: import("node:child_process").ChildProcess) => {
+  const record = (child: ChildProcess) => {
     if (child.pid) {
       fs.appendFileSync(journal, JSON.stringify({ pid: child.pid, closed: false }) + "\n");
       child.once("close", () => { if (fs.existsSync(journal)) fs.appendFileSync(journal, JSON.stringify({ pid: child.pid, closed: true }) + "\n"); });
     }
     return child;
   };
-  cp.spawn = ((file: string, args: string[], options: import("node:child_process").SpawnOptions) => {
+  cp.spawn = ((file: string, args: string[], options: SpawnOptions) => {
     const [command, argv] = argumentsFor(file, args);
     const child = spawn(command, argv, options);
     if (file === native?.path && !args.includes("-version")) fs.appendFileSync(native.log, JSON.stringify({ pid: child.pid, cwd: options.cwd ?? process.cwd(), args: args.join(" ") }) + "\n");
@@ -39,7 +40,7 @@ function redirect(directory: string, journal: string, native?: { path: string; t
     const child = Reflect.apply(execFile, cp, [command, argv, ...rest]);
     return command !== file ? record(child) : child;
   }) as typeof cp.execFile;
-  Object.defineProperty(cp.execFile, promisify.custom, { value: (file: string, args: string[], options: import("node:child_process").ExecFileOptions) => {
+  Object.defineProperty(cp.execFile, promisify.custom, { value: (file: string, args: string[], options: ExecFileOptions) => {
     const [command, argv] = argumentsFor(file, args);
     const promise = promisify(execFile)(command, argv, options);
     if (command !== file) record(promise.child);
@@ -58,7 +59,7 @@ export function nodeExecutables(directory: string, { workers = false, native }: 
   if (workers) {
     const preload = `data:text/javascript,${encodeURIComponent(`(${redirect.toString()})(${JSON.stringify(directory)}, ${JSON.stringify(journal)}, ${JSON.stringify(native)});`)}`;
     threads.Worker = class extends Worker {
-      constructor(file: string | URL, options?: import("node:worker_threads").WorkerOptions) {
+      constructor(file: string | URL, options?: WorkerOptions) {
         super(file, { ...options, execArgv: [...(options?.execArgv ?? []), "--import", preload] });
         runningWorkers.add(this);
         this.once("exit", () => runningWorkers.delete(this));

@@ -6,7 +6,7 @@ const overlays = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="l
 const controls = 'button, a, input, select, textarea, video, audio, [tabindex]:not([tabindex="-1"]), [role="slider"], [role="button"]';
 
 /** Whether a key pressed on `target` is the shortcuts' to take: nothing focused, or a focus target rather than a control. */
-export const isBackground = (target: Element | null | undefined) => !target?.closest(controls);
+const isBackground = (target: Element | null | undefined) => !target?.closest(controls);
 
 // Radix portals and focused controls keep ownership of their keyboard input.
 export function useCouchHotkeys(shortcuts: Shortcut[]) {

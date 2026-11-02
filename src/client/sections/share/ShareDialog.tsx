@@ -19,12 +19,12 @@ import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { CaptureBufferSelect, CaptureChannelsSelect, LiveSettingsStatus, PlaybackBufferInput, useLiveAudioSettings } from "./LiveOperator";
 import { nativeInputChannelMap, nativeInputChannelPreference } from "../../../shared/audio-settings";
 import { frameRateLabels, qualityLabels, selectionOf, shareKinds, shareTargets, unavailable, type ShareKind } from "./share";
-import type { CaptureSource } from "../../../shared/capture";
+import type { AudioInput, CaptureSource } from "../../../shared/capture";
 import { defaultLiveFrameRate, type LiveMetadata, type LiveVideoFrameRate, type LiveVideoQuality } from "../../../shared/live-input";
 import { LiveMetadataFields } from "./LiveMetadata";
 
 // A chip: a quiet capsule that steps up under the pointer, the chosen one checked (Search's kinds do the same).
-export const chip = "h-control flex-none gap-1.5 rounded-full bg-secondary px-3.5 font-normal hover:bg-fill-hover data-[state=on]:bg-secondary touch:h-11";
+const chip = "h-control flex-none gap-1.5 rounded-full bg-secondary px-3.5 font-normal hover:bg-fill-hover data-[state=on]:bg-secondary touch:h-11";
 
 /** One label beside its control, on a divided row. */
 function Row({ label, htmlFor, description, children }: { label: string; htmlFor?: string; description?: string; children: ReactNode }) {
@@ -65,7 +65,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
   const live = useLiveAudioSettings(kind.intent === "live");
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [sourceId, setSourceId] = useState("");
-  const [inputs, setInputs] = useState<import("../../../shared/capture").AudioInput[] | null>(null);
+  const [inputs, setInputs] = useState<AudioInput[] | null>(null);
   const [audioDeviceId, setAudioDeviceId] = useState("default");
   const nativeBuffer = useNativeInputBufferPreference(), nativeChannels = useNativeInputChannelPreference();
   const inputChannels = kind.intent === "live" ? inputs?.find(input => input.deviceId === audioDeviceId)?.nativeChannels : undefined;
