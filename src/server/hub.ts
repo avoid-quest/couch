@@ -3197,9 +3197,12 @@ export async function createHub(options: HubOptions) {
     onChange: () => invalidate("radio"),
     authorizeStation: (target, actor, authorize) => {
       if ("stationId" in target) return authorize;
-      const playback = playing(target.playbackId);
-      if (!playback) throw new RadioError("Choose a playing radio station to identify.", 404);
-      return authorizePlayback(playback, authorize, actor.deviceId);
+      // Look the Playback up on every check: one that ended while sampling grants nothing.
+      return () => {
+        const playback = playing(target.playbackId);
+        if (!playback) throw new RadioError("Choose a playing radio station to identify.", 404);
+        authorizePlayback(playback, authorize, actor.deviceId)();
+      };
     },
     station: async (target) => {
       if ("stationId" in target)
