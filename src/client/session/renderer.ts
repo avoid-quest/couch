@@ -49,8 +49,9 @@ let subtitleDelay = 0;
 let blocked = false;
 let following: Follow | null = null;
 let unfollow: (() => void) | null = null;
-// Where the source's timestamps start on this video's timeline (hls.js), to map a live clock.
-let ptsOffset: number | undefined;
+// Where the source's timestamps start on this video's timeline (hls.js), to map a live clock: one
+// offset per discontinuity, from the media time where its first parsed fragment starts.
+const ptsOffsets = new Map<number, { offset: number; start: number }>();
 let report: ((state: PlayerState) => void) | undefined;
 let reportedAt = 0;
 let reported = "";
@@ -165,7 +166,7 @@ const state = (): PlayerState => ({
               error:
                 "This browser cannot align this picture with the shared sound. Try another browser or device.",
             }
-          : sourcePts() && ptsOffset === undefined
+          : sourcePts() && !ptsOffsets.size
             ? undefined
             : { mapping: sourcePts() ? ("hls" as const) : ("media" as const) },
       }
@@ -375,14 +376,35 @@ const clock = () => {
   if (!sample || !following) return null;
   if (!canMapClock()) return { speed: sample.speed };
   if (!sourcePts()) return sample;
-  return ptsOffset === undefined ? null : { ...sample, position: sample.position - ptsOffset };
+  if (!ptsOffsets.size) return null;
+  const position = mediaTime(sample.position);
+  return position === undefined ? { speed: sample.speed } : { ...sample, position };
+};
+// Each discontinuity (a Twitch ad, a new encoder) maps source timestamps its own way, and hls.js
+// parses the next one before it plays: the sound's timestamp belongs to a stretch of the timeline
+// it lands in, inside the playlist's window. An encoder that restarts its timestamps can make two
+// stretches match; the one nearer the picture wins. None (an ad on this Device only) leaves the
+// picture following transport until its stream returns.
+const mediaTime = (pts: number) => {
+  const details = hls?.latestLevelDetails;
+  const stretches = [...ptsOffsets].sort(([a], [b]) => a - b).map(([, stretch]) => stretch);
+  const first = details ? details.fragmentStart - details.targetduration : 0;
+  const last = details ? details.edge + details.targetduration : Infinity;
+  const candidates = stretches.flatMap(({ offset, start }, index) => {
+    const time = pts - offset;
+    const end = stretches[index + 1]?.start ?? last;
+    return time >= Math.max(index ? start : 0, first) && time < end ? [time] : [];
+  });
+  return candidates.sort(
+    (a, b) => Math.abs(a - video.currentTime) - Math.abs(b - video.currentTime),
+  )[0];
 };
 const setFollow = (follow: Follow | null) => {
   followGeneration++;
   unfollow?.();
   unfollow = null;
   // The measured offset belongs to the loaded stream: keep it when a Direct picture starts following its own group.
-  if (follow?.timeline && follow.timeline.generation !== playbackId) ptsOffset = undefined;
+  if (follow?.timeline && follow.timeline.generation !== playbackId) ptsOffsets.clear();
   following = follow;
   if (follow) suspendCompression();
   else if (loading?.compressor) prepareCompression(loading.compressor);
@@ -430,7 +452,7 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
       if (!nativeFallback) return sourceFailed();
       if (!video.canPlayType("application/vnd.apple.mpegurl")) return unsupported();
       engine = "native";
-      ptsOffset = undefined;
+      ptsOffsets.clear();
       updateMapping();
       video.src = command.source;
       const at = begin(command);
@@ -465,7 +487,11 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
     });
     hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => {
       if (active() && data.id === "main" && Number.isFinite(data.initPTS) && data.timescale > 0) {
-        ptsOffset = data.initPTS / data.timescale;
+        const start = ptsOffsets.get(data.frag.cc)?.start ?? data.frag.start;
+        ptsOffsets.set(data.frag.cc, {
+          offset: data.initPTS / data.timescale,
+          start: Math.min(start, data.frag.start),
+        });
         updateMapping();
         send();
       }
@@ -491,6 +517,11 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
       if (audioTrack >= 0 && audioTrack < decoder.audioTracks.length)
         decoder.audioTrack = audioTrack;
       selectSubtitle(preferredSubtitle(command));
+    });
+    // Start at the best rendition a master offers (Core caps it at the chosen quality) and step down
+    // when the link can't carry it, rather than at hls.js's guess for an unmeasured link.
+    hls.once(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+      if (active() && data.levels.length > 1) decoder.startLevel = data.levels.length - 1;
     });
     hls.subtitleTrack = -1;
     hls.loadSource(command.source);
@@ -542,7 +573,7 @@ const reset = () => {
   loading = null;
   mediaStream = null;
   setFollow(null);
-  ptsOffset = undefined;
+  ptsOffsets.clear();
   hls?.destroy();
   hls = null;
   mpegts?.destroy();

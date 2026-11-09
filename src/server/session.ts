@@ -39,6 +39,7 @@ export type MediaSource = {
   mpv?: boolean;
   hls?: boolean;
   hlsSelection?: WebMediaSource["hlsSelection"];
+  hlsMaxHeight?: number;
   source: string;
   audioSource?: string;
   startPosition?: number;

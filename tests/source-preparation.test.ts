@@ -338,3 +338,33 @@ test("playlist sniffing retains its size limit and public destination guard", as
   ).toBe(false);
   expect(request).not.toHaveBeenCalled();
 });
+
+// Twitch: 2 s segments, TARGETDURATION 6; hls.js starts 18 s from the end, nine segments back.
+test("an endless media playlist starts its sound where hls.js starts the picture", async () => {
+  const playlist = (header: string[], count: number) =>
+    manifest(
+      [
+        "#EXTM3U",
+        ...header,
+        ...Array.from({ length: count }, (_, index) => [
+          `#EXTINF:2.000,live`,
+          `${index}.m4s`,
+        ]).flat(),
+        "",
+      ].join("\n"),
+    );
+  request.mockResolvedValueOnce(playlist(["#EXT-X-TARGETDURATION:6"], 15));
+  expect((await audioInput("https://media.example/audio.m3u8", {}, signal())).pictureStart).toBe(9);
+  request.mockResolvedValueOnce(
+    playlist(
+      ["#EXT-X-TARGETDURATION:6", "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,HOLD-BACK=4.0"],
+      15,
+    ),
+  );
+  expect((await audioInput("https://media.example/audio.m3u8", {}, signal())).pictureStart).toBe(2);
+  request.mockResolvedValueOnce(playlist(["#EXT-X-TARGETDURATION:6"], 3));
+  expect((await audioInput("https://media.example/audio.m3u8", {}, signal())).pictureStart).toBe(
+    2,
+    // A short window keeps its oldest segment in hand.
+  );
+});

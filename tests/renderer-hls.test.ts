@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 
 // Load the real renderer in a fresh browser-shaped environment for each case.
@@ -13,13 +14,11 @@ const check = (source: string, realPictureClock = false) => {
     import { mock } from "bun:test";
     mock.module("./src/client/session/sendspin.ts", () => ({ soundClock: () => clockSample }));
     mock.module("./src/client/session/device-id.ts", () => ({ localDeviceName: () => "Receiver" }));
-    const clockTimers = new Set(), timingUpdates = [], timingAttachments = [];
+    const clockTimers = new Set();
     const tickPicture = () => { for (const tick of clockTimers) tick(); };
     if (${realPictureClock}) {
       globalThis.setInterval = tick => { clockTimers.add(tick); return tick; };
       globalThis.clearInterval = tick => { clockTimers.delete(tick); };
-      mock.module("timing-object", () => ({ TimingObject: class { update(sample) { timingUpdates.push(sample); return Promise.resolve(); } } }));
-      mock.module("timingsrc", () => ({ setTimingsrc: (element, timing) => { const attachment = { element, timing }; timingAttachments.push(attachment); return () => { attachment.closed = true; }; } }));
       const { followClock } = await import("./src/client/session/picture-clock.ts");
       mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: (element, read, start) => {
         pictureRead = read;
@@ -90,7 +89,7 @@ const check = (source: string, realPictureClock = false) => {
     globalThis.location = { href: "https://couch.example/now", origin: "https://couch.example" };
     globalThis.addEventListener = () => {};
     globalThis.MediaError = { MEDIA_ERR_SRC_NOT_SUPPORTED: 4 };
-    globalThis.HTMLMediaElement = { HAVE_METADATA: 1 };
+    globalThis.HTMLMediaElement = { HAVE_METADATA: 1, HAVE_FUTURE_DATA: 3 };
     globalThis.MediaStream = class {
       constructor(tracks = []) { this.tracks = tracks; }
       getTracks() { return this.tracks; }
@@ -100,7 +99,7 @@ const check = (source: string, realPictureClock = false) => {
     Object.defineProperty(globalThis, "navigator", { value: { userAgent: "Chrome/140 Android" }, configurable: true });
     class Hls {
       static isSupported() { return mse; }
-      static Events = { ERROR: "error", INIT_PTS_FOUND: "pts", LEVEL_LOADED: "level", AUDIO_TRACKS_UPDATED: "audio-tracks", AUDIO_TRACK_SWITCHED: "audio-switch", SUBTITLE_TRACKS_UPDATED: "subtitle-tracks", SUBTITLE_TRACK_SWITCH: "subtitle-switch" };
+      static Events = { ERROR: "error", INIT_PTS_FOUND: "pts", MANIFEST_PARSED: "manifest", LEVEL_LOADED: "level", AUDIO_TRACKS_UPDATED: "audio-tracks", AUDIO_TRACK_SWITCHED: "audio-switch", SUBTITLE_TRACKS_UPDATED: "subtitle-tracks", SUBTITLE_TRACK_SWITCH: "subtitle-switch" };
       static ErrorDetails = {};
       static ErrorTypes = { NETWORK_ERROR: "networkError" };
       audioTracks = []; subtitleTracks = [];
@@ -378,17 +377,29 @@ test("HLS reports measured source PTS mapping and destroyed callbacks cannot alt
   load({ paused: true, follow: { group: "g", pts: true, timeline: { kind: "source-pts", mapping: "hls", generation: "one" } } });
   await flush();
   tickPicture();
-  assert.equal(timingAttachments.length, 0, "mapped following waits for measured PTS");
+  assert.equal(video.currentTime, 0, "mapped following waits for measured PTS");
   const first = decoders.at(-1);
-  first.emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 9000000, timescale: 90000 });
+  first.emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 9000000, timescale: 90000, frag: { cc: 0, start: 0 } });
   tickPicture();
   assert.deepEqual(pictureRead(), { position: 12, speed: 1 });
-  assert.deepEqual(timingUpdates.at(-1), { position: 12, velocity: 1 });
-  assert.equal(timingAttachments.length, 1, "measured mapping retains full position synchronization");
+  assert.equal(video.currentTime, 14, "an unbuffered picture waits ahead of the mapped sound");
+  // A Twitch ad on this Device's stream: its own timestamps from media time 30, then the programme again at 60.
+  first.latestLevelDetails = { fragmentStart: 0, edge: 70, targetduration: 2 };
+  first.emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: -30, timescale: 1, frag: { cc: 1, start: 30 } });
+  assert.deepEqual(pictureRead(), { position: 12, speed: 1 }, "an ad parsed ahead doesn't move the programme's mapping");
+  clockSample = { position: 145, speed: 1 };
+  assert.deepEqual(pictureRead(), { speed: 1 }, "during this Device's ad the picture follows transport only");
+  first.emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 100, timescale: 1, frag: { cc: 2, start: 60 } });
+  clockSample = { position: 165, speed: 1 };
+  assert.deepEqual(pictureRead(), { position: 65, speed: 1 }, "the programme maps again after the ad");
+  // An encoder restart at media time 70 sends timestamps back ten seconds: 165 maps into both stretches.
+  first.latestLevelDetails = { fragmentStart: 0, edge: 80, targetduration: 2 };
+  first.emit(Hls.Events.INIT_PTS_FOUND, { id: "main", initPTS: 90, timescale: 1, frag: { cc: 3, start: 70 } });
+  video.currentTime = 74;
+  assert.deepEqual(pictureRead(), { position: 75, speed: 1 }, "the stretch nearer the picture wins");
   assert.equal(reports.at(-1).timeline.mapping, "hls");
   load({ source: "https://couch.example/movie.mp4" });
   assert.equal(first.destroyed, true);
-  assert.equal(timingAttachments[0].closed, true);
   assert.equal(clockTimers.size, 0);
   first.emit(Hls.Events.ERROR, { fatal: true, details: "old error" });
   first.emit(Hls.Events.LEVEL_LOADED, {});
@@ -424,8 +435,6 @@ for (const mpegts of [false, true])
   assert.match(reports.at(-1).timeline.error, /cannot align/);
   assert.equal(video.muted, true);
   assert.equal(video.currentTime, 17, "an unmapped clock cannot reposition the picture");
-  assert.equal(timingAttachments.length, 0, "do not attach the position synchronizer without a mapping");
-  assert.equal(timingUpdates.length, 0);
 
   clockSample = { position: 2000, speed: 0 };
   tickPicture();
@@ -442,3 +451,118 @@ for (const mpegts of [false, true])
 `,
       true,
     ));
+
+// A picture following the shared sound over a slow link (the Twitch freeze): Chromium-shaped media
+// element with an explicit buffer, a clock 250 ms on per step.
+const followed = (ranges: [number, number][] = []) => {
+  const seeks: number[] = [];
+  let time = 0;
+  const video = {
+    seeks,
+    ranges,
+    get currentTime() {
+      return time;
+    },
+    set currentTime(value: number) {
+      time = value;
+      seeks.push(value);
+    },
+    play(seconds: number) {
+      if (!video.paused) time += seconds * video.playbackRate;
+    },
+    playbackRate: 1,
+    defaultPlaybackRate: 1,
+    paused: true,
+    seeking: false,
+    readyState: 1,
+    buffered: {
+      get length() {
+        return ranges.length;
+      },
+      start: (index: number) => ranges[index]![0],
+      end: (index: number) => ranges[index]![1],
+    },
+    pause() {
+      video.paused = true;
+    },
+  };
+  return video;
+};
+const follower = async (video: ReturnType<typeof followed>, clock: { position: number }) => {
+  Object.assign(globalThis, { HTMLMediaElement: { HAVE_METADATA: 1, HAVE_FUTURE_DATA: 3 } });
+  const { createFollower } = await import("../src/client/session/picture-clock");
+  const step = createFollower(
+    video as unknown as HTMLVideoElement,
+    () => ({ position: clock.position, speed: 1 }),
+    () => {
+      video.paused = false;
+    },
+  );
+  return (seconds = 0.25) => {
+    clock.position += seconds;
+    video.play(seconds);
+    step();
+  };
+};
+
+test("a picture without data where the sound is waits ahead once instead of chasing it", async () => {
+  const video = followed();
+  const clock = { position: 30 };
+  const step = await follower(video, clock);
+  step();
+  assert.deepEqual(video.seeks, [32.25], "parks two seconds ahead of the sound");
+  video.seeking = true;
+  for (let index = 0; index < 6; index++) step();
+  assert.equal(video.seeks.length, 1, "no seek while its picture loads");
+  video.ranges.push([31.9, 40]);
+  video.seeking = false;
+  video.readyState = 4;
+  step();
+  assert.equal(video.paused, true, "holds its frame until the sound arrives");
+  while (clock.position < 32.25) step();
+  assert.equal(video.paused, false);
+  assert.equal(video.seeks.length, 1);
+  assert.ok(Math.abs(clock.position - video.currentTime) < 0.05);
+});
+
+test("a picture whose link never catches up waits further ahead each time, not every tick", async () => {
+  const video = followed();
+  const clock = { position: 30 };
+  const step = await follower(video, clock);
+  video.seeking = true;
+  for (let index = 0; index < 120; index++) step();
+  assert.ok(video.seeks.length <= 5, `${video.seeks.length} seeks in 30 s`);
+});
+
+test("small drift moves the rate by at most 5% and a buffered second away seeks once", async () => {
+  const video = followed([[0, 100]]);
+  const clock = { position: 10.3 };
+  video.readyState = 4;
+  const step = await follower(video, clock);
+  video.currentTime = 10;
+  video.seeks.length = 0;
+  step();
+  assert.equal(video.paused, false);
+  assert.equal(video.playbackRate, 1.05);
+  video.currentTime = 10.6;
+  video.seeks.length = 0;
+  step();
+  assert.ok(video.playbackRate < 1 && video.playbackRate >= 0.95);
+  clock.position = 20;
+  step();
+  assert.equal(video.seeks.length, 1);
+  step();
+  step();
+  assert.equal(video.seeks.length, 1, "lands, then corrects the rest by rate");
+});
+
+test("a picture near a film's end waits at the end, not past it", async () => {
+  const video = Object.assign(followed(), { duration: 100 });
+  const clock = { position: 98.75 };
+  const step = await follower(video, clock);
+  step();
+  assert.deepEqual(video.seeks, [100]);
+  video.readyState = 1;
+  while (clock.position < 100) step();
+  assert.equal(video.paused, false, "plays out what is left instead of waiting forever");
+});

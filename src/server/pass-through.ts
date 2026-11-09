@@ -18,6 +18,7 @@ type Media = {
   credentialOrigin?: string;
   hls?: boolean;
   hlsSelection?: WebMediaSource["hlsSelection"];
+  hlsMaxHeight?: number;
   mpegts?: boolean;
   mpv?: boolean;
   publicNetwork?: boolean;
@@ -38,6 +39,7 @@ type Relay = {
   source: string;
   audioSource?: string;
   hlsSelection?: Media["hlsSelection"];
+  hlsMaxHeight?: number;
   logged: Set<string>;
 };
 type Kind = "playlist" | "bytes";
@@ -67,6 +69,23 @@ const mediaExtension = (url: string) => {
   } catch {
     return "ts";
   } // Malformed unsigned requests still fail capability validation.
+};
+
+// Variants taller than the chosen quality leave the master; those without a RESOLUTION
+// (audio only) stay, and a master with nothing at or below it stays whole.
+const capVariants = (lines: string[], maxHeight: number) => {
+  const height = (line: string) => Number(/RESOLUTION=\d+x(\d+)/.exec(line)?.[1] ?? 0);
+  const variants = lines.filter((line) => line.startsWith("#EXT-X-STREAM-INF:"));
+  if (!variants.some((line) => height(line) && height(line) <= maxHeight)) return lines;
+  let dropping = false;
+  return lines.filter((line) => {
+    if (line.startsWith("#EXT-X-STREAM-INF:")) dropping = height(line) > maxHeight;
+    else if (dropping && line.trim() && !line.startsWith("#")) {
+      dropping = false;
+      return false;
+    }
+    return !dropping;
+  });
 };
 
 // A server can mislabel an extensionless playlist. Inspect a small prefix before
@@ -169,8 +188,9 @@ export function createPassThrough(
     `${relay.target.origin}/api/relay/${relay.playbackId}/${kind}/${sign(relay.playbackId, relay.id, kind, url)}?${new URLSearchParams({ url })}`;
 
   async function rewrite(text: string, base: string, relay: Relay) {
-    const lines = text.split(/\r?\n/);
+    let lines = text.split(/\r?\n/);
     const master = lines.some((line) => /^#EXT-X-(?:STREAM-INF|MEDIA):/.test(line));
+    if (master && relay.hlsMaxHeight) lines = capVariants(lines, relay.hlsMaxHeight);
     // Public providers never hand a player an unchecked URI, including keys, maps,
     // low-latency parts and renditions. Variable substitution and content steering
     // can introduce destinations after rewriting, so fail closed on those features.
@@ -294,6 +314,7 @@ export function createPassThrough(
         source: media.source,
         audioSource: media.audioSource,
         hlsSelection: media.hlsSelection,
+        hlsMaxHeight: media.hlsMaxHeight,
         logged: new Set(),
       };
       const route = async (url: string) => {
@@ -335,6 +356,7 @@ export function createPassThrough(
         audioManifest: undefined,
         publicNetwork: undefined,
         hlsSelection: undefined,
+        hlsMaxHeight: undefined,
         source,
         ...(audioSource ? { audioSource } : {}),
         ...(main.playlist ? { hls: true } : {}),

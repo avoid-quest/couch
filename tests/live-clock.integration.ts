@@ -1,7 +1,7 @@
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -290,3 +290,144 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS])
       );
     },
   );
+
+// Plays index.m3u8 from `directory` as an endless stream to one PCM speaker and returns what it
+// hears at a given second of the shared timeline.
+async function heard(t: TestContext, directory: string, seconds: number) {
+  const key = Identity.generate();
+  const core = createSendspin({
+    name: "Stream fixture",
+    admit: (id) => id === key.peerId,
+    changed: () => {},
+    ffmpeg: async () => ffmpeg,
+  });
+  const group = core.group("stream", () => {});
+  const server = createServer((request, response) => {
+    const name = new URL(request.url!, "http://localhost").pathname.slice(1);
+    if (!/^[\w-]+\.(?:m3u8|m4s|mp4|ts)$/.test(name)) {
+      response.writeHead(404).end();
+      return;
+    }
+    response.end(readFileSync(join(directory, name)));
+  });
+  const sockets = new WebSocketServer({ server, path: "/sendspin" });
+  sockets.on("connection", (socket, request) => core.accept(socket, request));
+  const frames: { timestamp: number; bytes: Buffer }[] = [];
+  const client = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER, Roles.METADATA], {
+    playerSupport: {
+      supported_formats: [
+        { codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 },
+      ],
+      buffer_capacity: 2_000_000,
+      supported_commands: [],
+    },
+  });
+  t.after(async () => {
+    group.close();
+    core.close();
+    await client.disconnect();
+    await new Promise<void>((resolve) => sockets.close(() => resolve()));
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  client.addAudioChunkListener((timestamp, bytes) =>
+    frames.push({ timestamp, bytes: Buffer.from(bytes) }),
+  );
+  await client.connect(`ws://127.0.0.1:${address.port}/sendspin`, { timeoutMs: 3_000 });
+  group.members([{ deviceId: key.peerId, level: 100 }]);
+  group.send({
+    type: "load",
+    playbackId: "stream",
+    source: `http://127.0.0.1:${address.port}/index.m3u8`,
+    live: true,
+  });
+  await until(
+    () => frames.length >= 2 && frames.at(-1)!.timestamp - frames[0]!.timestamp >= seconds * 1e6,
+    "The stream's last segment never played",
+  );
+  return (second: number) =>
+    frames
+      .find(
+        (frame) =>
+          frame.timestamp - frames[0]!.timestamp <= second * 1e6 &&
+          frame.timestamp - frames[0]!.timestamp + 100_000 > second * 1e6,
+      )!
+      .bytes.some((byte) => byte !== 0);
+}
+const tone = (directory: string, name: string, frequency: number, offset: number, fmp4: boolean) =>
+  execFileSync(
+    ffmpeg,
+    [
+      ...["-hide_banner", "-loglevel", "error", "-f", "lavfi"],
+      ...["-i", `sine=frequency=${frequency}:sample_rate=48000:duration=${fmp4 ? 6 : 2}`],
+      ...["-c:a", "aac", "-ac", "2", "-output_ts_offset", String(offset)],
+      ...(fmp4
+        ? [
+            ...["-f", "hls", "-hls_time", "2", "-hls_segment_type", "fmp4", "-hls_list_size", "0"],
+            ...["-hls_segment_filename", join(directory, `${name}%d.m4s`)],
+            ...["-hls_fmp4_init_filename", `${name}-init.mp4`, join(directory, `${name}.m3u8`)],
+          ]
+        : ["-f", "mpegts", join(directory, `${name}.ts`)]),
+    ],
+    { stdio: "pipe" },
+  );
+const playlist = (directory: string, lines: string[]) =>
+  writeFileSync(
+    join(directory, "index.m3u8"),
+    ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:2", ...lines, "#EXT-X-ENDLIST", ""].join(
+      "\n",
+    ),
+  );
+
+// A Twitch ad: fMP4 segments whose timestamps restart lower, which FFmpeg's HLS reader drops. The
+// shared sound keeps the source's time: silence where the ad was, then the programme at its own time.
+test(
+  "an endless stream keeps the source's time across an ad FFmpeg drops",
+  {
+    timeout: 20_000,
+    skip: !available && "Set COUCH_TEST_FFMPEG to run the real-media clock test.",
+  },
+  async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), "couch-stream-ad-"));
+    tone(directory, "programme", 440, 7, true);
+    tone(directory, "ad", 880, 0, true);
+    // The ad replaces the programme's second segment, as Twitch's stitched ads do.
+    playlist(directory, [
+      '#EXT-X-MAP:URI="programme-init.mp4"',
+      ...["#EXTINF:2.0,", "programme0.m4s", "#EXT-X-DISCONTINUITY"],
+      ...['#EXT-X-MAP:URI="ad-init.mp4"', "#EXTINF:2.0,", "ad0.m4s", "#EXT-X-DISCONTINUITY"],
+      ...['#EXT-X-MAP:URI="programme-init.mp4"', "#EXTINF:2.0,", "programme2.m4s"],
+    ]);
+    const audible = await heard(t, directory, 5.8);
+    assert.ok(audible(1), "the programme plays before the ad");
+    assert.ok(!audible(3), "the ad's time is silence");
+    assert.ok(audible(5), "the programme returns at its own time, two seconds later");
+  },
+);
+
+// An encoder restart sends timestamps back: every sample still plays, in order, and a gap after it
+// is still silence.
+test(
+  "an endless stream whose timestamps go back keeps all of its sound and later gaps",
+  {
+    timeout: 20_000,
+    skip: !available && "Set COUCH_TEST_FFMPEG to run the real-media clock test.",
+  },
+  async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), "couch-stream-restart-"));
+    tone(directory, "before", 440, 20, false);
+    tone(directory, "after", 880, 10, false);
+    tone(directory, "later", 440, 14, false);
+    playlist(directory, [
+      ...["#EXTINF:2.0,", "before.ts", "#EXT-X-DISCONTINUITY"],
+      ...["#EXTINF:2.0,", "after.ts", "#EXTINF:2.0,", "later.ts"],
+    ]);
+    const audible = await heard(t, directory, 7.8);
+    for (const second of [1, 3, 7]) assert.ok(audible(second), `silence at ${second}s`);
+    assert.ok(!audible(5), "the two seconds missing after the restart are silence");
+  },
+);
