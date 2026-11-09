@@ -291,8 +291,8 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS])
     },
   );
 
-// Plays index.m3u8 from `directory` as an endless stream to one PCM speaker and returns what it
-// hears at a given second of the shared timeline.
+// Plays index.m3u8 from `directory` as an endless stream to one PCM speaker and screen: whether it
+// hears sound at a given second of the shared timeline, and the clock its pictures were sent.
 async function heard(t: TestContext, directory: string, seconds: number) {
   const key = Identity.generate();
   const core = createSendspin({
@@ -313,6 +313,7 @@ async function heard(t: TestContext, directory: string, seconds: number) {
   const sockets = new WebSocketServer({ server, path: "/sendspin" });
   sockets.on("connection", (socket, request) => core.accept(socket, request));
   const frames: { timestamp: number; bytes: Buffer }[] = [];
+  const metadata: SessionUpdateMetadata[] = [];
   const client = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER, Roles.METADATA], {
     playerSupport: {
       supported_formats: [
@@ -337,8 +338,12 @@ async function heard(t: TestContext, directory: string, seconds: number) {
   client.addAudioChunkListener((timestamp, bytes) =>
     frames.push({ timestamp, bytes: Buffer.from(bytes) }),
   );
+  client.addMetadataListener((payload) => {
+    if (payload.metadata) metadata.push(payload.metadata);
+  });
   await client.connect(`ws://127.0.0.1:${address.port}/sendspin`, { timeoutMs: 3_000 });
   group.members([{ deviceId: key.peerId, level: 100 }]);
+  group.screens([key.peerId]);
   group.send({
     type: "load",
     playbackId: "stream",
@@ -349,7 +354,7 @@ async function heard(t: TestContext, directory: string, seconds: number) {
     () => frames.length >= 2 && frames.at(-1)!.timestamp - frames[0]!.timestamp >= seconds * 1e6,
     "The stream's last segment never played",
   );
-  return (second: number) =>
+  const audible = (second: number) =>
     frames
       .find(
         (frame) =>
@@ -357,6 +362,7 @@ async function heard(t: TestContext, directory: string, seconds: number) {
           frame.timestamp - frames[0]!.timestamp + 100_000 > second * 1e6,
       )!
       .bytes.some((byte) => byte !== 0);
+  return { audible, metadata };
 }
 const tone = (directory: string, name: string, frequency: number, offset: number, fmp4: boolean) =>
   execFileSync(
@@ -378,9 +384,7 @@ const tone = (directory: string, name: string, frequency: number, offset: number
 const playlist = (directory: string, lines: string[]) =>
   writeFileSync(
     join(directory, "index.m3u8"),
-    ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:2", ...lines, "#EXT-X-ENDLIST", ""].join(
-      "\n",
-    ),
+    ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:2", ...lines, ""].join("\n"),
   );
 
 // A Twitch ad: fMP4 segments whose timestamps restart lower, which FFmpeg's HLS reader drops. The
@@ -401,8 +405,9 @@ test(
       ...["#EXTINF:2.0,", "programme0.m4s", "#EXT-X-DISCONTINUITY"],
       ...['#EXT-X-MAP:URI="ad-init.mp4"', "#EXTINF:2.0,", "ad0.m4s", "#EXT-X-DISCONTINUITY"],
       ...['#EXT-X-MAP:URI="programme-init.mp4"', "#EXTINF:2.0,", "programme2.m4s"],
+      "#EXT-X-ENDLIST",
     ]);
-    const audible = await heard(t, directory, 5.8);
+    const { audible } = await heard(t, directory, 5.8);
     assert.ok(audible(1), "the programme plays before the ad");
     assert.ok(!audible(3), "the ad's time is silence");
     assert.ok(audible(5), "the programme returns at its own time, two seconds later");
@@ -425,9 +430,37 @@ test(
     playlist(directory, [
       ...["#EXTINF:2.0,", "before.ts", "#EXT-X-DISCONTINUITY"],
       ...["#EXTINF:2.0,", "after.ts", "#EXTINF:2.0,", "later.ts"],
+      "#EXT-X-ENDLIST",
     ]);
-    const audible = await heard(t, directory, 7.8);
+    const { audible } = await heard(t, directory, 7.8);
     for (const second of [1, 3, 7]) assert.ok(audible(second), `silence at ${second}s`);
     assert.ok(!audible(5), "the two seconds missing after the restart are silence");
+  },
+);
+
+// A Twitch VOD of a stream still running: an EVENT playlist FFmpeg reports as six seconds long,
+// whose timestamps start at 7 s. The shared clock runs past both instead of stopping at its length.
+test(
+  "an endless stream's clock isn't capped by the length its recording has so far",
+  {
+    timeout: 20_000,
+    skip: !available && "Set COUCH_TEST_FFMPEG to run the real-media clock test.",
+  },
+  async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), "couch-stream-recording-"));
+    for (const [index, offset] of [7, 9, 11].entries())
+      tone(directory, `part${index}`, 440, offset, false);
+    playlist(directory, [
+      "#EXT-X-PLAYLIST-TYPE:EVENT",
+      ...[0, 1, 2].flatMap((index) => ["#EXTINF:2.0,", `part${index}.ts`]),
+    ]);
+    const { metadata } = await heard(t, directory, 3.8);
+    const latest = () =>
+      metadata.findLast((item) => item.progress?.playback_speed === 1000)?.progress;
+    await until(
+      () => (latest()?.track_progress ?? 0) > 11_000,
+      `The clock stopped at ${latest()?.track_progress} ms`,
+    );
+    assert.equal(latest()!.track_duration, 0, "a recording still in progress has no length");
   },
 );

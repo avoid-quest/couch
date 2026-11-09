@@ -432,7 +432,8 @@ export function createScheduledAudio(options: {
           run = next;
           state = {
             ...state,
-            duration: current.duration ?? state.duration,
+            // A recording still in progress (a Twitch VOD of a running stream) has no end yet.
+            duration: current.live ? null : (current.duration ?? state.duration),
             seekable: !current.live,
             timeline: {
               mapping: current.live ? "unavailable" : "media",
@@ -711,7 +712,8 @@ export function createScheduledAudio(options: {
               continue;
             }
             const duration = /Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(line);
-            if (duration && state.duration === null)
+            // FFmpeg gives a growing playlist (EVENT) its length so far, which would stop the clock there.
+            if (duration && state.duration === null && !live)
               state = {
                 ...state,
                 duration:
