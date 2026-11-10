@@ -529,9 +529,12 @@ test("a picture whose link never catches up waits further ahead each time, not e
   const video = followed();
   const clock = { position: 30 };
   const step = await follower(video, clock);
-  video.seeking = true;
-  for (let index = 0; index < 120; index++) step();
-  assert.ok(video.seeks.length <= 5, `${video.seeks.length} seeks in 30 s`);
+  for (let index = 0; index < 120; index++) {
+    step();
+    video.seeking = false;
+  }
+  // 2 s ahead, then 4, then 8 s ahead each time its picture misses.
+  assert.deepEqual(video.seeks, [32.25, 37, 45.75, 54.5, 63.25]);
 });
 
 test("small drift moves the rate by at most 5% and a buffered second away seeks once", async () => {

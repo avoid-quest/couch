@@ -184,17 +184,20 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     const stream = selected[0]!;
     source = selectedSource(stream);
     // An HLS master lets each Device adapt to its link and Core's sound read an audio-only
-    // rendition (Twitch's is 1/50 of 1080p60); the chosen variant's height stays the cap.
+    // rendition (Twitch's is 1/50 of 1080p60); the chosen variant's height stays the cap, so a
+    // variant without a height plays on its own.
     // YouTube keeps the format yt-dlp checked: its fresh URLs can refuse until checked.
     if (
       info.extractor !== "youtube" &&
       String(stream.protocol).startsWith("m3u8") &&
       stream.vcodec !== "none" &&
       typeof stream.manifest_url === "string" &&
-      stream.manifest_url !== stream.url
+      stream.manifest_url !== stream.url &&
+      typeof stream.height === "number" &&
+      stream.height > 0
     ) {
       source = mediaUrl(stream.manifest_url);
-      if (typeof stream.height === "number" && stream.height > 0) hlsMaxHeight = stream.height;
+      hlsMaxHeight = stream.height;
     }
   } else {
     const video = selected.find((stream) => stream.vcodec !== "none");

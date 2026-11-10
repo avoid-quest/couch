@@ -66,4 +66,7 @@ test("an HLS variant plays its master, capped at the chosen variant's height", (
   }
   expect(parseMedia({ ...stream, extractor: "youtube" }, "").source).toBe(stream.url);
   expect(parseMedia({ ...stream, protocol: "https" }, "").source).toBe(stream.url);
+  // Without a height the master couldn't keep the chosen quality.
+  const { height: _, ...unsized } = stream;
+  expect(parseMedia(unsized, "").source).toBe(stream.url);
 });
