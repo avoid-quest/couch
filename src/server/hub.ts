@@ -5444,6 +5444,8 @@ export async function createHub(options: HubOptions) {
         };
       },
       changed: (next, error, suggested) => {
+        // A computer that starts before its network (a TV at boot) gets its radio in seconds, not minutes.
+        if (next.length && !lanUrls.length) radio.retryNow();
         lanError = error;
         suggestedDomain = suggested ? `http://${new URL(suggested).hostname}:${port}` : "";
         publishLanUrls(next);

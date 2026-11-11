@@ -226,3 +226,35 @@ test("guide reads share cache and retry-after, restrict redirects, and explicitl
   );
   expect(calls).toBe(3);
 });
+
+test("a guide read that failed without the network is read again as soon as it is back, keeping what loaded", async () => {
+  let calls = 0,
+    online = false;
+  const hub = createRadioGuides({
+    now: () => now,
+    signal: new AbortController().signal,
+    fetch: async () => {
+      calls++;
+      if (!online) throw new TypeError("getaddrinfo ENOTFOUND community.example");
+      return new Response(xml);
+    },
+  });
+  const source = {
+    id: "source",
+    url: "https://community.example/list",
+    discoveredGuideUrl: "https://community.example/guide.xml",
+  } as never;
+  const stations = [{ id: "station", tvgId: "community.main" }] as never;
+  expect((await hub.get(source, stations)).programmes.size).toBe(0);
+  online = true;
+  await hub.get(source, stations);
+  expect(calls).toBe(1);
+  hub.expire();
+  expect((await hub.get(source, stations)).programmes.get("station")).toHaveLength(2);
+  expect(calls).toBe(2);
+  // Back on the network but DNS not ready yet: the loaded guide stays.
+  online = false;
+  hub.expire();
+  expect((await hub.get(source, stations)).programmes.get("station")).toHaveLength(2);
+  expect(calls).toBe(3);
+});
