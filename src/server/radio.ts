@@ -465,7 +465,7 @@ export function createRadio({
     /** The network is back: reads that failed without it run on the next request, not a minute later. */
     retryNow() {
       avoidRetryAt = 0;
-      guides.clear();
+      guides.expire();
       liveMetadata.clearMisses();
       onChange();
     },

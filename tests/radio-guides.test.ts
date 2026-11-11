@@ -227,7 +227,7 @@ test("guide reads share cache and retry-after, restrict redirects, and explicitl
   expect(calls).toBe(3);
 });
 
-test("a guide read that failed without the network is read again as soon as it is back", async () => {
+test("a guide read that failed without the network is read again as soon as it is back, keeping what loaded", async () => {
   let calls = 0,
     online = false;
   const hub = createRadioGuides({
@@ -249,7 +249,12 @@ test("a guide read that failed without the network is read again as soon as it i
   online = true;
   await hub.get(source, stations);
   expect(calls).toBe(1);
-  hub.clear();
+  hub.expire();
   expect((await hub.get(source, stations)).programmes.get("station")).toHaveLength(2);
   expect(calls).toBe(2);
+  // Back on the network but DNS not ready yet: the loaded guide stays.
+  online = false;
+  hub.expire();
+  expect((await hub.get(source, stations)).programmes.get("station")).toHaveLength(2);
+  expect(calls).toBe(3);
 });
