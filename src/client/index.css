@@ -650,6 +650,16 @@ html.electron,
 .electron ::-webkit-scrollbar-thumb:hover {
   background: var(--app-scrollbar-thumb-hover);
 }
+/* The TV moves by focus and is never dragged, so it shows no scrollbars, as on Apple TV
+   and Android TV. Linux draws classic ones otherwise; this wins over the thin player panes. */
+html:has(body.tv-presentation),
+.tv-presentation,
+.tv-presentation * {
+  scrollbar-width: none !important;
+}
+.tv-presentation [data-slot="scroll-area-scrollbar"] {
+  display: none;
+}
 
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell {
