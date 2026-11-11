@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils";
  */
 // Loaded artwork keeps its proportions as well as its fade state across route mounts.
 const shown = new Map<string, number | undefined>();
+// Artwork may fail just because the network isn't up yet (a TV that starts before it), so a failed picture is tried
+// again after these pauses: about a minute in all, then its cover stays, so a picture that is really gone isn't refetched.
+const retryDelays = [5_000, 15_000, 45_000];
 /** The cover's hue, from its title. */
 const hue = (title: string) => {
   let hash = 7;
@@ -39,7 +42,7 @@ export function MediaArtwork({
   priority?: boolean;
   className?: string;
 }) {
-  const [failedSrc, setFailedSrc] = useState("");
+  const [failure, setFailure] = useState({ src: "", count: 0, waiting: false });
   let src = "";
   try {
     const url = new URL(thumbnail ?? "");
@@ -64,7 +67,17 @@ export function MediaArtwork({
       setLoadedSrc(src);
     }
   }, [src, loadedSrc]);
-  return src && src !== failedSrc ? (
+  const failed = failure.src === src && failure.waiting;
+  useEffect(() => {
+    const delay = retryDelays[failure.count - 1];
+    if (!failed || delay === undefined) return;
+    const timer = setTimeout(
+      () => setFailure((current) => ({ ...current, waiting: false })),
+      delay,
+    );
+    return () => clearTimeout(timer);
+  }, [failed, failure.count]);
+  return src && !failed ? (
     <img
       ref={image}
       className={cn(
@@ -83,7 +96,13 @@ export function MediaArtwork({
         shown.set(src, naturalWidth && naturalHeight ? naturalWidth / naturalHeight : undefined);
         setLoadedSrc(src);
       }}
-      onError={() => setFailedSrc(src)}
+      onError={() =>
+        setFailure((current) => ({
+          src,
+          count: current.src === src ? current.count + 1 : 1,
+          waiting: true,
+        }))
+      }
     />
   ) : bare ? null : (
     <span

@@ -15,6 +15,10 @@ export function createRadioGuides({
   const cache = new Map<string, Result>();
   const pending = new Map<string, Promise<Result>>();
   return {
+    /** Reads again on the next request: one failed while the network was down. */
+    clear() {
+      cache.clear();
+    },
     async get(source: RadioPlaylist, stations: RadioStation[]): Promise<Result> {
       const url = source.guideUrl || source.discoveredGuideUrl;
       if (!url || signal.aborted) return { programmes: new Map(), retryAt: now() + 15 * 60_000 };

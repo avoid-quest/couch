@@ -115,6 +115,10 @@ export function createRadioMetadata({
   }
 
   return {
+    /** Asks again on the next request for stations without a programme: the network may have been down. */
+    clearMisses() {
+      for (const [key, result] of cache) if (!result.programme) cache.delete(key);
+    },
     async get(stationId: string, streamUrl: string, callerSignal?: AbortSignal): Promise<Result> {
       if (signal?.aborted || callerSignal?.aborted) return { programme: null, retryAt: now() };
       const key = `${stationId}\0${streamUrl}`;
