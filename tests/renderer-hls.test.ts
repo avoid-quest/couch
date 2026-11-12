@@ -559,13 +559,19 @@ test("small drift moves the rate by at most 5% and a buffered second away seeks 
   assert.equal(video.seeks.length, 1, "lands, then corrects the rest by rate");
 });
 
-test("a picture near a film's end waits at the end, not past it", async () => {
-  const video = Object.assign(followed(), { duration: 100 });
+test("a picture near a film's end waits at the end, not past it, and holds its last frame", async () => {
+  const video = followed();
+  // At its end a media element is paused and ended, and play() restarts it from its first frame.
+  Object.defineProperties(video, {
+    duration: { value: 100 },
+    ended: { get: () => video.currentTime >= 100 },
+  });
   const clock = { position: 98.75 };
   const step = await follower(video, clock);
   step();
   assert.deepEqual(video.seeks, [100]);
-  video.readyState = 1;
-  while (clock.position < 100) step();
-  assert.equal(video.paused, false, "plays out what is left instead of waiting forever");
+  // The sound outlasts the picture.
+  while (clock.position < 102) step();
+  assert.deepEqual(video.seeks, [100]);
+  assert.equal(video.paused, true, "not restarted from its first frame");
 });

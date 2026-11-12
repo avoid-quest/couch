@@ -9,6 +9,7 @@ export type FollowedVideo = Pick<
   HTMLVideoElement,
   | "currentTime"
   | "duration"
+  | "ended"
   | "playbackRate"
   | "defaultPlaybackRate"
   | "paused"
@@ -82,6 +83,12 @@ export function createFollower(video: FollowedVideo, read: () => Sample, start: 
       if (!video.paused) video.pause();
       if (!video.seeking && Math.abs(target - video.currentTime) > correcting)
         video.currentTime = target;
+      return;
+    }
+    // An ended picture holds its last frame until the clock moves back past it: play() would restart
+    // it from its first frame.
+    if (video.ended && target > video.currentTime - seekBeyond) {
+      parked = undefined;
       return;
     }
     // The sound moved back past the point the picture parked from (a new timeline): park again.
