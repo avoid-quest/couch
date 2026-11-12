@@ -1,4 +1,3 @@
-import { usePrototypeInputMode } from "@/sections/now/prototype-tv-feel";
 import { useRadioClock } from "@/radio-clock";
 import {
   defaultStringifySearch,
@@ -688,7 +687,6 @@ function ShellChrome({ children }: PropsWithChildren) {
   // Home's top item is what plays, with its own transport, whenever something does.
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
-  usePrototypeInputMode();
   const installationName = state?.installationName ?? details?.name;
   const localName = useLocalDeviceName();
   const tvName =

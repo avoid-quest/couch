@@ -131,21 +131,6 @@ export function useGamepadNavigation(onNavigate: (key: NavigationKey) => void) {
         return;
       }
       reader!.read(pads, document.hasFocus(), now);
-      // PROTOTYPE: a press makes the controller the last input, so its hints show, in its own shapes.
-      const active = pads.find(
-        (pad) =>
-          pad?.mapping === "standard" &&
-          (pad.buttons.some((button) => button.pressed) ||
-            pad.axes.some((axis) => Math.abs(axis) > deadzone)),
-      );
-      if (active && document.hasFocus()) {
-        document.documentElement.dataset.input = "pad";
-        document.documentElement.dataset.pad = /054c|sony|dualsense|dualshock|playstation/i.test(
-          active.id,
-        )
-          ? "ps"
-          : "xbox";
-      }
       frame = requestAnimationFrame(poll);
     };
     const connected = () => {

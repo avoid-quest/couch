@@ -1,5 +1,6 @@
 import { Description } from "@/components/DetailHeader";
-import { PadHint, PrototypeVideoInfo } from "./prototype-tv-feel";
+import { PrototypeVideoInfo } from "./prototype-tv-feel";
+import { PlayerVariantSwitcher, PrototypeBand, usePlayerVariant } from "./prototype-band";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
@@ -24,9 +25,9 @@ import {
   Info,
   Maximize,
   Minimize,
+  Minimize2,
   Music2,
   Settings,
-  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -128,13 +129,15 @@ export function PlayerPage({
   // A Live listener's Join/Leave sits outside the transport group.
   const firstTransport = () =>
     root.current?.querySelector<HTMLElement>(
-      '[aria-label="Playback controls"] button:not(:disabled), [data-live-participation] button:not(:disabled)',
+      '[aria-label="Playback controls"] button:not(:disabled), [data-live-participation] button:not(:disabled), [data-play-button]:not(:disabled)',
     );
   const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
   // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
   const tap = useRef<boolean | null>(null);
   // PROTOTYPE: the control the TV's controls hid on, where the next press brings them back.
   const restoreTo = useRef<HTMLElement | null>(null);
+  // PROTOTYPE: ?variant=A|B|C swaps the band for one of three layouts (prototype-band.tsx).
+  const variant = usePlayerVariant();
   // What the picture's last click asked for, so a double-click's second click can undo it.
   const clicked = useRef(false);
   // The band's control a click opened (a Popover, Up next), whose return of focus hands it to the picture.
@@ -520,18 +523,16 @@ export function PlayerPage({
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
   // PROTOTYPE: Back on every screen, the TV too.
   const back = (
-    <PadHint button="circle">
-      <Button
-        variant="ghost"
-        size="icon-lg"
-        className="-ml-2.5 size-(--player-target) shrink-0"
-        aria-label={backLabel}
-        title={backLabel}
-        onClick={shell.leavePlayer}
-      >
-        <ArrowLeft aria-hidden="true" />
-      </Button>
-    </PadHint>
+    <Button
+      variant="ghost"
+      size="icon-lg"
+      className="-ml-2.5 size-(--player-target) shrink-0"
+      aria-label={backLabel}
+      title={backLabel}
+      onClick={shell.leavePlayer}
+    >
+      <ArrowLeft aria-hidden="true" />
+    </Button>
   );
   const artwork = currentProgramme?.artworkUrl ? (
     <MediaArtwork priority thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} />
@@ -774,31 +775,35 @@ export function PlayerPage({
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <LiveSharingStatus />
               <div ref={setRecognitionControls} className="empty:hidden" />
-              {current && artworkStage && (
-                <PadHint button="triangle">
-                  <Button
-                    ref={infoToggle}
-                    data-info-toggle
-                    variant="ghost"
-                    size="icon-lg"
-                    className="-mr-2.5 size-(--player-target) shrink-0"
-                    aria-label="Info"
-                    title="Info"
-                    aria-expanded={info}
-                    aria-controls="player-info"
-                    onClick={(event) => {
-                      toggleInfo();
-                      if (event.detail) surface()?.focus({ preventScroll: true });
-                    }}
-                  >
-                    <Info aria-hidden="true" />
-                  </Button>
-                </PadHint>
+              {current && artworkStage && !variant && (
+                <Button
+                  ref={infoToggle}
+                  data-info-toggle
+                  variant="ghost"
+                  size="icon-lg"
+                  className="-mr-2.5 size-(--player-target) shrink-0"
+                  aria-label="Info"
+                  title="Info"
+                  aria-expanded={info}
+                  aria-controls="player-info"
+                  onClick={(event) => {
+                    toggleInfo();
+                    if (event.detail) surface()?.focus({ preventScroll: true });
+                  }}
+                >
+                  <Info aria-hidden="true" />
+                </Button>
               )}
             </div>
           </div>
         )}
-        {osd && (
+        {osd && variant && (
+          <div className="flex items-center justify-between px-(--gutter)">
+            {back}
+            {tvPresentation && <DigitalClock />}
+          </div>
+        )}
+        {osd && !variant && (
           <div
             data-player-heading
             className={cn(
@@ -823,21 +828,19 @@ export function PlayerPage({
               {!radio && <PlayerEndTime state={state} />}
               {tvPresentation && <DigitalClock />}
               {/* PROTOTYPE: Info for every item, where audio has it. */}
-              <PadHint button="triangle">
-                <Button
-                  ref={infoToggle}
-                  data-info-toggle
-                  variant="ghost"
-                  size="icon-lg"
-                  className="-mr-2.5 size-(--player-target) shrink-0 self-center text-foreground"
-                  aria-label="Info"
-                  title="Info"
-                  aria-expanded={info}
-                  onClick={() => toggleInfo()}
-                >
-                  <Info aria-hidden="true" />
-                </Button>
-              </PadHint>
+              <Button
+                ref={infoToggle}
+                data-info-toggle
+                variant="ghost"
+                size="icon-lg"
+                className="-mr-2.5 size-(--player-target) shrink-0 self-center text-foreground"
+                aria-label="Info"
+                title="Info"
+                aria-expanded={info}
+                onClick={() => toggleInfo()}
+              >
+                <Info aria-hidden="true" />
+              </Button>
             </div>
             {(byline || context) && (
               <div
@@ -1023,49 +1026,38 @@ export function PlayerPage({
           gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
           each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
           at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
-        <div className="grid gap-1">
-          {state && (
-            <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />
-          )}
-          <div
-            className="player-controls-scroll"
-            onFocusCapture={(event) =>
-              event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+        {variant && state && current ? (
+          <PrototypeBand
+            variant={variant}
+            state={state}
+            connected={connected}
+            run={run}
+            video={osd}
+            tv={tvPresentation}
+            title={title}
+            meta={
+              <>
+                {byline && <span>{byline}</span>}
+                {context}
+                {!radio && <PlayerEndTime state={state} />}
+              </>
             }
-          >
-            <div className="player-control-row [&_[data-size=icon-lg]]:size-(--player-target)">
-              {state && (
-                <PlaybackTransport
-                  state={state}
-                  connected={connected}
-                  run={run}
-                  pageFirst
-                  className="player-transport"
-                  stop={false}
-                />
-              )}
-              <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
-                {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
-                  with the same Volume, so the narrowest row leaves it out and keeps one line. */}
-                {state && (
-                  <VolumeButton
-                    state={state}
-                    connected={connected}
-                    run={run}
-                    className={livePlayback(state) ? undefined : "max-sm:hidden"}
-                  />
-                )}
-                {state && !livePlayback(state) && (
-                  <WhereItPlays state={state} connected={connected} run={run} />
-                )}
-                <UpNextButton
-                  ref={queueTrigger}
-                  state={state}
-                  aria-expanded={queueOpen}
-                  onClick={() => setQueueOpen(!queueOpen)}
-                />
-                {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
-                  turns subtitles on and off. It opens over the picture above the gear. */}
+            live={
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  <span className="text-destructive">●</span> Live
+                </span>
+                {currentProgramme && <RadioProgress show={currentProgramme} />}
+              </div>
+            }
+            info={info}
+            onInfo={toggleInfo}
+            queue={state.queue.length > 1}
+            queueOpen={queueOpen}
+            onQueue={() => setQueueOpen(!queueOpen)}
+            queueRef={queueTrigger}
+            settings={
+              <>
                 {!livePlayback(state) && (
                   <Popover
                     open={panel === "settings"}
@@ -1090,64 +1082,175 @@ export function PlayerPage({
                         tracks={!audioOnly}
                         trigger={gear.current}
                         details={
-                          detailHref && (
-                            <Button asChild variant="ghost" className={playbackMenuRow}>
-                              <Link to={detailHref} aria-label="Details" onClick={openDetails}>
-                                Details
-                                <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                              </Link>
+                          <>
+                            {detailHref && (
+                              <Button asChild variant="ghost" className={playbackMenuRow}>
+                                <Link to={detailHref} aria-label="Details" onClick={openDetails}>
+                                  Details
+                                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
+                                </Link>
+                              </Button>
+                            )}
+                            {/* PROTOTYPE: Stop lives here, not in the band. */}
+                            <Button
+                              variant="ghost"
+                              className={playbackMenuRow}
+                              onClick={() => void run({ type: "stop" })}
+                            >
+                              Stop
                             </Button>
-                          )
+                          </>
                         }
                       />
                     )}
                   </Popover>
                 )}
-                {/* PROTOTYPE: Stop past the tools, away from Play/Pause. */}
-                {state && playbackCapabilities(state, connected).stoppable && (
-                  <Button
-                    variant="ghost"
-                    size="icon-lg"
-                    className="ml-3"
-                    aria-label="Stop"
-                    title="Stop"
-                    onClick={() => void run({ type: "stop" })}
-                  >
-                    <Square aria-hidden="true" className="fill-current" />
-                  </Button>
+              </>
+            }
+            fullscreen={
+              tvPresentation ? (
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  aria-label="Minimize"
+                  title="Minimize"
+                  onClick={shell.leavePlayer}
+                >
+                  <Minimize2 aria-hidden="true" />
+                </Button>
+              ) : (
+                <Button
+                  data-player-last
+                  variant="ghost"
+                  size="icon-lg"
+                  disabled={!canFullscreen}
+                  aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  onClick={() => void fullscreen.toggle()}
+                >
+                  {fullscreen.fullscreen ? (
+                    <Minimize aria-hidden="true" />
+                  ) : (
+                    <Maximize aria-hidden="true" />
+                  )}
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div className="grid gap-1">
+            {state && (
+              <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />
+            )}
+            <div
+              className="player-controls-scroll"
+              onFocusCapture={(event) =>
+                event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+              }
+            >
+              <div className="player-control-row [&_[data-size=icon-lg]]:size-(--player-target)">
+                {state && (
+                  <PlaybackTransport
+                    state={state}
+                    connected={connected}
+                    run={run}
+                    pageFirst
+                    className="player-transport"
+                  />
                 )}
-                {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
-                  already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
-                {!tvPresentation ? (
-                  <Button
-                    data-player-last
-                    variant="ghost"
-                    size="icon-lg"
-                    disabled={!canFullscreen}
-                    aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                    title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                    onClick={() => void fullscreen.toggle()}
-                  >
-                    {fullscreen.fullscreen ? (
-                      <Minimize aria-hidden="true" />
-                    ) : (
-                      <Maximize aria-hidden="true" />
-                    )}
-                  </Button>
-                ) : (
-                  !artworkStage && (
-                    <span
-                      data-player-last
-                      aria-hidden="true"
-                      className="size-(--player-target) shrink-0"
+                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                  {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
+                  with the same Volume, so the narrowest row leaves it out and keeps one line. */}
+                  {state && (
+                    <VolumeButton
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      className={livePlayback(state) ? undefined : "max-sm:hidden"}
                     />
-                  )
-                )}
+                  )}
+                  {state && !livePlayback(state) && (
+                    <WhereItPlays state={state} connected={connected} run={run} />
+                  )}
+                  <UpNextButton
+                    ref={queueTrigger}
+                    state={state}
+                    aria-expanded={queueOpen}
+                    onClick={() => setQueueOpen(!queueOpen)}
+                  />
+                  {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
+                  turns subtitles on and off. It opens over the picture above the gear. */}
+                  {!livePlayback(state) && (
+                    <Popover
+                      open={panel === "settings"}
+                      onOpenChange={(open) => setPanel(open ? "settings" : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          ref={gear}
+                          data-panel="settings"
+                          variant="ghost"
+                          size="icon-lg"
+                          aria-label="Playback"
+                          title="Playback"
+                          disabled={!settings}
+                        >
+                          <Settings aria-hidden="true" />
+                        </Button>
+                      </PopoverTrigger>
+                      {panel === "settings" && settings && (
+                        <PlaybackMenu
+                          {...settings}
+                          tracks={!audioOnly}
+                          trigger={gear.current}
+                          details={
+                            detailHref && (
+                              <Button asChild variant="ghost" className={playbackMenuRow}>
+                                <Link to={detailHref} aria-label="Details" onClick={openDetails}>
+                                  Details
+                                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
+                                </Link>
+                              </Button>
+                            )
+                          }
+                        />
+                      )}
+                    </Popover>
+                  )}
+                  {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
+                  already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
+                  {!tvPresentation ? (
+                    <Button
+                      data-player-last
+                      variant="ghost"
+                      size="icon-lg"
+                      disabled={!canFullscreen}
+                      aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      onClick={() => void fullscreen.toggle()}
+                    >
+                      {fullscreen.fullscreen ? (
+                        <Minimize aria-hidden="true" />
+                      ) : (
+                        <Maximize aria-hidden="true" />
+                      )}
+                    </Button>
+                  ) : (
+                    !artworkStage && (
+                      <span
+                        data-player-last
+                        aria-hidden="true"
+                        className="size-(--player-target) shrink-0"
+                      />
+                    )
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
+      {variant && <PlayerVariantSwitcher variant={variant} />}
     </section>
   );
 }

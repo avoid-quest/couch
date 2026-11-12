@@ -1,5 +1,4 @@
-// PROTOTYPE, throwaway (branch prototype/aligned-player, never main): controller hints, Info over a video and the rest
-// when nothing plays (/prototype-rest?variant=A|B|C), all on real session data.
+// PROTOTYPE, throwaway (branch prototype/clean-player, never main): Info over a video and the rest when nothing plays (/prototype-rest?variant=A|B|C), all on real session data.
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
@@ -14,101 +13,6 @@ import { useSessionGate } from "@/session/session-context";
 import { deviceId } from "@/session/device-id";
 import type { ClientSessionState } from "@/session/session";
 import type { QueueEntry } from "../../../shared/protocol";
-
-type PadButton = "triangle" | "square" | "circle" | "cross" | "shoulders";
-const playstation: Record<PadButton, ReactNode> = {
-  triangle: (
-    <path
-      d="M12 5l7.5 13h-15z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-      strokeLinejoin="round"
-    />
-  ),
-  square: (
-    <rect
-      x="6"
-      y="6"
-      width="12"
-      height="12"
-      rx="1"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-    />
-  ),
-  circle: <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="2.6" />,
-  cross: (
-    <path
-      d="M6 6l12 12M18 6L6 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-    />
-  ),
-  shoulders: null,
-};
-const xbox: Record<PadButton, string> = {
-  triangle: "Y",
-  square: "X",
-  circle: "B",
-  cross: "A",
-  shoulders: "LB RB",
-};
-
-/**
- * The controller button that acts on this control, shown only while a controller was the last input (html[data-input=pad]),
- * in the shapes of the controller in hand (html[data-pad]), as games switch their prompts.
- */
-export function PadHint({ button, children }: { button: PadButton; children: ReactNode }) {
-  const badge =
-    "pointer-events-none absolute -top-1.5 -right-1.5 z-10 hidden h-5 min-w-5 place-items-center rounded-full bg-foreground px-1 text-[0.625rem] leading-none font-bold text-background shadow [[data-input=pad]_&]:grid";
-  return (
-    <span className="relative inline-flex">
-      {children}
-      <span aria-hidden="true" className={`${badge} [[data-pad=xbox]_&]:hidden`}>
-        {button === "shoulders" ? (
-          "L1 R1"
-        ) : (
-          <svg viewBox="0 0 24 24" className="size-3">
-            {playstation[button]}
-          </svg>
-        )}
-      </span>
-      <span aria-hidden="true" className={`${badge} [[data-pad=ps]_&]:hidden`}>
-        {xbox[button]}
-      </span>
-    </span>
-  );
-}
-
-/** Keys, a pointer or a touch take the hints away again; the controller's reader puts them back (gamepad.ts). */
-export function usePrototypeInputMode() {
-  useEffect(() => {
-    const root = document.documentElement;
-    const keys = (event: KeyboardEvent) => {
-      if (event.isTrusted) root.dataset.input = "keys";
-    };
-    const pointer = (event: PointerEvent) => {
-      if (
-        !event.isTrusted ||
-        (event.type === "pointermove" && !event.movementX && !event.movementY)
-      )
-        return;
-      root.dataset.input = event.pointerType === "touch" ? "touch" : "pointer";
-    };
-    window.addEventListener("keydown", keys, true);
-    window.addEventListener("pointerdown", pointer, true);
-    window.addEventListener("pointermove", pointer, true);
-    return () => {
-      window.removeEventListener("keydown", keys, true);
-      window.removeEventListener("pointerdown", pointer, true);
-      window.removeEventListener("pointermove", pointer, true);
-    };
-  }, []);
-}
 
 /** Info over a picture: what plays, its facts and end time, its description and what plays next. */
 export function PrototypeVideoInfo({
@@ -139,7 +43,7 @@ export function PrototypeVideoInfo({
     <div
       ref={panel}
       data-prototype-info
-      className="absolute inset-x-0 bottom-0 z-30 grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] items-end gap-12 bg-linear-to-t from-black/95 from-55% to-transparent px-(--gutter) pt-24 pb-10 duration-200 motion-safe:animate-in motion-safe:fade-in-0"
+      className={`absolute inset-x-0 bottom-0 z-30 grid items-end gap-x-12 gap-y-6 bg-linear-to-t from-black/95 from-55% to-transparent px-(--gutter) pt-24 pb-10 duration-200 motion-safe:animate-in motion-safe:fade-in-0 ${next ? "sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" : ""}`}
     >
       <div className="grid min-w-0 gap-3">
         <h2
@@ -159,7 +63,7 @@ export function PrototypeVideoInfo({
       </div>
       {next && (
         <div
-          className="grid justify-self-end gap-2 text-sm text-muted-foreground"
+          className="grid gap-2 text-sm text-muted-foreground max-sm:hidden sm:justify-self-end"
           style={{ width: "62%" }}
         >
           <span>Up next</span>

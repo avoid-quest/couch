@@ -2,7 +2,6 @@ import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
-import { PadHint } from "@/sections/now/prototype-tv-feel";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Action } from "../../shared/protocol";
@@ -231,32 +230,30 @@ export function PlaybackTransport({
       role="group"
       aria-label="Playback controls"
     >
-      <PadHint button="square">
-        <Button
-          data-page-first={first(0)}
-          data-play-button
-          variant="ghost"
-          size="icon-lg"
-          className={transportInk}
-          aria-label={label}
-          title={label}
-          disabled={!enabled[0]}
-          onClick={() => {
-            if ((ended || failed) && current)
-              void run({ type: "play", entryId: current.id, fromStart: ended });
-            else if (player.playbackId)
-              void run({ type: "pause", playbackId: player.playbackId, paused: playing });
-          }}
-        >
-          {ended || failed ? (
-            <RotateCcw aria-hidden="true" />
-          ) : pause ? (
-            <Pause aria-hidden="true" className="fill-current" />
-          ) : (
-            <Play aria-hidden="true" className="fill-current" />
-          )}
-        </Button>
-      </PadHint>
+      <Button
+        data-page-first={first(0)}
+        data-play-button
+        variant="ghost"
+        size="icon-lg"
+        className={transportInk}
+        aria-label={label}
+        title={label}
+        disabled={!enabled[0]}
+        onClick={() => {
+          if ((ended || failed) && current)
+            void run({ type: "play", entryId: current.id, fromStart: ended });
+          else if (player.playbackId)
+            void run({ type: "pause", playbackId: player.playbackId, paused: playing });
+        }}
+      >
+        {ended || failed ? (
+          <RotateCcw aria-hidden="true" />
+        ) : pause ? (
+          <Pause aria-hidden="true" className="fill-current" />
+        ) : (
+          <Play aria-hidden="true" className="fill-current" />
+        )}
+      </Button>
       <Button
         hidden={!stop}
         data-page-first={first(1)}
@@ -514,20 +511,18 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
     return null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PadHint button="shoulders">
-        <PopoverTrigger asChild>
-          <Button
-            ref={trigger}
-            variant="ghost"
-            size="icon-lg"
-            className={className}
-            aria-label="Volume"
-            title="Volume"
-          >
-            {muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-          </Button>
-        </PopoverTrigger>
-      </PadHint>
+      <PopoverTrigger asChild>
+        <Button
+          ref={trigger}
+          variant="ghost"
+          size="icon-lg"
+          className={className}
+          aria-label="Volume"
+          title="Volume"
+        >
+          {muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+        </Button>
+      </PopoverTrigger>
       {open && (
         <PopoverContent
           {...toolPanel(trigger.current)}
