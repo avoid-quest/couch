@@ -1,7 +1,8 @@
-// PROTOTYPE, throwaway (branch prototype/clean-player, never main): three layouts for the player's controls, switchable
-// with ?variant=A|B|C (kept for the tab): A a floating capsule (Infuse, Apple Music), B Apple TV's title, pills and round
-// buttons, C YouTube's grouped pills. Same controls in each: Play/Pause (■ for live radio), Next when there is one, a quick
-// volume where a pointer can use it, the mixer, Playback settings, fullscreen (Minimize on the TV), Info and Up next as pills.
+// PROTOTYPE, throwaway (branch prototype/clean-player, never main): layout D for the player, switchable with ?variant=D
+// (kept for the tab; the switcher flips between D and today's player). It uses the screen rather than a bottom strip:
+// over a picture, who and what at the top left with the tools at the top right, and one stable row at the bottom for
+// Play/Pause, Next and the timeline; beside artwork, the transport and the programme's or track's progress sit in the
+// title's column and only the tools stay at the top right. No fills, rings or pills: icons and text, Play the same size.
 import { useEffect, useState, type ReactNode, type Ref } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play, SkipForward, Square } from "lucide-react";
 import {
@@ -13,43 +14,33 @@ import { Button } from "@/components/ui/button";
 import { WhereItPlays } from "@/sections/shell/Outputs";
 import { deviceId } from "@/session/device-id";
 import type { ClientSessionState } from "@/session/session";
-import { cn } from "@/lib/utils";
 import type { Action } from "../../../shared/protocol";
 
-type Variant = "A" | "B" | "C";
-const variants: { key: Variant; name: string }[] = [
-  { key: "A", name: "Capsule" },
-  { key: "B", name: "Title, pills, round buttons" },
-  { key: "C", name: "Grouped pills" },
-];
 const storageKey = "couch.player-variant";
-const read = (): Variant | null => {
+const read = () => {
   const asked = new URLSearchParams(location.search).get("variant");
   try {
     if (asked) sessionStorage.setItem(storageKey, asked);
-    const kept = sessionStorage.getItem(storageKey);
-    return variants.some((item) => item.key === kept) ? (kept as Variant) : null;
+    return sessionStorage.getItem(storageKey) === "D";
   } catch {
-    return variants.some((item) => item.key === asked) ? (asked as Variant) : null;
+    return asked === "D";
   }
 };
 
 export function usePlayerVariant() {
-  const [variant, setVariant] = useState(read);
+  const [on, setOn] = useState(read);
   useEffect(() => {
-    const changed = () => setVariant(read());
+    const changed = () => setOn(read());
     window.addEventListener("couch-player-variant", changed);
     return () => window.removeEventListener("couch-player-variant", changed);
   }, []);
-  return variant;
+  return on;
 }
 
-export function PlayerVariantSwitcher({ variant }: { variant: Variant }) {
-  const at = variants.findIndex((item) => item.key === variant);
-  const go = (by: number) => {
-    const next = variants[(at + by + variants.length) % variants.length]!.key;
+export function PlayerVariantSwitcher({ on }: { on: boolean }) {
+  const flip = () => {
     try {
-      sessionStorage.setItem(storageKey, next);
+      sessionStorage.setItem(storageKey, on ? "off" : "D");
     } catch {
       /* The tab can't keep it; the switch still applies until reload. */
     }
@@ -58,17 +49,70 @@ export function PlayerVariantSwitcher({ variant }: { variant: Variant }) {
   return (
     <div
       data-tv-local-only
-      className="fixed top-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full border border-dashed border-white/40 bg-black/80 px-1 text-sm"
+      className="fixed bottom-2 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full border border-dashed border-white/40 bg-black/80 px-1 text-xs"
     >
-      <Button variant="ghost" size="icon" aria-label="Previous layout" onClick={() => go(-1)}>
+      <Button variant="ghost" size="icon-sm" aria-label="Switch layout" onClick={flip}>
         <ChevronLeft />
       </Button>
-      <span>
-        Prototype {variant}: {variants[at]?.name}
-      </span>
-      <Button variant="ghost" size="icon" aria-label="Next layout" onClick={() => go(1)}>
+      <span>{on ? "Prototype D" : "Today's player"}</span>
+      <Button variant="ghost" size="icon-sm" aria-label="Switch layout" onClick={flip}>
         <ChevronRight />
       </Button>
+    </div>
+  );
+}
+
+type Props = {
+  state: ClientSessionState;
+  connected: boolean;
+  run: (action: Action) => Promise<boolean>;
+};
+
+/** Play/Pause (Stop for a stream that can't pause), the same size as every other control; Next only when there is one. */
+export function PrototypeTransport({ state, connected, run }: Props) {
+  const caps = playbackCapabilities(state, connected);
+  const player = state.player;
+  const playing = player.status === "playing";
+  const stopOnly = !caps.pausable && caps.stoppable;
+  const label = stopOnly ? "Stop" : playing ? "Pause" : "Play";
+  return (
+    <div className="flex shrink-0 items-center">
+      <Button
+        data-page-first
+        data-play-button
+        variant="ghost"
+        size="icon-lg"
+        aria-label={label}
+        title={label}
+        disabled={stopOnly ? false : !caps.transportReady || !caps.pausable}
+        onClick={() => {
+          if (stopOnly) void run({ type: "stop" });
+          else if (player.playbackId)
+            void run({ type: "pause", playbackId: player.playbackId, paused: playing });
+        }}
+      >
+        {stopOnly ? (
+          <Square className="fill-current" />
+        ) : playing ? (
+          <Pause className="fill-current" />
+        ) : (
+          <Play className="fill-current" />
+        )}
+      </Button>
+      {caps.hasNext && (
+        <Button
+          variant="ghost"
+          size="icon-lg"
+          aria-label="Next"
+          title="Next"
+          disabled={!caps.nextReady}
+          onClick={() => {
+            if (player.playbackId) void run({ type: "next", playbackId: player.playbackId });
+          }}
+        >
+          <SkipForward className="fill-current" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -84,110 +128,76 @@ function soundingLabel(state: ClientSessionState) {
   return names.length > 1 ? `${names.length} devices` : (names[0] ?? "Where it plays");
 }
 
-export function PrototypeBand({
-  variant,
+/**
+ * The tools, one click each: the quick volume where a pointer can use it, the mixer (named for where it plays, an icon
+ * on a phone), Playback settings and fullscreen (Minimize on the TV). The TV's clock leads them.
+ */
+export function PrototypeTools({
   state,
   connected,
   run,
-  video,
   tv,
-  title,
-  meta,
-  live,
+  clock,
+  settings,
+  fullscreen,
+}: Props & { tv: boolean; clock?: ReactNode; settings: ReactNode; fullscreen: ReactNode }) {
+  return (
+    <div className="-mr-2.5 flex shrink-0 items-center gap-1">
+      {clock && <span className="mr-3 text-muted-foreground">{clock}</span>}
+      {!tv && (
+        <PlaybackVolume
+          state={state}
+          connected={connected}
+          run={run}
+          showValue={false}
+          className="w-36 min-w-0 flex-none max-md:hidden"
+        />
+      )}
+      <span className="max-md:hidden">
+        <WhereItPlays
+          state={state}
+          connected={connected}
+          run={run}
+          label={soundingLabel(state)}
+          className="max-w-48 font-normal text-muted-foreground"
+        />
+      </span>
+      <span className="md:hidden">
+        <WhereItPlays state={state} connected={connected} run={run} />
+      </span>
+      {settings}
+      {fullscreen}
+    </div>
+  );
+}
+
+/** Info and Up next as words, quiet until focused or pointed at. */
+export function PrototypeLinks({
   info,
   onInfo,
   queue,
   queueOpen,
   onQueue,
   queueRef,
-  settings,
-  fullscreen,
 }: {
-  variant: Variant;
-  state: ClientSessionState;
-  connected: boolean;
-  run: (action: Action) => Promise<boolean>;
-  video: boolean;
-  tv: boolean;
-  title?: string;
-  meta: ReactNode;
-  live: ReactNode;
   info: boolean;
   onInfo: () => void;
   queue: boolean;
   queueOpen: boolean;
   onQueue: () => void;
   queueRef: Ref<HTMLButtonElement>;
-  settings: ReactNode;
-  fullscreen: ReactNode;
 }) {
-  const caps = playbackCapabilities(state, connected);
-  const player = state.player;
-  const playing = player.status === "playing";
-  const stopOnly = !caps.pausable && caps.stoppable;
-  const primaryLabel = stopOnly ? "Stop" : playing ? "Pause" : "Play";
-  const round = variant === "B";
-  const primary = (
-    <Button
-      data-page-first
-      data-play-button
-      variant={round ? "secondary" : "ghost"}
-      size="icon-lg"
-      className={cn(round && "size-14 rounded-full bg-white/15 backdrop-blur-md")}
-      aria-label={primaryLabel}
-      title={primaryLabel}
-      disabled={stopOnly ? false : !caps.transportReady || !caps.pausable}
-      onClick={() => {
-        if (stopOnly) void run({ type: "stop" });
-        else if (player.playbackId)
-          void run({ type: "pause", playbackId: player.playbackId, paused: playing });
-      }}
-    >
-      {stopOnly ? (
-        <Square className="fill-current" />
-      ) : playing ? (
-        <Pause className="fill-current" />
-      ) : (
-        <Play className="fill-current" />
-      )}
-    </Button>
-  );
-  const next = caps.hasNext && (
-    <Button
-      variant={round ? "secondary" : "ghost"}
-      size="icon-lg"
-      className={cn(round && "size-12 rounded-full bg-white/15 backdrop-blur-md")}
-      aria-label="Next"
-      title="Next"
-      disabled={!caps.nextReady}
-      onClick={() => {
-        if (player.playbackId) void run({ type: "next", playbackId: player.playbackId });
-      }}
-    >
-      <SkipForward className="fill-current" />
-    </Button>
-  );
-  // A pointer gets the quick volume in the bar; phones keep their keys, the TV its mixer (L1/R1 later).
-  const volume = !tv && (
-    <PlaybackVolume
-      state={state}
-      connected={connected}
-      run={run}
-      showValue={false}
-      className="min-w-32 max-w-40 max-sm:hidden"
-    />
-  );
-  const pill = "h-9 rounded-full bg-white/12 px-4 text-sm font-medium backdrop-blur-md";
-  const pills = (
-    <div className="flex items-center gap-2">
-      <Button variant="secondary" className={pill} aria-pressed={info} onClick={onInfo}>
+  const word = "h-8 px-2 text-sm font-medium text-muted-foreground hover:text-foreground";
+  return (
+    <div className="-ml-2 flex items-center">
+      <Button variant="ghost" className={word} aria-pressed={info} onClick={onInfo}>
         Info
       </Button>
       {queue && (
         <Button
           ref={queueRef}
-          variant="secondary"
-          className={pill}
+          variant="ghost"
+          className={word}
           aria-expanded={queueOpen}
           onClick={onQueue}
         >
@@ -196,104 +206,75 @@ export function PrototypeBand({
       )}
     </div>
   );
-  // On a phone the chip's name would crowd Play, so it stays an icon there.
-  const mixerChip = (
-    <>
-      <WhereItPlays
-        state={state}
-        connected={connected}
-        run={run}
-        label={soundingLabel(state)}
-        className="max-w-48 rounded-full max-sm:hidden"
-      />
-      <span className="sm:hidden">
-        <WhereItPlays state={state} connected={connected} run={run} />
-      </span>
-    </>
-  );
-  const mixerIcon = <WhereItPlays state={state} connected={connected} run={run} />;
-  const timeline = caps.seekable ? (
-    <PlaybackTimeline state={state} connected={connected} run={run} compact />
-  ) : (
-    live
-  );
-  const titleBlock = video && title && (
-    <div className="grid min-w-0 gap-1">
-      <h2
-        className={cn(
-          "line-clamp-2 font-display font-bold tracking-[-0.02em] text-balance",
-          variant === "B" ? "text-3xl md:text-5xl" : "text-xl md:text-3xl",
-        )}
-      >
-        {title}
-      </h2>
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm text-muted-foreground md:text-base">
-        {meta}
+}
+
+/** Over a picture: Back, the title and its facts with Info and Up next under them, the tools at the right. */
+export function PrototypeVideoTop({
+  back,
+  title,
+  meta,
+  links,
+  tools,
+}: {
+  back: ReactNode;
+  title?: string;
+  meta: ReactNode;
+  links: ReactNode;
+  tools: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3 px-(--gutter)">
+      {back}
+      <div className="grid min-w-0 flex-1 gap-0.5 pt-1.5">
+        <h1 className="truncate font-display text-lg leading-tight font-bold tracking-[-0.01em] md:text-2xl">
+          {title}
+        </h1>
+        <div className="flex min-w-0 items-baseline gap-x-3 truncate text-sm text-muted-foreground [&_[data-media-context]]:text-sm">
+          {meta}
+        </div>
+        {links}
       </div>
+      {tools}
     </div>
   );
+}
 
-  if (variant === "A")
-    return (
-      <div className="grid gap-3 px-(--gutter) pb-4">
-        {titleBlock}
-        {pills}
-        <div className="mx-auto grid w-full max-w-5xl gap-1 rounded-[1.75rem] bg-black/45 px-3 py-2 shadow-[var(--float-shadow)] ring-1 ring-white/10 backdrop-blur-xl">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <div className="flex min-w-0 items-center">{volume}</div>
-            <div className="flex items-center gap-1">
-              {primary}
-              {next}
-            </div>
-            <div className="flex min-w-0 items-center justify-end gap-1">
-              {mixerChip}
-              {settings}
-              {fullscreen}
-            </div>
-          </div>
-          <div className="px-2">{timeline}</div>
-        </div>
-      </div>
-    );
-
-  if (variant === "B")
-    return (
-      <div className="grid gap-4 px-(--gutter) pb-6">
-        {titleBlock}
-        <div>{timeline}</div>
-        <div className="flex items-center gap-3">
-          {primary}
-          {next}
-          {pills}
-          <div className="ml-auto flex items-center gap-3 [&_button]:size-12 [&_button]:rounded-full [&_button]:bg-white/15 [&_button]:backdrop-blur-md">
-            {mixerIcon}
-            {settings}
-            {fullscreen}
-          </div>
-        </div>
-      </div>
-    );
-
-  const group =
-    "flex items-center rounded-full bg-black/40 px-1 ring-1 ring-white/10 backdrop-blur-md";
+/** One row that never wraps: Play/Pause and Next, then the timeline when the item has one. */
+export function PrototypeVideoBottom({
+  transport,
+  state,
+  connected,
+  run,
+}: Props & { transport: ReactNode }) {
+  const { seekable } = playbackCapabilities(state, connected);
   return (
-    <div className="grid gap-2 px-(--gutter) pb-4">
-      {titleBlock}
-      <div>{timeline}</div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className={group}>
-          {primary}
-          {next}
+    <div className="flex items-center gap-3 px-(--gutter) pb-2">
+      {transport}
+      {seekable && (
+        <div className="min-w-0 flex-1">
+          <PlaybackTimeline state={state} connected={connected} run={run} compact />
         </div>
-        {volume && <div className={cn(group, "px-3 max-sm:hidden")}>{volume}</div>}
-        {pills}
-        <div className="ml-auto flex items-center gap-2">
-          <div className={group}>{mixerChip}</div>
-          <div className={group}>
-            {settings}
-            {fullscreen}
-          </div>
-        </div>
+      )}
+    </div>
+  );
+}
+
+/** Beside artwork: the track's timeline or the show's slot (never a Live badge), then the transport with Info and Up next. */
+export function PrototypeAudioControls({
+  state,
+  connected,
+  run,
+  transport,
+  slot,
+  links,
+}: Props & { transport: ReactNode; slot: ReactNode; links: ReactNode }) {
+  const { seekable } = playbackCapabilities(state, connected);
+  return (
+    <div className="grid max-w-xl gap-2">
+      {seekable ? <PlaybackTimeline state={state} connected={connected} run={run} compact /> : slot}
+      <div className="-ml-2.5 flex flex-wrap items-center gap-x-3">
+        {transport}
+        {links}
       </div>
     </div>
   );

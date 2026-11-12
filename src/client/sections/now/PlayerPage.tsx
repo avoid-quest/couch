@@ -1,6 +1,15 @@
 import { Description } from "@/components/DetailHeader";
 import { PrototypeVideoInfo } from "./prototype-tv-feel";
-import { PlayerVariantSwitcher, PrototypeBand, usePlayerVariant } from "./prototype-band";
+import {
+  PlayerVariantSwitcher,
+  PrototypeAudioControls,
+  PrototypeLinks,
+  PrototypeTools,
+  PrototypeTransport,
+  PrototypeVideoBottom,
+  PrototypeVideoTop,
+  usePlayerVariant,
+} from "./prototype-band";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
@@ -136,7 +145,7 @@ export function PlayerPage({
   const tap = useRef<boolean | null>(null);
   // PROTOTYPE: the control the TV's controls hid on, where the next press brings them back.
   const restoreTo = useRef<HTMLElement | null>(null);
-  // PROTOTYPE: ?variant=A|B|C swaps the band for one of three layouts (prototype-band.tsx).
+  // PROTOTYPE: ?variant=D swaps the player's controls for layout D (prototype-band.tsx).
   const variant = usePlayerVariant();
   // What the picture's last click asked for, so a double-click's second click can undo it.
   const clicked = useRef(false);
@@ -668,6 +677,106 @@ export function PlayerPage({
     </div>
   );
 
+  // PROTOTYPE: layout D's pieces (prototype-band.tsx).
+  const prototypeSettings = (
+    <>
+      {!livePlayback(state) && (
+        <Popover
+          open={panel === "settings"}
+          onOpenChange={(open) => setPanel(open ? "settings" : null)}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              ref={gear}
+              data-panel="settings"
+              variant="ghost"
+              size="icon-lg"
+              aria-label="Playback"
+              title="Playback"
+              disabled={!settings}
+            >
+              <Settings aria-hidden="true" />
+            </Button>
+          </PopoverTrigger>
+          {panel === "settings" && settings && (
+            <PlaybackMenu
+              {...settings}
+              tracks={!audioOnly}
+              trigger={gear.current}
+              details={
+                <>
+                  {detailHref && (
+                    <Button asChild variant="ghost" className={playbackMenuRow}>
+                      <Link to={detailHref} aria-label="Details" onClick={openDetails}>
+                        Details
+                        <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
+                      </Link>
+                    </Button>
+                  )}
+                  {/* PROTOTYPE: Stop lives here, not in the band. */}
+                  <Button
+                    variant="ghost"
+                    className={playbackMenuRow}
+                    onClick={() => void run({ type: "stop" })}
+                  >
+                    Stop
+                  </Button>
+                </>
+              }
+            />
+          )}
+        </Popover>
+      )}
+    </>
+  );
+  const prototypeFullscreen = tvPresentation ? (
+    <Button
+      variant="ghost"
+      size="icon-lg"
+      aria-label="Minimize"
+      title="Minimize"
+      onClick={shell.leavePlayer}
+    >
+      <Minimize2 aria-hidden="true" />
+    </Button>
+  ) : (
+    <Button
+      data-player-last
+      variant="ghost"
+      size="icon-lg"
+      disabled={!canFullscreen}
+      aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      onClick={() => void fullscreen.toggle()}
+    >
+      {fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+    </Button>
+  );
+  const prototypeTransport = state && (
+    <PrototypeTransport state={state} connected={connected} run={run} />
+  );
+  const prototypeLinks = (
+    <PrototypeLinks
+      info={info}
+      onInfo={toggleInfo}
+      queue={(state?.queue.length ?? 0) > 1}
+      queueOpen={queueOpen}
+      onQueue={() => setQueueOpen(!queueOpen)}
+      queueRef={queueTrigger}
+    />
+  );
+  const prototypeTools = state && (
+    <PrototypeTools
+      state={state}
+      connected={connected}
+      run={run}
+      tv={tvPresentation}
+      clock={tvPresentation ? <DigitalClock /> : undefined}
+      settings={prototypeSettings}
+      fullscreen={prototypeFullscreen}
+    />
+  );
+
   return (
     <section
       ref={root}
@@ -775,6 +884,7 @@ export function PlayerPage({
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <LiveSharingStatus />
               <div ref={setRecognitionControls} className="empty:hidden" />
+              {variant && prototypeTools}
               {current && artworkStage && !variant && (
                 <Button
                   ref={infoToggle}
@@ -797,11 +907,20 @@ export function PlayerPage({
             </div>
           </div>
         )}
-        {osd && variant && (
-          <div className="flex items-center justify-between px-(--gutter)">
-            {back}
-            {tvPresentation && <DigitalClock />}
-          </div>
+        {osd && variant && state && (
+          <PrototypeVideoTop
+            back={back}
+            title={title}
+            meta={
+              <>
+                {byline && <span>{byline}</span>}
+                {context}
+                {!radio && <PlayerEndTime state={state} />}
+              </>
+            }
+            links={prototypeLinks}
+            tools={prototypeTools}
+          />
         )}
         {osd && !variant && (
           <div
@@ -886,6 +1005,16 @@ export function PlayerPage({
                 )}
                 {/* Where it plays leads the line under the title, as in the now-playing bar. */}
                 <PlaysOnLine at={at}>{copyContext}</PlaysOnLine>
+                {variant && state && (
+                  <PrototypeAudioControls
+                    state={state}
+                    connected={connected}
+                    run={run}
+                    transport={prototypeTransport}
+                    slot={currentProgramme ? <RadioProgress show={currentProgramme} /> : null}
+                    links={prototypeLinks}
+                  />
+                )}
                 {separateWindow && (
                   <p className="text-sm text-muted-foreground">In a separate window</p>
                 )}
@@ -996,7 +1125,7 @@ export function PlayerPage({
         keeps focus where the keyboard put it, and what it opened returns focus to its control. */}
       <div
         ref={band}
-        hidden={!current}
+        hidden={!current || (variant && artworkStage)}
         data-player-band={shown ? "shown" : "hidden"}
         inert={!shown}
         onClick={(event) => {
@@ -1026,116 +1155,12 @@ export function PlayerPage({
           gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
           each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
           at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
-        {variant && state && current ? (
-          <PrototypeBand
-            variant={variant}
+        {variant && state && current && osd ? (
+          <PrototypeVideoBottom
+            transport={prototypeTransport}
             state={state}
             connected={connected}
             run={run}
-            video={osd}
-            tv={tvPresentation}
-            title={title}
-            meta={
-              <>
-                {byline && <span>{byline}</span>}
-                {context}
-                {!radio && <PlayerEndTime state={state} />}
-              </>
-            }
-            live={
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  <span className="text-destructive">●</span> Live
-                </span>
-                {currentProgramme && <RadioProgress show={currentProgramme} />}
-              </div>
-            }
-            info={info}
-            onInfo={toggleInfo}
-            queue={state.queue.length > 1}
-            queueOpen={queueOpen}
-            onQueue={() => setQueueOpen(!queueOpen)}
-            queueRef={queueTrigger}
-            settings={
-              <>
-                {!livePlayback(state) && (
-                  <Popover
-                    open={panel === "settings"}
-                    onOpenChange={(open) => setPanel(open ? "settings" : null)}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        ref={gear}
-                        data-panel="settings"
-                        variant="ghost"
-                        size="icon-lg"
-                        aria-label="Playback"
-                        title="Playback"
-                        disabled={!settings}
-                      >
-                        <Settings aria-hidden="true" />
-                      </Button>
-                    </PopoverTrigger>
-                    {panel === "settings" && settings && (
-                      <PlaybackMenu
-                        {...settings}
-                        tracks={!audioOnly}
-                        trigger={gear.current}
-                        details={
-                          <>
-                            {detailHref && (
-                              <Button asChild variant="ghost" className={playbackMenuRow}>
-                                <Link to={detailHref} aria-label="Details" onClick={openDetails}>
-                                  Details
-                                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                                </Link>
-                              </Button>
-                            )}
-                            {/* PROTOTYPE: Stop lives here, not in the band. */}
-                            <Button
-                              variant="ghost"
-                              className={playbackMenuRow}
-                              onClick={() => void run({ type: "stop" })}
-                            >
-                              Stop
-                            </Button>
-                          </>
-                        }
-                      />
-                    )}
-                  </Popover>
-                )}
-              </>
-            }
-            fullscreen={
-              tvPresentation ? (
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  aria-label="Minimize"
-                  title="Minimize"
-                  onClick={shell.leavePlayer}
-                >
-                  <Minimize2 aria-hidden="true" />
-                </Button>
-              ) : (
-                <Button
-                  data-player-last
-                  variant="ghost"
-                  size="icon-lg"
-                  disabled={!canFullscreen}
-                  aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  onClick={() => void fullscreen.toggle()}
-                >
-                  {fullscreen.fullscreen ? (
-                    <Minimize aria-hidden="true" />
-                  ) : (
-                    <Maximize aria-hidden="true" />
-                  )}
-                </Button>
-              )
-            }
           />
         ) : (
           <div className="grid gap-1">
@@ -1250,7 +1275,7 @@ export function PlayerPage({
           </div>
         )}
       </div>
-      {variant && <PlayerVariantSwitcher variant={variant} />}
+      <PlayerVariantSwitcher on={variant} />
     </section>
   );
 }
