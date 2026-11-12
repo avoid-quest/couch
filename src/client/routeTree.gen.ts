@@ -18,6 +18,7 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LiveTvRouteImport } from './routes/live-tv'
 import { Route as NowRouteImport } from './routes/now'
+import { Route as PrototypeRestRouteImport } from './routes/prototype-rest'
 import { Route as RadioRouteImport } from './routes/radio'
 import { Route as RemoteRouteImport } from './routes/remote'
 import { Route as SavedRouteImport } from './routes/saved'
@@ -87,6 +88,11 @@ const LiveTvRoute = LiveTvRouteImport.update({
 const NowRoute = NowRouteImport.update({
   id: '/now',
   path: '/now',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrototypeRestRoute = PrototypeRestRouteImport.update({
+  id: '/prototype-rest',
+  path: '/prototype-rest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RadioRoute = RadioRouteImport.update({
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/live-tv': typeof LiveTvRoute
   '/now': typeof NowRoute
+  '/prototype-rest': typeof PrototypeRestRoute
   '/radio': typeof RadioRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
@@ -265,6 +272,7 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/live-tv': typeof LiveTvRoute
   '/now': typeof NowRoute
+  '/prototype-rest': typeof PrototypeRestRoute
   '/radio': typeof RadioRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/live-tv': typeof LiveTvRoute
   '/now': typeof NowRoute
+  '/prototype-rest': typeof PrototypeRestRoute
   '/radio': typeof RadioRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/live-tv'
     | '/now'
+    | '/prototype-rest'
     | '/radio'
     | '/remote'
     | '/saved'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/live-tv'
     | '/now'
+    | '/prototype-rest'
     | '/radio'
     | '/remote'
     | '/saved'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/live-tv'
     | '/now'
+    | '/prototype-rest'
     | '/radio'
     | '/remote'
     | '/saved'
@@ -443,6 +455,7 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   LiveTvRoute: typeof LiveTvRoute
   NowRoute: typeof NowRoute
+  PrototypeRestRoute: typeof PrototypeRestRoute
   RadioRoute: typeof RadioRoute
   RemoteRoute: typeof RemoteRoute
   SavedRoute: typeof SavedRoute
@@ -517,6 +530,13 @@ declare module '@tanstack/react-router' {
       path: '/now'
       fullPath: '/now'
       preLoaderRoute: typeof NowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prototype-rest': {
+      id: '/prototype-rest'
+      path: '/prototype-rest'
+      fullPath: '/prototype-rest'
+      preLoaderRoute: typeof PrototypeRestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/radio': {
@@ -769,6 +789,7 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   LiveTvRoute: LiveTvRoute,
   NowRoute: NowRoute,
+  PrototypeRestRoute: PrototypeRestRoute,
   RadioRoute: RadioRoute,
   RemoteRoute: RemoteRoute,
   SavedRoute: SavedRoute,

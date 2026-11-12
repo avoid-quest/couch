@@ -1,3 +1,4 @@
+import { PrototypeVolumeGauge } from "@/sections/now/prototype-tv-feel";
 import { useRadioClock } from "@/radio-clock";
 import {
   defaultStringifySearch,
@@ -730,6 +731,7 @@ function ShellChrome({ children }: PropsWithChildren) {
       )}
     >
       <main id="main" className="flex flex-1 flex-col">
+        {tvPresentation && <PrototypeVolumeGauge />}
         {tvPresentation && state?.appearance && (
           <TvAppearancePreview
             appearance={state.appearance}

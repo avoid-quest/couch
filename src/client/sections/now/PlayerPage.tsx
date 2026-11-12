@@ -1,4 +1,5 @@
 import { Description } from "@/components/DetailHeader";
+import { PrototypeVideoInfo } from "./prototype-tv-feel";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
@@ -203,7 +204,8 @@ export function PlayerPage({
   // another entry or Playback starts calm, while a new programme on the same station keeps it open.
   const infoKey = current ? `${state?.playback}:${current.id}:${current.source}` : null;
   const [infoFor, setInfoFor] = useState<string | null>(null);
-  const info = artworkStage && !!infoKey && infoFor === infoKey;
+  // PROTOTYPE: Info also over a picture.
+  const info = !!infoKey && infoFor === infoKey;
   useEffect(() => {
     setInfoFor(null);
   }, [infoKey]);
@@ -303,6 +305,8 @@ export function PlayerPage({
     setShown(false);
   };
   const wake = () => {
+    // PROTOTYPE: Info over a picture keeps the controls hidden.
+    if (info && !artworkStage) return;
     setShown(true);
     clearTimeout(timer.current);
     if (autoHide && !panel && !queueOpen) timer.current = setTimeout(idle, 4000);
@@ -313,6 +317,12 @@ export function PlayerPage({
     else timer.current = setTimeout(idle, 4000);
     return () => clearTimeout(timer.current);
   }, [autoHide, panel, queueOpen]);
+  // PROTOTYPE: however Info opened over a picture, the controls step aside for it.
+  useEffect(() => {
+    if (!info || artworkStage) return;
+    clearTimeout(timer.current);
+    setShown(false);
+  }, [info, artworkStage]);
   useEffect(() => {
     if (!nativeHost || !current || shown) return;
     document.documentElement.toggleAttribute("data-cursor-hidden", true);
@@ -436,8 +446,13 @@ export function PlayerPage({
   // whose top line already names what plays, a remote's Info shows or hides the controls, as a TV's info banner.
   const toggleInfo = () => {
     if (!artworkStage) {
-      if (shown) hide();
-      else wake();
+      // PROTOTYPE: Info over a picture opens its panel and hides the controls.
+      const open = !info;
+      setInfoFor(open ? infoKey : null);
+      if (open) {
+        clearTimeout(timer.current);
+        setShown(false);
+      }
       return;
     }
     const open = queueOpen || !info;
@@ -907,7 +922,27 @@ export function PlayerPage({
           </aside>
         )}
       </div>
-      {osd && state && !queueOpen && !panel && <NextUp state={state} run={run} />}
+      {osd && state && !queueOpen && !panel && !info && <NextUp state={state} run={run} />}
+      {osd && info && current && state && (
+        <PrototypeVideoInfo
+          state={state}
+          current={current}
+          title={title ?? ""}
+          byline={byline}
+          context={context}
+          ends={<PlayerEndTime state={state} />}
+          details={
+            <>
+              {detailHref && (
+                <Button variant="secondary" onClick={() => detailNavigation.open(detailHref)}>
+                  Details
+                </Button>
+              )}
+              <WhereItPlays state={state} connected={connected} run={run} label="Where it plays" />
+            </>
+          }
+        />
+      )}
       {/* A pointer leaves the keys to the shortcuts: once a click in the band has done its job, focus returns to the
         picture; what it opened returns focus to the picture once it closes, off the TV. A keyboard's click (detail 0)
         keeps focus where the keyboard put it, and what it opened returns focus to its control. */}

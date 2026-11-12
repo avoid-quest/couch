@@ -4,13 +4,17 @@ import { startHold } from "./hold";
 import { isTvPresentation } from "./session/presentation";
 
 type Direction = "up" | "down" | "left" | "right";
-type Control = Direction | "ok" | "back";
+// PROTOTYPE: Triangle is Info, L1/R1 step the volume.
+type Control = Direction | "ok" | "back" | "info" | "quieter" | "louder";
 
 // Button indices of the standard mapping (https://w3c.github.io/gamepad/#remapping): the bottom face button
 // (A, Cross) is OK, the right one (B, Circle) is Back, 12–15 the D-pad. The Guide button (16) stays Steam's.
 const buttons: [Control, number][] = [
   ["ok", 0],
   ["back", 1],
+  ["info", 3],
+  ["quieter", 4],
+  ["louder", 5],
   ["up", 12],
   ["down", 13],
   ["left", 14],
@@ -47,6 +51,7 @@ export function gamepadReader(navigate: (key: NavigationKey) => void) {
   let inFront = true;
   let ok: ReturnType<typeof startHold> | null = null;
   const repeats = new Map<Direction, number>();
+  const volumeRepeats = new Map<Control, number>();
   const stop = () => {
     ok?.release();
     ok = null;
@@ -62,6 +67,23 @@ export function gamepadReader(navigate: (key: NavigationKey) => void) {
     if (!focused || arriving) return;
     const pressed = (control: Control) => held.has(control) && !before.has(control);
     if (pressed("back")) navigate("back");
+    if (pressed("info")) navigate("info");
+    for (const [control, by] of [
+      ["quieter", -2],
+      ["louder", 2],
+    ] as const) {
+      const step = (repeat: boolean) =>
+        window.dispatchEvent(new CustomEvent("couch-volume-step", { detail: { by, repeat } }));
+      const next = volumeRepeats.get(control);
+      if (!held.has(control)) volumeRepeats.delete(control);
+      else if (pressed(control)) {
+        step(false);
+        volumeRepeats.set(control, now + repeatDelay);
+      } else if (next !== undefined && now >= next) {
+        step(true);
+        volumeRepeats.set(control, now + 250);
+      }
+    }
     if (pressed("ok")) ok = startHold(() => navigate("menu"));
     if (ok && !held.has("ok")) {
       if (ok.release()) navigate("select");
