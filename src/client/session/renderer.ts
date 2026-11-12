@@ -517,7 +517,6 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
       startPosition: begin(command) ?? -1,
       liveDurationInfinity: true,
       enableCEA708Captions: !command.subtitles?.length,
-      ...(following ? { maxLiveSyncPlaybackRate: 1 } : {}),
     }));
     const active = () => current === generation && attempt === decoderGeneration && hls === decoder;
     const codecs: string[] = [

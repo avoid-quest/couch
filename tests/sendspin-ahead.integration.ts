@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -27,6 +27,97 @@ async function until(predicate: () => boolean, message: string, timeout = 5_000)
   }
 }
 
+// Core and a WAV server for one test: receivers connect as Sendspin players with the codec they ask for.
+async function fixture(t: TestContext) {
+  const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-ahead-"));
+  const clients: SendspinClient[] = [];
+  const keys = [Identity.generate(), Identity.generate()];
+  const core = createSendspin({
+    name: "Ahead fixture",
+    admit: (id) => keys.some((key) => key.peerId === id),
+    changed: () => {},
+    ffmpeg: async () => ffmpeg,
+  });
+  const group = core.group("ahead", () => {});
+  const server = createServer((_request, response) => {
+    response.setHeader("Content-Type", "audio/wav");
+    response.end(readFileSync(join(directory, "tone.wav")));
+  });
+  const sockets = new WebSocketServer({ server, path: "/sendspin" });
+  sockets.on("connection", (socket, request) => core.accept(socket, request));
+  t.after(async () => {
+    group.close();
+    core.close();
+    await Promise.all(clients.map((client) => client.disconnect()));
+    await new Promise<void>((resolve) => sockets.close(() => resolve()));
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  execFileSync(
+    ffmpeg,
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440:sample_rate=48000",
+      "-t",
+      "30",
+      "-ac",
+      "2",
+      join(directory, "tone.wav"),
+    ],
+    { stdio: "pipe" },
+  );
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const origin = `http://127.0.0.1:${address.port}`;
+  async function receiver(index: number, codec: AudioCodec, capacity: number, interval: number) {
+    const key = keys[index]!,
+      frames: { timestamp: number; bytes: Buffer }[] = [],
+      streams: string[] = [];
+    let most = 0;
+    const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], {
+      playerSupport: {
+        supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }],
+        buffer_capacity: capacity,
+        supported_commands: [],
+      },
+    });
+    clients.push(client);
+    client.addStreamStartListener(() => streams.push("start"));
+    client.addStreamClearListener(() => streams.push("clear"));
+    client.addStreamEndListener(() => streams.push("end"));
+    client.addAudioChunkListener((timestamp, bytes) => {
+      frames.push({ timestamp, bytes: Buffer.from(bytes) });
+      // Held: chunks not yet played, with their 13-byte headers. A PCM chunk is 100 ms; Opus here is 60 ms.
+      const now = serverNowUs();
+      most = Math.max(
+        most,
+        frames.reduce(
+          (sum, frame) => (frame.timestamp + interval > now ? sum + frame.bytes.length + 13 : sum),
+          0,
+        ),
+      );
+    });
+    await client.connect(`${origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+    return {
+      id: key.peerId,
+      frames,
+      streams,
+      get most() {
+        return most;
+      },
+    };
+  }
+  return { group, source: `${origin}/tone.wav`, receiver };
+}
+const skip = !available && "Set COUCH_TEST_FFMPEG to run the send-ahead test.";
+
 // A locked Android phone runs its page's timers late and its Wi-Fi dozes. Speakers must hold
 // seconds of sound, not one, and a speaker that joins late gets that sound too. A speaker never
 // holds more than its buffer_capacity: 512 KiB is under 3 s of PCM.
@@ -37,92 +128,12 @@ const cases = [
 for (const { codec, capacity, lead, interval } of cases)
   test(
     `synced ${codec} goes out seconds ahead, also to a late speaker`,
-    { timeout: 20_000, skip: !available && "Set COUCH_TEST_FFMPEG to run the send-ahead test." },
+    { timeout: 20_000, skip },
     async (t) => {
-      const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-ahead-"));
-      const clients: SendspinClient[] = [];
-      const keys = [Identity.generate(), Identity.generate()];
-      const core = createSendspin({
-        name: "Ahead fixture",
-        admit: (id) => keys.some((key) => key.peerId === id),
-        changed: () => {},
-        ffmpeg: async () => ffmpeg,
-      });
-      const group = core.group("ahead", () => {});
-      const server = createServer((_request, response) => {
-        response.setHeader("Content-Type", "audio/wav");
-        response.end(readFileSync(join(directory, "tone.wav")));
-      });
-      const sockets = new WebSocketServer({ server, path: "/sendspin" });
-      sockets.on("connection", (socket, request) => core.accept(socket, request));
-      t.after(async () => {
-        group.close();
-        core.close();
-        await Promise.all(clients.map((client) => client.disconnect()));
-        await new Promise<void>((resolve) => sockets.close(() => resolve()));
-        server.closeAllConnections();
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-        rmSync(directory, { recursive: true, force: true });
-      });
-      execFileSync(
-        ffmpeg,
-        [
-          "-hide_banner",
-          "-loglevel",
-          "error",
-          "-f",
-          "lavfi",
-          "-i",
-          "sine=frequency=440:sample_rate=48000",
-          "-t",
-          "30",
-          "-ac",
-          "2",
-          join(directory, "tone.wav"),
-        ],
-        { stdio: "pipe" },
-      );
-      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-      const address = server.address();
-      assert.ok(address && typeof address === "object");
-      const origin = `http://127.0.0.1:${address.port}`;
-      async function receiver(index: number) {
-        const key = keys[index]!,
-          frames: { timestamp: number; bytes: Buffer }[] = [];
-        let most = 0;
-        const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], {
-          playerSupport: {
-            supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }],
-            buffer_capacity: capacity,
-            supported_commands: [],
-          },
-        });
-        clients.push(client);
-        client.addAudioChunkListener((timestamp, bytes) => {
-          frames.push({ timestamp, bytes: Buffer.from(bytes) });
-          // Held: chunks not yet played, with their 13-byte headers. A PCM chunk is 100 ms; Opus here is 60 ms.
-          const now = serverNowUs();
-          most = Math.max(
-            most,
-            frames.reduce(
-              (sum, frame) =>
-                frame.timestamp + interval > now ? sum + frame.bytes.length + 13 : sum,
-              0,
-            ),
-          );
-        });
-        await client.connect(`${origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
-        return {
-          id: key.peerId,
-          frames,
-          get most() {
-            return most;
-          },
-        };
-      }
-      const first = await receiver(0);
+      const { group, source, receiver } = await fixture(t);
+      const first = await receiver(0, codec, capacity, interval);
       group.members([{ deviceId: first.id, level: 100 }]);
-      group.send({ type: "load", playbackId: "ahead", source: `${origin}/tone.wav` });
+      group.send({ type: "load", playbackId: "ahead", source });
       await until(
         () => (first.frames.at(-1)?.timestamp ?? 0) - serverNowUs() > lead,
         "Speakers were not sent sound seconds ahead",
@@ -132,7 +143,7 @@ for (const { codec, capacity, lead, interval } of cases)
         "The first speaker never started playing",
       );
 
-      const second = await receiver(1);
+      const second = await receiver(1, codec, capacity, interval);
       const joinedAt = serverNowUs();
       group.members([
         { deviceId: first.id, level: 100 },
@@ -450,3 +461,51 @@ for (const source of [
       );
     },
   );
+// Firefox's player takes only PCM. Joining a Playback whose speakers take Opus must not restart their sound.
+test(
+  "a PCM speaker joins without restarting an Opus speaker",
+  { timeout: 20_000, skip },
+  async (t) => {
+    const { group, source, receiver } = await fixture(t);
+    const opus = await receiver(0, AudioCodec.OPUS, 2_000_000, 60_000);
+    group.members([{ deviceId: opus.id, level: 100 }]);
+    group.send({ type: "load", playbackId: "wires", source });
+    await until(
+      () => !!opus.frames.length && serverNowUs() > opus.frames[0]!.timestamp + 1_000_000,
+      "The Opus speaker never started playing",
+    );
+    const pcm = await receiver(1, AudioCodec.PCM, 512 * 1024, 100_000);
+    group.members([
+      { deviceId: opus.id, level: 100 },
+      { deviceId: pcm.id, level: 100 },
+    ]);
+    await until(
+      () => !!pcm.frames.length && serverNowUs() > pcm.frames[0]!.timestamp + 1_000_000,
+      "The PCM speaker never started playing",
+    );
+    for (let index = 1; index < opus.frames.length; index++)
+      assert.equal(
+        opus.frames[index]!.timestamp - opus.frames[index - 1]!.timestamp,
+        60_000,
+        "the Opus speaker's sound must run on, never restart",
+      );
+  },
+);
+
+// Sendspin: a paused group ends its speakers' streams and sends a new stream/start when it plays again.
+test(
+  "pause ends the speakers' stream and playing again starts one",
+  { timeout: 20_000, skip },
+  async (t) => {
+    const { group, source, receiver } = await fixture(t);
+    const speaker = await receiver(0, AudioCodec.OPUS, 2_000_000, 60_000);
+    group.members([{ deviceId: speaker.id, level: 100 }]);
+    group.send({ type: "load", playbackId: "pause", source });
+    await until(() => speaker.frames.length > 0, "The speaker never got sound");
+    group.send({ type: "pause", playbackId: "pause", paused: true });
+    await until(() => speaker.streams.includes("end"), "Pausing never ended the stream");
+    group.send({ type: "pause", playbackId: "pause", paused: false });
+    await until(() => speaker.streams.length === 3, "Playing again never started a stream");
+    assert.deepEqual(speaker.streams, ["start", "end", "start"]);
+  },
+);

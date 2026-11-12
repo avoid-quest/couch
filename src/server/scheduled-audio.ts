@@ -42,7 +42,9 @@ export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & {
   credentialOrigin?: string;
 };
 export type Member = { deviceId: string; level: number };
-type Wire = "opus" | "pcm";
+// Every run encodes both wires, so a speaker that joins never restarts everyone's sound for its format.
+const wires = ["opus", "pcm"] as const;
+type Wire = (typeof wires)[number];
 // offset and duration are microseconds of audio from where this FFmpeg started.
 type Chunk = { offset: number; duration: number; data: Buffer };
 // start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
@@ -61,7 +63,6 @@ type Run = {
   start: number;
   anchored: boolean;
   speed: number;
-  wires: Set<Wire>;
   queues: Record<Wire, Chunk[]>;
   sent: Record<Wire, { at: number; end: number; data: Buffer }[]>;
   cursors: Map<SendspinSession, number>;
@@ -369,10 +370,6 @@ export function createScheduledAudio(options: {
       }
       clearReceiverError(clientId);
       if (run.cursors.has(session)) return;
-      if (!run.wires.has(wire)) {
-        void restart();
-        return;
-      }
       session.sendStreamStart(wireFormat(wire));
       session.sendGroupUpdate(PlaybackStateType.PLAYING, id, options.name);
       session.sendMetadata(metadata());
@@ -384,7 +381,8 @@ export function createScheduledAudio(options: {
         if (session) action(session);
       }
     };
-    // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
+    // Ends FFmpeg. Speakers drop what they buffered and go quiet at once: a seek clears their stream;
+    // a pause or stop ends it, as Sendspin requires, and the next start begins a new one.
     const halt = (end = false) => {
       generation++;
       if (!run) return;
@@ -435,7 +433,6 @@ export function createScheduledAudio(options: {
             start: state.position,
             anchored: true,
             speed: state.speed ?? 1,
-            wires: new Set(),
             queues: { opus: [], pcm: [] },
             sent: { opus: [], pcm: [] },
             cursors: new Map(),
@@ -468,7 +465,6 @@ export function createScheduledAudio(options: {
             start: 0,
             anchored: true,
             speed: 1,
-            wires: new Set(["opus", "pcm"]),
             queues: { opus: [], pcm: [] },
             sent: { opus: [], pcm: [] },
             cursors: new Map(),
@@ -581,14 +577,6 @@ export function createScheduledAudio(options: {
           await proxy?.close();
           return;
         }
-        const wires = new Set<Wire>(
-          members.flatMap((member) => {
-            const session = listening(member.deviceId),
-              wire = session && wireOf(session);
-            return wire ? [wire] : [];
-          }),
-        );
-        if (!wires.size) wires.add("opus");
         const speed = state.speed ?? 1,
           start = state.position,
           live = !!current.live && !current.radio;
@@ -599,7 +587,7 @@ export function createScheduledAudio(options: {
           (state.duration !== null || !!current.startPosition);
         // A live run keeps the source's timestamps and prints its first one with ashowinfo.
         const compressed = current.compressor?.enabled && !current.liveSourceId;
-        const graph = `[0:a:${audioStream}]${[...(live ? ["ashowinfo", sourceTime] : []), ...(speed === 1 ? [] : [tempo(speed)]), live ? "aresample=48000:async=1" : "aresample=48000", "aformat=channel_layouts=stereo", ...(compressed ? [compressorFilter(current.compressor!)] : []), ...(wires.size > 1 ? [`asplit=${wires.size}`] : [])].join(",")}${[...wires].map((wire) => `[${wire}]`).join("")}`;
+        const graph = `[0:a:${audioStream}]${[...(live ? ["ashowinfo", sourceTime] : []), ...(speed === 1 ? [] : [tempo(speed)]), live ? "aresample=48000:async=1" : "aresample=48000", "aformat=channel_layouts=stereo", ...(compressed ? [compressorFilter(current.compressor!)] : []), `asplit=${wires.length}`].join(",")}${wires.map((wire) => `[${wire}]`).join("")}`;
         const shape = (wire: Wire) => [
           "-map",
           `[${wire}]`,
@@ -655,25 +643,24 @@ export function createScheduledAudio(options: {
             source,
             "-filter_complex",
             graph,
-            ...(wires.has("opus")
-              ? [
-                  ...shape("opus"),
-                  "-c:a",
-                  "libopus",
-                  "-b:a",
-                  "96k",
-                  "-frame_duration",
-                  "60",
-                  "-f",
-                  "ogg",
-                  "-page_duration",
-                  "60000",
-                  "pipe:1",
-                ]
-              : []),
-            ...(wires.has("pcm")
-              ? [...shape("pcm"), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"]
-              : []),
+            ...shape("opus"),
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "96k",
+            "-frame_duration",
+            "60",
+            "-f",
+            "ogg",
+            "-page_duration",
+            "60000",
+            "pipe:1",
+            ...shape("pcm"),
+            "-c:a",
+            "pcm_s16le",
+            "-f",
+            "s16le",
+            "pipe:3",
           ],
           {
             stdio: ["ignore", "pipe", "pipe", "pipe"],
@@ -709,7 +696,6 @@ export function createScheduledAudio(options: {
           anchored: !live,
           sourceTimed: live,
           speed,
-          wires,
           queues: { opus: [], pcm: [] },
           sent: { opus: [], pcm: [] },
           cursors: new Map(),
@@ -772,50 +758,46 @@ export function createScheduledAudio(options: {
           list.push(chunk);
           if (list.at(-1)!.offset - list[0]!.offset > aheadUs) pipe.pause();
         };
-        if (wires.has("opus")) {
-          const pipe = (next.pipes.opus = child.stdout!);
-          let offset = 0;
-          const packets = oggPackets((packet) => {
-            // OpusHead's pre-skip is the encoder's delay; timestamps drop it so every wire lines up.
-            const magic = packet.toString("latin1", 0, 8);
-            if (magic === "OpusHead") {
-              offset = (-packet.readUInt16LE(10) / 48_000) * 1e6;
-              return;
-            }
-            if (magic === "OpusTags") return;
-            const duration = opusDuration(packet);
-            queue("opus", pipe, { offset, duration, data: packet });
-            offset += duration;
-          });
-          pipe.on("data", (data: Buffer) => {
-            if (run !== next) return;
-            try {
-              packets(data);
-            } catch (error) {
-              fail(error instanceof Error ? error.message : "FFmpeg sent a broken Ogg stream.");
-            }
-          });
-        }
-        if (wires.has("pcm")) {
-          const pipe = (next.pipes.pcm = child.stdio[3] as Readable);
-          let pending: Buffer = Buffer.alloc(0),
-            offset = 0;
-          const flush = (data: Buffer) => {
-            queue("pcm", pipe, { offset, duration: (data.length / 192_000) * 1e6, data });
-            offset += (data.length / 192_000) * 1e6;
-          };
-          pipe.on("data", (data: Buffer) => {
-            pending = Buffer.concat([pending, data]);
-            while (pending.length >= pcmBytes) {
-              flush(pending.subarray(0, pcmBytes));
-              pending = pending.subarray(pcmBytes);
-            }
-          });
-          pipe.on("end", () => {
-            if (pending.length >= 4)
-              flush(pending.subarray(0, pending.length - (pending.length % 4)));
-          });
-        }
+        const opus = (next.pipes.opus = child.stdout!);
+        let opusOffset = 0;
+        const packets = oggPackets((packet) => {
+          // OpusHead's pre-skip is the encoder's delay; timestamps drop it so every wire lines up.
+          const magic = packet.toString("latin1", 0, 8);
+          if (magic === "OpusHead") {
+            opusOffset = (-packet.readUInt16LE(10) / 48_000) * 1e6;
+            return;
+          }
+          if (magic === "OpusTags") return;
+          const duration = opusDuration(packet);
+          queue("opus", opus, { offset: opusOffset, duration, data: packet });
+          opusOffset += duration;
+        });
+        opus.on("data", (data: Buffer) => {
+          if (run !== next) return;
+          try {
+            packets(data);
+          } catch (error) {
+            fail(error instanceof Error ? error.message : "FFmpeg sent a broken Ogg stream.");
+          }
+        });
+        const pcm = (next.pipes.pcm = child.stdio[3] as Readable);
+        let pending: Buffer = Buffer.alloc(0),
+          pcmOffset = 0;
+        const flush = (data: Buffer) => {
+          queue("pcm", pcm, { offset: pcmOffset, duration: (data.length / 192_000) * 1e6, data });
+          pcmOffset += (data.length / 192_000) * 1e6;
+        };
+        pcm.on("data", (data: Buffer) => {
+          pending = Buffer.concat([pending, data]);
+          while (pending.length >= pcmBytes) {
+            flush(pending.subarray(0, pcmBytes));
+            pending = pending.subarray(pcmBytes);
+          }
+        });
+        pcm.on("end", () => {
+          if (pending.length >= 4)
+            flush(pending.subarray(0, pending.length - (pending.length % 4)));
+        });
       } catch (error) {
         await proxy?.close();
         if (attempt === generation)
@@ -876,7 +858,7 @@ export function createScheduledAudio(options: {
         // PCM and Opus have different chunk boundaries; neither can rewind the shared clock.
         current.clock!.push({ at: current.base + offset, offset });
       }
-      for (const wire of current.wires) {
+      for (const wire of wires) {
         const list = current.queues[wire],
           sent = current.sent[wire];
         while (sent[0] && sent[0].end <= now) sent.shift();
@@ -942,7 +924,7 @@ export function createScheduledAudio(options: {
     };
     const pause = () => {
       const at = position();
-      halt();
+      halt(true);
       state = { ...state, position: at, status: "paused", buffering: false };
       report();
     };
