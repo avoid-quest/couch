@@ -4,7 +4,7 @@ What changed for people using Couch, and any PR this depends on.
 
 ## Story
 
-The story in `docs/stories/` this changes, or "none" for internal work.
+The story in `docs/stories/` this serves, or "none" for internal work.
 
 ## Checked
 
