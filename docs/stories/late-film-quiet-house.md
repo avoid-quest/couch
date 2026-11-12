@@ -30,5 +30,3 @@ with quiet dialogue and loud scenes.
 ## Known issues
 
 - Lip-sync and the Compressor's effect haven't been checked by ear.
-- During a Twitch ad, each device shows its own ad and the shared sound is silent;
-  pictures line up again when the programme returns.

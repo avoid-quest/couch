@@ -115,11 +115,14 @@ the official player (`@sendspin/sendspin-js`).
   data where the sound is waits a little ahead for the clock instead of chasing it.
 - For an endless URL stream (Twitch or YouTube live, Live TV; Live audio captures
   are separate, see [Live audio](live-audio.md)) the position is the source's own
-  timestamp (`-copyts`, mapped by hls.js per discontinuity), so a screen that joins
-  anywhere lines up. FFmpeg starts where hls.js starts a picture (`HOLD-BACK`, else
+  timestamp (`-copyts`), which hls.js maps onto each screen's timeline per
+  discontinuity. FFmpeg starts where hls.js starts a picture (`HOLD-BACK`, else
   three target durations from the end), which gives it that much audio in hand. A
   gap of up to three minutes, such as a Twitch ad FFmpeg drops, plays as silence and
   the clock runs on; audio that arrives after its time is dropped.
+- That mapping has limits: during a Twitch ad each screen shows its own ad; after
+  an encoder restart sends timestamps back, pictures can run off the sound by that
+  jump; native HLS and raw MPEG-TS pictures follow only play and pause.
 - Web media on HLS, except YouTube's checked formats, plays its master: each Device
   adapts to its link, capped at the chosen quality, and Core decodes an audio-only
   rendition when there is one.
