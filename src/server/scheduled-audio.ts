@@ -76,10 +76,12 @@ type Run = {
   timer: ReturnType<typeof setInterval>;
 };
 
-const leadUs = 1_000_000; // Buffered media and relaxed capture; Live uses player declarations.
-// Chunks go out this far ahead of their play time. Players schedule what they hold, so a page whose
-// timers stall or a radio that dozes (a locked Android phone) keeps playing instead of dropping late chunks.
-const sendUs = 8_000_000;
+// Relaxed's least send-ahead: screens follow the clock too, and they declare nothing. Live has none.
+const leadUs = 1_000_000;
+// Chunks go out this far ahead of their play time, within each player's buffer_capacity: Sendspin prefers
+// filling buffered streams near capacity, and sendspin-js sizes it for 30 s. Players schedule what they
+// hold, so a page whose timers stall or a radio that dozes (a locked Android phone) keeps playing.
+const sendUs = 30_000_000;
 const aheadUs = 8_000_000; // Decoded audio that may wait in Core before FFmpeg is held back.
 const pcmBytes = 19_200; // 100 ms of 48 kHz 16-bit stereo.
 const emptyMetadata = {
@@ -186,7 +188,9 @@ export function createScheduledAudio(options: {
     else sessions.delete(clientId);
     return true;
   };
-  const validTiming = (ms: number) => Number.isInteger(ms) && ms >= 0 && ms <= 5000;
+  // Sendspin bounds output delay and min buffer to 5 s.
+  const timingLimitMs = 5000;
+  const validTiming = (ms: number) => Number.isInteger(ms) && ms >= 0 && ms <= timingLimitMs;
   const hooks: SendspinSessionHooks = {
     onFormatChanged: (session) => {
       for (const group of groups) group.formatChanged(session);
@@ -236,18 +240,24 @@ export function createScheduledAudio(options: {
   ) {
     let members: Member[] = [];
     let screens: string[] = [];
-    // Sendspin servers supply timestamps. For capture use the group's largest
-    // declared buffer plus output delay, as the protocol specifies; no admission gate.
-    const captureLead = () => {
-      const minimum = load?.captureIntent === "live" ? 0 : leadUs / 1000;
+    // The group's common send-ahead (Sendspin server audio send constraints): the largest of each
+    // player's declared buffer plus its output delay; no admission gate. Relaxed also honours each
+    // player's startup lead, a hint with no upper bound that a server MAY shorten, up to timingLimitMs.
+    const sendAhead = () => {
+      const live = load?.captureIntent === "live",
+        minimum = live ? 0 : leadUs / 1000;
       return members.reduce<LiveLead>(
         (lead, member) => {
           const timing = sessions.get(member.deviceId)?.getPlayerTiming();
           // The SDK keeps a declaration before onPlayerState rejects it, so read only valid ones.
           const declared = (value?: number) =>
             value !== undefined && validTiming(value) ? value : 0;
+          const startup = live
+            ? 0
+            : declared(Math.min(timing?.requiredLeadTimeMs ?? 0, timingLimitMs));
           const ms =
-            Math.max(minimum, declared(timing?.minBufferMs)) + declared(timing?.staticDelayMs);
+            Math.max(minimum, declared(timing?.minBufferMs), startup) +
+            declared(timing?.staticDelayMs);
           return ms > lead.ms ? { ms, deviceId: member.deviceId } : lead;
         },
         { ms: minimum },
@@ -463,7 +473,7 @@ export function createScheduledAudio(options: {
           const source = sources.get(current.liveSourceId)!.capture;
           const next: Run = {
             fixed: true,
-            captureLead: captureLead(),
+            captureLead: sendAhead(),
             start: 0,
             anchored: true,
             speed: 1,
@@ -487,12 +497,12 @@ export function createScheduledAudio(options: {
               next.cursors.clear();
               next.base = undefined;
               next.released = 0;
-              next.captureLead = captureLead();
+              next.captureLead = sendAhead();
               each((session) => session.sendStreamClear());
               report();
               return;
             }
-            const lead = captureLead();
+            const lead = sendAhead();
             if (!next.captureLead || lead.ms > next.captureLead.ms) {
               next.captureLead = lead;
               report();
@@ -842,25 +852,21 @@ export function createScheduledAudio(options: {
       if (current.base === undefined) {
         if (first === Infinity || !current.anchored) return;
         // Chunk timestamps are shared by the group; each player adds its own delay.
-        const delay =
-          Math.max(0, ...members.map((member) => delays.get(member.deviceId) ?? 0)) * 1000;
-        current.base = now + leadUs + delay - first;
+        current.base = now + sendAhead().ms * 1000 - first;
         if (!current.fixed && !current.sourceTimed)
           current.clock = [{ at: current.base, offset: 0 }];
         for (const member of members) begin(member.deviceId);
         if (run !== current) return;
-      } else if (
-        !current.fixed &&
-        !current.sourceTimed &&
-        first !== Infinity &&
-        current.base + first < now + leadUs / 2
-      ) {
-        // Only future sound moves. Pictures finish the sound already scheduled, wait through
-        // the gap and resume when the recovered sound actually starts.
-        const offset = Math.max(first, current.released);
-        current.base = now + leadUs - first;
-        // PCM and Opus have different chunk boundaries; neither can rewind the shared clock.
-        current.clock!.push({ at: current.base + offset, offset });
+      } else if (!current.fixed && !current.sourceTimed && first !== Infinity) {
+        const ahead = sendAhead().ms * 1000;
+        if (current.base + first < now + ahead / 2) {
+          // Only future sound moves. Pictures finish the sound already scheduled, wait through
+          // the gap and resume when the recovered sound actually starts.
+          const offset = Math.max(first, current.released);
+          current.base = now + ahead - first;
+          // PCM and Opus have different chunk boundaries; neither can rewind the shared clock.
+          current.clock!.push({ at: current.base + offset, offset });
+        }
       }
       for (const wire of wires) {
         const list = current.queues[wire],

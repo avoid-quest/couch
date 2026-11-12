@@ -107,6 +107,7 @@ async function fixture(t: TestContext) {
     await client.connect(`${origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
     return {
       id: key.peerId,
+      client,
       frames,
       streams,
       get most() {
@@ -118,11 +119,11 @@ async function fixture(t: TestContext) {
 }
 const skip = !available && "Set COUCH_TEST_FFMPEG to run the send-ahead test.";
 
-// A locked Android phone runs its page's timers late and its Wi-Fi dozes. Speakers must hold
-// seconds of sound, not one, and a speaker that joins late gets that sound too. A speaker never
+// A locked Android phone runs its page's timers late and its Wi-Fi dozes. Speakers are filled toward
+// their buffer_capacity, up to 30 s, and a speaker that joins late gets that sound too. A speaker never
 // holds more than its buffer_capacity: 512 KiB is under 3 s of PCM.
 const cases = [
-  { codec: AudioCodec.OPUS, capacity: 2_000_000, lead: 5_000_000, interval: 60_000 },
+  { codec: AudioCodec.OPUS, capacity: 2_000_000, lead: 20_000_000, interval: 60_000 },
   { codec: AudioCodec.PCM, capacity: 512 * 1024, lead: 2_000_000, interval: 100_000 },
 ];
 for (const { codec, capacity, lead, interval } of cases)
@@ -521,3 +522,29 @@ test(
     assert.deepEqual(speaker.streams, ["start", "clear", "end"]);
   },
 );
+
+// A relaxed start waits for each player's declared startup lead, a hint Core honours up to 5 s.
+for (const { declared, expected } of [
+  { declared: 3_000, expected: 3_000 },
+  { declared: 60_000, expected: 5_000 },
+])
+  test(
+    `a relaxed start gives a ${declared / 1000} s startup lead ${expected / 1000} s`,
+    { timeout: 20_000, skip },
+    async (t) => {
+      const { group, source, receiver } = await fixture(t);
+      const speaker = await receiver(0, AudioCodec.OPUS, 2_000_000, 60_000);
+      let startedAt: number | undefined;
+      speaker.client.addStreamStartListener(() => (startedAt ??= serverNowUs()));
+      await speaker.client.sendPlayerState({ required_lead_time_ms: declared });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      group.members([{ deviceId: speaker.id, level: 100 }]);
+      group.send({ type: "load", playbackId: "startup", source });
+      await until(() => speaker.frames.length > 0, "The speaker never got sound");
+      const lead = (speaker.frames[0]!.timestamp - startedAt!) / 1000;
+      assert.ok(
+        Math.abs(lead - expected) < 100,
+        `the first sound played ${lead.toFixed(0)} ms after the start, not ${expected} ms`,
+      );
+    },
+  );
