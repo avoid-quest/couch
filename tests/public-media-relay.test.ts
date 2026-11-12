@@ -344,3 +344,40 @@ test("a source's refusal is kept for its relay, so Core can report it", async ()
   expect((await f.serve(media.source)).status).toBe(200);
   expect(f.relay.refused("playing", media.source)).toBeUndefined();
 });
+
+test("a capped live master offers only variants up to the chosen quality, and its audio only", async () => {
+  const f = fixture();
+  f.manifest(
+    source,
+    [
+      "#EXTM3U",
+      "#EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080",
+      "1080p.m3u8",
+      "#EXT-X-STREAM-INF:BANDWIDTH=3300000,RESOLUTION=1280x720",
+      "720p.m3u8",
+      "#EXT-X-STREAM-INF:BANDWIDTH=630000,RESOLUTION=640x360",
+      "360p.m3u8",
+      '#EXT-X-STREAM-INF:BANDWIDTH=160000,CODECS="mp4a.40.2"',
+      "audio_only.m3u8",
+      "",
+    ].join("\n"),
+  );
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, hlsMaxHeight: 720 },
+    {},
+    target,
+    signal(),
+  );
+  const text = await (await f.serve(media.source)).text();
+  const children = text
+    .split("\n")
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => new URL(line).searchParams.get("url"));
+  expect(children).toEqual([
+    "https://media.example/720p.m3u8",
+    "https://media.example/360p.m3u8",
+    "https://media.example/audio_only.m3u8",
+  ]);
+  expect(text).not.toContain("RESOLUTION=1920x1080");
+});

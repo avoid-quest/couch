@@ -28,6 +28,8 @@ type AudioInput = {
   audioManifest?: AudioManifest;
   audioSelection?: NonNullable<AudioSelectionContext["audioSelection"]>;
   audioStream?: number;
+  // An endless media playlist only: segments back from its end where hls.js starts a picture.
+  pictureStart?: number;
 };
 type Playlist = { url: string; lines: string[] };
 type ManifestReads = Map<string, Promise<Playlist | null>>;
@@ -124,6 +126,38 @@ export async function audioInput(
   return selectAudio(url, master, smallestFallback, selection);
 }
 
+// hls.js starts an endless stream at its HOLD-BACK, else three target durations from the end. A sound
+// decoder starting there lines up with the pictures and reads that much audio at once: its cushion
+// for late segments. One segment stays in hand, so the oldest can't expire before it is read.
+function pictureStart(lines: string[]) {
+  const target = Number(
+    /^#EXT-X-TARGETDURATION:(\d+)$/.exec(
+      lines.find((line) => line.startsWith("#EXT-X-TARGETDURATION:")) ?? "",
+    )?.[1],
+  );
+  const control = lines.find((line) => line.startsWith("#EXT-X-SERVER-CONTROL:"));
+  const latency = Number(control && attribute(control, "HOLD-BACK")) || 3 * target;
+  const durations = lines
+    .filter((line) => line.startsWith("#EXTINF:"))
+    .map((line) => Number.parseFloat(line.slice(8)));
+  if (!(latency > 0) || durations.some((duration) => !(duration > 0))) return undefined;
+  let count = 0;
+  for (let covered = 0; covered < latency && count < durations.length - 1; count++)
+    covered += durations.at(-1 - count)!;
+  return count || undefined;
+}
+
+// The same, for a media playlist chosen from a master after its selection.
+export async function pictureStartOf(
+  url: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  publicNetwork: boolean,
+) {
+  const media = await playlist(url, headers, signal, publicNetwork);
+  return media ? pictureStart(media.lines) : undefined;
+}
+
 function selectAudio(
   url: string,
   master: Playlist | null,
@@ -136,6 +170,7 @@ function selectAudio(
     return {
       source: url,
       hls: !!master,
+      ...(master ? { pictureStart: pictureStart(master.lines) } : {}),
       ...(selection
         ? { audioStream: master ? 0 : audioStream, audioSelection: selection.audioSelection }
         : {}),

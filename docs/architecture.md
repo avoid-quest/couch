@@ -110,9 +110,22 @@ the official player (`@sendspin/sendspin-js`).
   volume and delay.
 - Pause, seek and speed restart FFmpeg where the Playback is.
 - Screens showing a synced picture fetch the video themselves, play it muted and
-  follow Sendspin's clock with `timingsrc` (`src/client/session/picture-clock.ts`).
-  For a live source the position is the source's own timestamp (`-copyts`, mapped
-  by hls.js), so a screen that joins anywhere lines up.
+  follow Sendspin's clock (`src/client/session/picture-clock.ts`): small drift by
+  playback rate, a large one by one seek into buffered picture. A picture with no
+  data where the sound is waits a little ahead for the clock instead of chasing it.
+- For an endless URL stream (Twitch or YouTube live, Live TV; Live audio captures
+  are separate, see [Live audio](live-audio.md)) the position is the source's own
+  timestamp (`-copyts`), which hls.js maps onto each screen's timeline per
+  discontinuity. FFmpeg starts where hls.js starts a picture (`HOLD-BACK`, else
+  three target durations from the end), which gives it that much audio in hand. A
+  gap of up to three minutes, such as a Twitch ad FFmpeg drops, plays as silence and
+  the clock runs on; audio that arrives after its time is dropped.
+- That mapping has limits: during a Twitch ad each screen shows its own ad; after
+  an encoder restart sends timestamps back, pictures can run off the sound by that
+  jump; native HLS and raw MPEG-TS pictures follow only play and pause.
+- Web media on HLS, except YouTube's checked formats, plays its master: each Device
+  adapts to its link, capped at the chosen quality, and Core decodes an audio-only
+  rendition when there is one.
 - Clock agreement doesn't measure physical alignment: test real speakers and use
   the per-device delay where hardware adds latency.
 - Shutdown waits for the audio worker and its encoders, with a three-second

@@ -36,6 +36,8 @@ export type WebMediaSource = {
   source: string;
   audioSource?: string;
   hlsSelection?: { video: string; audio: string; bandwidth: number };
+  // The tallest variant a live HLS master may offer this Device (the chosen quality).
+  hlsMaxHeight?: number;
   audioOnly?: boolean;
   hls?: boolean;
   subtitles?: ExternalSubtitle[];
@@ -177,8 +179,27 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
   let audioSource: string | undefined;
   let hlsSelection: WebMediaSource["hlsSelection"];
   let subtitles = sourceSubtitles(info, subtitleLanguage);
-  if (selected.length === 1) source = selectedSource(selected[0]!);
-  else {
+  let hlsMaxHeight: number | undefined;
+  if (selected.length === 1) {
+    const stream = selected[0]!;
+    source = selectedSource(stream);
+    // An HLS master lets each Device adapt to its link and Core's sound read an audio-only
+    // rendition (Twitch's is 1/50 of 1080p60); the chosen variant's height stays the cap, so a
+    // variant without a height plays on its own.
+    // YouTube keeps the format yt-dlp checked: its fresh URLs can refuse until checked.
+    if (
+      info.extractor !== "youtube" &&
+      String(stream.protocol).startsWith("m3u8") &&
+      stream.vcodec !== "none" &&
+      typeof stream.manifest_url === "string" &&
+      stream.manifest_url !== stream.url &&
+      typeof stream.height === "number" &&
+      stream.height > 0
+    ) {
+      source = mediaUrl(stream.manifest_url);
+      hlsMaxHeight = stream.height;
+    }
+  } else {
     const video = selected.find((stream) => stream.vcodec !== "none");
     const audio = selected.find((stream) => stream.vcodec === "none" && stream.acodec !== "none");
     if (!video || !audio)
@@ -229,6 +250,7 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
     ...(preview ? { preview } : {}),
     ...(audioSource ? { audioSource } : {}),
     ...(hlsSelection ? { hlsSelection } : {}),
+    ...(hlsMaxHeight ? { hlsMaxHeight } : {}),
     ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}),
     ...(subtitles.length ? { subtitles } : {}),
     ...(Object.keys(metadata).length ? { metadata } : {}),
@@ -441,6 +463,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           media.metadata?.live &&
           !media.audioSource &&
           typeof info.manifest_url === "string" &&
+          media.source !== URL.parse(info.manifest_url)?.href &&
           String(info.protocol).startsWith("m3u8")
         ) {
           const response = await publicFetch(media.source, {

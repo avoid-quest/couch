@@ -18,7 +18,7 @@ import type { AudioSelection, LiveLead, PlaybackCommand, PlayerState } from "../
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError, safePlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
-import { audioInput } from "./source-preparation";
+import { audioInput, pictureStartOf } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
 import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
 import type { CaptureAudioPacket } from "./capture-audio";
@@ -54,6 +54,10 @@ type Run = {
   fixed?: boolean;
   captureLead?: LiveLead;
   timelineOnly?: boolean;
+  // An endless URL stream (Twitch, Live TV; not Live audio, which captures) keeps the source's time:
+  // a gap is silence on every speaker while the clock and its pictures run on, and audio that
+  // arrives after its time is dropped instead of moving everyone's timeline.
+  sourceTimed?: boolean;
   start: number;
   anchored: boolean;
   speed: number;
@@ -106,6 +110,21 @@ const wireOf = (session: SendspinSession): Wire | undefined => {
     if (format.codec === AudioCodec.PCM && format.bit_depth === 16) return "pcm";
   }
 };
+// Public media reaches this decoder only through Core's signed loopback relay, which checks every
+// upstream request itself; its playlists are read directly, as FFmpeg's proxy allows.
+const coreRelay = (url: string) => {
+  const parsed = URL.parse(url);
+  return (
+    parsed?.protocol === "http:" &&
+    ["127.0.0.1", "[::1]"].includes(parsed.hostname) &&
+    parsed.pathname.startsWith("/api/relay/")
+  );
+};
+// An endless stream's samples follow its timestamps: a forward jump of up to three minutes from
+// the previous frame (the longest Twitch ad break, whose audio FFmpeg's HLS reader drops) becomes
+// that much silence. Any other jump (an encoder restart, a misread wraparound) continues the samples.
+const sourceTime =
+  "asetpts=if(isnan(PREV_INPTS)\\,0\\,PREV_OUTPTS+if(between(PTS-PREV_INPTS-NB_SAMPLES/SR/TB\\,0\\,180/TB)\\,PTS-PREV_INPTS\\,NB_SAMPLES/SR/TB))";
 const tempo = (speed: number) =>
   speed < 0.5
     ? `atempo=0.5,atempo=${speed / 0.5}`
@@ -310,7 +329,8 @@ export function createScheduledAudio(options: {
     };
     const position = () => {
       if (!run || run.base === undefined) return state.position;
-      const heard = Math.min(Math.max(0, serverNowUs() - run.base), run.released);
+      const elapsed = Math.max(0, serverNowUs() - run.base);
+      const heard = run.sourceTimed ? elapsed : Math.min(elapsed, run.released);
       return Math.min(state.duration ?? Infinity, run.start + (heard / 1e6) * run.speed);
     };
     const begin = (clientId: string) => {
@@ -412,7 +432,8 @@ export function createScheduledAudio(options: {
           run = next;
           state = {
             ...state,
-            duration: current.duration ?? state.duration,
+            // A recording still in progress (a Twitch VOD of a running stream) has no end yet.
+            duration: current.live ? null : (current.duration ?? state.duration),
             seekable: !current.live,
             timeline: {
               mapping: current.live ? "unavailable" : "media",
@@ -482,7 +503,7 @@ export function createScheduledAudio(options: {
           inputUrl,
           Object.fromEntries(headers),
           signal,
-          !!current.publicNetwork,
+          !!current.publicNetwork && !coreRelay(inputUrl),
           true,
           undefined,
           {
@@ -498,13 +519,11 @@ export function createScheduledAudio(options: {
                 typeof selected === "string" ? { path: selected, release() {} } : selected,
               )
           : useHelper("ffmpeg");
-        const [{ source, hls, audioStream = 0, audioSelection }, executable] = await Promise.all([
-          input,
-          ffmpeg,
-        ]).catch((error) => {
-          input = undefined;
-          throw error;
-        });
+        const [{ source, hls, audioStream = 0, audioSelection, pictureStart }, executable] =
+          await Promise.all([input, ffmpeg]).catch((error) => {
+            input = undefined;
+            throw error;
+          });
         if (current.publicNetwork)
           proxy = await createPublicMediaProxy(new AbortController().signal, current.source);
         if (attempt !== generation) {
@@ -525,6 +544,21 @@ export function createScheduledAudio(options: {
           };
         if (/^https?:/.test(source) && new URL(source).origin !== new URL(credentialOrigin).origin)
           stripCrossOriginHeaders(headers);
+        // Read through a master, the selected media playlist says where its picture starts.
+        const segmentsBack =
+          pictureStart ??
+          (hls && current.live && !current.radio && source !== inputUrl
+            ? await pictureStartOf(
+                source,
+                Object.fromEntries(headers),
+                signal,
+                !!current.publicNetwork && !coreRelay(source),
+              )
+            : undefined);
+        if (attempt !== generation) {
+          await proxy?.close();
+          return;
+        }
         const wires = new Set<Wire>(
           members.flatMap((member) => {
             const session = listening(member.deviceId),
@@ -543,7 +577,7 @@ export function createScheduledAudio(options: {
           (state.duration !== null || !!current.startPosition);
         // A live run keeps the source's timestamps and prints its first one with ashowinfo.
         const compressed = current.compressor?.enabled && !current.liveSourceId;
-        const graph = `[0:a:${audioStream}]${[...(live ? ["ashowinfo"] : []), ...(speed === 1 ? [] : [tempo(speed)]), "aresample=48000", "aformat=channel_layouts=stereo", ...(compressed ? [compressorFilter(current.compressor!)] : []), ...(wires.size > 1 ? [`asplit=${wires.size}`] : [])].join(",")}${[...wires].map((wire) => `[${wire}]`).join("")}`;
+        const graph = `[0:a:${audioStream}]${[...(live ? ["ashowinfo", sourceTime] : []), ...(speed === 1 ? [] : [tempo(speed)]), live ? "aresample=48000:async=1" : "aresample=48000", "aformat=channel_layouts=stereo", ...(compressed ? [compressorFilter(current.compressor!)] : []), ...(wires.size > 1 ? [`asplit=${wires.size}`] : [])].join(",")}${[...wires].map((wire) => `[${wire}]`).join("")}`;
         const shape = (wire: Wire) => [
           "-map",
           `[${wire}]`,
@@ -579,10 +613,17 @@ export function createScheduledAudio(options: {
             ...([...headers].length
               ? ["-headers", [...headers].map(([name, value]) => `${name}: ${value}\r\n`).join("")]
               : []),
-            // Start live HLS at its newest complete segment and avoid probing ahead
-            // through several seconds before anchoring the shared playback clock.
+            // Start live HLS where its pictures start (FFmpeg's own default without a media
+            // playlist), and anchor the clock on the first packet instead of probing ahead.
             ...(live && hls
-              ? ["-live_start_index", "-1", "-probesize", "32768", "-analyzeduration", "100000"]
+              ? [
+                  "-live_start_index",
+                  String(-(segmentsBack ?? 3)),
+                  "-probesize",
+                  "32768",
+                  "-analyzeduration",
+                  "100000",
+                ]
               : []),
             ...(live ? ["-copyts"] : []),
             ...(seek ? ["-ss", String(start)] : []),
@@ -642,6 +683,7 @@ export function createScheduledAudio(options: {
           child,
           start,
           anchored: !live,
+          sourceTimed: live,
           speed,
           wires,
           queues: { opus: [], pcm: [] },
@@ -670,7 +712,8 @@ export function createScheduledAudio(options: {
               continue;
             }
             const duration = /Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(line);
-            if (duration && state.duration === null)
+            // FFmpeg gives a growing playlist (EVENT) its length so far, which would stop the clock there.
+            if (duration && state.duration === null && !live)
               state = {
                 ...state,
                 duration:
@@ -784,7 +827,12 @@ export function createScheduledAudio(options: {
         current.base = now + leadUs + delay - first;
         for (const member of members) begin(member.deviceId);
         if (run !== current) return;
-      } else if (!current.fixed && first !== Infinity && current.base + first < now + leadUs / 2) {
+      } else if (
+        !current.fixed &&
+        !current.sourceTimed &&
+        first !== Infinity &&
+        current.base + first < now + leadUs / 2
+      ) {
         // The source fell behind real time: later chunks play later instead of arriving too late,
         // and the pictures learn the new timeline at once.
         current.base = now + leadUs - first;
@@ -797,8 +845,9 @@ export function createScheduledAudio(options: {
         while (list[0] && (current.fixed || current.base + list[0].offset - sendUs <= now)) {
           const chunk = list.shift()!,
             at = current.base + chunk.offset;
-          sent.push({ at, end: at + chunk.duration, data: chunk.data });
           current.released = Math.max(current.released, chunk.offset + chunk.duration);
+          if (current.sourceTimed && at + chunk.duration <= now) continue;
+          sent.push({ at, end: at + chunk.duration, data: chunk.data });
         }
         // Output delay advances a player's playback, so its held bytes and missed deadlines
         // use that compensated time (Sendspin Player Buffer Accounting, including 13-byte headers).
@@ -836,7 +885,8 @@ export function createScheduledAudio(options: {
         Object.values(current.queues).every((list) => !list.length) &&
         now >= current.base + current.released;
       const starving = current.exit === undefined && drained;
-      const status = now >= current.base && !starving ? "playing" : "loading";
+      const status =
+        now >= current.base && (!starving || current.sourceTimed) ? "playing" : "loading";
       if (current.exit === 0 && drained) {
         halt(true);
         state = { ...state, position: position(), status: "ended" };

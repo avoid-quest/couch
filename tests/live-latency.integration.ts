@@ -28,11 +28,12 @@ async function until(predicate: () => boolean, label: string) {
   }
 }
 
-// An eight-segment live window advances at wall-clock speed. This locks the age
-// of samples at their scheduled play time, not just startup speed or group routing.
+// An eight-segment live window of 1 s segments advances at wall-clock speed. This locks the age of
+// samples at their scheduled play time, not just startup speed or group routing: sound starts where
+// hls.js starts a picture, three target durations back, plus Core's 1 s lead and up to a segment.
 for (const silent of [false, true])
   test(
-    `live HLS ${silent ? "silence" : "sound"} starts near capture time on both speakers`,
+    `live HLS ${silent ? "silence" : "sound"} starts where its pictures start, on both speakers`,
     {
       timeout: 15_000,
       skip: !available && "Set COUCH_TEST_FFMPEG to run real-media latency coverage.",
@@ -237,8 +238,8 @@ for (const silent of [false, true])
         ],
       });
       assert.ok(
-        age < 3,
-        `Live audio is ${age.toFixed(2)}s old when scheduled; expected less than 3s.`,
+        age >= 3 && age < 5,
+        `Live audio is ${age.toFixed(2)}s old when scheduled; expected 3 to 5s.`,
       );
     },
   );
