@@ -1,5 +1,5 @@
 import { Description } from "@/components/DetailHeader";
-import { PrototypeVideoInfo } from "./prototype-tv-feel";
+import { PadHint, PrototypeVideoInfo } from "./prototype-tv-feel";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
@@ -18,7 +18,16 @@ import {
   type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronRight, Info, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Info,
+  Maximize,
+  Minimize,
+  Music2,
+  Settings,
+  Square,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
@@ -124,6 +133,8 @@ export function PlayerPage({
   const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
   // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
   const tap = useRef<boolean | null>(null);
+  // PROTOTYPE: the control the TV's controls hid on, where the next press brings them back.
+  const restoreTo = useRef<HTMLElement | null>(null);
   // What the picture's last click asked for, so a double-click's second click can undo it.
   const clicked = useRef(false);
   // The band's control a click opened (a Popover, Up next), whose return of focus hands it to the picture.
@@ -261,10 +272,8 @@ export function PlayerPage({
       )
         return;
       if (restoreDetailFocus(location.state.detailFocus)) return;
-      (tvPresentation && document.documentElement.hasAttribute("data-keyboard")
-        ? firstTransport()
-        : surface()
-      )?.focus({ preventScroll: true });
+      // PROTOTYPE: every screen, the TV too, starts on the picture.
+      surface()?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [tvPresentation, current?.id, transportReady, location.state.__TSR_key]);
@@ -274,24 +283,24 @@ export function PlayerPage({
   // of their Popovers or Sheets is open (Volume, Where it plays), as YouTube's stay up under an open menu; on the
   // picture they hide when idle.
   const idle = () => {
-    const remoteFocus =
-      tvPresentation &&
-      document.documentElement.hasAttribute("data-keyboard") &&
-      root.current?.contains(document.activeElement) &&
-      !document.activeElement?.matches("[data-player-surface]");
+    // PROTOTYPE: on the TV the controls hide wherever focus is, and remember where it was.
+    const remoteFocus = false;
     const opened = document.querySelector(
       '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"]',
     );
     if (
       remoteFocus ||
       opened ||
-      root.current?.querySelector(":focus-visible:not([data-player-surface])") ||
+      (!tvPresentation &&
+        root.current?.querySelector(":focus-visible:not([data-player-surface])")) ||
       document.activeElement?.closest("[data-sonner-toaster]")
     )
       return;
     // Hidden bands are inert; a control a click left focused hands its keys to the picture rather than to the page.
-    if (!tvPresentation && document.activeElement?.closest("[data-player-band], [data-player-top]"))
+    if (document.activeElement?.closest("[data-player-band], [data-player-top]")) {
+      if (tvPresentation) restoreTo.current = document.activeElement as HTMLElement;
       surface()?.focus({ preventScroll: true });
+    }
     setShown(false);
   };
   // Back on a TV, and its Info over a picture, hide the controls, handing their focus to the picture.
@@ -309,12 +318,13 @@ export function PlayerPage({
     if (info && !artworkStage) return;
     setShown(true);
     clearTimeout(timer.current);
-    if (autoHide && !panel && !queueOpen) timer.current = setTimeout(idle, 4000);
+    if (autoHide && !panel && !queueOpen)
+      timer.current = setTimeout(idle, tvPresentation ? 5000 : 4000);
   };
   useEffect(() => {
     clearTimeout(timer.current);
     if (!autoHide || panel || queueOpen) setShown(true);
-    else timer.current = setTimeout(idle, 4000);
+    else timer.current = setTimeout(idle, tvPresentation ? 5000 : 4000);
     return () => clearTimeout(timer.current);
   }, [autoHide, panel, queueOpen]);
   // PROTOTYPE: however Info opened over a picture, the controls step aside for it.
@@ -389,13 +399,22 @@ export function PlayerPage({
           (event.key === "ArrowLeft" || event.key === "ArrowRight")
         )
           void seekBy(event.key === "ArrowLeft" ? -10 : 10);
-        const timeline = event.key.startsWith("Arrow");
+        // PROTOTYPE: OK on the picture plays or pauses and shows the controls on Play/Pause; Left and Right show the
+        // timeline; Up and Down bring the controls back on the one they hid on.
+        const ok = event.key === "Enter" || event.key === " ";
+        if (ok && transportReady && pausable && player?.playbackId)
+          void run({ type: "pause", playbackId: player.playbackId, paused: playing });
+        const sideways = event.key === "ArrowLeft" || event.key === "ArrowRight";
+        const before = restoreTo.current?.isConnected ? restoreTo.current : null;
         requestAnimationFrame(() =>
-          (timeline
-            ? (root.current?.querySelector<HTMLElement>(
-                '[role="slider"][aria-label="Playback position"]:not([data-disabled])',
-              ) ?? firstTransport())
-            : firstTransport()
+          (ok
+            ? (root.current?.querySelector<HTMLElement>("[data-play-button]:not(:disabled)") ??
+              firstTransport())
+            : sideways
+              ? (root.current?.querySelector<HTMLElement>(
+                  '[role="slider"][aria-label="Playback position"]:not([data-disabled])',
+                ) ?? firstTransport())
+              : (before ?? firstTransport())
           )?.focus(),
         );
         return;
@@ -459,7 +478,12 @@ export function PlayerPage({
     if (queueOpen) closeQueue();
     setInfoFor(open ? infoKey : null);
   };
-  useCouchHotkeys([{ hotkey: "I", enabled: artworkStage && !!current, action: toggleInfo }]);
+  useCouchHotkeys([{ hotkey: "I", enabled: !!current, action: toggleInfo }]);
+  // PROTOTYPE: L1/R1 open the band's Volume, so the controls come up with it.
+  useEffect(() => {
+    window.addEventListener("couch-volume-step", wake);
+    return () => window.removeEventListener("couch-volume-step", wake);
+  });
   useEffect(() => {
     window.addEventListener("couch-info", toggleInfo);
     return () => window.removeEventListener("couch-info", toggleInfo);
@@ -494,17 +518,20 @@ export function PlayerPage({
   };
   // A pointer has no Back key, so desktop and phones lead the top line with Back; the TV's remote has its own.
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
-  const back = !tvPresentation && (
-    <Button
-      variant="ghost"
-      size="icon-lg"
-      className="-ml-2.5 size-(--player-target) shrink-0"
-      aria-label={backLabel}
-      title={backLabel}
-      onClick={shell.leavePlayer}
-    >
-      <ArrowLeft aria-hidden="true" />
-    </Button>
+  // PROTOTYPE: Back on every screen, the TV too.
+  const back = (
+    <PadHint button="circle">
+      <Button
+        variant="ghost"
+        size="icon-lg"
+        className="-ml-2.5 size-(--player-target) shrink-0"
+        aria-label={backLabel}
+        title={backLabel}
+        onClick={shell.leavePlayer}
+      >
+        <ArrowLeft aria-hidden="true" />
+      </Button>
+    </PadHint>
   );
   const artwork = currentProgramme?.artworkUrl ? (
     <MediaArtwork priority thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} />
@@ -748,23 +775,25 @@ export function PlayerPage({
               <LiveSharingStatus />
               <div ref={setRecognitionControls} className="empty:hidden" />
               {current && artworkStage && (
-                <Button
-                  ref={infoToggle}
-                  data-info-toggle
-                  variant="ghost"
-                  size="icon-lg"
-                  className="-mr-2.5 size-(--player-target) shrink-0"
-                  aria-label="Info"
-                  title="Info"
-                  aria-expanded={info}
-                  aria-controls="player-info"
-                  onClick={(event) => {
-                    toggleInfo();
-                    if (event.detail) surface()?.focus({ preventScroll: true });
-                  }}
-                >
-                  <Info aria-hidden="true" />
-                </Button>
+                <PadHint button="triangle">
+                  <Button
+                    ref={infoToggle}
+                    data-info-toggle
+                    variant="ghost"
+                    size="icon-lg"
+                    className="-mr-2.5 size-(--player-target) shrink-0"
+                    aria-label="Info"
+                    title="Info"
+                    aria-expanded={info}
+                    aria-controls="player-info"
+                    onClick={(event) => {
+                      toggleInfo();
+                      if (event.detail) surface()?.focus({ preventScroll: true });
+                    }}
+                  >
+                    <Info aria-hidden="true" />
+                  </Button>
+                </PadHint>
               )}
             </div>
           </div>
@@ -793,6 +822,22 @@ export function PlayerPage({
               {sharing && <LiveSharingStatus />}
               {!radio && <PlayerEndTime state={state} />}
               {tvPresentation && <DigitalClock />}
+              {/* PROTOTYPE: Info for every item, where audio has it. */}
+              <PadHint button="triangle">
+                <Button
+                  ref={infoToggle}
+                  data-info-toggle
+                  variant="ghost"
+                  size="icon-lg"
+                  className="-mr-2.5 size-(--player-target) shrink-0 self-center text-foreground"
+                  aria-label="Info"
+                  title="Info"
+                  aria-expanded={info}
+                  onClick={() => toggleInfo()}
+                >
+                  <Info aria-hidden="true" />
+                </Button>
+              </PadHint>
             </div>
             {(byline || context) && (
               <div
@@ -996,6 +1041,7 @@ export function PlayerPage({
                   run={run}
                   pageFirst
                   className="player-transport"
+                  stop={false}
                 />
               )}
               <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
@@ -1056,6 +1102,19 @@ export function PlayerPage({
                       />
                     )}
                   </Popover>
+                )}
+                {/* PROTOTYPE: Stop past the tools, away from Play/Pause. */}
+                {state && playbackCapabilities(state, connected).stoppable && (
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    className="ml-3"
+                    aria-label="Stop"
+                    title="Stop"
+                    onClick={() => void run({ type: "stop" })}
+                  >
+                    <Square aria-hidden="true" className="fill-current" />
+                  </Button>
                 )}
                 {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                   already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}

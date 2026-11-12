@@ -1,7 +1,8 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
+import { PadHint } from "@/sections/now/prototype-tv-feel";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Action } from "../../shared/protocol";
@@ -186,11 +187,14 @@ export function PlaybackTransport({
   className,
   moreClassName,
   participation = true,
+  stop = true,
 }: Props & {
   pageFirst?: boolean;
   className?: string;
   moreClassName?: string;
   participation?: boolean;
+  // PROTOTYPE: the player puts Stop past its tools.
+  stop?: boolean;
 }) {
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
@@ -227,31 +231,34 @@ export function PlaybackTransport({
       role="group"
       aria-label="Playback controls"
     >
+      <PadHint button="square">
+        <Button
+          data-page-first={first(0)}
+          data-play-button
+          variant="ghost"
+          size="icon-lg"
+          className={transportInk}
+          aria-label={label}
+          title={label}
+          disabled={!enabled[0]}
+          onClick={() => {
+            if ((ended || failed) && current)
+              void run({ type: "play", entryId: current.id, fromStart: ended });
+            else if (player.playbackId)
+              void run({ type: "pause", playbackId: player.playbackId, paused: playing });
+          }}
+        >
+          {ended || failed ? (
+            <RotateCcw aria-hidden="true" />
+          ) : pause ? (
+            <Pause aria-hidden="true" className="fill-current" />
+          ) : (
+            <Play aria-hidden="true" className="fill-current" />
+          )}
+        </Button>
+      </PadHint>
       <Button
-        data-page-first={first(0)}
-        data-play-button
-        variant="ghost"
-        size="icon-lg"
-        className={transportInk}
-        aria-label={label}
-        title={label}
-        disabled={!enabled[0]}
-        onClick={() => {
-          if ((ended || failed) && current)
-            void run({ type: "play", entryId: current.id, fromStart: ended });
-          else if (player.playbackId)
-            void run({ type: "pause", playbackId: player.playbackId, paused: playing });
-        }}
-      >
-        {ended || failed ? (
-          <RotateCcw aria-hidden="true" />
-        ) : pause ? (
-          <Pause aria-hidden="true" className="fill-current" />
-        ) : (
-          <Play aria-hidden="true" className="fill-current" />
-        )}
-      </Button>
-      <Button
+        hidden={!stop}
         data-page-first={first(1)}
         variant="ghost"
         size="icon-lg"
@@ -479,6 +486,22 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
   const trigger = useRef<HTMLButtonElement>(null);
   // Controlled, so it places itself as it opens (toolPanel).
   const [open, setOpen] = useState(false);
+  // PROTOTYPE: L1/R1 open this Volume (when it is on screen) and step it by 2; holding never raises it past 80.
+  const closing = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    const step = (event: Event) => {
+      if (!trigger.current?.getClientRects().length) return;
+      const { by, repeat } = (event as CustomEvent<{ by: number; repeat: boolean }>).detail;
+      const level = Math.round(state.player.volume);
+      setOpen(true);
+      clearTimeout(closing.current);
+      closing.current = setTimeout(() => setOpen(false), 2500);
+      if (repeat && by > 0 && level >= 80) return;
+      void run({ type: "volume", volume: Math.max(0, Math.min(100, level + by)) });
+    };
+    window.addEventListener("couch-volume-step", step);
+    return () => window.removeEventListener("couch-volume-step", step);
+  }, [state.player.volume, run]);
   const sourceId = state.playbacks?.find(
     (playback) => playback.id === state.playback,
   )?.liveSourceId;
@@ -491,23 +514,34 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
     return null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          ref={trigger}
-          variant="ghost"
-          size="icon-lg"
-          className={className}
-          aria-label="Volume"
-          title="Volume"
-        >
-          {muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-        </Button>
-      </PopoverTrigger>
+      <PadHint button="shoulders">
+        <PopoverTrigger asChild>
+          <Button
+            ref={trigger}
+            variant="ghost"
+            size="icon-lg"
+            className={className}
+            aria-label="Volume"
+            title="Volume"
+          >
+            {muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+          </Button>
+        </PopoverTrigger>
+      </PadHint>
       {open && (
         <PopoverContent
           {...toolPanel(trigger.current)}
           aria-label="Volume controls"
           className="w-72"
+          // PROTOTYPE: Volume opens on its slider, not on Mute.
+          onOpenAutoFocus={(event) => {
+            const slider = document.querySelector<HTMLElement>(
+              '[aria-label="Volume controls"] [role="slider"]',
+            );
+            if (!slider) return;
+            event.preventDefault();
+            slider.focus();
+          }}
         >
           <PlaybackVolume state={state} connected={connected} run={run} />
         </PopoverContent>

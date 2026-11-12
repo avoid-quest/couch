@@ -1,9 +1,9 @@
-// PROTOTYPE, throwaway (branch prototype/tv-controller-feel, never main): the TV's volume gauge (L1/R1), Info over a
-// video (Triangle) and the rest when nothing plays (/prototype-rest?variant=A|B|C), all on real session data.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// PROTOTYPE, throwaway (branch prototype/aligned-player, never main): controller hints, Info over a video and the rest
+// when nothing plays (/prototype-rest?variant=A|B|C), all on real session data.
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Volume2, VolumeX } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Description } from "@/components/DetailHeader";
 import { titleFit, titleLength } from "@/components/Stage";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -15,58 +15,99 @@ import { deviceId } from "@/session/device-id";
 import type { ClientSessionState } from "@/session/session";
 import type { QueueEntry } from "../../../shared/protocol";
 
-const ceiling = 80;
+type PadButton = "triangle" | "square" | "circle" | "cross" | "shoulders";
+const playstation: Record<PadButton, ReactNode> = {
+  triangle: (
+    <path
+      d="M12 5l7.5 13h-15z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinejoin="round"
+    />
+  ),
+  square: (
+    <rect
+      x="6"
+      y="6"
+      width="12"
+      height="12"
+      rx="1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+    />
+  ),
+  circle: <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="2.6" />,
+  cross: (
+    <path
+      d="M6 6l12 12M18 6L6 18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+    />
+  ),
+  shoulders: null,
+};
+const xbox: Record<PadButton, string> = {
+  triangle: "Y",
+  square: "X",
+  circle: "B",
+  cross: "A",
+  shoulders: "LB RB",
+};
 
-/** L1/R1 step the volume by 2; the gauge shows for 2 s after any change, from here or another device. */
-export function PrototypeVolumeGauge() {
-  const { state, run } = useSessionGate();
-  const level = Math.round(state?.player.volume ?? 0);
-  const [shownAt, setShownAt] = useState(0);
-  const [, rerender] = useState(0);
-  const previous = useRef(level);
-  useEffect(() => {
-    if (previous.current === level) return;
-    previous.current = level;
-    setShownAt(Date.now());
-  }, [level]);
-  useEffect(() => {
-    const step = (event: Event) => {
-      const by = (event as CustomEvent<{ by: number; repeat: boolean }>).detail;
-      setShownAt(Date.now());
-      // Holding never raises past the ceiling; a fresh press does.
-      if (by.repeat && by.by > 0 && level >= ceiling) return;
-      void run({ type: "volume", volume: Math.max(0, Math.min(100, level + by.by)) });
-    };
-    window.addEventListener("couch-volume-step", step);
-    return () => window.removeEventListener("couch-volume-step", step);
-  }, [level, run]);
-  useEffect(() => {
-    if (!shownAt) return;
-    const timer = setTimeout(() => rerender((n) => n + 1), 2000);
-    return () => clearTimeout(timer);
-  }, [shownAt]);
-  if (!state || !shownAt || Date.now() - shownAt >= 2000) return null;
-  const sounding = state.outputs?.find((output) => output.sound)?.deviceId ?? deviceId();
-  const where = state.devices?.find((device) => device.id === sounding)?.name;
-  const muted = state.devices?.find((device) => device.id === sounding)?.muted;
+/**
+ * The controller button that acts on this control, shown only while a controller was the last input (html[data-input=pad]),
+ * in the shapes of the controller in hand (html[data-pad]), as games switch their prompts.
+ */
+export function PadHint({ button, children }: { button: PadButton; children: ReactNode }) {
+  const badge =
+    "pointer-events-none absolute -top-1.5 -right-1.5 z-10 hidden h-5 min-w-5 place-items-center rounded-full bg-foreground px-1 text-[0.625rem] leading-none font-bold text-background shadow [[data-input=pad]_&]:grid";
   return (
-    <div
-      role="status"
-      aria-label={`Volume ${level}`}
-      className="fixed top-1/2 right-[max(2rem,var(--gutter))] z-50 grid w-20 -translate-y-1/2 justify-items-center gap-3 rounded-full bg-(--bar)/90 py-5 shadow-[var(--float-shadow)] backdrop-blur"
-    >
-      {muted ? <VolumeX className="size-6" /> : <Volume2 className="size-6" />}
-      <div className="relative h-64 w-4 overflow-hidden rounded-full bg-white/15">
-        <div className="absolute inset-x-0 bottom-0 bg-white" style={{ height: `${level}%` }} />
-        <div
-          className="absolute -inset-x-1 h-px bg-destructive"
-          style={{ bottom: `${ceiling}%` }}
-        />
-      </div>
-      <span className="font-display text-3xl font-bold tabular-nums">{level}</span>
-      {where && <span className="px-2 text-center text-xs text-muted-foreground">{where}</span>}
-    </div>
+    <span className="relative inline-flex">
+      {children}
+      <span aria-hidden="true" className={`${badge} [[data-pad=xbox]_&]:hidden`}>
+        {button === "shoulders" ? (
+          "L1 R1"
+        ) : (
+          <svg viewBox="0 0 24 24" className="size-3">
+            {playstation[button]}
+          </svg>
+        )}
+      </span>
+      <span aria-hidden="true" className={`${badge} [[data-pad=ps]_&]:hidden`}>
+        {xbox[button]}
+      </span>
+    </span>
   );
+}
+
+/** Keys, a pointer or a touch take the hints away again; the controller's reader puts them back (gamepad.ts). */
+export function usePrototypeInputMode() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const keys = (event: KeyboardEvent) => {
+      if (event.isTrusted) root.dataset.input = "keys";
+    };
+    const pointer = (event: PointerEvent) => {
+      if (
+        !event.isTrusted ||
+        (event.type === "pointermove" && !event.movementX && !event.movementY)
+      )
+        return;
+      root.dataset.input = event.pointerType === "touch" ? "touch" : "pointer";
+    };
+    window.addEventListener("keydown", keys, true);
+    window.addEventListener("pointerdown", pointer, true);
+    window.addEventListener("pointermove", pointer, true);
+    return () => {
+      window.removeEventListener("keydown", keys, true);
+      window.removeEventListener("pointerdown", pointer, true);
+      window.removeEventListener("pointermove", pointer, true);
+    };
+  }, []);
 }
 
 /** Info over a picture: what plays, its facts and end time, its description and what plays next. */

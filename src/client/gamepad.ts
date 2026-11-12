@@ -4,8 +4,8 @@ import { startHold } from "./hold";
 import { isTvPresentation } from "./session/presentation";
 
 type Direction = "up" | "down" | "left" | "right";
-// PROTOTYPE: Triangle is Info, L1/R1 step the volume.
-type Control = Direction | "ok" | "back" | "info" | "quieter" | "louder";
+// PROTOTYPE: Triangle is Info, Square plays or pauses, L1/R1 step the volume.
+type Control = Direction | "ok" | "back" | "info" | "playpause" | "quieter" | "louder";
 
 // Button indices of the standard mapping (https://w3c.github.io/gamepad/#remapping): the bottom face button
 // (A, Cross) is OK, the right one (B, Circle) is Back, 12–15 the D-pad. The Guide button (16) stays Steam's.
@@ -13,6 +13,7 @@ const buttons: [Control, number][] = [
   ["ok", 0],
   ["back", 1],
   ["info", 3],
+  ["playpause", 2],
   ["quieter", 4],
   ["louder", 5],
   ["up", 12],
@@ -68,6 +69,9 @@ export function gamepadReader(navigate: (key: NavigationKey) => void) {
     const pressed = (control: Control) => held.has(control) && !before.has(control);
     if (pressed("back")) navigate("back");
     if (pressed("info")) navigate("info");
+    // PROTOTYPE: the one Play/Pause on screen (the player's, else the now-playing bar's).
+    if (pressed("playpause"))
+      document.querySelector<HTMLElement>("[data-play-button]:not(:disabled)")?.click();
     for (const [control, by] of [
       ["quieter", -2],
       ["louder", 2],
@@ -127,6 +131,21 @@ export function useGamepadNavigation(onNavigate: (key: NavigationKey) => void) {
         return;
       }
       reader!.read(pads, document.hasFocus(), now);
+      // PROTOTYPE: a press makes the controller the last input, so its hints show, in its own shapes.
+      const active = pads.find(
+        (pad) =>
+          pad?.mapping === "standard" &&
+          (pad.buttons.some((button) => button.pressed) ||
+            pad.axes.some((axis) => Math.abs(axis) > deadzone)),
+      );
+      if (active && document.hasFocus()) {
+        document.documentElement.dataset.input = "pad";
+        document.documentElement.dataset.pad = /054c|sony|dualsense|dualshock|playstation/i.test(
+          active.id,
+        )
+          ? "ps"
+          : "xbox";
+      }
       frame = requestAnimationFrame(poll);
     };
     const connected = () => {
