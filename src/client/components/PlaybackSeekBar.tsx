@@ -180,7 +180,7 @@ export function PlaybackSeekBar({
                 : clamp(target.current ?? value) + delta!,
           );
           if (pointer.current !== null) cancel();
-          update(position, value);
+          update(position === value && target.current === null ? null : position, value);
           commit(position, true);
         }}
       >

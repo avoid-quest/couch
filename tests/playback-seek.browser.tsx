@@ -49,6 +49,19 @@ export async function runPlaybackSeekRecovery() {
       throw new Error("Keyboard seeks did not accumulate from the latest pending target.");
   };
   try {
+    for (const keyName of ["ArrowLeft", "Home"]) {
+      mount(0);
+      key(keyName);
+      commands[0]!.resolve(true);
+      await painted();
+      update(0);
+      update(3);
+      position(3, "A no-op seek must not pin the thumb after a throttled clock update");
+      key();
+      await painted();
+      targets(0, 13);
+    }
+
     mount();
     key();
     commands[0]!.resolve(true);
