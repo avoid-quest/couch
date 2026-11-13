@@ -25,9 +25,11 @@ The scenes differ mostly in how they treat time:
 
 - **Shared playback** can buffer freely: the media is known ahead, so devices
   can be held in sync without anyone noticing a delay.
-- **Share live** must be fast. Each viewer plays as soon as the picture
-  arrives; two viewers a moment apart is fine, sound slipping off the picture
-  isn't.
+- **Share live** aims to send a screen or a sound card's input, with the
+  lowest delay the network allows, to every device that can keep up; those
+  play in step. A slower output, such as Bluetooth speakers, plays it a little
+  later as its own Playback. A screen share can choose relaxed instead when the
+  host can't keep up, and everyone watches together a few seconds behind.
 - **Live sound** must be close to live *and* in step across devices, because
   people hear each other's phones and the room itself. That's the hard one,
   and the one Couch is built toward.
