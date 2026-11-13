@@ -5260,7 +5260,6 @@ export async function createHub(options: HubOptions) {
               inspections.get(action.entryId)?.abort();
               removed = stateOf(playback).queue.find((entry) => entry.id === action.entryId)?.title;
             }
-            if (soundRouting && action.type === "pause" && !action.paused) soundRouting.prepare();
             try {
               await playback.session.command(action, permitted, playedBy);
             } catch (error) {

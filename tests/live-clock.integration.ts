@@ -226,7 +226,9 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS])
         () =>
           second.frames.length >= 8 &&
           first.frames.at(-1)!.timestamp >= second.frames.at(-1)!.timestamp &&
-          second.metadata.some((item) => item.progress?.playback_speed === 1000),
+          [first, second].every((receiver) =>
+            receiver.metadata.some((item) => item.progress?.playback_speed === 1000),
+          ),
         "Late receiver did not join the live clock",
       );
       const assertShared = () => {
@@ -279,12 +281,20 @@ for (const codec of [AudioCodec.PCM, AudioCodec.OPUS])
           "the existing receiver's clock must remain continuous across joins",
         );
       const pictureBefore = first.metadata.at(-1)!.progress!.track_progress;
+      const metadataBefore = first.metadata.length;
       group.members([]);
       await until(
         () => (first.metadata.at(-1)?.progress?.track_progress ?? 0) > pictureBefore + 100,
         "Pictures lost their timeline when all speakers left",
       );
       assert.equal(first.metadata.at(-1)!.progress!.playback_speed, 1000);
+      assert.ok(
+        first.metadata
+          .slice(metadataBefore)
+          .filter((item) => item.progress)
+          .every((item) => item.progress!.playback_speed === 1000),
+        "removing the last speaker must not pause the pictures' running clock",
+      );
       t.diagnostic(
         `${codec}: ${first.frames.length} original / ${second.frames.length} joined packets matched; source audio PTS ${audioPts}s, video PTS ${videoPts}s; shared metadata stayed within 30 ms.`,
       );

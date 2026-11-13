@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { playbackCapabilities } from "../src/client/components/PlaybackTransport";
 import type { ClientSessionState } from "../src/client/session/session";
+import { playbackControls } from "../src/shared/playback-policy";
 
 const state = (status: ClientSessionState["player"]["status"], extra: object = {}) =>
   ({
@@ -39,4 +40,28 @@ test("Next continues into what Autoplay picked, only while Autoplay is on", () =
       true,
     ).hasNext,
   ).toBe(false);
+});
+
+test("relaxed captures can pause without seeking, while Live listeners retain their own controls", () => {
+  for (const intent of ["relaxed", "live"] as const) {
+    const capture = state("playing", {
+      queue: [{ id: "one", source: "", live: true, liveSourceId: "input" }],
+      controls: playbackControls({
+        intent,
+        authorized: true,
+        receiving: true,
+        capture: true,
+        seekable: false,
+        scheduled: true,
+      }),
+    });
+    expect(playbackCapabilities(capture, true).pausable).toBe(intent === "relaxed");
+    expect(playbackCapabilities(capture, true).seekable).toBe(false);
+  }
+});
+
+test("an unseekable external live stream still cannot pause, but can resume when paused", () => {
+  const queue = [{ id: "one", source: "web:https://example.com/live", live: true }];
+  expect(playbackCapabilities(state("playing", { queue }), true).pausable).toBe(false);
+  expect(playbackCapabilities(state("paused", { queue }), true).pausable).toBe(true);
 });
