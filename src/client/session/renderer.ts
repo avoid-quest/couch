@@ -42,6 +42,8 @@ let mpegts: Mpegts.Player | null = null;
 let engine: "native" | "hls-pending" | "hls" | "mpegts" = "native";
 let ready = false;
 let stalled = false;
+let audioStalled = false;
+let heldForAudio = false;
 let failure: string | null = null;
 let volume = 1;
 let audioDelay = 0;
@@ -63,7 +65,7 @@ export const playsVp9 =
   video.canPlayType('video/webm; codecs="vp9"') === "probably";
 
 const split = () => audio.hasAttribute("src");
-const waiting = () => stalled && !video.paused;
+const waiting = () => (stalled && !video.paused) || heldForAudio;
 const external = () =>
   Array.from(video.textTracks).filter(
     (track) =>
@@ -198,11 +200,13 @@ export function waitForTap(unlock: (() => void) | null) {
 }
 // A browser that wants a gesture before sound plays the picture muted and asks for a tap.
 const start = (element: HTMLMediaElement) => {
+  if (failure) return Promise.resolve();
   const current = generation;
   resumeCompression();
   return element.play().catch((error: unknown) => {
     if (
       generation !== current ||
+      failure ||
       !(error instanceof DOMException) ||
       error.name !== "NotAllowedError" ||
       !playbackId
@@ -218,11 +222,26 @@ const start = (element: HTMLMediaElement) => {
 
 const follow = (resync = true) => {
   if (!split()) return;
+  const position = video.currentTime - audioDelay;
+  if (position < 0 || position >= audio.duration) {
+    // Delay can leave a silent beginning or ending. Playing an ended element restarts it.
+    audio.pause();
+    const boundary = position < 0 ? 0 : audio.duration;
+    if (audio.currentTime !== boundary) audio.currentTime = boundary;
+    audioStalled = false;
+    const resume = heldForAudio;
+    heldForAudio = false;
+    if (resume) void start(video);
+    return;
+  }
+  if (audioStalled) {
+    if (!heldForAudio) audio.pause();
+    return;
+  }
   // Small drift is corrected by playing the audio 5% faster or slower, large drift by seeking.
   // A positive audio delay plays the sound later.
-  const drift = video.currentTime - audioDelay - audio.currentTime;
-  if (Math.abs(drift) > (resync ? 0.1 : 0.5))
-    audio.currentTime = Math.max(0, video.currentTime - audioDelay);
+  const drift = position - audio.currentTime;
+  if (Math.abs(drift) > (resync ? 0.1 : 0.5)) audio.currentTime = position;
   audio.playbackRate =
     video.playbackRate * (Math.abs(drift) > 0.03 ? 1 + Math.sign(drift) * 0.05 : 1);
   if (video.paused || !ready || waiting()) audio.pause();
@@ -231,6 +250,12 @@ const follow = (resync = true) => {
 const fail = (message: string) => {
   if (!playbackId) return;
   failure = message;
+  stalled = false;
+  audioStalled = false;
+  heldForAudio = false;
+  // A terminal decoder error can leave playable media buffered underneath its error overlay.
+  video.pause();
+  audio.pause();
   send();
 };
 // Every window shows the error, so it names this Device.
@@ -244,10 +269,14 @@ const isPlaylist = (command: NonNullable<typeof loading>) =>
   !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
 // The timeline's loaded segment, only for media that seeks: not a capture, raw MPEG-TS or a live stream.
 const buffered = () => {
-  const end =
+  let end =
     playbackId && Number.isFinite(video.duration) && !mpegts && !mediaStream
       ? bufferedEnd(video.buffered, video.currentTime)
       : null;
+  if (end !== null && split()) {
+    const sound = bufferedEnd(audio.buffered, Math.max(0, video.currentTime - audioDelay));
+    end = sound === null ? null : Math.min(end, sound + audioDelay);
+  }
   setBuffered(end === null ? null : { playbackId: playbackId!, end });
 };
 let mediaEvents = new AbortController();
@@ -279,8 +308,10 @@ const observeElements = () => {
     ready = true;
     send();
   });
-  for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"])
+  for (const event of ["progress", "timeupdate", "seeking", "seeked", "emptied"]) {
     on(video, event, buffered);
+    on(audio, event, buffered);
+  }
   on(video, "timeupdate", () => {
     follow(false);
     shiftCues();
@@ -293,6 +324,24 @@ const observeElements = () => {
     else sourceFailed();
   });
   on(audio, "error", () => fail(audio.error?.message || "This media couldn't play here."));
+  on(audio, "waiting", () => {
+    const position = video.currentTime - audioDelay;
+    if (!split() || following || audio.ended || position < 0 || position >= audio.duration) return;
+    audioStalled = true;
+    // Sound must keep decoding to become ready again; hold the picture instead of chasing it with seeks.
+    heldForAudio ||= !video.paused;
+    video.pause();
+    if (!heldForAudio) audio.pause();
+    send();
+  });
+  on(audio, "canplay", () => {
+    if (!split() || !audioStalled || audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
+    audioStalled = false;
+    const resume = heldForAudio;
+    heldForAudio = false;
+    if (resume) void start(video);
+    send();
+  });
   on(video.textTracks, "change", () => send());
 };
 observeElements();
@@ -372,7 +421,7 @@ const prepareCompression = (settings: CompressorSettings) => {
 // Source timestamps need a real mapping. Native HLS and MPEG-TS do not expose one;
 // an offset guessed from when the receiver joined would misrepresent synchronization.
 const clock = () => {
-  const sample = following && soundClock(following.group);
+  const sample = !failure && following && soundClock(following.group);
   if (!sample || !following) return null;
   if (!canMapClock()) return { speed: sample.speed };
   if (!sourcePts()) return sample;
@@ -581,6 +630,8 @@ const reset = () => {
   engine = "native";
   ready = false;
   stalled = false;
+  audioStalled = false;
+  heldForAudio = false;
   failure = null;
   subtitleDelay = 0;
   audioDelay = 0;
@@ -741,6 +792,8 @@ export function play(command: PlaybackCommand) {
       setFollow(command.follow);
       // Scheduled audio owns all sound while this element follows picture.
       if (command.follow) {
+        audioStalled = false;
+        heldForAudio = false;
         audio.pause();
         audio.removeAttribute("src");
         audio.load();
@@ -772,14 +825,25 @@ export function play(command: PlaybackCommand) {
       addTrack(command.source, command.title, command.language, true);
       break;
     case "pause":
-      if (command.paused) video.pause();
-      else void start(video);
+      if (loading) loading.paused = command.paused;
+      heldForAudio = !command.paused && audioStalled;
+      if (command.paused || heldForAudio) {
+        video.pause();
+        if (command.paused) audio.pause();
+        else void start(audio);
+      } else void start(video);
       break;
     case "audioPause":
+      if (loading) loading.paused = true;
+      heldForAudio = false;
       video.pause();
+      audio.pause();
       break;
     case "seek":
-      if (!mediaStream) video.currentTime = command.position;
+      if (!mediaStream) {
+        video.currentTime = command.position;
+        if (split()) audio.currentTime = Math.max(0, command.position - audioDelay);
+      }
       break;
     case "speed":
       if (!mediaStream) video.defaultPlaybackRate = video.playbackRate = command.speed;
@@ -795,7 +859,9 @@ export function play(command: PlaybackCommand) {
       break;
     case "audioDelay":
       audioDelay = command.delay;
+      if (split() && audioStalled) audio.currentTime = Math.max(0, video.currentTime - audioDelay);
       follow();
+      buffered();
       break;
     case "subtitleDelay":
       subtitleDelay = command.delay;

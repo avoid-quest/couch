@@ -1701,14 +1701,17 @@ export async function createHub(options: HubOptions) {
           sourceSelection(playback),
         )
       : media;
-    const relay = sound && (media.publicNetwork || !!selected.audioManifest);
+    const relay =
+      sound &&
+      (media.publicNetwork || !!selected.audioManifest || (!entry.liveSourceId && selected.hls));
     const core = relay
       ? await passThrough.prepare(
           playbackId,
-          selected,
+          { ...selected, mpv: false },
           headers,
           { origin: await passThrough.coreOrigin(), userAgent: "Couch" },
           signal,
+          true,
         )
       : selected;
     return {
@@ -2051,14 +2054,19 @@ export async function createHub(options: HubOptions) {
               sourceSelection(playback),
             )
           : media;
-      const coreRelay = groupSound && (media.publicNetwork || !!coreSelected.audioManifest);
+      const coreRelay =
+        groupSound &&
+        (media.publicNetwork ||
+          !!coreSelected.audioManifest ||
+          (!entry?.liveSourceId && coreSelected.hls));
       const core = coreRelay
         ? await passThrough.prepare(
             playbackId,
-            coreSelected,
+            { ...coreSelected, mpv: false },
             headers,
             { origin: await passThrough.coreOrigin(), userAgent: "Couch" },
             signal,
+            true,
           )
         : coreSelected;
       const coreHeaders = coreRelay ? {} : headers;

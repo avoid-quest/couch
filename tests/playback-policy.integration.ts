@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
 import { liveFixture, until } from "./live-input.fixture";
+import { parseCommand } from "../src/server/validation";
 
 for (const master of ["/master.m3u8", "/stream"])
   test(
@@ -151,3 +152,127 @@ for (const master of ["/master.m3u8", "/stream"])
       }
     },
   );
+
+test(
+  "relative transport seeks accumulate through buffering and delayed observations",
+  { timeout: 10000 },
+  async () => {
+    const f = await liveFixture();
+    try {
+      assert.equal(
+        (
+          await f.receiver.command({
+            type: "enqueue",
+            entry: {
+              id: "relative-seek",
+              title: "Programme",
+              source: `${f.hub.origin}/api/health`,
+            },
+            playNow: true,
+            deviceId: f.receiver.id,
+          })
+        ).ok,
+        true,
+      );
+      await until(() => !!f.receiver.load());
+      f.receiver.report({
+        position: 12,
+        duration: 60,
+        seekable: true,
+        status: "loading",
+        buffering: true,
+      });
+      await until(() => f.receiver.state.player.position === 12);
+      let playbackId = f.receiver.state.player.playbackId!;
+      const relative = async (position: number) => {
+        const result = await f.receiver.command({
+          type: "seek",
+          playbackId,
+          position,
+          relative: true,
+        });
+        assert.equal(result.ok, true, result.error);
+        const latest = f.receiver.messages.findLast(
+          (message) => message.type === "player" && message.command.type === "seek",
+        );
+        assert.ok(latest?.type === "player" && latest.command.type === "seek");
+        assert.equal("relative" in latest.command, false, "renderers receive an absolute seek");
+        return latest.command.position;
+      };
+      assert.equal(await relative(10), 22);
+      assert.equal(await relative(10), 32, "a delayed clock must not discard the second key");
+      f.receiver.report({
+        position: 22,
+        duration: 60,
+        seekable: true,
+        status: "loading",
+        buffering: true,
+      });
+      assert.equal(
+        await relative(10),
+        42,
+        "an older seek report must not replace the latest target",
+      );
+      assert.equal(await relative(-10), 32);
+      assert.equal(await relative(100), 60);
+      assert.equal(await relative(-100), 0);
+      f.receiver.report({ position: 0, duration: 60, seekable: true });
+      await until(() => f.receiver.state.player.status === "playing");
+      f.receiver.report({ position: 3, duration: 60, seekable: true });
+      assert.equal(
+        await relative(10),
+        13,
+        "confirmed seeks resume from the observed programme clock",
+      );
+      assert.equal((await f.receiver.command({ type: "seek", playbackId, position: 45 })).ok, true);
+      assert.equal(
+        await relative(-10),
+        35,
+        "absolute seeks also establish the next relative target",
+      );
+      f.receiver.report({ position: 35, duration: 60, seekable: true });
+      assert.equal(await relative(10), 45);
+      assert.equal(await relative(-10), 35);
+      f.receiver.report({ position: 35, duration: 60, seekable: true });
+      f.receiver.report({ position: 45, duration: 60, seekable: true });
+      assert.equal(
+        await relative(10),
+        45,
+        "an unchanged old report cannot confirm a reversed seek",
+      );
+      await f.receiver.command({
+        type: "enqueue",
+        entry: {
+          id: "replacement",
+          title: "Replacement",
+          source: `${f.hub.origin}/api/health?next`,
+        },
+        playNow: true,
+      });
+      await until(() => f.receiver.load()?.playbackId !== playbackId);
+      playbackId = f.receiver.load()!.playbackId;
+      f.receiver.report({ playbackId, position: 5, duration: 60, seekable: true });
+      assert.equal(
+        await relative(10),
+        15,
+        "the replacement must not inherit the retired seek target",
+      );
+      for (const invalid of [
+        { position: -10 },
+        { position: 10, relative: "yes" },
+        { position: null, relative: true },
+      ])
+        assert.throws(() =>
+          parseCommand(
+            JSON.stringify({
+              type: "command",
+              requestId: "invalid",
+              action: { type: "seek", playbackId, ...invalid },
+            }),
+          ),
+        );
+    } finally {
+      await f.close();
+    }
+  },
+);

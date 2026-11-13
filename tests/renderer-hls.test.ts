@@ -14,6 +14,9 @@ const check = (source: string, realPictureClock = false) => {
     import { mock } from "bun:test";
     mock.module("./src/client/session/sendspin.ts", () => ({ soundClock: () => clockSample }));
     mock.module("./src/client/session/device-id.ts", () => ({ localDeviceName: () => "Receiver" }));
+    const realBuffered = await import("./src/client/session/buffered.ts");
+    let bufferedReport = null;
+    mock.module("./src/client/session/buffered.ts", () => ({ ...realBuffered, setBuffered: value => { bufferedReport = value; } }));
     const clockTimers = new Set();
     const tickPicture = () => { for (const tick of clockTimers) tick(); };
     if (${realPictureClock}) {
@@ -575,3 +578,186 @@ test("a picture near a film's end waits at the end, not past it, and holds its l
   assert.deepEqual(video.seeks, [100]);
   assert.equal(video.paused, true, "not restarted from its first frame");
 });
+
+test("separate sound buffering holds the picture and resumes both without chasing the empty sound buffer", () =>
+  check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
+  video.duration = 60;
+  video.readyState = audio.readyState = 4;
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("playing"));
+  video.currentTime = audio.currentTime = 10;
+  audio.readyState = 2;
+  audio.dispatchEvent(new Event("waiting"));
+  assert.equal(video.paused, true, "picture waits when its separate sound runs out");
+  assert.equal(audio.paused, false, "the starved audio must keep decoding so it can become ready again");
+  assert.equal(reports.at(-1).status, "loading");
+  assert.equal(reports.at(-1).buffering, true);
+  for (let i = 0; i < 3; i++) video.dispatchEvent(new Event("timeupdate"));
+  assert.equal(audio.currentTime, 10, "recovery keeps one audio position instead of chasing ahead");
+  play({ type: "seek", playbackId: "playback", position: 30 });
+  assert.equal(audio.currentTime, 30, "an explicit seek moves the held sound to its new destination");
+  assert.equal(video.currentTime, 30);
+  assert.equal(video.paused, true);
+  play({ type: "audioDelay", playbackId: "playback", delay: 1 });
+  assert.equal(audio.currentTime, 29, "changing the delay moves held sound to its new target");
+  audio.readyState = 4;
+  audio.dispatchEvent(new Event("canplay"));
+  assert.equal(video.paused, false, "the picture resumes when sound has data again");
+  video.dispatchEvent(new Event("playing"));
+  assert.equal(audio.paused, false);
+  assert.equal(reports.at(-1).status, "playing");
+  assert.equal(reports.at(-1).buffering, false);
+`));
+
+test("Pause during separate sound buffering survives data arriving and a replacement load", () =>
+  check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
+  video.duration = 60;
+  video.readyState = audio.readyState = 4;
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("playing"));
+  audio.readyState = 2;
+  audio.dispatchEvent(new Event("waiting"));
+  play({ type: "pause", playbackId: "playback", paused: true });
+  assert.equal(reports.at(-1).status, "paused");
+  assert.equal(reports.at(-1).buffering, false);
+  assert.equal(audio.paused, true, "explicit Pause also pauses the starved sound");
+  audio.readyState = 4;
+  audio.dispatchEvent(new Event("canplay"));
+  assert.equal(video.paused, true, "data arrival must not undo the person's Pause");
+  play({ type: "pause", playbackId: "playback", paused: false });
+  video.dispatchEvent(new Event("playing"));
+  audio.readyState = 2;
+  audio.dispatchEvent(new Event("waiting"));
+  load({ source: "https://couch.example/next.mp4", paused: true });
+  video.dispatchEvent(new Event("canplay"));
+  audio.readyState = 4;
+  audio.dispatchEvent(new Event("canplay"));
+  assert.equal(video.paused, true, "an old audio event cannot start a replacement");
+`));
+
+test("the loaded timeline includes separate sound, its progress and the audio delay", () =>
+  check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
+  video.duration = 60;
+  video.currentTime = audio.currentTime = 2.5;
+  video.buffered = { length: 1, start: () => 0, end: () => 20 };
+  audio.buffered = { length: 1, start: () => 0, end: () => 3 };
+  video.dispatchEvent(new Event("progress"));
+  assert.equal(bufferedReport.end, 3, "loaded picture alone cannot promise playable A/V");
+  audio.buffered = { length: 0 };
+  audio.dispatchEvent(new Event("progress"));
+  assert.equal(bufferedReport, null, "sound without a current range leaves no loaded segment");
+  audio.buffered = { length: 1, start: () => 0, end: () => 8 };
+  audio.dispatchEvent(new Event("progress"));
+  assert.equal(bufferedReport.end, 8, "sound arriving while the picture is held updates its loaded segment");
+  play({ type: "audioDelay", playbackId: "playback", delay: 2 });
+  assert.equal(bufferedReport.end, 10, "sound's loaded end is mapped onto the picture timeline");
+  video.currentTime = 11;
+  video.dispatchEvent(new Event("seeking"));
+  assert.equal(bufferedReport, null, "a seek outside the loaded sound has no playable range");
+  load({ source: "https://couch.example/next.mp4" });
+  video.currentTime = 2.5;
+  video.dispatchEvent(new Event("progress"));
+  assert.equal(bufferedReport.end, 20, "an ordinary muxed source keeps its own loaded range");
+`));
+
+test("separate sound stays silent outside its delayed timeline", () =>
+  check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a", preferences: { audioDelay: 2 } });
+  video.duration = audio.duration = 60;
+  video.readyState = audio.readyState = 4;
+  video.currentTime = .5;
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("playing"));
+  assert.equal(audio.paused, true, "positive delay does not repeatedly play the first sound before its start");
+  video.currentTime = 3;
+  video.dispatchEvent(new Event("timeupdate"));
+  assert.equal(audio.paused, false, "sound starts when the picture reaches its delayed timeline");
+  assert.equal(audio.currentTime, 1);
+  play({ type: "audioDelay", playbackId: "playback", delay: -2 });
+  video.currentTime = 59;
+  audio.currentTime = 60;
+  audio.paused = true;
+  video.dispatchEvent(new Event("timeupdate"));
+  assert.equal(audio.paused, true, "an advanced sound track does not restart after its end");
+`));
+
+test("Pause during asynchronous decoder startup remains paused", () =>
+  check(`
+  for (const mpegts of [false, true]) {
+    load({ mpegts });
+    play({ type: "pause", playbackId: "playback", paused: true });
+    await flush();
+    assert.equal(video.paused, true, "the delayed decoder must honor Pause received during startup");
+    load({ mpegts, paused: true });
+    play({ type: "pause", playbackId: "playback", paused: false });
+    await flush();
+    assert.equal(video.paused, false, "the latest Play also survives startup");
+    load({ mpegts });
+    play({ type: "audioPause" });
+    await flush();
+    assert.equal(video.paused, true, "audio interruption remains paused through startup");
+  }
+`));
+
+test("audio interruption cancels a separate sound buffer's pending play", () =>
+  check(`
+  load({ source: "https://couch.example/movie.mp4", audioSource: "https://couch.example/audio.m4a" });
+  video.readyState = audio.readyState = 4;
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("playing"));
+  audio.readyState = 2;
+  audio.dispatchEvent(new Event("waiting"));
+  assert.equal(video.paused, true);
+  assert.equal(audio.paused, false);
+  play({ type: "audioPause" });
+  assert.equal(audio.paused, true, "an already held picture emits no new pause event to stop sound");
+  audio.readyState = 4;
+  audio.dispatchEvent(new Event("canplay"));
+  assert.equal(video.paused, true);
+  assert.equal(audio.paused, true, "data arrival cannot restart interrupted sound");
+`));
+
+test("terminal decoder failure stops buffered playback and cannot resume under its error", () =>
+  check(`
+  load({ audioSource: "https://couch.example/audio.m4a" });
+  await flush();
+  video.readyState = audio.readyState = 4;
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("playing"));
+  assert.equal(video.paused, false);
+  assert.equal(audio.paused, false);
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: false, type: Hls.ErrorTypes.NETWORK_ERROR, details: "fragLoadError" });
+  assert.equal(video.paused, false, "ordinary decoder retries retain buffered playback");
+  assert.equal(reports.at(-1).error, null);
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: Hls.ErrorTypes.NETWORK_ERROR, details: "fragLoadError" });
+  assert.equal(reports.at(-1).status, "error");
+  assert.equal(video.paused, true, "already buffered frames must not play behind the failure overlay");
+  assert.equal(audio.paused, true);
+  play({ type: "pause", playbackId: "playback", paused: false });
+  assert.equal(video.paused, true, "a terminal decoder needs a new load, not a stale resume");
+  load({ audioSource: "https://couch.example/audio.m4a" });
+  await flush();
+  video.dispatchEvent(new Event("canplay"));
+  video.dispatchEvent(new Event("playing"));
+  audio.readyState = 2;
+  audio.dispatchEvent(new Event("waiting"));
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: Hls.ErrorTypes.NETWORK_ERROR, details: "fragLoadError" });
+  audio.readyState = 4;
+  audio.dispatchEvent(new Event("canplay"));
+  assert.equal(video.paused, true, "late sound recovery cannot start failed media");
+  assert.equal(audio.paused, true);
+  assert.equal(reports.at(-1).buffering, false);
+  load({ source: "https://couch.example/retry.mp4" });
+  video.dispatchEvent(new Event("canplay"));
+  assert.equal(video.paused, false, "an explicit replacement load can play again");
+  assert.equal(reports.at(-1).error, null);
+  load({ follow: { group: "g", pts: false } });
+  await flush();
+  clockSample = { position: 30, speed: 1 };
+  assert.deepEqual(pictureRead(), clockSample);
+  decoders.at(-1).emit(Hls.Events.ERROR, { fatal: true, type: Hls.ErrorTypes.NETWORK_ERROR, details: "fragLoadError" });
+  assert.equal(pictureRead(), null, "shared sound cannot keep seeking a failed picture beneath its overlay");
+`));

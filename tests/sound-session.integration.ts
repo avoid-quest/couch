@@ -7,6 +7,9 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { setImmediate } from "node:timers/promises";
 import { createSoundRouting } from "../src/server/sound-routing";
+import { createSession } from "../src/server/session";
+import { openStore } from "../src/server/store";
+import type { PlaybackCommand } from "../src/shared/protocol";
 import { authorityFixture, resultOk, until } from "./hub-authority.fixture";
 
 // Replace only the Linux process boundary; exercise the real inventory, API,
@@ -200,3 +203,49 @@ for (const destination of ["browser", "host picture"] as const)
       }
     },
   );
+
+test("losing an audio output while buffering preserves the paused programme for explicit resume", async () => {
+  const store = openStore(":memory:");
+  const commands: PlaybackCommand[] = [];
+  const session = createSession(
+    { ...store, ...store.playback("interrupted") },
+    (command) => commands.push(command),
+    () => {},
+  );
+  try {
+    await session.command({
+      type: "enqueue",
+      entry: { id: "programme", title: "Programme", source: "https://media.example/movie.mp4" },
+      playNow: true,
+    });
+    session.observe({
+      ...session.state.player,
+      status: "loading",
+      buffering: true,
+      seekable: true,
+      position: 42,
+      duration: 120,
+    });
+    const playbackId = session.state.player.playbackId!;
+    session.audioLost("The sound output disconnected.");
+    assert.equal(session.state.player.status, "paused");
+    assert.equal(session.state.player.buffering, false);
+    assert.equal(session.state.player.playbackId, playbackId);
+    assert.equal(session.state.player.position, 42);
+    assert.deepEqual(commands.at(-1), { type: "audioPause" });
+    session.observe({ ...session.state.player, status: "playing", position: 43, error: null });
+    assert.equal(
+      session.state.player.status,
+      "paused",
+      "a refill report cannot resume interrupted playback",
+    );
+    assert.equal(session.state.player.position, 42);
+    await session.command({ type: "pause", playbackId, paused: false });
+    assert.deepEqual(commands.at(-1), { type: "pause", playbackId, paused: false });
+    session.observe({ ...session.state.player, status: "playing", position: 42, error: null });
+    assert.equal(session.state.player.status, "playing");
+  } finally {
+    session.close();
+    store.close();
+  }
+});

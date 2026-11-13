@@ -50,6 +50,7 @@ export function KeyboardShortcuts({
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const {
     available,
+    playing,
     transportReady,
     seekable,
     pausable,
@@ -67,7 +68,7 @@ export function KeyboardShortcuts({
       void run({
         type: "pause",
         playbackId: player.playbackId,
-        paused: player.status === "playing",
+        paused: playing,
       });
   };
   const canSeek = transportReady && seekable;

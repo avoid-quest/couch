@@ -216,7 +216,16 @@ function validAction(value: unknown): value is Action {
     case "pause":
       return id(value.playbackId) && typeof value.paused === "boolean";
     case "seek":
-      return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
+      return (
+        id(value.playbackId) &&
+        (value.relative === undefined || typeof value.relative === "boolean") &&
+        number(
+          value.relative === true && typeof value.position === "number"
+            ? Math.abs(value.position)
+            : value.position,
+          365 * 24 * 60 * 60,
+        )
+      );
     case "mute":
       return (
         typeof value.muted === "boolean" && (value.deviceId === undefined || id(value.deviceId))

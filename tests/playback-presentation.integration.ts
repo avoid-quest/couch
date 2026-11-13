@@ -4,6 +4,7 @@ import { createSession, type MediaSource } from "../src/server/session";
 import { openStore } from "../src/server/store";
 import type { PlaybackCommand, SessionState } from "../src/shared/protocol";
 import type { WebMediaSource } from "../src/server/web-media";
+import { createSubtitles } from "../src/server/subtitles";
 
 test("only explicit starts request a new picture presentation", async () => {
   const store = openStore(":memory:");
@@ -81,6 +82,7 @@ function recoveringSession(
     playbackId: string,
     signal: AbortSignal,
   ) => Promise<MediaSource>,
+  beforeFailure?: (session: ReturnType<typeof createSession>) => void,
 ) {
   const store = openStore(":memory:");
   const recovery = Promise.withResolvers<WebMediaSource | null>();
@@ -121,6 +123,7 @@ function recoveringSession(
   });
   const originalId = state!.player.playbackId!,
     presentation = state!.presentationId;
+  beforeFailure?.(session);
   session.observe({ ...state!.player, status: "error", error: "HTTP 410" });
   return {
     session,
@@ -178,5 +181,198 @@ test("expiry recovery prepares public media for the new transport and sends only
     assert.equal(f.state.presentationId, f.presentation);
   } finally {
     f.close();
+  }
+});
+
+test("a quality change while buffering retains the latest seek, pause and audio choice", async () => {
+  const store = openStore(":memory:");
+  const fresh = Promise.withResolvers<MediaSource>();
+  const commands: PlaybackCommand[] = [];
+  let resolves = 0;
+  const session = createSession(
+    { ...store, ...store.playback("buffered-quality") },
+    (command) => commands.push(structuredClone(command)),
+    () => {},
+    {
+      resolveSource: () =>
+        resolves++ === 0 ? { source: "https://media.example/original.mp4" } : fresh.promise,
+    },
+  );
+  try {
+    session.command({
+      type: "enqueue",
+      entry: { id: "film", title: "Film", source: "web:https://media.example/film" },
+      playNow: true,
+    });
+    session.observe({
+      ...session.state.player,
+      status: "loading",
+      buffering: true,
+      seekable: true,
+      position: 30,
+      duration: 120,
+      tracks: [
+        { id: "picture", kind: "video", index: 0, label: "Picture", selected: true },
+        {
+          id: "english",
+          kind: "audio",
+          index: 0,
+          label: "English",
+          language: "en",
+          selected: true,
+        },
+        {
+          id: "italian",
+          kind: "audio",
+          index: 1,
+          label: "Italian",
+          language: "it",
+          selected: false,
+        },
+      ],
+    });
+    const playbackId = session.state.player.playbackId!;
+    const changing = session.command({ type: "videoQuality", playbackId, quality: "480p" });
+    session.command({ type: "seek", playbackId, position: 70 });
+    session.command({ type: "pause", playbackId, paused: true });
+    session.command({ type: "track", playbackId, kind: "audio", index: 1 });
+    session.observe({ ...session.state.player, position: 31 });
+    fresh.resolve({ source: "https://media.example/lower-quality.mp4" });
+    await changing;
+    const load = commands.findLast((command) => command.type === "load")!;
+    assert.equal(load.source, "https://media.example/lower-quality.mp4");
+    assert.equal(load.startPosition, 70);
+    assert.equal(load.paused, true);
+    assert.equal(load.audioTrack, 1);
+    assert.notEqual(load.playbackId, playbackId);
+  } finally {
+    session.close();
+    store.close();
+  }
+});
+
+for (const newerSeek of [false, true])
+  test(`expiry recovery retains seek and tracks${newerSeek ? " with newer controls during resolution" : ""}`, async () => {
+    const subtitle = { source: "https://media.example/custom.vtt", title: "Custom captions" };
+    const f = recoveringSession(
+      async (media) => media,
+      (session) => {
+        session.observe({
+          ...session.state.player,
+          subtitleDelay: 2,
+          tracks: [
+            {
+              id: "english",
+              kind: "audio",
+              index: 0,
+              label: "English",
+              language: "en",
+              selected: true,
+            },
+            {
+              id: "italian",
+              kind: "audio",
+              index: 1,
+              label: "Italian",
+              language: "it",
+              selected: false,
+            },
+            {
+              id: "captions",
+              kind: "subtitle",
+              index: 2,
+              label: "Custom captions",
+              selected: true,
+            },
+          ],
+        });
+        const playbackId = session.state.player.playbackId!;
+        session.addSubtitle(playbackId, subtitle);
+        session.command({ type: "seek", playbackId, position: 70 });
+        session.command({ type: "track", playbackId, kind: "audio", index: 1 });
+      },
+    );
+    try {
+      if (newerSeek) {
+        f.session.command({ type: "seek", playbackId: f.state.player.playbackId!, position: 80 });
+        f.session.command({ type: "pause", playbackId: f.state.player.playbackId!, paused: false });
+      }
+      f.recovery.resolve(replacement);
+      await flush();
+      const load = f.commands.findLast((command) => command.type === "load")!;
+      assert.equal(load.startPosition, newerSeek ? 80 : 70);
+      assert.equal(load.paused, !newerSeek);
+      assert.equal(load.audioTrack, 1);
+      assert.equal(load.subtitleTrack, 2);
+      assert.equal(load.subtitleDelay, 2);
+      assert.deepEqual(load.subtitles, [subtitle]);
+    } finally {
+      f.close();
+    }
+  });
+
+test("uploaded subtitles survive the retired Stop acknowledgement during expiry recovery", async () => {
+  const store = openStore(":memory:");
+  const commands: PlaybackCommand[] = [];
+  const recovery = Promise.withResolvers<WebMediaSource | null>();
+  let session: ReturnType<typeof createSession>;
+  const subtitles = createSubtitles(
+    (id) => (session.state.player.playbackId === id ? session.state.player : undefined),
+    (id, subtitle) => session.addSubtitle(id, subtitle),
+  );
+  session = createSession(
+    { ...store, ...store.playback("subtitle-recovery") },
+    (command) => commands.push(structuredClone(command)),
+    () => {},
+    {
+      resolveSource: () => ({
+        source: "https://media.example/original.mp4",
+        expiry: { at: 0, recover: () => recovery.promise },
+      }),
+      prepareRecoveredSource: async (media) => media,
+      observe: (player) => subtitles.observe(player),
+      stopped: (id) => subtitles.stopped(id),
+      moved: (from, to) => subtitles.moved(from, to),
+    },
+  );
+  try {
+    session.command({
+      type: "enqueue",
+      entry: { id: "film", title: "Film", source: "web:https://media.example/film" },
+      playNow: true,
+    });
+    session.observe({
+      ...session.state.player,
+      status: "playing",
+      position: 30,
+      duration: 120,
+      seekable: true,
+    });
+    const uploaded = await subtitles.handle(
+      new Request(
+        `http://couch/api/subtitles?playbackId=${session.state.player.playbackId}&name=custom.vtt`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nCaption\n",
+        },
+      ),
+    );
+    assert.equal(uploaded.status, 200);
+    const added = commands.findLast((command) => command.type === "addSubtitle")!;
+    const url = new URL(added.source, "http://couch");
+    assert.equal((await subtitles.serve(url)).status, 200);
+    session.observe({ ...session.state.player, status: "error", error: "HTTP 410" });
+    session.observe({ ...session.state.player, playbackId: null, status: "idle" });
+    assert.equal((await subtitles.serve(url)).status, 200);
+    recovery.resolve(replacement);
+    await flush();
+    assert.equal((await subtitles.serve(url)).status, 200);
+    const load = commands.findLast((command) => command.type === "load")!;
+    assert.deepEqual(load.subtitles, [{ source: added.source, title: "custom.vtt" }]);
+  } finally {
+    session.close();
+    subtitles.close();
+    store.close();
   }
 });

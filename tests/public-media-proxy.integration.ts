@@ -3,6 +3,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { createServer, request } from "node:http";
 import { connect, createServer as createTcpServer, type Server, type Socket } from "node:net";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { createPublicMediaProxy } from "../src/server/public-media-proxy";
 import { lookupPublic } from "../src/server/public-network";
 
@@ -64,6 +65,145 @@ function tunnel(
     req.end();
   });
 }
+
+async function interrupted(mode = "resume") {
+  const bytes = Buffer.from(Array.from({ length: 65_536 }, (_, index) => index % 251));
+  const contacts: { range?: string; etag?: string }[] = [];
+  let cut!: () => void;
+  const disconnected = new Promise<void>((resolve) => (cut = resolve));
+  const upstream = createServer((req, response) => {
+    contacts.push({ range: req.headers.range, etag: req.headers["if-match"] });
+    const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? "");
+    const from = range ? Number(range[1]) : 0;
+    const to = range?.[2] ? Number(range[2]) : bytes.length - 1;
+    const retry = contacts.length > 1;
+    if (mode === "upload") return req.resume().once("end", () => response.destroy());
+    response.writeHead(mode === "ignored" && retry ? 200 : 206, {
+      "Content-Length": to - from + 1,
+      ETag: mode === "changed" && retry ? '"new"' : '"same"',
+      "Content-Range": `bytes ${mode === "wrong" && retry ? from + 1 : from}-${to}/${bytes.length}`,
+    });
+    if (retry) response.end(bytes.subarray(from, to + 1));
+    else {
+      response.write(bytes.subarray(from, from + 4096));
+      setTimeout(() => {
+        response.destroy();
+        cut();
+      }, 20);
+    }
+  });
+  const port = await listen(upstream);
+  const cancellation = new AbortController();
+  const proxy = await createPublicMediaProxy(cancellation.signal, undefined, async (hostname) => {
+    assert.equal(hostname, "public.test");
+    return [{ address: "127.0.0.1", family: 4 }];
+  });
+  const failures: Error[] = [];
+  void proxy.failure.then((error) => failures.push(error));
+  let received = 0;
+  const read = (range = "bytes=0-", signal?: AbortSignal, method = "GET") =>
+    new Promise<Buffer>((resolve, reject) => {
+      const address = new URL(proxy.url);
+      const req = request(
+        {
+          hostname: address.hostname,
+          port: address.port,
+          path: `http://public.test:${port}/segment.ts`,
+          method,
+          headers: { "Proxy-Authorization": auth(proxy.url), range },
+          signal,
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk) => {
+            received += chunk.length;
+            chunks.push(chunk);
+          });
+          response.once("end", () => resolve(Buffer.concat(chunks)));
+          response.once("error", reject);
+        },
+      );
+      req.once("error", reject);
+      req.end(method === "POST" ? "upload" : undefined);
+    });
+  return {
+    bytes,
+    contacts,
+    failures,
+    disconnected,
+    cancellation,
+    proxy,
+    read,
+    get received() {
+      return received;
+    },
+    async close() {
+      await proxy.close();
+      upstream.closeAllConnections();
+      await stop(upstream);
+    },
+  };
+}
+
+for (const [from, to] of [
+  [0, 65_535],
+  [9000, 19_000],
+] as const)
+  test(`interrupted media resumes within its original byte range ${from}-${to}`, async () => {
+    const f = await interrupted();
+    try {
+      assert.deepEqual(await f.read(`bytes=${from}-${to}`), f.bytes.subarray(from, to + 1));
+      assert.deepEqual(f.contacts, [
+        { range: `bytes=${from}-${to}`, etag: undefined },
+        { range: `bytes=${from + 4096}-${to}`, etag: '"same"' },
+      ]);
+      assert.deepEqual(f.failures, []);
+    } finally {
+      await f.close();
+    }
+  });
+
+for (const mode of ["wrong", "ignored", "changed"])
+  test(`a ${mode} range response cannot append different bytes to an interrupted stream`, async () => {
+    const f = await interrupted(mode);
+    try {
+      await assert.rejects(() => f.read());
+      assert.equal(f.received, 4096);
+      assert.ok((await f.proxy.failure) instanceof Error);
+    } finally {
+      await f.close();
+    }
+  });
+
+for (const owner of ["consumer", "proxy", "signal"])
+  test(`${owner} cancellation during retry backoff cannot request more media`, async () => {
+    const f = await interrupted();
+    try {
+      const consumer = new AbortController();
+      const reading = assert.rejects(f.read("bytes=0-", consumer.signal));
+      await f.disconnected;
+      if (owner === "consumer") consumer.abort();
+      else if (owner === "proxy") await f.proxy.close();
+      else f.cancellation.abort();
+      await reading;
+      await delay(650); // Past Undici's default first retry delay of 500 ms.
+      assert.equal(f.contacts.length, 1);
+      assert.deepEqual(f.failures, []);
+    } finally {
+      await f.close();
+    }
+  });
+
+test("an interrupted POST upload is never replayed", async () => {
+  const f = await interrupted("upload");
+  try {
+    await f.read("bytes=0-", undefined, "POST");
+    assert.equal(f.contacts.length, 1);
+    assert.deepEqual(f.failures, []);
+  } finally {
+    await f.close();
+  }
+});
 
 test("extractor proxy authenticates and rejects private HTTP and CONNECT destinations before contact", async () => {
   let contacts = 0;

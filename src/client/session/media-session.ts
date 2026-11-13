@@ -70,7 +70,7 @@ export function useMediaSession() {
     : clock.playbackId === playbackId
       ? (clock.duration ?? current?.duration ?? null)
       : (current?.duration ?? null);
-  const { transportReady, pausable, seekable, nextReady, hasNext, stoppable } =
+  const { playing, transportReady, pausable, seekable, nextReady, hasNext, stoppable } =
     playbackCapabilities(state, connected);
   // Live listeners get no media commands. Unhandled, Android's notification Pause would pause the SDK's
   // silent keep-alive element while the sound plays on, so Play, Pause and Stop are handled and do nothing.
@@ -114,11 +114,14 @@ export function useMediaSession() {
             ? { type: "next", playbackId }
             : action === "seekto" && Number.isFinite(details.seekTime)
               ? seek(details.seekTime!)
-              : action === "seekbackward"
-                ? seek(position - (details.seekOffset ?? 10))
-                : action === "seekforward"
-                  ? seek(position + (details.seekOffset ?? 10))
-                  : null;
+              : action === "seekbackward" || action === "seekforward"
+                ? {
+                    type: "seek",
+                    playbackId,
+                    position: (action === "seekbackward" ? -1 : 1) * (details.seekOffset ?? 10),
+                    relative: true,
+                  }
+                : null;
     if (command) void run(command);
   });
   const handlers = actions
@@ -144,7 +147,7 @@ export function useMediaSession() {
     if (!navigator.mediaSession) return;
     navigator.mediaSession.playbackState = !playbackId
       ? "none"
-      : listening || player?.status === "playing"
+      : listening || playing
         ? "playing"
         : "paused";
     if (playbackId && duration && Number.isFinite(duration))
@@ -154,5 +157,5 @@ export function useMediaSession() {
         playbackRate: player?.speed || 1,
       });
     else navigator.mediaSession.setPositionState();
-  }, [playbackId, listening, player?.status, player?.speed, position, duration]);
+  }, [playbackId, listening, playing, player?.speed, position, duration]);
 }

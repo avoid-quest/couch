@@ -332,36 +332,36 @@ for (const rate of [10, 60])
         Math.abs(frames - seconds * rate) <= 1,
         `${frames} encoded frames in a ${seconds}s HLS segment must retain ${rate} fps without duplication`,
       );
-      const timing = spawnSync(
-        ffmpeg,
-        [
-          "-hide_banner",
-          "-i",
-          "pipe:0",
-          "-map",
-          "0:v:0",
-          "-map",
-          "0:a:0",
-          "-vf",
-          "showinfo",
-          "-af",
-          "ashowinfo",
-          "-fps_mode",
-          "passthrough",
-          "-f",
-          "null",
-          "-",
-        ],
-        { input: segment },
-      );
-      assert.equal(timing.status, 0, String(timing.stderr));
-      const output = String(timing.stderr);
-      const videoPts = [
-        ...output.matchAll(/Parsed_showinfo[^\n]+n:\s*\d+\s+pts:\s*\d+\s+pts_time:([\d.]+)/g),
-      ].map((match) => Number(match[1]));
-      const audioPts = [
-        ...output.matchAll(/Parsed_ashowinfo[^\n]+n:\d+\s+pts:\d+\s+pts_time:([\d.]+)/g),
-      ].map((match) => Number(match[1]));
+      // FFmpeg's audio and video filter threads can interleave stderr mid-line.
+      // Measure each track alone so their timestamp diagnostics cannot mix.
+      const timestamps = (track: "a" | "v") => {
+        const timing = spawnSync(
+          ffmpeg,
+          [
+            "-hide_banner",
+            "-copyts",
+            "-i",
+            "pipe:0",
+            "-map",
+            `0:${track}:0`,
+            ...(track === "v"
+              ? ["-vf", "showinfo", "-fps_mode", "passthrough"]
+              : ["-af", "ashowinfo"]),
+            "-f",
+            "null",
+            "-",
+          ],
+          { input: segment },
+        );
+        assert.equal(timing.status, 0, String(timing.stderr));
+        return [
+          ...String(timing.stderr).matchAll(
+            /Parsed_a?showinfo[^\n]+n:\s*\d+\s+pts:\s*-?\d+\s+pts_time:(-?[\d.]+)/g,
+          ),
+        ].map((match) => Number(match[1]));
+      };
+      const videoPts = timestamps("v"),
+        audioPts = timestamps("a");
       assert.ok(
         videoPts.length > 1 && audioPts.length > 1,
         "Both encoded tracks must retain timestamps",
