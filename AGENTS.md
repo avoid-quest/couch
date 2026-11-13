@@ -2,7 +2,7 @@
 
 A media player everyone shares. Use the terms in [GLOSSARY.md](GLOSSARY.md).
 
-- **Stories**: [docs/stories/](docs/stories/README.md) are Couch's user guide: how people use it, in the UI's words. Every change keeps them true; how Couch works goes in the technical docs and the PR body. A PR touches a story only to move its status or drop a known issue it fixed. When people should do something new or different, write that journey and get the owner's OK before building.
+- **Stories**: [docs/stories/](docs/stories/README.md) are Couch's user guide: how people use it, in the UI's words. Every change keeps them true; how Couch works goes in the technical docs and the PR body. A PR touches a story only to move its status, drop a known issue it fixed, or change a journey the owner agreed to. When people should do something new or different, write that journey and get the owner's OK before building.
 - **Smallest change** that does what was asked. Add tests, docs, settings or limits only when the request needs them. A number the owner gives is a target to aim for, not a gate.
 - **Ask** when the request is unclear or the work grows past it. Show options before building anything new or visual.
 - **Upstream first**: read the existing Couch code and the library's docs before writing your own. For the desktop shell, releases and repo setup, read how [t3code](https://github.com/pingdotgg/t3code) does it.
