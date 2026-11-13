@@ -276,3 +276,49 @@ test(
     }
   },
 );
+
+for (const relative of [false, true])
+  test(`a ${relative ? "relative" : "absolute"} no-op seek does not pin later transport controls`, async () => {
+    const f = await liveFixture();
+    try {
+      await f.receiver.command({
+        type: "enqueue",
+        entry: { id: "no-op", title: "Programme", source: `${f.hub.origin}/api/health` },
+        playNow: true,
+        deviceId: f.receiver.id,
+      });
+      await until(() => !!f.receiver.load());
+      const playbackId = f.receiver.load()!.playbackId;
+      f.receiver.report({ position: 0, duration: 60, seekable: true, status: "paused", speed: 2 });
+      await until(() => f.receiver.state.player.status === "paused");
+      assert.equal(
+        (
+          await f.receiver.command({
+            type: "seek",
+            playbackId,
+            position: relative ? -10 : 0,
+            relative,
+          })
+        ).ok,
+        true,
+      );
+      f.receiver.report({ position: 0, duration: 60, seekable: true, status: "paused", speed: 2 });
+      // A throttled observation at double speed can skip the entire confirmation window.
+      f.receiver.report({ position: 3, duration: 60, seekable: true, status: "playing", speed: 2 });
+      assert.equal(
+        (await f.receiver.command({ type: "seek", playbackId, position: 10, relative: true })).ok,
+        true,
+      );
+      const latest = f.receiver.messages.findLast(
+        (message) => message.type === "player" && message.command.type === "seek",
+      );
+      assert.ok(latest?.type === "player" && latest.command.type === "seek");
+      assert.equal(
+        latest.command.position,
+        13,
+        "relative controls must use the advanced clock after a no-op",
+      );
+    } finally {
+      await f.close();
+    }
+  });

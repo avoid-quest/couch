@@ -1561,7 +1561,11 @@ export function createSession(
             ),
           );
           send({ type: "seek", playbackId: action.playbackId, position });
-          pendingSeek = { playbackId: action.playbackId, position, from: state.player.position };
+          // Returning to the observed position is a real move only if another seek is pending.
+          pendingSeek =
+            position !== state.player.position || pendingSeek?.playbackId === action.playbackId
+              ? { playbackId: action.playbackId, position, from: state.player.position }
+              : null;
           progress.seek(position);
           break;
         case "mute":
