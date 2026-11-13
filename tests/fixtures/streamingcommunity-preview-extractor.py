@@ -19,6 +19,7 @@ class CouchStreamingPreviewTestIE(InfoExtractor):
                 if len(calls) == 1:
                     return '<iframe src="https://player.example/embed/1"></iframe>'
                 assert len(calls) == 2, 'No extra player or manifest request for previews'
+                assert kwargs.get('headers', {}).get('Referer') == info['props']['embedUrl'], 'The embedded player requires its embedding page as Referer'
                 return "window.masterPlaylist = {params: {}, url: 'https://media.example/master.m3u8'}; window.canPlayFHD = true; window.thumbnailsUrl = " + literal
             extractor._download_webpage = page
             extractor._extract_m3u8_formats_and_subtitles = lambda *args, **kwargs: ([{'url': 'https://media.example/video.m3u8'}], {})

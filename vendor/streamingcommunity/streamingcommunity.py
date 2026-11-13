@@ -103,14 +103,16 @@ class StreamingCommunityIE(InfoExtractor):
         Returns:
         - dict: A dictionary containing extracted video information.
         """
-        video_page_url = self._download_webpage(traverse_obj(
-            info, ('props', 'embedUrl')), self._get_title_id(info))
+        embed_url = traverse_obj(info, ('props', 'embedUrl'))
+        video_page_url = self._download_webpage(embed_url, self._get_title_id(info))
 
         self.to_screen("Downloaded video page.")
         # Get the iframe url and iframe page
         iframe_url = self._html_search_regex(
             r'<iframe[^>]+src\s*=\s*"([^"]+)', video_page_url, 'iframe url')
-        iframe_page = self._download_webpage(iframe_url, self._get_title_id(info))
+        # The player refuses a request without the page that embeds it.
+        iframe_page = self._download_webpage(
+            iframe_url, self._get_title_id(info), headers={'Referer': embed_url})
         self.to_screen("Got video iframe.")
         preview = re.search(r'''window\.thumbnailsUrl\s*=\s*(['"])([^'"\\\r\n]{1,4096})\1\s*(?:;|\r?\n|<|$)''', iframe_page)
         preview_url = None
