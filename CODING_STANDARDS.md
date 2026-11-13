@@ -26,6 +26,6 @@ Reviewers apply these to every PR. A finding names the rule it breaks.
 ## Docs
 
 - Docs describe how Couch works now, for the next reader. Changelogs, dates, measurements, audit logs and "now does X" belong in the PR body.
-- A PR that changes what people can do names its story in `docs/stories/` and updates its journey, status and known issues.
+- Stories in `docs/stories/` are the user guide: how people use Couch. A PR keeps them true, touches one only to move its status or drop a known issue it fixed, and changes a journey only when the owner agreed it.
 - Change a doc when the behavior it describes changes or when it is wrong. An ordinary UI change doesn't need a doc change.
 - Research notes, handoffs and plans go in `.scratch/`, not `docs/`.

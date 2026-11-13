@@ -1,13 +1,14 @@
 # User stories
 
-What people do with Couch, one story per file, and how far each has got. A new
-feature or a change in behavior starts here.
+What people do with Couch, one story per file, and how far each has got: the
+user guide every change keeps true. Something new for people to do starts here.
 
 ## How to use them
 
-- **Stories first.** Before building, write or update the story: who, when, the
-  journey in the UI's words, and what "done" looks like. The owner agrees the
-  journey, then the work starts.
+- **Stories first.** Before building something new for people to do, write or
+  update its story: who, when, the journey in the UI's words, and what "done"
+  looks like. The owner agrees the journey, then the work starts. How Couch
+  works goes in the technical docs.
 - **One story per job.** A feature belongs to the one story whose journey needs
   it; others link there. A feature with no story, or a story that repeats
   another, is a finding.
