@@ -493,6 +493,7 @@ export function createSession(
     const playbackId = crypto.randomUUID();
     state.webRetry = { paused: recovery.paused };
     state.player = { ...previous, playbackId, status: "loading", buffering: false, error: null };
+    options.moved?.(previous.playbackId, playbackId);
     const current = () =>
       admitted() &&
       !controller.signal.aborted &&
@@ -553,8 +554,13 @@ export function createSession(
           type: "load",
           playbackId,
           ...media,
-          startPosition: previous.position,
+          startPosition:
+            pendingSeek && [previous.playbackId, playbackId].includes(pendingSeek.playbackId)
+              ? pendingSeek.position
+              : previous.position,
           paused: recovery.paused,
+          subtitles: withAdded(media.subtitles),
+          ...carried(previous),
           preferences: {
             ...state.preferences!.profile,
             ...(previous.speed !== undefined ? { speed: previous.speed } : {}),
@@ -1070,13 +1076,9 @@ export function createSession(
       resolution?.abort();
       qualityResolution?.abort();
       finishProgress();
-      if (
-        state.player.playbackId &&
-        state.player.seekable &&
-        ["playing", "paused"].includes(state.player.status)
-      ) {
+      if (state.player.playbackId && state.player.seekable && started()) {
         send({ type: "audioPause" });
-        state.player = { ...state.player, status: "paused", error };
+        state.player = { ...state.player, status: "paused", buffering: false, error };
       } else {
         state.player = {
           ...state.player,
@@ -1546,11 +1548,19 @@ export function createSession(
         case "seek":
           currentPlayback(action.playbackId);
           if (!state.player.seekable) throw new Error("This stream does not support seeking.");
-          const position =
-            state.player.duration === null
-              ? action.position
-              : Math.min(action.position, state.player.duration);
-          send({ ...action, position });
+          // Controllers can repeat a key before the player reports the previous seek.
+          const from =
+            pendingSeek?.playbackId === action.playbackId
+              ? pendingSeek.position
+              : state.player.position;
+          const position = Math.max(
+            0,
+            Math.min(
+              action.position + (action.relative ? from : 0),
+              state.player.duration ?? Infinity,
+            ),
+          );
+          send({ type: "seek", playbackId: action.playbackId, position });
           pendingSeek = { playbackId: action.playbackId, position, from: state.player.position };
           progress.seek(position);
           break;
@@ -1590,6 +1600,7 @@ export function createSession(
         return;
       }
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
+      const requestedAudio = pendingAudioSelection ? audioSelection : null;
       const audio = player.tracks?.filter((track) => track.kind === "audio") ?? [],
         selected = audio.find((track) => track.selected);
       // Reports already in flight may still select the old track. Only a
@@ -1627,7 +1638,13 @@ export function createSession(
         player.position + 2 < player.duration;
       if (earlyEnd && webRetried) player = { ...player, status: "error" };
       const ended = player.status === "ended" && state.player.status !== "ended";
-      if ((player.status === "error" || earlyEnd) && recoverWeb(player)) return;
+      if ((player.status === "error" || earlyEnd) && recoverWeb(player)) {
+        if (requestedAudio) {
+          audioSelection = requestedAudio;
+          pendingAudioSelection = true;
+        }
+        return;
+      }
       if (["playing", "paused"].includes(player.status)) {
         if (
           pendingSeek?.playbackId === player.playbackId &&
@@ -1636,7 +1653,7 @@ export function createSession(
             ? player.position < pendingSeek.from
             : pendingSeek.position > pendingSeek.from
               ? player.position > pendingSeek.from
-              : true)
+              : player.position !== pendingSeek.from)
         )
           pendingSeek = null;
         if (pendingPause === (player.status === "paused")) pendingPause = null;

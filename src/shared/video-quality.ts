@@ -19,7 +19,7 @@ export function supportsWebVideoQuality(source: string) {
 
 export function supportsCurrentVideoQuality(
   entry: QueueEntry | undefined,
-  player: Pick<PlayerState, "playbackId" | "status" | "seekable" | "tracks">,
+  player: Pick<PlayerState, "playbackId" | "status" | "buffering" | "seekable" | "tracks">,
 ) {
   return (
     !!entry &&
@@ -27,7 +27,8 @@ export function supportsCurrentVideoQuality(
     entry.kind !== "radio" &&
     supportsWebVideoQuality(entry.source.slice(4)) &&
     !!player.playbackId &&
-    ["playing", "paused"].includes(player.status) &&
+    (["playing", "paused"].includes(player.status) ||
+      (player.status === "loading" && player.buffering === true)) &&
     (entry.live === true || player.seekable) &&
     (!player.tracks?.length || player.tracks.some((track) => track.kind === "video"))
   );

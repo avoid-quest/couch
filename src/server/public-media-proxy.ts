@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer, request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { connect, type Socket } from "node:net";
+import { Agent, RetryAgent, type Dispatcher } from "undici";
 import { lookupPublic } from "./public-network";
 
 const hopHeaders = new Set([
@@ -31,7 +32,7 @@ export async function createPublicMediaProxy(
   signal: AbortSignal,
   localRelay?: string,
   lookup: typeof lookupPublic = lookupPublic,
-): Promise<{ url: string; close: () => Promise<void> }> {
+): Promise<{ url: string; failure: Promise<Error>; close: () => Promise<void> }> {
   signal.throwIfAborted();
   const local = localRelay ? new URL(localRelay) : undefined;
   const playback =
@@ -55,6 +56,12 @@ export async function createPublicMediaProxy(
     const supplied = Buffer.from(value ?? "");
     return supplied.length === authorization.length && timingSafeEqual(supplied, authorization);
   };
+  // Resume interrupted reads with validated byte ranges; FFmpeg's HLS requests
+  // do not inherit its reconnect option. Playback cancellation owns stalled reads.
+  const requests = new RetryAgent(new Agent({ headersTimeout: 0, bodyTimeout: 0 }), {
+    methods: ["GET", "HEAD"],
+  });
+  const failure = Promise.withResolvers<Error>();
   const sockets = new Set<Socket>();
   const track = (socket: Socket) => {
     sockets.add(socket);
@@ -92,31 +99,34 @@ export async function createPublicMediaProxy(
             }
           : await destination(target.hostname);
       if (incoming.destroyed) return;
-      const upstream = httpRequest(
-        {
-          hostname: address.address,
-          family: address.family,
-          port: Number(target.port || 80),
-          method: incoming.method,
+      const cancellation = new AbortController();
+      incoming.once("aborted", () => cancellation.abort());
+      response.once("close", () => cancellation.abort());
+      const source = await requests
+        .request({
+          origin: `http://${address.family === 6 ? `[${address.address}]` : address.address}:${Number(target.port || 80)}`,
+          method: incoming.method as Dispatcher.HttpMethod,
           path: `${target.pathname}${target.search}`,
           headers: { ...forwarded(incoming.headers), host: target.host },
-          agent: false,
-          signal,
-        },
-        (source) => {
-          response.writeHead(source.statusCode ?? 502, forwarded(source.headers));
-          source.on("error", () => response.destroy());
-          source.pipe(response);
-        },
-      );
-      upstream.on("socket", track);
-      upstream.on("error", () => {
-        if (!response.headersSent) response.writeHead(502);
-        response.end();
+          body:
+            incoming.headers["transfer-encoding"] || Number(incoming.headers["content-length"]) > 0
+              ? incoming
+              : undefined,
+          signal: AbortSignal.any([signal, cancellation.signal]),
+        })
+        .catch(() => {
+          if (!response.headersSent) response.writeHead(502);
+          response.end();
+          return null;
+        });
+      if (!source) return;
+      response.writeHead(source.statusCode, forwarded(source.headers));
+      source.body.once("error", () => {
+        if (incoming.method === "GET" && !closed && !signal.aborted && !cancellation.signal.aborted)
+          failure.resolve(new Error("The media stream was interrupted and could not be resumed."));
+        response.destroy();
       });
-      incoming.on("aborted", () => upstream.destroy());
-      response.on("close", () => upstream.destroy());
-      incoming.pipe(upstream);
+      source.body.pipe(response);
     } catch {
       if (!response.headersSent) response.writeHead(403, { Connection: "close" });
       response.end();
@@ -171,12 +181,15 @@ export async function createPublicMediaProxy(
   server.unref();
   let closing: Promise<void> | undefined;
   const close = (): Promise<void> =>
-    (closing ??= new Promise((resolve) => {
+    (closing ??= (async () => {
       closed = true;
       signal.removeEventListener("abort", abort);
       for (const socket of sockets) socket.destroy();
-      server.close(() => resolve());
-    }));
+      await Promise.all([
+        requests.destroy(),
+        new Promise<void>((resolve) => server.close(() => resolve())),
+      ]);
+    })());
   const abort = () => {
     void close();
   };
@@ -190,5 +203,9 @@ export async function createPublicMediaProxy(
     await close();
     throw new Error("Extractor proxy did not start.");
   }
-  return { url: `http://couch:${password}@127.0.0.1:${address.port}`, close };
+  return {
+    url: `http://couch:${password}@127.0.0.1:${address.port}`,
+    failure: failure.promise,
+    close,
+  };
 }

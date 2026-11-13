@@ -27,13 +27,15 @@ export function PlaybackSeekBar({
   const root = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<number | null>(null);
   const target = useRef<number | null>(null);
+  const keyboardFrom = useRef<number | null>(null);
   const pointer = useRef<number | null>(null);
   const released = useRef<number | null>(null);
   const revision = useRef(0);
   const clamp = (position: number) => Math.max(0, Math.min(max, position));
   const current = clamp(draft ?? value);
-  const update = (position: number | null) => {
+  const update = (position: number | null, from: number | null = null) => {
     target.current = position;
+    keyboardFrom.current = from;
     setDraft(position);
   };
   const cancel = () => {
@@ -47,6 +49,18 @@ export function PlaybackSeekBar({
   useLayoutEffect(() => {
     if (disabled) cancel();
   }, [disabled]);
+  useLayoutEffect(() => {
+    const from = keyboardFrom.current;
+    if (draft === null || from === null) return;
+    // An acknowledgement can precede the clock during buffering. Keep repeated
+    // keys cumulative until playback reaches the seek, then follow its position.
+    const position = clamp(draft);
+    const moved =
+      position === from ? value !== from : position > from ? value > from : value < from;
+    const passed = position > from ? value >= position : position < from && value <= position;
+    // Core also confirms within two seconds: mpv can first report after the target.
+    if (moved && (passed || Math.abs(value - position) <= 2)) update(null);
+  }, [value, draft, max]);
   useLayoutEffect(
     () => () => {
       revision.current++;
@@ -166,7 +180,7 @@ export function PlaybackSeekBar({
                 : clamp(target.current ?? value) + delta!,
           );
           if (pointer.current !== null) cancel();
-          update(position);
+          update(position, value);
           commit(position, true);
         }}
       >

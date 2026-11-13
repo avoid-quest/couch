@@ -14,11 +14,13 @@ import {
   serverNowUs,
 } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
+import { createPassThrough } from "../src/server/pass-through";
+import type { PlayerState } from "../src/shared/protocol";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const available = spawnSync(ffmpeg, ["-version"], { stdio: "ignore" }).status === 0;
-async function until(predicate: () => boolean, message: string) {
-  const deadline = Date.now() + 5_000;
+async function until(predicate: () => boolean, message: string, timeout = 5_000) {
+  const deadline = Date.now() + timeout;
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error(message);
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -164,6 +166,287 @@ for (const { codec, capacity, lead, interval } of cases)
         );
       t.diagnostic(
         `lead ${((first.frames.at(-1)!.timestamp - serverNowUs()) / 1e6).toFixed(1)} s; late speaker started ${((second.frames[0]!.timestamp - joinedAt) / 1e3).toFixed(0)} ms after joining`,
+      );
+    },
+  );
+
+for (const source of [
+  "buffered WAV",
+  "mixed buffered WAV",
+  "stalled HLS",
+  "disconnected WAV",
+  "disconnected HLS",
+  "private disconnected HLS",
+  "unrecoverable HLS",
+  "forbidden HLS",
+])
+  test(
+    ["unrecoverable HLS", "forbidden HLS"].includes(source)
+      ? `${source} reports failure and can be retried`
+      : `${source} resumes its sound and picture clock without losing media`,
+    { timeout: 30_000, skip: !available && "Set COUCH_TEST_FFMPEG to run the buffering test." },
+    async (t) => {
+      const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-buffering-"));
+      const hls = source.endsWith("HLS");
+      const disconnectedHls = hls && source !== "stalled HLS";
+      const unrecoverable = source === "unrecoverable HLS";
+      const forbidden = source === "forbidden HLS";
+      const publicNetwork = disconnectedHls && source !== "private disconnected HLS";
+      const filename = hls ? "tone.m3u8" : "tone.wav";
+      execFileSync(ffmpeg, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:sample_rate=48000",
+        "-t",
+        "10",
+        "-ac",
+        "2",
+        ...(hls
+          ? [
+              "-c:a",
+              "aac",
+              "-f",
+              "hls",
+              "-hls_time",
+              "1",
+              "-hls_list_size",
+              "0",
+              "-hls_segment_filename",
+              join(directory, "segment%02d.ts"),
+            ]
+          : []),
+        join(directory, filename),
+      ]);
+      const key = Identity.generate();
+      const opusKey = Identity.generate();
+      let opus: SendspinClient | undefined;
+      let opusFrames = 0;
+      const frames: { timestamp: number; bytes: Buffer }[] = [];
+      const states: (PlayerState & { at: number })[] = [];
+      let release: (() => void) | undefined;
+      let heldAt = 0;
+      let recovered = false;
+      const server = createServer((request, response) => {
+        const path = new URL(request.url!, "http://localhost").pathname.slice(1);
+        const media = readFileSync(join(directory, path));
+        if (forbidden && !recovered && path === "segment06.ts") {
+          const reject = () => response.writeHead(403).end("Source expired");
+          if (!heldAt) {
+            heldAt = Date.now();
+            release = reject;
+          } else reject();
+          return;
+        }
+        response.setHeader(
+          "Content-Type",
+          path.endsWith(".m3u8")
+            ? "application/vnd.apple.mpegurl"
+            : hls
+              ? "video/mp2t"
+              : "audio/wav",
+        );
+        response.setHeader("Accept-Ranges", "bytes");
+        response.setHeader("ETag", JSON.stringify(path));
+        const from = unrecoverable
+          ? 0
+          : Number(/^bytes=(\d+)-/.exec(request.headers.range ?? "")?.[1] ?? 0);
+        response.setHeader("Content-Length", media.length - from);
+        if (request.headers.range && !unrecoverable) {
+          response.statusCode = 206;
+          response.setHeader("Content-Range", `bytes ${from}-${media.length - 1}/${media.length}`);
+        }
+        if (
+          (hls || request.headers["user-agent"]?.startsWith("Lavf")) &&
+          !heldAt &&
+          (!hls || path === "segment06.ts")
+        ) {
+          heldAt = Date.now();
+          // Six seconds lets FFmpeg finish probing, then its decoded sound runs out.
+          // A partial TS response must reach the decoder before its socket drops.
+          const prefix = disconnectedHls ? 24 * 188 : hls ? 0 : 6 * 192_000;
+          response.flushHeaders();
+          response.write(media.subarray(0, prefix));
+          release = () => {
+            if (source === "disconnected WAV" || disconnectedHls) response.destroy();
+            else if (source === "mixed buffered WAV") {
+              response.write(media.subarray(prefix, 6.2 * 192_000));
+              setTimeout(() => response.write(media.subarray(6.2 * 192_000, 6.4 * 192_000)), 800);
+              setTimeout(() => response.end(media.subarray(6.4 * 192_000)), 1_600);
+            } else response.end(media.subarray(prefix));
+          };
+        } else response.end(media.subarray(from));
+      });
+      const core = createSendspin({
+        name: "Buffering fixture",
+        admit: (id) => id === key.peerId || id === opusKey.peerId,
+        changed: () => {},
+        ffmpeg: async () => ffmpeg,
+      });
+      // The fixture supplies local upstream media; the real relay and FFmpeg proxy still run.
+      const relay = disconnectedHls ? createPassThrough(() => true, fetch) : undefined;
+      const group = core.group("buffering", (state) =>
+        states.push({ ...state, at: serverNowUs() }),
+      );
+      const sockets = new WebSocketServer({ server, path: "/sendspin" });
+      sockets.on("connection", (socket, request) => core.accept(socket, request));
+      const client = new SendspinClient(key.peerId, "Receiver", [Roles.PLAYER], {
+        playerSupport: {
+          supported_formats: [
+            { codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 },
+          ],
+          buffer_capacity: 2_000_000,
+          supported_commands: [],
+        },
+      });
+      client.addAudioChunkListener((timestamp, bytes) =>
+        frames.push({ timestamp, bytes: Buffer.from(bytes) }),
+      );
+      t.after(async () => {
+        group.close();
+        await client.disconnect();
+        await opus?.disconnect();
+        await core.close();
+        await relay?.close();
+        await new Promise<void>((resolve) => sockets.close(() => resolve()));
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        rmSync(directory, { recursive: true, force: true });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      assert.ok(address && typeof address === "object");
+      const origin = `http://127.0.0.1:${address.port}`;
+      await client.connect(`${origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+      if (source === "mixed buffered WAV") {
+        opus = new SendspinClient(opusKey.peerId, "Opus receiver", [Roles.PLAYER], {
+          playerSupport: {
+            supported_formats: [
+              { codec: AudioCodec.OPUS, channels: 2, sample_rate: 48_000, bit_depth: 16 },
+            ],
+            buffer_capacity: 2_000_000,
+            supported_commands: [],
+          },
+        });
+        opus.addAudioChunkListener(() => opusFrames++);
+        opus.addStreamStartListener((message) =>
+          assert.equal(message.payload.player?.codec, AudioCodec.OPUS),
+        );
+        await opus.connect(`${origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+      }
+      group.members([
+        { deviceId: key.peerId, level: 100 },
+        ...(opus ? [{ deviceId: opusKey.peerId, level: 100 }] : []),
+      ]);
+      const media = relay
+        ? await relay.prepare(
+            "buffering",
+            { source: `${origin}/${filename}`, publicNetwork },
+            {},
+            { origin: await relay.coreOrigin(), userAgent: "Couch" },
+            AbortSignal.timeout(3_000),
+            true,
+          )
+        : { source: `${origin}/${filename}` };
+      group.send({
+        type: "load",
+        playbackId: "buffering",
+        ...media,
+        publicNetwork,
+      });
+      await until(() => frames.length > 0, "No sound arrived before the source stalled");
+      await until(
+        () => states.some((state) => state.buffering && state.position > 0),
+        "The stalled source never entered buffering",
+        8_000,
+      );
+      const stalled = states.at(-1)!;
+      const boundary = frames.length;
+      if (source === "stalled HLS") {
+        // An eleven-second read stall must preserve the whole segment.
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(0, heldAt + 11_000 - Date.now())),
+        );
+      }
+      release!();
+      if (unrecoverable || forbidden) {
+        await until(
+          () => ["ended", "error"].includes(states.at(-1)!.status),
+          "The interrupted programme neither ended nor reported an error",
+          8_000,
+        );
+        assert.equal(states.at(-1)!.status, "error", "An unreadable segment must not be skipped");
+        assert.equal(states.at(-1)!.buffering, false);
+        recovered = true;
+        group.send({ type: "load", playbackId: "retry", ...media, publicNetwork });
+        await until(
+          () => states.at(-1)?.playbackId === "retry" && states.at(-1)?.status === "playing",
+          "The failed programme could not be retried",
+        );
+        return;
+      }
+      await until(() => frames.length > boundary, "The source never supplied its remaining sound");
+      const resumedAt = frames[boundary]!.timestamp;
+      await until(
+        () => states.at(-1)?.status === "playing",
+        "The buffered programme never resumed playing",
+      );
+      const recovery = states.filter((state) => state.at >= stalled.at);
+      assert.ok(
+        recovery.every(
+          (state, index) => state.position >= (recovery[index - 1]?.position ?? stalled.position),
+        ),
+        "Buffering recovery must not rewind the shared picture clock",
+      );
+      assert.ok(
+        recovery.every((state) => state.status !== "playing" || state.at >= resumedAt),
+        "The picture clock must stay stopped until resumed sound starts playing",
+      );
+      const expected = execFileSync(
+        ffmpeg,
+        ["-v", "error", "-i", join(directory, filename), "-f", "s16le", "pipe:1"],
+        { maxBuffer: 4_000_000 },
+      );
+      await until(
+        () => frames.reduce((bytes, frame) => bytes + frame.bytes.length, 0) >= expected.length,
+        "The source lost sound while recovering",
+      );
+      assert.ok(
+        Buffer.concat(frames.map((frame) => frame.bytes)).equals(expected),
+        "All source samples must survive buffering exactly once",
+      );
+      if (opus) assert.ok(opusFrames > 0, "Both wire formats must participate in recovery");
+      await until(() => states.at(-1)?.status === "ended", "The recovered programme never ended");
+      const completeRecovery = states.filter((state) => state.at >= stalled.at);
+      assert.ok(
+        completeRecovery.every(
+          (state, index) =>
+            state.position >= (completeRecovery[index - 1]?.position ?? stalled.position),
+        ),
+        `The recovered clock must never rewind: ${completeRecovery.map((state) => state.position).join(", ")}`,
+      );
+      if (opus)
+        for (const state of completeRecovery) {
+          let heard = 0;
+          for (const frame of frames) {
+            if (state.at < frame.timestamp) break;
+            const duration = frame.bytes.length / 192_000;
+            const elapsed = (state.at - frame.timestamp) / 1e6;
+            heard += Math.min(elapsed, duration);
+            if (elapsed < duration) break;
+          }
+          // A buffered picture corrects errors above 25 ms; codec boundaries must not trigger it.
+          assert.ok(
+            Math.abs(state.position - heard) < 0.025,
+            `The picture clock was ${state.position} while its sound was ${heard}`,
+          );
+        }
+      assert.ok(
+        Math.abs(states.at(-1)!.position - expected.length / 192_000) < 0.001,
+        "Completion must report the final sound position",
       );
     },
   );

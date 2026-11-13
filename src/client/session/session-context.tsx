@@ -467,15 +467,16 @@ export function SessionGate({
   const seekBy = useCallback(
     (seconds: number, targetDeviceId?: string) => {
       const player = readObservation()?.player;
-      return player?.playbackId && player.seekable && ["playing", "paused"].includes(player.status)
+      return player?.playbackId &&
+        player.seekable &&
+        (["playing", "paused"].includes(player.status) ||
+          (player.status === "loading" && player.buffering === true))
         ? run(
             {
               type: "seek",
               playbackId: player.playbackId,
-              position: Math.max(
-                0,
-                Math.min(player.duration ?? Infinity, player.position + seconds),
-              ),
+              position: seconds,
+              relative: true,
             },
             targetDeviceId,
           )

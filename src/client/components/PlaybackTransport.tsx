@@ -36,6 +36,8 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   return {
     available,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
+    playing:
+      player?.status === "playing" || (player?.status === "loading" && player.buffering === true),
     // Stop clears whatever is current: loading or playing, paused, finished or failed.
     stoppable:
       controls.programme &&
@@ -196,7 +198,7 @@ export function PlaybackTransport({
 }) {
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
-  const { available, transportReady, pausable, stoppable, nextReady, hasNext, programme } =
+  const { available, playing, transportReady, pausable, stoppable, nextReady, hasNext, programme } =
     playbackCapabilities(state, connected);
   if (livePlayback(state))
     return participation ? (
@@ -209,7 +211,6 @@ export function PlaybackTransport({
         className={className}
       />
     ) : null;
-  const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current,
     failed =
       (player.status === "error" ||

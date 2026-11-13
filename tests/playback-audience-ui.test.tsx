@@ -60,8 +60,15 @@ mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
 mock.module("../src/client/sections/shell/shell-context", () => ({
   useShell: () => ({ section: "Now", changeSection() {}, openPlayer() {}, focusSearch() {} }),
 }));
-const { PlaybackVolume, LiveParticipation } =
+let shortcuts: Parameters<typeof import("../src/client/useCouchHotkeys").useCouchHotkeys>[0] = [];
+mock.module("../src/client/useCouchHotkeys", () => ({
+  useCouchHotkeys: (next: typeof shortcuts) => {
+    shortcuts = next;
+  },
+}));
+const { PlaybackTransport, PlaybackVolume, LiveParticipation } =
   await import("../src/client/components/PlaybackTransport");
+const { KeyboardShortcuts } = await import("../src/client/sections/shell/KeyboardShortcuts");
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 
@@ -162,6 +169,37 @@ function read<T>(render: () => T): T {
 const buttons = (node: ReactNode) =>
   elements(node).filter((element) => typeof element.props.onClick === "function");
 
+test("Play/Pause can pause a started programme while it buffers", async () => {
+  for (const status of ["playing", "loading", "paused"] as const) {
+    state = {
+      ...fixture(),
+      controls: undefined,
+      playbacks: [],
+      liveSources: [],
+      queue: [{ id: "entry", title: "Film", source: "web:https://example.com/movie" }],
+      player: { ...fixture().player, status, buffering: status === "loading" },
+    };
+    sent.length = 0;
+    const transport = buttons(PlaybackTransport({ state, connected: true, run }))[0]!;
+    expect(transport.props.disabled).toBe(false);
+    await transport.props.onClick!();
+    expect(sent).toEqual([
+      { type: "pause", playbackId: "load-generation", paused: status !== "paused" },
+    ]);
+    read(() => KeyboardShortcuts({ open: false, onOpenChange() {}, openerRef: { current: null } }));
+    for (const key of ["K", "Space"]) {
+      const shortcut = shortcuts.find((item) => item.hotkey === key)!;
+      expect(shortcut.enabled).toBe(true);
+      shortcut.action();
+      expect(sent.at(-1)).toEqual({
+        type: "pause",
+        playbackId: "load-generation",
+        paused: status !== "paused",
+      });
+    }
+  }
+});
+
 test("Join always targets this listener even while its browser controls a TV", async () => {
   state = {
     ...fixture(),
@@ -259,6 +297,18 @@ test("Live owns Media Session without a queued item, its controls do nothing, an
   });
   expect(mediaSession.metadata?.title).toBe("Film");
   expect(mediaSession.playbackState).toBe("paused");
+  session({ ...state, player: { ...state.player, status: "loading", buffering: true } });
+  expect(mediaSession.playbackState).toBe("playing");
+  handlers.get("pause")!({ action: "pause" });
+  expect(sent.at(-1)).toEqual({ type: "pause", playbackId: "load-generation", paused: true });
+  handlers.get("seekforward")!({ action: "seekforward" });
+  handlers.get("seekforward")!({ action: "seekforward", seekOffset: 15 });
+  handlers.get("seekbackward")!({ action: "seekbackward", seekOffset: 5 });
+  expect(sent.slice(-3)).toEqual([
+    { type: "seek", playbackId: "load-generation", position: 10, relative: true },
+    { type: "seek", playbackId: "load-generation", position: 15, relative: true },
+    { type: "seek", playbackId: "load-generation", position: -5, relative: true },
+  ]);
   handlers.get("stop")!({ action: "stop" });
   expect(sent.at(-1)).toEqual({ type: "stop", playbackId: "load-generation" });
   // A remaining source and audience do not claim this device after it leaves.

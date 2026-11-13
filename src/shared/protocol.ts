@@ -296,7 +296,7 @@ export type Action =
   | { type: "play"; entryId: string; fromStart?: boolean }
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
   | { type: "pause"; playbackId: string; paused: boolean }
-  | { type: "seek"; playbackId: string; position: number }
+  | { type: "seek"; playbackId: string; position: number; relative?: boolean }
   // A Device's volume or mute. Without deviceId, the one Volume: every Device in the controlled Playback's sound
   // you may control, scaled so the loudest plays at `volume` with any trim folded in, or the controlled Device when none is.
   | { type: "mute"; muted: boolean; deviceId?: string }

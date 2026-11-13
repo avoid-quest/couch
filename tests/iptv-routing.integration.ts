@@ -84,9 +84,21 @@ async function fixture(raw = false) {
     `#!${process.execPath}\n${[
       'const { appendFileSync, rmSync } = require("node:fs"), { createServer } = require("node:net");',
       'if (process.argv.includes("--version")) { console.log("mpv 0.40.0"); process.exit(); }',
-      `appendFileSync(${JSON.stringify(nativeLog)}, JSON.stringify({ pid: process.pid, source: process.argv.at(-1) }) + "\\n");`,
       'const ipc = process.argv.find(arg => arg.startsWith("--input-ipc-server=")).split("=")[1]; rmSync(ipc, {force:true});',
-      `const server = createServer(socket => { let commands = 0, ready = false; socket.on("data", bytes => { commands += String(bytes).split("\\n").length - 1; if (commands >= 6 && !ready) { ready = true; appendFileSync(${JSON.stringify(readyLog)}, process.pid + "\\n"); } }); socket.on("error", () => {}); }); server.listen(ipc);`,
+      `const server = createServer(socket => {
+        let pending = "";
+        socket.on("data", bytes => {
+          const lines = (pending + String(bytes)).split("\\n");
+          pending = lines.pop();
+          for (const line of lines) {
+            const { command } = JSON.parse(line);
+            if (command[0] !== "loadfile") continue;
+            appendFileSync(${JSON.stringify(nativeLog)}, JSON.stringify({ pid: process.pid, source: command[1] }) + "\\n");
+            appendFileSync(${JSON.stringify(readyLog)}, process.pid + "\\n");
+          }
+        });
+        socket.on("error", () => {});
+      }); server.listen(ipc);`,
       'process.on("SIGTERM", () => server.close(() => process.exit()));',
     ].join("\n")}\n`,
     { mode: 0o755 },

@@ -67,6 +67,8 @@ type Run = {
   cursors: Map<SendspinSession, number>;
   pipes: Partial<Record<Wire, Readable>>;
   base?: number;
+  // A buffered source can resume after a gap. Earlier sound keeps its original play times.
+  clock?: { at: number; offset: number }[];
   released: number;
   exit?: number | null;
   timer: ReturnType<typeof setInterval>;
@@ -327,9 +329,22 @@ export function createScheduledAudio(options: {
       );
       session?.sendMetadata(metadata());
     };
+    const soundClock = (current: Run, now: number) => {
+      const points = current.clock;
+      while (points && points.length > 1 && points[1]!.at <= now) points.shift();
+      const point = points?.[0];
+      const elapsed = point
+        ? point.offset + Math.max(0, now - point.at)
+        : Math.max(0, now - current.base!);
+      const next = points?.[1];
+      return {
+        elapsed: Math.min(elapsed, next?.offset ?? Infinity),
+        buffering: !!next && elapsed >= next.offset,
+      };
+    };
     const position = () => {
       if (!run || run.base === undefined) return state.position;
-      const elapsed = Math.max(0, serverNowUs() - run.base);
+      const { elapsed } = soundClock(run, serverNowUs());
       const heard = run.sourceTimed ? elapsed : Math.min(elapsed, run.released);
       return Math.min(state.duration ?? Infinity, run.start + (heard / 1e6) * run.speed);
     };
@@ -389,7 +404,7 @@ export function createScheduledAudio(options: {
       else if (options.logError) options.logError(id, load?.audioSource ?? load?.source, message);
       else logPlaybackError(id, "Synced", load?.audioSource ?? load?.source, message);
       halt(true);
-      state = { ...state, status: "error", error: message };
+      state = { ...state, status: "error", buffering: false, error: message };
       report();
     };
     const restart = async () => {
@@ -524,8 +539,15 @@ export function createScheduledAudio(options: {
             input = undefined;
             throw error;
           });
-        if (current.publicNetwork)
-          proxy = await createPublicMediaProxy(new AbortController().signal, current.source);
+        if (current.publicNetwork || coreRelay(source)) {
+          proxy = await createPublicMediaProxy(
+            new AbortController().signal,
+            coreRelay(source) ? source : current.source,
+          );
+          void proxy.failure.then((error) => {
+            if (attempt === generation) fail(safePlaybackError(error.message));
+          });
+        }
         if (attempt !== generation) {
           await proxy?.close();
           return;
@@ -589,7 +611,8 @@ export function createScheduledAudio(options: {
           "-ac",
           "2",
         ];
-        // Network protocols only, and a 10 s timeout on every read (#644 FFmpeg safety).
+        // A read timeout makes FFmpeg end partial files or skip HLS segments. Let reads
+        // buffer until they resume; halting this run kills the decoder and closes its proxy.
         const child = spawn(
           executable.path,
           [
@@ -600,8 +623,9 @@ export function createScheduledAudio(options: {
             "info",
             "-protocol_whitelist",
             "http,https,tcp,tls,crypto,httpproxy",
-            "-rw_timeout",
-            "10000000",
+            // Retry interrupted seekable HTTP responses at their byte offset, using FFmpeg's policy.
+            "-reconnect",
+            "1",
             ...(proxy
               ? [
                   "-http_proxy",
@@ -703,6 +727,16 @@ export function createScheduledAudio(options: {
           const lines = (partial + text).split("\n");
           partial = lines.pop()!;
           for (const line of lines) {
+            // HLS can skip an inaccessible segment and still exit successfully.
+            // Keep its retries and live catch-up, but never silently shorten a recording.
+            if (
+              !current.live &&
+              !current.radio &&
+              /Segment \d+ of playlist \d+ failed too many times, skipping/.test(line)
+            ) {
+              fail("Part of this programme couldn't be loaded. Try playing it again.");
+              return;
+            }
             if (line.includes("Parsed_ashowinfo")) {
               const first = !next.anchored && /\bn:\s*0\s.*?pts_time:(-?[\d.]+)/.exec(line);
               if (first) {
@@ -825,6 +859,8 @@ export function createScheduledAudio(options: {
         const delay =
           Math.max(0, ...members.map((member) => delays.get(member.deviceId) ?? 0)) * 1000;
         current.base = now + leadUs + delay - first;
+        if (!current.fixed && !current.sourceTimed)
+          current.clock = [{ at: current.base, offset: 0 }];
         for (const member of members) begin(member.deviceId);
         if (run !== current) return;
       } else if (
@@ -833,10 +869,12 @@ export function createScheduledAudio(options: {
         first !== Infinity &&
         current.base + first < now + leadUs / 2
       ) {
-        // The source fell behind real time: later chunks play later instead of arriving too late,
-        // and the pictures learn the new timeline at once.
+        // Only future sound moves. Pictures finish the sound already scheduled, wait through
+        // the gap and resume when the recovered sound actually starts.
+        const offset = Math.max(first, current.released);
         current.base = now + leadUs - first;
-        report();
+        // PCM and Opus have different chunk boundaries; neither can rewind the shared clock.
+        current.clock!.push({ at: current.base + offset, offset });
       }
       for (const wire of current.wires) {
         const list = current.queues[wire],
@@ -884,12 +922,14 @@ export function createScheduledAudio(options: {
       const drained =
         Object.values(current.queues).every((list) => !list.length) &&
         now >= current.base + current.released;
-      const starving = current.exit === undefined && drained;
+      const starving =
+        (current.exit === undefined && drained) || soundClock(current, now).buffering;
       const status =
         now >= current.base && (!starving || current.sourceTimed) ? "playing" : "loading";
       if (current.exit === 0 && drained) {
+        const at = position();
         halt(true);
-        state = { ...state, position: position(), status: "ended" };
+        state = { ...state, position: at, status: "ended", buffering: false };
         report();
       } else if (
         status !== state.status ||
