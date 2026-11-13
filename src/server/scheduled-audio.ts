@@ -957,12 +957,9 @@ export function createScheduledAudio(options: {
           begin(member.deviceId);
         }
         options.changed();
-        if (
-          run &&
-          !load?.liveSourceId &&
-          load?.hasAudio !== false &&
-          !!before.length !== !!next.length
-        ) {
+        // Only a picture-only run needs a decoder when sound joins. Removing
+        // speakers keeps the running clock and a live source's measured PTS.
+        if (run?.timelineOnly && load?.hasAudio !== false && next.length) {
           void restart();
           return;
         }

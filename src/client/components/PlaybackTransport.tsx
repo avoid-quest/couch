@@ -57,8 +57,10 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
       !!player?.playbackId &&
       ["loading", "playing", "paused", "ended", "error"].includes(player.status),
     seekable: controls.seek && !!player?.seekable,
-    // Paused live media resumes, so it offers Play rather than a disabled Pause.
-    pausable: controls.programme && (!live || !!player?.seekable || player?.status === "paused"),
+    // Captures keep programme controls without seeking; paused external live media can still resume.
+    pausable:
+      controls.programme &&
+      (!live || !!current?.liveSourceId || !!player?.seekable || player?.status === "paused"),
     programme: controls.programme,
     hasNext:
       currentIndex >= 0 &&

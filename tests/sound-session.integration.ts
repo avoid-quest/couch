@@ -7,6 +7,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { setImmediate } from "node:timers/promises";
 import { createSoundRouting } from "../src/server/sound-routing";
+import { authorityFixture, resultOk, until } from "./hub-authority.fixture";
 
 // Replace only the Linux process boundary; exercise the real inventory, API,
 // subscription and routing lifecycle on Core's Node runtime without hardware.
@@ -141,3 +142,61 @@ test("audio session loss interrupts playback and recovery preserves its saved ou
   await flush();
   assert.equal(session.subscribers.length, 2, "closed routing resubscribed");
 });
+
+for (const destination of ["browser", "host picture"] as const)
+  test(
+    `${destination} playback resumes without the host's audio session`,
+    { skip: process.platform !== "linux" },
+    async (t) => {
+      const exists = fs.existsSync;
+      t.mock.method(fs, "existsSync", (path) => (path === "/usr/bin/pactl" ? false : exists(path)));
+      syncBuiltinESMExports();
+      t.after(() => {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      });
+      const f = await authorityFixture(t, { native: true });
+      try {
+        const publisher = await f.connect(f.devices[1]);
+        const receiver = await f.connect(
+          destination === "browser" ? f.devices[2] : f.host,
+          "&audio=1&video=1",
+        );
+        resultOk(
+          await publisher.command({
+            type: "publishLive",
+            sourceId: "screen",
+            uploadToken: "1".repeat(64),
+            kind: "screen",
+            audio: destination === "browser",
+            video: true,
+          }),
+        );
+        resultOk(
+          await receiver.command({ type: "playLive", sourceId: "screen", deviceId: receiver.id }),
+        );
+        await until(() => !!receiver.state.player.playbackId);
+        const playbackId = receiver.state.player.playbackId!;
+        receiver.report({ status: "playing", playbackId });
+        await until(() => receiver.state.player.status === "playing");
+        resultOk(await receiver.command({ type: "pause", playbackId, paused: true }));
+        receiver.report({ status: "paused", playbackId });
+        await until(() => receiver.state.player.status === "paused");
+        resultOk(await receiver.command({ type: "pause", playbackId, paused: false }));
+        receiver.report({ status: "playing", playbackId });
+        await until(() => receiver.state.player.status === "playing");
+        if (destination === "browser") {
+          const host = await f.connect(f.host);
+          const local = await host.command({
+            type: "playLive",
+            sourceId: "screen",
+            deviceId: host.id,
+          });
+          assert.equal(local.ok, false);
+          assert.match(local.error!, /pactl/);
+        }
+      } finally {
+        await f.close();
+      }
+    },
+  );
