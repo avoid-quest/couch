@@ -13,7 +13,7 @@ test("mpv cancels retired loads and preserves controls through cache stalls", ()
     import { Duplex } from "node:stream";
     const pending=[], launches=[], reports=[], connections=[], commands=[], children=[], addresses=[];
     mock.module("./src/server/helpers.ts",()=>({helper:()=>new Promise(resolve=>pending.push(resolve))}));
-    spyOn(await import("node:child_process"),"spawn").mockImplementation((path,args)=>{launches.push(args);const child=Object.assign(new EventEmitter(),{kill(){}});children.push(child);return child;});
+    spyOn(await import("node:child_process"),"spawn").mockImplementation((path,args)=>{launches.push(args);const child=Object.assign(new EventEmitter(),{killed:false,kill(){this.killed=true;}});children.push(child);return child;});
     spyOn(await import("node:net"),"connect").mockImplementation((address)=>{
       addresses.push(address);
       const socket=new Duplex({read(){},write(chunk,encoding,callback){commands.push(JSON.parse(String(chunk)).command);callback();}});
@@ -75,6 +75,32 @@ test("mpv cancels retired loads and preserves controls through cache stalls", ()
     await settle();
     assert.equal(reports.at(-1).status,"error","an IPC reset stops the player without crashing Core");
     assert.match(reports.at(-1).error,/connection/i);
+    const retries=[];
+    const timers=spyOn(globalThis,"setTimeout").mockImplementation(callback=>{retries.push(callback);return 1;});
+    player.send({...load,playbackId:"missing-ipc"});
+    pending.pop()("mpv");await settle();
+    const stuck=children.at(-1);
+    for(let attempt=0;attempt<=50;attempt++) {
+      connections.at(-1).emit("error",new Error("fixture no IPC"));
+      if(attempt<50) retries.shift()();
+    }
+    assert.equal(reports.at(-1).status,"error","exhausted IPC retries must not leave loading forever");
+    assert.match(reports.at(-1).error,/connection/i);
+    assert.equal(stuck.killed,true,"an unreachable owned mpv must be stopped");
+    assert.equal(retries.length,0);
+    player.send({...load,playbackId:"retired-ipc"});
+    pending.pop()("mpv");await settle();
+    connections.at(-1).emit("error",new Error("fixture no IPC"));
+    const retry=retries.shift();
+    player.send({...load,playbackId:"fresh-ipc"});
+    pending.pop()("mpv");await settle();
+    const count=connections.length;
+    retry();
+    stuck.emit("exit",1);
+    assert.equal(connections.length,count,"a retired retry cannot attach to newer playback");
+    assert.equal(reports.at(-1).playbackId,"fresh-ipc");
+    assert.equal(reports.at(-1).status,"loading","retired exit cannot fail newer playback");
+    timers.mockRestore();
     player.close();
   `,
     ],

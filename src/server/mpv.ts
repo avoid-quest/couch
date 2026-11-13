@@ -67,6 +67,10 @@ export function createMpv(report: (state: PlayerState) => void) {
     connection.once("error", () => {
       if (child !== process) return;
       if (attempt < 50) setTimeout(() => attach(process, source, ipc, attempt + 1), 100);
+      else {
+        quit();
+        publish({ status: "error", error: "The connection to mpv could not be established." });
+      }
     });
     connection.once("connect", () => {
       if (child !== process) {
