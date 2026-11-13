@@ -174,6 +174,11 @@ for (const choice of cases)
         supported_commands: [],
       },
     });
+    let clears = 0;
+    client.addStreamClearListener(() => {
+      clears++;
+      chunks.length = 0;
+    });
     client.addAudioChunkListener((_timestamp, data) => chunks.push(Buffer.from(data)));
     const group = core.group("language", (state) => states.push(state));
     t.after(async () => {
@@ -238,9 +243,10 @@ for (const choice of cases)
     // Explicit seek restarts decoding but keeps this load's selected input.
     if (choice.live) return; // Broadcasts do not offer a source seek timeline.
     const beforeSeek = startedDecoders();
-    chunks.length = 0;
+    const clearsBeforeSeek = clears;
     group.send({ type: "seek", playbackId: "language", position: 1 });
-    await until(() => chunks.length >= 8, "no PCM after seek");
+    // In-flight PCM belongs to the old run until Core's clear reaches this socket.
+    await until(() => clears > clearsBeforeSeek && chunks.length >= 8, "no PCM after seek");
     assertLanguage();
     const afterSeek = startedDecoders();
     assert.equal(afterSeek.length, beforeSeek.length + 1, "seek starts exactly one new decoder");
