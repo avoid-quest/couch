@@ -158,8 +158,15 @@ for (const { codec, capacity, lead, interval } of cases)
         second.frames[0]!.timestamp - joinedAt < 500_000,
         "a late speaker must start with the sound that plays next",
       );
+      // An existing speaker still holds its partly played chunk; the fresh one can
+      // hold one more future chunk. Wait for this fixed snapshot on the first socket.
+      const joined = [...second.frames];
+      await until(
+        () => first.frames.at(-1)!.timestamp >= joined.at(-1)!.timestamp,
+        "The original speaker did not receive the joined speaker's queued sound",
+      );
       const original = new Map(first.frames.map((frame) => [frame.timestamp, frame.bytes]));
-      for (const frame of second.frames)
+      for (const frame of joined)
         assert.deepEqual(
           original.get(frame.timestamp),
           frame.bytes,
@@ -545,6 +552,93 @@ for (const { declared, expected } of [
       assert.ok(
         Math.abs(lead - expected) < 100,
         `the first sound played ${lead.toFixed(0)} ms after the start, not ${expected} ms`,
+      );
+    },
+  );
+
+// Late receivers warm up on the existing programme; skipped sound never occupies their buffer.
+for (const { codec, startup, buffer, delay, expected, capacity, interval } of [
+  {
+    codec: AudioCodec.OPUS,
+    startup: 3_000,
+    buffer: 250,
+    delay: 0,
+    expected: 3_000,
+    capacity: 2_000_000,
+    interval: 60_000,
+  },
+  {
+    codec: AudioCodec.PCM,
+    startup: 0,
+    buffer: 3_000,
+    delay: 500,
+    expected: 3_500,
+    capacity: 512 * 1024,
+    interval: 100_000,
+  },
+  {
+    codec: AudioCodec.OPUS,
+    startup: 60_000,
+    buffer: 250,
+    delay: 250,
+    expected: 5_250,
+    capacity: 2_000_000,
+    interval: 60_000,
+  },
+])
+  test(
+    `a late ${codec} speaker warms up for ${expected} ms without moving the group`,
+    { timeout: 20_000, skip },
+    async (t) => {
+      const { group, source, receiver } = await fixture(t);
+      const first = await receiver(0, codec, 2_000_000, interval);
+      group.members([{ deviceId: first.id, level: 100 }]);
+      group.send({ type: "load", playbackId: "late-startup", source });
+      await until(
+        () => first.frames.length > 0 && serverNowUs() > first.frames[0]!.timestamp + 1_000_000,
+        "The first speaker never started playing",
+      );
+      const second = await receiver(1, codec, capacity, interval);
+      let startedAt: number | undefined;
+      second.client.addStreamStartListener(() => (startedAt ??= serverNowUs()));
+      await second.client.sendPlayerState({
+        required_lead_time_ms: startup,
+        min_buffer_ms: buffer,
+        static_delay_ms: delay,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      group.members([
+        { deviceId: first.id, level: 100 },
+        { deviceId: second.id, level: 100 },
+      ]);
+      await until(
+        () => second.frames.length >= 25,
+        "The late speaker was not filled from already buffered sound",
+      );
+      assert.ok(
+        serverNowUs() - startedAt! < 500_000,
+        "skipped warmup must not occupy the receiver's buffer and delay its initial fill",
+      );
+      const lead = (second.frames[0]!.timestamp - startedAt!) / 1000;
+      assert.ok(
+        lead >= expected - 20 && lead <= expected + interval / 1000,
+        `The late speaker got ${lead.toFixed(0)} ms instead of its ${expected} ms startup window`,
+      );
+      assert.deepEqual(
+        first.streams,
+        ["start"],
+        "joining must not restart or pause existing sound",
+      );
+      const original = new Map(first.frames.map((frame) => [frame.timestamp, frame.bytes]));
+      for (const frame of second.frames)
+        assert.deepEqual(
+          original.get(frame.timestamp),
+          frame.bytes,
+          "the late receiver keeps the group's samples and presentation timestamps",
+        );
+      assert.ok(second.most <= capacity, "the startup window must still respect buffer capacity");
+      t.diagnostic(
+        `late ${codec}: first packet ${lead.toFixed(0)} ms after stream/start; ${second.frames.length} packets buffered`,
       );
     },
   );

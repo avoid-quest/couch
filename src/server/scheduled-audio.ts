@@ -49,7 +49,7 @@ type Wire = (typeof wires)[number];
 type Chunk = { offset: number; duration: number; data: Buffer };
 // start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
 // sent: released chunks that have not played yet, at their play times, so a speaker that joins late gets them too.
-// cursors: the play time of the last chunk each speaker got.
+// cursors: each speaker's startup deadline and last transmitted chunk; skipped warmup is never buffered.
 type Run = {
   child?: ChildProcess;
   dispose?: () => void;
@@ -65,7 +65,7 @@ type Run = {
   speed: number;
   queues: Record<Wire, Chunk[]>;
   sent: Record<Wire, { at: number; end: number; data: Buffer }[]>;
-  cursors: Map<SendspinSession, number>;
+  cursors: Map<SendspinSession, { start: number; sent?: number }>;
   pipes: Partial<Record<Wire, Readable>>;
   base?: number;
   // A buffered source can resume after a gap. Earlier sound keeps its original play times.
@@ -240,24 +240,26 @@ export function createScheduledAudio(options: {
   ) {
     let members: Member[] = [];
     let screens: string[] = [];
-    // The group's common send-ahead (Sendspin server audio send constraints): the largest of each
-    // player's declared buffer plus its output delay; no admission gate. Relaxed also honours each
-    // player's startup lead, a hint with no upper bound that a server MAY shorten, up to timingLimitMs.
+    // Startup lead is a hint with no upper bound; Couch honours it up to the
+    // protocol's buffer/delay bound. Live capture needs only its ongoing buffer.
+    const playerLead = (session: SendspinSession | undefined, minimum: number) => {
+      const timing = session?.getPlayerTiming();
+      // The SDK stores declarations before the validation hook can reject them.
+      const declared = (value?: number) => (value !== undefined && validTiming(value) ? value : 0);
+      const startup =
+        load?.captureIntent === "live"
+          ? 0
+          : declared(Math.min(timing?.requiredLeadTimeMs ?? 0, timingLimitMs));
+      return (
+        Math.max(minimum, declared(timing?.minBufferMs), startup) + declared(timing?.staticDelayMs)
+      );
+    };
+    // Screens declare nothing, so a new relaxed group keeps its one-second floor.
     const sendAhead = () => {
-      const live = load?.captureIntent === "live",
-        minimum = live ? 0 : leadUs / 1000;
+      const minimum = load?.captureIntent === "live" ? 0 : leadUs / 1000;
       return members.reduce<LiveLead>(
         (lead, member) => {
-          const timing = sessions.get(member.deviceId)?.getPlayerTiming();
-          // The SDK keeps a declaration before onPlayerState rejects it, so read only valid ones.
-          const declared = (value?: number) =>
-            value !== undefined && validTiming(value) ? value : 0;
-          const startup = live
-            ? 0
-            : declared(Math.min(timing?.requiredLeadTimeMs ?? 0, timingLimitMs));
-          const ms =
-            Math.max(minimum, declared(timing?.minBufferMs), startup) +
-            declared(timing?.staticDelayMs);
+          const ms = playerLead(sessions.get(member.deviceId), minimum);
           return ms > lead.ms ? { ms, deviceId: member.deviceId } : lead;
         },
         { ms: minimum },
@@ -362,7 +364,7 @@ export function createScheduledAudio(options: {
         : Math.min(elapsed, run.released, run.decodedEnd ?? Infinity);
       return Math.min(state.duration ?? Infinity, run.start + (heard / 1e6) * run.speed);
     };
-    const begin = (clientId: string) => {
+    const begin = (clientId: string, notBefore?: number) => {
       const session = listening(clientId),
         wire = session && wireOf(session);
       const member = members.find((member) => member.deviceId === clientId);
@@ -386,7 +388,14 @@ export function createScheduledAudio(options: {
       session.sendStreamStart(wireFormat(wire));
       session.sendGroupUpdate(PlaybackStateType.PLAYING, id, options.name);
       session.sendMetadata(metadata());
-      run.cursors.set(session, serverNowUs());
+      // Live already has a common capture-derived lead. Adding a receiver-local
+      // deadline would discard different prefixes after capture's encoding delay.
+      const warmup = load?.captureIntent === "live" ? 0 : playerLead(session, 0) * 1000;
+      run.cursors.set(session, {
+        // A relaxed receiver warms up against existing timestamps; skipped sound
+        // never consumes its buffer or moves the other receivers' programme.
+        start: notBefore ?? serverNowUs() + warmup,
+      });
     };
     const each = (action: (session: SendspinSession) => void) => {
       for (const member of members) {
@@ -855,7 +864,7 @@ export function createScheduledAudio(options: {
         current.base = now + sendAhead().ms * 1000 - first;
         if (!current.fixed && !current.sourceTimed)
           current.clock = [{ at: current.base, offset: 0 }];
-        for (const member of members) begin(member.deviceId);
+        for (const member of members) begin(member.deviceId, current.base + first);
         if (run !== current) return;
       } else if (!current.fixed && !current.sourceTimed && first !== Infinity) {
         const ahead = sendAhead().ms * 1000;
@@ -882,14 +891,15 @@ export function createScheduledAudio(options: {
         // Output delay advances a player's playback, so its held bytes and missed deadlines
         // use that compensated time (Sendspin Player Buffer Accounting, including 13-byte headers).
         // Cursors already contain only this run's active members.
-        for (const [session, from] of current.cursors) {
+        for (const [session, cursor] of current.cursors) {
           if (wireOf(session) !== wire) continue;
           const capacity = session.getPlayerBufferCapacity() || 1024 * 1024,
             socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
           let held = 0;
           for (const chunk of sent) {
-            if (chunk.at <= from) {
+            if (chunk.at < cursor.start) continue;
+            if (cursor.sent !== undefined && chunk.at <= cursor.sent) {
               if (chunk.end - delay > now) held += chunk.data.length + 13;
               continue;
             }
@@ -901,7 +911,7 @@ export function createScheduledAudio(options: {
               break;
             session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
             held += chunk.data.length + 13;
-            current.cursors.set(session, chunk.at);
+            cursor.sent = chunk.at;
           }
         }
         if (
@@ -998,8 +1008,9 @@ export function createScheduledAudio(options: {
         if (state.playbackId) report();
       },
       formatChanged(session: SendspinSession) {
+        const start = run?.cursors.get(session)?.start;
         run?.cursors.delete(session);
-        begin(session.getClientId()!);
+        begin(session.getClientId()!, start);
       },
       joined(clientId: string) {
         if (screens.includes(clientId)) watch(clientId);
