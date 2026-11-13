@@ -5,10 +5,12 @@ Source from [Blu-Tiger/StreamingCommunity-yt-dlp-plugin](https://github.com/Blu-
 SHA-256:
 
 - Upstream `streamingcommunity.py`: `c718694ea4d3b70e55e75037338d4b41d53071c09787cf916f3b368e1e254d72`
-- Bundled `streamingcommunity.py`, after the changes below: `8d6ed369dc5548e41625dca8f7ec427f7a722197c53c37c3b6b2f70dc8302ecf`
+- Bundled `streamingcommunity.py`, after the changes below: `84bb8a839a893031c49152c2b4176e6d41f9f3265b5c2cad2f70acf0fc1bdef8`
 - `LICENSE`: `5596c70c76886155f5758bf55346057206bdee650a07bd85149dfa93784d72f2`
 
 Couch carries a downstream correction in `_real_extract`: its two route checks use `'/watch/' in urlsplit(url).path` and `'/titles/' in urlsplit(url).path`. The upstream full-URL substring check misroutes film titles such as `/it/titles/123-the-watchers` into video extraction before visiting the watch page. No URL is rewritten by Couch, and extraction logic remains upstream-owned. Remove this correction when a reviewed upstream version fixes dispatch. `python3 scripts/tests/streamingcommunity-dispatch.py` executes the actual vendored dispatch and movie redirect with only network/framework boundaries stubbed; the watcher-title cases fail on the upstream bytes and pass with this correction.
+
+The embedded player request carries its embedding page as `Referer`; Vixcloud rejects that request with HTTP 403 when the header is missing. `tests/provider-preview.integration.ts` checks this request context through the real yt-dlp plugin. Remove this correction when the reviewed upstream extractor supplies the header.
 
 Couch embeds the source in its sidecar and loads it only for an item link on the administrator's exact configured HTTPS origin. Each extraction gets a private temporary plugin directory, removed when the process exits or is cancelled. `--no-plugin-dirs` clears yt-dlp's default directories before the one explicit directory is added; `--use-extractors StreamingCommunity,end` restricts extractor selection. Other website requests load no plugins.
 
