@@ -174,7 +174,8 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     try {
       if (tv) await automatic();
       const result = await autoUpdater.checkForUpdates();
-      const found = result?.isUpdateAvailable ? result.updateInfo : null;
+      if (!result) throw new Error("The native updater is disabled for this installation.");
+      const found = result.isUpdateAvailable ? result.updateInfo : null;
       if (found && !isUpdateVersion(found.version)) throw new Error("Invalid update version.");
       set({ checkedAt: Date.now() });
       if (waiting && !tv) ready(waiting);
