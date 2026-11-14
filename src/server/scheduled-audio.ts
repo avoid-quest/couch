@@ -240,8 +240,8 @@ export function createScheduledAudio(options: {
   ) {
     let members: Member[] = [];
     let screens: string[] = [];
-    // Startup lead is a hint with no upper bound; Couch honours it up to the
-    // protocol's buffer/delay bound. Live capture needs only its ongoing buffer.
+    // Couch caps startup hints at the same five seconds as its other timing
+    // declarations. Live capture needs only its ongoing buffer.
     const playerLead = (session: SendspinSession | undefined, minimum: number) => {
       const timing = session?.getPlayerTiming();
       // The SDK stores declarations before the validation hook can reject them.
