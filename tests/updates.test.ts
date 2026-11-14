@@ -10,6 +10,7 @@ const app = Object.assign(new EventEmitter(), {
   getVersion: () => "0.3.0",
 });
 let available: string | null;
+let disabled: boolean;
 let checkError: Error | null;
 let installError: Error | null;
 let downloads: string[];
@@ -28,6 +29,7 @@ const autoUpdater = Object.assign(new EventEmitter(), {
   autoInstallOnAppQuit: true,
   async checkForUpdates() {
     if (checkError) throw checkError;
+    if (disabled) return null;
     return {
       isUpdateAvailable: available !== null,
       updateInfo: { version: available, files: [] },
@@ -87,6 +89,7 @@ beforeEach(() => {
   starts = [];
   installs = 0;
   available = null;
+  disabled = false;
   checkError = null;
   installError = null;
   app.isPackaged = false;
@@ -108,6 +111,16 @@ test("a downloaded update installs when Couch quits, on macOS as elsewhere", asy
   await updates.check();
   expect(updates.state().status).toBe("ready");
   expect(armed).toEqual([true]);
+});
+
+test("a disabled native updater cannot report a successful check", async () => {
+  const updates = start();
+  disabled = true;
+  await updates.check();
+  expect(updates.state().status).toBe("error");
+  expect(updates.state().checkedAt).toBeNull();
+  expect(updates.state().available).toBeNull();
+  expect(downloads).toEqual([]);
 });
 
 test("manual installation checks playback in its owner and needs explicit interruption", async () => {
