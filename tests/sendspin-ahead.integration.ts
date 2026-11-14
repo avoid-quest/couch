@@ -492,9 +492,9 @@ test(
   },
 );
 
-// Sendspin: a paused group ends its speakers' streams and sends a new stream/start when it plays again.
+// Clearing paused sound keeps the phone's audio element alive; Stop still ends the stream.
 test(
-  "pause ends the speakers' stream and playing again starts one",
+  "pause clears buffered sound without ending the stream, and Stop ends it",
   { timeout: 20_000, skip },
   async (t) => {
     const { group, source, receiver } = await fixture(t);
@@ -503,9 +503,12 @@ test(
     group.send({ type: "load", playbackId: "pause", source });
     await until(() => speaker.frames.length > 0, "The speaker never got sound");
     group.send({ type: "pause", playbackId: "pause", paused: true });
-    await until(() => speaker.streams.includes("end"), "Pausing never ended the stream");
+    await until(() => speaker.streams.includes("clear"), "Pausing never cleared buffered sound");
     group.send({ type: "pause", playbackId: "pause", paused: false });
     await until(() => speaker.streams.length === 3, "Playing again never started a stream");
-    assert.deepEqual(speaker.streams, ["start", "end", "start"]);
+    assert.deepEqual(speaker.streams, ["start", "clear", "start"]);
+    group.send({ type: "stop", playbackId: "pause" });
+    await until(() => speaker.streams.includes("end"), "Stop never ended the stream");
+    assert.deepEqual(speaker.streams, ["start", "clear", "start", "end"]);
   },
 );

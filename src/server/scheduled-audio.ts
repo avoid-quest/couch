@@ -381,8 +381,7 @@ export function createScheduledAudio(options: {
         if (session) action(session);
       }
     };
-    // Ends FFmpeg. Speakers drop what they buffered and go quiet at once: a seek clears their stream;
-    // a pause or stop ends it, as Sendspin requires, and the next start begins a new one.
+    // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
     const halt = (end = false) => {
       generation++;
       if (!run) return;
@@ -924,7 +923,7 @@ export function createScheduledAudio(options: {
     };
     const pause = () => {
       const at = position();
-      halt(true);
+      halt();
       state = { ...state, position: at, status: "paused", buffering: false };
       report();
     };
