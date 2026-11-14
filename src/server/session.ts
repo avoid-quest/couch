@@ -491,6 +491,8 @@ export function createSession(
     const controller = (resolution = new AbortController());
     const intent = playIntent;
     const playbackId = crypto.randomUUID();
+    if (pendingSeek?.playbackId === previous.playbackId)
+      pendingSeek = { ...pendingSeek, playbackId };
     state.webRetry = { paused: recovery.paused };
     state.player = { ...previous, playbackId, status: "loading", buffering: false, error: null };
     options.moved?.(previous.playbackId, playbackId);
