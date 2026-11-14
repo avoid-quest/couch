@@ -27,6 +27,7 @@ import { setCoreTime } from "../core-clock";
 import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
+import { reloadAppShell } from "../register-sw";
 import type { LiveSelection, LiveVideoFrameRate, LiveVideoQuality } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -258,7 +259,7 @@ export function useSession(
                 const key = `couch.asset-refresh:${origin}`;
                 if (current && sessionStorage.getItem(key) !== current) {
                   sessionStorage.setItem(key, current);
-                  location.reload();
+                  await reloadAppShell();
                 }
               } catch {
                 /* Keep the refresh prompt when browser storage is unavailable. */
