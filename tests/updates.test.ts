@@ -3,8 +3,13 @@ import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { NsisUpdater } from "electron-updater/out/NsisUpdater";
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+const resourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
+const nativeEvents = new EventEmitter();
+let windowsUpdater: NsisUpdater | undefined;
+let shellError: string;
 const app = Object.assign(new EventEmitter(), {
   isPackaged: false,
   getVersion: () => "0.3.0",
@@ -52,11 +57,19 @@ const autoUpdater = Object.assign(new EventEmitter(), {
 });
 mock.module("electron", () => ({
   app,
+  autoUpdater: nativeEvents,
+  shell: { openPath: async () => shellError },
   Notification: class {
     show() {}
   },
 }));
-mock.module("electron-updater", () => ({ default: { autoUpdater } }));
+mock.module("electron-updater", () => ({
+  default: {
+    get autoUpdater() {
+      return windowsUpdater ?? autoUpdater;
+    },
+  },
+}));
 mock.module("node:child_process", () => ({
   execFile(
     command: string,
@@ -92,6 +105,8 @@ beforeEach(() => {
   disabled = false;
   checkError = null;
   installError = null;
+  windowsUpdater = undefined;
+  shellError = "";
   app.isPackaged = false;
   app.removeAllListeners();
   autoUpdater.removeAllListeners();
@@ -101,7 +116,139 @@ beforeEach(() => {
 });
 afterEach(() => {
   Object.defineProperty(process, "platform", platform);
+  if (resourcesPath) Object.defineProperty(process, "resourcesPath", resourcesPath);
+  else delete (process as Partial<NodeJS.Process>).resourcesPath;
   rmSync(temporary, { recursive: true, force: true });
+});
+
+// Exercise electron-updater's actual NSIS launch and quit logic on any host.
+const windows = async (spawn: (command: string, args: string[]) => Promise<boolean>) => {
+  Object.defineProperty(process, "resourcesPath", { configurable: true, value: temporary });
+  let quits = 0;
+  const quitting = Promise.withResolvers<void>();
+  windowsUpdater = new NsisUpdater(null, {
+    version: "0.3.0",
+    name: "Couch",
+    isPackaged: true,
+    appUpdateConfigPath: join(temporary, "app-update.yml"),
+    userDataPath: temporary,
+    baseCachePath: temporary,
+    whenReady: async () => {},
+    relaunch() {},
+    quit() {
+      quits++;
+      quitting.resolve();
+    },
+    onQuit() {},
+  });
+  Object.assign(windowsUpdater, {
+    downloadedUpdateHelper: {
+      file: join(temporary, "installer.exe"),
+      downloadedFileInfo: {},
+    },
+    checkForUpdates: autoUpdater.checkForUpdates,
+    async downloadUpdate() {
+      windowsUpdater!.emit("update-downloaded", { version: available });
+      return [];
+    },
+    spawnLog: spawn,
+  });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  return { updates, quits: () => quits, quitting: quitting.promise };
+};
+
+test.each(["UNKNOWN", "EACCES"])(
+  "a Windows %s fallback keeps Couch reachable on failure and permits retry",
+  async (code) => {
+    const fallback = Promise.withResolvers<boolean>();
+    let attempt = 0;
+    const { updates, quits, quitting } = await windows(async (command, args) => {
+      attempt++;
+      if (attempt === 1) throw Object.assign(new Error(`spawn ${code}`), { code });
+      if (attempt === 2) {
+        expect(command).toBe(join(temporary, "elevate.exe"));
+        expect(args).toEqual([join(temporary, "installer.exe"), "--updated", "/S", "--force-run"]);
+        return fallback.promise;
+      }
+      return true;
+    });
+    try {
+      await updates.action({ op: "install", version: "0.3.1" });
+      await new Promise(setImmediate);
+      expect(quits()).toBe(0);
+      expect((await updates.action({ op: "read" })).status).toBe("installing");
+      await expect(updates.action({ op: "install", version: "0.3.1" })).rejects.toThrow();
+      fallback.reject(new Error("Elevation failed"));
+      await new Promise(setImmediate);
+      expect(quits()).toBe(0);
+      expect(updates.state().status).toBe("ready");
+      expect(updates.state().error).toContain("Couldn't install");
+      await updates.action({ op: "install", version: "0.3.1" });
+      await quitting;
+      expect(attempt).toBe(3);
+      expect(quits()).toBe(1);
+    } finally {
+      fallback.resolve(true);
+      await new Promise(setImmediate);
+    }
+  },
+);
+
+test("a Windows shell launch error does not quit Couch or strand Installing", async () => {
+  shellError = "No application could open the installer";
+  const { updates, quits } = await windows(async () => {
+    throw Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" });
+  });
+  await updates.action({ op: "install", version: "0.3.1" });
+  await new Promise(setImmediate);
+  expect(quits()).toBe(0);
+  expect(updates.state().status).toBe("ready");
+  expect(updates.state().error).toContain("Couldn't install");
+});
+
+test("a pending Windows fallback launches once and quits only after it succeeds", async () => {
+  const fallback = Promise.withResolvers<boolean>();
+  let attempts = 0;
+  const { updates, quits, quitting } = await windows(async () => {
+    if (++attempts === 1) throw Object.assign(new Error("spawn UNKNOWN"), { code: "UNKNOWN" });
+    return fallback.promise;
+  });
+  try {
+    await updates.action({ op: "install", version: "0.3.1" });
+    await new Promise(setImmediate);
+    windowsUpdater!.quitAndInstall(true, true);
+    expect(attempts).toBe(2);
+    expect(quits()).toBe(0);
+  } finally {
+    fallback.resolve(true);
+    await quitting;
+  }
+  expect(quits()).toBe(1);
+});
+
+test("retrying a failed Windows launch starts the installer again", async () => {
+  let attempts = 0;
+  const { updates } = await windows(async () => {
+    if (++attempts === 1) throw Object.assign(new Error("spawn EPERM"), { code: "EPERM" });
+    return true;
+  });
+  await updates.action({ op: "install", version: "0.3.1" });
+  await new Promise(setImmediate);
+  await updates.action({ op: "install", version: "0.3.1" });
+  await new Promise(setImmediate);
+  expect(attempts).toBe(2);
+});
+
+test("a successful Windows launch keeps silent restart arguments and quits once", async () => {
+  const { updates, quits, quitting } = await windows(async (_command, args) => {
+    expect(args).toEqual(["--updated", "/S", "--force-run"]);
+    return true;
+  });
+  await updates.action({ op: "install", version: "0.3.1" });
+  await quitting;
+  expect(quits()).toBe(1);
 });
 
 test("a downloaded update installs when Couch quits, on macOS as elsewhere", async () => {
