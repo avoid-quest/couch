@@ -251,8 +251,8 @@ test("a quality change while buffering retains the latest seek, pause and audio 
   }
 });
 
-for (const newerSeek of [false, true])
-  test(`expiry recovery retains seek and tracks${newerSeek ? " with newer controls during resolution" : ""}`, async () => {
+for (const newerSeek of ["none", "absolute", "relative"] as const)
+  test(`expiry recovery retains seek and tracks with ${newerSeek} seeking during resolution`, async () => {
     const subtitle = { source: "https://media.example/custom.vtt", title: "Custom captions" };
     const f = recoveringSession(
       async (media) => media,
@@ -293,15 +293,20 @@ for (const newerSeek of [false, true])
       },
     );
     try {
-      if (newerSeek) {
-        f.session.command({ type: "seek", playbackId: f.state.player.playbackId!, position: 80 });
+      if (newerSeek !== "none") {
+        f.session.command({
+          type: "seek",
+          playbackId: f.state.player.playbackId!,
+          position: newerSeek === "relative" ? 10 : 80,
+          relative: newerSeek === "relative",
+        });
         f.session.command({ type: "pause", playbackId: f.state.player.playbackId!, paused: false });
       }
       f.recovery.resolve(replacement);
       await flush();
       const load = f.commands.findLast((command) => command.type === "load")!;
-      assert.equal(load.startPosition, newerSeek ? 80 : 70);
-      assert.equal(load.paused, !newerSeek);
+      assert.equal(load.startPosition, newerSeek !== "none" ? 80 : 70);
+      assert.equal(load.paused, newerSeek === "none");
       assert.equal(load.audioTrack, 1);
       assert.equal(load.subtitleTrack, 2);
       assert.equal(load.subtitleDelay, 2);
