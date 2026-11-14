@@ -71,6 +71,7 @@ type Run = {
   // A buffered source can resume after a gap. Earlier sound keeps its original play times.
   clock?: { at: number; offset: number }[];
   released: number;
+  decodedEnd?: number;
   exit?: number | null;
   timer: ReturnType<typeof setInterval>;
 };
@@ -346,7 +347,9 @@ export function createScheduledAudio(options: {
     const position = () => {
       if (!run || run.base === undefined) return state.position;
       const { elapsed } = soundClock(run, serverNowUs());
-      const heard = run.sourceTimed ? elapsed : Math.min(elapsed, run.released);
+      const heard = run.sourceTimed
+        ? elapsed
+        : Math.min(elapsed, run.released, run.decodedEnd ?? Infinity);
       return Math.min(state.duration ?? Infinity, run.start + (heard / 1e6) * run.speed);
     };
     const begin = (clientId: string) => {
@@ -796,6 +799,8 @@ export function createScheduledAudio(options: {
         pcm.on("end", () => {
           if (pending.length >= 4)
             flush(pending.subarray(0, pending.length - (pending.length % 4)));
+          // Opus pads its final frame; the PCM samples mark where the actual sound ends.
+          next.decodedEnd = pcmOffset;
         });
       } catch (error) {
         await proxy?.close();

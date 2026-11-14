@@ -239,6 +239,7 @@ for (const source of [
       const frames: { timestamp: number; bytes: Buffer }[] = [];
       const states: (PlayerState & { at: number })[] = [];
       let release: (() => void) | undefined;
+      const heldResponses: (() => void)[] = [];
       let heldAt = 0;
       let recovered = false;
       const server = createServer((request, response) => {
@@ -272,22 +273,28 @@ for (const source of [
         }
         if (
           (hls || request.headers["user-agent"]?.startsWith("Lavf")) &&
-          !heldAt &&
+          (!heldAt || (!hls && !recovered)) &&
           (!hls || path === "segment06.ts")
         ) {
-          heldAt = Date.now();
+          heldAt ||= Date.now();
           // Six seconds lets FFmpeg finish probing, then its decoded sound runs out.
           // A partial TS response must reach the decoder before its socket drops.
           const prefix = disconnectedHls ? 24 * 188 : hls ? 0 : 6 * 192_000;
           response.flushHeaders();
-          response.write(media.subarray(0, prefix));
-          release = () => {
+          response.write(media.subarray(from, prefix));
+          heldResponses.push(() => {
+            if (response.destroyed) return;
             if (source === "disconnected WAV" || disconnectedHls) response.destroy();
             else if (source === "mixed buffered WAV") {
               response.write(media.subarray(prefix, 6.2 * 192_000));
               setTimeout(() => response.write(media.subarray(6.2 * 192_000, 6.4 * 192_000)), 800);
               setTimeout(() => response.end(media.subarray(6.4 * 192_000)), 1_600);
             } else response.end(media.subarray(prefix));
+          });
+          // FFmpeg may reopen a WAV after probing its header; that range must stall too.
+          release = () => {
+            recovered = true;
+            for (const finish of heldResponses) finish();
           };
         } else response.end(media.subarray(from));
       });
@@ -457,7 +464,7 @@ for (const source of [
         }
       assert.ok(
         Math.abs(states.at(-1)!.position - expected.length / 192_000) < 0.001,
-        "Completion must report the final sound position",
+        `Completion must report the final sound position: ${states.at(-1)!.position} != ${expected.length / 192_000}, duration ${states.at(-1)!.duration}`,
       );
     },
   );
@@ -504,11 +511,13 @@ test(
     await until(() => speaker.frames.length > 0, "The speaker never got sound");
     group.send({ type: "pause", playbackId: "pause", paused: true });
     await until(() => speaker.streams.includes("clear"), "Pausing never cleared buffered sound");
+    const pausedFrames = speaker.frames.length;
     group.send({ type: "pause", playbackId: "pause", paused: false });
-    await until(() => speaker.streams.length === 3, "Playing again never started a stream");
-    assert.deepEqual(speaker.streams, ["start", "clear", "start"]);
+    await until(() => speaker.frames.length > pausedFrames, "Playing again never supplied sound");
+    // The SDK treats another start on an active stream as a format update.
+    assert.deepEqual(speaker.streams, ["start", "clear"]);
     group.send({ type: "stop", playbackId: "pause" });
     await until(() => speaker.streams.includes("end"), "Stop never ended the stream");
-    assert.deepEqual(speaker.streams, ["start", "clear", "start", "end"]);
+    assert.deepEqual(speaker.streams, ["start", "clear", "end"]);
   },
 );
