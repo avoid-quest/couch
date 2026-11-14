@@ -78,6 +78,7 @@ import { UpdateCue } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
+import { reloadAppShell } from "@/register-sw";
 import { hear, onBlocked } from "@/session/renderer";
 import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id";
 
@@ -510,7 +511,7 @@ function ConnectionStatus({ paired }: { paired: boolean }) {
     return (
       <StatusLine
         actions={
-          <Button variant="ghost" size="sm" onClick={() => location.reload()}>
+          <Button variant="ghost" size="sm" onClick={() => void reloadAppShell()}>
             {TRY_AGAIN}
           </Button>
         }

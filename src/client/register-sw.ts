@@ -19,3 +19,14 @@ export function registerAppShellWorker(document: Document = window.document) {
   else view.addEventListener("load", register, { once: true });
   return true;
 }
+
+// A cached worker can keep serving an older build when its own update fails.
+export async function reloadAppShell() {
+  try {
+    const registration = await window.navigator.serviceWorker?.getRegistration("/");
+    await registration?.unregister();
+  } catch {
+    /* A blocked worker API must not prevent a network reload. */
+  }
+  window.location.reload();
+}
