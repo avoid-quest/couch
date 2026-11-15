@@ -50,6 +50,8 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   // electron-updater's pending cache even when that download fails.
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  // Windows releases contain the full NSIS installer, not a web installer.
+  autoUpdater.disableWebInstaller = true;
   let saved: string | null = null;
   try {
     saved = readFileSync(channelPath, "utf8").trim();

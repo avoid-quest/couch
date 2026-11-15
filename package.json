@@ -187,5 +187,8 @@
   },
   "desktopName": "couch.desktop",
   "identifier": "quest.avoid.couch",
+  "patchedDependencies": {
+    "electron-updater@6.8.11": "patches/electron-updater@6.8.11.patch"
+  },
   "productName": "Couch"
 }
