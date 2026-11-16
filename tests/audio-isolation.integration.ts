@@ -7,8 +7,18 @@ import { AudioCodec, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node
 import { createScheduledAudio } from "../src/server/scheduled-audio";
 import { createSendspin } from "../src/server/sendspin";
 import type { Socket } from "node:net";
+import type { LiveSource } from "../src/shared/live-input";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const liveCapture: LiveSource = {
+  id: "capture",
+  deviceId: "host",
+  name: "Capture",
+  kind: "microphone",
+  audio: true,
+  video: false,
+  intent: "live",
+};
 const until = async (check: () => boolean) => {
   const deadline = Date.now() + 5000;
   while (!check()) {
@@ -57,7 +67,7 @@ test(
     });
     await healthy.connect(url);
     await healthy.sendPlayerState({ min_buffer_ms: 150 });
-    audio.registerSource("capture");
+    audio.registerSource("capture", liveCapture);
     group.members([
       { deviceId: "healthy", level: 100 },
       { deviceId: "bad", level: 100 },
@@ -248,7 +258,7 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
   await stalled.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: delay });
   await until(() => audio.delay("stalled") === delay);
   const stalledSocket = served.at(-1)!;
-  audio.registerSource("capture");
+  audio.registerSource("capture", liveCapture);
   const group = audio.group("programme", () => {});
   group.members([
     { deviceId: "healthy", level: 100 },

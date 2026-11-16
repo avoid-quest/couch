@@ -42,7 +42,13 @@ export function createScheduledCapture(
   ffmpeg: Ffmpeg,
   failed: (error: string) => void,
   childStarted?: (child: ChildProcess) => void,
+  relaxed = false,
 ) {
+  // Live sends each frame as soon as it is encoded. A relaxed capture plays a second or more late,
+  // so it uses the relaxed decoder's chunks (scheduled-audio.ts): 60 ms Opus frames, the longest
+  // Opus has, and 100 ms of PCM: far fewer writes per speaker than Live's.
+  const opusMs = relaxed ? 60 : liveFrameMs.opus,
+    pcmMs = relaxed ? 100 : liveFrameMs.pcm;
   const listeners = new Set<(event: Event) => void>();
   let child: ChildProcess | undefined,
     starting = false,
@@ -114,16 +120,15 @@ export function createScheduledCapture(
           "[opus]",
           "-c:a",
           "libopus",
-          "-application",
-          "lowdelay",
+          ...(relaxed ? [] : ["-application", "lowdelay"]),
           "-b:a",
           "160k",
           "-frame_duration",
-          String(liveFrameMs.opus),
+          String(opusMs),
           "-f",
           "ogg",
           "-page_duration",
-          String(liveFrameMs.opus * 1000),
+          String(opusMs * 1000),
           "-flush_packets",
           "1",
           "pipe:1",
@@ -179,10 +184,10 @@ export function createScheduledCapture(
       (process.stdio[3] as Readable).on("data", (bytes: Buffer) => {
         if (child !== process) return;
         pcm = Buffer.concat([pcm, bytes]);
-        const size = 192 * liveFrameMs.pcm; // 48 kHz 16-bit stereo; a chunk goes out only once full.
+        const size = pcmMs * 192; // 48 kHz 16-bit stereo; a chunk is sent only once it is full.
         while (pcm.length >= size) {
-          output("pcm", pcmOffset, liveFrameMs.pcm * 1000, pcm.subarray(0, size));
-          pcmOffset += liveFrameMs.pcm * 1000;
+          output("pcm", pcmOffset, pcmMs * 1000, pcm.subarray(0, size));
+          pcmOffset += pcmMs * 1000;
           pcm = pcm.subarray(size);
         }
       });
