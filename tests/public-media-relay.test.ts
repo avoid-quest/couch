@@ -834,7 +834,7 @@ test("a finished playlist's refused init file or key renews the item and reads i
   expect(runs).toBe(1);
 });
 
-test("an endless stream's refused segment renews the item and leaves a later expiry free to renew it", async () => {
+test("an endless stream renews on each expiry its segments answered between", async () => {
   const f = fixture();
   const live = (sig: string) => `https://media.example/live.m3u8?sig=${sig}`,
     segment = (sig: string) => `https://media.example/${sig}.ts?sig=${sig}`;
@@ -863,6 +863,7 @@ test("an endless stream's refused segment renews the item and leaves a later exp
   for (const [index, sig] of ["a", "b"].entries()) {
     const link = await firstLink(f, variant);
     destination(link, "bytes", segment(sig));
+    expect((await f.serve(link)).status).toBe(200);
     // Its link expired: the item renews, and the player's next playlist read names fresh segments.
     f.replies.set(segment(sig), () => response(segment(sig), "", { status: 403 }));
     expect((await f.serve(link)).status).toBe(403);
@@ -871,4 +872,55 @@ test("an endless stream's refused segment renews the item and leaves a later exp
     await Bun.sleep(5);
   }
   expect(await firstLink(f, variant)).toContain(encodeURIComponent(segment("c")));
+});
+
+test("an endless stream whose renewed segments are refused too spends its renewal", async () => {
+  const f = fixture();
+  const live = (sig: string) => `https://media.example/live.m3u8?sig=${sig}`,
+    segment = (sig: string, index: number) => `https://media.example/${index}.ts?sig=${sig}`;
+  const publish = (sig: string) => {
+    f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000\n${live(sig)}\n`);
+    f.manifest(
+      live(sig),
+      `#EXTM3U\n#EXT-X-TARGETDURATION:0.002\n#EXTINF:2,\n${segment(sig, 1)}\n#EXTINF:2,\n${segment(sig, 2)}\n`,
+    );
+    // The playlist answers, and every segment is refused for a reason a renewal doesn't cure.
+    for (const index of [1, 2])
+      f.replies.set(segment(sig, index), () => response(segment(sig, index), "", { status: 403 }));
+  };
+  publish("a");
+  let runs = 0;
+  const renewal: NonNullable<Parameters<typeof f.relay.prepare>[1]["renewal"]> = {
+    current: { source },
+    renew: async () => {
+      publish(`r${++runs}`);
+      return { source };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  const variant = await firstLink(f, media.source);
+  const links = async () =>
+    (await (await f.serve(variant)).text())
+      .split("\n")
+      .filter((line) => line && !line.startsWith("#"));
+  const [first, second] = await links();
+  expect((await f.serve(first!)).status).toBe(403);
+  expect(runs).toBe(1);
+  // A segment the player read before the renewal is passed on refused; it doesn't renew again.
+  expect((await f.serve(second!)).status).toBe(403);
+  expect(runs).toBe(1);
+  expect(renewal.spent).toBeFalsy();
+  // One the renewed playlist named is refused too: the renewal is spent.
+  await Bun.sleep(5);
+  for (const link of await links()) {
+    expect((await f.serve(link)).status).toBe(403);
+    expect(runs).toBe(1);
+    expect(renewal.spent).toBe(true);
+  }
 });

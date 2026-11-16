@@ -407,11 +407,17 @@ export function createPassThrough(
   // init files and keys) onto the new one. Each address renews the item once, so an address and the
   // expiry it names never renew it twice; a renewal that leaves its address as it was, or as close
   // to expiry, is the last, except an endless stream's segment: the stream's next playlist read
-  // names new ones. One that fails (yt-dlp, the network) may be tried once more.
+  // names new ones. Until one of its segments answers, a segment its playlists named before that
+  // renewal is passed on refused, and one they named since spends it: a fresh resolution didn't
+  // cure that refusal. One that fails (yt-dlp, the network) may be tried once more.
   const renew = (relay: Relay, trigger: string, segment = false): Promise<boolean> => {
     const renewal = relay.renewal;
     if (!renewal || renewal.spent) return Promise.resolve(false);
     if (renewal.pending) return renewal.pending;
+    if (segment && renewal.stale) {
+      if (!renewal.stale.has(trigger)) renewal.spent = true;
+      return Promise.resolve(false);
+    }
     const tried = (renewal.tried ??= new Set());
     if (tried.has(trigger)) return Promise.resolve(false);
     tried.add(trigger);
@@ -478,11 +484,11 @@ export function createPassThrough(
       };
       renewal.failed = undefined;
       const now = renewedAddress(relay.playbackId, trigger);
-      if (
-        now === trigger
-          ? !segment || finished.has(trigger)
-          : (linkExpiry(now) ?? Infinity) - Date.now() < renewAhead
-      )
+      const endless = now === trigger && segment && !finished.has(trigger);
+      renewal.stale = endless
+        ? new Set([...old.values()].flatMap((answer) => segmentsOf(answer.text, answer.url)))
+        : undefined;
+      if (!endless && (now === trigger || (linkExpiry(now) ?? Infinity) - Date.now() < renewAhead))
         renewal.spent = true;
       return true;
     })()
@@ -878,6 +884,7 @@ export function createPassThrough(
           }
         } else if (file && refusal(upstream.status) && relay.renewal?.spent)
           relay.renewal.dead = true;
+        if (!file && upstream.ok && relay.renewal) relay.renewal.stale = undefined;
         diagnostic(upstream.status, upstream);
         answered(upstream.status);
         let playlist = playlistType(upstream.headers.get("content-type"), upstream.url || url);
