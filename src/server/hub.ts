@@ -1798,6 +1798,8 @@ export async function createHub(options: HubOptions) {
           sourceSelection(playback),
         )
       : media;
+    // Core decodes this resolution's sound, so a speaker that joins later shares it.
+    if (sound && resolved.output) resolved.output = { ...resolved.output, sound: true };
     const relay =
       sound &&
       (media.publicNetwork || !!selected.audioManifest || (!entry.liveSourceId && selected.hls));
@@ -2151,6 +2153,8 @@ export async function createHub(options: HubOptions) {
               sourceSelection(playback),
             )
           : media;
+      if (groupSound && pending.resolved.output)
+        pending.resolved.output = { ...pending.resolved.output, sound: true };
       const coreRelay =
         groupSound &&
         (media.publicNetwork ||
