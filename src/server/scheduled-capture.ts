@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import { validateCapturePacket, type CaptureAudioPacket } from "./capture-audio";
-import { oggPackets, opusDuration } from "./audio-packets";
+import { opusDuration, tsOpusPackets } from "./audio-packets";
 
 export type Ffmpeg = () => Promise<string | { path: string; release: () => void }>;
 type Event =
@@ -36,6 +36,8 @@ function captureWaveHeader(sampleRate: number, channels: number) {
 // write per listener, and smaller frames only gain the time a frame takes to fill. The spec-sized
 // comparison is { opus: 20, pcm: 15 } (Opus has no 15 ms frame; it takes 2.5, 5, 10, 20, 40 or 60).
 const liveFrameMs = { opus: 5, pcm: 5 };
+// Couch reads the Opus stream from the one MPEG-TS PID it asks FFmpeg for.
+const opusPid = 0x100;
 
 /** Native/browser float PCM -> standard Sendspin formats. FFmpeg owns sample conversion and encoding. */
 export function createScheduledCapture(
@@ -125,10 +127,14 @@ export function createScheduledCapture(
           "160k",
           "-frame_duration",
           String(opusMs),
+          // MPEG-TS, not Ogg: FFmpeg's Ogg muxer holds each page until the next one, a whole frame.
+          // Each packet gets its own PES; the default gathers 2930 bytes (100+ ms) first.
           "-f",
-          "ogg",
-          "-page_duration",
-          String(opusMs * 1000),
+          "mpegts",
+          "-mpegts_start_pid",
+          String(opusPid),
+          "-pes_payload_size",
+          "0",
           "-flush_packets",
           "1",
           "pipe:1",
@@ -157,14 +163,10 @@ export function createScheduledCapture(
         const through = Math.min(opusOffset, pcmOffset);
         while (anchors[1] && anchors[1].offset <= through) anchors.shift();
       };
-      const packets = oggPackets((packet) => {
+      const packets = tsOpusPackets(opusPid, (packet, trim) => {
         if (child !== process) return;
-        const magic = packet.toString("latin1", 0, 8);
-        if (magic === "OpusHead") {
-          opusOffset = (-packet.readUInt16LE(10) / 48_000) * 1e6;
-          return;
-        }
-        if (magic === "OpusTags") return;
+        // The first packet's start trim is the encoder's pre-skip: its first samples precede the input.
+        if (trim) opusOffset = (-trim / 48_000) * 1e6;
         const duration = opusDuration(packet);
         output("opus", opusOffset, duration, packet);
         opusOffset += duration;
@@ -175,9 +177,7 @@ export function createScheduledCapture(
           packets(data);
         } catch (error) {
           fail(
-            error instanceof Error
-              ? error.message
-              : "The capture encoder sent a broken Ogg stream.",
+            error instanceof Error ? error.message : "The capture encoder sent a broken stream.",
           );
         }
       });
