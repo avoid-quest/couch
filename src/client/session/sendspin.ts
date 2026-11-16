@@ -23,6 +23,17 @@ const dispose = (stopped: SendspinPlayer) => {
   stopped.destroy("user_request");
   if (session) Object.assign(session, kept);
 };
+// On Android, relaxed sound keeps the SDK's estimated clock, its fallback without getOutputTimestamp(), as
+// the SDK keeps Cast receivers: their output timestamps make the speed hunt (sendspin-js #85). Live keeps them.
+const outputTimestamp =
+  typeof AudioContext !== "undefined" && /Android/i.test(navigator.userAgent)
+    ? Object.getOwnPropertyDescriptor(AudioContext.prototype, "getOutputTimestamp")
+    : undefined;
+const useOutputTimestamps = (use: boolean) => {
+  if (!outputTimestamp) return;
+  const descriptor = use ? outputTimestamp : { ...outputTimestamp, value: undefined };
+  Object.defineProperty(AudioContext.prototype, "getOutputTimestamp", descriptor);
+};
 let liveSettings: LiveAudioSettings | undefined;
 let bufferScope: string | undefined;
 let declaredBufferMs = 0;
@@ -59,6 +70,7 @@ export function listen(
     declaredBufferMs = live ? declareLiveBuffer(0, live.minBufferMs) : 0;
   }
   liveSettings = live;
+  useOutputTimestamps(Boolean(live));
   const next = JSON.stringify([
     credentials?.origin,
     credentials?.token,
