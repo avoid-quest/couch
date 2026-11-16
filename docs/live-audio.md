@@ -60,7 +60,23 @@ wrong clock still shows the right time.
   `getOutputTimestamp()` gives the frame being heard and when (the median of the
   last second's readings, 20 ms apart); iOS, Firefox and Safari give the frame
   being rendered, so their reported `baseLatency` and `outputLatency` stand in.
-  The worklet plays samples one after another from a short queue. The first
+  The need below comes from the same reading, so placement and declaration agree.
+- On Android, Chrome plays a context that has an AudioWorklet through a FIFO
+  filled from the worklet's thread (desktop Chrome bypasses it). Each time it
+  runs dry the output plays a callback of silence and keeps that much more
+  queued from then on, but `getOutputTimestamp()` still counts those silent
+  frames as the context's (Chromium's `audio_destination.cc`,
+  `push_pull_fifo.cc`). So on Android the player takes the total of those
+  underruns, `AudioContext.playbackStats.underrunDuration` (Chrome 146 and
+  later), off the heard frame. On the rig's Redmi the timestamp alone played
+  39–48 ms later than Core placed it, and later as the run went on; the SDK's
+  player, which reads the same timestamp but has no worklet, landed within a
+  millisecond. `baseLatency + outputLatency` comes from the same device delay
+  and misses the FIFO too. Chrome counts underruns only while the page is
+  visible, so any while it's hidden still play late. Linux and macOS read the
+  timestamp alone (the rig's Linux plays 7 ms after its placement, as with the
+  SDK).
+- The worklet plays samples one after another from a short queue. The first
   chunk, and the first after the queue ran dry, starts exactly at its frame;
   what already passed is skipped, so lateness never shifts the timeline. While
   it plays, it follows the frames it was given by playing 0.3 % faster or slower
