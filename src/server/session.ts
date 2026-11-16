@@ -49,6 +49,7 @@ export type MediaSource = {
   radio?: boolean;
   eventStart?: boolean;
   expiry?: WebMediaSource["expiry"];
+  renewal?: WebMediaSource["renewal"];
 };
 type SessionOptions = {
   resolveSource?: (
@@ -411,11 +412,17 @@ export function createSession(
         credentialOrigin: _credentialOrigin,
         publicNetwork: _publicNetwork,
         hasAudio: _hasAudio,
+        renewal: _renewal,
         ...wire
       } = command as typeof command &
         Pick<
           MediaSource,
-          "preview" | "audioManifest" | "credentialOrigin" | "publicNetwork" | "hasAudio"
+          | "preview"
+          | "audioManifest"
+          | "credentialOrigin"
+          | "publicNetwork"
+          | "hasAudio"
+          | "renewal"
         > & { headers?: Record<string, string>; audioSelection?: AudioSelection };
       command = wire;
       const entry = state.queue.find((item) => item.id === state.currentEntryId);
@@ -543,6 +550,7 @@ export function createSession(
         const {
           metadata: _metadata,
           expiry: _expiry,
+          renewal: _renewal,
           headers: _headers,
           publicNetwork: _publicNetwork,
           ...media

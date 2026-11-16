@@ -503,3 +503,89 @@ test("a capped live master offers only variants up to the chosen quality, and it
   ]);
   expect(text).not.toContain("RESOLUTION=1920x1080");
 });
+
+test("every route of a Playback shares one read of each playlist: the master for the item, an endless one per refresh", async () => {
+  const f = fixture();
+  const variant = "https://media.example/720p.m3u8";
+  f.manifest(
+    source,
+    `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000,RESOLUTION=1280x720\n${variant}\n`,
+  );
+  f.manifest(
+    variant,
+    "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:2,\nhttps://media.example/7.ts\n",
+  );
+  const screens = await Promise.all([
+    f.prepare(source, "playing", target),
+    f.prepare(source, "playing", { origin: "https://other.local", userAgent: "Browser fixture" }),
+  ]);
+  // Core's own read of the master, choosing its sound, is the same read.
+  const core = await f.relay.reader("playing")(source, {}, true);
+  expect(await core.text()).toContain(variant);
+  const variants = await Promise.all(
+    screens.map(async (media) =>
+      (await (await f.serve(media.source)).text())
+        .split("\n")
+        .find((line) => line && !line.startsWith("#"))!,
+    ),
+  );
+  const texts = await Promise.all(variants.map(async (link) => (await f.serve(link)).text()));
+  expect(texts[0]).toContain("#EXT-X-MEDIA-SEQUENCE:7");
+  expect(texts[1]).toContain("#EXT-X-MEDIA-SEQUENCE:7");
+  expect(f.requests.map((request) => request.url)).toEqual([source, variant]);
+});
+
+test("a refused playlist renews the item once, and the links Core gave read the fresh resolution", async () => {
+  const f = fixture();
+  const fresh = "https://media.example/renewed/master.m3u8";
+  const stale = "https://media.example/720p.m3u8?session=old";
+  const renewed = "https://media.example/720p.m3u8?session=new";
+  f.manifest(
+    source,
+    `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000,RESOLUTION=1280x720\n${stale}\n`,
+  );
+  f.manifest(
+    fresh,
+    `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3100000,RESOLUTION=1280x720\n${renewed}\n`,
+  );
+  f.replies.set(stale, () => response(stale, "", { status: 403 }));
+  f.manifest(renewed, "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nhttps://media.example/9.ts\n");
+  let runs = 0;
+  const renewal = {
+    current: { source },
+    renew: async () => {
+      runs++;
+      return { source: fresh };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  const link = (await (await f.serve(media.source)).text())
+    .split("\n")
+    .find((line) => line && !line.startsWith("#"))!;
+  destination(link, "playlist", stale);
+  for (let reload = 0; reload < 2; reload++) {
+    const answer = await f.serve(link);
+    expect(answer.status).toBe(200);
+    expect(await answer.text()).toContain("9.ts");
+  }
+  expect(runs).toBe(1);
+  // A late screen still names the first resolution and reads the fresh one.
+  const late = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  const variant = (await (await f.serve(late.source)).text())
+    .split("\n")
+    .find((line) => line && !line.startsWith("#"))!;
+  destination(variant, "playlist", renewed);
+  expect(runs).toBe(1);
+});

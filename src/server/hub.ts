@@ -427,6 +427,8 @@ export async function createHub(options: HubOptions) {
       output?: { picture: boolean; sound: boolean };
       media: ReturnType<typeof resolveEntry>;
     };
+    // This item's other resolutions (another codec family, or one still running), which later screens share.
+    resolutions?: NonNullable<Playback["resolved"]>[];
     hostMpv?: Set<string>;
     screens: Map<Socket<SocketData>, { playbackId: string; generation?: number; error?: string }>;
     heard?: PlayerState;
@@ -491,6 +493,36 @@ export async function createHub(options: HubOptions) {
       coversOutput(resolved.output, output)
       ? resolved
       : undefined;
+  };
+  // One resolution per item and codec family: screens and the group's sound share it, also while
+  // it runs, and Core's relay renews its link when it expires (pass-through.ts).
+  const sharedResolution = (
+    playback: Playback,
+    entry: QueueEntry,
+    playbackId: string,
+    output: { picture: boolean; sound: boolean },
+    tab: Socket<SocketData> | null | undefined,
+    signal: AbortSignal,
+  ) => {
+    playback.resolutions = playback.resolutions?.filter((item) => item.playbackId === playbackId);
+    const found = [playback.resolved, ...(playback.resolutions ?? [])].find(
+      (item) =>
+        item?.playbackId === playbackId &&
+        (!tab || item.vp9 === tab.data.vp9) &&
+        coversOutput(item.output, output),
+    );
+    if (found) return found;
+    const resolved: NonNullable<Playback["resolved"]> = {
+      playbackId,
+      vp9: tab?.data.vp9 ?? true,
+      output: { ...output },
+      media: resolveEntry(entry, playbackId, signal, tab, playback, output),
+    };
+    (playback.resolutions ??= []).push(resolved);
+    resolved.media.catch(
+      () => (playback.resolutions = playback.resolutions?.filter((item) => item !== resolved)),
+    );
+    return resolved;
   };
   let mpvPlayback: Playback | null = null;
   const all = () => [...playbacks.values()];
@@ -1382,8 +1414,7 @@ export async function createHub(options: HubOptions) {
       kind: playback.media?.live ? "source-pts" : "position",
       generation: playback.loaded?.playbackId ?? stateOf(playback).player.playbackId ?? playback.id,
       mapping: playback.media?.live
-        ? playback.loaded?.mpegts ||
-          (!sourceOf(playback) && (!members(playback).length || playback.media.hasAudio === false))
+        ? playback.loaded?.mpegts || (!sourceOf(playback) && playback.media.hasAudio === false)
           ? "unavailable"
           : "hls"
         : "media",
@@ -1484,13 +1515,10 @@ export async function createHub(options: HubOptions) {
     tab: Socket<SocketData>,
   ): Promise<Extract<PlaybackCommand, { type: "load" }>> => {
     const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(30_000)]);
-    // A live link can expire within minutes, so a live screen resolves its own.
     const output = { picture: true, sound: false };
-    const reuse =
-      !playback.media?.live && cachedResolution(playback, loaded.playbackId, output, tab);
-    const { headers = {}, ...media } = await (reuse
-      ? reuse.media
-      : resolveEntry(entry, loaded.playbackId, signal, tab, playback, output));
+    const { headers = {}, ...media } = await (entry.liveSourceId
+      ? resolveEntry(entry, loaded.playbackId, signal, tab, playback, output)
+      : sharedResolution(playback, entry, loaded.playbackId, output, tab, signal).media);
     const selected = entry.liveSourceId
       ? media
       : await prepareSource({ ...media, headers }, { picture: true, sound: false }, signal);
@@ -1753,23 +1781,25 @@ export async function createHub(options: HubOptions) {
         sound: playback.outputs.some((output) => output.sound),
       },
       tab = newest(playback.outputs.find((output) => output.picture)?.deviceId ?? "");
-    const resolved = cachedResolution(playback, playbackId, output) ?? {
-      playbackId,
-      vp9: tab?.data.vp9 ?? true,
-      output: { ...output },
-      media: resolveEntry(entry, playbackId, signal, tab, playback, output),
-    };
+    const resolved =
+      cachedResolution(playback, playbackId, output) ??
+      sharedResolution(playback, entry, playbackId, output, tab, signal);
     const { headers = {}, ...media } = await resolved.media;
-    const sound = output.sound && media.hasAudio !== false;
+    const live =
+      !!media.metadata?.live ||
+      (playback.media?.playbackId === playbackId && !!playback.media.live);
+    // An endless stream's sound is the clock its pictures follow, so Core decodes it with no speaker too.
+    const sound =
+      (output.sound || (live && !media.radio && !media.mpegts)) && media.hasAudio !== false;
     const selected = sound
-      ? await prepareSource(
+      ? await createSourcePreparation(signal, passThrough.reader(playbackId)).select(
           { ...media, headers },
           { picture: false, sound: true },
-          signal,
-          undefined,
           sourceSelection(playback),
         )
       : media;
+    // Core decodes this resolution's sound, so a speaker that joins later shares it.
+    if (sound && resolved.output) resolved.output = { ...resolved.output, sound: true };
     const relay =
       sound &&
       (media.publicNetwork || !!selected.audioManifest || (!entry.liveSourceId && selected.hls));
@@ -1791,9 +1821,7 @@ export async function createHub(options: HubOptions) {
         audioSource: core.audioSource,
         headers: relay ? {} : headers,
         publicNetwork: media.publicNetwork,
-        live:
-          !!media.metadata?.live ||
-          (playback.media?.playbackId === playbackId && !!playback.media.live),
+        live,
         audioOnly: media.audioOnly,
         hasAudio: media.hasAudio,
         duration: media.metadata?.duration ?? state.player.duration ?? undefined,
@@ -2081,7 +2109,7 @@ export async function createHub(options: HubOptions) {
       const output = pending.moving
         ? (pending.resolved.output ?? { picture: true, sound: true })
         : { ...sourceOutput(playback) };
-      const preparation = createSourcePreparation(signal);
+      const preparation = createSourcePreparation(signal, passThrough.reader(playbackId));
       // Select channels before probing or relaying any bytes. Direct has no Core
       // decoder; keep the original resolution for a later group/picture change.
       const selected = entry?.liveSourceId
@@ -2111,9 +2139,11 @@ export async function createHub(options: HubOptions) {
             signal,
             playback.compressor.enabled,
           );
+      // An endless stream's sound is the clock its pictures follow, so Core decodes it with no speaker too.
       const groupSound =
         grouped(playback) &&
-        playback.outputs.some((output) => output.sound) &&
+        (playback.outputs.some((output) => output.sound) ||
+          (isLiveMedia && !media.radio && !media.mpegts)) &&
         media.hasAudio !== false;
       const coreSelected =
         groupSound && !entry?.liveSourceId
@@ -2123,6 +2153,8 @@ export async function createHub(options: HubOptions) {
               sourceSelection(playback),
             )
           : media;
+      if (groupSound && pending.resolved.output)
+        pending.resolved.output = { ...pending.resolved.output, sound: true };
       const coreRelay =
         groupSound &&
         (media.publicNetwork ||
