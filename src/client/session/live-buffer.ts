@@ -1,29 +1,26 @@
 import { liveLateStepMs, risenNeed } from "../../shared/live-need";
 
 // What a listener declares is its own output-side need; Core adds its measured input-side time and
-// plays it at that need rounded up to a step. The need is what the player measures and what it
-// structurally takes, nothing more:
-// - syncInfo.outputLatencyMs: the device's reported output latency (SDK 6.0.0's raw reading). The
-//   player starts each chunk that much before its time, and drops it when that start has passed.
-// - the player's scheduling batch: it handles received chunks 15 ms after the first of them
-//   (scheduler.js scheduleQueueProcessing, setTimeout(..., 15)), so a chunk may wait that long.
-// Decoding and the network aren't measured: a listener that loses chunks to them counts that
-// itself and asks for late steps (nextLateSteps).
-const playerBatchMs = 15;
+// plays it at that need rounded up to a step. The need is how far ahead of its time a sample has to
+// reach the Live player's worklet: the most the context's render clock runs ahead of what's heard
+// (LivePlayer.outputMs, the output's latency and its render callback). Nothing for the player itself:
+// it hands each decoded chunk to the worklet at once, where the SDK's player waited up to its 15 ms
+// scheduling batch. Decoding and the network aren't measured: a listener that loses chunks to them
+// counts that itself and asks for late steps (nextLateSteps).
 // Core and Sendspin bound declarations to 5 s.
 const limitMs = 5000;
 
 export function declareLiveBuffer(declaredMs: number | undefined, latencyMs: number[] = []) {
-  const need = risenNeed(declaredMs, latencyMs, playerBatchMs);
+  const need = risenNeed(declaredMs, latencyMs);
   return need === undefined ? undefined : Math.min(limitMs, need);
 }
 
-// A listener that keeps losing chunks to its own lateness needs more than its output side and the
-// player's batch: it asks for a late step, and Core moves it that much later. Every second it adds
-// what it received and lost, and how late (live-loss.ts).
+// A listener that keeps losing chunks to its own lateness needs more than its output side: it asks
+// for a late step, and Core moves it that much later. Every second it adds what it received and
+// lost, and how late (live-timeline.ts).
 // - Loss recurs when the last ten seconds lost chunks in two separate spells, or in three seconds
 //   running, or when the last minute lost chunks in three separate spells. One stall doesn't step: a
-//   burst's late chunks are counted within two seconds (the count waits 100 ms past each start), and
+//   burst's late chunks are counted as they arrive, within two seconds, and
 //   its loss is over before a step could tell whether it helped. The minute: on the rig, a phone at
 //   150 ms lost sound every 20 to 30 s and chunks every 25 to 90 s (late arrivals over Wi-Fi), never
 //   twice in ten seconds, and 25 ms more would have cut most of it; three spells in a minute is a
@@ -55,9 +52,12 @@ export function declareLiveBuffer(declaredMs: number | undefined, latencyMs: num
 //   is taken before its pause, so without this a few large ones would each come before the pauses
 //   that bound them. So loss no step changes climbs no faster than with 10 ms steps, however late:
 //   at most 130 ms in a listen's first hour and about 90 ms an hour after, and loss a step would
-//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which the player
-//   resyncs at once (a jump) instead of slewing. A step that helped, or 16 minutes with no recurring
-//   loss, starts the pauses from 24 s again.
+//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which the worklet
+//   places its timeline again at once (a jump) instead of slewing. A step that helped, or 16 minutes
+//   with no recurring loss, starts the pauses from 24 s again, but steps in any hour still add at
+//   most 130 ms together: a step can halve the loss by chance, and a cap that came back with it let
+//   loss no step changes climb 340 ms in an hour. What a step added comes back only as it falls out
+//   of the hour.
 // Steps only add up: Core never moves a listener earlier while it listens. Each listen starts with
 // none and learns its own: nothing is remembered across listens.
 export type LossSecond = {
@@ -86,6 +86,9 @@ export type LateSteps = {
   caused?: Recurring;
   // Seconds since loss last recurred.
   clean: number;
+  // Seconds counted so far, and the steps of the last hour: the second each was taken, its ms.
+  counted: number;
+  taken: { at: number; ms: number }[];
   // The last minute.
   seconds: LossSecond[];
   phase: Phase;
@@ -94,6 +97,8 @@ export const noLateSteps: LateSteps = {
   lateMs: 0,
   unhelpful: 0,
   clean: 0,
+  counted: 0,
+  taken: [],
   seconds: [],
   phase: { kind: "watching" },
 };
@@ -179,13 +184,21 @@ function mostMs(unhelpful: number) {
   }
   return Math.max(1, parts) * liveLateStepMs;
 }
+// What steps may add in any hour: what 10 ms steps that don't help add in a listen's first.
+const hourMs = mostMs(0);
 
-// A step that's taken is past judging: the one before it helped, or was never judged.
+// A step that's taken is past judging: the one before it helped, or was never judged. With the hour
+// spent, none is taken until its oldest step falls out of it.
 function step(late: LateSteps, seconds: LossSecond[], recurring: Recurring): LateSteps {
-  const caused = { ...recurring, stepMs: Math.min(recurring.stepMs, mostMs(late.unhelpful)) };
+  const taken = late.taken.filter(({ at }) => late.counted - at < hourSeconds),
+    leftMs = hourMs - taken.reduce((sum, { ms }) => sum + ms, 0);
+  const stepMs = Math.min(recurring.stepMs, mostMs(late.unhelpful), leftMs);
+  if (stepMs <= 0) return { ...late, seconds, taken, caused: undefined };
+  const caused = { ...recurring, stepMs };
   return {
     ...late,
     lateMs: late.lateMs + caused.stepMs,
+    taken: [...taken, { at: late.counted, ms: caused.stepMs }],
     caused: undefined,
     seconds,
     clean: 0,
@@ -213,8 +226,9 @@ function move(late: LateSteps, phase: Phase & { kind: "moving" }, second: LossSe
   return { ...late, seconds, phase: watching };
 }
 
-export function nextLateSteps(late: LateSteps, second: LossSecond): LateSteps {
-  const { phase } = late;
+export function nextLateSteps(before: LateSteps, second: LossSecond): LateSteps {
+  const late = { ...before, counted: before.counted + 1 },
+    { phase } = late;
   if (phase.kind === "moving") return move(late, phase, second);
   const seconds = [...late.seconds, second].slice(-horizonSeconds);
   const recurring = recurs(seconds);

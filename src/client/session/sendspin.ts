@@ -1,5 +1,5 @@
 import type { LiveAudioSettings } from "../../shared/audio-settings";
-import type { SendspinPlayer } from "@sendspin/sendspin-js";
+import type { SendspinPlayer, SendspinPlayerConfig } from "@sendspin/sendspin-js";
 import { apiFetch } from "../api/client";
 import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
@@ -7,23 +7,25 @@ import { storage } from "./device-id";
 import { failed } from "../toasts";
 import { declareLiveBuffer, nextLateSteps, noLateSteps, withLateSteps } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
-import { logLiveMargins, noteLiveDropped } from "./live-margin";
-import { countingLiveLoss, countLiveLoss, reportsOutputLatency, sampleLiveLoss } from "./live-loss";
+import type { LivePlayer } from "./live-player";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
-// official Sendspin player, with Couch's stable Device ID.
+// official Sendspin player, with Couch's stable Device ID. A Live listener plays with Couch's own
+// player on the SDK's connection, clock and decoding (live-player.ts).
 // A tab that shows a synced picture connects too, only for the clock it follows (ticket 11).
-let player: Promise<SendspinPlayer> | null = null;
-let connected: SendspinPlayer | null = null;
+type Player = SendspinPlayer | LivePlayer;
+const isLive = (player: Player): player is LivePlayer => "sampleLoss" in player;
+let player: Promise<Player> | null = null;
+let connected: Player | null = null;
 let group: string | undefined;
 let hearing = false;
 let configuration: string | undefined;
 // The SDK's destroy() clears Media Session, which useMediaSession owns and won't rewrite
 // while its inputs are unchanged (a codec change replaces the player mid-Live): keep what it set.
-const dispose = (stopped: SendspinPlayer) => {
+const dispose = (stopped: Player) => {
   const session = navigator.mediaSession,
     kept = session && { metadata: session.metadata, playbackState: session.playbackState };
-  stopped.destroy("user_request");
+  stopped.destroy();
   if (session) Object.assign(session, kept);
 };
 // On Android, relaxed sound keeps the SDK's estimated clock, its fallback without getOutputTimestamp(), as
@@ -69,10 +71,10 @@ let bufferTimer: ReturnType<typeof setInterval> | undefined;
 // The player whose sound this tab unlocked. Until then its context is suspended and reports only
 // its base latency, too little a need; Core sends a listener nothing before it has declared one,
 // so this reading has to come from a running context.
-let sounding: SendspinPlayer | undefined;
+let sounding: Player | undefined;
 // sample: add this second's readings.
-const updateBuffer = (created: SendspinPlayer, sample = false) => {
-  if (connected !== created || !liveSettings) return;
+const updateBuffer = (created: Player, sample = false) => {
+  if (connected !== created || !liveSettings || !isLive(created)) return;
   const playing =
     sample &&
     hearing &&
@@ -80,17 +82,17 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
     created.isConnected &&
     created.isPlaying &&
     created.timeSyncInfo.synced;
-  const latency = playing ? created.syncInfo.outputLatencyMs : NaN;
+  const reading = sample ? created.outputMs() : undefined;
+  const latency = playing ? reading : undefined;
   // The first declaration waits for a reading the context has settled on: one that includes its
   // output latency, or the same reading twice (a browser that reports none).
-  const settled = needMs !== undefined || reportsOutputLatency() || latency === lastLatency;
+  const settled = needMs !== undefined || created.measuresOutput || latency === lastLatency;
   lastLatency = latency;
-  if (settled && Number.isFinite(latency) && latency >= 0)
+  if (settled && latency !== undefined && latency >= 0)
     latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
   if (sample) {
     // A suspended context handles nothing: what it received isn't late, and it plays nothing.
-    const second = sampleLiveLoss(created, playing);
-    noteLiveDropped(second?.lost ?? 0);
+    const second = created.sampleLoss(playing);
     if (second) lateSteps = nextLateSteps(lateSteps, second);
   }
   needMs = declareLiveBuffer(needMs, latencyReadings);
@@ -118,7 +120,6 @@ export function listen(
     needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
-  countingLiveLoss(Boolean(live) && (on || watch));
   useOutputTimestamps(Boolean(live));
   const next = JSON.stringify([
     credentials?.origin,
@@ -142,17 +143,15 @@ export function listen(
   const hear = on && !hearing;
   hearing = on;
   if (!on) waitForTap(null);
-  const current: Promise<SendspinPlayer> = (player ??= import("@sendspin/sendspin-js")
-    .then(async (sendspin) => {
-      const { SendspinPlayer } = sendspin;
+  const current: Promise<Player> = (player ??= Promise.all([
+    import("@sendspin/sendspin-js"),
+    live ? import("./live-player") : undefined,
+  ])
+    .then(async ([sendspin, livePlayer]) => {
       alignStartsToFrames();
-      countLiveLoss(sendspin, () => connected);
-      logLiveMargins(sendspin, () =>
-        liveSettings ? { player: connected, declaredMs: declaredBufferMs } : undefined,
-      );
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
-      const created = new SendspinPlayer({
+      const options = {
         suite: "aesgcm",
         url: `${credentials.origin.replace(/^http/, "ws")}/sendspin`,
         clientName: name,
@@ -160,11 +159,13 @@ export function listen(
         ...(live?.codec && live.codec !== "auto"
           ? { codecs: live.codec === "opus" ? ["opus", "pcm"] : ["pcm"] }
           : {}),
-        ...(live ? { minBufferMs: declaredBufferMs ?? 0 } : {}),
         onStateChange: (state) => {
           if (player === current) group = state.groupState.group_id;
         },
-      });
+      } satisfies SendspinPlayerConfig;
+      const created = livePlayer
+        ? new livePlayer.LivePlayer({ ...options, minBufferMs: declaredBufferMs ?? 0 })
+        : new sendspin.SendspinPlayer(options);
       if (player !== current) return created;
       connected = created;
       if (live) bufferTimer = setInterval(() => updateBuffer(created, true), 1000);

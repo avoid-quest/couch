@@ -101,7 +101,9 @@ When a Playback has sound on several Devices, Live audio, Audio input or
 AirPlay, its sound is **Synced** (`src/server/sendspin.ts`,
 `src/server/scheduled-audio.ts`). Core serves `/sendspin` with the unmodified
 Sendspin Node SDK behind Couch token authorization, and the client plays it with
-the official player (`@sendspin/sendspin-js`).
+the official player (`@sendspin/sendspin-js`). A Live audio listener plays with
+Couch's own AudioWorklet player on the SDK's connection, clock and decoding
+([Live audio](live-audio.md)).
 
 - For ordinary media, one FFmpeg per Playback decodes the audio once and encodes
   once per wire format: Opus in 60 ms packets, or 100 ms PCM chunks for players

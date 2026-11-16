@@ -13,27 +13,27 @@ const steady = (latency: number) => Array(5).fill(latency);
 
 test("a Receiver declares only its own need, from its first reading", () => {
   expect(declareLiveBuffer(undefined)).toBeUndefined();
-  // Need = reading + the player's 15 ms scheduling batch.
-  expect(declareLiveBuffer(undefined, [40])).toBe(55);
-  expect(declareLiveBuffer(undefined, steady(40))).toBe(55);
-  expect(declareLiveBuffer(undefined, steady(0))).toBe(15);
+  // Need = the reading: how far the render clock runs ahead of what's heard.
+  expect(declareLiveBuffer(undefined, [40])).toBe(40);
+  expect(declareLiveBuffer(undefined, steady(40.2))).toBe(41);
+  expect(declareLiveBuffer(undefined, steady(0))).toBe(0);
 });
 
 test("after the first reading, only the median of five raises the declaration", () => {
   expect(declareLiveBuffer(75, [40, 200])).toBe(75);
   expect(declareLiveBuffer(75, [40, 200, 200, 200])).toBe(75);
-  expect(declareLiveBuffer(75, [40, 200, 200, 200, 200])).toBe(215);
+  expect(declareLiveBuffer(75, [40, 200, 200, 200, 200])).toBe(200);
 });
 
 test("a declaration rises only when the smoothed need clearly outgrows it", () => {
-  expect(declareLiveBuffer(75, steady(65))).toBe(75);
-  expect(declareLiveBuffer(75, steady(66))).toBe(81);
+  expect(declareLiveBuffer(75, steady(80))).toBe(75);
+  expect(declareLiveBuffer(75, steady(81))).toBe(81);
   expect(declareLiveBuffer(75, [42, 900, 42, 900, 42])).toBe(75);
   expect(declareLiveBuffer(250, steady(27))).toBe(250);
 });
 
 test("the declaration respects Core's 5000 ms timing limit", () => {
-  expect(declareLiveBuffer(150, steady(4990))).toBe(5000);
+  expect(declareLiveBuffer(150, steady(5010))).toBe(5000);
 });
 
 // Seconds of a listener's sound: 50 chunks each, `lost` of them lost (the latest `lateMs` past its
@@ -308,6 +308,20 @@ test("a step is at most what 10 ms steps could add in an hour, less what they ad
   expect(run({ ...noLateSteps, unhelpful: 13 }, recurring(2, 95, 1000))).toMatchObject({
     lateMs: 10,
   });
+});
+
+test("a step judged helped doesn't give back what the hour's steps added; only time does", () => {
+  // 130 ms for loss 1000 ms late, which Core applies in the 11th second.
+  let late = run(noLateSteps, [...recurring(4, 95, 1000), second(0, 225)]);
+  expect(late).toMatchObject({ lateMs: 130, caused: { stepMs: 130 } });
+  // Loss recurs at half (by chance, or not): it helped, and the pauses start again, but the hour
+  // has no room left however long the loss goes on.
+  late = run(late, recurring(2, 225, 1000));
+  expect(late).toMatchObject({ lateMs: 130, unhelpful: 0, caused: undefined });
+  late = run(late, repeat(3609 - 21, second(2, 225, 1000)));
+  expect(late.lateMs).toBe(130);
+  // An hour after the step, the hour has room again.
+  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 260 });
 });
 
 test("a step that didn't help pauses as long as its 10 ms parts would have", () => {

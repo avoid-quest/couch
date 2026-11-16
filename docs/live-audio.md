@@ -4,9 +4,12 @@
 official SDKs: `@sendspin/sendspin-js` in browsers and
 `@sonn-audio/node-sendspin` in Core. Couch supplies capture, encoding,
 presentation timestamps, group membership and authorization; the SDKs own the
-connection, Noise encryption, clock sync, decoding, buffering, correction and
-reconnection. Don't reach into SDK internals, intercept its transport or parse
-its logs. What people do with it is in
+connection, Noise encryption, clock sync, decoding and reconnection. Relaxed
+sound plays with the SDK's `SendspinPlayer`, which also buffers and corrects. A
+Live listener plays with Couch's own player (`live-player.ts`) on the SDK's
+`SendspinCore`: the SDK's player handles chunks in 15 ms batches, which every
+Live listener would wait for. Don't reach into SDK internals, intercept its
+transport or parse its logs. What people do with it is in
 [The gig in your ears](stories/the-gig-in-your-ears.md).
 
 ## Connection and identity
@@ -51,50 +54,52 @@ wrong clock still shows the right time.
   every chunk is stamped at its capture time, and each listener plays it at its
   own step (below). Settings saved with the old **Playback buffer floor** still
   load; the floor is ignored.
-- Each Receiver declares only its own need through the SDK's `minBufferMs`: its
-  once-a-second `syncInfo.outputLatencyMs` reading plus the player's 15 ms
-  scheduling batch (`scheduler.js`), read only once its sound is unlocked (a
-  suspended context reports its base latency only). The first reading sets it,
-  once the context reports an output latency (or reads the same twice, on a
-  browser that reports none): just after `resume()` it may report only its base
-  latency. Later, the median of the last five raises it only when it outgrows it
-  by more than 5 ms. Until then it declares 0 and Core sends it nothing: it
-  hears nothing for its first second or two, then starts at its step.
-- The SDK drops a late chunk silently, so Couch counts them chunk by chunk
-  (`live-loss.ts`), wrapping the SDK's exported `AudioScheduler` and Web Audio's
-  `createBuffer`, `getChannelData` and `start`. Each buffer the player makes of
-  a decoded chunk is tagged with the chunk's stamp; a start removes it (a
-  sample-corrected copy removes the buffer it was copied from). A chunk is lost
-  when its start, the stamp less the output latency and Sync delay, passed more
-  than 100 ms ago and it was never started. Chunks Core never sent, chunks a
-  stream clear discarded, and anything in a second when the context wasn't
-  running throughout or the clock isn't synced don't count. A step's changeover
-  can't count either: the chunks after it are stamped later. A chunk the player
-  started after a silence counts as lost too: its batch ran after the chunk
-  before it had ended (a busy page), though it already held the chunk. It counts
-  only when its stamp follows on from that chunk's (Core sent nothing in between)
-  and it was received before that chunk ended, so a late arrival or a gap in the
-  stream doesn't; a dropped chunk breaks the chain, so nothing counts twice.
-  Chunks the player discards in a guarded cutover (its private
-  `performGuardedCutover`, on a sync recorrection or a Sync delay or clock
-  change, which starts nothing for 0.3 s) never count: from the cutover on,
-  stamps from the first whose start hadn't passed to the guard's end, plus the
-  100 ms grace, are excused, so a sample before the player's next start can't
-  count them.
+- The Live player hands each decoded chunk to an AudioWorklet
+  (`live-timeline.ts`) with the context frame it's due at: its stamp on the
+  synced clock, less the Sync delay, mapped to the frame heard then. Chromium's
+  `getOutputTimestamp()` gives the frame being heard and when (the median of the
+  last second's readings, 20 ms apart); iOS, Firefox and Safari give the frame
+  being rendered, so their reported `baseLatency` and `outputLatency` stand in.
+  The worklet plays samples one after another from a short queue. The first
+  chunk, and the first after the queue ran dry, starts exactly at its frame;
+  what already passed is skipped, so lateness never shifts the timeline. While
+  it plays, it follows the frames it was given by playing 0.3 % faster or slower
+  once it's more than 1 ms off (the SDK's soft rate and deadband), never by a
+  jump; beyond 200 ms (the SDK's resync threshold) the clock itself moved, and
+  it starts again at the frame. Volume, the Android keep-alive element and the
+  iOS media-element route are the SDK player's.
+- Each Receiver declares only its own need through the SDK's `minBufferMs`: the
+  most the context's render clock ran ahead of what's heard over the last
+  second, which is how far ahead of its time a sample has to reach the worklet
+  (the output's latency and its render callback). It's read once the output has
+  run a second (an output fills its buffers as it starts) and only once its
+  sound is unlocked. Where the browser reports no output position, the first
+  reading waits for one that includes an output latency (or the same twice, on a
+  browser that reports none). Later, the median of the last five raises it only
+  when it outgrows it by more than 5 ms. Until then it declares 0 and Core sends
+  it nothing: it hears nothing for its first two seconds or so, then starts at
+  its step.
+- The worklet counts lost chunks: a chunk is lost when it arrives after its
+  first sample was due, either its frame passed or the sound before it ran out
+  and its stamp follows on from that sound's (Core sent nothing in between).
+  Chunks Core never sent, a step's changeover, chunks a stream clear discarded,
+  and anything in a second when the context wasn't running throughout or the
+  clock isn't synced don't count. A lost chunk also measures how late it was:
+  how long after its first sample was due it reached the worklet, network,
+  decoding and the page's own work included.
 - A Receiver that keeps losing chunks declares a late step (`nextLateSteps`)
   when loss recurs: the last ten seconds lost chunks in two separate spells, or
   three seconds running, or the last minute lost chunks in three separate
   spells (loss that keeps coming back, as late Wi-Fi arrivals do on a phone).
   One stall doesn't step: a burst's late chunks fall within two samples.
 - A step is as large as the lateness that recurred, rounded up to the next
-  10 ms. Couch measures each dropped chunk's lateness at the player's batch
-  that dropped it (it wraps `processAudioQueue`): how far its start had passed,
-  which is what a step must add for that batch to start it. Each spell is as
+  10 ms. A lost chunk's lateness is what a step must add for it to reach the
+  worklet before its first sample is due. Each spell is as
   late as its latest lost chunk, and the step follows the second latest spell
   that caused it (or, for one spell three seconds running, its second latest
   second): one spell can't set a step however late it was, only lateness two
-  spells reached. A chunk started after a silence (a busy page, nothing late)
-  and loss with no lateness measured count as 0, so they step 10 ms. On the rig,
+  spells reached. Loss with no lateness measured (the sound ran out early, with
+  nothing late) counts as 0, so it steps 10 ms. On the rig,
   10 ms steps took the phone from 75 to 125 ms one step at a time, losing
   chunks at each; a step sized by the lateness reaches the same place in one.
 - Core has applied a step when its chunks leave it half that step further
@@ -113,12 +118,13 @@ wrong clock still shows the right time.
   in the hour before it: 130 ms at first, then as little as 10 ms. So loss no
   step changes climbs no faster than with 10 ms steps, however late: at most
   130 ms in a listen's first hour and about 90 ms an hour after. The cap also
-  keeps every step under the 200 ms at which the player resyncs at once instead
-  of slewing. A step that helped, or sixteen minutes with no recurring loss,
-  starts the pauses from 24 s again. A step after which loss doesn't recur is
-  never doubted. Pauses last only as long as the listen. The player takes a
-  step by playing slightly slower (0.5 % while it is over 35 ms off, 0.3 % over
-  8 ms, then a sample at a time): at 0.3 % it plays 10 ms later every 3.3 s.
+  keeps every step under the 200 ms at which the worklet places its timeline
+  again at once instead of slewing. A step that helped, or sixteen minutes with
+  no recurring loss, starts the pauses from 24 s again, but steps in any hour
+  still add at most 130 ms together: a step can halve the loss by chance, and
+  what a step added comes back only as it falls out of the hour. A step after which loss doesn't recur is
+  never doubted. Pauses last only as long as the listen. The worklet takes a
+  step by playing 0.3 % slower: 10 ms later every 3.3 s.
 - Each listen starts with no late steps and learns its own: nothing is
   remembered across listens, so a step one listen needed never holds a later
   one back, and loss no step cures can't climb across joins.
@@ -152,7 +158,7 @@ wrong clock still shows the right time.
 - **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.
 - On Android, relaxed sound plays on the SDK's estimated audio clock, as the SDK
   plays on Cast receivers: Couch hides `AudioContext.getOutputTimestamp()` from
-  the page, the case the SDK falls back from. Live keeps output timestamps.
+  the page, the case the SDK falls back from. Live's player reads them.
 - On macOS, desktop listeners request Chromium's `audio-buffer-size=128`. Linux
   keeps the default until measured there; Windows keeps its device period because
   WASAPI can glitch with mismatched sizes.
