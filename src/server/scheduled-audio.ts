@@ -105,6 +105,10 @@ const backlogBytes = 64 * 1024;
 // One held-back check is ordinary back-pressure; a speaker that took no new sound in most of the last
 // five seconds while some waited for it (its socket backed up, or its declared capacity full) is stalled.
 const stallSeconds = 5;
+// A Sendspin client starts a burst of clock-sync requests at least every 10 s (messaging.md "Clock
+// Synchronization"). One that sent Core nothing for longer is frozen (a paused or suspended tab),
+// even while its browser still drains its socket; such a second counts toward stalled too.
+const quietUs = 10_000_000;
 const wireFormat = (wire: Wire) => ({
   codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM,
   sampleRate: 48_000,
@@ -168,27 +172,41 @@ export function createScheduledAudio(options: {
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
-  // Each speaker's sends: whether this second held sound back and sent some, and whether each of
-  // the last few seconds held back without sending any.
+  // Each speaker's sends: whether this second held sound back and sent some, or found it quiet,
+  // and whether each of the last few seconds held back without sending any or was quiet.
   const backlogs = new Map<
     string,
-    { second: number; held: boolean; sent: boolean; seconds: boolean[] }
+    { second: number; held: boolean; sent: boolean; quiet: boolean; seconds: boolean[] }
   >();
+  // When Core last received anything on each speaker's socket.
+  const heard = new WeakMap<WebSocket, number>();
   const stalled = (clientId: string) =>
     (backlogs.get(clientId)?.seconds.filter(Boolean).length ?? 0) > stallSeconds / 2;
-  const took = (clientId: string, held: boolean, sent: boolean, nowUs: number) => {
+  const took = (
+    clientId: string,
+    check: { held: boolean; sent: boolean; quiet: boolean },
+    nowUs: number,
+  ) => {
     const second = Math.floor(nowUs / 1e6),
-      backlog = backlogs.get(clientId) ?? { second, held: false, sent: false, seconds: [] };
+      backlog = backlogs.get(clientId) ?? {
+        second,
+        held: false,
+        sent: false,
+        quiet: false,
+        seconds: [],
+      };
     backlogs.set(clientId, backlog);
     if (second !== backlog.second) {
       const before = stalled(clientId);
-      backlog.seconds = [...backlog.seconds, backlog.held && !backlog.sent].slice(-stallSeconds);
+      const stalling = (backlog.held && !backlog.sent) || backlog.quiet;
+      backlog.seconds = [...backlog.seconds, stalling].slice(-stallSeconds);
       backlog.second = second;
-      backlog.held = backlog.sent = false;
+      backlog.held = backlog.sent = backlog.quiet = false;
       if (stalled(clientId) !== before) options.changed();
     }
-    backlog.held ||= held;
-    backlog.sent ||= sent;
+    backlog.held ||= check.held;
+    backlog.sent ||= check.sent;
+    backlog.quiet ||= check.quiet;
   };
   const forgetBacklog = (clientId: string) => {
     const before = stalled(clientId);
@@ -1037,7 +1055,8 @@ export function createScheduledAudio(options: {
             );
             cursor.sent = chunk.at;
           }
-          took(session.getClientId()!, held, cursor.sent !== before, now);
+          const quiet = socket !== undefined && serverNowUs() - (heard.get(socket) ?? 0) > quietUs;
+          took(session.getClientId()!, { held, sent: cursor.sent !== before, quiet }, now);
           // Its first sound in this run: it no longer joins.
           if (first && cursor.sent !== undefined) options.changed();
         }
@@ -1299,6 +1318,7 @@ export function createScheduledAudio(options: {
         }
       };
       socket.on("message", (data, binary) => {
+        heard.set(socket, serverNowUs());
         if (socket.readyState !== 1) return;
         if (socket.bufferedAmount <= backlogBytes && !pending.length) return dispatch(data, binary);
         // Pause requests while replies cannot drain. Keep their order: dropping a Noise frame loses its nonce.

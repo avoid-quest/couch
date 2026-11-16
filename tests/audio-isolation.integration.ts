@@ -336,12 +336,12 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
 });
 
 test(
-  "a speaker Core holds back for most of 5 s reports stalled",
-  { timeout: 20_000 },
+  "a speaker Core holds back or doesn't hear from for most of 5 s reports stalled",
+  { timeout: 30_000 },
   async (t) => {
     const audio = createScheduledAudio({
       name: "Held back",
-      admit: (id) => ["healthy", "full"].includes(id),
+      admit: (id) => ["healthy", "full", "frozen"].includes(id),
       changed() {},
       ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
       sourceFailed() {},
@@ -352,7 +352,8 @@ test(
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`;
     const frames: number[] = [];
-    // A player whose declared capacity never fits a chunk: its socket stays empty, it never takes sound.
+    // A player whose declared capacity never fits a chunk (5 ms of Live PCM is 960 bytes): its socket
+    // stays empty, it never takes sound.
     const player = (id: string, capacity: number) =>
       new SendspinClient(id, id, [Roles.PLAYER], {
         playerSupport: {
@@ -364,18 +365,20 @@ test(
         },
       });
     const healthy = player("healthy", 1 << 20),
-      full = player("full", 1024);
+      full = player("full", 512),
+      frozen = player("frozen", 1 << 20);
     healthy.addAudioChunkListener((timestamp) => frames.push(timestamp));
-    await healthy.connect(url);
-    await full.connect(url);
-    await healthy.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
-    await full.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
-    await until(() => audio.delay("full") === 0);
+    for (const client of [healthy, full, frozen]) {
+      await client.connect(url);
+      await client.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
+    }
+    await until(() => audio.delay("full") === 0 && audio.delay("frozen") === 0);
     audio.registerSource("capture", liveCapture);
     const group = audio.group("programme", () => {});
     group.members([
       { deviceId: "healthy", level: 100 },
       { deviceId: "full", level: 100 },
+      { deviceId: "frozen", level: 100 },
     ]);
     group.send({
       type: "load",
@@ -407,11 +410,20 @@ test(
       audio.close();
       await healthy.disconnect();
       await full.disconnect();
+      await frozen.disconnect();
       sockets.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     });
     await until(() => frames.length > 20);
+    // A frozen tab: its clock-sync requests stop, though its socket keeps taking sound.
+    const clock = frozen as unknown as { scheduleTimeSync(): void; stopTimeSync(): void };
+    clock.scheduleTimeSync = () => {};
+    clock.stopTimeSync();
     await sleep(4000);
     assert.deepEqual(audio.status().stalled, ["full"]);
+    // Its last burst was at most 5 s before; 10 s without one, then most of 5 s.
+    await sleep(6000);
+    await until(() => audio.status().stalled.includes("frozen"));
+    assert.deepEqual(audio.status().stalled.sort(), ["frozen", "full"]);
   },
 );
