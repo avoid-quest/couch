@@ -136,7 +136,7 @@ test("Live audio settings are the host's and admins': controllers can't read or 
     assert.equal((await read(f.controller)).status, 403);
     assert.equal(
       (await read(f.admin).then((response) => response.json())).minBufferMs,
-      150,
+      0,
       "a refused change leaves the default",
     );
     for (const settings of [

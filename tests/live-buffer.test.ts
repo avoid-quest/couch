@@ -6,21 +6,21 @@ const steady = (latency: number) => Array(5).fill(latency);
 
 test("a Receiver declares only its own need, from its first reading", () => {
   expect(declareLiveBuffer(undefined)).toBeUndefined();
-  // Need = reading + 35 ms allowance; the host's room delay isn't part of it.
-  expect(declareLiveBuffer(undefined, [40])).toBe(75);
-  expect(declareLiveBuffer(undefined, steady(40))).toBe(75);
-  expect(declareLiveBuffer(undefined, steady(0))).toBe(35);
+  // Need = reading + the player's 15 ms scheduling batch; the host's room delay isn't part of it.
+  expect(declareLiveBuffer(undefined, [40])).toBe(55);
+  expect(declareLiveBuffer(undefined, steady(40))).toBe(55);
+  expect(declareLiveBuffer(undefined, steady(0))).toBe(15);
 });
 
 test("after the first reading, only the median of five raises the declaration", () => {
   expect(declareLiveBuffer(75, [40, 200])).toBe(75);
   expect(declareLiveBuffer(75, [40, 200, 200, 200])).toBe(75);
-  expect(declareLiveBuffer(75, [40, 200, 200, 200, 200])).toBe(235);
+  expect(declareLiveBuffer(75, [40, 200, 200, 200, 200])).toBe(215);
 });
 
 test("a declaration rises only when the smoothed need clearly outgrows it", () => {
-  expect(declareLiveBuffer(75, steady(65))).toBe(75);
-  expect(declareLiveBuffer(75, steady(66))).toBe(101);
+  expect(declareLiveBuffer(75, steady(85))).toBe(75);
+  expect(declareLiveBuffer(75, steady(86))).toBe(101);
   expect(declareLiveBuffer(75, [42, 900, 42, 900, 42])).toBe(75);
   expect(declareLiveBuffer(250, steady(27))).toBe(250);
 });
@@ -138,4 +138,23 @@ test("one slow second doesn't move the input-side time", () => {
   lead.arrived("opus", 6_000_000, 6_900_000);
   measure(lead, 10, 7);
   expect(lead.leadMs("wired", "opus", 40)).toBe(50);
+});
+
+test("with no room delay, a listener waits for its need, and needs in the same step play together", () => {
+  const lines: string[] = [];
+  const lead = createLiveLead(0, (line) => lines.push(line));
+  measure(lead, 26);
+  // Not measured yet: it waits at the room's 0, where Core sends it nothing.
+  expect(lead.leadMs("phone", "opus", undefined, "Phone")).toBe(0);
+  // 55 + 26 and 70 + 26 both round up to 100.
+  expect(lead.leadMs("phone", "opus", 55, "Phone")).toBe(100);
+  expect(lead.leadMs("laptop", "opus", 70, "Laptop")).toBe(100);
+  expect(lead.leadMs("wired", "opus", 47, "Wired")).toBe(75);
+  expect(lead.leadMs("phone", "opus", 55, "Phone")).toBe(100);
+  expect(lines).toEqual([
+    "live input side opus: 26 ms",
+    'live listener "Phone" opus: declares 55 ms, input side 26 ms, plays 100 ms after capture (room 0 ms)',
+    'live listener "Laptop" opus: declares 70 ms, input side 26 ms, plays 100 ms after capture (room 0 ms)',
+    'live listener "Wired" opus: declares 47 ms, input side 26 ms, plays 75 ms after capture (room 0 ms)',
+  ]);
 });

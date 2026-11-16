@@ -1,6 +1,9 @@
 import type { NativeBufferFrames, NativeChannelMap } from "./capture";
 export type LiveAudioSettings = { codec: "auto" | "pcm" | "opus"; minBufferMs: number };
-export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 150 };
+// The room's delay (minBufferMs) is a floor an organiser may set. By default there is none: each
+// listener plays as soon as its own measured need allows, and listeners whose needs round up to
+// the same step play together.
+export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 0 };
 export const isLiveAudioSettings = (value: unknown): value is LiveAudioSettings => {
   const v = value as LiveAudioSettings;
   return (

@@ -48,13 +48,16 @@ wrong clock still shows the right time.
 ## Timing
 
 - A relaxed share keeps at least one second of lead. A Live share's delay, the
-  room's, is the host's **Playback buffer floor** (Share dialog, 150 ms
-  initially), taken when each listener's playback loads. Every chunk is stamped
+  room's, is the host's **Playback buffer floor** (Share dialog, 0 initially: no
+  floor), taken when each listener's playback loads. Every chunk is stamped
   capture time plus that delay; nothing a listener declares moves it.
 - Each Receiver declares only its own need through the SDK's `minBufferMs`: its
-  once-a-second `syncInfo.outputLatencyMs` reading plus a 35 ms allowance. The
-  first reading sets it; later, the median of the last five raises it only when
-  it outgrows it by more than 25 ms.
+  once-a-second `syncInfo.outputLatencyMs` reading plus the player's 15 ms
+  scheduling batch (`scheduler.js`), read only once its sound is unlocked (a
+  suspended context reports its base latency only). The first reading sets it;
+  later, the median of the last five raises it only when it outgrows it by more
+  than 25 ms. Until then it declares 0 and Core keeps it in the room: with no
+  floor it hears nothing for its first second or two, then starts at its step.
 - A Receiver that keeps losing sound to late chunks declares one more 25 ms
   step. The SDK drops a late chunk silently, so Couch counts them next to the
   player: when the sound ran out before the next chunk was scheduled, that
@@ -66,15 +69,19 @@ wrong clock still shows the right time.
   doesn't count: it holds what was captured while the encoder started.
 - A listener whose declaration, Sync delay and its wire's input-side time exceed
   the room's delay plays on its own, at that need rounded up to the next 25 ms
-  step: the same chunks, stamped later for it. It plays in the room until the
-  input-side time is known (about two seconds), so it moves once. Its step only
+  step: the same chunks, stamped later for it. Listeners whose needs round up to
+  the same step play together. It plays in the room until the input-side time
+  and its own need are known (about two seconds), so it moves once. Its step only
   rises while it listens and resets when it leaves or the input restarts. A
   rise is a short slew or gap for that listener only. Core keeps each chunk
   until the latest listener has played it.
 - Sync is only as good as the browser's output-latency report; Couch can't
-  correct a misreported output delay. The SDK exposes no arrival or queue
-  statistics, so the 35 ms allowance (the player's 15 ms scheduling batch,
-  decoding and an ordinary network) isn't measured jitter.
+  correct a misreported output delay. Decoding and the network aren't measured
+  up front: a listener that loses chunks to them steps itself later.
+- Couch's log gets one line each time a wire's input side changes
+  (`live input side opus: 26 ms`) and each time a listener's declaration or step
+  changes (`live listener "Name" opus: declares 55 ms, input side 26 ms, plays
+  100 ms after capture (room 0 ms)`).
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.
 - **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.

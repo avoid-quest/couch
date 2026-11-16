@@ -78,6 +78,15 @@ async function fixture(t: TestContext) {
       },
     };
   };
+  // The host's room delay: a floor an organiser may set (none by default).
+  const room = async (minBufferMs: number) => {
+    const saved = await fetch(`${f.hub.origin}/api/settings/live-audio`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${"h".repeat(64)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: { codec: "auto", minBufferMs } }),
+    });
+    assert.equal(saved.status, 200);
+  };
   return {
     ...f,
     get hub() {
@@ -85,6 +94,7 @@ async function fixture(t: TestContext) {
     },
     host,
     listener,
+    room,
   };
 }
 
@@ -94,6 +104,7 @@ test(
   async (t) => {
     const f = await fixture(t),
       other = await f.connect(2);
+    await f.room(150);
     const fast = await f.listener(1, AudioCodec.PCM, 65),
       slow = await f.listener(2, AudioCodec.PCM, 150);
     await slow.client.sendPlayerState({ static_delay_ms: 10 });
@@ -110,7 +121,7 @@ test(
       const [moved] = moves(slow.frames);
       return moved !== undefined && Math.min(fast.frames.length, slow.frames.length) > moved + 20;
     });
-    // The default room delay is 150 ms; 150 + 10 ms of Sync and the input side don't fit.
+    // A room of 150 ms; 150 + 10 ms of Sync and the input side don't fit.
     assert.equal(fast.frames[0]!.at, input.origin + 150_000);
     assert.deepEqual(moves(fast.frames), [], "the one that fits stays in the room");
     const [moved] = moves(slow.frames),
@@ -147,6 +158,7 @@ test(
     const f = await fixture(t),
       secondHost = await f.connect(-1),
       other = await f.connect(2);
+    await f.room(150);
     const first = await f.listener(1, AudioCodec.PCM, 100),
       second = await f.listener(2, AudioCodec.PCM, 400);
     assert.equal((await f.host.command(publication)).ok, true);
@@ -226,26 +238,32 @@ test(
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
-      listener = await f.listener(1, AudioCodec.PCM, 65);
-    const saved = await fetch(`${f.hub.origin}/api/settings/live-audio`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${"h".repeat(64)}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ settings: { codec: "auto", minBufferMs: 0 } }),
-    });
-    assert.equal(saved.status, 200);
+      other = await f.connect(2),
+      listener = await f.listener(1, AudioCodec.PCM, 65),
+      // Couch's own listener declares nothing until it has measured its output.
+      measuring = await f.listener(2, AudioCodec.PCM, 0);
     assert.equal((await f.host.command(publication)).ok, true);
-    assert.equal(
-      (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
-        .ok,
-      true,
-    );
-    await f.streamCapture(f.host, "concert", -1, counted(0.25));
+    for (const receiver of [f.receiver, other])
+      assert.equal(
+        (await receiver.command({ type: "playLive", sourceId: "concert", deviceId: receiver.id }))
+          .ok,
+        true,
+      );
+    const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
     // Every chunk is late in the room itself, so the listener hears nothing until its own step.
     await until(() => listener.frames.length > 20);
     assert.deepEqual(moves(listener.frames), []);
+    const step = delays(listener.frames, input.origin)[0]!;
+    assert.ok(step > 65_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
     await until(
       () => f.receiver.state.player.status === "playing" && !f.receiver.state.player.buffering,
     );
+    assert.equal(measuring.frames.length, 0, "a listener with no need yet gets nothing");
+    // The same need plays together; its first chunk is already at its step.
+    await measuring.client.sendPlayerState({ min_buffer_ms: 65 });
+    await until(() => measuring.frames.length > 20);
+    assert.deepEqual(moves(measuring.frames), []);
+    assert.equal(delays(measuring.frames, input.origin)[0], step);
   },
 );
 
@@ -306,6 +324,7 @@ test(
   async (t) => {
     const f = await fixture(t),
       player = await f.listener(1);
+    await f.room(150);
     assert.equal((await f.host.command(publication)).ok, true);
     assert.equal(
       (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))

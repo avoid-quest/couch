@@ -518,11 +518,18 @@ export function createScheduledAudio(options: {
           const live = current.captureIntent === "live";
           // Sender-timed AirPlay plays at its capture times, the sender's, like a Live room with no
           // delay: a speaker that joins doesn't move it, and one whose need doesn't fit plays a step later.
+          const log = (line: string) =>
+            console.log(
+              `${new Date().toISOString()} ${id.slice(0, 8)} ${line}`.replace(
+                /[\p{Cc}\u2028\u2029]/gu,
+                " ",
+              ),
+            );
           const lead = () =>
             live
-              ? createLiveLead(current.liveDelayMs ?? 0)
+              ? createLiveLead(current.liveDelayMs ?? 0, log)
               : details?.senderTimed
-                ? createLiveLead(0)
+                ? createLiveLead(0, log)
                 : undefined;
           const next: Run = {
             fixed: true,
@@ -926,13 +933,19 @@ export function createScheduledAudio(options: {
         const list = current.queues[wire],
           sent = current.sent[wire];
         // A Live listener that doesn't fit the room's delay gets the same chunks, stamped later.
+        // Couch's own listener declares no buffer until it has measured its output: it has no need yet.
         const later = new Map<SendspinSession, number>();
         for (const session of current.cursors.keys())
           if (wireOf(session) === wire)
             later.set(
               session,
               current.live
-                ? (current.live.leadMs(session.getClientId()!, wire, playerLead(session, 0)) -
+                ? (current.live.leadMs(
+                    session.getClientId()!,
+                    wire,
+                    session.getPlayerTiming().minBufferMs ? playerLead(session, 0) : undefined,
+                    session.getClientName() ?? session.getClientId()!,
+                  ) -
                     current.live.roomMs) *
                     1000
                 : 0,

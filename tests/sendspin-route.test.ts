@@ -76,7 +76,7 @@ test("a new Live source or a new Join starts its own need again", async () => {
   const first = players.at(-1)!;
   first.syncInfo.outputLatencyMs = 201;
   tick(5);
-  expect(first.buffers).toEqual([236]);
+  expect(first.buffers).toEqual([216]);
   listen(true, false, credentials, "Fixture", { ...settings, sourceId: "second" });
   await settle();
   expect(first.disconnected).toBe(true);
@@ -154,10 +154,10 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
     for (let i = 0; i < 5; i++) await second(50, true);
     // Core sends nothing (its input stalled, or what it had was already late).
     for (let i = 0; i < 5; i++) await second(0, false);
-    expect(player.buffers).toEqual([62]);
+    expect(player.buffers).toEqual([42]);
     // Every chunk that arrives is late and dropped: the listener plays nothing.
     for (let i = 0; i < 5; i++) await second(50, false);
-    expect(player.buffers).toEqual([62, 87]);
+    expect(player.buffers).toEqual([42, 67]);
   } finally {
     clock.mockRestore();
   }

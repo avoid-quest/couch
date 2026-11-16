@@ -99,11 +99,20 @@ let latencyReadings: number[] = [];
 let lostSeconds: boolean[] = [];
 let lateSteps: LateSteps = { steps: 0 };
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
+// The player whose sound this tab unlocked. Until then its context is suspended and reports only
+// its base latency, too little a need; with no room delay, Core sends a listener nothing before it
+// has declared one, so this reading has to come from a running context.
+let sounding: SendspinPlayer | undefined;
 // sample: add this second's readings. The room's delay is the host's and isn't declared here.
 const updateBuffer = (created: SendspinPlayer, sample = false) => {
   if (connected !== created || !liveSettings) return;
   const playing =
-    sample && hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced;
+    sample &&
+    hearing &&
+    sounding === created &&
+    created.isConnected &&
+    created.isPlaying &&
+    created.timeSyncInfo.synced;
   const latency = playing ? created.syncInfo.outputLatencyMs : NaN;
   if (Number.isFinite(latency) && latency >= 0)
     latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
@@ -218,6 +227,7 @@ export function listen(
         () => {
           if (player !== current || !hearing) return;
           unlocked = true;
+          sounding = created;
           waitForTap(null);
         },
         () => {},
@@ -226,7 +236,9 @@ export function listen(
         if (player !== current || !hearing) return;
         void created.unlock().then(
           () => {
-            if (player === current && hearing) waitForTap(null);
+            if (player !== current || !hearing) return;
+            sounding = created;
+            waitForTap(null);
           },
           (reason) => {
             if (player !== current || !hearing) return;
