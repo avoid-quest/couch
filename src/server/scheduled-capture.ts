@@ -125,6 +125,12 @@ export function createScheduledCapture(
           ...(relaxed ? [] : ["-application", "lowdelay"]),
           "-b:a",
           "160k",
+          // Constant bitrate: variable bitrate encodes silence as 3-byte packets, and FFmpeg's MPEG-TS
+          // muxer gathers Opus packets until 170 bytes or 120 ms, so after any silence every frame
+          // left about 100 ms late and Core's input side (which only rises) kept that for the run.
+          // At 160 kb/s each frame is 400 bytes or more and leaves at once.
+          "-vbr",
+          "off",
           "-frame_duration",
           String(opusMs),
           // MPEG-TS, not Ogg: FFmpeg's Ogg muxer holds each page until the next one, a whole frame.
