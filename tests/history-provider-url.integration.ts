@@ -5,7 +5,7 @@ import { openStore } from "../src/server/store";
 import type { QueueEntry } from "../src/shared/protocol";
 
 const mediaId = `media:${"a".repeat(64)}`;
-async function history(source: string, kind?: QueueEntry["kind"], live = false) {
+async function history(source: string, kind?: QueueEntry["kind"], endless = false) {
   const store = openStore(":memory:");
   store.saveProgress(
     "household",
@@ -22,7 +22,7 @@ async function history(source: string, kind?: QueueEntry["kind"], live = false) 
       source,
       title: "Known film",
       kind,
-      live,
+      endless,
       thumbnail: "https://art.example/poster.png",
     },
   );
