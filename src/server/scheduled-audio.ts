@@ -534,7 +534,7 @@ export function createScheduledAudio(options: {
               report();
               return;
             }
-            next.live?.arrived(event.at, serverNowUs());
+            next.live?.arrived(event.wire, event.at, serverNowUs());
             if (!live) next.captureLead = Math.max(next.captureLead!, sendAhead());
             const at = event.at + (next.live?.roomMs ?? next.captureLead!) * 1000;
             if (next.base === undefined) {
@@ -897,10 +897,27 @@ export function createScheduledAudio(options: {
           current.clock!.push({ at: current.base + offset, offset });
         }
       }
+      // How much later than the room the latest Live listener plays.
+      let latest = 0;
       for (const wire of wires) {
         const list = current.queues[wire],
           sent = current.sent[wire];
-        while (sent[0] && sent[0].end <= now) sent.shift();
+        // A Live listener that doesn't fit the room's delay gets the same chunks, stamped later.
+        const later = new Map<SendspinSession, number>();
+        for (const session of current.cursors.keys())
+          if (wireOf(session) === wire)
+            later.set(
+              session,
+              current.live
+                ? (current.live.leadMs(session.getClientId()!, wire, playerLead(session, 0)) -
+                    current.live.roomMs) *
+                    1000
+                : 0,
+            );
+        // Chunks stay until the latest listener on this wire has played them.
+        const kept = Math.max(0, ...later.values());
+        latest = Math.max(latest, kept);
+        while (sent[0] && sent[0].end + kept <= now) sent.shift();
         while (list[0] && (current.fixed || current.base + list[0].offset - sendUs <= now)) {
           const chunk = list.shift()!,
             at = current.base + chunk.offset;
@@ -912,7 +929,8 @@ export function createScheduledAudio(options: {
         // time. The SDK counts what each player holds (Sendspin Player Buffer Accounting).
         // Cursors already contain only this run's active members.
         for (const [session, cursor] of current.cursors) {
-          if (wireOf(session) !== wire) continue;
+          const lateUs = later.get(session);
+          if (lateUs === undefined) continue;
           // The SDK holds a player's stream until it may play (its first state, available) and
           // drops audio meanwhile, so nothing counts as sent before the stream is open. A stream it
           // ended (an unavailable player) took its held audio along, so that audio goes again.
@@ -923,16 +941,10 @@ export function createScheduledAudio(options: {
           }
           const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
-          // A Live listener that doesn't fit the room's delay gets the same chunks, stamped later.
-          const later = current.live
-            ? (current.live.leadMs(session.getClientId()!, playerLead(session, 0)) -
-                current.live.roomMs) *
-              1000
-            : 0;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;
             if (cursor.sent !== undefined && chunk.at <= cursor.sent) continue;
-            if (chunk.at + later - delay <= now) continue;
+            if (chunk.at + lateUs - delay <= now) continue;
             if (
               session.timeUntilPlayerCapacityUs(chunk.data.length + session.getAudioHeaderSize()) >
                 0 ||
@@ -941,7 +953,7 @@ export function createScheduledAudio(options: {
               break;
             session.sendPcmAudioFrame({
               data: chunk.data,
-              timestampUs: chunk.at + later,
+              timestampUs: chunk.at + lateUs,
               durationUs: chunk.end - chunk.at,
             });
             cursor.sent = chunk.at;
@@ -953,10 +965,10 @@ export function createScheduledAudio(options: {
         )
           current.pipes[wire]!.resume();
       }
-      // Waiting for the source: the speakers have played everything they were sent.
+      // Waiting for the source: the speakers, Live listeners at their steps, have played everything they were sent.
       const drained =
         Object.values(current.queues).every((list) => !list.length) &&
-        now >= current.base + current.released;
+        now >= current.base + current.released + latest;
       const starving =
         (current.exit === undefined && drained) || soundClock(current, now).buffering;
       const status =

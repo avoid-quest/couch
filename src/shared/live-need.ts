@@ -6,11 +6,11 @@ export const liveReadings = 5;
 
 export const liveStep = (needMs: number) => Math.ceil(needMs / liveStepMs) * liveStepMs;
 
-// The median of the last five once-a-second readings, plus an allowance: the first one sets the
-// need, later ones only raise it.
+// Once-a-second readings plus an allowance. The first reading sets the need, so a listener reaches
+// its step within a second; later only the median of the last five raises it.
 export function risenNeed(currentMs: number | undefined, readingsMs: number[], allowanceMs = 0) {
   const recent = readingsMs.slice(-liveReadings).sort((a, b) => a - b);
-  if (recent.length < liveReadings) return currentMs;
-  const need = Math.ceil(recent[liveReadings >> 1]! + allowanceMs);
+  if (!recent.length || (currentMs !== undefined && recent.length < liveReadings)) return currentMs;
+  const need = Math.ceil(recent[recent.length >> 1]! + allowanceMs);
   return currentMs === undefined || need > currentMs + liveStepMs ? need : currentMs;
 }

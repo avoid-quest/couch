@@ -16,6 +16,9 @@ const publication = {
   intent: "live",
 } as const;
 const signal = (_position: number, channel: number) => (channel ? -0.25 : 0.25);
+// Where a listener's 5 ms frames stop following each other: it moved to another step.
+const moves = (frames: { at: number }[]) =>
+  frames.flatMap((frame, i) => (i && frame.at - frames[i - 1]!.at !== 5_000 ? [i] : []));
 
 async function fixture(t: TestContext) {
   const f = await liveFixture({ media: { ffmpeg, recording: new Uint8Array() } });
@@ -92,22 +95,29 @@ test(
         true,
       );
     const input = await f.streamCapture(f.host, "concert", -1, signal);
-    await until(() => fast.frames.length > 20 && slow.frames.length > 20);
-    // The default room delay is 150 ms; 150 + 10 ms of Sync doesn't fit, so that one plays at 175.
+    // A listener plays in the room until Core has measured the input side, then moves once.
+    await until(() => {
+      const [moved] = moves(slow.frames);
+      return moved !== undefined && Math.min(fast.frames.length, slow.frames.length) > moved + 20;
+    });
+    // The default room delay is 150 ms; 150 + 10 ms of Sync and the input side don't fit.
     assert.equal(fast.frames[0]!.at, input.origin + 150_000);
+    assert.deepEqual(moves(fast.frames), [], "the one that fits stays in the room");
+    const [moved] = moves(slow.frames),
+      later = slow.frames[moved!]!.at - fast.frames[moved!]!.at;
+    assert.deepEqual(moves(slow.frames), [moved], "it moves once");
+    assert.ok(later > 0 && later % 25_000 === 0, `a whole step later, not ${later} µs`);
     assert.deepEqual(
-      slow.frames.slice(0, 20),
-      fast.frames.slice(0, 20).map((frame) => ({ ...frame, at: frame.at + 25_000 })),
+      slow.frames.slice(0, moved! + 20),
+      fast.frames
+        .slice(0, moved! + 20)
+        .map((frame, i) => ({ ...frame, at: frame.at + (i < moved! ? 0 : later) })),
       "the same samples, stamped a step later",
     );
 
     await fast.client.sendPlayerState({ min_buffer_ms: 205 });
-    await until(() =>
-      fast.frames.some((frame, i, frames) => i > 0 && frame.at - frames[i - 1]!.at === 80_000),
-    );
-    const steady = (frames: { at: number }[]) =>
-      frames.every((frame, i) => i === 0 || frame.at - frames[i - 1]!.at === 5_000);
-    assert.ok(steady(slow.frames), "one Receiver's need moves nobody else");
+    await until(() => moves(fast.frames).length > 0);
+    assert.deepEqual(moves(slow.frames), [moved], "one Receiver's need moves nobody else");
 
     assert.equal(
       (await f.receiver.command({ type: "leave", playbackId: f.receiver.state.player.playbackId! }))
@@ -116,7 +126,7 @@ test(
     );
     const before = slow.frames.length;
     await until(() => slow.frames.length > before + 20);
-    assert.ok(steady(slow.frames), "leaving moves nobody else");
+    assert.deepEqual(moves(slow.frames), [moved], "leaving moves nobody else");
   },
 );
 
@@ -127,7 +137,7 @@ test(
     const f = await fixture(t),
       secondHost = await f.connect(-1),
       other = await f.connect(2);
-    const first = await f.listener(1),
+    const first = await f.listener(1, AudioCodec.PCM, 100),
       second = await f.listener(2, AudioCodec.PCM, 400);
     assert.equal((await f.host.command(publication)).ok, true);
     assert.equal(
@@ -150,7 +160,10 @@ test(
       -1,
       (_position, channel) => (channel ? 0.5 : -0.5),
     );
-    await until(() => first.frames.length > 20 && second.frames.length > 20);
+    await until(() => {
+      const [moved] = moves(second.frames);
+      return first.frames.length > 20 && moved !== undefined && second.frames.length > moved + 20;
+    });
     assert.notEqual(f.receiver.state.playback, other.state.playback);
     assert.deepEqual(
       f.receiver.state.outputs?.map((output) => output.deviceId),
@@ -161,11 +174,14 @@ test(
       [other.id],
     );
     assert.equal(first.frames[0]!.at, input.origin + 150_000);
-    assert.equal(
-      second.frames[0]!.at,
-      otherInput.origin + 400_000,
+    assert.deepEqual(
+      moves(first.frames),
+      [],
       "another share's larger buffer does not delay this audience",
     );
+    const last = second.frames.length - 1,
+      step = second.frames[last]!.at - otherInput.origin - last * 5_000;
+    assert.ok(step > 400_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
     assert.ok(
       first.frames.every(
         (frame) => frame.bytes.readInt16LE(0) === 8192 && frame.bytes.readInt16LE(2) === -8192,
@@ -195,9 +211,7 @@ test(
     assert.equal(second.clears, clears);
     assert.equal(second.ends, 0);
     assert.equal(second.starts, 1);
-    assert.ok(
-      second.frames.every((frame, i, frames) => i === 0 || frame.at - frames[i - 1]!.at === 5000),
-    );
+    assert.deepEqual(moves(second.frames.slice(before - 1)), []);
     assert.equal(other.state.playback, playback);
     assert.deepEqual(
       other.state.liveSources?.map((source) => source.id),
@@ -207,6 +221,34 @@ test(
       (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
         .ok,
       false,
+    );
+  },
+);
+
+test(
+  "with no room delay, each listener plays at its own step and the Playback plays",
+  { timeout: 15_000 },
+  async (t) => {
+    const f = await fixture(t),
+      listener = await f.listener(1, AudioCodec.PCM, 65);
+    const saved = await fetch(`${f.hub.origin}/api/settings/live-audio`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${"h".repeat(64)}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: { codec: "auto", minBufferMs: 0 } }),
+    });
+    assert.equal(saved.status, 200);
+    assert.equal((await f.host.command(publication)).ok, true);
+    assert.equal(
+      (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
+        .ok,
+      true,
+    );
+    await f.streamCapture(f.host, "concert", -1, signal);
+    // Every chunk is late in the room itself, so the listener hears nothing until its own step.
+    await until(() => listener.frames.length > 20);
+    assert.deepEqual(moves(listener.frames), []);
+    await until(
+      () => f.receiver.state.player.status === "playing" && !f.receiver.state.player.buffering,
     );
   },
 );

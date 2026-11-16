@@ -51,18 +51,21 @@ wrong clock still shows the right time.
   room's, is the host's **Playback buffer floor** (Share dialog, 150 ms
   initially), taken when each listener's playback loads. Every chunk is stamped
   capture time plus that delay; nothing a listener declares moves it.
-- Each Receiver declares only its own need through the SDK's `minBufferMs`: the
-  median of five once-a-second `syncInfo.outputLatencyMs` readings plus a 35 ms
-  allowance. The first median sets it; later ones raise it only when they
-  outgrow it by more than 25 ms.
-- Core measures its own input-side time per run: capture to the chunk reaching
-  Core from the encoder, the highest of each second, the median of the last
-  five, raised by the same rule.
-- A listener whose declaration, Sync delay and the input-side time exceed the
-  room's delay plays on its own, at that need rounded up to the next 25 ms step:
-  the same chunks, stamped later for it. Its step only rises while it listens
-  and resets when it leaves or the input restarts. A rise is a short slew or gap
-  for that listener only.
+- Each Receiver declares only its own need through the SDK's `minBufferMs`: its
+  once-a-second `syncInfo.outputLatencyMs` reading plus a 35 ms allowance. The
+  first reading sets it; later, the median of the last five raises it only when
+  it outgrows it by more than 25 ms.
+- Core measures its own input-side time per run and wire (Opus and PCM frames
+  fill at their own pace): capture to the chunk reaching Core from the encoder,
+  the highest of each second, set and raised by the same rule. The first second
+  doesn't count: it holds what was captured while the encoder started.
+- A listener whose declaration, Sync delay and its wire's input-side time exceed
+  the room's delay plays on its own, at that need rounded up to the next 25 ms
+  step: the same chunks, stamped later for it. It plays in the room until the
+  input-side time is known (about two seconds), so it moves once. Its step only
+  rises while it listens and resets when it leaves or the input restarts. A
+  rise is a short slew or gap for that listener only. Core keeps each chunk
+  until the latest listener has played it.
 - Sync is only as good as the browser's output-latency report; Couch can't
   correct a misreported output delay. The SDK exposes no arrival/starvation
   statistics, so the 35 ms allowance (the player's 15 ms scheduling batch,
