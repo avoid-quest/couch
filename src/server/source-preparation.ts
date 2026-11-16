@@ -32,7 +32,13 @@ type AudioInput = {
   pictureStart?: number;
 };
 type Playlist = { url: string; lines: string[] };
-type ManifestReads = Map<string, Promise<Playlist | null>>;
+// read: where a preparation's playlists come from, when not straight from the source (the relay's shared reads).
+type Read = (
+  url: string,
+  headers: Record<string, string>,
+  publicNetwork: boolean,
+) => Promise<Response>;
+type ManifestReads = Map<string, Promise<Playlist | null>> & { read?: Read };
 
 // Read only the manifest, never its media. Public-provider preparation uses the
 // same destination/redirect checks as the byte relay; private URL media retains
@@ -43,24 +49,27 @@ async function playlist(
   signal: AbortSignal,
   publicNetwork = false,
   reads?: ManifestReads,
+  source?: Read,
 ): Promise<Playlist | null> {
   if (reads) {
     const key = JSON.stringify([url, publicNetwork, Object.entries(headers).sort()]);
     let read = reads.get(key);
     if (!read) {
-      read = playlist(url, headers, signal, publicNetwork);
+      read = playlist(url, headers, signal, publicNetwork, undefined, reads.read);
       reads.set(key, read);
     }
     return read;
   }
   signal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
   signal.throwIfAborted();
-  const response = await (publicNetwork ? publicFetch : fetch)(url, { headers, signal }).catch(
-    () => {
-      signal.throwIfAborted();
-      return null;
-    },
-  );
+  const response = await (
+    source
+      ? source(url, headers, publicNetwork)
+      : (publicNetwork ? publicFetch : fetch)(url, { headers, signal })
+  ).catch(() => {
+    signal.throwIfAborted();
+    return null;
+  });
   const type = response?.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
   const advertised =
     /mpegurl/i.test(type) || /\.m3u8$/i.test(new URL(response?.url || url).pathname);
@@ -426,8 +435,8 @@ export async function prepareSource<T extends Media>(
 
 // Selection precedes live classification, even when the HLS URL has no suffix.
 // Reuse those bounded reads only while preparing this load, never across loads.
-export function createSourcePreparation(signal: AbortSignal) {
-  const reads: ManifestReads = new Map();
+export function createSourcePreparation(signal: AbortSignal, read?: Read) {
+  const reads: ManifestReads = Object.assign(new Map<string, Promise<Playlist | null>>(), { read });
   return {
     select: <T extends Media>(
       media: T,

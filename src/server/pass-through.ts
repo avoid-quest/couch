@@ -24,6 +24,7 @@ type Media = {
   mpegts?: boolean;
   mpv?: boolean;
   publicNetwork?: boolean;
+  renewal?: WebMediaSource["renewal"];
 };
 // refused: the last error status the source answered, which a browser reports as an unsupported format.
 type Relay = {
@@ -44,9 +45,70 @@ type Relay = {
   audioSource?: string;
   hlsSelection?: Media["hlsSelection"];
   hlsMaxHeight?: number;
+  renewal?: Media["renewal"];
   logged: Set<string>;
 };
 type Kind = "playlist" | "bytes";
+// One upstream read of a playlist, shared by every route of its Playback: Core's sound decoder and
+// every screen get the same text, so one provider session serves them all (Twitch: the same ads).
+// text: the playlist, when the source answered one.
+type Read = {
+  playbackId: string;
+  at: number;
+  maxAge: number;
+  answer: Promise<{ status: number; url: string; response: Response; text?: string }>;
+};
+
+// A master, or a media playlist that won't change (VOD, ENDLIST), is read once for the item. An
+// endless one at most every half target duration: a client that reloads and sees no change asks
+// again after half the target duration (RFC 8216 §6.3.4), so a screen waits no longer for news.
+const playlistAge = (text: string) => {
+  if (/^#EXT-X-(?:STREAM-INF:|MEDIA:|ENDLIST|PLAYLIST-TYPE:VOD)/m.test(text)) return Infinity;
+  const target = Number(/^#EXT-X-TARGETDURATION:(\d+(?:\.\d+)?)/m.exec(text)?.[1]);
+  return target > 0 ? target * 500 : 0;
+};
+// A refused address may be a link that expired, so Core resolves the item again once.
+const refusal = (status: number) => [401, 403, 404, 410].includes(status);
+// The expiry a link names, in ms: googlevideo's expire= (or /expire/<s>/ in its playlists'
+// paths), or "expires" in a token parameter (Twitch's usher).
+const linkExpiry = (url: string) => {
+  const address = URL.parse(url);
+  if (!address) return undefined;
+  const named = [
+    address.searchParams.get("expire"),
+    address.searchParams.get("expires"),
+    /\/expire\/(\d+)(?:\/|$)/.exec(address.pathname)?.[1],
+    ...[...address.searchParams.values()].map((value) => /"expires"\s*:\s*(\d+)/.exec(value)?.[1]),
+  ].find((value) => !!value && /^\d{9,11}$/.test(value));
+  return named ? Number(named) * 1000 : undefined;
+};
+// Core renews this long before a link's expiry: a yt-dlp run takes seconds, and a hung one gives
+// up after 30 s (the resolution's own timeout), so a second try still fits before the link fails.
+const renewAhead = 60_000;
+// The masters' variants and renditions, each with what identifies it across two resolutions of
+// one item: its tag without its address and bandwidth, which a provider may re-measure.
+const variantsOf = (text: string, base: string) => {
+  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  return lines.flatMap((line, index) => {
+    const tag = /^#EXT-X-(STREAM-INF|MEDIA|I-FRAME-STREAM-INF):/.exec(line)?.[1];
+    const uri =
+      tag === "STREAM-INF"
+        ? lines[index + 1] && !lines[index + 1]!.startsWith("#")
+          ? lines[index + 1]
+          : undefined
+        : /[:,]URI="([^"]+)"/.exec(line)?.[1];
+    const url = uri && URL.parse(uri, base)?.href;
+    return tag && url
+      ? [
+          {
+            tag,
+            key: line.replace(/([:,])(?:URI|BANDWIDTH|AVERAGE-BANDWIDTH)=("[^"]*"|[^,]*)/g, "$1"),
+            url,
+          },
+        ]
+      : [];
+  });
+};
 
 const playlistType = (type: string | null, url: string) =>
   /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -249,6 +311,148 @@ export function createPassThrough(
     const relay = relayId ? relays.get(relayId) : undefined;
     return relay?.playbackId === playbackId ? relay : undefined;
   };
+  const reads = new Map<string, Read>();
+  // Upstream addresses a renewal replaced, per Playback: every link Core gave keeps working.
+  const renewed = new Map<string, Map<string, string>>();
+  const renewedAddress = (playbackId: string, url: string) => {
+    const aliases = renewed.get(playbackId);
+    for (let hops = 0; aliases?.has(url) && hops < 64; hops++) url = aliases.get(url)!;
+    return url;
+  };
+  const forget = () => {
+    for (const [key, read] of reads)
+      if (
+        (!current(read.playbackId) && Date.now() - read.at > 60_000) ||
+        Date.now() - read.at > read.maxAge + 60_000
+      )
+        reads.delete(key);
+    for (const playbackId of renewed.keys()) if (!current(playbackId)) renewed.delete(playbackId);
+  };
+  // hls.js gives up on a playlist that hasn't answered in 10 s (its playlistLoadPolicy), so one
+  // slow read never holds every screen's reload longer than that.
+  const shared = (
+    playbackId: string,
+    url: string,
+    publicNetwork: boolean | undefined,
+    headers: Record<string, string>,
+    expiring?: () => void,
+  ) => {
+    const key = `${playbackId}\n${url}`;
+    const saved = reads.get(key);
+    if (saved && Date.now() - saved.at < saved.maxAge) return saved.answer;
+    forget();
+    const read: Read = {
+      playbackId,
+      at: Date.now(),
+      maxAge: Infinity, // Until it answers, every request waits for this one read.
+      answer: (async () => {
+        const expiry = linkExpiry(url);
+        if (expiry !== undefined && expiry - Date.now() < renewAhead) expiring?.();
+        const signal = AbortSignal.timeout(10_000);
+        const response = await (publicNetwork ? publicRequest : fetch)(url, { headers, signal });
+        const answer = { status: response.status, url: response.url || url, response };
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {});
+          return answer;
+        }
+        const sniffed = await sniffPlaylist(response);
+        if (!sniffed.playlist && !playlistType(response.headers.get("content-type"), answer.url)) {
+          await sniffed.response.body?.cancel().catch(() => {});
+          return answer;
+        }
+        const text = new TextDecoder().decode(
+          await boundedBytes(sniffed.response, 2 * 1024 * 1024, signal),
+        );
+        return { ...answer, text };
+      })(),
+    };
+    reads.set(key, read);
+    read.answer.then(
+      (answer) => {
+        read.at = Date.now();
+        read.maxAge = answer.text === undefined ? 0 : playlistAge(answer.text);
+      },
+      () => {
+        if (reads.get(key) === read) reads.delete(key);
+      },
+    );
+    return read.answer;
+  };
+  // Core resolves the item again, once at a time for every route of its resolution, and maps each
+  // old address (the master, its variants and renditions, a file) onto the new one.
+  const renew = (relay: Relay): Promise<boolean> => {
+    const renewal = relay.renewal;
+    if (!renewal || renewal.spent) return Promise.resolve(false);
+    renewal.pending ??= (async () => {
+      const previous = renewal.current;
+      const fresh = await renewal.renew(AbortSignal.timeout(30_000));
+      const aliases = renewed.get(relay.playbackId) ?? new Map<string, string>();
+      const pairs: Array<[string | undefined, string | undefined]> = [
+        [previous.source, fresh.source],
+        [previous.audioSource, fresh.audioSource],
+        [previous.hlsSelection?.video, fresh.hlsSelection?.video],
+        [previous.hlsSelection?.audio, fresh.hlsSelection?.audio],
+      ];
+      const before = await reads
+        .get(`${relay.playbackId}\n${previous.source}`)
+        ?.answer.catch(() => undefined);
+      const after = before?.text
+        ? await shared(
+            relay.playbackId,
+            fresh.source,
+            relay.publicNetwork,
+            relayHeaders(relay, fresh.source),
+          ).catch(() => undefined)
+        : undefined;
+      if (before?.text && after?.text) {
+        const old = variantsOf(before.text, before.url),
+          next = variantsOf(after.text, after.url);
+        for (const variant of old) {
+          const same = next.filter((item) => item.tag === variant.tag);
+          const position = old.filter((item) => item.tag === variant.tag).indexOf(variant);
+          pairs.push([
+            variant.url,
+            (same.find((item) => item.key === variant.key) ?? same[position])?.url,
+          ]);
+        }
+      }
+      for (const [from, to] of pairs) if (from && to && from !== to) aliases.set(from, to);
+      renewed.set(relay.playbackId, aliases);
+      renewal.current = {
+        source: fresh.source,
+        audioSource: fresh.audioSource,
+        hlsSelection: fresh.hlsSelection,
+      };
+      // A link that would expire again at once is not worth another resolution.
+      if ((linkExpiry(fresh.source) ?? Infinity) - Date.now() < renewAhead) renewal.spent = true;
+      return true;
+    })()
+      .catch(() => {
+        renewal.spent = true;
+        return false;
+      })
+      .finally(() => (renewal.pending = undefined));
+    return renewal.pending;
+  };
+  // A playlist through the shared read; a refusal renews the link once and reads again.
+  const playlistOf = async (relay: Relay, url: string) => {
+    const read = () => {
+      const address = renewedAddress(relay.playbackId, url);
+      return shared(
+        relay.playbackId,
+        address,
+        relay.publicNetwork,
+        relayHeaders(relay, address),
+        () => void renew(relay),
+      );
+    };
+    let answer = await read();
+    if (refusal(answer.status) && (await renew(relay))) {
+      answer = await read();
+      if (refusal(answer.status) && relay.renewal) relay.renewal.spent = true;
+    }
+    return answer;
+  };
 
   async function rewrite(text: string, base: string, relay: Relay) {
     let lines = text.split(/\r?\n/);
@@ -343,6 +547,25 @@ export function createPassThrough(
       relays.clear();
       await (await internal)?.stop();
     },
+    // Core's own playlist reads while it prepares a Playback (the master its sound is chosen from)
+    // share the relay's reads, so Core and the screens start from one provider session.
+    reader:
+      (playbackId: string) =>
+      (url: string, headers: Record<string, string>, publicNetwork: boolean) =>
+        shared(playbackId, renewedAddress(playbackId, url), publicNetwork, headers).then(
+          ({ status, url: answered, text, response: { ok } }) => {
+            // An answer that isn't a playlist reads as one Core can't use (415).
+            const response =
+              text === undefined
+                ? new Response(null, { status: ok ? 415 : status })
+                : new Response(text, {
+                    status,
+                    headers: { "content-type": "application/vnd.apple.mpegurl" },
+                  });
+            Object.defineProperty(response, "url", { value: answered });
+            return response;
+          },
+        ),
     // The reporting window names its loaded capability, not another Core or screen relay.
     refused(playbackId: string, source: string) {
       const relay = relayOf(playbackId, source);
@@ -396,13 +619,17 @@ export function createPassThrough(
         audioSource: media.audioSource,
         hlsSelection: media.hlsSelection,
         hlsMaxHeight: media.hlsMaxHeight,
+        renewal: media.renewal,
         logged: new Set(),
       };
-      const route = async (url: string) => {
+      const route = async (resolved: string) => {
+        // A renewed item's late preparation reads its current address.
+        const url = renewedAddress(playbackId, resolved);
         // A web provider's playlist always goes through Core, and its extractor already knows
         // the transport; nothing at all is probed for a target the relay must serve.
         const named =
-          (url === media.source && !!(media.hls || media.hlsSelection)) || playlistType(null, url);
+          (resolved === media.source && !!(media.hls || media.hlsSelection)) ||
+          playlistType(null, url);
         const answer =
           relay.publicNetwork && (named || relay.target.relay)
             ? { direct: false, playlist: named }
@@ -412,7 +639,7 @@ export function createPassThrough(
           url:
             answer.direct && !relay.target.relay && !(audioCors && answer.playlist)
               ? url
-              : link(relay, answer.playlist ? "playlist" : "bytes", url),
+              : link(relay, answer.playlist ? "playlist" : "bytes", resolved),
           playlist: answer.playlist,
         };
       };
@@ -434,6 +661,7 @@ export function createPassThrough(
         ...media,
         audioManifest: undefined,
         publicNetwork: undefined,
+        renewal: undefined,
         hlsSelection: undefined,
         hlsMaxHeight: undefined,
         source,
@@ -512,48 +740,64 @@ export function createPassThrough(
           headers: mediaHeaders(context?.headers ?? sentHeaders),
         });
       };
+      // The last answer stands: a refusal is forgotten once the source answers again.
+      const answered = (status: number) =>
+        (relay.refused = status >= 400 && status <= 599 && status !== 416 ? status : undefined);
+      const playlistResponse = async (text: string, base: string) => {
+        // YouTube refreshes child signatures on each master request. Build one
+        // standard HLS variant from the exact pair yt-dlp checked, retaining
+        // its quality and language without comparing fresh signed URLs.
+        const selection = url === relay.source ? relay.hlsSelection : undefined;
+        if (selection)
+          text = `#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="${selection.audio}"\n#EXT-X-STREAM-INF:BANDWIDTH=${selection.bandwidth},AUDIO="audio"\n${selection.video}\n`;
+        if (relay.publicNetwork && !/^\uFEFF?#EXTM3U\r?\n/.test(text))
+          throw new Error("Invalid HLS playlist.");
+        return new Response(await rewrite(text, base, destination), {
+          headers: {
+            "Content-Type": "application/vnd.apple.mpegurl",
+            "Cache-Control": "no-store",
+          },
+        });
+      };
       let upstream: Response;
       try {
-        upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, {
-          headers: sentHeaders,
-          signal: request.signal,
-        });
+        if (kind === "playlist") {
+          const answer = await playlistOf(relay, url);
+          diagnostic(answer.status, answer.response);
+          answered(answer.status);
+          if (!answer.response.ok) return new Response(null, { status: answer.status });
+          if (answer.text === undefined) throw new Error("Invalid HLS playlist.");
+          return await playlistResponse(answer.text, answer.url);
+        }
+        // A file of the item itself (not a segment) renews like a playlist when it is refused.
+        const file = url === relay.source || url === relay.audioSource;
+        const read = () => {
+          const address = file ? renewedAddress(playbackId, url) : url;
+          const expiry = file ? linkExpiry(address) : undefined;
+          if (expiry !== undefined && expiry - Date.now() < renewAhead) void renew(relay);
+          return (relay.publicNetwork ? publicRequest : fetch)(address, {
+            headers: { ...relayHeaders(relay, address), ...(range ? { range } : {}) },
+            signal: request.signal,
+          });
+        };
+        upstream = await read();
+        if (file && refusal(upstream.status) && (await renew(relay))) {
+          await upstream.body?.cancel().catch(() => {});
+          upstream = await read();
+        }
         diagnostic(upstream.status, upstream);
-        // The last answer stands: a refusal is forgotten once the source answers again.
-        relay.refused =
-          upstream.status >= 400 && upstream.status <= 599 && upstream.status !== 416
-            ? upstream.status
-            : undefined;
-        let playlist =
-          kind === "playlist" ||
-          playlistType(upstream.headers.get("content-type"), upstream.url || url);
+        answered(upstream.status);
+        let playlist = playlistType(upstream.headers.get("content-type"), upstream.url || url);
         if (relay.publicNetwork && upstream.ok && !playlist) {
           const sniffed = await sniffPlaylist(upstream);
           upstream = sniffed.response;
           playlist = sniffed.playlist;
         }
-        if (upstream.ok && playlist) {
-          // YouTube refreshes child signatures on each master request. Build one
-          // standard HLS variant from the exact pair yt-dlp checked, retaining
-          // its quality and language without comparing fresh signed URLs.
-          const selection = url === relay.source ? relay.hlsSelection : undefined;
-          let text: string;
-          if (selection) {
-            await upstream.body?.cancel();
-            text = `#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="${selection.audio}"\n#EXT-X-STREAM-INF:BANDWIDTH=${selection.bandwidth},AUDIO="audio"\n${selection.video}\n`;
-          } else
-            text = new TextDecoder().decode(
-              await boundedBytes(upstream, 2 * 1024 * 1024, request.signal),
-            );
-          if (relay.publicNetwork && !/^\uFEFF?#EXTM3U\r?\n/.test(text))
-            throw new Error("Invalid HLS playlist.");
-          return new Response(await rewrite(text, upstream.url || url, destination), {
-            headers: {
-              "Content-Type": "application/vnd.apple.mpegurl",
-              "Cache-Control": "no-store",
-            },
-          });
-        }
+        if (upstream.ok && playlist)
+          return await playlistResponse(
+            new TextDecoder().decode(await boundedBytes(upstream, 2 * 1024 * 1024, request.signal)),
+            upstream.url || url,
+          );
       } catch {
         if (!request.signal.aborted) diagnostic(502, undefined, true);
         return new Response("The media destination could not be read.", { status: 502 });

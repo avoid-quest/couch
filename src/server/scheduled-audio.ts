@@ -467,7 +467,10 @@ export function createScheduledAudio(options: {
           new URL(inputUrl).origin !== new URL(credentialOrigin).origin
         )
           stripCrossOriginHeaders(headers);
-        if ((!members.length || current.hasAudio === false) && !current.liveSourceId) {
+        // An endless stream's decoder runs with no speaker too: its timestamps are the clock its
+        // pictures follow. Raw MPEG-TS screens can't map them, so those keep the plain timeline.
+        const clock = !!current.live && !current.radio && !current.mpegts;
+        if (((!members.length && !clock) || current.hasAudio === false) && !current.liveSourceId) {
           const next: Run = {
             timelineOnly: true,
             start: state.position,

@@ -44,6 +44,14 @@ export type WebMediaSource = {
   headers?: Record<string, string>;
   metadata?: WebMediaMetadata;
   expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> };
+  // The same resolution run again, for a link that expires or is refused: Core's relay swaps the
+  // fresh one in under the same item (pass-through.ts). current: the resolution in use.
+  renewal?: {
+    current: Pick<WebMediaSource, "source" | "audioSource" | "hlsSelection">;
+    renew: (signal: AbortSignal) => Promise<WebMediaSource>;
+    pending?: Promise<boolean>;
+    spent?: boolean;
+  };
 };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
@@ -440,6 +448,24 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
               info.formats.every((format) => object(format) && format.vcodec === "none")) ||
             undefined;
         media.publicNetwork = true;
+        media.renewal = {
+          current: {
+            source: media.source,
+            audioSource: media.audioSource,
+            hlsSelection: media.hlsSelection,
+          },
+          renew: (cancellation) =>
+            resolveWebMedia(
+              source,
+              cancellation,
+              quality,
+              streamingCommunityOrigin,
+              vp9,
+              subtitleLanguage,
+              playbackId,
+              output,
+            ),
+        };
         if (direct) {
           media.metadata = { ...media.metadata, ...direct.metadata };
           media.preview = media.metadata.live ? undefined : (direct.preview ?? media.preview);
