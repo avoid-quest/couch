@@ -175,6 +175,11 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
         : {}),
       ...(typeof entry.endless === "boolean" ? { endless: entry.endless } : {}),
       ...(entry.kind === "radio" ? { kind: entry.kind } : {}),
+      ...(typeof entry.station?.id === "string" &&
+      /^[\w-]{1,80}$/.test(entry.station.id) &&
+      typeof entry.station.name === "string"
+        ? { station: { id: entry.station.id, name: entry.station.name.slice(0, 300) } }
+        : {}),
       ...(entry.quality && ["auto", "best", "1080p", "720p", "480p"].includes(entry.quality)
         ? { quality: entry.quality }
         : {}),
