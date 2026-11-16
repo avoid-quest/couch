@@ -1249,6 +1249,7 @@ export function createScheduledAudio(options: {
             options.changed();
           },
           childStarted,
+          details?.intent !== "live",
         ),
       });
     },
