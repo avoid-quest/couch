@@ -202,6 +202,8 @@ export class LivePlayer {
         this.report(data.epoch, data.stats);
       node.connect(gain);
       this.node = node;
+      // A stream that cleared while the worklet loaded raised the epoch the reports must carry.
+      this.post({ type: "reset", epoch: this.epoch });
     });
     return context;
   }
