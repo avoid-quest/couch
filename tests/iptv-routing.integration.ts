@@ -390,18 +390,26 @@ test(
         assert.equal(loads(f.host).length, 0);
         assert.equal(f.nativeLoads().length, 0);
       }
-      f.remote.socket.send(
-        JSON.stringify({
-          type: "player",
-          state: {
-            ...f.remote.state.player,
-            speed: 1,
-            buffering: false,
-            status: "error",
-            error: "Synthetic decoder refusal",
-          },
-        }),
-      );
+      const refuse = () =>
+        f.remote.socket.send(
+          JSON.stringify({
+            type: "player",
+            state: {
+              ...f.remote.state.player,
+              speed: 1,
+              buffering: false,
+              status: "error",
+              error: "Synthetic decoder refusal",
+            },
+          }),
+        );
+      // A failure on the channel's own address first loads it again through Couch's relay.
+      const direct = loads(f.remote).length;
+      refuse();
+      await until(() => loads(f.remote).length > direct);
+      assert.ok(loads(f.remote).at(-1)!.source.includes("/api/relay/"));
+      assert.equal(f.remote.state.player.error, null);
+      refuse();
       await until(() => f.remote.state.player.error === "Synthetic decoder refusal");
       assert.deepEqual(
         f.remote.state.outputs?.map((output) => output.deviceId),

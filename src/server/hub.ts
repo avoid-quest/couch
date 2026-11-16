@@ -657,6 +657,13 @@ export async function createHub(options: HubOptions) {
     Socket<SocketData>,
     Extract<PlaybackCommand, { type: "load" }>
   >();
+  // The transport each tab plays only through Core's relay, after it failed on a direct address.
+  const relayedLoads = new WeakMap<Socket<SocketData>, string>();
+  const deviceTarget = (tab: Socket<SocketData>, playbackId: string) => ({
+    origin: tab.data.origin,
+    userAgent: tab.data.userAgent,
+    relay: relayedLoads.get(tab) === playbackId,
+  });
   const stateOf = (playback: Playback) => (playback.state ??= playback.session.state);
   const sourceOf = (playback: Playback) => {
     const state = stateOf(playback);
@@ -1500,7 +1507,7 @@ export async function createHub(options: HubOptions) {
           loaded.playbackId,
           selected,
           headers,
-          { origin: tab.data.origin, userAgent: tab.data.userAgent },
+          deviceTarget(tab, loaded.playbackId),
           signal,
           playback.compressor.enabled,
         );
@@ -1554,7 +1561,7 @@ export async function createHub(options: HubOptions) {
       playbackId,
       selected,
       headers,
-      { origin: tab.data.origin, userAgent: tab.data.userAgent },
+      deviceTarget(tab, playbackId),
       signal,
       audioCors,
     );
@@ -1579,6 +1586,52 @@ export async function createHub(options: HubOptions) {
     tab: Socket<SocketData>,
     playbackId: string,
   ) => (await directMedia(playback, tab, playbackId, true)).prepared;
+  // A tab that fails on an address it read straight from the source (a link tied to Core's
+  // address, a provider that refuses browsers) loads again through Core's relay, once per
+  // transport. Its error stands only if that preparation fails; a relay failure reports itself.
+  const relayFallback = (
+    tab: Socket<SocketData>,
+    loaded: Extract<PlaybackCommand, { type: "load" }>,
+    report: PlayerState,
+  ) => {
+    const playback = all().find((item) => item.renderer === tab || item.screens.has(tab));
+    const { playbackId } = loaded;
+    if (
+      !playback ||
+      mpvPlayback === playback ||
+      sourceOf(playback) ||
+      loaded.mpv ||
+      relayedLoads.get(tab) === playbackId ||
+      stateOf(playback).player.playbackId !== playbackId ||
+      !(playback.synced ? playback.screens.has(tab) : playback.renderer === tab) ||
+      !passThrough.direct(playbackId, [loaded.source, loaded.audioSource])
+    )
+      return false;
+    relayedLoads.set(tab, playbackId);
+    log(
+      `relay fallback ${playback.id.slice(0, 8)}: ${nameOf(deviceOf(tab))} couldn't read its source directly (${safePlaybackError(report.error ?? "")}); loading it through Couch.`,
+    );
+    if (playback.synced) {
+      playback.screens.delete(tab);
+      show(playback);
+      return true;
+    }
+    const generation = playback.generation;
+    const current = () =>
+      !playback.synced &&
+      playback.renderer === tab &&
+      playback.generation === generation &&
+      stateOf(playback).player.playbackId === playbackId;
+    void directMedia(playback, tab, playbackId).then(
+      ({ prepared }) => {
+        if (current()) playback.session.reload(prepared);
+      },
+      () => {
+        if (current()) playback.session.observe(report);
+      },
+    );
+    return true;
+  };
   // The group reports the sound; a screen adds the subtitles it shows. Paused in Where it plays, it keeps that message.
   const observeSynced = (playback: Playback) => {
     const { heard, seen } = playback;
@@ -1712,7 +1765,7 @@ export async function createHub(options: HubOptions) {
           playbackId,
           { ...selected, mpv: false },
           headers,
-          { origin: await passThrough.coreOrigin(), userAgent: "Couch" },
+          { origin: await passThrough.coreOrigin(), userAgent: "Couch", relay: true },
           signal,
           true,
         )
@@ -2041,7 +2094,7 @@ export async function createHub(options: HubOptions) {
             playbackId,
             selected,
             headers,
-            tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null,
+            tab?.data.origin ? deviceTarget(tab, playbackId) : null,
             signal,
             playback.compressor.enabled,
           );
@@ -2067,7 +2120,7 @@ export async function createHub(options: HubOptions) {
             playbackId,
             { ...coreSelected, mpv: false },
             headers,
-            { origin: await passThrough.coreOrigin(), userAgent: "Couch" },
+            { origin: await passThrough.coreOrigin(), userAgent: "Couch", relay: true },
             signal,
             true,
           )
@@ -4671,6 +4724,13 @@ export async function createHub(options: HubOptions) {
         if (player) {
           // A browser can't tell a relayed source's refusal from a format it can't play.
           const loaded = browserLoads.get(socket);
+          if (
+            player.status === "error" &&
+            player.playbackId &&
+            loaded?.playbackId === player.playbackId &&
+            relayFallback(socket, loaded, player)
+          )
+            return;
           const refused =
             player.status === "error" &&
             player.playbackId &&

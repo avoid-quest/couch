@@ -7,10 +7,12 @@ import type { WebMediaSource } from "./web-media";
 import type { AudioManifest } from "./source-preparation";
 
 // Pass-through (#644 Delivery): a Device that can't fetch a source itself because of its
-// Origin, CORS or headers gets the bytes through Core. Public web-provider media always
-// uses the protected relay; other URL media is probed for the destination's access.
+// Origin, CORS or headers gets the bytes through Core. Every source is probed for the
+// destination's access; a web provider's playlists always go through Core, and its files
+// and segments go direct only over HTTPS on the public internet. `relay` sends everything
+// through Core: Core's own decoder, or a Device that failed on a direct address.
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
-type Target = { origin: string; userAgent: string };
+type Target = { origin: string; userAgent: string; relay?: boolean };
 type Media = {
   source: string;
   audioSource?: string;
@@ -34,7 +36,9 @@ type Relay = {
   audioCors?: boolean;
   audioManifest?: AudioManifest;
   createdAt: number;
-  segments?: Promise<boolean>;
+  // Shared by every request on this route: one probe of the first segment decides them all.
+  // origin: the probed segment's, the only one a web provider's segments may be read from directly.
+  segments: { direct?: Promise<boolean>; origin?: string; answered?: boolean };
   refused?: number;
   source: string;
   audioSource?: string;
@@ -141,7 +145,14 @@ const relayHeaders = (relay: Relay, url: string) => {
 // CORS, so they also need the source to share it. A source Core can't fetch either stays
 // direct, so the Device reports the source's own error. An HTTPS page can't load http://
 // media at all (mixed content), so Core relays those whenever it can fetch them (#644 ticket 8).
-async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSignal) {
+async function probe(
+  url: string,
+  relay: Relay,
+  cors: boolean,
+  signal: AbortSignal,
+  publicRequest: typeof fetch,
+) {
+  if (relay.publicNetwork) return probePublic(url, relay, cors, signal, publicRequest);
   const ask = (headers: Record<string, string>) =>
     fetch(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) }).then(
       async (response) => {
@@ -170,6 +181,42 @@ async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSign
   return { direct: sameOrigin || shared || !(cors || playlist), playlist };
 }
 
+// A web provider's file is direct only over HTTPS, when Core's pinned request, asking as the
+// Device would, reached a public address that answered and allows the Device to read it.
+// Its playlists never are: Core reads each one and checks every address in it. A provider
+// that needs Core's headers or cookies refuses this request, so it stays relayed.
+async function probePublic(
+  url: string,
+  relay: Relay,
+  cors: boolean,
+  signal: AbortSignal,
+  publicRequest: typeof fetch,
+) {
+  const named = playlistType(null, url);
+  if (!url.startsWith("https:")) return { direct: false, playlist: named };
+  const response = await publicRequest(url, {
+    headers: { origin: relay.target.origin, "user-agent": relay.target.userAgent },
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+  }).catch(() => null);
+  if (!response?.ok) {
+    await response?.body?.cancel().catch(() => {});
+    return { direct: false, playlist: named };
+  }
+  // A mislabelled playlist is found by its first bytes, as the relay does.
+  const sniffed = await sniffPlaylist(response).catch(() => null);
+  await sniffed?.response.body?.cancel().catch(() => {});
+  const playlist =
+    !!sniffed?.playlist || playlistType(response.headers.get("content-type"), response.url || url);
+  const shared = ["*", relay.target.origin].includes(
+    response.headers.get("access-control-allow-origin") ?? "",
+  );
+  return {
+    direct:
+      !!sniffed && !playlist && (response.url || url).startsWith("https:") && (shared || !cors),
+    playlist,
+  };
+}
+
 // Relay addresses are signed for one Playback, so Core relays only what it resolved for the
 // current Playback and the playlists it relayed; it is never an open proxy. Only Devices
 // that were sent a load command learn them, like subtitle paths.
@@ -186,6 +233,11 @@ export function createPassThrough(
     `${relayId}-${createHmac("sha256", key).update(`${playbackId}\n${relayId}\n${kind}\n${url}`).digest("base64url")}.${kind === "playlist" ? "m3u8" : mediaExtension(url)}`;
   const link = (relay: Relay, kind: Kind, url: string) =>
     `${relay.target.origin}/api/relay/${relay.playbackId}/${kind}/${sign(relay.playbackId, relay.id, kind, url)}?${new URLSearchParams({ url })}`;
+  const relayOf = (playbackId: string, source: string) => {
+    const relayId = URL.parse(source)?.pathname.split("/")[5]?.split("-", 1)[0];
+    const relay = relayId ? relays.get(relayId) : undefined;
+    return relay?.playbackId === playbackId ? relay : undefined;
+  };
 
   async function rewrite(text: string, base: string, relay: Relay) {
     let lines = text.split(/\r?\n/);
@@ -211,23 +263,30 @@ export function createPassThrough(
       return null;
     };
     const first = master ? null : lines.find((line) => line.trim() && !line.startsWith("#"));
+    const relayed = relay.audioCors || relay.target.relay;
     // Segments stay direct when the Device may read them (Twitch's allow every Origin).
-    if (!relay.publicNetwork && !relay.audioCors && first && absolute(first.trim()))
-      relay.segments ??= probe(
-        absolute(first.trim())!,
+    if (!relayed && first && absolute(first.trim()) && !relay.segments.direct) {
+      const url = absolute(first.trim())!;
+      relay.segments.origin = new URL(url).origin;
+      relay.segments.direct = probe(
+        url,
         relay,
         true,
         AbortSignal.timeout(5000),
-      ).then((answer) => answer.direct);
-    const segments =
-      relay.publicNetwork || relay.audioCors ? false : ((await relay.segments) ?? true);
+        publicRequest,
+      ).then((answer) => (relay.segments.answered = answer.direct));
+    }
+    const segments = relayed ? false : ((await relay.segments.direct) ?? !relay.publicNetwork);
+    // A web provider's segments elsewhere than the probed origin stay relayed.
+    const direct = (url: string) =>
+      segments && (!relay.publicNetwork || new URL(url).origin === relay.segments.origin);
     const to = (uri: string, playlist: boolean) => {
       const url = absolute(uri);
       return !url
         ? uri
         : playlist
           ? link(relay, "playlist", url)
-          : segments
+          : direct(url)
             ? url
             : link(relay, "bytes", url);
     };
@@ -275,9 +334,18 @@ export function createPassThrough(
     },
     // The reporting window names its loaded capability, not another Core or screen relay.
     refused(playbackId: string, source: string) {
-      const relayId = URL.parse(source)?.pathname.split("/")[5]?.split("-", 1)[0];
-      const relay = relayId ? relays.get(relayId) : undefined;
+      const relay = relayOf(playbackId, source);
       return relay?.playbackId === playbackId ? relay.refused : undefined;
+    },
+    // Whether a Device's load reads anything straight from its source: a source or audio
+    // address of its own, or a relayed playlist whose segments it reads directly.
+    direct(playbackId: string, sources: Array<string | undefined>) {
+      return sources.some((source) => {
+        const address = source ? URL.parse(source) : null;
+        if (!address || !/^https?:$/.test(address.protocol)) return false;
+        if (!address.pathname.startsWith("/api/relay/")) return true;
+        return !!relayOf(playbackId, source!)?.segments.answered;
+      });
     },
     // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
     async prepare<T extends Media>(
@@ -291,7 +359,7 @@ export function createPassThrough(
       signal.throwIfAborted();
       if (closed) throw new Error("The media relay is closed.");
       if (media.audioManifest && !target)
-        target = { origin: await api.coreOrigin(), userAgent: "Couch" };
+        target = { origin: await api.coreOrigin(), userAgent: "Couch", relay: true };
       if (!target || (media.mpv && !media.publicNetwork && !media.audioManifest)) {
         if (media.publicNetwork)
           throw new Error("Public media requires a protected playback route.");
@@ -311,6 +379,7 @@ export function createPassThrough(
         audioCors,
         audioManifest: media.audioManifest,
         createdAt: Date.now(),
+        segments: {},
         source: media.source,
         audioSource: media.audioSource,
         hlsSelection: media.hlsSelection,
@@ -318,20 +387,18 @@ export function createPassThrough(
         logged: new Set(),
       };
       const route = async (url: string) => {
-        // Public media always uses the protected relay. Its extractor already
-        // knows the transport; discarded CORS probes only delay the first frame.
-        const answer = relay.publicNetwork
-          ? {
-              direct: false,
-              playlist:
-                !!(url === media.source && (media.hls || media.hlsSelection)) ||
-                playlistType(null, url),
-            }
-          : await probe(url, relay, !!media.mpegts || audioCors, signal);
+        // A web provider's playlist always goes through Core, and its extractor already knows
+        // the transport; nothing at all is probed for a target the relay must serve.
+        const named =
+          (url === media.source && !!(media.hls || media.hlsSelection)) || playlistType(null, url);
+        const answer =
+          relay.publicNetwork && (named || relay.target.relay)
+            ? { direct: false, playlist: named }
+            : await probe(url, relay, !!media.mpegts || audioCors, signal, publicRequest);
         // Web Audio needs readable audio, including every HLS child; a native media element alone does not.
         return {
           url:
-            answer.direct && !relay.publicNetwork && !(audioCors && answer.playlist)
+            answer.direct && !relay.target.relay && !(audioCors && answer.playlist)
               ? url
               : link(relay, answer.playlist ? "playlist" : "bytes", url),
           playlist: answer.playlist,
