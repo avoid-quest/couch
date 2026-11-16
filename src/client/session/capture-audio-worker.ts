@@ -48,17 +48,20 @@ self.onmessage = async (event) => {
       }
       lastTimestamp = timestamp;
       lastFrames = frame.numberOfFrames;
-      const planes = Array.from({ length: channels }, (_, channel) => {
+      // Core plays stereo. AudioData names no channel layout, so a wider input (an interface's
+      // discrete channels, or surround in WAVE order) sends its first two: its front pair.
+      const sent = Math.min(channels, 2);
+      const planes = Array.from({ length: sent }, (_, channel) => {
         const data = new Float32Array(frame.numberOfFrames);
         frame.copyTo(data, { planeIndex: channel, format: "f32-planar" });
         return data;
       });
       for (let start = 0; start < frame.numberOfFrames; start += 4096) {
         const frames = Math.min(4096, frame.numberOfFrames - start),
-          buffer = new ArrayBuffer(40 + frames * channels * 4),
+          buffer = new ArrayBuffer(40 + frames * sent * 4),
           view = new DataView(buffer);
         view.setUint32(0, 0x31414343, true);
-        view.setUint8(4, channels);
+        view.setUint8(4, sent);
         view.setUint8(5, 1);
         view.setUint16(6, 40, true);
         view.setUint32(8, rate, true);
@@ -68,7 +71,7 @@ self.onmessage = async (event) => {
         view.setUint32(32, frames, true);
         const pcm = new Float32Array(buffer, 40);
         for (let f = 0; f < frames; f++)
-          for (let ch = 0; ch < channels; ch++) pcm[f * channels + ch] = planes[ch]![start + f]!;
+          for (let ch = 0; ch < sent; ch++) pcm[f * sent + ch] = planes[ch]![start + f]!;
         if (connection.bufferedAmount + buffer.byteLength > 192_000)
           throw new Error("The connection cannot keep up with audio capture.");
         connection.send(buffer);

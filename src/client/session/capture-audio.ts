@@ -43,10 +43,7 @@ export async function prepareCaptureAudio(
     if (!first.value) throw new Error("The audio input ended before capture started.");
     const frame = first.value;
     try {
-      if (
-        ![1, 2].includes(frame.numberOfChannels) ||
-        ![44_100, 48_000, 96_000].includes(frame.sampleRate)
-      )
+      if (frame.numberOfChannels < 1 || ![44_100, 48_000, 96_000].includes(frame.sampleRate))
         throw new Error("This audio input's format is not supported for scheduled capture.");
       if (expectedSampleRate !== undefined && frame.sampleRate !== expectedSampleRate)
         throw new Error(
