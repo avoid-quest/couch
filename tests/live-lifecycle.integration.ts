@@ -16,9 +16,9 @@ const publication = {
   intent: "live",
 } as const;
 const signal = (_position: number, channel: number) => (channel ? -0.25 : 0.25);
-// Where a listener's 5 ms frames stop following each other: it moved to another step.
+// Where a listener's 15 ms PCM chunks stop following each other: it moved to another step.
 const moves = (frames: { at: number }[]) =>
-  frames.flatMap((frame, i) => (i && frame.at - frames[i - 1]!.at !== 5_000 ? [i] : []));
+  frames.flatMap((frame, i) => (i && frame.at - frames[i - 1]!.at !== 15_000 ? [i] : []));
 
 async function fixture(t: TestContext) {
   const f = await liveFixture({ media: { ffmpeg, recording: new Uint8Array() } });
@@ -180,7 +180,7 @@ test(
       "another share's larger buffer does not delay this audience",
     );
     const last = second.frames.length - 1,
-      step = second.frames[last]!.at - otherInput.origin - last * 5_000;
+      step = second.frames[last]!.at - otherInput.origin - last * 15_000;
     assert.ok(step > 400_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
     assert.ok(
       first.frames.every(

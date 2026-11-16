@@ -29,7 +29,7 @@ its logs. What people do with it is in
 |---|---|
 | Acquisition: timestamped f32 PCM | The browser SDK has no capture API. Main owns Live capture: the Mac native helper for **Native** inputs, a hidden capture page otherwise. |
 | Upload: validated `CaptureAudioPacket` per source epoch | The Node SDK has no public source start/end to declare a format. Publication tokens and epochs retire stale work. |
-| Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample`, Opus at 160 kbps in 5 ms frames, in MPEG-TS so each frame leaves as it's encoded (Ogg holds a page until the next). 5 ms steps keep capture-to-chunk delay low. |
+| Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample`, Opus at 160 kbps in 20 ms frames and PCM in 15 ms chunks, the spec's sizes. Opus goes in MPEG-TS so each frame leaves as it's encoded (Ogg holds a page until the next). |
 | Capture-time mapping | The Node SDK timestamps at send time; Couch maps encoded offsets (with Opus pre-skip) back to measured capture blocks. |
 | Group scheduling | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, metadata and volume APIs. |
 

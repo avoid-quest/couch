@@ -32,10 +32,10 @@ function captureWaveHeader(sampleRate: number, channels: number) {
   return header;
 }
 
-// Live frames are 5 ms, a third of the spec's 15 ms floor: each frame is a packet and an encrypted
-// write per listener, and smaller frames only gain the time a frame takes to fill. The spec-sized
-// comparison is { opus: 20, pcm: 15 } (Opus has no 15 ms frame; it takes 2.5, 5, 10, 20, 40 or 60).
-const liveFrameMs = { opus: 5, pcm: 5 };
+// Live frames are the spec's size: chunks of at least 15 ms (Opus has no 15 ms frame; it takes 2.5,
+// 5, 10, 20, 40 or 60). 5 ms frames cost a frame's fill less, but three or four times the packets and encrypted
+// writes per listener, and the player's per-chunk sync correction as much more often, which smears the sound.
+const liveFrameMs = { opus: 20, pcm: 15 };
 // Couch reads the Opus stream from the one MPEG-TS PID it asks FFmpeg for.
 const opusPid = 0x100;
 
