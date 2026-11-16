@@ -158,6 +158,8 @@ test(
     const noise = lead.leadMs("noise", "opus", 0);
     await sleep(first! + 7300 - Date.now());
     assert.deepEqual(errors, []);
-    assert.equal(lead.leadMs("silence", "opus", 0), noise);
+    // Silence gathered in the muxer made it ~100 ms later; a busy host moves it a few 5 ms steps.
+    const silence = lead.leadMs("silence", "opus", 0);
+    assert.ok(silence <= noise + 25, `silence plays at ${silence} ms, noise at ${noise} ms`);
   },
 );

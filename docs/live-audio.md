@@ -58,7 +58,7 @@ wrong clock still shows the right time.
   once the context reports an output latency (or reads the same twice, on a
   browser that reports none): just after `resume()` it may report only its base
   latency. Later, the median of the last five raises it only when it outgrows it
-  by more than 25 ms. Until then it declares 0 and Core sends it nothing: it
+  by more than 5 ms. Until then it declares 0 and Core sends it nothing: it
   hears nothing for its first second or two, then starts at its step.
 - The SDK drops a late chunk silently, so Couch counts them chunk by chunk
   (`live-loss.ts`), wrapping the SDK's exported `AudioScheduler` and Web Audio's
@@ -83,7 +83,7 @@ wrong clock still shows the right time.
   count them. Each start also measures the chunk's slack: how long before it had
   to start (where the chunk before it ended, when it follows on) the player
   started it, network, decoding and the player's batch included.
-- A Receiver that keeps losing chunks declares one more 25 ms step
+- A Receiver that keeps losing chunks declares one more 10 ms step
   (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
   separate spells, or three seconds running, or the last minute lost chunks in
   three separate spells (loss that keeps coming back, as late Wi-Fi arrivals do
@@ -96,13 +96,16 @@ wrong clock still shows the right time.
   when loss recurs after it: the chunks lost in the ten seconds that show it
   against those of the ten seconds that caused it. Half as many or fewer: it
   helped, and the next step follows. Spells over a minute never show that a step
-  helped: each minute that recurs holds three or more. Otherwise no step for a
-  minute, then two, four, eight, then at most sixteen; after that, recurring
-  loss steps again. A step that helped, or sixteen minutes with no recurring
-  loss, starts the pauses from a minute again. A step after which loss doesn't
+  helped: each minute that recurs holds three or more. Otherwise no step for
+  24 s, then 48, 96, 192, then at most 384 s; after that, recurring loss steps
+  again. A step that helped, or sixteen minutes with no recurring loss, starts
+  the pauses from 24 s again. A 10 ms step rarely halves a broad tail of late
+  arrivals that 30 or 50 ms would cure, so the pauses are short enough to take a
+  few such steps within minutes. A step after which loss doesn't
   recur is never doubted. Pauses last only as long as the listen. Each rise moves
   that listener at most one step later, which the player takes by playing
-  slightly slower for about 12 s.
+  slightly slower for about 8 s. Steps that don't help stay about nine an hour
+  (90 ms) in a long listen.
 - A device remembers one number per Couch (by origin), in the browser storage
   the SDK keeps its Sync delay in (`couch.live-steps:<origin>`): the late steps
   its last listen ended at that held. A step holds when Core applied it and it
@@ -122,8 +125,9 @@ wrong clock still shows the right time.
   the highest of each second, set and raised by the same rule. The first second
   doesn't count: it holds what was captured while the encoder started.
 - Each listener plays at its declaration, Sync delay and its wire's input-side
-  time, rounded up to the next 25 ms step: the same chunks, stamped later for
-  it. Listeners whose needs round up to the same step play together. It hears
+  time, rounded up to the next 5 ms step: the same chunks, stamped later for
+  it. Listeners whose needs round up to the same step play together; others a
+  few ms apart. It hears
   nothing until the input-side time and its own need are known (about two
   seconds), so it moves once. Its step only rises while it listens; Core forgets
   it when it leaves or the input restarts, and the listener declares its
@@ -139,7 +143,7 @@ wrong clock still shows the right time.
 - Couch's log gets one line each time a wire's input side changes
   (`live input side opus: 26 ms`) and one when a listener's declaration or step
   changes (`live listener "Name" opus: declares 55 ms, input side 26 ms, plays
-  100 ms after capture`), at most every ten seconds per listener
+  85 ms after capture`), at most every ten seconds per listener
   unless its step rose.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.

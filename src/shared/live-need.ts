@@ -1,6 +1,11 @@
-// Live steps: a listener plays at its need rounded up to the next step, and a need moves only when
-// it outgrows its last value by more than a step, so drift or one spike can't reach it. Each move is a short slew or gap for that listener.
-export const liveStepMs = 25;
+// Live steps: a listener plays at its need rounded up to the next 5 ms step, and a need moves only
+// when it outgrows its last value by more than a step, so drift or one spike can't reach it. Each
+// move is a short slew or gap for that listener. 5 ms keeps a listener within 5 ms of its need;
+// listeners whose needs round up to the same step play together, and others a few ms apart.
+const liveStepMs = 5;
+// A listener that keeps losing chunks asks for 10 ms more at a time: two placement steps, so Core
+// always moves it by exactly that, and the send_ahead that shows it can't be read as jitter.
+export const liveLateStepMs = 10;
 export const liveReadings = 5;
 
 export const liveStep = (needMs: number) => Math.ceil(needMs / liveStepMs) * liveStepMs;

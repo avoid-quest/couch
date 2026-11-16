@@ -289,11 +289,11 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
   for (let i = 0; i < 2; i++) await second(50, 10);
   expect(player.buffers).toEqual([42]);
   await second(50, 10);
-  expect(player.buffers).toEqual([42, 67]);
+  expect(player.buffers).toEqual([42, 52]);
   // Core sends its chunks a step further ahead: it applied the step, which is judged only once ten
   // seconds after it show whether loss still recurs.
-  for (let i = 0; i < 9; i++) await second(50, 10, false, 120);
-  expect(player.buffers).toEqual([42, 67]);
+  for (let i = 0; i < 9; i++) await second(50, 10, false, 105);
+  expect(player.buffers).toEqual([42, 52]);
 });
 
 test("a listener steps when its player runs dry holding chunks, not for a gap Core left or a late arrival", async () => {
@@ -348,7 +348,7 @@ test("a listener steps when its player runs dry holding chunks, not for a gap Co
   second();
   expect(player.buffers).toEqual([42]);
   second("dry");
-  expect(player.buffers).toEqual([42, 67]);
+  expect(player.buffers).toEqual([42, 52]);
 });
 
 const key = "couch.live-steps:http://localhost";
@@ -367,7 +367,7 @@ test("a listener that joins again starts at the steps it remembered with that Co
   let tick = await join();
   tick(2);
   // Its own need, 27 + 15, and two steps.
-  expect(players.at(-1)!.buffers).toEqual([92]);
+  expect(players.at(-1)!.buffers).toEqual([62]);
   await leave();
   // Another Couch starts from its own.
   tick = await join("http://elsewhere");
@@ -407,7 +407,7 @@ test("a minute with two steps' slack starts the next listen a step earlier; a lo
     tick(1);
   };
   for (let i = 0; i < 40; i++) second();
-  expect(player.buffers).toEqual([67]);
+  expect(player.buffers).toEqual([52]);
   // Counted from the first declaration, which takes the first two seconds.
   expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 38 });
   // A lost chunk: what storage holds is undone that second, so a reload can't use it.

@@ -5,8 +5,8 @@ const logEveryMs = 10_000;
 
 // One Live run's timing, or sender-timed AirPlay's. Every chunk is stamped at its capture time, and
 // each listener plays it at its own need (its declaration and Sync delay, plus Core's measured
-// input-side time) rounded up to a 25 ms step: the same chunks, stamped later. Listeners whose
-// needs round up to the same step play together.
+// input-side time) rounded up to a 5 ms step: the same chunks, stamped later. Listeners whose
+// needs round up to the same step play together; others play a few ms apart.
 // log gets one line each time a wire's input side changes, and one when a listener's step rises or
 // its declaration changes, at most every ten seconds per listener unless its step rose, so the
 // delays real devices get can be read from Couch's log and a client can't flood it.

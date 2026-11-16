@@ -122,8 +122,8 @@ test(
     const [fastStep] = delays(fast.frames, input.origin),
       [slowStep] = delays(slow.frames, input.origin);
     // 65 ms, and 150 + 10 ms of Sync, each with the input side, rounded up to a whole step.
-    assert.ok(fastStep! > 65_000 && fastStep! % 25_000 === 0, `its own step, not ${fastStep} µs`);
-    assert.ok(slowStep! >= fastStep! + 75_000 && slowStep! % 25_000 === 0, `not ${slowStep} µs`);
+    assert.ok(fastStep! > 65_000 && fastStep! % 5_000 === 0, `its own step, not ${fastStep} µs`);
+    assert.ok(slowStep! >= fastStep! + 75_000 && slowStep! % 5_000 === 0, `not ${slowStep} µs`);
     assert.ok(
       [...fast.frames, ...slow.frames].every((frame) => frame.bytes.readInt16LE(0) === 8192),
       "the same samples, stamped by each listener's step",
@@ -183,7 +183,7 @@ test(
       step = delays(second.frames, otherInput.origin).at(-1)!;
     assert.deepEqual(moves(first.frames), []);
     assert.ok(firstStep < 400_000, "another share's larger buffer does not delay this audience");
-    assert.ok(step > 400_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
+    assert.ok(step > 400_000 && step % 5_000 === 0, `its own step, not ${step} µs`);
     assert.ok(first.frames.every((frame) => frame.bytes.readInt16LE(0) === 8192));
     assert.ok(second.frames.every((frame) => frame.bytes.readInt16LE(0) === -16384));
     const before = second.frames.length,
@@ -240,7 +240,7 @@ test(
     await until(() => listener.frames.length > 20);
     assert.deepEqual(moves(listener.frames), []);
     const step = delays(listener.frames, input.origin)[0]!;
-    assert.ok(step > 65_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
+    assert.ok(step > 65_000 && step % 5_000 === 0, `its own step, not ${step} µs`);
     await until(
       () => f.receiver.state.player.status === "playing" && !f.receiver.state.player.buffering,
     );
@@ -353,7 +353,7 @@ test(
     const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
     await until(() => player.frames.length > 20);
     const step = delays(player.frames, input.origin)[0]!;
-    assert.ok(step > 0 && step % 25_000 === 0, `a step for its input side, not ${step} µs`);
+    assert.ok(step > 0 && step % 5_000 === 0, `a step for its input side, not ${step} µs`);
   },
 );
 
