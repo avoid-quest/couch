@@ -355,8 +355,14 @@ export function createPassThrough(
           await response.body?.cancel().catch(() => {});
           return answer;
         }
-        const sniffed = await sniffPlaylist(response);
-        if (!sniffed.playlist && !playlistType(response.headers.get("content-type"), answer.url)) {
+        // Media that says so ends here unread; any other answer is a playlist by its first bytes.
+        const type = response.headers.get("content-type") ?? "";
+        const named = playlistType(type, answer.url);
+        const sniffed =
+          named || /^\s*(?:audio|video|image)\//i.test(type)
+            ? { response, playlist: named }
+            : await sniffPlaylist(response);
+        if (!sniffed.playlist) {
           await sniffed.response.body?.cancel().catch(() => {});
           return answer;
         }
