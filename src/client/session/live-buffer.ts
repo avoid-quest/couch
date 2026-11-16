@@ -6,7 +6,7 @@ import { liveLateStepMs, risenNeed } from "../../shared/live-need";
 // - Couch's Live player: the most the context's render clock runs ahead of what's heard
 //   (LivePlayer.outputMs, the output's latency and its render callback). Nothing for the player
 //   itself: it hands each decoded chunk to the worklet at once.
-// - The SDK's player, which Live uses on Android (sendspin.ts): syncInfo.outputLatencyMs, plus its
+// - The SDK's player, which Live uses on Android and iOS (sendspin.ts): syncInfo.outputLatencyMs, plus its
 //   scheduling batch: it handles received chunks 15 ms after the first of them (scheduler.js
 //   scheduleQueueProcessing, setTimeout(..., 15)), so a chunk may wait that long.
 // Decoding and the network aren't measured: a listener that loses chunks to them counts that itself

@@ -1,5 +1,10 @@
 import type { LiveAudioSettings } from "../../shared/audio-settings";
-import type { SendspinPlayer, SendspinPlayerConfig } from "@sendspin/sendspin-js";
+import {
+  detectIsAndroid,
+  detectIsIOS,
+  type SendspinPlayer,
+  type SendspinPlayerConfig,
+} from "@sendspin/sendspin-js";
 import { apiFetch } from "../api/client";
 import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
@@ -18,13 +23,15 @@ import { countingLiveLoss, countLiveLoss, reportsOutputLatency, sampleLiveLoss }
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID. A Live listener plays with Couch's own
-// player on the SDK's connection, clock and decoding (live-player.ts), except on Android.
+// player on the SDK's connection, clock and decoding (live-player.ts), except on Android and iOS.
 // A tab that shows a synced picture connects too, only for the clock it follows (ticket 11).
 type Player = SendspinPlayer | LivePlayer;
 const isLive = (player: Player): player is LivePlayer => "sampleLoss" in player;
 // On Android, Chrome plays a context with an AudioWorklet through a FIFO whose underruns add delay
-// its output timestamps miss; the SDK's player has no worklet (docs/live-audio.md).
-const android = () => /Android/i.test(navigator.userAgent);
+// its output timestamps miss; the SDK's player has no worklet. On iOS sound plays through a media
+// element whose delay no browser reports; the SDK's player adds its own allowance for it
+// (docs/live-audio.md).
+const sdkPlays = () => detectIsAndroid() || detectIsIOS();
 let player: Promise<Player> | null = null;
 let connected: Player | null = null;
 let group: string | undefined;
@@ -132,7 +139,7 @@ export function listen(
     needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
-  const sdkLive = Boolean(live) && android();
+  const sdkLive = Boolean(live) && sdkPlays();
   countingLiveLoss(sdkLive && (on || watch));
   useOutputTimestamps(Boolean(live));
   const next = JSON.stringify([

@@ -8,9 +8,9 @@ connection, Noise encryption, clock sync, decoding and reconnection. Relaxed
 sound plays with the SDK's `SendspinPlayer`, which also buffers and corrects. A
 Live listener plays with Couch's own player (`live-player.ts`) on the SDK's
 `SendspinCore`: the SDK's player handles chunks in 15 ms batches, which every
-Live listener would wait for. On Android, Live plays with `SendspinPlayer` too
-(Timing explains why). Don't reach into SDK internals, intercept its
-transport or parse its logs. What people do with it is in
+Live listener would wait for. On Android and iOS, Live plays with
+`SendspinPlayer` too (Timing explains why). Don't reach into SDK internals,
+intercept its transport or parse its logs. What people do with it is in
 [The gig in your ears](stories/the-gig-in-your-ears.md).
 
 ## Connection and identity
@@ -59,19 +59,20 @@ wrong clock still shows the right time.
 
   | Device | Player | Why |
   |---|---|---|
-  | Desktop browsers (Chrome, Edge, Firefox, Safari), iOS | Couch's `LivePlayer` | No 15 ms batch: on the rig's Linux listener it plays at 112–117 ms after capture, where the SDK's player played at 131–157 ms. |
+  | Desktop browsers (Chrome, Edge, Firefox, Safari) | Couch's `LivePlayer` | No 15 ms batch: on the rig's Linux listener it plays at 112–117 ms after capture, where the SDK's player played at 131–157 ms. |
   | Android | The SDK's `SendspinPlayer` | Chrome on Android plays a context that has an AudioWorklet through a FIFO filled from the worklet's thread (desktop Chrome bypasses it). Each time the FIFO runs dry the output plays a callback of silence and keeps that much more queued from then on, but `getOutputTimestamp()` still counts those silent frames as the context's (Chromium's `audio_destination.cc`, `push_pull_fifo.cc`). On the rig's phone `LivePlayer` ran up 56–60 ms of underruns (`AudioContext.playbackStats.underrunDuration`) in its first minute, its declared lead rose from about 39 to 99 ms, and it ended placed at 185 ms. The SDK's player has no worklet: on the same phone it ran up no such delay and played within about 1 ms of its placement. |
+  | iOS | The SDK's `SendspinPlayer` | iOS plays a context's sound through a media element (so the silent switch doesn't mute it), fed by a `MediaStreamDestination` whose delay the context doesn't report. The SDK's player adds its own allowance for it (`IOS_UNREPORTED_OUTPUT_LATENCY_MS`, 55 ms) to where it plays and to `syncInfo.outputLatencyMs`; `LivePlayer` would play that much before its placement. |
 
 - Browsers offer AudioWorklet only to secure pages, so a desktop Live listener
   needs Couch's `https://` address (or this computer's own); on the plain HTTP
   address it shows "Live sound needs Couch's https:// address on this device."
-  Android's Live listener and relaxed sound don't need it.
+  Android's and iOS's Live listeners and relaxed sound don't need it.
 - `LivePlayer` hands each decoded chunk to an AudioWorklet
   (`live-timeline.ts`) with the context frame it's due at: its stamp on the
   synced clock, less the Sync delay, mapped to the frame heard then. Chromium's
   `getOutputTimestamp()` gives the frame being heard and when (the median of the
-  last second's readings, 20 ms apart); iOS, Firefox and Safari give the frame
-  being rendered, so their reported `baseLatency` and `outputLatency` stand in.
+  last second's readings, 20 ms apart); Firefox and Safari give the frame being
+  rendered, so their reported `baseLatency` and `outputLatency` stand in.
   The need below comes from the same reading, so placement and declaration agree.
 - The worklet plays samples one after another from a short queue. The first
   chunk, and the first after the queue ran dry, starts exactly at its frame;
@@ -79,8 +80,7 @@ wrong clock still shows the right time.
   it plays, it follows the frames it was given by playing 0.3 % faster or slower
   once it's more than 1 ms off (the SDK's soft rate and deadband), never by a
   jump; beyond 200 ms (the SDK's resync threshold) the clock itself moved, and
-  it starts again at the frame. Volume and the iOS media-element route are the
-  SDK player's.
+  it starts again at the frame. Volume is the SDK player's.
 - Each Receiver declares only its own need through the SDK's `minBufferMs`, read
   only once its sound is unlocked (a suspended context reports its base latency
   only):
@@ -88,7 +88,7 @@ wrong clock still shows the right time.
     over the last second, which is how far ahead of its time a sample has to
     reach the worklet (the output's latency and its render callback). It's read
     once the output has run a second (an output fills its buffers as it starts).
-  - `SendspinPlayer` on Android: its `syncInfo.outputLatencyMs` plus the
+  - `SendspinPlayer` on Android and iOS: its `syncInfo.outputLatencyMs` plus the
     player's 15 ms scheduling batch (`scheduler.js`
     `scheduleQueueProcessing`), which a chunk may wait for.
 
@@ -103,8 +103,8 @@ wrong clock still shows the right time.
   between). A lost chunk also measures how late it was: how long after its
   first sample was due it reached the worklet, network, decoding and the page's
   own work included.
-- The SDK's player drops a late chunk silently, so on Android Couch counts them
-  chunk by chunk (`live-loss.ts`), wrapping the SDK's exported `AudioScheduler`
+- The SDK's player drops a late chunk silently, so on Android and iOS Couch
+  counts them chunk by chunk (`live-loss.ts`), wrapping the SDK's exported `AudioScheduler`
   and Web Audio's `createBuffer`, `getChannelData` and `start`. A chunk is lost
   when its start, the stamp less the output latency and Sync delay, passed more
   than 100 ms ago and the player never started it, or when the player started

@@ -103,7 +103,7 @@ AirPlay, its sound is **Synced** (`src/server/sendspin.ts`,
 Sendspin Node SDK behind Couch token authorization, and the client plays it with
 the official player (`@sendspin/sendspin-js`). A Live audio listener plays with
 Couch's own AudioWorklet player on the SDK's connection, clock and decoding,
-except on Android, where it keeps the official player ([Live audio](live-audio.md)).
+except on Android and iOS, where it keeps the official player ([Live audio](live-audio.md)).
 
 - For ordinary media, one FFmpeg per Playback decodes the audio once and encodes
   once per wire format: Opus in 60 ms packets, or 100 ms PCM chunks for players

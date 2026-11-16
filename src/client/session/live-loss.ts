@@ -1,7 +1,7 @@
 import type * as Sendspin from "@sendspin/sendspin-js";
 import type { LossSecond } from "./live-buffer";
 
-// Which Live chunks an Android listener lost to its own lateness, chunk by chunk: there Live plays
+// Which Live chunks an Android or iOS listener lost to its own lateness, chunk by chunk: there Live plays
 // with the SDK's player (sendspin.ts); elsewhere Couch's worklet counts them (live-timeline.ts).
 // The SDK's player (scheduler.js) makes each decoded chunk a buffer (handleDecodedChunk →
 // createBuffer) and starts it at its next batch, or drops it silently because its start has

@@ -1,6 +1,5 @@
 import {
   SendspinCore,
-  detectIsIOS,
   type DecodedAudioChunk,
   type SendspinCoreConfig,
 } from "@sendspin/sendspin-js";
@@ -27,12 +26,12 @@ class LiveCore extends SendspinCore {
   }
 }
 
-// Chromium's getOutputTimestamp() gives the frame being heard and when; iOS, Firefox and Safari give
-// the frame being rendered (the SDK's reportsContextTimeAtRenderPosition, which it doesn't export).
-// There the output latency the context reports stands in.
+// Chromium's getOutputTimestamp() gives the frame being heard and when; Firefox and Safari give the
+// frame being rendered (the SDK's reportsContextTimeAtRenderPosition, which it doesn't export).
+// There the output latency the context reports stands in. Android and iOS play Live with the SDK's
+// player (sendspin.ts).
 const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
 const heardStamps = !(
-  detectIsIOS() ||
   /Firefox/i.test(userAgent) ||
   (/Safari/i.test(userAgent) && !/Chrome|Chromium|Edg|OPR/i.test(userAgent))
 );
@@ -77,7 +76,6 @@ export class LivePlayer {
   private gain: GainNode | undefined;
   private node: AudioWorkletNode | undefined;
   private ready: Promise<void> | undefined;
-  private element: HTMLAudioElement | undefined;
   // The last second's readings, their median clock offset, and when the output first gave one.
   private readings: (Reading & { at: number })[] = [];
   private offset: number | undefined;
@@ -126,7 +124,6 @@ export class LivePlayer {
   // Call from a tap, before any other await, as the SDK's unlock().
   async unlock() {
     const context = this.open();
-    void this.element?.play().catch(() => {});
     if (context.state !== "running") await context.resume();
     await this.ready;
   }
@@ -137,11 +134,6 @@ export class LivePlayer {
     this.node?.disconnect();
     void this.context?.close().catch(() => {});
     this.context = this.gain = this.node = undefined;
-    if (!this.element) return;
-    this.element.pause();
-    this.element.srcObject = null;
-    this.element.remove();
-    this.element = undefined;
   }
 
   // The most the render clock ran ahead of what's heard over the last second (ms): how long before
@@ -197,17 +189,7 @@ export class LivePlayer {
     this.context = context;
     this.gain = gain;
     this.updateVolume();
-    // As the SDK's player: on iOS the sound plays through an element so it isn't muted by the silent
-    // switch. Android plays Live with the SDK's player (sendspin.ts).
-    if (detectIsIOS()) {
-      const element = document.createElement("audio");
-      element.style.display = "none";
-      document.body.append(element);
-      this.element = element;
-      const stream = context.createMediaStreamDestination();
-      gain.connect(stream);
-      element.srcObject = stream.stream;
-    } else gain.connect(context.destination);
+    gain.connect(context.destination);
     context.addEventListener("statechange", () => this.interrupt());
     this.reader = setInterval(() => this.read(), readingMs);
     this.ready = context.audioWorklet.addModule(workletUrl).then(() => {

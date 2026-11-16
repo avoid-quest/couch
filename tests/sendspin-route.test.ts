@@ -126,7 +126,11 @@ class FixtureCore {
   timeSyncInfo = { synced: false };
   handleBinaryMessage(_data: ArrayBuffer) {}
 }
+// The SDK's own platform detection, which picks the player.
+const { detectIsAndroid, detectIsIOS } = await import("@sendspin/sendspin-js");
 mock.module("@sendspin/sendspin-js", () => ({
+  detectIsAndroid,
+  detectIsIOS,
   SendspinPlayer: FixturePlayer,
   AudioScheduler: FixtureScheduler,
   SendspinCore: FixtureCore,
@@ -145,7 +149,7 @@ const { listen } = await import("../src/client/session/sendspin");
 const credentials = { origin: "http://localhost", token: "fixture-token" };
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const live = () => players.at(-1) as FixtureLivePlayer;
-// This browser's user agent; a test on Android sets it.
+// This browser's user agent; a test on Android or iOS sets it.
 const userAgent = navigator.userAgent;
 let agent = userAgent;
 Object.defineProperty(navigator, "userAgent", { configurable: true, get: () => agent });
@@ -170,6 +174,15 @@ test("Live listeners play with Couch's player and relaxed sound with the SDK's",
   listen(false, false, credentials, "Fixture");
   await settle();
   onAndroid();
+  listen(true, false, credentials, "Fixture", { codec: "pcm" });
+  await settle();
+  expect(players.at(-1)).not.toBeInstanceOf(FixtureLivePlayer);
+  expect(players.at(-1)!.options.minBufferMs).toBe(0);
+  // On iOS sound plays through a media element whose delay only the SDK's player allows for.
+  listen(false, false, credentials, "Fixture");
+  await settle();
+  agent =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
   listen(true, false, credentials, "Fixture", { codec: "pcm" });
   await settle();
   expect(players.at(-1)).not.toBeInstanceOf(FixtureLivePlayer);
