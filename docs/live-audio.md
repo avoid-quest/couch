@@ -70,6 +70,9 @@ wrong clock still shows the right time.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.
 - **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.
+- On Android, relaxed sound plays on the SDK's estimated audio clock, as the SDK
+  plays on Cast receivers: Couch hides `AudioContext.getOutputTimestamp()` from
+  the page, the case the SDK falls back from. Live keeps output timestamps.
 - On macOS, desktop listeners request Chromium's `audio-buffer-size=128`. Linux
   keeps the default until measured there; Windows keeps its device period because
   WASAPI can glitch with mismatched sizes.
