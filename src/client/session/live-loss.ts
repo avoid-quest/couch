@@ -8,11 +8,25 @@ import type { LossSecond } from "./live-buffer";
 // started it. Chunks Core never sent can't count, nor ones a stream clear discarded, nor a step's
 // changeover: Core stamps the chunks after it later, which the player can always start. Nor chunks
 // whose start fell while the context wasn't running: it plays nothing then.
+// A chunk the player started too late counts too: its sound ran out while it held the chunk (a
+// busy page runs its batch after the last chunk ended), so the chunk starts after a silence. It
+// counts only when its stamp follows on from the chunk before it (Core sent nothing in between) and
+// it was received before that chunk ended. A chunk the player dropped breaks that chain, so it
+// counts once. More lead cures both: the next batch has longer before the sound runs out.
 // Couch wraps the SDK's exported AudioScheduler and Web Audio's prototypes; the SDK is unchanged.
 type Player = Sendspin.SendspinPlayer;
 
 // A received buffer the player hasn't started, by its chunk's stamp (server time, µs).
 const pending = new Map<AudioBuffer, number>();
+// Each received buffer's stamp, and when it was received on its context's clock (s).
+const receivedBuffers = new WeakMap<AudioBuffer, { stampUs: number; at: number }>();
+// The last received chunk the player started: where its sound ends (context clock, s) and where its
+// stamp ends (µs).
+let chain: { end: number; stampEndUs: number } | undefined;
+// Stamps are whole µs and the player starts each chunk on its nearest frame (half a sample): within
+// this, two chunks join. Well under a chunk (15 or 20 ms), so a chunk Core never sent never joins.
+const joinSec = 0.001;
+let dried = 0;
 let counting = false;
 let installed = false;
 let scheduler: Sendspin.AudioScheduler | undefined;
@@ -29,6 +43,7 @@ let sendAheads: number[] = [];
 let interrupted = false;
 const interrupt = () => {
   interrupted = true;
+  chain = undefined;
 };
 // A chunk whose start passed less than this ago may still be in the player's batch, which runs
 // 15 ms after a chunk arrives; the player's smoothed output latency also differs from the reading
@@ -87,6 +102,7 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
     const buffer = createBuffer.apply(this, args);
     if (decoding !== undefined) {
       pending.set(buffer, decoding);
+      receivedBuffers.set(buffer, { stampUs: decoding, at: this.currentTime });
       received++;
       decoding = undefined;
     }
@@ -100,8 +116,24 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
   const start = AudioBufferSourceNode.prototype.start;
   AudioBufferSourceNode.prototype.start = function (this: AudioBufferSourceNode, ...args) {
     const buffer = this.buffer;
+    const chunk = buffer && (receivedBuffers.get(buffer) ?? (read && receivedBuffers.get(read)));
     if (buffer && !pending.delete(buffer) && read) pending.delete(read);
     read = undefined;
+    if (chunk) {
+      const [when = 0, offset = 0] = args,
+        now = this.context.currentTime;
+      if (
+        chain &&
+        Math.abs(chunk.stampUs - chain.stampEndUs) <= joinSec * 1e6 &&
+        chunk.at <= chain.end &&
+        now > chain.end + joinSec
+      )
+        dried++;
+      chain = {
+        end: Math.max(when, now) + (buffer.duration - offset) / this.playbackRate.value,
+        stampEndUs: chunk.stampUs + buffer.duration * 1e6,
+      };
+    }
     return start.apply(this, args);
   };
 }
@@ -109,10 +141,14 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
 // Count only while a Live listen samples it, so nothing piles up otherwise.
 export function countingLiveLoss(on: boolean) {
   counting = on;
-  if (!on) pending.clear();
+  if (on) return;
+  pending.clear();
+  chain = undefined;
+  dried = 0;
 }
 
-// Once a second: the chunks received since the last sample, those lost, and how far ahead of their
+// Once a second: the chunks received since the last sample, those lost (dropped or started after a
+// silence), and how far ahead of their
 // stamps Core sent them (the median rises when Core moves this listener a step later). Undefined when
 // the second can't be counted: the listener wasn't playing on a context that ran throughout it.
 export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond | undefined {
@@ -131,10 +167,11 @@ export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond |
   const sorted = sendAheads.sort((a, b) => a - b);
   const second = {
     chunks: received,
-    lost,
+    lost: lost + dried,
     sendAheadMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
   };
   received = 0;
+  dried = 0;
   sendAheads = [];
   interrupted = false;
   return sounding ? second : undefined;

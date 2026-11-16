@@ -57,6 +57,45 @@ class FixtureScheduler {
     }
   }
 }
+// Web Audio, as far as the player and Couch use it. Couch wraps its prototypes once, so every test
+// shares these.
+class FixtureBuffer {
+  constructor(readonly length: number) {}
+  get duration() {
+    return this.length / 48_000;
+  }
+  getChannelData() {
+    return new Float32Array(1);
+  }
+}
+class Context extends EventTarget {
+  state = "running";
+  sampleRate = 48_000;
+  currentTime = 0;
+  createBuffer(_channels: number, length: number) {
+    return new FixtureBuffer(length);
+  }
+  // The context stops running and runs again, as on a phone call or a hidden page.
+  suspendFor(run: () => void) {
+    this.state = "suspended";
+    this.dispatchEvent(new Event("statechange"));
+    run();
+    this.state = "running";
+    this.dispatchEvent(new Event("statechange"));
+  }
+}
+class FixtureSource {
+  buffer?: FixtureBuffer;
+  playbackRate = { value: 1 };
+  constructor(readonly context: Context) {}
+  start(_when?: number) {}
+}
+const useWebAudio = () =>
+  Object.assign(globalThis, {
+    BaseAudioContext: Context,
+    AudioBuffer: FixtureBuffer,
+    AudioBufferSourceNode: FixtureSource,
+  });
 // The SDK's protocol layer, as far as Couch reaches it: each decrypted binary message.
 class FixtureCore {
   timeSyncInfo = { synced: false };
@@ -181,34 +220,7 @@ test("a codec change keeps the Media Session that Couch set when the SDK's destr
 });
 
 test("a listener steps for chunks it received and couldn't play, not for chunks Core never sent", async () => {
-  // Web Audio, as far as the player and Couch use it.
-  class AudioBuffer {
-    getChannelData() {
-      return new Float32Array(1);
-    }
-  }
-  class Context extends EventTarget {
-    state = "running";
-    sampleRate = 48_000;
-    createBuffer() {
-      return new AudioBuffer();
-    }
-    // The context stops running and runs again, as on a phone call or a hidden page.
-    suspendFor(run: () => void) {
-      this.state = "suspended";
-      this.dispatchEvent(new Event("statechange"));
-      run();
-      this.state = "running";
-      this.dispatchEvent(new Event("statechange"));
-    }
-  }
-  class AudioBufferSourceNode {
-    buffer?: AudioBuffer;
-    playbackRate = { value: 1 };
-    constructor(readonly context: Context) {}
-    start() {}
-  }
-  Object.assign(globalThis, { BaseAudioContext: Context, AudioBuffer, AudioBufferSourceNode });
+  useWebAudio();
   const tick = await sampling(async () => {
     listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150 });
     await settle();
@@ -271,5 +283,60 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
   // Core sends its chunks a step further ahead: it applied the step, which is judged only once ten
   // seconds after it show whether loss still recurs.
   for (let i = 0; i < 9; i++) await second(50, 10, false, 120);
+  expect(player.buffers).toEqual([42, 67]);
+});
+
+test("a listener steps when its player runs dry holding chunks, not for a gap Core left or a late arrival", async () => {
+  useWebAudio();
+  const tick = await sampling(async () => {
+    listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150 });
+    await settle();
+  });
+  const player = players.at(-1)!,
+    context = new Context(),
+    scheduler = new FixtureScheduler(context as unknown as BaseAudioContext);
+  scheduler.initAudioContext();
+  // The context's clock is the synced clock here. Each 20 ms chunk is received 100 ms before its
+  // stamp, and the player starts it where the one before it ended.
+  let stampUs = serverNowUs + 100_000,
+    end = 0;
+  const play = (startAt?: number) => {
+    const { buffer } = scheduler.queue.shift()!;
+    const source = Object.assign(new FixtureSource(context), { buffer });
+    const when = startAt ?? (end || context.currentTime + 0.05);
+    source.start(when);
+    end = when + buffer.duration;
+  };
+  // One second, with at most one fault in it:
+  // - dry: the batch runs 5 ms after the last chunk ended, though it held the next one;
+  // - gap: Core sent nothing for one chunk, and the next starts after a silence;
+  // - late: the next chunk is received only after the last one ended.
+  const second = (fault?: "dry" | "gap" | "late") => {
+    for (let chunk = 0; chunk < 50; chunk++) {
+      const faulty = chunk === 25 ? fault : undefined;
+      if (faulty === "gap") stampUs += 20_000;
+      serverNowUs = stampUs - 100_000;
+      context.currentTime = faulty === "late" ? end + 0.005 : serverNowUs / 1e6;
+      scheduler.handleDecodedChunk({ serverTimeUs: stampUs });
+      stampUs += 20_000;
+      if (faulty === undefined) play();
+      else {
+        context.currentTime = end + 0.005;
+        play(context.currentTime + 0.01);
+      }
+    }
+    tick(1);
+  };
+  for (let i = 0; i < 10; i++) second();
+  expect(player.buffers).toEqual([42]);
+  for (const fault of ["gap", undefined, "late", undefined, "gap", undefined, "late"] as const)
+    second(fault);
+  for (let i = 0; i < 10; i++) second();
+  expect(player.buffers).toEqual([42]);
+  // Two dry-outs in ten seconds: loss that recurs.
+  second("dry");
+  second();
+  expect(player.buffers).toEqual([42]);
+  second("dry");
   expect(player.buffers).toEqual([42, 67]);
 });

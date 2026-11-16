@@ -70,7 +70,12 @@ wrong clock still shows the right time.
   than 100 ms ago and it was never started. Chunks Core never sent, chunks a
   stream clear discarded, and anything in a second when the context wasn't
   running throughout or the clock isn't synced don't count. A step's changeover
-  can't count either: the chunks after it are stamped later.
+  can't count either: the chunks after it are stamped later. A chunk the player
+  started after a silence counts as lost too: its batch ran after the chunk
+  before it had ended (a busy page), though it already held the chunk. It counts
+  only when its stamp follows on from that chunk's (Core sent nothing in between)
+  and it was received before that chunk ended, so a late arrival or a gap in the
+  stream doesn't; a dropped chunk breaks the chain, so nothing counts twice.
 - A Receiver that keeps losing chunks declares one more 25 ms step
   (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
   separate spells, or three seconds running, or the last minute lost chunks in
