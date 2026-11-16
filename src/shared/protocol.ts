@@ -28,6 +28,8 @@ export type QueueEntry = {
   duration?: number;
   // An item with no end: a radio station, a Live TV channel, a stream or a shared capture.
   endless?: boolean;
+  // A radio station or Live TV channel in Couch's catalog; its programme is the Playback's radioProgramme.
+  station?: { id: string; name: string };
   liveSourceId?: string;
   quality?: VideoQuality;
   automaticTitle?: boolean;

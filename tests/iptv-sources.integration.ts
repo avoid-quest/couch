@@ -45,6 +45,11 @@ test("an edit with a null guide URL removes the guide and its programmes; a blan
     const { source } = (await created.json()) as { source: { id: string } };
     assert.deepEqual(await listed(), { ...(await listed()), hasGuide: true, programCount: 1 });
     assert.equal(JSON.stringify(await listed()).includes("guide.xml"), false);
+    // A playing channel's programme comes from the guide.
+    const { channels: guided } = (await (await call("/guide")).json()) as {
+      channels: { id: string }[];
+    };
+    assert.equal(guide.programmeAt(guided[0]!.id).now?.title, "News");
     assert.equal((await call(`/sources/${source.id}`, { name: "TV", guideUrl: "" })).status, 200);
     assert.equal((await listed()).programCount, 1);
     assert.equal((await call(`/sources/${source.id}`, { name: "TV", guideUrl: null })).status, 200);

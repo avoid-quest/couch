@@ -1,10 +1,8 @@
 import { useEffect, useEffectEvent } from "react";
 import type { Action } from "../../shared/protocol";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
-import { useQuery } from "@tanstack/react-query";
-import { radioProgrammesQuery } from "@/api/radio";
 import { useRadioClock } from "@/radio-clock";
-import { isRadio, freshRadioProgramme, radioNow } from "../../shared/radio";
+import { isRadio, freshRadioProgramme } from "../../shared/radio";
 import { useSessionGate } from "./session-context";
 import { usePlaybackClock } from "./playback-clock";
 import { livePlayback } from "./playback-controls";
@@ -23,7 +21,7 @@ const actions = [
 // Media Session feeds the system's media keys and Now Playing (macOS Now
 // Playing, Windows media controls, Linux MPRIS) while this page plays media.
 export function useMediaSession() {
-  const { state, connected, run, credentials } = useSessionGate();
+  const { state, connected, run } = useSessionGate();
   const clock = usePlaybackClock();
   const player = state?.player;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
@@ -41,18 +39,12 @@ export function useMediaSession() {
     (listening || (current && ["playing", "paused", "loading"].includes(player.status)))
       ? player.playbackId
       : null;
-  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : "";
-  const guides = useQuery({
-    ...radioProgrammesQuery(credentials ?? { origin: "", token: "" }),
-    enabled: connected && !!credentials && !!stationId,
-    refetchInterval: 60_000,
-  });
-  const now = useRadioClock(Object.values(guides.data ?? {}), state?.radioProgramme);
+  // Core sends the station's or channel's programme, from its guide, with the Playback.
+  const now = useRadioClock([], state?.radioProgramme);
   const programme =
-    (state?.radioProgramme?.playbackId === playbackId
+    state?.radioProgramme?.playbackId === playbackId
       ? freshRadioProgramme(state?.radioProgramme, now)
-      : null) ??
-    (stationId && playbackId ? radioNow(guides.data?.[stationId], stationId, now) : null);
+      : null;
   const title = listening
     ? source
       ? liveTitle(source)

@@ -764,7 +764,7 @@ export function createSession(
         if (metadata || radio)
           enrichEntry(entry.id, entry.source, {
             ...metadata,
-            ...(radio ? { kind: "radio", live: true } : {}),
+            ...(radio ? { kind: "radio", endless: true } : {}),
           });
         const currentEntry = state.queue.find((candidate) => candidate.id === entry.id)!;
         const mediaId = playbackMediaId(currentEntry);

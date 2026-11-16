@@ -3337,6 +3337,7 @@ export async function createHub(options: HubOptions) {
           playback.hostMpv.delete(id);
       if (hostMpv || media.mpv) playback.hostMpv.add(playbackId);
       else playback.hostMpv.delete(playbackId);
+      radioProgramme?.load(playbackId, entry.source, entry.source, playback.id);
       return media;
     }
     if (entry.source.startsWith("radio:")) {
@@ -3416,9 +3417,37 @@ export async function createHub(options: HubOptions) {
     programme: async (id, source, sampledAt, signal) =>
       (await radio.metadata.get(id, source, signal, sampledAt)).programme?.title,
   });
+  // A Live TV channel's programme comes from its guide; it changes when the next one starts.
+  const channelProgramme = (source: string) => {
+    const { now, nextStart } = guide.programmeAt(source.slice(5));
+    const at = Date.now(),
+      // A guide refreshed meanwhile is read again within a quarter of an hour.
+      until = Math.min(now?.end ?? Infinity, nextStart ?? Infinity, at + 15 * 60_000);
+    return {
+      programme: now
+        ? {
+            stationId: source.slice(5),
+            provider: "xmltv" as const,
+            title: now.title,
+            ...(now.description ? { description: now.description } : {}),
+            start: now.start,
+            end: now.end,
+            sampledAt: at,
+            expiresAt: until,
+          }
+        : null,
+      retryAt: until,
+    };
+  };
   radioProgramme = createRadioProgramme({
-    station: radio.programmeStation,
-    metadata: radio.metadata,
+    station: (source) =>
+      source.startsWith("iptv:")
+        ? { id: source, streamUrl: source }
+        : radio.programmeStation(source),
+    metadata: {
+      get: async (id, streamUrl, signal) =>
+        id.startsWith("iptv:") ? channelProgramme(id) : radio.metadata.get(id, streamUrl, signal),
+    },
     publish: (playbackId, programme) =>
       playing(playbackId)?.session.updateRadioProgramme(playbackId, programme),
   });
@@ -3456,6 +3485,7 @@ export async function createHub(options: HubOptions) {
               title: channel.name,
               source: `iptv:${channel.id}`,
               endless: true,
+              station: { id: channel.id, name: channel.name },
             },
             playNow,
           },
@@ -3702,7 +3732,8 @@ export async function createHub(options: HubOptions) {
               title: station.title,
               source: `radio:${action.stationId}`,
               kind: "radio",
-              live: true,
+              endless: true,
+              station: { id: action.stationId, name: station.title },
               ...station.metadata,
             },
           };
