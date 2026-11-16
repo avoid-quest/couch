@@ -191,29 +191,45 @@ export function createScheduledAudio(options: {
   // Sendspin bounds output delay and min buffer to 5 s.
   const timingLimitMs = 5000;
   const validTiming = (ms: number) => Number.isInteger(ms) && ms >= 0 && ms <= timingLimitMs;
+  // A failed handler retires its connection, so the device reconnects into a clean session.
+  const retire = (socket: WebSocket | undefined, error: unknown) => {
+    console.warn(
+      "Couch: Sendspin session handler failed:",
+      safePlaybackError(error instanceof Error ? error.message : String(error)),
+    );
+    socket?.terminate();
+  };
+  // The SDK contains errors thrown by its hooks without reporting them.
+  const contained =
+    <Rest extends unknown[]>(hook: (session: SendspinSession, ...rest: Rest) => void) =>
+    (session: SendspinSession, ...rest: Rest) => {
+      try {
+        hook(session, ...rest);
+      } catch (error) {
+        retire(socketOf.get(session), error);
+      }
+    };
   const hooks: SendspinSessionHooks = {
-    onFormatChanged: (session) => {
+    onFormatChanged: contained((session) => {
       for (const group of groups) group.formatChanged(session);
-    },
-    onIdentified: (session) => {
+    }),
+    onIdentified: contained((session) => {
       const clientId = session.getClientId()!;
       identified.add(session);
       if (select(clientId)) {
         for (const group of groups) group.joined(clientId);
         options.changed();
       }
-    },
-    onPlayerState: (_session, update) => {
-      // The SDK exposes declarations unchanged and contains a hook's errors, so drop the
-      // connection here before invalid timing can poison a shared capture timeline.
+    }),
+    onPlayerState: contained((_session, update) => {
+      // The SDK exposes declarations unchanged. Reject invalid timing before it can
+      // poison a shared capture timeline.
       if (
         [update.minBufferMs, update.staticDelayMs].some(
           (value) => value !== undefined && !validTiming(value),
         )
-      ) {
-        socketOf.get(_session)?.terminate();
-        return;
-      }
+      )
+        throw new Error("Invalid Sendspin player timing.");
       const clientId = _session.getClientId()!;
       if (sessions.get(clientId) !== _session) return;
       const delayChanged =
@@ -223,15 +239,15 @@ export function createScheduledAudio(options: {
         options.saveDelay?.(clientId, update.staticDelayMs!);
       }
       if (delayChanged) options.changed();
-    },
-    onDisconnected: (session) => {
+    }),
+    onDisconnected: contained((session) => {
       const clientId = session.getClientId()!;
       identified.delete(session);
       if (select(clientId)) {
         for (const group of groups) group.joined(clientId);
         options.changed();
       }
-    },
+    }),
   };
 
   // One Playback's speakers: its Sendspin group. It is the Playback's player while its outputs span Devices.
@@ -897,6 +913,12 @@ export function createScheduledAudio(options: {
         // Cursors already contain only this run's active members.
         for (const [session, cursor] of current.cursors) {
           if (wireOf(session) !== wire) continue;
+          // The SDK holds a player's stream until it may play (its first state, available) and
+          // drops audio meanwhile, so nothing counts as sent before the stream is open.
+          if (!session.getActiveStreams().includes("player")) {
+            session.sendStreamStart(wireFormat(wire));
+            if (!session.getActiveStreams().includes("player")) continue;
+          }
           const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
           for (const chunk of sent) {
@@ -1164,11 +1186,7 @@ export function createScheduledAudio(options: {
           if (binary) session.handleBinary(data as Buffer);
           else session.handleText(String(data));
         } catch (error) {
-          console.warn(
-            "Couch: Sendspin session handler failed:",
-            safePlaybackError(error instanceof Error ? error.message : String(error)),
-          );
-          socket.terminate();
+          retire(socket, error);
         }
       };
       socket.on("message", (data, binary) => {
