@@ -25,7 +25,14 @@ import type { SoundRouteState } from "../shared/sound";
 
 type Metadata = Pick<
   QueueEntry,
-  "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"
+  | "thumbnail"
+  | "duration"
+  | "endless"
+  | "kind"
+  | "subtitle"
+  | "description"
+  | "collection"
+  | "creator"
 > & { title?: string };
 export type MediaSource = {
   preview?: WebMediaSource["preview"];
@@ -83,8 +90,13 @@ type SessionOptions = {
 // One Playback (#644 ticket 9): its queue, current item, position, pause state, speed and tracks.
 // `store` is Core's store with this Playback's own saved queue (store.playback(id)).
 export type PlaybackStore = Store & ReturnType<Store["playback"]>;
-// Up next shows this many of the entries Autoplay will play.
+// Up next shows this many of the entries Autoplay will play with the state; the rest come in pages
+// as people scroll, so a 500-item playlist loads in ten.
 const AUTOPLAY_PREVIEW = 10;
+const AUTOPLAY_PAGE = 50;
+// A position this close to where the last anchor says it is needs no new one: well under a second on any
+// timeline, and above the jitter of a once-a-second report.
+const clockTolerance = 0.25;
 export function createSession(
   store: PlaybackStore,
   sendPlayer: (command: PlaybackCommand) => void,
@@ -141,6 +153,7 @@ export function createSession(
       enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false,
       contextTitle: continuation?.title ?? null,
       upcoming: continuation?.entries.slice(0, AUTOPLAY_PREVIEW) ?? [],
+      total: continuation?.entries.length ?? 0,
     },
     player: {
       playbackId: null,
@@ -155,6 +168,7 @@ export function createSession(
   let published: Omit<SessionState, "player"> | undefined;
   let publishedPlayer: string | undefined;
   let publishedClock: PlaybackClock | undefined;
+  let reported = { position: NaN, at: 0 };
   const publishState = (observation = false, suppressClock = false) => {
     const { player, ...rest } = state;
     const { position, duration, ...details } = player;
@@ -168,16 +182,27 @@ export function createSession(
       Object.keys({ ...published, ...rest }).every(
         (key) => Reflect.get(published!, key) === Reflect.get(rest, key),
       );
-    const clock = { playbackId: player.playbackId, position, duration };
-    if (
-      clockOnly &&
-      (suppressClock ||
-        (position === publishedClock?.position && duration === publishedClock?.duration))
-    )
-      return;
+    const at = (options.now ?? Date.now)(),
+      rate = player.status === "playing" && !player.buffering ? (player.speed ?? 1) : 0;
+    const clock = { playbackId: player.playbackId, position, duration, at, rate };
+    // A position is as of when it was first reported: a later report or change can repeat it (a screen's
+    // report repeats the sound's), so it's checked against the anchor at that time.
+    if (position !== reported.position) reported = { position, at };
+    // Clients move from the last anchor; it changes only when where it is or how it moves changes.
+    const holds =
+      !!publishedClock &&
+      publishedClock.playbackId === player.playbackId &&
+      rate === publishedClock.rate &&
+      duration === publishedClock.duration &&
+      Math.abs(
+        position -
+          publishedClock.position -
+          ((Math.max(reported.at, publishedClock.at) - publishedClock.at) / 1000) * rate,
+      ) < clockTolerance;
+    if (clockOnly && (suppressClock || holds)) return;
     published = rest;
     publishedPlayer = playerDetails;
-    publishedClock = clock;
+    if (!holds) publishedClock = clock;
     publish(state, clockOnly ? clock : undefined);
   };
   const broadcast = (observation = false, suppressClock = false) => {
@@ -190,12 +215,14 @@ export function createSession(
       state.autoplay.upcoming.map((entry) => entry.id).join() !==
         upcoming.map((entry) => entry.id).join() ||
       state.autoplay.contextTitle !== (continuation?.title ?? null) ||
+      state.autoplay.total !== (continuation?.entries.length ?? 0) ||
       (state.autoplay.pending === true) !== pending
     ) {
       state.autoplay = {
         enabled,
         contextTitle: continuation?.title ?? null,
         upcoming,
+        total: continuation?.entries.length ?? 0,
         ...(pending ? { pending: true } : {}),
       };
     }
@@ -426,7 +453,7 @@ export function createSession(
         > & { headers?: Record<string, string>; audioSelection?: AudioSelection };
       command = wire;
       const entry = state.queue.find((item) => item.id === state.currentEntryId);
-      if (entry?.live || isRadio(entry) || command.radio)
+      if (entry?.endless || isRadio(entry) || command.radio)
         command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
       loaded = command;
     }
@@ -757,7 +784,7 @@ export function createSession(
         if (metadata || radio)
           enrichEntry(entry.id, entry.source, {
             ...metadata,
-            ...(radio ? { kind: "radio", live: true } : {}),
+            ...(radio ? { kind: "radio", endless: true } : {}),
           });
         const currentEntry = state.queue.find((candidate) => candidate.id === entry.id)!;
         const mediaId = playbackMediaId(currentEntry);
@@ -890,7 +917,7 @@ export function createSession(
         subtitles: withAdded(media.subtitles),
         paused,
         ...carried(previous),
-        ...(entry.live || fresh.metadata?.live ? {} : { startPosition: position }),
+        ...(entry.endless || fresh.metadata?.endless ? {} : { startPosition: position }),
         preferences: {
           ...state.preferences!.profile,
           ...(previous.speed === undefined ? {} : { speed: previous.speed }),
@@ -1058,6 +1085,11 @@ export function createSession(
   };
 
   return {
+    // A page of the whole list Autoplay will play, from `offset`.
+    autoplayPage(offset: number) {
+      const entries = continuation?.entries ?? [];
+      return { entries: entries.slice(offset, offset + AUTOPLAY_PAGE), total: entries.length };
+    },
     audioSelection: () => audioSelection,
     updateSystemAudio(audio: SoundRouteState) {
       state.systemAudio = audio;
@@ -1126,7 +1158,7 @@ export function createSession(
       )
         return;
       const entry = state.queue.find((entry) => entry.id === state.currentEntryId);
-      const live = loaded.radio || entry?.live;
+      const live = loaded.radio || entry?.endless;
       if (retry && status === "error" && entry && progressContext) {
         progress.begin(
           entry,
@@ -1260,6 +1292,10 @@ export function createSession(
     },
     get state() {
       return structuredClone(state);
+    },
+    // The anchor clients move on from: where the Playback was at Core's time `at`.
+    get clock() {
+      return publishedClock;
     },
     enrichEntry,
     loadQueue(
@@ -1472,11 +1508,11 @@ export function createSession(
         case "videoQuality":
           return changeVideoQuality(action, authorize);
         case "play": {
-          // Autoplay's visible picks are playable before they join the queue. Keep manual entries waiting,
+          // Autoplay's picks are playable before they join the queue. Keep manual entries waiting,
           // and continue the collection after the chosen pick, without resolving that collection again.
           const pick =
             !state.queue.some((entry) => entry.id === action.entryId) && state.autoplay?.enabled
-              ? state.autoplay.upcoming.find((entry) => entry.id === action.entryId)
+              ? continuation?.entries.find((entry) => entry.id === action.entryId)
               : undefined;
           if (pick && continuation) {
             // At capacity, only played history may make room; the current item and waiting entries stay.
@@ -1707,7 +1743,7 @@ export function createSession(
       // A live stream's duration grows with every playlist reload. Suppress its
       // clock publications, but still publish any other Session change.
       const suppressClock =
-        (isRadio(current) || current?.live === true) &&
+        (isRadio(current) || current?.endless === true) &&
         ["playing", "paused"].includes(player.status);
       state.player = {
         ...player,

@@ -360,6 +360,20 @@ export function createGuide({
 
   return {
     sources,
+    // What a channel shows at `at` from its guide, and when the next programme starts.
+    programmeAt(id: string, at = Date.now()) {
+      const now = db
+        .query<GuideProgram, [string, number, number]>(
+          `${programSelect} WHERE channel_id = ? AND start <= ? AND end > ? ORDER BY start DESC LIMIT 1`,
+        )
+        .get(id, at, at);
+      const next = db
+        .query<{ start: number }, [string, number]>(
+          "SELECT start FROM iptv_programs WHERE channel_id = ? AND start > ? ORDER BY start LIMIT 1",
+        )
+        .get(id, at);
+      return { now, nextStart: next?.start };
+    },
     async getPlayable(id: string, signal: AbortSignal, hostOutput: boolean) {
       const item = channel(id);
       signal.throwIfAborted();

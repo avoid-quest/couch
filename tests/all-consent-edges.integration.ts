@@ -14,6 +14,7 @@ import {
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { routes, withState } from "./whole-state.fixture";
 
 // Keep origin discovery local; playback requests still go through the real HTTP server.
 const originalFetch = globalThis.fetch;
@@ -87,7 +88,7 @@ async function fixture() {
     await new Promise<void>((resolve, reject) => {
       socket.once("error", reject);
       socket.onmessage = (event) => {
-        const message = JSON.parse(String(event.data)) as ServerMessage;
+        const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
         messages.push(message);
         if (message.type === "state") {
           state = message.state;
@@ -184,11 +185,11 @@ test(
       await until(() => f.levels[1]!.at(-1) === 40);
       await f.admin.command({ type: "allSpeakers", level: 0 });
       await until(() => f.levels[1]!.at(-1) === 0);
-      const outputs = f.device.state.outputs;
+      const outputs = routes(f.device.state.outputs);
       for (const audio of [false, true, false]) {
         await f.device.command({ type: "sharing", sharing: { audio, video: false } });
         await until(() => f.levels[1]!.at(-1) === (audio ? 0 : 40));
-        assert.deepEqual(f.device.state.outputs, outputs);
+        assert.deepEqual(routes(f.device.state.outputs), outputs);
         assert.equal(f.levels[0]!.at(-1), 0);
       }
       // A Device's own All remains its choice even when it subsequently revokes sharing.

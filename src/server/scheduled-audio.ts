@@ -102,6 +102,9 @@ const emptyMetadata = {
 // A speaker whose socket holds more than this unsent has stopped reading (a frozen tab, a dozing radio).
 // It gets nothing more until it drains; what it missed expires from sent, so it resumes at audio that can still play.
 const backlogBytes = 64 * 1024;
+// One held-back check is ordinary back-pressure; a speaker that took no new sound in most of the last
+// five seconds while some waited for it (its socket backed up, or its declared capacity full) is stalled.
+const stallSeconds = 5;
 const wireFormat = (wire: Wire) => ({
   codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM,
   sampleRate: 48_000,
@@ -165,6 +168,33 @@ export function createScheduledAudio(options: {
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
+  // Each speaker's sends: whether this second held sound back and sent some, and whether each of
+  // the last few seconds held back without sending any.
+  const backlogs = new Map<
+    string,
+    { second: number; held: boolean; sent: boolean; seconds: boolean[] }
+  >();
+  const stalled = (clientId: string) =>
+    (backlogs.get(clientId)?.seconds.filter(Boolean).length ?? 0) > stallSeconds / 2;
+  const took = (clientId: string, held: boolean, sent: boolean, nowUs: number) => {
+    const second = Math.floor(nowUs / 1e6),
+      backlog = backlogs.get(clientId) ?? { second, held: false, sent: false, seconds: [] };
+    backlogs.set(clientId, backlog);
+    if (second !== backlog.second) {
+      const before = stalled(clientId);
+      backlog.seconds = [...backlog.seconds, backlog.held && !backlog.sent].slice(-stallSeconds);
+      backlog.second = second;
+      backlog.held = backlog.sent = false;
+      if (stalled(clientId) !== before) options.changed();
+    }
+    backlog.held ||= held;
+    backlog.sent ||= sent;
+  };
+  const forgetBacklog = (clientId: string) => {
+    const before = stalled(clientId);
+    backlogs.delete(clientId);
+    if (before) options.changed();
+  };
   const sources = new Map<
     string,
     { capture: ReturnType<typeof createScheduledCapture>; details?: LiveSource }
@@ -176,6 +206,7 @@ export function createScheduledAudio(options: {
     joined: (clientId: string) => void;
     formatChanged: (session: SendspinSession) => void;
     sourceChanged: (id: string) => void;
+    started: (clientId: string) => boolean;
     close: () => void;
   }>();
   const children = new Set<ChildProcess>();
@@ -978,6 +1009,9 @@ export function createScheduledAudio(options: {
           }
           const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
+          const first = cursor.sent === undefined,
+            before = cursor.sent;
+          let held = (socket?.bufferedAmount ?? 0) > backlogBytes;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;
             if (cursor.sent !== undefined && chunk.at <= cursor.sent) continue;
@@ -986,8 +1020,10 @@ export function createScheduledAudio(options: {
               session.timeUntilPlayerCapacityUs(chunk.data.length + session.getAudioHeaderSize()) >
                 0 ||
               (socket?.bufferedAmount ?? 0) > backlogBytes
-            )
+            ) {
+              held = true;
               break;
+            }
             session.sendPcmAudioFrame({
               data: chunk.data,
               timestampUs: chunk.at + lateUs,
@@ -1001,6 +1037,9 @@ export function createScheduledAudio(options: {
             );
             cursor.sent = chunk.at;
           }
+          took(session.getClientId()!, held, cursor.sent !== before, now);
+          // Its first sound in this run: it no longer joins.
+          if (first && cursor.sent !== undefined) options.changed();
         }
         if (
           current.pipes[wire]?.isPaused() &&
@@ -1038,6 +1077,11 @@ export function createScheduledAudio(options: {
     };
 
     const synced = {
+      // Whether this speaker has been sent sound in the current run.
+      started: (clientId: string) =>
+        [...(run?.cursors ?? [])].some(
+          ([session, cursor]) => session.getClientId() === clientId && cursor.sent !== undefined,
+        ),
       sourceChanged(sourceId: string) {
         if (load?.liveSourceId === sourceId) each((session) => session.sendMetadata(metadata()));
       },
@@ -1066,6 +1110,7 @@ export function createScheduledAudio(options: {
         for (const member of before)
           if (!next.some((item) => item.deviceId === member.deviceId)) {
             clearReceiverError(member.deviceId);
+            forgetBacklog(member.deviceId);
             sessions.get(member.deviceId)?.sendMetadata(emptyMetadata);
             run?.live?.left(member.deviceId);
             for (const session of run?.cursors.keys() ?? [])
@@ -1298,6 +1343,10 @@ export function createScheduledAudio(options: {
       delays: [...delays],
       receivers: [...receiverErrors].map(
         ([clientId, value]) => [clientId, value.error, value.group] as const,
+      ),
+      stalled: [...sessions.keys()].filter(stalled),
+      started: [...sessions.keys()].filter((clientId) =>
+        [...groups].some((group) => group.started(clientId)),
       ),
     }),
     registerSource(id: string, details?: LiveSource) {

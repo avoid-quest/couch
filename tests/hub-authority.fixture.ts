@@ -7,6 +7,7 @@ import type { TestContext } from "node:test";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 export async function until(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
@@ -59,7 +60,7 @@ export async function authorityFixture(
     await new Promise<void>((resolve, reject) => {
       socket.once("error", reject);
       socket.on("message", (data) => {
-        const message = JSON.parse(String(data)) as ServerMessage;
+        const message = withState(socket, JSON.parse(String(data)) as ServerMessage);
         messages.push(message);
         if (message.type === "state") {
           state = message.state;

@@ -15,6 +15,7 @@ import { openStore } from "../src/server/store";
 import { startHelpers, helper } from "../src/server/helpers";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 import type { IncomingMessage, RequestOptions } from "node:http";
+import { withState } from "./whole-state.fixture";
 
 const until = async (check: () => boolean) => {
   const end = Date.now() + 5000;
@@ -175,7 +176,7 @@ for (const kind of ["storyboard", "vtt", "hls"])
         (message: Extract<ServerMessage, { type: "result" }>) => void
       >();
       socket.on("message", (data) => {
-        const message = JSON.parse(String(data)) as ServerMessage;
+        const message = withState(socket, JSON.parse(String(data)) as ServerMessage);
         messages.push(message);
         if (message.type === "state") state = message.state;
         if (message.type === "result") pending.get(message.requestId)?.(message);

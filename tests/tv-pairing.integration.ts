@@ -9,6 +9,7 @@ import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { TV_PAIRING_TTL } from "../src/server/tv-pairing";
 import type { DeviceSummary, ServerMessage } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 // A TV shows a code; an admin approves it from a paired device; the TV collects its credentials.
 const hostToken = "h".repeat(64);
@@ -188,7 +189,7 @@ test("a paired TV is still a TV after Core restarts", async () => {
       return await new Promise<DeviceSummary[]>((resolve, reject) => {
         socket.once("error", reject);
         socket.on("message", (data) => {
-          const message = JSON.parse(String(data)) as ServerMessage;
+          const message = withState(socket, JSON.parse(String(data)) as ServerMessage);
           if (message.type === "state") resolve(message.state.devices!);
         });
       });

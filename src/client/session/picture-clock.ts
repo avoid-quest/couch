@@ -61,7 +61,7 @@ export function createFollower(video: FollowedVideo, read: () => Sample, start: 
   const rate = (value: number) => {
     if (video.playbackRate !== value) video.playbackRate = value;
   };
-  return () => {
+  const step = () => {
     const sample = video.readyState >= HTMLMediaElement.HAVE_METADATA ? read() : null;
     // No clock yet, or none any more: the picture waits where it is.
     if (!sample) {
@@ -133,11 +133,25 @@ export function createFollower(video: FollowedVideo, read: () => Sample, start: 
         : 0;
     rate(speed * (1 + nudge));
   };
+  // Each step says whether the picture waits for data where the sound is: it is behind.
+  return () => {
+    step();
+    return parked !== undefined;
+  };
 }
 
-export function followClock(video: FollowedVideo, read: () => Sample, start: () => void) {
+export function followClock(
+  video: FollowedVideo,
+  read: () => Sample,
+  start: () => void,
+  behind: (waiting: boolean) => void,
+) {
   const step = createFollower(video, read, start);
-  step();
-  const timer = setInterval(step, 250);
-  return () => clearInterval(timer);
+  const follow = () => behind(step());
+  follow();
+  const timer = setInterval(follow, 250);
+  return () => {
+    clearInterval(timer);
+    behind(false);
+  };
 }

@@ -107,7 +107,7 @@ type Group = { id: GroupId; title: string; shape: ArtShape };
 const groups: Group[] = [
   { id: "films", title: "Films and series", shape: "poster" },
   { id: "radio", title: "Radio", shape: "square" },
-  { id: "live", title: "Live now", shape: "video" },
+  { id: "live", title: "Streaming now", shape: "video" },
   { id: "music", title: "Music", shape: "square" },
   { id: "videos", title: "Videos", shape: "video" },
   { id: "channels", title: "Channels and lists", shape: "round" },
@@ -127,7 +127,7 @@ const groupOf = (hit: SearchHit): GroupId =>
     ? "films"
     : hit.kind === "Radio"
       ? "radio"
-      : hit.kind === "Live"
+      : hit.kind === "Stream"
         ? "live"
         : hit.kind === "Music"
           ? "music"

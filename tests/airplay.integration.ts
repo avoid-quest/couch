@@ -15,6 +15,7 @@ import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { AirPlayState } from "../src/shared/airplay";
 import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 // Real Core, HTTP, WebSockets, setpriv, stdbuf and FFmpeg. UxPlay is a script that speaks its
 // interface: the log lines Couch reads and RFC 4571-framed L16 RTP on fd 3, which the test drives.
@@ -249,7 +250,7 @@ async function fixture(t: TestContext, { uxplay: replacement }: { uxplay?: strin
     let state: SessionState | undefined,
       sequence = 0;
     socket.on("message", (data) => {
-      const message = JSON.parse(String(data)) as ServerMessage;
+      const message = withState(socket, JSON.parse(String(data)) as ServerMessage);
       messages.push(message);
       if (message.type === "state") state = message.state;
       if (message.type === "result") {
@@ -609,10 +610,10 @@ test(
     assert.ok(Math.abs(frequency - 440) < 15, `scheduled sender tone (${frequency.toFixed(1)} Hz)`);
     const rms = Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
     assert.ok(rms > 3000, `at the sender's level (${rms.toFixed(0)})`);
-    // Where it plays shows what it plays, not the browser fallback's Buffered.
-    assert.equal(
-      device.state.outputs?.find((output) => output.deviceId === receiver.id)?.buffered,
-      undefined,
+    // Where it plays shows what it plays, not the browser fallback's relayed route.
+    assert.notEqual(
+      device.state.outputs?.find((output) => output.deviceId === receiver.id)?.state,
+      "relayed",
     );
 
     // The sender stops AirPlay: its connections close. The source, its playback and busy-ness end.

@@ -373,7 +373,7 @@ export function PlaybackMenu({
     ...(controls.programme && showTracks && audio.length > 1
       ? [{ view: "audio" as const, value: audioTrack ? trackLabel(audioTrack, "Audio") : "" }]
       : []),
-    ...(controls.speed && player.seekable && !entry?.live
+    ...(controls.speed && player.seekable && !entry?.endless
       ? [{ view: "speed" as const, value: speedLabel(player.speed ?? 1) }]
       : []),
     ...(controls.programme && qualityAvailable

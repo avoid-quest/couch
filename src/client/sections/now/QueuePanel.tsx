@@ -35,6 +35,7 @@ import type { Credentials } from "../../session/session";
 import { deviceId } from "@/session/device-id";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
+import { useAutoplayList } from "./autoplay-list";
 import { browserActions, queuePageUrl } from "@/original-page";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { queueCursorIndex } from "../../../shared/queue";
@@ -70,7 +71,7 @@ function duration(seconds: number) {
 }
 
 function knownLength(entry: QueueEntry): number | null {
-  return entry.live || entry.duration == null || !Number.isFinite(entry.duration)
+  return entry.endless || entry.duration == null || !Number.isFinite(entry.duration)
     ? null
     : Math.max(0, entry.duration);
 }
@@ -165,7 +166,7 @@ export function QueuePanel({
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
   const currentLabel = playbackStatus(state, connected).label;
   const currentLength = current
-    ? current.live
+    ? current.endless
       ? null
       : (playbackClock.duration ?? knownLength(current))
     : 0;
@@ -184,12 +185,13 @@ export function QueuePanel({
     startsIn = startsIn == null || length == null ? null : startsIn + length;
     return {
       time: starts == null ? undefined : formatEndTime(starts),
-      length: entry.live || length == null ? null : duration(length),
+      length: entry.endless || length == null ? null : duration(length),
     };
   };
   const autoplay = state?.autoplay;
   // The switch shows only where Autoplay has something to continue; Settings → Playback always holds it.
-  const autoplayUpcoming = autoplay?.enabled ? autoplay.upcoming : [];
+  const autoplayList = useAutoplayList(credentials, state?.playback, autoplay);
+  const autoplayUpcoming = autoplayList.entries;
   // The list takes its rows' majority shape, as Home's Up next does; a row of another shape is contained in that frame.
   const shape = majorityShape(
     [...upNext, ...autoplayUpcoming, ...previous].map(entryShape),
@@ -355,7 +357,7 @@ export function QueuePanel({
                 <QueueRow
                   entry={current}
                   shape={shape}
-                  meta={!current.live && currentLength ? duration(currentLength) : undefined}
+                  meta={!current.endless && currentLength ? duration(currentLength) : undefined}
                 />
               </ul>
             </section>
@@ -448,6 +450,7 @@ export function QueuePanel({
                       );
                     })}
                   </ul>
+                  {autoplayList.hasMore && <LoadMore onVisible={autoplayList.more} />}
                 </>
               )}
               {autoplayFinding && (
@@ -605,5 +608,25 @@ function QueueRow({
       )}
       <ItemMenu menu={options} title={entry.title} />
     </li>
+  );
+}
+
+/** Asks for more as it nears the view: Autoplay's next page loads before Up next's end shows. */
+function LoadMore({ onVisible }: { onVisible: () => void }) {
+  return (
+    <div
+      aria-hidden="true"
+      ref={(element) => {
+        if (!element) return;
+        const observer = new IntersectionObserver(
+          (items) => {
+            if (items.some((item) => item.isIntersecting)) onVisible();
+          },
+          { rootMargin: "400px" },
+        );
+        observer.observe(element);
+        return () => observer.disconnect();
+      }}
+    />
   );
 }

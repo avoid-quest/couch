@@ -48,7 +48,7 @@ describe("who's watching", () => {
         title: null,
         status: "playing",
         liveSourceId: "s",
-        outputs: [{ deviceId: "bedroom", picture: true, sound: false, buffered: true }],
+        outputs: [{ deviceId: "bedroom", picture: true, sound: false, state: "relayed" }],
       },
       {
         id: "c",

@@ -200,6 +200,10 @@ export function openStore(path: string, remoteControlEnabled = false) {
       .some((column) => column.name === "inSync")
   )
     db.exec("ALTER TABLE playback ADD COLUMN inSync INTEGER NOT NULL DEFAULT 0");
+  // Saved items with no end said `live`; "Live" now names only the Live mode.
+  db.exec(
+    `UPDATE playback SET queue = replace(queue, '"live":true', '"endless":true') WHERE queue LIKE '%"live":true%'`,
+  );
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(
     Number(remoteControlEnabled),

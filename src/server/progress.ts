@@ -13,7 +13,7 @@ export class ViewingError extends Error {
 }
 
 export function playbackMediaId(entry: QueueEntry): string | null {
-  if (entry.live || entry.kind === "radio" || /^(radio|iptv):/.test(entry.source)) return null;
+  if (entry.endless || entry.kind === "radio" || /^(radio|iptv):/.test(entry.source)) return null;
   if (/^(web:https?:|https?:)/.test(entry.source))
     return `media:${createHash("sha256").update(entry.source).digest("hex")}`;
   return null;

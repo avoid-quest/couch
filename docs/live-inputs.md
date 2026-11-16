@@ -34,9 +34,9 @@ The publisher encodes once per receiver.
 
 - **In sync** (in **Where it plays**, with more than one receiver) buffers the
   capture through FFmpeg and HLS so devices play together, a few seconds behind.
-- **Behind**: a receiver that can't connect directly within 10 seconds plays the
-  buffered stream alone; `couch.log` lists it as `(buffered)` with the reason. It
-  stays buffered for that source until sharing ends.
+- **Through Couch**: a receiver that can't connect directly within 10 seconds
+  plays the buffered stream alone; `couch.log` lists it as `(buffered)` with the
+  reason. It stays buffered for that source until sharing ends.
 - Timestamped **Audio input** and AirPlay use Sendspin's scheduler, even with one
   listener. **Live audio** on the hosting desktop is described in
   [Live audio](live-audio.md).

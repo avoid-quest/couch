@@ -301,7 +301,7 @@ function SharingPanel({
   const viewing =
     state?.playbacks?.find((playback) => playback.id === state.playback)?.liveSourceId ===
     sharing.source.id;
-  const behind = viewers.some((viewer) => viewer.behind && viewer.delivery !== "scheduled");
+  const relayed = viewers.some((viewer) => viewer.state === "relayed");
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-3">
@@ -363,7 +363,8 @@ function SharingPanel({
                 <Level
                   moving={
                     viewer.playing &&
-                    !viewer.behind &&
+                    viewer.state !== "joining" &&
+                    viewer.state !== "stalled" &&
                     !viewer.error &&
                     viewer.device.online &&
                     !viewer.device.muted &&
@@ -421,13 +422,13 @@ function SharingPanel({
       {sharing.source.intent === "live" && (
         <LiveSettings sharing={sharing} onCaptureChange={() => refresh((count) => count + 1)} />
       )}
-      {behind && (
+      {relayed && (
         <p className="text-meta text-muted-foreground">
           {sharing.relay ? (
-            "A device marked behind couldn't connect directly, even through the relay."
+            "A device playing through Couch couldn't connect directly, even through the relay."
           ) : (
             <>
-              A device marked behind couldn't connect directly. A relay can fix that, in{" "}
+              A device playing through Couch couldn't connect directly. A relay can fix that, in{" "}
               <Link
                 to="/settings/couch/devices"
                 className="text-foreground underline underline-offset-4"

@@ -1104,7 +1104,7 @@ function NextUp({
     !playbackControls(state).queue ||
     !current ||
     !next ||
-    current.live ||
+    current.endless ||
     isRadio(current) ||
     !length ||
     remaining > 30 ||

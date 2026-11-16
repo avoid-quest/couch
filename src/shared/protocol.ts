@@ -26,7 +26,10 @@ export type QueueEntry = {
   source: string;
   thumbnail?: string;
   duration?: number;
-  live?: boolean;
+  // An item with no end: a radio station, a Live TV channel, a stream or a shared capture.
+  endless?: boolean;
+  // A radio station or Live TV channel in Couch's catalog; its programme is the Playback's radioProgramme.
+  station?: { id: string; name: string };
   liveSourceId?: string;
   quality?: VideoQuality;
   automaticTitle?: boolean;
@@ -104,11 +107,15 @@ export type PlayerState = {
   timeline?: { mapping: "hls" | "media" | "unavailable"; error?: string };
 };
 
+// What a receiver is doing in its Playback, from its own reports and Core's checks. behind: its picture
+// waits for data, or its speaker keeps losing sound to chunks that arrive late. stalled: Core couldn't
+// send its speaker sound for most of the last few seconds. relayed: it gets the media through Couch
+// because it couldn't fetch or connect on its own. cant-play: error says why.
+export type ReceiverState = "joining" | "playing" | "behind" | "stalled" | "relayed" | "cant-play";
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
 // volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds as it
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
-// buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
-// error: that buffered stream failed, so the live input doesn't reach it this item.
+// state: its receiver state, while its Playback plays; error: why it can't play.
 export type Output = {
   deviceId: string;
   picture: boolean;
@@ -116,9 +123,11 @@ export type Output = {
   delay?: number;
   delayActive?: boolean;
   local?: boolean;
-  buffered?: boolean;
+  state?: ReceiverState;
   error?: string;
 };
+// mode: Direct (one device plays it), Relaxed (several devices in step) or Live. plays: what it plays,
+// media from the queue or a capture: a sound, a screen or AirPlay.
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
@@ -134,7 +143,8 @@ export type PlaybackSummary = {
   choosing?: number;
   held?: Output;
   inSync?: boolean;
-  intent?: "relaxed" | "live";
+  mode: "direct" | "relaxed" | "live";
+  plays: "media" | "sound" | "screen" | "airplay";
   delivery?: "direct" | "scheduled" | "webrtc" | "mpv";
 };
 export type PlaybackControls = {
@@ -161,15 +171,19 @@ export type DeviceSummary = {
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 // controlling: this server's selected output Device (the server's own by default), whose Playback is in view.
 export type SessionState = {
+  // Core's wall time (ms) when the Playback was at player.position: the anchor of its clock messages.
+  positionAt?: number;
   controls?: PlaybackControls;
   controlling?: string;
   textField?: RemoteTextField | null;
   queue: QueueEntry[];
-  // upcoming: the first entries Autoplay will play after Up next, in order.
+  // upcoming: the first entries Autoplay will play after Up next, in order, of total; GET /api/autoplay
+  // pages through the rest.
   autoplay?: {
     enabled: boolean;
     contextTitle: string | null;
     upcoming: QueueEntry[];
+    total?: number;
     pending?: boolean;
   };
   queueRemoval?: { entryId: string; token: string };
@@ -214,6 +228,23 @@ export type SessionState = {
   webRetry?: { paused: boolean } | null;
   systemAudio?: SoundRouteState;
 };
+
+// What every window shares, whichever Playback it looks at.
+type CouchState = Pick<
+  SessionState,
+  | "versions"
+  | "installationName"
+  | "setupStep"
+  | "appearance"
+  | "askEveryDevice"
+  | "administratorClaimed"
+  | "activeProfile"
+  | "preferences"
+  | "systemAudio"
+  | "playbacks"
+  | "devices"
+  | "liveSources"
+>;
 
 export type Action =
   | {
@@ -327,7 +358,14 @@ export type ClientMessage = {
 };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
-export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
+// A receiver that can't keep up says so: its picture waits for data, or its speaker keeps losing late chunks.
+export type BehindMessage = { type: "behind"; picture: boolean; sound: boolean };
+// Where the Playback is, as an anchor: position at Core's wall time `at` (ms), moving `rate` seconds per
+// second (0 while paused or waiting). Core sends a new one only when it changes; clients move on their own.
+export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration"> & {
+  at: number;
+  rate: number;
+};
 export type ServerMessage =
   | { type: "liveIceServers"; iceServers: RTCIceServer[] }
   | LiveSignalMessage
@@ -338,7 +376,10 @@ export type ServerMessage =
   | ({ type: "clock" } & PlaybackClock)
   // Core's Unix time in milliseconds, once per connection: elapsed Live times count on it.
   | { type: "time"; now: number }
-  | { type: "state"; state: SessionState }
+  // What a window sees, in three parts sent as each changes (session-parts.ts).
+  | { type: "couch"; couch: CouchState }
+  | { type: "playback"; playback: Omit<SessionState, keyof CouchState | "outputs"> }
+  | { type: "outputs"; outputs: Output[] }
   | { type: "navigation"; key: NavigationKey }
   | { type: "text"; requestId: string; token: string; text: string; submit: boolean }
   | { type: "player"; command: PlaybackCommand }

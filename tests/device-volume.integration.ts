@@ -15,6 +15,7 @@ import {
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 async function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-volume-")),
@@ -44,7 +45,7 @@ async function fixture() {
     await new Promise<void>((resolve, reject) => {
       socket.once("error", reject);
       socket.onmessage = (event) => {
-        const message = JSON.parse(String(event.data)) as ServerMessage;
+        const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
         messages.push(message);
         if (message.type === "state") {
           state = message.state;

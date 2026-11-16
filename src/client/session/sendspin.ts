@@ -10,6 +10,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
+import { reportBehind } from "./behind";
 import {
   declareLiveBuffer,
   nextLateSteps,
@@ -113,6 +114,10 @@ const updateBuffer = (created: Player, sample = false) => {
     // A suspended context handles nothing: what it received isn't late, and it plays nothing.
     const second = worklet ? created.sampleLoss(playing) : sampleLiveLoss(created, playing);
     if (second) lateSteps = nextLateSteps(lateSteps, second);
+    // Losing chunks in most of the last few seconds is what makes it step later: until then it is
+    // behind. A step that lands starts its seconds again.
+    const lossy = lateSteps.seconds.slice(-liveReadings).filter((counted) => counted.lost > 0);
+    reportBehind({ sound: lossy.length > liveReadings / 2 });
   }
   needMs = declareLiveBuffer(needMs, latencyReadings, worklet ? 0 : sdkBatchMs);
   const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.lateMs);
@@ -155,6 +160,7 @@ export function listen(
     hearing = false;
     configuration = undefined;
     clearInterval(bufferTimer);
+    reportBehind({ sound: false });
     waitForTap(null);
     void current?.then(dispose).catch(() => {});
     if (!on && !watch) return;

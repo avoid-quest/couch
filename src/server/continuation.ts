@@ -20,7 +20,7 @@ function streamingEpisode(value: string) {
 export function createContinuationResolver(loadList = loadProviderList) {
   return async (entry: QueueEntry, signal: AbortSignal): Promise<PlaybackContinuation | null> => {
     signal.throwIfAborted();
-    if (entry.live || entry.kind === "radio" || !entry.source.startsWith("web:")) return null;
+    if (entry.endless || entry.kind === "radio" || !entry.source.startsWith("web:")) return null;
     const url = entry.source.slice(4),
       episode = streamingEpisode(url),
       movies123 = movies123PageUrl(url);

@@ -322,6 +322,8 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
     "the healthy listener keeps receiving while another stalls",
   );
   assert.ok(writes < 10, `Core stops queueing audio for the stalled listener (${writes} writes)`);
+  // Backed up for most of the last few seconds, it reports stalled; the healthy one doesn't.
+  assert.deepEqual(audio.status().stalled, ["stalled"]);
   const resumed = serverNowUs() + delay * 1000;
   stalledFrames.length = 0;
   backlog = false;
@@ -332,3 +334,84 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
   const stale = stalledFrames.filter((at) => at < resumed).length;
   assert.ok(stale < 50, `stale chunks after resume: ${stale} of ${stalledFrames.length}`);
 });
+
+test(
+  "a speaker Core holds back for most of 5 s reports stalled",
+  { timeout: 20_000 },
+  async (t) => {
+    const audio = createScheduledAudio({
+      name: "Held back",
+      admit: (id) => ["healthy", "full"].includes(id),
+      changed() {},
+      ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
+      sourceFailed() {},
+    });
+    const server = createServer(),
+      sockets = new WebSocketServer({ server });
+    sockets.on("connection", (socket, request) => audio.accept(socket, request));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const frames: number[] = [];
+    // A player whose declared capacity never fits a chunk: its socket stays empty, it never takes sound.
+    const player = (id: string, capacity: number) =>
+      new SendspinClient(id, id, [Roles.PLAYER], {
+        playerSupport: {
+          supported_formats: [
+            { codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 },
+          ],
+          buffer_capacity: capacity,
+          supported_commands: [],
+        },
+      });
+    const healthy = player("healthy", 1 << 20),
+      full = player("full", 1024);
+    healthy.addAudioChunkListener((timestamp) => frames.push(timestamp));
+    await healthy.connect(url);
+    await full.connect(url);
+    await healthy.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
+    await full.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
+    await until(() => audio.delay("full") === 0);
+    audio.registerSource("capture", liveCapture);
+    const group = audio.group("programme", () => {});
+    group.members([
+      { deviceId: "healthy", level: 100 },
+      { deviceId: "full", level: 100 },
+    ]);
+    group.send({
+      type: "load",
+      playbackId: "programme",
+      source: "",
+      liveSourceId: "capture",
+      live: true,
+      captureIntent: "live",
+    });
+    let sequence = 0;
+    const origin = serverNowUs(),
+      timer = setInterval(() => {
+        while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
+          audio.writeSource("capture", {
+            generation: "capture",
+            sequence,
+            samplePosition: sequence * 480,
+            capturedAtUs: origin + sequence * 10000,
+            sampleRate: 48000,
+            channels: 2,
+            pcm: new Float32Array(960),
+          });
+          sequence++;
+        }
+      }, 5);
+    t.after(async () => {
+      clearInterval(timer);
+      group.close();
+      audio.close();
+      await healthy.disconnect();
+      await full.disconnect();
+      sockets.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+    await until(() => frames.length > 20);
+    await sleep(4000);
+    assert.deepEqual(audio.status().stalled, ["full"]);
+  },
+);
