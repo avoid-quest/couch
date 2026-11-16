@@ -7,6 +7,7 @@ import { storage } from "./device-id";
 import { failed } from "../toasts";
 import { declareLiveBuffer, nextLateSteps, withLateSteps, type LateSteps } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
+import { logLiveMargins, noteLiveDropped } from "./live-margin";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID.
@@ -58,6 +59,7 @@ const droppedLate = () => {
     handled = arrivals.at.findIndex((at) => at > due);
   const dropped = handled === -1 ? arrivals.at.length : handled;
   arrivals.at = arrivals.at.slice(dropped);
+  noteLiveDropped(dropped);
   return dropped > 0;
 };
 const alignStartsToFrames = () => {
@@ -176,8 +178,12 @@ export function listen(
   hearing = on;
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = (player ??= import("@sendspin/sendspin-js")
-    .then(async ({ SendspinPlayer }) => {
+    .then(async (sendspin) => {
+      const { SendspinPlayer } = sendspin;
       alignStartsToFrames();
+      logLiveMargins(sendspin, () =>
+        liveSettings ? { player: connected, declaredMs: declaredBufferMs } : undefined,
+      );
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
       const created = new SendspinPlayer({
