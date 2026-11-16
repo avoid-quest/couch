@@ -57,9 +57,18 @@ class FixtureScheduler {
     }
   }
 }
+// The SDK's protocol layer, as far as Couch reaches it: each decrypted binary message.
+class FixtureCore {
+  timeSyncInfo = { synced: false };
+  handleBinaryMessage(_data: ArrayBuffer) {}
+}
 mock.module("@sendspin/sendspin-js", () => ({
   SendspinPlayer: FixturePlayer,
   AudioScheduler: FixtureScheduler,
+  SendspinCore: FixtureCore,
+  SendspinTimeFilter: class {
+    update() {}
+  },
 }));
 mock.module("../src/client/api/client", () => ({ apiFetch: async () => {} }));
 mock.module("../src/client/toasts", () => ({ failed: () => {} }));
@@ -178,11 +187,19 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
       return new Float32Array(1);
     }
   }
-  class Context {
+  class Context extends EventTarget {
     state = "running";
     sampleRate = 48_000;
     createBuffer() {
       return new AudioBuffer();
+    }
+    // The context stops running and runs again, as on a phone call or a hidden page.
+    suspendFor(run: () => void) {
+      this.state = "suspended";
+      this.dispatchEvent(new Event("statechange"));
+      run();
+      this.state = "running";
+      this.dispatchEvent(new Event("statechange"));
     }
   }
   class AudioBufferSourceNode {
@@ -197,13 +214,21 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
     await settle();
   });
   const player = players.at(-1)!,
-    scheduler = new FixtureScheduler(new Context() as unknown as BaseAudioContext),
+    context = new Context(),
+    scheduler = new FixtureScheduler(context as unknown as BaseAudioContext),
     outputUs = player.syncInfo.outputLatencyMs * 1000;
-  // A second of 50 chunks, each arriving `aheadMs` before its stamp; the player's batch runs after
-  // each (busy: only after the second's sample).
-  const second = async (chunks: number, aheadMs: number, busy = false) => {
+  scheduler.initAudioContext();
+  const core = new FixtureCore();
+  // A second of 50 chunks, each arriving `aheadMs` before its stamp and sent `sendAheadMs` before
+  // it; the player's batch runs after each (busy: only after the second's sample).
+  const second = async (chunks: number, aheadMs: number, busy = false, sendAheadMs = 95) => {
     for (let chunk = 0; chunk < chunks; chunk++) {
       serverNowUs += 20_000;
+      const header = new DataView(new ArrayBuffer(13));
+      header.setUint8(0, 4);
+      header.setBigInt64(1, BigInt(serverNowUs + aheadMs * 1000));
+      header.setUint32(9, sendAheadMs * 1000);
+      core.handleBinaryMessage(header.buffer);
       scheduler.handleDecodedChunk({ serverTimeUs: serverNowUs + aheadMs * 1000 });
       await settle();
       if (!busy) scheduler.processAudioQueue(outputUs);
@@ -228,10 +253,23 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
     tick(1);
   }
   expect(player.buffers).toEqual([42]);
-  // Every chunk arrives after its start: the listener plays nothing, and steps once its last ten
-  // seconds lost chunks in both halves.
-  for (let i = 0; i < 5; i++) await second(50, 10);
+  // Chunks whose starts fell while the context was suspended between two samples: not lost.
+  for (let i = 0; i < 10; i++) {
+    context.suspendFor(() => {
+      for (let chunk = 0; chunk < 50; chunk++)
+        scheduler.handleDecodedChunk({ serverTimeUs: (serverNowUs += 20_000) + 10_000 });
+    });
+    await second(0, 0);
+  }
+  expect(player.buffers).toEqual([42]);
+  // Every chunk arrives after its start: the listener plays nothing, and steps once it lost chunks
+  // three seconds running.
+  for (let i = 0; i < 2; i++) await second(50, 10);
   expect(player.buffers).toEqual([42]);
   await second(50, 10);
+  expect(player.buffers).toEqual([42, 67]);
+  // Core sends its chunks a step further ahead: it applied the step, which is judged only once ten
+  // seconds after it show whether loss still recurs.
+  for (let i = 0; i < 9; i++) await second(50, 10, false, 120);
   expect(player.buffers).toEqual([42, 67]);
 });

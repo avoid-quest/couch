@@ -90,8 +90,8 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
   if (sample) {
     // A suspended context handles nothing: what it received isn't late, and it plays nothing.
     const second = sampleLiveLoss(created, playing);
-    noteLiveDropped(second.lost);
-    if (playing) lateSteps = nextLateSteps(lateSteps, second);
+    noteLiveDropped(second?.lost ?? 0);
+    if (second) lateSteps = nextLateSteps(lateSteps, second);
   }
   needMs = declareLiveBuffer(needMs, latencyReadings);
   const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.steps);

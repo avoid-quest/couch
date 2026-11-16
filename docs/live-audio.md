@@ -68,20 +68,24 @@ wrong clock still shows the right time.
   sample-corrected copy removes the buffer it was copied from). A chunk is lost
   when its start, the stamp less the output latency and Sync delay, passed more
   than 100 ms ago and it was never started. Chunks Core never sent, chunks a
-  stream clear discarded, and anything while the context isn't running or the
-  clock isn't synced don't count. A step's changeover can't count either: the
-  chunks after it are stamped later.
+  stream clear discarded, and anything in a second when the context wasn't
+  running throughout or the clock isn't synced don't count. A step's changeover
+  can't count either: the chunks after it are stamped later.
 - A Receiver that keeps losing chunks declares one more 25 ms step
-  (`nextLateSteps`): when the last ten seconds lost chunks in both halves, loss
-  that recurs; one stall, however long, doesn't step. A step is judged once Core
-  has applied it, seen as chunks arriving with half a step more time left; that
-  second is skipped, and the next ten seconds' share of chunks lost is compared
-  with the ten seconds before the ones that caused the step. A step Core didn't
-  apply within three seconds (the room's delay had slack) isn't judged. A step
-  that lowered the share is kept and stepping goes on while loss recurs; one
-  that didn't pauses stepping for a minute, then two, four and so on for that
-  listen. So steps that don't help add at most one per pause, six in the first
-  hour. Each rise moves that listener at most one step later.
+  (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
+  separate spells, or three seconds running. One stall doesn't step: a burst's
+  late chunks fall within two samples. Core has applied a step when its chunks
+  leave it half a step further ahead of their stamps (Sendspin's `send_ahead`,
+  which Core writes as it sends, so the network can't move it); a step not seen
+  within three seconds fell in the room's slack, and recurring loss steps again.
+  An applied step is judged when loss recurs after it: the chunks lost in the
+  ten seconds that show it against those of the ten seconds that caused it.
+  Half as many or fewer: it helped, and the next step follows. Otherwise no step
+  for a minute, then two, four, eight, then at most sixteen; after that,
+  recurring loss steps again. A step that helped, or sixteen minutes with no
+  recurring loss, starts the pauses from a minute again. A step after which loss
+  doesn't recur is never doubted. Each rise moves that listener at most one step
+  later, which the player takes by playing slightly slower for about 12 s.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second

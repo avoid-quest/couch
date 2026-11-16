@@ -1,11 +1,13 @@
 import type * as Sendspin from "@sendspin/sendspin-js";
+import type { LossSecond } from "./live-buffer";
 
 // Which Live chunks this listener lost to its own lateness, chunk by chunk. The SDK's player
 // (scheduler.js) makes each decoded chunk a buffer (handleDecodedChunk → createBuffer) and starts it
 // at its next batch, or drops it silently because its start has already passed. A chunk is lost
 // when its start, its stamp less the output latency and Sync delay, passed and the player never
 // started it. Chunks Core never sent can't count, nor ones a stream clear discarded, nor a step's
-// changeover: Core stamps the chunks after it later, which the player can always start.
+// changeover: Core stamps the chunks after it later, which the player can always start. Nor chunks
+// whose start fell while the context wasn't running: it plays nothing then.
 // Couch wraps the SDK's exported AudioScheduler and Web Audio's prototypes; the SDK is unchanged.
 type Player = Sendspin.SendspinPlayer;
 
@@ -21,8 +23,13 @@ let decoding: number | undefined;
 // the copy in the same task: the received buffer it read last is the copy's.
 let read: AudioBuffer | undefined;
 let received = 0;
-// How long each chunk received this second had until its stamp, as it reached the player.
-let margins: number[] = [];
+// How far ahead of its stamp Core sent each chunk received this second (send_ahead).
+let sendAheads: number[] = [];
+// The context left or resumed running since the last sample.
+let interrupted = false;
+const interrupt = () => {
+  interrupted = true;
+};
 // A chunk whose start passed less than this ago may still be in the player's batch, which runs
 // 15 ms after a chunk arrives; the player's smoothed output latency also differs from the reading
 // by a few ms. Such a chunk is judged at the next sample instead.
@@ -47,13 +54,22 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
   scheduling.initAudioContext = function () {
     heard(this);
     init.call(this);
+    this.getAudioContext()?.addEventListener("statechange", interrupt);
   };
+  // Sendspin's audio chunk: type 4, its stamp (int64), then send_ahead (uint32, µs).
+  const message = sendspin.SendspinCore?.prototype.handleBinaryMessage;
+  if (message)
+    sendspin.SendspinCore.prototype.handleBinaryMessage = function (data) {
+      const view = new DataView(data);
+      if (counting && view.byteLength >= 13 && view.getUint8(0) === 4)
+        sendAheads.push(view.getUint32(9) / 1000);
+      message.call(this, data);
+    };
   const decoded = scheduling.handleDecodedChunk;
   scheduling.handleDecodedChunk = function (chunk) {
     heard(this);
     const listener = counting ? player() : null;
     if (!listener?.timeSyncInfo.synced) return decoded.call(this, chunk);
-    margins.push((chunk.serverTimeUs - listener.getCurrentServerTimeUs()) / 1000);
     decoding = chunk.serverTimeUs;
     try {
       decoded.call(this, chunk);
@@ -96,12 +112,13 @@ export function countingLiveLoss(on: boolean) {
   if (!on) pending.clear();
 }
 
-// Once a second: the chunks received since the last sample, those lost, and the median time a
-// chunk had until its stamp on arrival (it rises when Core moves this listener a step later).
-// counted: the listener was playing on a running context, so what it lost was lost to lateness.
-export function sampleLiveLoss(listener: Player, counted: boolean) {
+// Once a second: the chunks received since the last sample, those lost, and how far ahead of their
+// stamps Core sent them (the median rises when Core moves this listener a step later). Undefined when
+// the second can't be counted: the listener wasn't playing on a context that ran throughout it.
+export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond | undefined {
   const context = scheduler?.getAudioContext();
-  const sounding = counted && listener.timeSyncInfo.synced && context?.state === "running";
+  const sounding =
+    counted && !interrupted && listener.timeSyncInfo.synced && context?.state === "running";
   const leadUs = (listener.syncInfo.outputLatencyMs + (scheduler?.getSyncDelayMs() ?? 0)) * 1000;
   // Infinity: what the player holds now can't be judged, so none of it counts.
   const passedUs = sounding ? listener.getCurrentServerTimeUs() - graceUs : Infinity;
@@ -111,15 +128,16 @@ export function sampleLiveLoss(listener: Player, counted: boolean) {
       pending.delete(buffer);
       lost++;
     }
-  const sorted = margins.sort((a, b) => a - b);
+  const sorted = sendAheads.sort((a, b) => a - b);
   const second = {
     chunks: received,
-    lost: sounding ? lost : 0,
-    marginMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
+    lost,
+    sendAheadMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
   };
   received = 0;
-  margins = [];
-  return second;
+  sendAheads = [];
+  interrupted = false;
+  return sounding ? second : undefined;
 }
 
 // Just after resume(), a context may report only its base latency; Chrome reports its output

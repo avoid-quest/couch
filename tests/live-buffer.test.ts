@@ -36,37 +36,42 @@ test("the declaration respects Core's 5000 ms timing limit", () => {
   expect(declareLiveBuffer(150, steady(4990))).toBe(5000);
 });
 
-// Seconds of a listener's sound: 50 chunks each, `lost` of them lost, arriving `margin` ms early.
-const second = (lost = 0, marginMs = 100): LossSecond => ({ chunks: 50, lost, marginMs });
+// Seconds of a listener's sound: 50 chunks each, `lost` of them lost, sent `sendAheadMs` ahead of
+// their stamps (Core's send_ahead: 25 ms more once Core applied a step).
+const second = (lost = 0, sendAheadMs = 95): LossSecond => ({ chunks: 50, lost, sendAheadMs });
 const run = (late: LateSteps, seconds: LossSecond[]) => seconds.reduce(nextLateSteps, late);
-const repeat = (count: number, each: LossSecond) => Array<LossSecond>(count).fill(each);
-// Ten seconds that lose one chunk in each half: loss that recurs.
-const recurring = (lost = 1, marginMs = 100) => [
-  ...repeat(4, second(0, marginMs)),
-  second(lost, marginMs),
-  ...repeat(4, second(0, marginMs)),
-  second(lost, marginMs),
+const repeat = <T>(count: number, each: T) => Array<T>(count).fill(each);
+// Ten seconds that lose chunks in two separate spells: loss that recurs.
+const recurring = (lost = 1, sendAheadMs = 95) => [
+  ...repeat(4, second(0, sendAheadMs)),
+  second(lost, sendAheadMs),
+  ...repeat(4, second(0, sendAheadMs)),
+  second(lost, sendAheadMs),
 ];
 
-test("a listener steps when loss recurs through ten seconds, not for one stall however long", () => {
-  // One stall: 20 chunks lost at once.
+test("a listener steps when loss recurs, not for one stall however its chunks are counted", () => {
+  // One stall: 20 chunks lost at once, or a burst the count splits over two seconds.
   expect(run(noLateSteps, [...repeat(9, second()), second(20)]).steps).toBe(0);
-  expect(run(noLateSteps, [second(20), ...repeat(20, second())]).steps).toBe(0);
-  // Two lossy seconds in five, every five seconds: it steps.
+  expect(
+    run(noLateSteps, [...repeat(4, second()), second(15), second(5), ...repeat(20, second())])
+      .steps,
+  ).toBe(0);
+  // Two spells in ten seconds, or loss three seconds running: it steps.
   expect(run(noLateSteps, recurring()).steps).toBe(1);
+  expect(run(noLateSteps, [...repeat(7, second()), ...repeat(3, second(50))]).steps).toBe(1);
   // Not before ten seconds are in.
   expect(run(noLateSteps, recurring().slice(1)).steps).toBe(0);
 });
 
-test("a step is judged only once Core applied it, after its changeover second", () => {
+test("a step counts as applied only when Core sends its chunks a step further ahead", () => {
   let late = run(noLateSteps, recurring(2));
   expect(late.phase.kind).toBe("moving");
-  // Core hasn't moved it yet: chunks arrive with the same time left.
-  late = run(late, [second(2)]);
+  // Core hasn't moved it yet, whatever the network does to arrivals.
+  late = run(late, [second(0, 105)]);
   expect(late.phase.kind).toBe("moving");
-  // They arrive a step earlier relative to their stamp: applied. That second doesn't count.
-  late = run(late, [second(20, 125)]);
-  expect(late).toMatchObject({ steps: 1, seconds: [], phase: { kind: "judging" } });
+  // Core sends its chunks 25 ms further ahead: applied. That second doesn't count.
+  late = run(late, [second(20, 120)]);
+  expect(late).toMatchObject({ steps: 1, caused: 4, seconds: [], phase: { kind: "watching" } });
 });
 
 test("a step Core didn't apply, because the room's delay had slack, isn't judged: loss steps again", () => {
@@ -74,50 +79,71 @@ test("a step Core didn't apply, because the room's delay had slack, isn't judged
   expect(late).toMatchObject({ steps: 2, unhelpful: 0, phase: { kind: "moving" } });
 });
 
-test("a step that cut the share lost is kept and stepping goes on while loss recurs", () => {
-  let late = run(noLateSteps, [...recurring(4), second(0, 125)]);
+test("a step after which loss doesn't recur is kept", () => {
+  const late = run(noLateSteps, [...recurring(4), second(0, 120), ...repeat(600, second(0, 120))]);
+  expect(late).toMatchObject({ steps: 1, phase: { kind: "watching" } });
+  // A lone stall later doesn't judge it.
+  expect(run(late, [second(30, 120), ...repeat(10, second(0, 120))])).toMatchObject({
+    steps: 1,
+    unhelpful: 0,
+    phase: { kind: "watching" },
+  });
+});
+
+test("a step that halved the loss is kept and stepping goes on while loss recurs", () => {
+  let late = run(noLateSteps, [...recurring(4), second(0, 120)]);
   // Half the loss, still recurring: another step at once.
-  late = run(late, recurring(2, 125));
+  late = run(late, recurring(2, 120));
   expect(late).toMatchObject({ steps: 2, unhelpful: 0, phase: { kind: "moving" } });
   // Cured: it stays.
-  late = run(late, [second(0, 150), ...repeat(30, second(0, 150))]);
+  late = run(late, [second(0, 145), ...repeat(30, second(0, 145))]);
   expect(late).toMatchObject({ steps: 2, phase: { kind: "watching" } });
 });
 
-test("a step that didn't cut the loss pauses stepping, longer each time, and never for good", () => {
-  let late = run(noLateSteps, [...recurring(), second(0, 125), ...recurring(1, 125)]);
+test("a step that didn't cut the loss pauses stepping, longer each time up to 16 minutes", () => {
+  let late = run(noLateSteps, [...recurring(), second(0, 120), ...recurring(1, 120)]);
   expect(late).toMatchObject({ steps: 1, unhelpful: 1, phase: { kind: "pausing", left: 60 } });
   // Still losing during the pause: no step.
-  late = run(late, repeat(59, second(1, 125)));
+  late = run(late, [...repeat(50, recurring(1, 120)).flat()].slice(0, 59));
   expect(late.steps).toBe(1);
   // After it, recurring loss steps again; another step that doesn't help pauses twice as long.
-  late = run(late, [second(1, 125), ...recurring(1, 125)]);
+  late = run(late, [second(0, 120), ...recurring(1, 120)]);
   expect(late).toMatchObject({ steps: 2, phase: { kind: "moving" } });
-  late = run(late, [second(0, 150), ...recurring(1, 150)]);
+  late = run(late, [second(0, 145), ...recurring(1, 145)]);
   expect(late).toMatchObject({ steps: 2, unhelpful: 2, phase: { kind: "pausing", left: 120 } });
+  expect(
+    run(
+      { ...late, unhelpful: 6, caused: 2, seconds: [], phase: { kind: "watching" } },
+      recurring(1, 145),
+    ),
+  ).toMatchObject({ phase: { kind: "pausing", left: 960 } });
 });
 
-test("a step is weighed against the ten seconds before the loss that caused it", () => {
-  // Clean, then loss that recurs: less loss after the step still isn't less than before it.
-  const late = run(noLateSteps, [
-    ...repeat(10, second()),
-    ...recurring(4),
-    second(0, 125),
-    ...recurring(1, 125),
-  ]);
-  expect(late).toMatchObject({ steps: 1, unhelpful: 1, phase: { kind: "pausing" } });
+test("a step that helps, or a long listen without recurring loss, starts the pauses again", () => {
+  const paused: LateSteps = { ...noLateSteps, steps: 3, unhelpful: 3, phase: { kind: "watching" } };
+  // Helped: half the loss of the ten seconds that caused it.
+  expect(run({ ...paused, caused: 8 }, recurring(2))).toMatchObject({ steps: 4, unhelpful: 0 });
+  // Sixteen minutes without recurring loss: the next loss is new, and steps.
+  const quiet = run({ ...paused, caused: 2 }, repeat(16 * 60, second()));
+  expect(quiet).toMatchObject({ unhelpful: 0, caused: undefined });
+  expect(run(quiet, recurring(5))).toMatchObject({ steps: 4, phase: { kind: "moving" } });
 });
 
-test("steady loss that no step changes climbs at most six steps in an hour", () => {
+test("steady loss that no step changes climbs about four steps an hour", () => {
   let late = noLateSteps,
-    marginMs = 100;
-  for (let second = 0; second < 3600; second++) {
+    sendAheadMs = 95;
+  const hours = [0, 0];
+  for (let second = 0; second < 2 * 3600; second++) {
     const before = late.steps;
     // Every second loses chunks, whatever the step.
-    late = nextLateSteps(late, { chunks: 50, lost: 1, marginMs });
-    if (late.steps > before) marginMs += 25;
+    late = nextLateSteps(late, { chunks: 50, lost: 1, sendAheadMs });
+    if (late.steps > before) {
+      sendAheadMs += 25;
+      hours[second < 3600 ? 0 : 1]++;
+    }
   }
-  expect(late.steps).toBeLessThanOrEqual(6);
+  expect(hours[0]).toBeLessThanOrEqual(7);
+  expect(hours[1]).toBeLessThanOrEqual(4);
 });
 
 test("each late step adds one step to the declaration, within Core's limit", () => {
