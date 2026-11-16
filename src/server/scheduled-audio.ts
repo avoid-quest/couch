@@ -102,7 +102,8 @@ const emptyMetadata = {
 // A speaker whose socket holds more than this unsent has stopped reading (a frozen tab, a dozing radio).
 // It gets nothing more until it drains; what it missed expires from sent, so it resumes at audio that can still play.
 const backlogBytes = 64 * 1024;
-// One backed-up check is ordinary back-pressure; a speaker backed up in most of the last five seconds is stalled.
+// One held-back check is ordinary back-pressure; a speaker that took no new sound in most of the last
+// five seconds while some waited for it (its socket backed up, or its declared capacity full) is stalled.
 const stallSeconds = 5;
 const wireFormat = (wire: Wire) => ({
   codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM,
@@ -167,22 +168,27 @@ export function createScheduledAudio(options: {
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
-  // Each speaker's backed-up checks: this second's, and whether each of the last few seconds had one.
-  const backlogs = new Map<string, { second: number; hit: boolean; seconds: boolean[] }>();
+  // Each speaker's sends: whether this second held sound back and sent some, and whether each of
+  // the last few seconds held back without sending any.
+  const backlogs = new Map<
+    string,
+    { second: number; held: boolean; sent: boolean; seconds: boolean[] }
+  >();
   const stalled = (clientId: string) =>
     (backlogs.get(clientId)?.seconds.filter(Boolean).length ?? 0) > stallSeconds / 2;
-  const backedUp = (clientId: string, hit: boolean, nowUs: number) => {
+  const took = (clientId: string, held: boolean, sent: boolean, nowUs: number) => {
     const second = Math.floor(nowUs / 1e6),
-      backlog = backlogs.get(clientId) ?? { second, hit: false, seconds: [] };
+      backlog = backlogs.get(clientId) ?? { second, held: false, sent: false, seconds: [] };
     backlogs.set(clientId, backlog);
     if (second !== backlog.second) {
       const before = stalled(clientId);
-      backlog.seconds = [...backlog.seconds, backlog.hit].slice(-stallSeconds);
+      backlog.seconds = [...backlog.seconds, backlog.held && !backlog.sent].slice(-stallSeconds);
       backlog.second = second;
-      backlog.hit = false;
+      backlog.held = backlog.sent = false;
       if (stalled(clientId) !== before) options.changed();
     }
-    backlog.hit ||= hit;
+    backlog.held ||= held;
+    backlog.sent ||= sent;
   };
   const forgetBacklog = (clientId: string) => {
     const before = stalled(clientId);
@@ -988,9 +994,10 @@ export function createScheduledAudio(options: {
             if (!session.getActiveStreams().includes("player")) continue;
           }
           const socket = socketOf.get(session);
-          backedUp(session.getClientId()!, (socket?.bufferedAmount ?? 0) > backlogBytes, now);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
-          const first = cursor.sent === undefined;
+          const first = cursor.sent === undefined,
+            before = cursor.sent;
+          let held = (socket?.bufferedAmount ?? 0) > backlogBytes;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;
             if (cursor.sent !== undefined && chunk.at <= cursor.sent) continue;
@@ -999,8 +1006,10 @@ export function createScheduledAudio(options: {
               session.timeUntilPlayerCapacityUs(chunk.data.length + session.getAudioHeaderSize()) >
                 0 ||
               (socket?.bufferedAmount ?? 0) > backlogBytes
-            )
+            ) {
+              held = true;
               break;
+            }
             session.sendPcmAudioFrame({
               data: chunk.data,
               timestampUs: chunk.at + lateUs,
@@ -1008,6 +1017,7 @@ export function createScheduledAudio(options: {
             });
             cursor.sent = chunk.at;
           }
+          took(session.getClientId()!, held, cursor.sent !== before, now);
           // Its first sound in this run: it no longer joins.
           if (first && cursor.sent !== undefined) options.changed();
         }
