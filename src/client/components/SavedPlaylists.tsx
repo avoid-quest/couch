@@ -348,7 +348,7 @@ export function SavedPlaylists({
                           style={drag.style}
                           title={entry.title}
                           meta={
-                            !entry.live && entry.duration != null
+                            !entry.endless && entry.duration != null
                               ? formatDuration(entry.duration)
                               : undefined
                           }

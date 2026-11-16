@@ -31,7 +31,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   const controls = playbackControls(state);
   const player = state?.player;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
-  const live = current?.live || isRadio(current);
+  const live = current?.endless || isRadio(current);
   const available = connected && !!player && player.status !== "unavailable";
   const currentIndex = state?.queue.findIndex((entry) => entry.id === state.currentEntryId) ?? -1;
   return {
@@ -88,7 +88,7 @@ export function useEndTime(state: ClientSessionState | null | undefined) {
       !(state.player.status === "loading" && state.player.buffering))
   )
     return undefined;
-  if (current.live || isRadio(current)) return undefined;
+  if (current.endless || isRadio(current)) return undefined;
   const length = playbackClock.duration || current.duration || 0;
   return length
     ? `ends ${formatEndTime((length - playbackClock.position) / (state.player.speed || 1))}`
@@ -114,7 +114,7 @@ export function PlaybackTimeline({
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current || !playbackControls(state).seek) return null;
-  const live = current.live || isRadio(current);
+  const live = current.endless || isRadio(current);
   const length = playbackClock.duration || current.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
   const canSeek = seekable && !!playbackClock.duration;

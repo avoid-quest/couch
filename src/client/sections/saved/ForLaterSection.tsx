@@ -187,7 +187,7 @@ export function ForLaterSection({
                     caption.lead,
                     item.creator?.title ?? caption.subtitle,
                     savedSourceLabel(item),
-                    !item.live && item.duration != null && formatRuntime(item.duration),
+                    !item.endless && item.duration != null && formatRuntime(item.duration),
                   )}
                   aria-label={`Details ${caption.title}`}
                   href={itemLocation("saved", item.id)}

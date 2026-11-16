@@ -61,7 +61,7 @@ test("relaxed captures can pause without seeking, while Live listeners retain th
 });
 
 test("an unseekable external live stream still cannot pause, but can resume when paused", () => {
-  const queue = [{ id: "one", source: "web:https://example.com/live", live: true }];
+  const queue = [{ id: "one", source: "web:https://example.com/live", endless: true }];
   expect(playbackCapabilities(state("playing", { queue }), true).pausable).toBe(false);
   expect(playbackCapabilities(state("paused", { queue }), true).pausable).toBe(true);
 });

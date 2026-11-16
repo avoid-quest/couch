@@ -67,6 +67,10 @@ export function createForLater({
         db.query("UPDATE for_later SET position = ? WHERE id = ?").run(index + 1, row.id);
     })();
   }
+  // Saved items with no end said `live`; "Live" now names only the Live mode.
+  db.exec(
+    `UPDATE for_later SET entry = replace(entry, '"live":true', '"endless":true') WHERE entry LIKE '%"live":true%'`,
+  );
   const get = (id: string) => {
     const row = db.query<Row, [string]>("SELECT id, entry FROM for_later WHERE id = ?").get(id);
     if (!row) throw new ControllerError("This item is no longer in For later.", 404);

@@ -43,7 +43,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
             source: "Shared sources",
             title: liveTitle(source),
             meta: source.metadata?.description || (source.name.endsWith(` · ${meta}`) ? "" : meta),
-            kind: "Live",
+            kind: "Stream",
             live: true,
             video: source.video,
             primary: { label: primary, disabled, run: play },

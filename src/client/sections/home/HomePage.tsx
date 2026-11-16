@@ -74,7 +74,7 @@ export type HistoryPlayback = (
 const shelfLength = 12;
 const boardLength = 4;
 const knownLength = (entry: QueueEntry) =>
-  entry.live || entry.duration == null || !Number.isFinite(entry.duration)
+  entry.endless || entry.duration == null || !Number.isFinite(entry.duration)
     ? null
     : Math.max(0, entry.duration);
 const recentCaption = (item: HistoryItem) => {
@@ -286,7 +286,7 @@ export function HomePage() {
     later.data?.items.filter(
       (item) =>
         item.kind !== "radio" &&
-        !item.live &&
+        !item.endless &&
         !continuingUrls.has(item.url) &&
         (!currentUrl || item.url !== currentUrl),
     ) ?? [],
@@ -320,7 +320,7 @@ export function HomePage() {
   const saved = (provider: ProviderId) =>
     sourceFavorites.data?.favorites.filter((item) => item.provider === provider) ?? [];
 
-  const live = !!(current?.live || current?.kind === "radio");
+  const live = !!(current?.endless || current?.kind === "radio");
   const at = playsOn(state);
   const show = useStationShow();
   // Where it plays reads "on {name}" before the links, on one line, as in the now-playing bar and the player. A
@@ -760,7 +760,7 @@ function UpcomingBoard({
   const upcoming = playbackControls(state).queue ? queue.slice(cursor + 1) : [];
   const shape = majorityShape(upcoming.slice(0, boardLength).map(entryShape));
   const length = current
-    ? current.live
+    ? current.endless
       ? null
       : playbackClock.duration || knownLength(current)
     : 0;

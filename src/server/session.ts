@@ -25,7 +25,14 @@ import type { SoundRouteState } from "../shared/sound";
 
 type Metadata = Pick<
   QueueEntry,
-  "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection" | "creator"
+  | "thumbnail"
+  | "duration"
+  | "endless"
+  | "kind"
+  | "subtitle"
+  | "description"
+  | "collection"
+  | "creator"
 > & { title?: string };
 export type MediaSource = {
   preview?: WebMediaSource["preview"];
@@ -426,7 +433,7 @@ export function createSession(
         > & { headers?: Record<string, string>; audioSelection?: AudioSelection };
       command = wire;
       const entry = state.queue.find((item) => item.id === state.currentEntryId);
-      if (entry?.live || isRadio(entry) || command.radio)
+      if (entry?.endless || isRadio(entry) || command.radio)
         command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
       loaded = command;
     }
@@ -890,7 +897,7 @@ export function createSession(
         subtitles: withAdded(media.subtitles),
         paused,
         ...carried(previous),
-        ...(entry.live || fresh.metadata?.live ? {} : { startPosition: position }),
+        ...(entry.endless || fresh.metadata?.endless ? {} : { startPosition: position }),
         preferences: {
           ...state.preferences!.profile,
           ...(previous.speed === undefined ? {} : { speed: previous.speed }),
@@ -1126,7 +1133,7 @@ export function createSession(
       )
         return;
       const entry = state.queue.find((entry) => entry.id === state.currentEntryId);
-      const live = loaded.radio || entry?.live;
+      const live = loaded.radio || entry?.endless;
       if (retry && status === "error" && entry && progressContext) {
         progress.begin(
           entry,
@@ -1707,7 +1714,7 @@ export function createSession(
       // A live stream's duration grows with every playlist reload. Suppress its
       // clock publications, but still publish any other Session change.
       const suppressClock =
-        (isRadio(current) || current?.live === true) &&
+        (isRadio(current) || current?.endless === true) &&
         ["playing", "paused"].includes(player.status);
       state.player = {
         ...player,

@@ -265,7 +265,7 @@ function QueueDetails({ id }: { id: string }) {
         radio={radio}
         thumbnail={item.thumbnail}
         shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)}
-        duration={item.live ? undefined : item.duration}
+        duration={item.endless ? undefined : item.duration}
         meta={[mediaSubtitle(item), sourceLabel(item.source)].filter(Boolean).join(" · ")}
         description={item.description}
         play={{
@@ -485,7 +485,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
         collection={item.collection}
         thumbnail={item.thumbnail}
         shape={tileShape(savedSourceLabel(item), !!item.collection)}
-        duration={item.live ? undefined : item.duration}
+        duration={item.endless ? undefined : item.duration}
         meta={[mediaSubtitle(item), savedSourceLabel(item)].filter(Boolean).join(" · ")}
         description={item.description}
         play={{

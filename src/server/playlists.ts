@@ -173,7 +173,7 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
       entry.duration >= 0
         ? { duration: entry.duration }
         : {}),
-      ...(typeof entry.live === "boolean" ? { live: entry.live } : {}),
+      ...(typeof entry.endless === "boolean" ? { endless: entry.endless } : {}),
       ...(entry.kind === "radio" ? { kind: entry.kind } : {}),
       ...(entry.quality && ["auto", "best", "1080p", "720p", "480p"].includes(entry.quality)
         ? { quality: entry.quality }
@@ -239,6 +239,10 @@ export function createPlaylists({
       .some((column) => column.name === "source")
   )
     db.exec("ALTER TABLE saved_playlists ADD COLUMN source TEXT");
+  // Saved items with no end said `live`; "Live" now names only the Live mode.
+  db.exec(
+    `UPDATE saved_playlists SET entries = replace(entries, '"live":true', '"endless":true') WHERE entries LIKE '%"live":true%'`,
+  );
   const get = (id: string) => {
     const row = db
       .query<Row, [string]>(`SELECT ${columns} FROM saved_playlists WHERE id = ?`)
@@ -286,7 +290,9 @@ export function createPlaylists({
                   ...summary,
                   source: sourceOf(source),
                   entryCount: items.length,
-                  totalDuration: items.every((item) => !item.live && Number.isFinite(item.duration))
+                  totalDuration: items.every(
+                    (item) => !item.endless && Number.isFinite(item.duration),
+                  )
                     ? items.reduce((total, item) => total + item.duration!, 0)
                     : null,
                 };

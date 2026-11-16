@@ -26,7 +26,8 @@ export type QueueEntry = {
   source: string;
   thumbnail?: string;
   duration?: number;
-  live?: boolean;
+  // An item with no end: a radio station, a Live TV channel, a stream or a shared capture.
+  endless?: boolean;
   liveSourceId?: string;
   quality?: VideoQuality;
   automaticTitle?: boolean;

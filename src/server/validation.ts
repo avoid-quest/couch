@@ -610,7 +610,7 @@ export function parseCommand(message: string): ClientMessage {
       ...guard,
       action: {
         type: "enqueue",
-        entry: { id, title, source, ...(kind ? { kind, live: true } : {}) },
+        entry: { id, title, source, ...(kind ? { kind, endless: true } : {}) },
         ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }),
         ...(value.action.placement === undefined ? {} : { placement: value.action.placement }),
         ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }),

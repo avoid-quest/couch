@@ -63,7 +63,7 @@ export function useMediaSession() {
     : (programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "");
   const album = listening ? "" : (programme?.album ?? current?.collection?.title ?? "");
   const artwork = listening ? null : (programme?.artworkUrl ?? current?.thumbnail ?? null);
-  const live = listening || !!current?.live || isRadio(current);
+  const live = listening || !!current?.endless || isRadio(current);
   const position = clock.playbackId === playbackId ? clock.position : 0;
   const duration = live
     ? null

@@ -26,7 +26,7 @@ export type WebMediaMetadata = {
   title?: string;
   thumbnail?: string;
   duration?: number;
-  live?: boolean;
+  endless?: boolean;
 };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
@@ -155,10 +155,10 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
     info.duration <= Number.MAX_SAFE_INTEGER
   )
     metadata.duration = info.duration;
-  if (typeof info.is_live === "boolean") metadata.live = info.is_live;
-  else if (info.live_status === "is_live") metadata.live = true;
+  if (typeof info.is_live === "boolean") metadata.endless = info.is_live;
+  else if (info.live_status === "is_live") metadata.endless = true;
   else if (["not_live", "was_live", "post_live", "is_upcoming"].includes(String(info.live_status)))
-    metadata.live = false;
+    metadata.endless = false;
   return metadata;
 }
 
@@ -477,7 +477,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         };
         if (direct) {
           media.metadata = { ...media.metadata, ...direct.metadata };
-          media.preview = media.metadata.live ? undefined : (direct.preview ?? media.preview);
+          media.preview = media.metadata.endless ? undefined : (direct.preview ?? media.preview);
           if (direct.subtitles?.length)
             media.subtitles = direct.subtitles.map((track) => ({
               ...track,
@@ -495,7 +495,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
         // its own headers, opens the master playlist instead.
         if (
-          media.metadata?.live &&
+          media.metadata?.endless &&
           !media.audioSource &&
           typeof info.manifest_url === "string" &&
           media.source !== URL.parse(info.manifest_url)?.href &&
@@ -517,7 +517,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           info.extractor === "Bandcamp" &&
           info.format_id === "mp3-128" &&
           !media.audioSource &&
-          !media.metadata?.live &&
+          !media.metadata?.endless &&
           transport.protocol === "https:" &&
           /^t\d+\.bcbits\.com$/.test(transport.hostname) &&
           transport.pathname.startsWith("/stream/") &&

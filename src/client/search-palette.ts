@@ -9,7 +9,7 @@ export type Scope = { label: string; words: string[] } & (
 
 export const kindLabels: Record<SearchKind, string> = {
   films: "Films & series",
-  live: "Live",
+  live: "Streams",
   radio: "Radio",
   music: "Music",
   videos: "Videos",

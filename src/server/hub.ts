@@ -650,7 +650,7 @@ export async function createHub(options: HubOptions) {
               id: crypto.randomUUID(),
               title: source.name,
               source: `live:${id}`,
-              live: true,
+              endless: true,
               liveSourceId: id,
             },
             playNow: true,
@@ -1649,7 +1649,7 @@ export async function createHub(options: HubOptions) {
         audioSource: media.audioSource,
         headers,
         publicNetwork: media.publicNetwork,
-        live: !!media.metadata?.live || !!entry.live,
+        live: !!media.metadata?.endless || !!entry.endless,
         audioOnly: media.audioOnly,
         hasAudio: media.hasAudio,
         duration: media.metadata?.duration ?? entry.duration ?? state.player.duration ?? undefined,
@@ -1831,7 +1831,7 @@ export async function createHub(options: HubOptions) {
       sharedResolution(playback, entry, playbackId, output, tab, signal);
     const { headers = {}, ...media } = await resolved.media;
     const live =
-      !!media.metadata?.live ||
+      !!media.metadata?.endless ||
       (playback.media?.playbackId === playbackId && !!playback.media.live);
     // An endless stream's sound is the clock its pictures follow, so Core decodes it with no speaker too.
     const sound =
@@ -2148,7 +2148,7 @@ export async function createHub(options: HubOptions) {
       const entry = stateOf(playback).queue.find(
         (item) => item.id === stateOf(playback).currentEntryId,
       );
-      let isLiveMedia = !!(entry?.live || media.metadata?.live);
+      let isLiveMedia = !!(entry?.endless || media.metadata?.endless);
       // Resolution coverage can exceed this attempt's channels. A prospective
       // move retains its proposed selection until its destination is committed.
       const output = pending.moving
@@ -2245,7 +2245,7 @@ export async function createHub(options: HubOptions) {
         ...(entry?.liveSourceId ? { liveSourceId: entry.liveSourceId } : {}),
       };
       return isLiveMedia
-        ? { ...prepared, metadata: { ...prepared.metadata, live: true } }
+        ? { ...prepared, metadata: { ...prepared.metadata, endless: true } }
         : prepared;
     };
     const prepareResolution = async (
@@ -3276,7 +3276,7 @@ export async function createHub(options: HubOptions) {
         ...(source.audioDelivery === "pcm" ? { liveSourceId: source.id } : { hls: true }),
         audioOnly: !source.video,
         hasAudio: source.audio,
-        metadata: { live: true },
+        metadata: { endless: true },
       };
     }
     if (entry.source.startsWith("web:")) {
@@ -3443,7 +3443,7 @@ export async function createHub(options: HubOptions) {
               id: crypto.randomUUID(),
               title: channel.name,
               source: `iptv:${channel.id}`,
-              live: true,
+              endless: true,
             },
             playNow,
           },
@@ -5174,7 +5174,7 @@ export async function createHub(options: HubOptions) {
                       id: crypto.randomUUID(),
                       title: source.name,
                       source: `live:${source.id}`,
-                      live: true,
+                      endless: true,
                       liveSourceId: source.id,
                     },
                     playNow,
