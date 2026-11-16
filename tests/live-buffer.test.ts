@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { declareLiveBuffer } from "../src/client/session/live-buffer";
+import { declareLiveBuffer, keepsLosing, withLateSteps } from "../src/client/session/live-buffer";
 import { createLiveLead } from "../src/server/live-lead";
 
 const steady = (latency: number) => Array(5).fill(latency);
@@ -27,6 +27,31 @@ test("a declaration rises only when the smoothed need clearly outgrows it", () =
 
 test("the declaration respects Core's 5000 ms timing limit", () => {
   expect(declareLiveBuffer(150, steady(4990))).toBe(5000);
+});
+
+test("a listener asks for a step later only when most of five seconds lost sound", () => {
+  // One Wi-Fi hiccup, even across a second's edge, isn't enough.
+  expect(keepsLosing([true])).toBe(false);
+  expect(keepsLosing([false, true, true, false, false])).toBe(false);
+  expect(keepsLosing([true, false, true, false, true])).toBe(true);
+  expect(keepsLosing([false, false, true, true, true])).toBe(true);
+  expect(keepsLosing([true, true, true, false, false, false, false, false])).toBe(false);
+});
+
+test("each late step adds one step to the declaration, within Core's limit", () => {
+  expect(withLateSteps(75, 0)).toBe(75);
+  expect(withLateSteps(75, 1)).toBe(100);
+  expect(withLateSteps(4990, 1)).toBe(5000);
+});
+
+test("a declaration one step higher moves a listener at most one step later", () => {
+  const lead = createLiveLead(100);
+  measure(lead, 15);
+  // In the room with slack: it stays until its need outgrows the room, then plays a step later.
+  expect(lead.leadMs("phone", "opus", withLateSteps(60, 1))).toBe(100);
+  expect(lead.leadMs("phone", "opus", withLateSteps(60, 2))).toBe(125);
+  // Already a step later: one more.
+  expect(lead.leadMs("phone", "opus", withLateSteps(60, 3))).toBe(150);
 });
 
 // Seconds of chunks on one wire that took `ms` from capture to Core, from the run's first second

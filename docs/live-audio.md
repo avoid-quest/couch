@@ -29,7 +29,7 @@ its logs. What people do with it is in
 |---|---|
 | Acquisition: timestamped f32 PCM | The browser SDK has no capture API. Main owns Live capture of inputs: the Mac native helper for **Native** inputs, a hidden capture page otherwise. Live **System audio** is the window's own timestamped capture, as relaxed System audio's. |
 | Upload: validated `CaptureAudioPacket` per source epoch | The Node SDK has no public source start/end to declare a format. Publication tokens and epochs retire stale work. |
-| Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample`, Opus at 160 kbps in 5 ms frames. 5 ms steps keep capture-to-chunk delay low. |
+| Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample`, Opus at 160 kbps in 20 ms frames and PCM in 15 ms chunks, the spec's sizes. Opus goes in MPEG-TS so each frame leaves as it's encoded (Ogg holds a page until the next). |
 | Capture-time mapping | The Node SDK timestamps at send time; Couch maps encoded offsets (with Opus pre-skip) back to measured capture blocks. |
 | Group scheduling | Public `getPlayerTiming`, `sendStreamStart`, `sendPcmAudioFrame`, metadata and volume APIs. |
 
@@ -55,6 +55,11 @@ wrong clock still shows the right time.
   once-a-second `syncInfo.outputLatencyMs` reading plus a 35 ms allowance. The
   first reading sets it; later, the median of the last five raises it only when
   it outgrows it by more than 25 ms.
+- A Receiver that keeps losing sound to late chunks declares one more 25 ms
+  step. The SDK drops a late chunk silently, so Couch counts them next to the
+  player: when the sound ran out before the next chunk was scheduled, that
+  second lost sound. Most of the last five seconds must have lost some; one
+  hiccup doesn't count. Each rise moves that listener at most one step later.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second
@@ -67,9 +72,9 @@ wrong clock still shows the right time.
   rise is a short slew or gap for that listener only. Core keeps each chunk
   until the latest listener has played it.
 - Sync is only as good as the browser's output-latency report; Couch can't
-  correct a misreported output delay. The SDK exposes no arrival/starvation
+  correct a misreported output delay. The SDK exposes no arrival or queue
   statistics, so the 35 ms allowance (the player's 15 ms scheduling batch,
-  decoding and the network) isn't measured jitter.
+  decoding and an ordinary network) isn't measured jitter.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.
 - **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.

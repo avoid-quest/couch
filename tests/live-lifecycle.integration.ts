@@ -16,16 +16,16 @@ const publication = {
   intent: "live",
 } as const;
 const signal = (_position: number, channel: number) => (channel ? -0.25 : 0.25);
-// Its right channel counts the 5 ms frames (240 samples), so a listener's frame says which it is.
+// Its right channel counts the 15 ms PCM chunks (720 samples), so a listener's chunk says which it is.
 const counted =
   (level: number) =>
   (position: number, channel: number): number =>
-    channel ? Math.floor(position / 240) / 32768 : level;
+    channel ? Math.floor(position / 720) / 32768 : level;
 type Frame = { at: number; bytes: Buffer };
 // How long after its capture each counted frame plays, by its count rather than its place
 // among the frames received: one the host skipped under load doesn't shift the others.
 const delays = (frames: Frame[], origin = 0) =>
-  frames.map((frame) => frame.at - origin - frame.bytes.readInt16LE(2) * 5_000);
+  frames.map((frame) => frame.at - origin - frame.bytes.readInt16LE(2) * 15_000);
 // Where a listener's delay changes: it moved to another step.
 const moves = (frames: Frame[]) =>
   delays(frames).flatMap((delay, i, all) => (i && delay !== all[i - 1] ? [i] : []));

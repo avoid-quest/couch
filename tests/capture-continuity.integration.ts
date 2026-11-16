@@ -101,14 +101,14 @@ test(
       );
       assert.ok(pcm.length && opus.length);
       assert.ok(
-        opus.every((chunk) => chunk.duration === 5_000),
-        "Live Opus uses 5 ms frames",
+        opus.every((chunk) => chunk.duration === 20_000),
+        "Live Opus uses 20 ms frames",
       );
       assert.equal(pcm[0]!.at, origin);
       assert.ok(opus[0]!.at < origin, "Opus pre-skip maps before the first captured sample");
       const last = pcm.at(-1)!;
-      // Times follow each 10 ms block's measured capture time; a 5 ms chunk may start mid-block.
-      const position = (pcm.length - 1) * 5_000,
+      // Times follow each 10 ms block's measured capture time; a 15 ms chunk may start mid-block.
+      const position = (pcm.length - 1) * 15_000,
         block = Math.floor(position / 10_000);
       assert.equal(
         last.at,
