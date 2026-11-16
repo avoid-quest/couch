@@ -914,8 +914,10 @@ export function createScheduledAudio(options: {
         for (const [session, cursor] of current.cursors) {
           if (wireOf(session) !== wire) continue;
           // The SDK holds a player's stream until it may play (its first state, available) and
-          // drops audio meanwhile, so nothing counts as sent before the stream is open.
+          // drops audio meanwhile, so nothing counts as sent before the stream is open. A stream it
+          // ended (an unavailable player) took its held audio along, so that audio goes again.
           if (!session.getActiveStreams().includes("player")) {
+            cursor.sent = undefined;
             session.sendStreamStart(wireFormat(wire));
             if (!session.getActiveStreams().includes("player")) continue;
           }
