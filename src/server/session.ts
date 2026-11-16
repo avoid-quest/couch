@@ -168,6 +168,7 @@ export function createSession(
   let published: Omit<SessionState, "player"> | undefined;
   let publishedPlayer: string | undefined;
   let publishedClock: PlaybackClock | undefined;
+  let reported = { position: NaN, at: 0 };
   const publishState = (observation = false, suppressClock = false) => {
     const { player, ...rest } = state;
     const { position, duration, ...details } = player;
@@ -184,21 +185,24 @@ export function createSession(
     const at = (options.now ?? Date.now)(),
       rate = player.status === "playing" && !player.buffering ? (player.speed ?? 1) : 0;
     const clock = { playbackId: player.playbackId, position, duration, at, rate };
-    // Clients move from the last anchor; one goes out only when where it is or how it moves changes.
-    const predicted =
-      publishedClock &&
-      publishedClock.position + ((at - publishedClock.at) / 1000) * publishedClock.rate;
-    if (
-      clockOnly &&
-      (suppressClock ||
-        (rate === publishedClock?.rate &&
-          duration === publishedClock.duration &&
-          Math.abs(position - predicted!) < clockTolerance))
-    )
-      return;
+    // A position is as of when it was first reported: a later report or change can repeat it (a screen's
+    // report repeats the sound's), so it's checked against the anchor at that time.
+    if (position !== reported.position) reported = { position, at };
+    // Clients move from the last anchor; it changes only when where it is or how it moves changes.
+    const holds =
+      !!publishedClock &&
+      publishedClock.playbackId === player.playbackId &&
+      rate === publishedClock.rate &&
+      duration === publishedClock.duration &&
+      Math.abs(
+        position -
+          publishedClock.position -
+          ((Math.max(reported.at, publishedClock.at) - publishedClock.at) / 1000) * rate,
+      ) < clockTolerance;
+    if (clockOnly && (suppressClock || holds)) return;
     published = rest;
     publishedPlayer = playerDetails;
-    publishedClock = clock;
+    if (!holds) publishedClock = clock;
     publish(state, clockOnly ? clock : undefined);
   };
   const broadcast = (observation = false, suppressClock = false) => {
@@ -1288,6 +1292,10 @@ export function createSession(
     },
     get state() {
       return structuredClone(state);
+    },
+    // The anchor clients move on from: where the Playback was at Core's time `at`.
+    get clock() {
+      return publishedClock;
     },
     enrichEntry,
     loadQueue(

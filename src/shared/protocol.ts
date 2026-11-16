@@ -171,6 +171,8 @@ export type DeviceSummary = {
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 // controlling: this server's selected output Device (the server's own by default), whose Playback is in view.
 export type SessionState = {
+  // Core's wall time (ms) when the Playback was at player.position: the anchor of its clock messages.
+  positionAt?: number;
   controls?: PlaybackControls;
   controlling?: string;
   textField?: RemoteTextField | null;

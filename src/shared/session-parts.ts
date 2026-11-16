@@ -12,7 +12,16 @@ export function createSessionParts() {
     if (message.type === "couch") couch = message.couch;
     else if (message.type === "playback") playback = message.playback;
     else if (message.type === "outputs") outputs = message.outputs;
-    else return null;
+    else {
+      // A clock message moves the Playback's anchor; a later part must not bring back an older one.
+      if (message.type === "clock" && playback?.player.playbackId === message.playbackId)
+        playback = {
+          ...playback,
+          player: { ...playback.player, position: message.position, duration: message.duration },
+          positionAt: message.at,
+        };
+      return null;
+    }
     return couch && playback && outputs ? { ...playback, ...couch, outputs } : null;
   };
 }

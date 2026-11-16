@@ -440,12 +440,12 @@ export function useSession(
           reportPlayback();
           const { position, duration, ...player } = whole.player;
           setState({ ...whole, player });
-          // The state's position is where it is now: an anchor moving at its speed while it plays.
+          // The state's position is Core's anchor: where it was at positionAt, moving at its speed while it plays.
           setClock({
             playbackId: player.playbackId,
             position,
             duration,
-            at: coreNow(),
+            at: whole.positionAt ?? coreNow(),
             rate: player.status === "playing" && !player.buffering ? (player.speed ?? 1) : 0,
           });
           setStatus("connected");
