@@ -24,11 +24,9 @@ beforeEach(() => {
 });
 afterAll(() => rawRequest.mockRestore());
 
+// No CORS unless a test grants it: a Device can't read these itself, so Core relays them.
 function response(url: string, body: BodyInit, init: ResponseInit = {}) {
-  const result = new Response(body, {
-    ...init,
-    headers: { "Access-Control-Allow-Origin": "*", ...init.headers },
-  });
+  const result = new Response(body, init);
   Object.defineProperty(result, "url", { value: url });
   return result;
 }
@@ -37,11 +35,14 @@ function fixture() {
   const current = new Set(["playing"]);
   const replies = new Map<string, () => Response>();
   const requests: Array<{ url: string; headers: Headers }> = [];
+  const probes: Array<{ url: string; headers: Headers }> = [];
   // Only the pinned public-request boundary is synthetic. The production relay
   // chooses every route, rewrites each manifest and validates each capability.
+  // A probe asks as the Device would, with its Origin; the relay never sends one.
   const publicRequest = (async (input, init) => {
     const url = String(input);
-    requests.push({ url, headers: new Headers(init?.headers) });
+    const headers = new Headers(init?.headers);
+    (headers.has("origin") ? probes : requests).push({ url, headers });
     return (
       replies.get(url)?.() ?? response(url, "bytes", { headers: { "Content-Type": "video/mp4" } })
     );
@@ -57,7 +58,7 @@ function fixture() {
   ) =>
     relay.prepare(playbackId, { source: url, publicNetwork: true }, headers, destination, signal());
   const serve = (url: string, headers?: HeadersInit) => relay.serve(new Request(url, { headers }));
-  return { relay, current, replies, requests, manifest, prepare, serve };
+  return { relay, current, replies, requests, probes, manifest, prepare, serve };
 }
 
 function destination(value: string, kind: "playlist" | "bytes", upstream: string, base = origin) {
@@ -77,20 +78,103 @@ function sourceHeaders(headers: Headers, authorized: boolean) {
   expect(headers.get("accept-encoding")).toBe("identity");
 }
 
-test("public video and audio use protected relay even with permissive CORS and native playback", async () => {
+test("a public file a Device may read over HTTPS goes direct; plain HTTP stays relayed", async () => {
   const f = fixture();
   const video = "https://media.example/video.mp4",
-    audio = "https://media.example/audio.m4a";
+    audio = "http://media.example/audio.m4a";
   const media = await f.relay.prepare(
     "playing",
     { source: video, audioSource: audio, publicNetwork: true, mpv: true },
+    providerHeaders,
+    target,
+    signal(),
+  );
+  expect(media.source).toBe(video);
+  destination(media.audioSource!, "bytes", audio);
+  // Core asked as the Device would, through the pinned request, and never sent the provider's secrets.
+  expect(f.probes.map((probe) => probe.url)).toEqual([video]);
+  const asked = f.probes[0]!.headers;
+  expect(asked.get("origin")).toBe(origin);
+  expect(asked.get("user-agent")).toBe(target.userAgent);
+  for (const name of [...Object.keys(credentials), "referer"]) expect(asked.has(name)).toBe(false);
+  expect(f.relay.direct("playing", [media.source, media.audioSource])).toBe(true);
+  expect(f.relay.direct("playing", [media.audioSource])).toBe(false);
+  expect(rawRequest).not.toHaveBeenCalled();
+});
+
+test("a public file stays relayed when the Device can't read it, when it is a playlist, or for a relay-only target", async () => {
+  const f = fixture();
+  const refused = "https://media.example/refused.mp4",
+    corsless = "https://media.example/corsless.ts",
+    mislabelled = "https://media.example/stream";
+  f.replies.set(refused, () => response(refused, "", { status: 403 }));
+  f.replies.set(mislabelled, () =>
+    response(mislabelled, "#EXTM3U\n#EXTINF:6,\nsegment.ts\n", {
+      headers: { "Content-Type": "video/mp4", "Access-Control-Allow-Origin": "*" },
+    }),
+  );
+  destination((await f.prepare(refused)).source, "bytes", refused);
+  destination((await f.prepare(mislabelled)).source, "playlist", mislabelled);
+  // mpegts.js reads with CORS, and this source doesn't share it.
+  const transport = await f.relay.prepare(
+    "playing",
+    { source: corsless, publicNetwork: true, mpegts: true },
     {},
     target,
     signal(),
   );
-  destination(media.source, "bytes", video);
-  destination(media.audioSource!, "bytes", audio);
-  expect(f.requests).toHaveLength(0);
+  destination(transport.source, "bytes", corsless);
+  f.probes.length = 0;
+  const video = "https://media.example/video.mp4";
+  destination(
+    (await f.prepare(video, "playing", { ...target, relay: true })).source,
+    "bytes",
+    video,
+  );
+  expect(f.probes).toHaveLength(0);
+});
+
+test("public segments go direct only from the probed HTTPS origin, and their playlists stay relayed", async () => {
+  const f = fixture();
+  const variant = "https://media.example/variant.m3u8";
+  f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\n${variant}\n`);
+  f.manifest(
+    variant,
+    [
+      "#EXTM3U",
+      '#EXT-X-MAP:URI="init.mp4"',
+      "#EXTINF:6,",
+      "https://cdn.example/1.ts",
+      "#EXTINF:6,",
+      "https://cdn.example/2.ts",
+      "#EXTINF:6,",
+      "https://other.example/3.ts",
+      "",
+    ].join("\n"),
+  );
+  f.replies.set("https://cdn.example/1.ts", () =>
+    response("https://cdn.example/1.ts", "bytes", {
+      headers: { "Content-Type": "video/mp2t", "Access-Control-Allow-Origin": "*" },
+    }),
+  );
+  const media = await f.prepare(source, "playing", target, providerHeaders);
+  expect(f.probes).toHaveLength(0);
+  const master = await (await f.serve(media.source)).text();
+  const playlist = master.split("\n").find((line) => line && !line.startsWith("#"))!;
+  destination(playlist, "playlist", variant);
+  expect(f.relay.direct("playing", [media.source])).toBe(false);
+  for (let reload = 0; reload < 2; reload++) {
+    const text = await (await f.serve(playlist)).text();
+    const children = [...text.matchAll(/URI="([^"]+)"/g)]
+      .map((match) => match[1]!)
+      .concat(text.split("\n").filter((line) => line && !line.startsWith("#")));
+    destination(children[0]!, "bytes", "https://media.example/init.mp4");
+    expect(children.slice(1, 3)).toEqual(["https://cdn.example/1.ts", "https://cdn.example/2.ts"]);
+    destination(children[3]!, "bytes", "https://other.example/3.ts");
+  }
+  // One probe decides every reload of this route.
+  expect(f.probes.map((probe) => probe.url)).toEqual(["https://cdn.example/1.ts"]);
+  expect(f.relay.direct("playing", [media.source])).toBe(true);
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
