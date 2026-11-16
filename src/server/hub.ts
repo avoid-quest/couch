@@ -1496,10 +1496,12 @@ export async function createHub(options: HubOptions) {
       const previous = playback.screens.get(tab),
         generation = playback.generation,
         group = playback.synced;
-      if (
-        previous?.playbackId === loaded.playbackId &&
-        (!previous.error || previous.generation === generation)
-      )
+      // A screen already showing the item carries on in the new generation.
+      if (previous?.playbackId === loaded.playbackId && !previous.error) {
+        previous.generation = generation;
+        continue;
+      }
+      if (previous?.playbackId === loaded.playbackId && previous.generation === generation)
         continue;
       const screen: { playbackId: string; generation?: number; error?: string; started?: boolean } =
         {
@@ -3047,6 +3049,9 @@ export async function createHub(options: HubOptions) {
             : entry;
         });
         const { outputs: _outputs, ...session } = state;
+        // Where it plays goes as its clock's anchor, so a window anchors where a clock message would.
+        const clock = playback?.session.clock,
+          anchored = clock?.playbackId === state.player.playbackId ? clock : undefined;
         views.set(
           view,
           JSON.stringify({
@@ -3054,7 +3059,12 @@ export async function createHub(options: HubOptions) {
             playback: {
               ...session,
               queue,
-              player: { ...state.player, volume },
+              player: {
+                ...state.player,
+                volume,
+                position: anchored?.position ?? state.player.position,
+              },
+              ...(anchored ? { positionAt: anchored.at } : {}),
               controlling: device,
               textField: remote.field(tvSocket(device)),
               playback: playback?.id ?? null,
