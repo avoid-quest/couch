@@ -139,6 +139,13 @@ mock.module("../src/client/session/live-player", () => ({ LivePlayer: FixtureLiv
 mock.module("../src/client/api/client", () => ({ apiFetch: async () => {} }));
 mock.module("../src/client/toasts", () => ({ failed: () => {} }));
 mock.module("../src/client/session/renderer", () => ({ waitForTap: () => {} }));
+// Whether this device last told Core its speaker is behind.
+let soundBehind = false;
+mock.module("../src/client/session/behind", () => ({
+  reportBehind: ({ sound }: { sound?: boolean }) => {
+    if (sound !== undefined) soundBehind = sound;
+  },
+}));
 // This browser's storage, as Couch and the SDK share it.
 const stored = new Map<string, string>();
 mock.module("../src/client/session/device-id", () => ({
@@ -321,6 +328,22 @@ test("a listener steps as late as the loss its player counted, never for a secon
   stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));
   (await join())(2);
   expect(live().buffers).toEqual([27]);
+});
+
+test("a Live listener is behind while it loses chunks in most of the last 5 seconds", async () => {
+  const tick = await join();
+  const player = live();
+  tick(10);
+  player.next = () => ({ ...clean, lost: 3, lateMs: 17 });
+  tick(2);
+  expect(soundBehind).toBe(false);
+  tick(1);
+  expect(soundBehind).toBe(true);
+  player.next = () => clean;
+  tick(2);
+  expect(soundBehind).toBe(true);
+  tick(1);
+  expect(soundBehind).toBe(false);
 });
 
 test("loss with no lateness, the sound running out early, steps 10 ms", async () => {
