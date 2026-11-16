@@ -212,12 +212,12 @@ test(
       assert.ok(uploadRequested(f));
       await until(
         () =>
-          f.publisher.state.outputs?.find((output) => output.deviceId === f.receiver.id)
-            ?.buffered === true,
+          f.publisher.state.outputs?.find((output) => output.deviceId === f.receiver.id)?.state ===
+          "relayed",
       );
-      assert.equal(
-        f.publisher.state.outputs?.find((output) => output.deviceId === other.id)?.buffered,
-        undefined,
+      assert.notEqual(
+        f.publisher.state.outputs?.find((output) => output.deviceId === other.id)?.state,
+        "relayed",
       );
       assert.deepEqual(
         f.publisher.messages

@@ -39,6 +39,7 @@ import type {
   PlaybackSummary,
   PlayerState,
   QueueEntry,
+  ReceiverState,
   ServerMessage,
   SessionState,
 } from "../shared/protocol";
@@ -55,6 +56,7 @@ import { openStore } from "./store";
 import {
   parseCommand,
   parseLiveFailed,
+  parseBehind,
   parseLiveSignal,
   parseLiveUploadFailed,
   parsePlayer,
@@ -430,7 +432,10 @@ export async function createHub(options: HubOptions) {
     // This item's other resolutions (another codec family, or one still running), which later screens share.
     resolutions?: NonNullable<Playback["resolved"]>[];
     hostMpv?: Set<string>;
-    screens: Map<Socket<SocketData>, { playbackId: string; generation?: number; error?: string }>;
+    screens: Map<
+      Socket<SocketData>,
+      { playbackId: string; generation?: number; error?: string; started?: boolean }
+    >;
     heard?: PlayerState;
     // The item whose group clock has no source timestamps (scheduled-audio's timeline-only run).
     unmapped?: string;
@@ -702,6 +707,8 @@ export async function createHub(options: HubOptions) {
   const relayedLoads = new WeakMap<Socket<SocketData>, string>();
   // The transport each tab is being reloaded through the relay; its reports wait until that load is sent.
   const relaying = new WeakMap<Socket<SocketData>, string>();
+  // What each tab last said it can't keep up with (BehindMessage); a device's newest tab speaks for it.
+  const behindOf = new WeakMap<Socket<SocketData>, { picture: boolean; sound: boolean }>();
   const deviceTarget = (tab: Socket<SocketData>, playbackId: string) => ({
     origin: tab.data.origin,
     userAgent: tab.data.userAgent,
@@ -1491,10 +1498,11 @@ export async function createHub(options: HubOptions) {
         (!previous.error || previous.generation === generation)
       )
         continue;
-      const screen: { playbackId: string; generation?: number; error?: string } = {
-        playbackId: loaded.playbackId,
-        generation,
-      };
+      const screen: { playbackId: string; generation?: number; error?: string; started?: boolean } =
+        {
+          playbackId: loaded.playbackId,
+          generation,
+        };
       playback.screens.set(tab, screen);
       const isCurrent = () => {
         const output = playback.outputs.find((output) => output.deviceId === deviceOf(tab));
@@ -2869,44 +2877,63 @@ export async function createHub(options: HubOptions) {
       playback.delivery = delivery;
     }
     // A speaker's delay is its player's own, as it last reported it; it applies while the speaker is in sync.
-    const delays = (playback: Playback) =>
-      playback.outputs.map((output) => {
+    // Its state gathers what it reports and what Core sees, worst first.
+    const outputsOf = (playback: Playback) =>
+      playback.outputs.map((output): Output => {
         const sourceId = sourceOf(playback);
         const delay = sendspin.delay(output.deviceId);
+        const { player } = stateOf(playback);
         const tab = newest(output.deviceId),
-          screen = tab && playback.screens.get(tab);
-        const screenError =
-          output.picture &&
-          screen?.playbackId === stateOf(playback).player.playbackId &&
-          screen.generation === playback.generation
-            ? screen.error
-            : undefined;
+          screen = tab && playback.screens.get(tab),
+          current =
+            screen?.playbackId === player.playbackId && screen.generation === playback.generation;
+        const screenError = output.picture && current ? screen.error : undefined;
+        const liveRelayed =
+          !!sourceId &&
+          !playback.synced &&
+          live.relayed(sourceId, output.deviceId) &&
+          !live.hosted(sourceId);
         const error =
           (systemAudio && output.deviceId === hostId() && output.sound
             ? common.systemAudio?.error
             : undefined) ||
           (playback.synced
             ? (sourceId ? sendspin.sourceError(sourceId) : undefined) ||
-              stateOf(playback).player.error ||
+              player.error ||
               screenError ||
               sendspin.receiverError(output.deviceId)
-            : undefined);
+            : liveRelayed
+              ? bufferFailed(playback)
+              : player.status === "error"
+                ? (player.error ?? undefined)
+                : undefined);
+        const behind = tab && behindOf.get(tab);
+        const joining = playback.synced
+          ? (output.sound && !sendspin.started(output.deviceId)) ||
+            (output.picture && !!screen && !(current && screen.started))
+          : player.status === "loading";
+        const state: ReceiverState | undefined = !active(player.status)
+          ? undefined
+          : error
+            ? "cant-play"
+            : output.sound && playback.synced && sendspin.stalled(output.deviceId)
+              ? "stalled"
+              : player.status !== "paused" && joining
+                ? "joining"
+                : (output.picture && behind?.picture) || (output.sound && behind?.sound)
+                  ? "behind"
+                  : liveRelayed || (!!tab && relayedLoads.get(tab) === player.playbackId)
+                    ? "relayed"
+                    : "playing";
         return {
           ...output,
           ...(error ? { error } : {}),
+          ...(state ? { state } : {}),
           ...(delay === undefined ? {} : { delay }),
           ...(syncing(playback, output.deviceId) ? { delayActive: true } : {}),
-          ...(sourceId &&
-          !playback.synced &&
-          live.relayed(sourceId, output.deviceId) &&
-          !live.hosted(sourceId)
-            ? bufferFailed(playback)
-              ? { error: bufferFailed(playback) }
-              : { buffered: true }
-            : {}),
         };
       });
-    const outputViews = new Map(all().map((playback) => [playback, delays(playback)]));
+    const outputViews = new Map(all().map((playback) => [playback, outputsOf(playback)]));
     const shared = {
       ...common,
       playbacks: all().map((playback): PlaybackSummary => {
@@ -4811,6 +4838,13 @@ export async function createHub(options: HubOptions) {
           }
           return;
         }
+        const behind = parseBehind(message);
+        if (behind) {
+          const before = behindOf.get(socket);
+          behindOf.set(socket, behind);
+          if (before?.picture !== behind.picture || before?.sound !== behind.sound) broadcast();
+          return;
+        }
         const player = parsePlayer(message);
         if (player) {
           // A browser can't tell a relayed source's refusal from a format it can't play.
@@ -4854,6 +4888,17 @@ export async function createHub(options: HubOptions) {
             );
             if (!failures.has(socket)) failures.set(socket, new Set());
             failures.get(socket)!.add(failure);
+          }
+          // A screen that plays its item's picture has joined.
+          const screen = playback?.screens.get(socket);
+          if (
+            screen &&
+            !screen.started &&
+            screen.playbackId === player.playbackId &&
+            player.status === "playing"
+          ) {
+            screen.started = true;
+            broadcast();
           }
           // Only a report with a picture is a screen's: one still loading, or just reconnected, has no tracks yet.
           if (playback?.synced) {

@@ -609,10 +609,10 @@ test(
     assert.ok(Math.abs(frequency - 440) < 15, `scheduled sender tone (${frequency.toFixed(1)} Hz)`);
     const rms = Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
     assert.ok(rms > 3000, `at the sender's level (${rms.toFixed(0)})`);
-    // Where it plays shows what it plays, not the browser fallback's Buffered.
-    assert.equal(
-      device.state.outputs?.find((output) => output.deviceId === receiver.id)?.buffered,
-      undefined,
+    // Where it plays shows what it plays, not the browser fallback's relayed route.
+    assert.notEqual(
+      device.state.outputs?.find((output) => output.deviceId === receiver.id)?.state,
+      "relayed",
     );
 
     // The sender stops AirPlay: its connections close. The source, its playback and busy-ness end.

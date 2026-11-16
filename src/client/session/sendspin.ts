@@ -5,6 +5,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
+import { reportBehind } from "./behind";
 import { declareLiveBuffer, nextLateSteps, withLateSteps, type LateSteps } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
 
@@ -118,6 +119,8 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
   );
   if (late.steps !== lateSteps.steps) lostSeconds = [];
   lateSteps = late;
+  // Losing sound in most of the last few seconds is what makes it step later: until then it is behind.
+  reportBehind({ sound: lostSeconds.filter(Boolean).length > liveReadings / 2 });
   needMs = declareLiveBuffer(needMs, latencyReadings);
   const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.steps);
   if (next === undefined || next === declaredBufferMs) return;
@@ -157,6 +160,7 @@ export function listen(
     hearing = false;
     configuration = undefined;
     clearInterval(bufferTimer);
+    reportBehind({ sound: false });
     waitForTap(null);
     void current?.then(dispose).catch(() => {});
     if (!on && !watch) return;

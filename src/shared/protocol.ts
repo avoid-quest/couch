@@ -104,11 +104,15 @@ export type PlayerState = {
   timeline?: { mapping: "hls" | "media" | "unavailable"; error?: string };
 };
 
+// What a receiver is doing in its Playback, from its own reports and Core's checks. behind: its picture
+// waits for data, or its speaker keeps losing sound to chunks that arrive late. stalled: Core couldn't
+// send its speaker sound for most of the last few seconds. relayed: it gets the media through Couch
+// because it couldn't fetch or connect on its own. cant-play: error says why.
+export type ReceiverState = "joining" | "playing" | "behind" | "stalled" | "relayed" | "cant-play";
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
 // volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds as it
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
-// buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
-// error: that buffered stream failed, so the live input doesn't reach it this item.
+// state: its receiver state, while its Playback plays; error: why it can't play.
 export type Output = {
   deviceId: string;
   picture: boolean;
@@ -116,7 +120,7 @@ export type Output = {
   delay?: number;
   delayActive?: boolean;
   local?: boolean;
-  buffered?: boolean;
+  state?: ReceiverState;
   error?: string;
 };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
@@ -327,6 +331,8 @@ export type ClientMessage = {
 };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
+// A receiver that can't keep up says so: its picture waits for data, or its speaker keeps losing late chunks.
+export type BehindMessage = { type: "behind"; picture: boolean; sound: boolean };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
   | { type: "liveIceServers"; iceServers: RTCIceServer[] }

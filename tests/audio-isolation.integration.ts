@@ -322,6 +322,8 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
     "the healthy listener keeps receiving while another stalls",
   );
   assert.ok(writes < 10, `Core stops queueing audio for the stalled listener (${writes} writes)`);
+  // Backed up for most of the last few seconds, it reports stalled; the healthy one doesn't.
+  assert.deepEqual(audio.status().stalled, ["stalled"]);
   const resumed = serverNowUs() + delay * 1000;
   stalledFrames.length = 0;
   backlog = false;

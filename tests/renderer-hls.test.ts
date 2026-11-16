@@ -23,9 +23,9 @@ const check = (source: string, realPictureClock = false) => {
       globalThis.setInterval = tick => { clockTimers.add(tick); return tick; };
       globalThis.clearInterval = tick => { clockTimers.delete(tick); };
       const { followClock } = await import("./src/client/session/picture-clock.ts");
-      mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: (element, read, start) => {
+      mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: (element, read, start, behind) => {
         pictureRead = read;
-        const stop = followClock(element, read, start);
+        const stop = followClock(element, read, start, behind);
         return () => { stop(); pictureRead = undefined; };
       } }));
     } else mock.module("./src/client/session/picture-clock.ts", () => ({ followClock: (_video, read) => { pictureRead = read; return () => { pictureRead = undefined; }; } }));

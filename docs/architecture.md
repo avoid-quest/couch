@@ -67,6 +67,13 @@ Playback at a time.
   Undo. Up next is saved in the `playback` table.
 - Core decides delivery and programme authority
   ([ADR 0002](adr/0002-playback-delivery-and-authority.md)).
+- Each output carries a receiver state while its Playback plays (`Output.state`),
+  which Where it plays and the sharer's panel show: *joining* until its screen
+  plays or its speaker is sent sound; *behind* while the device reports that its
+  picture waits for data or its Live speaker keeps losing late chunks
+  (`BehindMessage`); *stalled* while Core's backlog check held its speaker for
+  most of the last five seconds; *relayed* while it gets the media through Core;
+  *can't play* with the reason.
 
 ## Rendering
 

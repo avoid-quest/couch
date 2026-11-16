@@ -14,6 +14,7 @@ import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
+import { connectBehind } from "./behind";
 import {
   deviceId,
   loadLocalDeviceSharing,
@@ -139,6 +140,7 @@ export function useSession(
     let handshake: ReturnType<typeof setTimeout> | undefined;
     let textInput: ReturnType<typeof connectRemoteText> | undefined;
     let stopRendering: (() => void) | undefined;
+    let stopBehind: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
     let publishing = false;
@@ -182,6 +184,7 @@ export function useSession(
       publishing = false;
       setLocalLiveSourceId(null);
       stopRendering?.();
+      stopBehind?.();
       listen(false, false, credentials, "Couch");
       rendererStatus = syncedStatus = "idle";
       reportPlayback();
@@ -353,6 +356,9 @@ export function useSession(
             if (isCurrent() && connection.readyState === WebSocket.OPEN)
               connection.send(JSON.stringify({ type: "textFocus", field }));
           });
+        stopBehind = connectBehind((message) => {
+          if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message));
+        });
         stopRendering = connectRenderer((state) => {
           rendererStatus = state.status;
           reportPlayback();

@@ -6,6 +6,7 @@ import { localDeviceName } from "./device-id";
 import { bufferedEnd, setBuffered } from "./buffered";
 import { createCompressor } from "./compressor";
 import { setPictureMapping } from "./picture-mapping";
+import { reportBehind } from "./behind";
 import type { CompressorSettings } from "../../shared/compressor";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
@@ -466,9 +467,14 @@ const setFollow = (follow: Follow | null) => {
     revision = ++followGeneration;
   void import("./picture-clock").then(({ followClock }) => {
     if (following === follow && generation === current && revision === followGeneration)
-      unfollow = followClock(video, clock, () => {
-        void start(video);
-      });
+      unfollow = followClock(
+        video,
+        clock,
+        () => {
+          void start(video);
+        },
+        (waiting) => reportBehind({ picture: waiting }),
+      );
   });
 };
 // Only hls.js tells where the source's timestamps start; engines without MSE keep native HLS.

@@ -8,7 +8,7 @@ import {
   type LiveVideoFrameRate,
   type LiveVideoQuality,
 } from "../../../shared/live-input";
-import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
+import type { DeviceSummary, PlaybackSummary, ReceiverState } from "../../../shared/protocol";
 
 // Sources and their capture variants (docs/live-inputs.md). The dialog offers source choices first. On the Couch
 // computer an audio input is always Live, and System audio can be. The capsule also uses the variant to describe a running share.
@@ -161,9 +161,8 @@ export type Viewer = {
   picture: boolean;
   sound: boolean;
   playing: boolean;
-  behind: boolean;
+  state?: ReceiverState;
   delivery?: PlaybackSummary["delivery"];
-  delayActive?: boolean;
   error?: string;
 };
 /** Every online device the share plays on, in each playback that plays it; only a Live audio input plays on its publisher (docs/live-inputs.md). */
@@ -188,29 +187,33 @@ export function viewersOf(
             picture,
             sound,
             playing: playback.status === "playing",
-            behind: !!output.buffered,
+            state: output.state,
             delivery: playback.delivery,
-            delayActive: output.delayActive,
             error: output.error,
           });
       }
   return [...viewers.values()];
 }
 
+const receiverWords: Partial<Record<ReceiverState, string>> = {
+  joining: "joining",
+  behind: "behind",
+  stalled: "stalled",
+  relayed: "through Couch",
+};
 /**
  * What a viewer's row says under its name: its channels and its route on the sharer's own panel, where every row names
- * it (docs/live-inputs.md); Behind and Can't play as Where it plays says them.
+ * it (docs/live-inputs.md); its state and Can't play as Where it plays says them.
  */
 export function viewerLine(viewer: Viewer, route: LiveRoute | undefined) {
   if (viewer.error) return `Can't play: ${viewer.error}`;
   const channels =
     viewer.picture && viewer.sound ? "Picture and sound" : viewer.picture ? "Picture" : "Sound";
-  if (viewer.behind) return `${channels}, behind`;
+  const state = viewer.state && receiverWords[viewer.state];
+  if (state) return `${channels}, ${state}`;
   // Core's delivery wins over absent or stale WebRTC candidate statistics.
   if (viewer.delivery === "scheduled")
-    return viewer.sound
-      ? `${channels}, ${viewer.delayActive ? "in sync" : "connecting"}`
-      : channels;
+    return viewer.sound && viewer.state === "playing" ? `${channels}, in sync` : channels;
   if (viewer.delivery && viewer.delivery !== "webrtc") return channels;
   return route ? `${channels}, ${route === "relay" ? "through the relay" : "direct"}` : channels;
 }

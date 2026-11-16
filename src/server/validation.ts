@@ -5,6 +5,7 @@ import type {
 } from "../shared/live-input";
 import type {
   Action,
+  BehindMessage,
   ClientMessage,
   MediaTrack,
   PlayerState,
@@ -412,6 +413,23 @@ export function parseLiveUploadFailed(message: string): LiveUploadFailedMessage 
     uploadId: value.uploadId,
     error: safePlaybackError(value.error),
   };
+}
+
+export function parseBehind(message: string): BehindMessage | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(message);
+  } catch {
+    return null;
+  }
+  if (
+    !object(value) ||
+    value.type !== "behind" ||
+    typeof value.picture !== "boolean" ||
+    typeof value.sound !== "boolean"
+  )
+    return null;
+  return { type: "behind", picture: value.picture, sound: value.sound };
 }
 
 const finite = (value: unknown): value is number =>
