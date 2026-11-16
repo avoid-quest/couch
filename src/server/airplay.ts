@@ -1,4 +1,3 @@
-import { serverNowUs } from "@sonn-audio/node-sendspin";
 import type { CaptureAudioPacket } from "./capture-audio";
 import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants } from "node:fs";
@@ -6,11 +5,12 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import type { Readable } from "node:stream";
 import type { AirPlayAvailability, AirPlayState } from "../shared/airplay";
-import { createAudioIngress, createFramer, payloadType, type RtpPacket } from "./airplay-audio";
+import { createAudioIngress, createFramer, type RtpPacket } from "./airplay-audio";
 
 export type AirPlaySessions = {
-  /** An admitted sender's sound has started: publish it as a source. */
-  started: (id: string, sender: string) => void;
+  /** An admitted sender's sound has started: publish it as a source. timed: its packets' capture
+   * times are when the sender means them to be heard (audio-only AirPlay), not when Couch got them. */
+  started: (id: string, sender: string, timed: boolean) => void;
   /** RTP jitter-buffer output, timestamped on Core's clock; not the remote ADC clock. */
   audio: (id: string, packet: CaptureAudioPacket) => void;
   ended: (id: string) => void;
@@ -152,22 +152,25 @@ export function createAirPlay(options: {
     options.sessions.ended(id);
     options.changed();
   };
-  const begin = () => {
+  const begin = (timed: boolean) => {
     const id = crypto.randomUUID(),
       ingress = createAudioIngress();
     let position = 0,
-      sequence = 0,
-      originUs: number | undefined;
+      sequence = 0;
     const current = (session = {
       id,
       sender: sender || "AirPlay device",
       ingress,
       media: Date.now(),
       timer: setInterval(() => {
-        const pcm = ingress.tick();
+        const { pcm, at: startMs } = ingress.tick();
         if (session !== current) return;
         if (pcm.length) {
-          originUs ??= serverNowUs() - (pcm.length / 4 / 44_100) * 1e6;
+          // How far ahead the sender's time is, for checking a sender's picture against Couch's sound.
+          if (timed && !position)
+            log(
+              `airplay ${id.slice(0, 8)} on the sender's time, ${Math.round(startMs - performance.now())} ms ahead`,
+            );
           for (let at = 0; at < pcm.length; at += 4096 * 4) {
             const part = pcm.subarray(at, at + 4096 * 4),
               samples = new Float32Array(part.length / 2);
@@ -176,7 +179,7 @@ export function createAirPlay(options: {
               generation: id,
               sequence: sequence++,
               samplePosition: position,
-              capturedAtUs: Math.round(originUs + (position / 44_100) * 1e6),
+              capturedAtUs: Math.round(startMs * 1000 + (at / 4 / 44_100) * 1e6),
               sampleRate: 44_100,
               channels: 2,
               pcm: samples,
@@ -190,13 +193,15 @@ export function createAirPlay(options: {
     });
     current.timer.unref();
     log(`airplay ${id.slice(0, 8)} receiving`);
-    options.sessions.started(id, current.sender);
+    options.sessions.started(id, current.sender, timed);
     options.changed();
   };
   const media = (packets: RtpPacket[]) => {
     // Sound is a sender's only on its authenticated connection, and only from the process that serves it.
     if (!packets.length || (!session && !(connected && authenticated))) return;
-    if (!session) begin();
+    // A sender's sound that changes how it is timed (audio to mirroring) is another source.
+    if (session && session.ingress.timed() !== packets[0]!.timed) end();
+    if (!session) begin(packets[0]!.timed);
     session!.media = Date.now();
     for (const packet of packets) session!.ingress.place(packet);
   };
@@ -283,8 +288,14 @@ export function createAirPlay(options: {
       "0",
       "-d",
       "1",
+      // Audio-only AirPlay keeps the sender's timing (payload type 97, Couch's patch); mirroring's
+      // sound, whose picture Couch discards, doesn't.
+      "-async",
+      "-vsync",
+      "no",
+      // The patch names each stream's payload type and RTP timing itself.
       "-artp",
-      `pt=${payloadType} ! rtpstreampay ! fdsink fd=3 sync=false`,
+      "! rtpstreampay ! fdsink fd=3 sync=false",
       "-key",
       join(directory, "key.pem"),
       "-m",

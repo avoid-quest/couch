@@ -9,14 +9,15 @@ const exec = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // UxPlay 1.74 (GPL-3.0-or-later), the first release with its own mDNS responder and the
-// -artp export Couch reads. Git checks the commit; nothing else is downloaded. Couch's one change,
-// in native/airplay, accepts a sender's audio only from that sender's address.
+// -artp export Couch reads. Git checks the commit; nothing else is downloaded. Couch's changes, in
+// native/airplay: one accepts a sender's audio only from that sender's address; the other keeps the
+// sender's timing in what -artp exports.
 export const uxplay = {
   repository: "https://github.com/FDH2/UxPlay",
   commit: "d9e293da6d5276315af6820d10542a859bbc3424",
   version: "1.74",
 };
-const patch = join(root, "native", "airplay", "uxplay-sender-address.patch");
+const patches = ["uxplay-sender-address.patch", "uxplay-sender-time.patch"];
 // No X11: Couch renders nothing through UxPlay. No -march=native, which UxPlay's lib/CMakeLists.txt
 // otherwise adds on x86, so the package runs on any x86-64 machine, not only the one that built it.
 const cmakeFlags = ["-DCMAKE_BUILD_TYPE=Release", "-DNO_X11_DEPS=ON", "-DNO_MARCH_NATIVE=ON"];
@@ -76,7 +77,8 @@ export async function buildAirPlay(platform: string, arch: string, destination: 
     );
   // A fresh build never mixes another machine's configuration.
   await rm(build, { recursive: true, force: true });
-  await run("git", ["apply", patch], source);
+  for (const patch of patches)
+    await run("git", ["apply", join(root, "native", "airplay", patch)], source);
   try {
     await run("cmake", ["-S", source, "-B", build, ...cmakeFlags], work);
     await run("cmake", ["--build", build, "--target", "uxplay", "--parallel"], work);
@@ -101,7 +103,8 @@ export async function buildAirPlay(platform: string, arch: string, destination: 
     source,
   );
   await copyFile(join(source, "LICENSE"), join(destination, "LICENSE"));
-  await copyFile(patch, join(destination, "uxplay-sender-address.patch"));
+  for (const patch of patches)
+    await copyFile(join(root, "native", "airplay", patch), join(destination, patch));
   const libraries = [
     ...(await run("readelf", ["--dynamic", join(destination, "uxplay")], work)).stdout.matchAll(
       /\(NEEDED\)\s+Shared library: \[(.+)\]/g,
@@ -112,15 +115,16 @@ export async function buildAirPlay(platform: string, arch: string, destination: 
     `Couch's AirPlay receiver is UxPlay ${uxplay.version}, an independent program that Couch runs as a separate process.
 
 UxPlay is free software under the GNU General Public License, version 3 or later (LICENSE).
-Couch modified it: uxplay-sender-address.patch, which this package includes, makes it accept a
-sender's audio and control packets only from that sender's address. Its complete corresponding
-source is ${archive}, the unmodified UxPlay, also at
+Couch modified it with two patches, which this package includes: uxplay-sender-address.patch makes
+it accept a sender's audio and control packets only from that sender's address, and
+uxplay-sender-time.patch keeps the sender's timing in the audio it exports (-artp). Its complete
+corresponding source is ${archive}, the unmodified UxPlay, also at
 ${uxplay.repository}/tree/${uxplay.commit}
-with that patch applied (git apply uxplay-sender-address.patch).
+with those patches applied in that order (git apply ${patches.join(", then git apply ")}).
 It includes llhttp (MIT, lib/llhttp/LICENSE-MIT), playfair (GPL-3.0, lib/playfair/LICENSE.md)
 and files under the LGPL, version 2.1 or later, as each file states.
 
-Built with the patch applied, with CMake: ${cmakeFlags.join(" ")}.
+Built with the patches applied, with CMake: ${cmakeFlags.join(" ")}.
 It uses these libraries of the system it runs on, which are not part of this package:
 ${libraries.join("\n")}
 

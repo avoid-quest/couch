@@ -14,6 +14,8 @@ export type LiveSource = {
   video: boolean;
   intent?: "relaxed" | "live";
   audioDelivery?: "pcm";
+  // AirPlay that keeps the sender's timing: each sample's capture time is when the sender means it heard.
+  senderTimed?: boolean;
   startedAt?: number;
   metadata?: LiveMetadata;
 };

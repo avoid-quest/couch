@@ -14,16 +14,19 @@ restarts AirPlay and makes every device enter it again.
 
 While a device plays, **AirPlay · {name}** leads Home's **Shared sources** and
 plays automatically on the Couch computer; other devices join it with **Play on**
-or **Where it plays**. Every receiver gets Couch's buffered stream, a few seconds
-behind the sender. One sender plays at a time; after it
+or **Where it plays**. AirPlay audio plays when the sender means it to be heard
+(about 1.75 s after it sends it), so a Mac's own video stays in step, and a
+speaker joining doesn't move it; a speaker that can't be that early plays a
+little later on its own. Screen Mirroring's sound, whose picture Couch discards,
+plays at least a second after it arrives. One sender plays at a time; after it
 leaves, AirPlay restarts, so the Couch may briefly disappear from AirPlay lists.
 A sender that has played counts as playing, so a TV's unattended update waits.
 
 ## How it works
 
 Couch runs [UxPlay](https://github.com/FDH2/UxPlay) 1.74, pinned to commit
-`d9e293da6d5276315af6820d10542a859bbc3424` with one Couch patch
-(`native/airplay/uxplay-sender-address.patch`), as a separate process
+`d9e293da6d5276315af6820d10542a859bbc3424` with two Couch patches
+(`native/airplay/`), as a separate process
 (`src/server/airplay.ts`). UxPlay keeps the protocol, discovery (its own mDNS),
 the password check and one sender at a time.
 
@@ -37,14 +40,24 @@ the password check and one sender at a time.
 - `setpriv --pdeathsig KILL` ends UxPlay with Core; `stdbuf -oL` lets Core read
   its log live. A crash restarts it up to three times in five minutes.
 - Sound reaches only Core, on a private pipe, as RTP L16 44.1 kHz stereo framed
-  per RFC 4571 (`-artp "pt=96 ! rtpstreampay ! fdsink fd=3 sync=false"`).
-  `src/server/airplay-audio.ts` paces it on Core's clock and fills loss with
-  silence, then it goes through the scheduled-audio worker like other capture.
+  per RFC 4571 (`-artp "! rtpstreampay ! fdsink fd=3 sync=false"`).
+  `src/server/airplay-audio.ts` fills loss with silence, then it goes through
+  the scheduled-audio worker like other capture.
+- **The sender's timing** (`uxplay-sender-time.patch`, with `-async -vsync no`):
+  UxPlay already works out when the sender means each packet to be heard, from
+  its sync packets, but drops it in `-artp`. The patch keeps it for AirPlay audio
+  (ALAC): payload type 97, each RTP timestamp that time on the computer's wall
+  clock in 1/44100 s modulo 2^32. Core hands the sound on as it arrives, stamped
+  with that time on its own clock, and the speakers play it then, like a Live
+  room with no delay (`live-lead.ts`): one whose need doesn't fit plays a step
+  later. Mirroring's sound (AAC-ELD, payload type 96) has a budget of about
+  0.17 s, too short for the speakers, so it keeps Couch's own timing: a quarter
+  second after it arrives, plus the relaxed send-ahead.
 - A sender becomes a source only when its sound arrives on a connection UxPlay
   authenticated (`-d 1` log lines). One UxPlay process serves one sender: after
   it leaves, Core restarts UxPlay, because log and sound arrive on separate pipes
   in no fixed order.
-- **Couch's patch**: upstream UxPlay accepted a sender's UDP audio from any
+- **The sender's address** (`uxplay-sender-address.patch`): upstream UxPlay accepted a sender's UDP audio from any
   address, and packets shorter than one AES block are never decrypted, so another
   host could inject sound. The patch accepts packets only from the sender's own
   address (and interface, for IPv6 link-local).
@@ -56,7 +69,7 @@ the password check and one sender at a time.
 ## Build and test
 
 Linux packages ship UxPlay in `Resources/airplay` with its GPL license, source
-and patch. It uses the system's GStreamer, libplist and OpenSSL (the deb
+and patches. It uses the system's GStreamer, libplist and OpenSSL (the deb
 recommends the packages; the dedicated TV installs them). The build uses
 `-DNO_MARCH_NATIVE=ON`, or UxPlay compiles for the build machine's CPU.
 

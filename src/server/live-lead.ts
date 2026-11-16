@@ -2,9 +2,10 @@ import { liveReadings, liveStep, risenNeed } from "../shared/live-need";
 
 type Wire = "opus" | "pcm";
 
-// One Live run's timing. The room's delay is the host's setting and nothing a listener declares
-// moves it. A listener whose own need (its declaration and Sync delay, plus Core's measured
-// input-side time) doesn't fit plays on its own, a step later: the same chunks, stamped later.
+// One Live run's timing, or sender-timed AirPlay's with a room delay of 0. The room's delay is the
+// host's setting and nothing a listener declares moves it. A listener whose own need (its
+// declaration and Sync delay, plus Core's measured input-side time) doesn't fit plays on its own,
+// a step later: the same chunks, stamped later.
 export function createLiveLead(roomMs: number) {
   // Each wire has its own input-side time: its frames take their own time to fill.
   const inputs = new Map<
@@ -16,9 +17,15 @@ export function createLiveLead(roomMs: number) {
     roomMs,
     // Capture to sending, for each chunk as Core gets it from the encoder: the sound card's buffer,
     // the transfer and the encoder, whatever card it is. Each second keeps its highest time, since
-    // a typical one would leave the slower chunks of that second late.
+    // a typical one would leave the slower chunks of that second late. Negative for sound stamped
+    // with a time still to come (sender-timed AirPlay): how early it arrives.
     arrived(wire: Wire, capturedAtUs: number, nowUs: number) {
-      const input = inputs.get(wire) ?? { firstUs: nowUs, second: 0, highest: 0, readings: [] };
+      const input = inputs.get(wire) ?? {
+        firstUs: nowUs,
+        second: 0,
+        highest: -Infinity,
+        readings: [],
+      };
       inputs.set(wire, input);
       const second = Math.floor((nowUs - input.firstUs) / 1e6);
       if (second !== input.second) {
@@ -29,7 +36,7 @@ export function createLiveLead(roomMs: number) {
           input.ms = risenNeed(input.ms, input.readings);
         }
         input.second = second;
-        input.highest = 0;
+        input.highest = -Infinity;
       }
       input.highest = Math.max(input.highest, (nowUs - capturedAtUs) / 1000);
     },
