@@ -19,8 +19,8 @@ test("after the first reading, only the median of five raises the declaration", 
 });
 
 test("a declaration rises only when the smoothed need clearly outgrows it", () => {
-  expect(declareLiveBuffer(75, steady(65))).toBe(75);
-  expect(declareLiveBuffer(75, steady(66))).toBe(101);
+  expect(declareLiveBuffer(75, steady(50))).toBe(75);
+  expect(declareLiveBuffer(75, steady(51))).toBe(86);
   expect(declareLiveBuffer(75, [42, 900, 42, 900, 42])).toBe(75);
   expect(declareLiveBuffer(250, steady(27))).toBe(250);
 });
@@ -46,7 +46,7 @@ test("no listener's declaration raises the room's delay; one that doesn't fit pl
   const lead = createLiveLead(100);
   measure(lead, 12);
   expect(lead.leadMs("earbuds", "opus", 75)).toBe(100);
-  expect(lead.leadMs("bluetooth", "opus", 200)).toBe(225);
+  expect(lead.leadMs("bluetooth", "opus", 200)).toBe(220);
   expect(lead.leadMs("earbuds", "opus", 75)).toBe(100);
   expect(lead.roomMs).toBe(100);
 });
@@ -55,7 +55,7 @@ test("Core's measured input-side time counts towards each listener's need", () =
   const lead = createLiveLead(100);
   expect(lead.leadMs("phone", "opus", 80)).toBe(100);
   measure(lead, 30);
-  expect(lead.leadMs("phone", "opus", 80)).toBe(125);
+  expect(lead.leadMs("phone", "opus", 80)).toBe(110);
 });
 
 test("a listener waits in the room for the input side, then moves once, within two seconds", () => {
@@ -64,22 +64,22 @@ test("a listener waits in the room for the input side, then moves once, within t
   lead.arrived("opus", 0, 300_000);
   expect(lead.leadMs("phone", "opus", 75)).toBe(50);
   measure(lead, 15, 0, 2);
-  expect(lead.leadMs("phone", "opus", 75)).toBe(100);
+  expect(lead.leadMs("phone", "opus", 75)).toBe(90);
 });
 
 test("each wire has its own input-side time", () => {
   const lead = createLiveLead(100);
   measure(lead, 40, 0, 6, "opus");
   measure(lead, 10, 0, 6, "pcm");
-  expect(lead.leadMs("phone", "opus", 75)).toBe(125);
+  expect(lead.leadMs("phone", "opus", 75)).toBe(120);
   expect(lead.leadMs("laptop", "pcm", 75)).toBe(100);
 });
 
 test("a listener's step only rises while it listens, and resets when it leaves", () => {
   const lead = createLiveLead(50);
   measure(lead, 0, 0, 2);
-  expect(lead.leadMs("phone", "opus", 110)).toBe(125);
-  expect(lead.leadMs("phone", "opus", 0)).toBe(125);
+  expect(lead.leadMs("phone", "opus", 110)).toBe(110);
+  expect(lead.leadMs("phone", "opus", 0)).toBe(110);
   lead.left("phone");
   expect(lead.leadMs("phone", "opus", 0)).toBe(50);
 });

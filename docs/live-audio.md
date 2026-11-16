@@ -54,13 +54,13 @@ wrong clock still shows the right time.
 - Each Receiver declares only its own need through the SDK's `minBufferMs`: its
   once-a-second `syncInfo.outputLatencyMs` reading plus a 35 ms allowance. The
   first reading sets it; later, the median of the last five raises it only when
-  it outgrows it by more than 25 ms.
+  it outgrows it by more than 10 ms.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second
   doesn't count: it holds what was captured while the encoder started.
 - A listener whose declaration, Sync delay and its wire's input-side time exceed
-  the room's delay plays on its own, at that need rounded up to the next 25 ms
+  the room's delay plays on its own, at that need rounded up to the next 10 ms
   step: the same chunks, stamped later for it. It plays in the room until the
   input-side time is known (about two seconds), so it moves once. Its step only
   rises while it listens and resets when it leaves or the input restarts. A

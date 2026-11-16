@@ -106,7 +106,7 @@ test(
     const [moved] = moves(slow.frames),
       later = slow.frames[moved!]!.at - fast.frames[moved!]!.at;
     assert.deepEqual(moves(slow.frames), [moved], "it moves once");
-    assert.ok(later > 0 && later % 25_000 === 0, `a whole step later, not ${later} µs`);
+    assert.ok(later > 0 && later % 10_000 === 0, `a whole step later, not ${later} µs`);
     assert.deepEqual(
       slow.frames.slice(0, moved! + 20),
       fast.frames
@@ -181,7 +181,7 @@ test(
     );
     const last = second.frames.length - 1,
       step = second.frames[last]!.at - otherInput.origin - last * 5_000;
-    assert.ok(step > 400_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
+    assert.ok(step > 400_000 && step % 10_000 === 0, `its own step, not ${step} µs`);
     assert.ok(
       first.frames.every(
         (frame) => frame.bytes.readInt16LE(0) === 8192 && frame.bytes.readInt16LE(2) === -8192,
