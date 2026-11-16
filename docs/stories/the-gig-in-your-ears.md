@@ -43,4 +43,3 @@ Behringer and phone rig). Content: a stereo mix.
 
 - Live starts only from the desktop app on the Couch computer.
 - No input level meter; lowering the shared delay needs a restart.
-- Raising one listener's buffer raises it for everyone.

@@ -1198,6 +1198,9 @@ export async function createHub(options: HubOptions) {
               ...(playback.media?.playbackId === command.playbackId ? playback.media : {}),
               ...groupSelection(playback),
               captureIntent: intentOf(playback) ?? "relaxed",
+              ...(intentOf(playback) === "live"
+                ? { liveDelayMs: store.liveAudioSettings().minBufferMs }
+                : {}),
             }
           : command,
       );
@@ -2792,7 +2795,6 @@ export async function createHub(options: HubOptions) {
           outputs: outputViews.get(playback)!,
           delivery: deliveryOf(playback),
           intent: intentOf(playback) ?? "relaxed",
-          ...(state.player.liveLead ? { liveLead: state.player.liveLead } : {}),
           ...(mpvPlayback === playback ? { hostOnly: true } : {}),
           ...(common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}),
           ...(playback.held ? { held: playback.held } : {}),

@@ -289,7 +289,7 @@ export function LiveSettings({
   sharing: LiveSharing;
   onCaptureChange?: () => void;
 }) {
-  const { liveSharing, setError, state } = useSessionGate();
+  const { liveSharing, setError } = useSessionGate();
   const live = useLiveAudioSettings();
   const { settings, save } = live;
   const nativeBuffer = useNativeInputBufferPreference();
@@ -297,11 +297,6 @@ export function LiveSettings({
   const [restarting, setRestarting] = useState(false);
   const [opened, setOpened] = useState<"capture" | "channels" | "codec" | null>(null);
   const native = sharing.captureFormat?.native;
-  // Only the playback carrying the shared lead reports it; other playbacks of this source may come first.
-  const lead = state?.playbacks?.find(
-    (playback) => playback.liveSourceId === sharing.source.id && playback.liveLead,
-  )?.liveLead;
-  const leadDevice = state?.devices?.find((device) => device.id === lead?.deviceId);
   return (
     <div className="grid gap-2 border-t pt-2">
       {native && (
@@ -393,12 +388,7 @@ export function LiveSettings({
         <PlaybackBufferInput id="live-buffer" live={live} className="ml-auto" />
       </div>
       <LiveSettingsStatus live={live} />
-      {lead?.deviceId && (
-        <p className="text-meta text-muted-foreground [overflow-wrap:anywhere]">
-          Shared lead: {lead.ms} ms · set by {leadDevice?.name ?? "a previous listener"}
-        </p>
-      )}
-      {/* Core keeps the largest lead a running share has used, so listeners never jump backwards mid-stream. */}
+      {/* The room's delay is taken when listeners start, so listeners never jump backwards mid-stream. */}
       <p className="text-meta text-muted-foreground">
         0 removes the floor. To reduce the shared lead, restart sharing.
       </p>

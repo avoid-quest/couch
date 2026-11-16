@@ -76,7 +76,7 @@ async function fixture(t: TestContext) {
 }
 
 test(
-  "different Receiver buffers produce one shared Live lead and report the Receiver that set it",
+  "the room's delay is the host's; a Receiver that doesn't fit plays a step later on its own",
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
@@ -93,28 +93,21 @@ test(
       );
     const input = await f.streamCapture(f.host, "concert", -1, signal);
     await until(() => fast.frames.length > 20 && slow.frames.length > 20);
-    assert.equal(fast.frames[0]!.at, input.origin + 160_000);
+    // The default room delay is 150 ms; 150 + 10 ms of Sync doesn't fit, so that one plays at 175.
+    assert.equal(fast.frames[0]!.at, input.origin + 150_000);
     assert.deepEqual(
-      fast.frames.slice(0, 20),
       slow.frames.slice(0, 20),
-      "every Receiver gets identical samples at identical timestamps",
+      fast.frames.slice(0, 20).map((frame) => ({ ...frame, at: frame.at + 25_000 })),
+      "the same samples, stamped a step later",
     );
-    const lead = () =>
-      f.host.state.playbacks?.find((playback) => playback.liveSourceId === "concert")?.liveLead;
-    assert.deepEqual(lead(), { ms: 160, deviceId: other.id });
 
     await fast.client.sendPlayerState({ min_buffer_ms: 205 });
     await until(() =>
-      fast.frames.some((frame, i, frames) => i > 0 && frame.at - frames[i - 1]!.at === 50_000),
+      fast.frames.some((frame, i, frames) => i > 0 && frame.at - frames[i - 1]!.at === 80_000),
     );
-    await until(() => lead()?.ms === 205);
-    assert.deepEqual(lead(), { ms: 205, deviceId: f.receiver.id });
-    await until(() => slow.frames.length >= fast.frames.length);
-    assert.deepEqual(
-      fast.frames,
-      slow.frames.slice(0, fast.frames.length),
-      "raising either declaration moves the whole audience together",
-    );
+    const steady = (frames: { at: number }[]) =>
+      frames.every((frame, i) => i === 0 || frame.at - frames[i - 1]!.at === 5_000);
+    assert.ok(steady(slow.frames), "one Receiver's need moves nobody else");
 
     assert.equal(
       (await f.receiver.command({ type: "leave", playbackId: f.receiver.state.player.playbackId! }))
@@ -123,11 +116,7 @@ test(
     );
     const before = slow.frames.length;
     await until(() => slow.frames.length > before + 20);
-    assert.deepEqual(
-      lead(),
-      { ms: 205, deviceId: f.receiver.id },
-      "leaving retains the lead and its attribution until the input restarts",
-    );
+    assert.ok(steady(slow.frames), "leaving moves nobody else");
   },
 );
 

@@ -36,7 +36,7 @@ afterEach(async () => {
   await settle();
 });
 
-test("clock-only watch reuses the player; public buffer changes keep the connection", async () => {
+test("clock-only watch reuses the player; the room's delay is never declared", async () => {
   listen(true, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 });
   await settle();
   const player = players.at(-1)!;
@@ -44,7 +44,8 @@ test("clock-only watch reuses the player; public buffer changes keep the connect
   listen(false, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 400 });
   await settle();
   expect(players.at(-1)).toBe(player);
-  expect(player.buffers.at(-1)).toBe(400);
+  expect(player.options.minBufferMs).toBe(0);
+  expect(player.buffers).toEqual([]);
   listen(true, true, credentials, "Fixture", { codec: "opus", minBufferMs: 400 });
   await settle();
   expect(player.disconnected).toBe(true);
@@ -66,7 +67,7 @@ async function sampling(run: () => Promise<void>) {
   };
 }
 
-test("a new Live source or a new Join starts again from the host floor", async () => {
+test("a new Live source or a new Join starts its own need again", async () => {
   const settings = { codec: "pcm", minBufferMs: 150, sourceId: "first" } as const;
   const tick = await sampling(async () => {
     listen(true, false, credentials, "Fixture", settings);
@@ -75,16 +76,16 @@ test("a new Live source or a new Join starts again from the host floor", async (
   const first = players.at(-1)!;
   first.syncInfo.outputLatencyMs = 201;
   tick(5);
-  expect(first.buffers).toEqual([250]);
+  expect(first.buffers).toEqual([236]);
   listen(true, false, credentials, "Fixture", { ...settings, sourceId: "second" });
   await settle();
   expect(first.disconnected).toBe(true);
-  expect(players.at(-1)!.options.minBufferMs).toBe(150);
+  expect(players.at(-1)!.options.minBufferMs).toBe(0);
   listen(false, false, credentials, "Fixture");
   await settle();
   listen(true, false, credentials, "Fixture", settings);
   await settle();
-  expect(players.at(-1)!.options.minBufferMs).toBe(150);
+  expect(players.at(-1)!.options.minBufferMs).toBe(0);
 });
 
 test("a codec change keeps the Media Session that Couch set when the SDK's destroy clears it", async () => {

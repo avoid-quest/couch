@@ -5,7 +5,8 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import { declareLiveBuffer, liveBufferReadings } from "./live-buffer";
+import { declareLiveBuffer } from "./live-buffer";
+import { liveReadings } from "../../shared/live-need";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID.
@@ -25,10 +26,10 @@ const dispose = (stopped: SendspinPlayer) => {
 };
 let liveSettings: LiveAudioSettings | undefined;
 let bufferScope: string | undefined;
-let declaredBufferMs = 0;
+let declaredBufferMs: number | undefined;
 let latencyReadings: number[] = [];
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
-// sample: add this second's output reading; otherwise only the host floor can raise the declaration.
+// sample: add this second's output reading. The room's delay is the host's and isn't declared here.
 const updateBuffer = (created: SendspinPlayer, sample = false) => {
   if (connected !== created || !liveSettings) return;
   const latency =
@@ -36,9 +37,9 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
       ? created.syncInfo.outputLatencyMs
       : NaN;
   if (Number.isFinite(latency) && latency >= 0)
-    latencyReadings = [...latencyReadings, latency].slice(-liveBufferReadings);
-  const next = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs, latencyReadings);
-  if (next === declaredBufferMs) return;
+    latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
+  const next = declareLiveBuffer(declaredBufferMs, latencyReadings);
+  if (next === undefined || next === declaredBufferMs) return;
   declaredBufferMs = next;
   created.setMinBufferMs(next);
 };
@@ -56,7 +57,7 @@ export function listen(
   if (scope !== bufferScope) {
     bufferScope = scope;
     latencyReadings = [];
-    declaredBufferMs = live ? declareLiveBuffer(0, live.minBufferMs) : 0;
+    declaredBufferMs = undefined;
   }
   liveSettings = live;
   const next = JSON.stringify([
@@ -84,8 +85,6 @@ export function listen(
   const current: Promise<SendspinPlayer> = (player ??= import("@sendspin/sendspin-js")
     .then(async ({ SendspinPlayer }) => {
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
-      if (player === current && liveSettings)
-        declaredBufferMs = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs);
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
       const created = new SendspinPlayer({
         suite: "aesgcm",
@@ -95,7 +94,7 @@ export function listen(
         ...(live?.codec && live.codec !== "auto"
           ? { codecs: live.codec === "opus" ? ["opus", "pcm"] : ["pcm"] }
           : {}),
-        ...(live ? { minBufferMs: declaredBufferMs } : {}),
+        ...(live ? { minBufferMs: declaredBufferMs ?? 0 } : {}),
         onStateChange: (state) => {
           if (player === current) group = state.groupState.group_id;
         },

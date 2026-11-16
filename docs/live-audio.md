@@ -47,18 +47,26 @@ wrong clock still shows the right time.
 
 ## Timing
 
-- A relaxed share keeps at least one second of lead. A Live share's lead is the
-  largest `min_buffer_ms` plus static output delay any member declares. It grows
-  at once and never shrinks while the input runs, so listeners never jump back;
-  lower declarations apply when sharing or the input restarts.
-- **Playback buffer floor** (Share dialog, 150 ms initially) is declared through
-  the SDK's `minBufferMs`. Each Receiver reads `syncInfo.outputLatencyMs` once a
-  second and raises its declaration in 25 ms steps when the median of five
-  readings plus a fixed 35 ms allowance exceeds it. A raise is heard once as a
-  gap on every Receiver.
-- Sync after a raise is only as good as the browser's output-latency report;
-  Couch can't correct a misreported output delay. The SDK exposes no
-  arrival/starvation statistics, so the 35 ms allowance isn't measured jitter.
+- A relaxed share keeps at least one second of lead. A Live share's delay, the
+  room's, is the host's **Playback buffer floor** (Share dialog, 150 ms
+  initially), taken when each listener's playback loads. Every chunk is stamped
+  capture time plus that delay; nothing a listener declares moves it.
+- Each Receiver declares only its own need through the SDK's `minBufferMs`: the
+  median of five once-a-second `syncInfo.outputLatencyMs` readings plus a 35 ms
+  allowance. The first median sets it; later ones raise it only when they
+  outgrow it by more than 25 ms.
+- Core measures its own input-side time per run: capture to the chunk reaching
+  Core from the encoder, the highest of each second, the median of the last
+  five, raised by the same rule.
+- A listener whose declaration, Sync delay and the input-side time exceed the
+  room's delay plays on its own, at that need rounded up to the next 25 ms step:
+  the same chunks, stamped later for it. Its step only rises while it listens
+  and resets when it leaves or the input restarts. A rise is a short slew or gap
+  for that listener only.
+- Sync is only as good as the browser's output-latency report; Couch can't
+  correct a misreported output delay. The SDK exposes no arrival/starvation
+  statistics, so the 35 ms allowance (the player's 15 ms scheduling batch,
+  decoding and the network) isn't measured jitter.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.
 - **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.

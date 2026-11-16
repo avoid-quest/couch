@@ -14,13 +14,14 @@ import {
   SendspinSession,
   type SendspinSessionHooks,
 } from "@sonn-audio/node-sendspin";
-import type { AudioSelection, LiveLead, PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError, safePlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { audioInput, pictureStartOf } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
 import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
+import { createLiveLead } from "./live-lead";
 import type { CaptureAudioPacket } from "./capture-audio";
 import { compressorFilter } from "../shared/compressor";
 import { liveTitle, type LiveSource } from "../shared/live-input";
@@ -40,6 +41,8 @@ export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & {
   duration?: number;
   audioSelection?: AudioSelection;
   credentialOrigin?: string;
+  // Live audio: the room's delay, the host's setting.
+  liveDelayMs?: number;
 };
 export type Member = { deviceId: string; level: number };
 // Every run encodes both wires, so a speaker that joins never restarts everyone's sound for its format.
@@ -54,7 +57,9 @@ type Run = {
   child?: ChildProcess;
   dispose?: () => void;
   fixed?: boolean;
-  captureLead?: LiveLead;
+  // A relaxed capture's send-ahead, which only rises; Live audio keeps its own.
+  captureLead?: number;
+  live?: ReturnType<typeof createLiveLead>;
   timelineOnly?: boolean;
   // An endless URL stream (Twitch, Live TV; not Live audio, which captures) keeps the source's time:
   // a gap is silence on every speaker while the clock and its pictures run on, and audio that
@@ -273,16 +278,11 @@ export function createScheduledAudio(options: {
       );
     };
     // Screens declare nothing, so a new relaxed group keeps its one-second floor.
-    const sendAhead = () => {
-      const minimum = load?.captureIntent === "live" ? 0 : leadUs / 1000;
-      return members.reduce<LiveLead>(
-        (lead, member) => {
-          const ms = playerLead(sessions.get(member.deviceId), minimum);
-          return ms > lead.ms ? { ms, deviceId: member.deviceId } : lead;
-        },
-        { ms: minimum },
+    const sendAhead = () =>
+      Math.max(
+        leadUs / 1000,
+        ...members.map((member) => playerLead(sessions.get(member.deviceId), leadUs / 1000)),
       );
-    };
     let load: SyncedLoad | undefined;
     let input: ReturnType<typeof audioInput> | undefined;
     let run: Run | undefined;
@@ -317,7 +317,6 @@ export function createScheduledAudio(options: {
         (state = {
           ...state,
           volume,
-          liveLead: load?.captureIntent === "live" ? run?.captureLead : undefined,
           ...(run?.base !== undefined && state.status !== "ended" ? { position: position() } : {}),
         }),
       );
@@ -500,9 +499,12 @@ export function createScheduledAudio(options: {
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const source = sources.get(current.liveSourceId)!.capture;
+          const live = current.captureIntent === "live";
           const next: Run = {
             fixed: true,
-            captureLead: sendAhead(),
+            ...(live
+              ? { live: createLiveLead(current.liveDelayMs ?? 0) }
+              : { captureLead: sendAhead() }),
             start: 0,
             anchored: true,
             speed: 1,
@@ -526,17 +528,15 @@ export function createScheduledAudio(options: {
               next.cursors.clear();
               next.base = undefined;
               next.released = 0;
-              next.captureLead = sendAhead();
+              if (live) next.live = createLiveLead(current.liveDelayMs ?? 0);
+              else next.captureLead = sendAhead();
               each((session) => session.sendStreamClear());
               report();
               return;
             }
-            const lead = sendAhead();
-            if (!next.captureLead || lead.ms > next.captureLead.ms) {
-              next.captureLead = lead;
-              report();
-            }
-            const at = event.at + next.captureLead.ms * 1000;
+            next.live?.arrived(event.at, serverNowUs());
+            if (!live) next.captureLead = Math.max(next.captureLead!, sendAhead());
+            const at = event.at + (next.live?.roomMs ?? next.captureLead!) * 1000;
             if (next.base === undefined) {
               next.base = at;
               for (const member of members) begin(member.deviceId);
@@ -881,13 +881,13 @@ export function createScheduledAudio(options: {
       if (current.base === undefined) {
         if (first === Infinity || !current.anchored) return;
         // Chunk timestamps are shared by the group; each player adds its own delay.
-        current.base = now + sendAhead().ms * 1000 - first;
+        current.base = now + sendAhead() * 1000 - first;
         if (!current.fixed && !current.sourceTimed)
           current.clock = [{ at: current.base, offset: 0 }];
         for (const member of members) begin(member.deviceId, current.base + first);
         if (run !== current) return;
       } else if (!current.fixed && !current.sourceTimed && first !== Infinity) {
-        const ahead = sendAhead().ms * 1000;
+        const ahead = sendAhead() * 1000;
         if (current.base + first < now + ahead / 2) {
           // Only future sound moves. Pictures finish the sound already scheduled, wait through
           // the gap and resume when the recovered sound actually starts.
@@ -923,10 +923,16 @@ export function createScheduledAudio(options: {
           }
           const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
+          // A Live listener that doesn't fit the room's delay gets the same chunks, stamped later.
+          const later = current.live
+            ? (current.live.leadMs(session.getClientId()!, playerLead(session, 0)) -
+                current.live.roomMs) *
+              1000
+            : 0;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;
             if (cursor.sent !== undefined && chunk.at <= cursor.sent) continue;
-            if (chunk.at - delay <= now) continue;
+            if (chunk.at + later - delay <= now) continue;
             if (
               session.timeUntilPlayerCapacityUs(chunk.data.length + session.getAudioHeaderSize()) >
                 0 ||
@@ -935,7 +941,7 @@ export function createScheduledAudio(options: {
               break;
             session.sendPcmAudioFrame({
               data: chunk.data,
-              timestampUs: chunk.at,
+              timestampUs: chunk.at + later,
               durationUs: chunk.end - chunk.at,
             });
             cursor.sent = chunk.at;
@@ -1006,6 +1012,7 @@ export function createScheduledAudio(options: {
           if (!next.some((item) => item.deviceId === member.deviceId)) {
             clearReceiverError(member.deviceId);
             sessions.get(member.deviceId)?.sendMetadata(emptyMetadata);
+            run?.live?.left(member.deviceId);
             for (const session of run?.cursors.keys() ?? [])
               if (session.getClientId() === member.deviceId) {
                 run!.cursors.delete(session);

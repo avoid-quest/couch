@@ -32,6 +32,11 @@ function captureWaveHeader(sampleRate: number, channels: number) {
   return header;
 }
 
+// Live frames are 5 ms, a third of the spec's 15 ms floor: each frame is a packet and an encrypted
+// write per listener, and smaller frames only gain the time a frame takes to fill. The spec-sized
+// comparison is { opus: 20, pcm: 15 } (Opus has no 15 ms frame; it takes 2.5, 5, 10, 20, 40 or 60).
+const liveFrameMs = { opus: 5, pcm: 5 };
+
 /** Native/browser float PCM -> standard Sendspin formats. FFmpeg owns sample conversion and encoding. */
 export function createScheduledCapture(
   ffmpeg: Ffmpeg,
@@ -114,11 +119,11 @@ export function createScheduledCapture(
           "-b:a",
           "160k",
           "-frame_duration",
-          "5",
+          String(liveFrameMs.opus),
           "-f",
           "ogg",
           "-page_duration",
-          "5000",
+          String(liveFrameMs.opus * 1000),
           "-flush_packets",
           "1",
           "pipe:1",
@@ -174,10 +179,10 @@ export function createScheduledCapture(
       (process.stdio[3] as Readable).on("data", (bytes: Buffer) => {
         if (child !== process) return;
         pcm = Buffer.concat([pcm, bytes]);
-        const size = 960; // 5 ms: a chunk is sent only once it is full.
+        const size = 192 * liveFrameMs.pcm; // 48 kHz 16-bit stereo; a chunk goes out only once full.
         while (pcm.length >= size) {
-          output("pcm", pcmOffset, 5_000, pcm.subarray(0, size));
-          pcmOffset += 5_000;
+          output("pcm", pcmOffset, liveFrameMs.pcm * 1000, pcm.subarray(0, size));
+          pcmOffset += liveFrameMs.pcm * 1000;
           pcm = pcm.subarray(size);
         }
       });

@@ -85,8 +85,6 @@ export type NavigationKey =
   | "home"
   | "info";
 
-// The shared capture lead and the Receiver whose declaration raised it, retained until input restart.
-export type LiveLead = { ms: number; deviceId?: string };
 export type PlayerState = {
   playbackId: string | null;
   status: "unavailable" | "idle" | "loading" | "playing" | "paused" | "ended" | "error";
@@ -104,7 +102,6 @@ export type PlayerState = {
   subtitleError?: string | null;
   nowPlaying?: NowPlaying | null;
   timeline?: { mapping: "hls" | "media" | "unavailable"; error?: string };
-  liveLead?: LiveLead;
 };
 
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
@@ -134,7 +131,6 @@ export type PlaybackSummary = {
   hostOnly?: boolean;
   audioOnly?: boolean;
   liveSourceId?: string;
-  liveLead?: LiveLead;
   choosing?: number;
   held?: Output;
   inSync?: boolean;
