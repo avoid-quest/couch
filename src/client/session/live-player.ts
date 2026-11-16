@@ -1,15 +1,11 @@
 import {
   SendspinCore,
-  detectIsAndroid,
   detectIsIOS,
   type DecodedAudioChunk,
   type SendspinCoreConfig,
 } from "@sendspin/sendspin-js";
-// The SDK's own Android keep-alive sound, which it doesn't export.
-import { SILENT_AUDIO_SRC } from "../../../node_modules/@sendspin/sendspin-js/dist/silent-audio.generated.js";
 import workletUrl from "./live-worklet.ts?worker&url";
 import type { LossSecond } from "./live-buffer";
-import { heard, reported, type OutputContext, type Reading } from "./live-output";
 import { addStats, noStats, type LiveMessage, type LiveStats } from "./live-timeline";
 
 // Couch's player for Live listeners. The SDK's SendspinCore keeps the connection, its encryption,
@@ -31,16 +27,15 @@ class LiveCore extends SendspinCore {
   }
 }
 
-// Chromium's getOutputTimestamp() gives the frame being heard; iOS, Firefox and Safari give the
-// frame being rendered (live-output.ts).
+// Chromium's getOutputTimestamp() gives the frame being heard and when; iOS, Firefox and Safari give
+// the frame being rendered (the SDK's reportsContextTimeAtRenderPosition, which it doesn't export).
+// There the output latency the context reports stands in.
 const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
 const heardStamps = !(
   detectIsIOS() ||
   /Firefox/i.test(userAgent) ||
   (/Safari/i.test(userAgent) && !/Chrome|Chromium|Edg|OPR/i.test(userAgent))
 );
-// Only Android's Chrome runs the worklet through a FIFO whose underruns the timestamps miss.
-const countsUnderruns = heardStamps && detectIsAndroid();
 // Readings 20 ms apart land at different points of a render callback (2.7 to 21 ms at 48 kHz), so the
 // highest lead of a second's readings is within a millisecond of the most the render clock runs
 // ahead. The player reads from the last second of them, so the median clock offset follows a change
@@ -57,6 +52,24 @@ const volumeRampSec = 0.015;
 
 const median = (values: number[]) =>
   values.length ? [...values].sort((a, b) => a - b)[values.length >> 1] : undefined;
+
+// Where the context's clock stands against performance.now() (context seconds minus performance
+// seconds at the same heard instant), and how far the render clock runs ahead of what's heard.
+type Reading = { offset: number; lead: number; measured: boolean };
+function heard(context: AudioContext, now: number): Reading | undefined {
+  // Hidden while relaxed sound plays on Android (sendspin.ts); zero until the output runs.
+  const stamp = context.getOutputTimestamp?.();
+  if (!stamp?.contextTime || !stamp.performanceTime) return undefined;
+  const offset = stamp.contextTime - stamp.performanceTime / 1000;
+  return { offset, lead: context.currentTime - (offset + now / 1000), measured: true };
+}
+// Just after resume() a context may report only its base latency; Safari before 18.4 never reports
+// an output latency.
+function reported(context: AudioContext, now: number): Reading {
+  const output = context.outputLatency || 0,
+    lead = context.baseLatency + output;
+  return { offset: context.currentTime - lead - now / 1000, lead, measured: output > 0 };
+}
 
 export class LivePlayer {
   private core: LiveCore;
@@ -127,7 +140,6 @@ export class LivePlayer {
     if (!this.element) return;
     this.element.pause();
     this.element.srcObject = null;
-    this.element.removeAttribute("src");
     this.element.remove();
     this.element = undefined;
   }
@@ -185,23 +197,17 @@ export class LivePlayer {
     this.context = context;
     this.gain = gain;
     this.updateVolume();
-    // As the SDK's player: on Android a looping, almost silent element keeps the page playing with
-    // the screen off; on iOS the sound plays through an element so it isn't muted by the silent switch.
-    if (detectIsAndroid() || detectIsIOS()) {
+    // As the SDK's player: on iOS the sound plays through an element so it isn't muted by the silent
+    // switch. Android plays Live with the SDK's player (sendspin.ts).
+    if (detectIsIOS()) {
       const element = document.createElement("audio");
       element.style.display = "none";
       document.body.append(element);
       this.element = element;
-      if (detectIsIOS()) {
-        const stream = context.createMediaStreamDestination();
-        gain.connect(stream);
-        element.srcObject = stream.stream;
-      } else {
-        element.src = SILENT_AUDIO_SRC;
-        element.loop = true;
-      }
-    }
-    if (!detectIsIOS()) gain.connect(context.destination);
+      const stream = context.createMediaStreamDestination();
+      gain.connect(stream);
+      element.srcObject = stream.stream;
+    } else gain.connect(context.destination);
     context.addEventListener("statechange", () => this.interrupt());
     this.reader = setInterval(() => this.read(), readingMs);
     this.ready = context.audioWorklet.addModule(workletUrl).then(() => {
@@ -247,7 +253,7 @@ export class LivePlayer {
   private read(now = performance.now()) {
     const context = this.context;
     if (context?.state !== "running") return;
-    const reading = heardStamps ? heard(context, now, countsUnderruns) : reported(context, now);
+    const reading = heardStamps ? heard(context, now) : reported(context, now);
     if (!reading) return;
     this.measured = reading.measured;
     this.startedAt ??= now;
@@ -288,15 +294,11 @@ export class LivePlayer {
     const ms = (frames: number) =>
       Number.isFinite(frames) ? ((frames / this.context!.sampleRate) * 1000).toFixed(1) : "-";
     const { chunks, lost, slack, filled, skipped, errorMin, errorMax, corrections } = this.window;
-    const underrun = (this.context as OutputContext | undefined)?.playbackStats?.underrunDuration;
     console.log(
       `Couch live player: ${((now - this.windowStart) / 1000).toFixed(1)} s, ${chunks} chunks, ${lost} lost` +
         ` | slack min ${ms(slack)} ms | filled ${ms(filled)} ms, skipped ${ms(skipped)} ms` +
         ` | sync error ${ms(errorMin)} .. ${ms(errorMax)} ms, ${corrections} corrections` +
-        ` | lead ${this.outputMs()?.toFixed(1) ?? "-"} ms, ctx ${this.context?.state}` +
-        (countsUnderruns
-          ? `, underruns ${underrun === undefined ? "-" : (underrun * 1000).toFixed(1)} ms`
-          : ""),
+        ` | lead ${this.outputMs()?.toFixed(1) ?? "-"} ms, ctx ${this.context?.state}`,
     );
     this.window = noStats();
     this.windowStart = now;

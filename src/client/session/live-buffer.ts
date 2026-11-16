@@ -2,22 +2,31 @@ import { liveLateStepMs, risenNeed } from "../../shared/live-need";
 
 // What a listener declares is its own output-side need; Core adds its measured input-side time and
 // plays it at that need rounded up to a step. The need is how far ahead of its time a sample has to
-// reach the Live player's worklet: the most the context's render clock runs ahead of what's heard
-// (LivePlayer.outputMs, the output's latency and its render callback). Nothing for the player itself:
-// it hands each decoded chunk to the worklet at once, where the SDK's player waited up to its 15 ms
-// scheduling batch. Decoding and the network aren't measured: a listener that loses chunks to them
-// counts that itself and asks for late steps (nextLateSteps).
+// reach the player:
+// - Couch's Live player: the most the context's render clock runs ahead of what's heard
+//   (LivePlayer.outputMs, the output's latency and its render callback). Nothing for the player
+//   itself: it hands each decoded chunk to the worklet at once.
+// - The SDK's player, which Live uses on Android (sendspin.ts): syncInfo.outputLatencyMs, plus its
+//   scheduling batch: it handles received chunks 15 ms after the first of them (scheduler.js
+//   scheduleQueueProcessing, setTimeout(..., 15)), so a chunk may wait that long.
+// Decoding and the network aren't measured: a listener that loses chunks to them counts that itself
+// and asks for late steps (nextLateSteps).
+export const sdkBatchMs = 15;
 // Core and Sendspin bound declarations to 5 s.
 const limitMs = 5000;
 
-export function declareLiveBuffer(declaredMs: number | undefined, latencyMs: number[] = []) {
-  const need = risenNeed(declaredMs, latencyMs);
+export function declareLiveBuffer(
+  declaredMs: number | undefined,
+  latencyMs: number[] = [],
+  allowanceMs = 0,
+) {
+  const need = risenNeed(declaredMs, latencyMs, allowanceMs);
   return need === undefined ? undefined : Math.min(limitMs, need);
 }
 
 // A listener that keeps losing chunks to its own lateness needs more than its output side: it asks
 // for a late step, and Core moves it that much later. Every second it adds what it received and
-// lost, and how late (live-timeline.ts).
+// lost, and how late (live-timeline.ts, or live-loss.ts for the SDK's player).
 // - Loss recurs when the last ten seconds lost chunks in two separate spells, or in three seconds
 //   running, or when the last minute lost chunks in three separate spells. One stall doesn't step: a
 //   burst's late chunks are counted as they arrive, within two seconds, and
@@ -52,8 +61,8 @@ export function declareLiveBuffer(declaredMs: number | undefined, latencyMs: num
 //   is taken before its pause, so without this a few large ones would each come before the pauses
 //   that bound them. So loss no step changes climbs no faster than with 10 ms steps, however late:
 //   at most 130 ms in a listen's first hour and about 90 ms an hour after, and loss a step would
-//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which the worklet
-//   places its timeline again at once (a jump) instead of slewing. A step that helped, or 16 minutes
+//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which either player
+//   places its sound again at once (a jump) instead of slewing. A step that helped, or 16 minutes
 //   with no recurring loss, starts the pauses from 24 s again, but steps in any hour still add at
 //   most 130 ms together: a step can halve the loss by chance, and a cap that came back with it let
 //   loss no step changes climb 340 ms in an hour. What a step added comes back only as it falls out

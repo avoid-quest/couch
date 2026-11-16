@@ -5,16 +5,26 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import { declareLiveBuffer, nextLateSteps, noLateSteps, withLateSteps } from "./live-buffer";
+import {
+  declareLiveBuffer,
+  nextLateSteps,
+  noLateSteps,
+  sdkBatchMs,
+  withLateSteps,
+} from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
 import type { LivePlayer } from "./live-player";
+import { countingLiveLoss, countLiveLoss, reportsOutputLatency, sampleLiveLoss } from "./live-loss";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID. A Live listener plays with Couch's own
-// player on the SDK's connection, clock and decoding (live-player.ts).
+// player on the SDK's connection, clock and decoding (live-player.ts), except on Android.
 // A tab that shows a synced picture connects too, only for the clock it follows (ticket 11).
 type Player = SendspinPlayer | LivePlayer;
 const isLive = (player: Player): player is LivePlayer => "sampleLoss" in player;
+// On Android, Chrome plays a context with an AudioWorklet through a FIFO whose underruns add delay
+// its output timestamps miss; the SDK's player has no worklet (docs/live-audio.md).
+const android = () => /Android/i.test(navigator.userAgent);
 let player: Promise<Player> | null = null;
 let connected: Player | null = null;
 let group: string | undefined;
@@ -74,7 +84,8 @@ let bufferTimer: ReturnType<typeof setInterval> | undefined;
 let sounding: Player | undefined;
 // sample: add this second's readings.
 const updateBuffer = (created: Player, sample = false) => {
-  if (connected !== created || !liveSettings || !isLive(created)) return;
+  if (connected !== created || !liveSettings) return;
+  const worklet = isLive(created);
   const playing =
     sample &&
     hearing &&
@@ -82,20 +93,21 @@ const updateBuffer = (created: Player, sample = false) => {
     created.isConnected &&
     created.isPlaying &&
     created.timeSyncInfo.synced;
-  const reading = sample ? created.outputMs() : undefined;
-  const latency = playing ? reading : undefined;
+  const output = worklet ? created.outputMs() : created.syncInfo.outputLatencyMs;
+  const latency = playing ? output : undefined;
   // The first declaration waits for a reading the context has settled on: one that includes its
   // output latency, or the same reading twice (a browser that reports none).
-  const settled = needMs !== undefined || created.measuresOutput || latency === lastLatency;
+  const measured = worklet ? created.measuresOutput : reportsOutputLatency();
+  const settled = needMs !== undefined || measured || latency === lastLatency;
   lastLatency = latency;
   if (settled && latency !== undefined && latency >= 0)
     latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
   if (sample) {
     // A suspended context handles nothing: what it received isn't late, and it plays nothing.
-    const second = created.sampleLoss(playing);
+    const second = worklet ? created.sampleLoss(playing) : sampleLiveLoss(created, playing);
     if (second) lateSteps = nextLateSteps(lateSteps, second);
   }
-  needMs = declareLiveBuffer(needMs, latencyReadings);
+  needMs = declareLiveBuffer(needMs, latencyReadings, worklet ? 0 : sdkBatchMs);
   const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.lateMs);
   if (next === undefined || next === declaredBufferMs) return;
   declaredBufferMs = next;
@@ -120,6 +132,8 @@ export function listen(
     needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
+  const sdkLive = Boolean(live) && android();
+  countingLiveLoss(sdkLive && (on || watch));
   useOutputTimestamps(Boolean(live));
   const next = JSON.stringify([
     credentials?.origin,
@@ -145,10 +159,12 @@ export function listen(
   if (!on) waitForTap(null);
   const current: Promise<Player> = (player ??= Promise.all([
     import("@sendspin/sendspin-js"),
-    live ? import("./live-player") : undefined,
+    live && !sdkLive ? import("./live-player") : undefined,
   ])
     .then(async ([sendspin, livePlayer]) => {
       alignStartsToFrames();
+      if (sdkLive)
+        countLiveLoss(sendspin, () => (connected && !isLive(connected) ? connected : null));
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
       const options = {
@@ -165,7 +181,10 @@ export function listen(
       } satisfies SendspinPlayerConfig;
       const created = livePlayer
         ? new livePlayer.LivePlayer({ ...options, minBufferMs: declaredBufferMs ?? 0 })
-        : new sendspin.SendspinPlayer(options);
+        : new sendspin.SendspinPlayer({
+            ...options,
+            ...(live ? { minBufferMs: declaredBufferMs ?? 0 } : {}),
+          });
       if (player !== current) return created;
       connected = created;
       if (live) bufferTimer = setInterval(() => updateBuffer(created, true), 1000);

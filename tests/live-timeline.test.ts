@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { heard, reported } from "../src/client/session/live-output";
 import { LiveTimeline, addStats, noStats } from "../src/client/session/live-timeline";
 
 const rate = 48_000;
@@ -127,30 +126,4 @@ test("a clock that moved by more than a slew can take back is placed again, with
   const replaced = sent[100]!.frame;
   expect(left[replaced - 1]).toBe(0);
   expect(left[replaced]).toBe(100 * chunkFrames);
-});
-
-// The player's output reading (live-output.ts): a stamp says context second 10 is heard at
-// performance 5000 ms; the render clock reads 10.031 s 2 ms later.
-const output = (underrunSec?: number) => ({
-  currentTime: 10.031,
-  baseLatency: 0.005,
-  outputLatency: 0.032,
-  getOutputTimestamp: () => ({ contextTime: 10, performanceTime: 5000 }),
-  playbackStats: underrunSec === undefined ? undefined : { underrunDuration: underrunSec },
-});
-// The context frame a sample heard at performance `ms` is due at.
-const dueFrame = ({ offset }: { offset: number }, ms: number) => (offset + ms / 1000) * rate;
-
-test("Android's FIFO underruns place every sample that much earlier and declare that much more lead", () => {
-  const stamps = heard(output(), 5002, true)!,
-    underran = heard(output(0.045), 5002, true)!;
-  expect(stamps.lead * 1000).toBeCloseTo(29, 9);
-  expect(underran.lead * 1000).toBeCloseTo(29 + 45, 9);
-  expect(dueFrame(stamps, 5100)).toBeCloseTo(10.1 * rate, 6);
-  expect(dueFrame(underran, 5100)).toBeCloseTo(10.055 * rate, 6);
-});
-
-test("elsewhere the output timestamp alone places samples, whatever playbackStats counts", () => {
-  expect(heard(output(0.045), 5002, false)).toEqual(heard(output(), 5002, true));
-  expect(reported(output(0.045), 5002).lead * 1000).toBeCloseTo(37, 9);
 });
