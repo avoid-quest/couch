@@ -81,29 +81,44 @@ wrong clock still shows the right time.
   stamps from the first whose start hadn't passed to the guard's end, plus the
   100 ms grace, are excused, so a sample before the player's next start can't
   count them.
-- A Receiver that keeps losing chunks declares one more 10 ms step
-  (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
-  separate spells, or three seconds running, or the last minute lost chunks in
-  three separate spells (loss that keeps coming back, as late Wi-Fi arrivals do
-  on a phone). One stall doesn't step: a burst's late chunks fall within two
-  samples. Core has applied a step when its chunks leave it half a step further
+- A Receiver that keeps losing chunks declares a late step (`nextLateSteps`)
+  when loss recurs: the last ten seconds lost chunks in two separate spells, or
+  three seconds running, or the last minute lost chunks in three separate
+  spells (loss that keeps coming back, as late Wi-Fi arrivals do on a phone).
+  One stall doesn't step: a burst's late chunks fall within two samples.
+- A step is as large as the lateness that recurred, rounded up to the next
+  10 ms. Couch measures each dropped chunk's lateness at the player's batch
+  that dropped it (it wraps `processAudioQueue`): how far its start had passed,
+  which is what a step must add for that batch to start it. Each spell is as
+  late as its latest lost chunk, and the step follows the second latest spell
+  that caused it (or, for one spell three seconds running, its second latest
+  second): one spell can't set a step however late it was, only lateness two
+  spells reached. A chunk started after a silence (a busy page, nothing late)
+  and loss with no lateness measured count as 0, so they step 10 ms. On the rig,
+  10 ms steps took the phone from 75 to 125 ms one step at a time, losing
+  chunks at each; a step sized by the lateness reaches the same place in one.
+- Core has applied a step when its chunks leave it half that step further
   ahead of their stamps (Sendspin's `send_ahead`, which Core writes as it sends,
   so the network can't move it). Core applies every step a listener asks for,
   short of its 5 s limit; one not seen within three seconds isn't judged. An
-  applied step is judged
-  when loss recurs after it: the chunks lost in the ten seconds that show it
-  against those of the ten seconds that caused it. Half as many or fewer: it
-  helped, and the next step follows. Spells over a minute never show that a step
-  helped: each minute that recurs holds three or more. Otherwise no step for
-  24 s, then 48, 96, 192, then at most 384 s; after that, recurring loss steps
-  again. A step that helped, or sixteen minutes with no recurring loss, starts
-  the pauses from 24 s again. A 10 ms step rarely halves a broad tail of late
-  arrivals that 30 or 50 ms would cure, so the pauses are short enough to take a
-  few such steps within minutes. A step after which loss doesn't
-  recur is never doubted. Pauses last only as long as the listen. Each rise moves
-  that listener at most one step later, which the player takes by playing
-  slightly slower for about 8 s. Steps that don't help stay about nine an hour
-  (90 ms) in a long listen.
+  applied step is judged when loss recurs after it: the chunks lost in the ten
+  seconds that show it against those of the ten seconds that caused it. Half as
+  many or fewer: it helped, and the next step follows. Spells over a minute
+  never show that a step helped: each minute that recurs holds three or more.
+  Otherwise no step for a while; after that, recurring loss steps again. Each
+  10 ms of steps that didn't help pauses 24 s, then 48, 96, 192, then at most
+  384 s, and a larger step pauses as long as its 10 ms parts would one after
+  another (40 ms: 24 + 48 + 96 + 192 s). A step adds at most what 10 ms steps
+  that don't help could add in an hour, less the 10 ms parts whose pauses fell
+  in the hour before it: 130 ms at first, then as little as 10 ms. So loss no
+  step changes climbs no faster than with 10 ms steps, however late: at most
+  130 ms in a listen's first hour and about 90 ms an hour after. The cap also
+  keeps every step under the 200 ms at which the player resyncs at once instead
+  of slewing. A step that helped, or sixteen minutes with no recurring loss,
+  starts the pauses from 24 s again. A step after which loss doesn't recur is
+  never doubted. Pauses last only as long as the listen. The player takes a
+  step by playing slightly slower (0.5 % while it is over 35 ms off, 0.3 % over
+  8 ms, then a sample at a time): at 0.3 % it plays 10 ms later every 3.3 s.
 - Each listen starts with no late steps and learns its own: nothing is
   remembered across listens, so a step one listen needed never holds a later
   one back, and loss no step cures can't climb across joins.

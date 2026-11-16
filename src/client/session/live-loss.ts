@@ -17,6 +17,9 @@ import type { LossSecond } from "./live-buffer";
 // sync recorrection or a Sync delay or clock change): it starts nothing in its 0.3 s guard and
 // drops what falls in it, however early it arrived. They're excused from the cutover on, so a
 // sample before the player starts its next chunk can't count them.
+// How late a dropped chunk was: how far its start had passed when the player's batch dropped it.
+// That's what a step must add for the batch to start it. A started-late chunk has no lateness: it
+// wasn't late, the page was busy.
 // Couch wraps the SDK's exported AudioScheduler and Web Audio's prototypes; the SDK is unchanged.
 type Player = Sendspin.SendspinPlayer;
 
@@ -24,6 +27,8 @@ type Player = Sendspin.SendspinPlayer;
 const pending = new Map<AudioBuffer, number>();
 // Each received buffer's stamp, and when it was received on its context's clock (s).
 const receivedBuffers = new WeakMap<AudioBuffer, { stampUs: number; at: number }>();
+// How far each received buffer's start had passed at the batch that left it unstarted (ms).
+const lateness = new WeakMap<AudioBuffer, number>();
 // The last received chunk the player started: where its sound ends (context clock, s) and where its
 // stamp ends (µs).
 let chain: { end: number; stampEndUs: number } | undefined;
@@ -103,7 +108,9 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
     }
   };
   // A private method: wrapped only where the SDK still has it.
-  const cutting = scheduling as unknown as { performGuardedCutover?: (...args: unknown[]) => void };
+  const cutting = scheduling as unknown as {
+    performGuardedCutover?: (...args: unknown[]) => void;
+  };
   const cutover = cutting.performGuardedCutover;
   if (cutover)
     cutting.performGuardedCutover = function (this: Sendspin.AudioScheduler, ...args) {
@@ -118,6 +125,22 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
       chain = undefined;
       cutover.apply(this, args);
     };
+  // The player drops a chunk in its batch, as its start has passed (scheduleTime < currentTime):
+  // whatever the batch left unstarted with a passed start, it dropped.
+  const batch = scheduling.processAudioQueue;
+  scheduling.processAudioQueue = function (
+    this: Sendspin.AudioScheduler,
+    ...args: Parameters<typeof batch>
+  ) {
+    const listener = counting ? player() : null;
+    const nowUs = listener?.timeSyncInfo.synced ? listener.getCurrentServerTimeUs() : undefined;
+    batch.apply(this, args);
+    if (nowUs === undefined) return;
+    const lead = leadUs(listener!);
+    for (const [buffer, stampUs] of pending)
+      if (!lateness.has(buffer) && stampUs - lead < nowUs)
+        lateness.set(buffer, (nowUs - stampUs + lead) / 1000);
+  };
   const clear = scheduling.clearBuffers;
   scheduling.clearBuffers = function () {
     pending.clear();
@@ -170,7 +193,7 @@ export function countingLiveLoss(on: boolean) {
 }
 
 // Once a second: the chunks received since the last sample, those lost (dropped or started after a
-// silence), how far ahead of their stamps Core sent them (the median rises when Core moves this
+// silence), how late the latest dropped one was, how far ahead of their stamps Core sent them (the median rises when Core moves this
 // listener a step later). Undefined when the second can't be
 // counted: the listener wasn't playing on a context that ran throughout it.
 export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond | undefined {
@@ -180,11 +203,15 @@ export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond |
   const lead = leadUs(listener);
   // Infinity: what the player holds now can't be judged, so none of it counts.
   const passedUs = sounding ? listener.getCurrentServerTimeUs() - graceUs : Infinity;
-  let lost = 0;
+  let lost = 0,
+    lateMs: number | undefined;
   for (const [buffer, stampUs] of pending)
     if (stampUs - lead <= passedUs) {
       pending.delete(buffer);
-      if (!cuts.some((cut) => stampUs >= cut.fromUs && stampUs < cut.toUs)) lost++;
+      if (cuts.some((cut) => stampUs >= cut.fromUs && stampUs < cut.toUs)) continue;
+      lost++;
+      const missedBy = lateness.get(buffer);
+      if (missedBy !== undefined) lateMs = Math.max(lateMs ?? 0, missedBy);
     }
   cuts = cuts.filter((cut) => cut.toUs - lead > passedUs);
   const sorted = sendAheads.sort((a, b) => a - b);
@@ -192,6 +219,7 @@ export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond |
     chunks: received,
     lost: lost + dried,
     sendAheadMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
+    lateMs,
   };
   received = 0;
   dried = 0;

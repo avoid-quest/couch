@@ -295,15 +295,16 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
   }
   expect(player.buffers).toEqual([42]);
   // Every chunk arrives after its start: the listener plays nothing, and steps once it lost chunks
-  // three seconds running.
+  // three seconds running. Each arrives 10 ms before its stamp, 17 ms after its start (output 27):
+  // a 20 ms step.
   for (let i = 0; i < 2; i++) await second(50, 10);
   expect(player.buffers).toEqual([42]);
   await second(50, 10);
-  expect(player.buffers).toEqual([42, 52]);
+  expect(player.buffers).toEqual([42, 62]);
   // Core sends its chunks a step further ahead: it applied the step, which is judged only once ten
   // seconds after it show whether loss still recurs.
-  for (let i = 0; i < 9; i++) await second(50, 10, false, 105);
-  expect(player.buffers).toEqual([42, 52]);
+  for (let i = 0; i < 9; i++) await second(50, 10, false, 115);
+  expect(player.buffers).toEqual([42, 62]);
   // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
   await leave();
   stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));

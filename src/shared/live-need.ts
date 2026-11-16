@@ -3,8 +3,9 @@
 // move is a short slew or gap for that listener. 5 ms keeps a listener within 5 ms of its need;
 // listeners whose needs round up to the same step play together, and others a few ms apart.
 const liveStepMs = 5;
-// A listener that keeps losing chunks asks for 10 ms more at a time: two placement steps, so Core
-// always moves it by exactly that, and the send_ahead that shows it can't be read as jitter.
+// A listener that keeps losing chunks asks for more in 10 ms units, as late as its lost chunks were:
+// two placement steps each, so Core always moves it by exactly that, and the send_ahead that shows
+// it can't be read as jitter.
 export const liveLateStepMs = 10;
 export const liveReadings = 5;
 

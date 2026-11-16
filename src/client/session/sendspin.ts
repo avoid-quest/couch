@@ -94,7 +94,7 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
     if (second) lateSteps = nextLateSteps(lateSteps, second);
   }
   needMs = declareLiveBuffer(needMs, latencyReadings);
-  const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.steps);
+  const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.lateMs);
   if (next === undefined || next === declaredBufferMs) return;
   declaredBufferMs = next;
   created.setMinBufferMs(next);
