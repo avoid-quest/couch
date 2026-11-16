@@ -15,12 +15,12 @@ let connected: SendspinPlayer | null = null;
 let group: string | undefined;
 let hearing = false;
 let configuration: string | undefined;
-// The SDK's disconnect() clears Media Session, which useMediaSession owns and won't rewrite
+// The SDK's destroy() clears Media Session, which useMediaSession owns and won't rewrite
 // while its inputs are unchanged (a codec change replaces the player mid-Live): keep what it set.
 const dispose = (stopped: SendspinPlayer) => {
   const session = navigator.mediaSession,
     kept = session && { metadata: session.metadata, playbackState: session.playbackState };
-  stopped.disconnect("user_request");
+  stopped.destroy("user_request");
   if (session) Object.assign(session, kept);
 };
 let liveSettings: LiveAudioSettings | undefined;
@@ -89,7 +89,7 @@ export function listen(
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
       const created = new SendspinPlayer({
         suite: "aesgcm",
-        baseUrl: credentials.origin,
+        url: `${credentials.origin.replace(/^http/, "ws")}/sendspin`,
         clientName: name,
         storage,
         ...(live?.codec && live.codec !== "auto"

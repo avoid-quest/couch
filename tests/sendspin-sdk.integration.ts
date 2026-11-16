@@ -51,7 +51,7 @@ for (const intent of ["live", "relaxed"] as const)
       const player = new SendspinCore({
         suite: "aesgcm",
         storage,
-        baseUrl: f.hub.origin,
+        url: `${f.hub.origin.replace(/^http/, "ws")}/sendspin`,
         codecs: ["pcm"],
         minBufferMs: 150,
       });
@@ -144,7 +144,7 @@ test(
     const player = new SendspinCore({
       suite: "aesgcm",
       storage,
-      baseUrl: `${f.hub.origin}/api/audio/${identity.token}`,
+      url: `${f.hub.origin.replace(/^http/, "ws")}/api/audio/${identity.token}/sendspin`,
       codecs: ["pcm"],
       reconnect: { maxAttempts: 0 },
     });

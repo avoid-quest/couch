@@ -13,7 +13,7 @@ class FixturePlayer {
   }
   async connect() {}
   async unlock() {}
-  disconnect() {
+  destroy() {
     this.disconnected = true;
   }
   setMinBufferMs(value: number) {
@@ -87,11 +87,11 @@ test("a new Live source or a new Join starts again from the host floor", async (
   expect(players.at(-1)!.options.minBufferMs).toBe(150);
 });
 
-test("a codec change keeps the Media Session that Couch set when the SDK's disconnect clears it", async () => {
+test("a codec change keeps the Media Session that Couch set when the SDK's destroy clears it", async () => {
   const mediaSession = { metadata: null as unknown, playbackState: "none" };
-  const original = FixturePlayer.prototype.disconnect;
-  // The SDK's disconnect() resets Media Session for its own page.
-  FixturePlayer.prototype.disconnect = function () {
+  const original = FixturePlayer.prototype.destroy;
+  // The SDK's destroy() resets Media Session for its own page.
+  FixturePlayer.prototype.destroy = function () {
     this.disconnected = true;
     mediaSession.metadata = null;
     mediaSession.playbackState = "none";
@@ -109,7 +109,7 @@ test("a codec change keeps the Media Session that Couch set when the SDK's disco
     expect(players.at(-1)).not.toBe(first);
     expect(mediaSession).toEqual({ metadata, playbackState: "playing" });
   } finally {
-    FixturePlayer.prototype.disconnect = original;
+    FixturePlayer.prototype.destroy = original;
     delete (navigator as { mediaSession?: unknown }).mediaSession;
   }
 });

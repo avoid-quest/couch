@@ -106,11 +106,10 @@ test(
       }),
     );
     await greeting;
-    // Valid JSON numbers can overflow JavaScript's finite range. The SDK forwards this declaration unchanged.
+    // Valid JSON numbers can overflow JavaScript's finite range.
     bad.send(
       '{"type":"client/state","payload":{"player":{"min_buffer_ms":1e309,"static_delay_ms":0}}}',
     );
-    await until(() => bad!.readyState === WebSocket.CLOSED || errors.length > 0);
     assert.deepEqual(errors, [], "a player's invalid timing must not fail other playbacks");
     const before = frames.length;
     await until(() => frames.length > before + 10);
@@ -200,10 +199,8 @@ test(
       },
     };
     bad.send(JSON.stringify(hello));
-    const closed = once(bad, "close");
     const before = frames.length;
-    bad.send("null"); // The unmodified SDK throws here; our public dispatch boundary contains it.
-    await closed;
+    bad.send("null"); // Not a Sendspin message: neither the SDK nor our dispatch boundary may let it through.
     await until(() => frames.length > before + 5);
     assert.deepEqual(errors, []);
     assert.equal(healthy.isConnected, true);

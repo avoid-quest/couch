@@ -204,14 +204,16 @@ export function createScheduledAudio(options: {
       }
     },
     onPlayerState: (_session, update) => {
-      // The SDK exposes declarations unchanged. Reject invalid timing in the
-      // socket's dispatch boundary before it can poison a shared capture timeline.
+      // The SDK exposes declarations unchanged and contains a hook's errors, so drop the
+      // connection here before invalid timing can poison a shared capture timeline.
       if (
         [update.minBufferMs, update.staticDelayMs].some(
           (value) => value !== undefined && !validTiming(value),
         )
-      )
-        throw new Error("Invalid Sendspin player timing.");
+      ) {
+        socketOf.get(_session)?.terminate();
+        return;
+      }
       const clientId = _session.getClientId()!;
       if (sessions.get(clientId) !== _session) return;
       const delayChanged =
@@ -404,7 +406,8 @@ export function createScheduledAudio(options: {
       }
     };
     // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
-    const halt = (end = false) => {
+    // A pause ends the player stream and keeps the cover (Sendspin stream/end); Play starts a new one.
+    const halt = (how: "clear" | "pause" | "end" = "clear") => {
       generation++;
       if (!run) return;
       clearInterval(run.timer);
@@ -412,17 +415,18 @@ export function createScheduledAudio(options: {
       run.dispose?.();
       run = undefined;
       each((session) => {
-        if (end) {
+        if (how === "end") {
           session.sendStreamEnd();
           session.sendGroupUpdate(PlaybackStateType.STOPPED, id, options.name);
-        } else session.sendStreamClear();
+        } else if (how === "pause") session.endPlaybackStreams();
+        else session.sendStreamClear();
       });
     };
     const fail = (message: string) => {
       if (logError) logError(load?.audioSource ?? load?.source, message);
       else if (options.logError) options.logError(id, load?.audioSource ?? load?.source, message);
       else logPlaybackError(id, "Synced", load?.audioSource ?? load?.source, message);
-      halt(true);
+      halt("end");
       state = { ...state, status: "error", buffering: false, error: message };
       report();
     };
@@ -850,7 +854,7 @@ export function createScheduledAudio(options: {
         }
         if (ended) {
           const at = position();
-          halt(true);
+          halt("end");
           state = { ...state, position: at };
         }
         return;
@@ -888,29 +892,28 @@ export function createScheduledAudio(options: {
           if (current.sourceTimed && at + chunk.duration <= now) continue;
           sent.push({ at, end: at + chunk.duration, data: chunk.data });
         }
-        // Output delay advances a player's playback, so its held bytes and missed deadlines
-        // use that compensated time (Sendspin Player Buffer Accounting, including 13-byte headers).
+        // Output delay advances a player's playback, so its missed deadlines use that compensated
+        // time. The SDK counts what each player holds (Sendspin Player Buffer Accounting).
         // Cursors already contain only this run's active members.
         for (const [session, cursor] of current.cursors) {
           if (wireOf(session) !== wire) continue;
-          const capacity = session.getPlayerBufferCapacity() || 1024 * 1024,
-            socket = socketOf.get(session);
+          const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
-          let held = 0;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;
-            if (cursor.sent !== undefined && chunk.at <= cursor.sent) {
-              if (chunk.end - delay > now) held += chunk.data.length + 13;
-              continue;
-            }
+            if (cursor.sent !== undefined && chunk.at <= cursor.sent) continue;
             if (chunk.at - delay <= now) continue;
             if (
-              held + chunk.data.length + 13 > capacity ||
+              session.timeUntilPlayerCapacityUs(chunk.data.length + session.getAudioHeaderSize()) >
+                0 ||
               (socket?.bufferedAmount ?? 0) > backlogBytes
             )
               break;
-            session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
-            held += chunk.data.length + 13;
+            session.sendPcmAudioFrame({
+              data: chunk.data,
+              timestampUs: chunk.at,
+              durationUs: chunk.end - chunk.at,
+            });
             cursor.sent = chunk.at;
           }
         }
@@ -930,7 +933,7 @@ export function createScheduledAudio(options: {
         now >= current.base && (!starving || current.sourceTimed) ? "playing" : "loading";
       if (current.exit === 0 && drained) {
         const at = position();
-        halt(true);
+        halt("end");
         state = { ...state, position: at, status: "ended", buffering: false };
         report();
       } else if (
@@ -944,7 +947,7 @@ export function createScheduledAudio(options: {
     };
     const pause = () => {
       const at = position();
-      halt();
+      halt("pause");
       state = { ...state, position: at, status: "paused", buffering: false };
       report();
     };
@@ -1088,7 +1091,7 @@ export function createScheduledAudio(options: {
             if (state.status === "playing" || state.status === "loading") void restart();
             break;
           case "stop":
-            halt(true);
+            halt("end");
             load = undefined;
             each((session) => session.sendMetadata(emptyMetadata));
             state = idle();
@@ -1097,7 +1100,7 @@ export function createScheduledAudio(options: {
         }
       },
       close() {
-        halt(true);
+        halt("end");
         each((session) => session.sendMetadata(emptyMetadata));
         groups.delete(synced);
         for (const member of members) clearReceiverError(member.deviceId);
