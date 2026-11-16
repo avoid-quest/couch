@@ -144,7 +144,11 @@ async function fixture(t: TestContext, name = "Test TV") {
         true,
       );
       await until(() => tv.commands.some((command) => command.type === "load"));
-      return tv.commands.find((command) => command.type === "load")!.playbackId;
+      const loaded = tv.commands.find((command) => command.type === "load")!.playbackId;
+      // The first failure on a direct address only reloads through Core's relay; later ones are reported.
+      tv.report({ playbackId: loaded, status: "error", error: "Direct address refused" });
+      await until(() => tv.commands.filter((command) => command.type === "load").length > 1);
+      return tv.commands.findLast((command) => command.type === "load")!.playbackId;
     },
     errors: () =>
       lines.filter((line) => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z player error /.test(line)),

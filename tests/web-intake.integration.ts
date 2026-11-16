@@ -199,8 +199,8 @@ for (const intake of ["enqueueWeb", "enqueueProvider"] as const)
       assert.deepEqual(f.runs(), [{ inspect: false, url }]);
       assert.equal(
         f.upstreamRequests,
-        0,
-        "Core dispatches the resolved media without discarded delivery probes",
+        1,
+        "Core probes the resolved media once to decide whether the device fetches it directly",
       );
     },
   );

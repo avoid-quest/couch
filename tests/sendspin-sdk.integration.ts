@@ -106,7 +106,8 @@ for (const intent of ["live", "relaxed"] as const)
       assert.equal(player.currentFormat?.codec, "pcm");
       assert.equal(chunks[0]!.sampleRate, 48000);
       assert.equal(chunks[0]!.samples.length, 2);
-      assert.equal(chunks[0]!.samples[0]!.length, 240);
+      // Live sends 5 ms frames; a relaxed capture uses the relaxed decoder's 100 ms PCM chunks.
+      assert.equal(chunks[0]!.samples[0]!.length, intent === "live" ? 240 : 4800);
       assert.ok(chunks.every((chunk) => Number.isSafeInteger(chunk.serverTimeUs)));
       assert.ok(
         chunks.some((chunk) => chunk.samples[0]!.some((value) => value > 0.15)),
