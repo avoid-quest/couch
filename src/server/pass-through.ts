@@ -453,10 +453,15 @@ export function createPassThrough(
       );
     };
     let answer = await read();
-    if (refusal(answer.status) && (await renew(relay))) {
+    if (!refusal(answer.status)) return answer;
+    if (await renew(relay)) {
       answer = await read();
       if (refusal(answer.status) && relay.renewal) relay.renewal.spent = true;
-    }
+    } else
+      // A source Core can't renew (radio, Live TV) may have expired its master's addresses:
+      // the next load reads them afresh.
+      for (const [key, saved] of reads)
+        if (saved.playbackId === relay.playbackId) reads.delete(key);
     return answer;
   };
 
