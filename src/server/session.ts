@@ -90,8 +90,10 @@ type SessionOptions = {
 // One Playback (#644 ticket 9): its queue, current item, position, pause state, speed and tracks.
 // `store` is Core's store with this Playback's own saved queue (store.playback(id)).
 export type PlaybackStore = Store & ReturnType<Store["playback"]>;
-// Up next shows this many of the entries Autoplay will play.
+// Up next shows this many of the entries Autoplay will play with the state; the rest come in pages
+// as people scroll, so a 500-item playlist loads in ten.
 const AUTOPLAY_PREVIEW = 10;
+const AUTOPLAY_PAGE = 50;
 export function createSession(
   store: PlaybackStore,
   sendPlayer: (command: PlaybackCommand) => void,
@@ -148,6 +150,7 @@ export function createSession(
       enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false,
       contextTitle: continuation?.title ?? null,
       upcoming: continuation?.entries.slice(0, AUTOPLAY_PREVIEW) ?? [],
+      total: continuation?.entries.length ?? 0,
     },
     player: {
       playbackId: null,
@@ -197,12 +200,14 @@ export function createSession(
       state.autoplay.upcoming.map((entry) => entry.id).join() !==
         upcoming.map((entry) => entry.id).join() ||
       state.autoplay.contextTitle !== (continuation?.title ?? null) ||
+      state.autoplay.total !== (continuation?.entries.length ?? 0) ||
       (state.autoplay.pending === true) !== pending
     ) {
       state.autoplay = {
         enabled,
         contextTitle: continuation?.title ?? null,
         upcoming,
+        total: continuation?.entries.length ?? 0,
         ...(pending ? { pending: true } : {}),
       };
     }
@@ -1065,6 +1070,11 @@ export function createSession(
   };
 
   return {
+    // A page of the whole list Autoplay will play, from `offset`.
+    autoplayPage(offset: number) {
+      const entries = continuation?.entries ?? [];
+      return { entries: entries.slice(offset, offset + AUTOPLAY_PAGE), total: entries.length };
+    },
     audioSelection: () => audioSelection,
     updateSystemAudio(audio: SoundRouteState) {
       state.systemAudio = audio;
@@ -1479,11 +1489,11 @@ export function createSession(
         case "videoQuality":
           return changeVideoQuality(action, authorize);
         case "play": {
-          // Autoplay's visible picks are playable before they join the queue. Keep manual entries waiting,
+          // Autoplay's picks are playable before they join the queue. Keep manual entries waiting,
           // and continue the collection after the chosen pick, without resolving that collection again.
           const pick =
             !state.queue.some((entry) => entry.id === action.entryId) && state.autoplay?.enabled
-              ? state.autoplay.upcoming.find((entry) => entry.id === action.entryId)
+              ? continuation?.entries.find((entry) => entry.id === action.entryId)
               : undefined;
           if (pick && continuation) {
             // At capacity, only played history may make room; the current item and waiting entries stay.

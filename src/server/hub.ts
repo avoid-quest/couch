@@ -4522,6 +4522,16 @@ export async function createHub(options: HubOptions) {
             return cors(request, await forLater.handle(request, authorize, playedBy));
           if (/^\/api\/hidden(?:\/|$)/.test(url.pathname))
             return cors(request, await hidden.handle(request, authorize));
+          if (url.pathname === "/api/autoplay" && request.method === "GET") {
+            authorize();
+            const playback = playbacks.get(url.searchParams.get("playback") ?? "");
+            const offset = Number(url.searchParams.get("offset") ?? 0);
+            if (!playback) throw new ControllerError("Playback changed.", 404);
+            requirePlayback(playback, playedBy?.deviceId ?? hostId());
+            if (!Number.isSafeInteger(offset) || offset < 0)
+              throw new ControllerError("Invalid offset.", 400);
+            return cors(request, json(playback.session.autoplayPage(offset)));
+          }
           if (url.pathname === "/api/playback-preview") {
             const playbackId = url.searchParams.get("playbackId") ?? "";
             const playback = playing(playbackId);

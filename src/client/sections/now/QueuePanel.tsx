@@ -35,6 +35,7 @@ import type { Credentials } from "../../session/session";
 import { deviceId } from "@/session/device-id";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
+import { useAutoplayList } from "./autoplay-list";
 import { browserActions, queuePageUrl } from "@/original-page";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { queueCursorIndex } from "../../../shared/queue";
@@ -189,7 +190,8 @@ export function QueuePanel({
   };
   const autoplay = state?.autoplay;
   // The switch shows only where Autoplay has something to continue; Settings → Playback always holds it.
-  const autoplayUpcoming = autoplay?.enabled ? autoplay.upcoming : [];
+  const autoplayList = useAutoplayList(credentials, state?.playback, autoplay);
+  const autoplayUpcoming = autoplayList.entries;
   // The list takes its rows' majority shape, as Home's Up next does; a row of another shape is contained in that frame.
   const shape = majorityShape(
     [...upNext, ...autoplayUpcoming, ...previous].map(entryShape),
@@ -448,6 +450,7 @@ export function QueuePanel({
                       );
                     })}
                   </ul>
+                  {autoplayList.hasMore && <LoadMore onVisible={autoplayList.more} />}
                 </>
               )}
               {autoplayFinding && (
@@ -605,5 +608,25 @@ function QueueRow({
       )}
       <ItemMenu menu={options} title={entry.title} />
     </li>
+  );
+}
+
+/** Asks for more as it nears the view: Autoplay's next page loads before Up next's end shows. */
+function LoadMore({ onVisible }: { onVisible: () => void }) {
+  return (
+    <div
+      aria-hidden="true"
+      ref={(element) => {
+        if (!element) return;
+        const observer = new IntersectionObserver(
+          (items) => {
+            if (items.some((item) => item.isIntersecting)) onVisible();
+          },
+          { rootMargin: "400px" },
+        );
+        observer.observe(element);
+        return () => observer.disconnect();
+      }}
+    />
   );
 }

@@ -175,11 +175,13 @@ export type SessionState = {
   controlling?: string;
   textField?: RemoteTextField | null;
   queue: QueueEntry[];
-  // upcoming: the first entries Autoplay will play after Up next, in order.
+  // upcoming: the first entries Autoplay will play after Up next, in order, of total; GET /api/autoplay
+  // pages through the rest.
   autoplay?: {
     enabled: boolean;
     contextTitle: string | null;
     upcoming: QueueEntry[];
+    total?: number;
     pending?: boolean;
   };
   queueRemoval?: { entryId: string; token: string };
