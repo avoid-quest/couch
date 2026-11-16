@@ -73,19 +73,22 @@ wrong clock still shows the right time.
   can't count either: the chunks after it are stamped later.
 - A Receiver that keeps losing chunks declares one more 25 ms step
   (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
-  separate spells, or three seconds running. One stall doesn't step: a burst's
-  late chunks fall within two samples. Core has applied a step when its chunks
-  leave it half a step further ahead of their stamps (Sendspin's `send_ahead`,
-  which Core writes as it sends, so the network can't move it); a step not seen
-  within three seconds fell in the room's slack, and recurring loss steps again.
-  An applied step is judged when loss recurs after it: the chunks lost in the
-  ten seconds that show it against those of the ten seconds that caused it.
-  Half as many or fewer: it helped, and the next step follows. Otherwise no step
-  for a minute, then two, four, eight, then at most sixteen; after that,
-  recurring loss steps again. A step that helped, or sixteen minutes with no
-  recurring loss, starts the pauses from a minute again. A step after which loss
-  doesn't recur is never doubted. Each rise moves that listener at most one step
-  later, which the player takes by playing slightly slower for about 12 s.
+  separate spells, or three seconds running, or the last minute lost chunks in
+  three separate spells (loss that keeps coming back, as late Wi-Fi arrivals do
+  on a phone). One stall doesn't step: a burst's late chunks fall within two
+  samples. Core has applied a step when its chunks leave it half a step further
+  ahead of their stamps (Sendspin's `send_ahead`, which Core writes as it sends,
+  so the network can't move it); a step not seen within three seconds fell in
+  the room's slack, and recurring loss steps again. An applied step is judged
+  when loss recurs after it: the chunks lost in the ten seconds that show it
+  against those of the ten seconds that caused it. Half as many or fewer: it
+  helped, and the next step follows. Spells over a minute never show that a step
+  helped: each minute that recurs holds three or more. Otherwise no step for a
+  minute, then two, four, eight, then at most sixteen; after that, recurring
+  loss steps again. A step that helped, or sixteen minutes with no recurring
+  loss, starts the pauses from a minute again. A step after which loss doesn't
+  recur is never doubted. Each rise moves that listener at most one step later,
+  which the player takes by playing slightly slower for about 12 s.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second
