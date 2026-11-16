@@ -1,21 +1,27 @@
 import { liveReadings, liveStep, risenNeed } from "../shared/live-need";
 
 type Wire = "opus" | "pcm";
+const logEveryMs = 10_000;
 
 // One Live run's timing, or sender-timed AirPlay's with a room delay of 0. The room's delay is the
 // host's setting, 0 unless an organiser sets a floor, and nothing a listener declares moves it. A
 // listener whose own need (its declaration and Sync delay, plus Core's measured input-side time)
 // doesn't fit plays on its own, a step later: the same chunks, stamped later. Listeners whose needs
 // round up to the same step play together.
-// log gets one line each time a wire's input side or a listener's declaration or step changes, so
-// the delays real devices get can be read from Couch's log.
-export function createLiveLead(roomMs: number, log: (line: string) => void = () => {}) {
-  // Each wire has its own input-side time: its frames take their own time to fill.
-  const inputs = new Map<
-    Wire,
-    { firstUs: number; second: number; highest: number; readings: number[]; ms?: number }
-  >();
+// log gets one line each time a wire's input side changes, and one when a listener's step rises or
+// its declaration changes, at most every ten seconds per listener unless its step rose, so the
+// delays real devices get can be read from Couch's log and a client can't flood it.
+export function createLiveLead(
+  roomMs: number,
+  log: (line: string) => void = () => {},
+  nowMs = () => Date.now(),
+) {
+  // Each wire has its own input-side time: its frames take their own time to fill. held: kept from
+  // before the capture restarted, until the new encoder's is measured.
+  type Input = { second: number; highest: number; readings: number[]; ms?: number };
+  const inputs = new Map<Wire, Input & { firstUs?: number; held?: boolean }>();
   const listeners = new Map<string, { step: number; declared: number }>();
+  const logged = new Map<string, { step: number; atMs: number }>();
   return {
     roomMs,
     // Capture to sending, for each chunk as Core gets it from the encoder: the sound card's buffer,
@@ -23,13 +29,9 @@ export function createLiveLead(roomMs: number, log: (line: string) => void = () 
     // a typical one would leave the slower chunks of that second late. Negative for sound stamped
     // with a time still to come (sender-timed AirPlay): how early it arrives.
     arrived(wire: Wire, capturedAtUs: number, nowUs: number) {
-      const input = inputs.get(wire) ?? {
-        firstUs: nowUs,
-        second: 0,
-        highest: -Infinity,
-        readings: [],
-      };
+      const input = inputs.get(wire) ?? { second: 0, highest: -Infinity, readings: [] };
       inputs.set(wire, input);
+      input.firstUs ??= nowUs;
       const second = Math.floor((nowUs - input.firstUs) / 1e6);
       if (second !== input.second) {
         // The first second holds the encoder's start: what was captured while it started arrives
@@ -37,7 +39,8 @@ export function createLiveLead(roomMs: number, log: (line: string) => void = () 
         if (input.second > 0) {
           input.readings = [...input.readings, input.highest].slice(-liveReadings);
           const before = input.ms;
-          input.ms = risenNeed(input.ms, input.readings);
+          input.ms = risenNeed(input.held ? undefined : input.ms, input.readings);
+          input.held = false;
           if (input.ms !== before) log(`live input side ${wire}: ${input.ms} ms`);
         }
         input.second = second;
@@ -55,12 +58,34 @@ export function createLiveLead(roomMs: number, log: (line: string) => void = () 
       if (inputMs === undefined || declaredMs === undefined) return known?.step ?? roomMs;
       const need = declaredMs + inputMs;
       const step = Math.max(known?.step ?? roomMs, need > roomMs ? liveStep(need) : roomMs);
-      if (step !== known?.step || declaredMs !== known.declared)
+      const last = logged.get(clientId);
+      if (
+        (step !== known?.step || declaredMs !== known.declared) &&
+        (!last || step > last.step || nowMs() - last.atMs >= logEveryMs)
+      ) {
         log(
           `live listener ${JSON.stringify(name)} ${wire}: declares ${declaredMs} ms, input side ${inputMs} ms, plays ${step} ms after capture (room ${roomMs} ms)`,
         );
+        logged.set(clientId, { step, atMs: nowMs() });
+      }
       listeners.set(clientId, { step, declared: declaredMs });
       return step;
+    },
+    // The capture restarted (a new generation): its encoder starts again and every listener is
+    // placed again. Until the new input side is measured (about two seconds), the last one stands
+    // in, so listeners keep playing at their steps instead of waiting in a room that may be 0.
+    restart() {
+      for (const input of inputs.values()) {
+        const held = input.ms !== undefined;
+        Object.assign(input, {
+          firstUs: undefined,
+          second: 0,
+          highest: -Infinity,
+          readings: [],
+          held,
+        });
+      }
+      listeners.clear();
     },
     left(clientId: string) {
       listeners.delete(clientId);

@@ -54,15 +54,34 @@ wrong clock still shows the right time.
 - Each Receiver declares only its own need through the SDK's `minBufferMs`: its
   once-a-second `syncInfo.outputLatencyMs` reading plus the player's 15 ms
   scheduling batch (`scheduler.js`), read only once its sound is unlocked (a
-  suspended context reports its base latency only). The first reading sets it;
-  later, the median of the last five raises it only when it outgrows it by more
-  than 25 ms. Until then it declares 0 and Core keeps it in the room: with no
-  floor it hears nothing for its first second or two, then starts at its step.
-- A Receiver that keeps losing sound to late chunks declares one more 25 ms
-  step. The SDK drops a late chunk silently, so Couch counts them next to the
-  player: when the sound ran out before the next chunk was scheduled, that
-  second lost sound. Most of the last five seconds must have lost some; one
-  hiccup doesn't count. Each rise moves that listener at most one step later.
+  suspended context reports its base latency only). The first reading sets it,
+  once the context reports an output latency (or reads the same twice, on a
+  browser that reports none): just after `resume()` it may report only its base
+  latency. Later, the median of the last five raises it only when it outgrows it
+  by more than 25 ms. Until then it declares 0 and Core keeps it in the room:
+  with no floor it hears nothing for its first second or two, then starts at
+  its step.
+- The SDK drops a late chunk silently, so Couch counts them chunk by chunk
+  (`live-loss.ts`), wrapping the SDK's exported `AudioScheduler` and Web Audio's
+  `createBuffer`, `getChannelData` and `start`. Each buffer the player makes of
+  a decoded chunk is tagged with the chunk's stamp; a start removes it (a
+  sample-corrected copy removes the buffer it was copied from). A chunk is lost
+  when its start, the stamp less the output latency and Sync delay, passed more
+  than 100 ms ago and it was never started. Chunks Core never sent, chunks a
+  stream clear discarded, and anything while the context isn't running or the
+  clock isn't synced don't count. A step's changeover can't count either: the
+  chunks after it are stamped later.
+- A Receiver that keeps losing chunks declares one more 25 ms step
+  (`nextLateSteps`): when the last ten seconds lost chunks in both halves, loss
+  that recurs; one stall, however long, doesn't step. A step is judged once Core
+  has applied it, seen as chunks arriving with half a step more time left; that
+  second is skipped, and the next ten seconds' share of chunks lost is compared
+  with the ten seconds before the ones that caused the step. A step Core didn't
+  apply within three seconds (the room's delay had slack) isn't judged. A step
+  that lowered the share is kept and stepping goes on while loss recurs; one
+  that didn't pauses stepping for a minute, then two, four and so on for that
+  listen. So steps that don't help add at most one per pause, six in the first
+  hour. Each rise moves that listener at most one step later.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second
@@ -72,16 +91,20 @@ wrong clock still shows the right time.
   step: the same chunks, stamped later for it. Listeners whose needs round up to
   the same step play together. It plays in the room until the input-side time
   and its own need are known (about two seconds), so it moves once. Its step only
-  rises while it listens and resets when it leaves or the input restarts. A
-  rise is a short slew or gap for that listener only. Core keeps each chunk
-  until the latest listener has played it.
+  rises while it listens and resets when it leaves or the input restarts. When
+  the capture restarts, the last input-side time stands in until the new
+  encoder's is measured, so listeners keep their steps. A player that reports
+  its state without declaring a buffer (another Sendspin player) needs at least
+  the input-side time. A rise is a short slew or gap for that listener only.
+  Core keeps each chunk until the latest listener has played it.
 - Sync is only as good as the browser's output-latency report; Couch can't
   correct a misreported output delay. Decoding and the network aren't measured
   up front: a listener that loses chunks to them steps itself later.
 - Couch's log gets one line each time a wire's input side changes
-  (`live input side opus: 26 ms`) and each time a listener's declaration or step
+  (`live input side opus: 26 ms`) and one when a listener's declaration or step
   changes (`live listener "Name" opus: declares 55 ms, input side 26 ms, plays
-  100 ms after capture (room 0 ms)`).
+  100 ms after capture (room 0 ms)`), at most every ten seconds per listener
+  unless its step rose.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.
 - **Codec** (Automatic, PCM or Opus) uses the SDK's `codecs` option.

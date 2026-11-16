@@ -38,7 +38,12 @@ async function fixture(t: TestContext) {
     await f.close();
   });
   const host = await f.connect(-1);
-  const listener = async (index: number, codec = AudioCodec.PCM, minBufferMs = 150) => {
+  // minBufferMs null: a player that never declares one (the Node SDK always does, so it's left out).
+  const listener = async (
+    index: number,
+    codec = AudioCodec.PCM,
+    minBufferMs: number | null = 150,
+  ) => {
     const identity = f.identities[index]!;
     const client = new SendspinClient(identity.id, "Lifecycle listener", [Roles.PLAYER], {
       encryption: { identity: identity.key, suite: "25519_AESGCM_SHA256" },
@@ -49,6 +54,11 @@ async function fixture(t: TestContext) {
       },
     });
     clients.push(client);
+    if (minBufferMs === null) {
+      const declaring = client as unknown as { fullPlayerState(): Record<string, unknown> };
+      const full = declaring.fullPlayerState.bind(client);
+      declaring.fullPlayerState = () => ({ ...full(), min_buffer_ms: undefined });
+    }
     const frames: { at: number; bytes: Buffer; codec: AudioCodec; clears: number }[] = [];
     let starts = 0,
       clears = 0,
@@ -63,7 +73,7 @@ async function fixture(t: TestContext) {
       `${f.hub.origin.replace("http:", "ws:")}/api/audio/${identity.token}/sendspin`,
       { timeoutMs: 3000 },
     );
-    await client.sendPlayerState({ min_buffer_ms: minBufferMs });
+    if (minBufferMs !== null) await client.sendPlayerState({ min_buffer_ms: minBufferMs });
     return {
       client,
       frames,
@@ -351,5 +361,53 @@ test(
     );
     assert.equal(f.receiver.state.playback, playback);
     assert.equal(f.receiver.state.player.error, null);
+  },
+);
+
+test(
+  "with no room delay, a player that declares no buffer plays at Core's input side",
+  { timeout: 15_000 },
+  async (t) => {
+    const f = await fixture(t),
+      player = await f.listener(1, AudioCodec.PCM, null);
+    assert.equal((await f.host.command(publication)).ok, true);
+    assert.equal(
+      (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
+        .ok,
+      true,
+    );
+    const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
+    await until(() => player.frames.length > 20);
+    const step = delays(player.frames, input.origin)[0]!;
+    assert.ok(step > 0 && step % 25_000 === 0, `a step for its input side, not ${step} µs`);
+  },
+);
+
+test(
+  "with no room delay, a replaced upload keeps each listener at its step while Core measures again",
+  { timeout: 15_000 },
+  async (t) => {
+    const f = await fixture(t),
+      player = await f.listener(1, AudioCodec.PCM, 65);
+    assert.equal((await f.host.command(publication)).ok, true);
+    assert.equal(
+      (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
+        .ok,
+      true,
+    );
+    const first = await f.streamCapture(f.host, "concert", -1, counted(0.25));
+    await until(() => player.frames.length > 20);
+    const step = delays(player.frames, first.origin)[0]!,
+      clears = player.clears;
+    const closed = once(first.upload, "close");
+    first.upload.terminate();
+    await closed;
+    const second = await f.streamCapture(f.host, "concert", -1, counted(-0.25));
+    await until(() => player.frames.filter((frame) => frame.clears > clears).length > 20);
+    const resumed = player.frames.filter((frame) => frame.clears > clears);
+    // At the room's 0 every chunk would be late: without the last input side it hears nothing
+    // until the new one is measured, about two seconds (133 chunks of 15 ms).
+    assert.ok(resumed[0]!.bytes.readInt16LE(2) < 40, "it resumes with the new capture's start");
+    assert.equal(delays(resumed, second.origin)[0], step);
   },
 );

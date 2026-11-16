@@ -527,15 +527,13 @@ export function createScheduledAudio(options: {
                 " ",
               ),
             );
-          const lead = () =>
-            live
+          const next: Run = {
+            fixed: true,
+            live: live
               ? createLiveLead(current.liveDelayMs ?? 0, log)
               : details?.senderTimed
                 ? createLiveLead(0, log)
-                : undefined;
-          const next: Run = {
-            fixed: true,
-            live: lead(),
+                : undefined,
             margins: live ? createLiveMarginLog(log) : undefined,
             start: 0,
             anchored: true,
@@ -561,7 +559,7 @@ export function createScheduledAudio(options: {
               next.cursors.clear();
               next.base = undefined;
               next.released = 0;
-              next.live = lead();
+              next.live?.restart();
               if (!next.live) next.captureLead = sendAhead();
               each((session) => session.sendStreamClear());
               report();
@@ -936,7 +934,9 @@ export function createScheduledAudio(options: {
         const list = current.queues[wire],
           sent = current.sent[wire];
         // A Live listener that doesn't fit the room's delay gets the same chunks, stamped later.
-        // Couch's own listener declares no buffer until it has measured its output: it has no need yet.
+        // Couch's own listener declares a buffer of 0 until it has measured its output: it has no
+        // need yet, nor has a player that hasn't reported its state. One whose state declares no
+        // buffer at all (another Sendspin player) needs at least Core's input side.
         const later = new Map<SendspinSession, number>();
         for (const session of current.cursors.keys())
           if (wireOf(session) === wire)
@@ -946,7 +946,10 @@ export function createScheduledAudio(options: {
                 ? (current.live.leadMs(
                     session.getClientId()!,
                     wire,
-                    session.getPlayerTiming().minBufferMs ? playerLead(session, 0) : undefined,
+                    session.getPlayerTiming().minBufferMs === 0 ||
+                      session.isAvailable() === undefined
+                      ? undefined
+                      : playerLead(session, 0),
                     session.getClientName() ?? session.getClientId()!,
                   ) -
                     current.live.roomMs) *
