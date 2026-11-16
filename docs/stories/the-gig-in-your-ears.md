@@ -11,8 +11,8 @@ a talk, a silent disco or a listening party.
 
 **Organiser**, in the Couch desktop app on the Couch computer:
 
-1. **Share screen or sound** → **Audio input** → **Playback: Live** → **Find
-   audio inputs** → the **Device**.
+1. **Share screen or sound** → **Audio input** → **Find audio inputs** → the
+   **Device**.
 2. Optionally a **Title**, **Now playing** and **Playback buffer floor (ms)**.
 3. **Start sharing**. The panel shows **Live** time, **Listeners**, their state,
    **Remove**, **Mute audio input** and **Codec**; native Mac inputs also offer

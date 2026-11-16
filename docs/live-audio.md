@@ -27,7 +27,7 @@ its logs. What people do with it is in
 
 | Step | Why Couch owns it |
 |---|---|
-| Acquisition: timestamped f32 PCM | The browser SDK has no capture API. Main owns Live capture: the Mac native helper for **Native** inputs, a hidden capture page otherwise. |
+| Acquisition: timestamped f32 PCM | The browser SDK has no capture API. Main owns Live capture of inputs: the Mac native helper for **Native** inputs, a hidden capture page otherwise. Live **System audio** is the window's own timestamped capture, as relaxed System audio's. |
 | Upload: validated `CaptureAudioPacket` per source epoch | The Node SDK has no public source start/end to declare a format. Publication tokens and epochs retire stale work. |
 | Encoding: 48 kHz stereo PCM16 and Opus | One FFmpeg per source: 64-tap `aresample`, Opus at 160 kbps in 5 ms frames. 5 ms steps keep capture-to-chunk delay low. |
 | Capture-time mapping | The Node SDK timestamps at send time; Couch maps encoded offsets (with Opus pre-skip) back to measured capture blocks. |

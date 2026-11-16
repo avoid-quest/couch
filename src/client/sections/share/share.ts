@@ -10,8 +10,8 @@ import {
 } from "../../../shared/live-input";
 import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
-// Sources and their capture variants (docs/live-inputs.md). The dialog offers source choices first; Live is an
-// audio input's playback mode. The capsule also uses the variant to describe a running share.
+// Sources and their capture variants (docs/live-inputs.md). The dialog offers source choices first. On the Couch
+// computer an audio input is always Live, and System audio can be. The capsule also uses the variant to describe a running share.
 export type ShareKind = {
   id: string;
   label: string;
@@ -66,6 +66,14 @@ export const shareKinds: ShareKind[] = [
     inputs: true,
     intent: "live",
   },
+  {
+    id: "live-sound",
+    label: "System audio",
+    description: "Share this computer's sound without video.",
+    icon: Volume2,
+    capture: "system-audio",
+    intent: "live",
+  },
 ];
 
 /** The kind a running share was started as, by how it captures. */
@@ -75,7 +83,8 @@ export const shareKindOf = (
   intent?: "relaxed" | "live",
 ) =>
   intent === "live"
-    ? shareKinds.find((kind) => kind.intent === "live")!
+    ? (shareKinds.find((kind) => kind.intent === "live" && kind.capture === capture) ??
+      shareKinds.find((kind) => kind.intent === "live")!)
     : (shareKinds.find(
         (kind) =>
           !kind.intent &&
@@ -157,7 +166,7 @@ export type Viewer = {
   delayActive?: boolean;
   error?: string;
 };
-/** Every online device the share plays on, in each playback that plays it; the publisher never plays its own (docs/live-inputs.md). */
+/** Every online device the share plays on, in each playback that plays it; only a Live audio input plays on its publisher (docs/live-inputs.md). */
 export function viewersOf(
   state: ClientSessionState | null | undefined,
   sourceId: string,

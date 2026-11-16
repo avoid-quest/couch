@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Action } from "../../shared/protocol";
 import { isRadio } from "../../shared/radio";
+import { heldOutOf } from "../../shared/live-input";
 import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
@@ -299,7 +300,7 @@ export function LiveParticipation({
   const playback = state.playbacks?.find((item) => item.id === state.playback);
   const source = state.liveSources?.find((item) => item.id === playback?.liveSourceId);
   const receiving = controls.leave;
-  const publisher = source?.deviceId === deviceId();
+  const publisher = !!source && heldOutOf(source) === deviceId();
   const output = state.outputs?.find((output) => output.deviceId === deviceId());
   const error = receiving ? output?.error || state.player.error : null;
   if (!source || publisher) return null;
@@ -488,7 +489,7 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
   if (
     state.liveSources?.some(
       (source) =>
-        source.id === sourceId && source.intent === "live" && source.deviceId === deviceId(),
+        source.id === sourceId && source.intent === "live" && heldOutOf(source) === deviceId(),
     )
   )
     return null;

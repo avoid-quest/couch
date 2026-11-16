@@ -61,7 +61,7 @@ import {
 } from "./validation";
 import { createLiveInputs } from "./live-input";
 import { createAirPlay } from "./airplay";
-import { AIRPLAY_PUBLISHER, liveTitle, type LiveSource } from "../shared/live-input";
+import { AIRPLAY_PUBLISHER, heldOutOf, liveTitle, type LiveSource } from "../shared/live-input";
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
@@ -798,16 +798,18 @@ export async function createHub(options: HubOptions) {
       local: id === actor,
     };
   };
-  // The capturing Device controls its source but never receives it: a synchronized speaker there needs the
-  // native route that docs/live-inputs.md describes as a prototype. Its other playback is unaffected.
-  const capturing = (playback: Playback, deviceId: string) =>
-    live.source(sourceOf(playback) ?? "")?.deviceId === deviceId;
+  // The capturing Device controls its source but never receives it, unless it is a Live audio input (heldOutOf).
+  // Its other playback is unaffected.
+  const capturing = (playback: Playback, deviceId: string) => {
+    const source = live.source(sourceOf(playback) ?? "");
+    return !!source && heldOutOf(source) === deviceId;
+  };
   const prepareOutput = (output: Pick<Output, "deviceId" | "sound">, source?: LiveSource) =>
     systemAudio &&
     output.deviceId === hostId() &&
     output.sound &&
     source?.audio !== false &&
-    source?.deviceId !== output.deviceId
+    (!source || heldOutOf(source) !== output.deviceId)
       ? soundRouting!.prepare()
       : "";
   const sharingSource = (deviceId: string) =>
@@ -1133,7 +1135,9 @@ export async function createHub(options: HubOptions) {
       const kept = source
         ? [
             ...playback.outputs,
-            ...(playback.held && playback.held.deviceId !== source.deviceId ? [playback.held] : []),
+            ...(playback.held && playback.held.deviceId !== heldOutOf(source)
+              ? [playback.held]
+              : []),
           ]
         : [];
       if (source?.audioDelivery === "pcm" && !sendspin.hasSource(source.id))
@@ -1143,7 +1147,7 @@ export async function createHub(options: HubOptions) {
         kept.length &&
         !kept.some(
           (output) =>
-            output.deviceId === source.deviceId ||
+            output.deviceId === heldOutOf(source) ||
             (output.picture && source.video) ||
             (output.sound && source.audio),
         )
@@ -1295,13 +1299,13 @@ export async function createHub(options: HubOptions) {
   ) => {
     playback.generation = (playback.generation ?? 0) + 1;
     // Its publisher leaves, or was chosen while it waited in Where it plays.
+    const publisher = source && heldOutOf(source);
     const left =
       source &&
-      (playback.choosing || playback.outputs.some((output) => output.deviceId === source.deviceId));
+      (playback.choosing || playback.outputs.some((output) => output.deviceId === publisher));
     if (source) {
-      playback.held =
-        outputs.find((output) => output.deviceId === source.deviceId) ?? playback.held;
-      outputs = outputs.filter((output) => output.deviceId !== source.deviceId);
+      playback.held = outputs.find((output) => output.deviceId === publisher) ?? playback.held;
+      outputs = outputs.filter((output) => output.deviceId !== publisher);
       if (
         outputs.length &&
         !outputs.some(
@@ -1355,14 +1359,15 @@ export async function createHub(options: HubOptions) {
   // The selected mix moves to an item of `source`, however it was played: another publisher's held output
   // returns first; then this source's publisher is held.
   const transition = (playback: Playback, source: ReturnType<typeof live.source>) => {
-    if (playback.held && playback.held.deviceId !== source?.deviceId) restore(playback, source);
+    if (playback.held && playback.held.deviceId !== (source && heldOutOf(source)))
+      restore(playback, source);
     if (source)
       assign(
         playback,
         source.intent === "live"
           ? playback.outputs
               .map((output) => ({ ...output, picture: false, sound: output.sound && source.audio }))
-              .filter((output) => output.sound || output.deviceId === source.deviceId)
+              .filter((output) => output.sound || output.deviceId === heldOutOf(source))
           : playback.outputs,
         source,
       );
@@ -1834,7 +1839,7 @@ export async function createHub(options: HubOptions) {
     refreshTrims(playback);
     const sourceId = sourceOf(playback),
       source = sourceId && live.source(sourceId);
-    const own = source && playback.outputs.find((output) => output.deviceId === source.deviceId);
+    const own = source && playback.outputs.find((output) => output.deviceId === heldOutOf(source));
     if (own) {
       playback.held = own;
       release(playback, own.deviceId, false);
@@ -4958,8 +4963,9 @@ export async function createHub(options: HubOptions) {
                 picture: action.picture ?? allowed.picture,
                 sound: action.sound ?? allowed.sound,
               };
+            const publisher = heldOutOf(source);
             const usable = (output: Output) =>
-              output.deviceId !== source.deviceId &&
+              output.deviceId !== publisher &&
               ((output.picture && source.video) || (output.sound && source.audio));
             const sharedBy = all().filter(
               (item) => sourceOf(item) === source.id && active(stateOf(item).player.status),
@@ -4969,7 +4975,7 @@ export async function createHub(options: HubOptions) {
               waiting = sharedBy.findLast((item) => !item.outputs.length);
             // On its publisher, Play leads to the one playback it may view instead of starting another.
             const viewable =
-              playNow && target === source.deviceId && receiving.length === 1
+              playNow && target === publisher && receiving.length === 1
                 ? receiving[0]!.outputs.find((output) => shares(output.deviceId, deviceId))
                 : undefined;
             // Its publisher's own playback, where it is held, is where it plays too.
@@ -4980,7 +4986,7 @@ export async function createHub(options: HubOptions) {
               : undefined;
             // Play and Play on converge: a receiver joins the playback of this source, with its queue and clock.
             const joining =
-              playNow && !there && target !== source.deviceId
+              playNow && !there && target !== publisher
                 ? receiving.length
                   ? receiving
                   : waiting
@@ -5019,7 +5025,7 @@ export async function createHub(options: HubOptions) {
                 authorizePlayback(playback, authorize, deviceId, source.intent === "live"),
                 deviceId,
               );
-            } else if (playNow && target === source.deviceId && waiting) {
+            } else if (playNow && target === publisher && waiting) {
               playback = waiting;
               authorizePlayback(playback, authorize, deviceId)();
               choose(playback, source.deviceId);
@@ -5029,7 +5035,7 @@ export async function createHub(options: HubOptions) {
               requireReplacement(target, deviceId);
               const mix = memberOf(target),
                 outputs = (action.deviceId ? [output] : mix ? mixOf(mix) : [output]).filter(
-                  (output) => output.deviceId !== source.deviceId,
+                  (output) => output.deviceId !== publisher,
                 );
               if (outputs.length && !outputs.some(usable))
                 throw new Error(`${nameOf(target)} is not sharing an output this source uses.`);

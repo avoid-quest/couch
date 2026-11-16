@@ -1,5 +1,6 @@
 import type { ClientSessionState } from "./session";
 import type { Action, DeviceSummary, Output } from "../../shared/protocol";
+import { heldOutOf } from "../../shared/live-input";
 
 // Where it plays' rules, without React: which devices the picker lists and in what
 // order, what each row says, which controls it offers, and when the chooser opens. Core decides; these rules
@@ -50,8 +51,8 @@ export const choosesHere = (
     action.type === "playLive" &&
     action.playNow !== false &&
     playback.liveSourceId === action.sourceId &&
-    after.liveSources?.find((source) => source.id === action.sourceId)?.deviceId ===
-      (action.deviceId ?? before?.controlling)
+    !!source &&
+    heldOutOf(source) === (action.deviceId ?? before?.controlling)
   );
 };
 
@@ -125,8 +126,8 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     const current = output(device.id);
     // Ownership permits local controls even while viewing another playback.
     const mine = device.id === here;
-    // The publisher controls its capture and never plays it (docs/live-inputs.md).
-    const capturing = source?.deviceId === device.id;
+    // The publisher controls its capture and never plays it, except a Live audio input (docs/live-inputs.md).
+    const capturing = !!source && heldOutOf(source) === device.id;
     const speakers = mine || device.sharing?.audio === true,
       screen = mine || device.sharing?.video === true;
     const audio = !silent && !capturing && speakers,
