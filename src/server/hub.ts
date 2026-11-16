@@ -659,6 +659,8 @@ export async function createHub(options: HubOptions) {
   >();
   // The transport each tab plays only through Core's relay, after it failed on a direct address.
   const relayedLoads = new WeakMap<Socket<SocketData>, string>();
+  // The transport each tab is being reloaded through the relay; its reports wait until that load is sent.
+  const relaying = new WeakMap<Socket<SocketData>, string>();
   const deviceTarget = (tab: Socket<SocketData>, playbackId: string) => ({
     origin: tab.data.origin,
     userAgent: tab.data.userAgent,
@@ -1586,9 +1588,10 @@ export async function createHub(options: HubOptions) {
     tab: Socket<SocketData>,
     playbackId: string,
   ) => (await directMedia(playback, tab, playbackId, true)).prepared;
-  // A tab that fails on an address it read straight from the source (a link tied to Core's
-  // address, a provider that refuses browsers) loads again through Core's relay, once per
-  // transport. Its error stands only if that preparation fails; a relay failure reports itself.
+  // A tab that fails on a web provider's address it read straight from the source (a link tied
+  // to Core's address, a provider that refuses browsers) loads again through Core's relay, once
+  // per transport. Household sources were direct before and keep their first error.
+  // Its error stands only if that preparation fails; a relay failure reports itself.
   const relayFallback = (
     tab: Socket<SocketData>,
     loaded: Extract<PlaybackCommand, { type: "load" }>,
@@ -1604,6 +1607,8 @@ export async function createHub(options: HubOptions) {
       relayedLoads.get(tab) === playbackId ||
       stateOf(playback).player.playbackId !== playbackId ||
       !(playback.synced ? playback.screens.has(tab) : playback.renderer === tab) ||
+      playback.media?.playbackId !== playbackId ||
+      !playback.media.publicNetwork ||
       !passThrough.direct(playbackId, [loaded.source, loaded.audioSource])
     )
       return false;
@@ -1622,11 +1627,19 @@ export async function createHub(options: HubOptions) {
       playback.renderer === tab &&
       playback.generation === generation &&
       stateOf(playback).player.playbackId === playbackId;
+    // Another error from this load (a second media element, an hls.js fatal error) would put
+    // the Session in "error", and it would then refuse the relayed load.
+    relaying.set(tab, playbackId);
+    const settled = () => {
+      if (relaying.get(tab) === playbackId) relaying.delete(tab);
+    };
     void directMedia(playback, tab, playbackId).then(
       ({ prepared }) => {
+        settled();
         if (current()) playback.session.reload(prepared);
       },
       () => {
+        settled();
         if (current()) playback.session.observe(report);
       },
     );
@@ -4724,6 +4737,7 @@ export async function createHub(options: HubOptions) {
         if (player) {
           // A browser can't tell a relayed source's refusal from a format it can't play.
           const loaded = browserLoads.get(socket);
+          if (player.playbackId && relaying.get(socket) === player.playbackId) return;
           if (
             player.status === "error" &&
             player.playbackId &&
