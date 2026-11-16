@@ -5,7 +5,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import { declareLiveBuffer, keepsLosing, withLateSteps } from "./live-buffer";
+import { declareLiveBuffer, nextLateSteps, withLateSteps, type LateSteps } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
@@ -39,14 +39,41 @@ const useOutputTimestamps = (use: boolean) => {
 // frame where they meet without part of it: a one-frame notch per chunk that clicks on loud transients.
 // Starting a chunk on its nearest frame moves it by at most half a sample and joins it exactly.
 // A chunk the player speeds up or slows down has a fractional length, so it keeps its own start.
-// The same place sees late chunks: the player drops one whose start has passed (scheduler.js) and
-// counts nothing, and the next chunk then starts after the sound already ran out.
+// The same places see late chunks. The player makes each chunk it receives a buffer and handles it at
+// its next batch, 15 ms later (scheduler.js; its schedule horizon is seconds, so none waits longer):
+// it starts it, or drops it because its start has passed, and counts nothing. So a chunk received and
+// not started well after that batch was lost to this listener's own lateness, which a later step
+// cures. Chunks Core never sent don't count: Core sending nothing, or skipping what is already late
+// when its input is late for everyone, which Core's own input side covers.
 let framesAligned = false;
-let played: { context: BaseAudioContext; end: number } | undefined;
-let lostSound = false;
+// When each chunk the player received and hasn't started arrived, on the player's own context.
+let arrivals: { context?: BaseAudioContext; at: number[] } = { at: [] };
+// The player corrects a chunk by a sample by copying it and starting the copy at once, in the same
+// task; a chunk it received is started in a later one.
+let copy: AudioBuffer | undefined;
+// Well past the player's 15 ms batch, even with a busy main thread.
+const handledMs = 100;
+const droppedLate = () => {
+  const due = performance.now() - handledMs,
+    handled = arrivals.at.findIndex((at) => at > due);
+  const dropped = handled === -1 ? arrivals.at.length : handled;
+  arrivals.at = arrivals.at.slice(dropped);
+  return dropped > 0;
+};
 const alignStartsToFrames = () => {
   if (framesAligned || typeof AudioBufferSourceNode === "undefined") return;
   framesAligned = true;
+  const createBuffer = BaseAudioContext.prototype.createBuffer;
+  BaseAudioContext.prototype.createBuffer = function (this: BaseAudioContext, ...args) {
+    const buffer = createBuffer.apply(this, args);
+    if (arrivals.context !== this) arrivals = { context: this, at: [] };
+    arrivals.at.push(performance.now());
+    copy = buffer;
+    queueMicrotask(() => {
+      if (copy === buffer) copy = undefined;
+    });
+    return buffer;
+  };
   const start = AudioBufferSourceNode.prototype.start;
   AudioBufferSourceNode.prototype.start = function (
     this: AudioBufferSourceNode,
@@ -55,12 +82,12 @@ const alignStartsToFrames = () => {
     ...rest
   ) {
     const rate = this.context.sampleRate,
-      speed = this.playbackRate.value,
-      now = this.context.currentTime;
+      speed = this.playbackRate.value;
     const aligned = when === undefined || speed !== 1 ? when : Math.round(when * rate) / rate;
-    if (played?.context === this.context && played.end < now) lostSound = true;
-    const length = this.buffer ? (this.buffer.duration - offset) / speed : 0;
-    played = { context: this.context, end: Math.max(aligned ?? now, now) + length };
+    if (this.context === arrivals.context) {
+      if (this.buffer === copy) arrivals.at.pop();
+      arrivals.at.shift();
+    }
     return start.call(this, aligned, offset, ...rest);
   };
 };
@@ -70,7 +97,7 @@ let needMs: number | undefined;
 let declaredBufferMs: number | undefined;
 let latencyReadings: number[] = [];
 let lostSeconds: boolean[] = [];
-let lateSteps = 0;
+let lateSteps: LateSteps = { steps: 0 };
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
 // sample: add this second's readings. The room's delay is the host's and isn't declared here.
 const updateBuffer = (created: SendspinPlayer, sample = false) => {
@@ -80,14 +107,19 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
   const latency = playing ? created.syncInfo.outputLatencyMs : NaN;
   if (Number.isFinite(latency) && latency >= 0)
     latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
-  if (playing) lostSeconds = [...lostSeconds, lostSound].slice(-liveReadings);
-  if (sample) lostSound = false;
-  if (keepsLosing(lostSeconds)) {
-    lateSteps++;
-    lostSeconds = [];
-  }
+  // A suspended context handles nothing: what it received isn't late, and it plays nothing.
+  const lost = sample && droppedLate() && arrivals.context?.state === "running";
+  if (playing) lostSeconds = [...lostSeconds, lost].slice(-liveReadings);
+  const late = nextLateSteps(
+    lateSteps,
+    lostSeconds,
+    declaredBufferMs ?? 0,
+    liveSettings.minBufferMs,
+  );
+  if (late.steps !== lateSteps.steps) lostSeconds = [];
+  lateSteps = late;
   needMs = declareLiveBuffer(needMs, latencyReadings);
-  const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps);
+  const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.steps);
   if (next === undefined || next === declaredBufferMs) return;
   declaredBufferMs = next;
   created.setMinBufferMs(next);
@@ -107,8 +139,7 @@ export function listen(
     bufferScope = scope;
     latencyReadings = [];
     lostSeconds = [];
-    lostSound = false;
-    lateSteps = 0;
+    lateSteps = { steps: 0 };
     needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;

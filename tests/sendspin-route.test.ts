@@ -114,3 +114,51 @@ test("a codec change keeps the Media Session that Couch set when the SDK's destr
     delete (navigator as { mediaSession?: unknown }).mediaSession;
   }
 });
+
+test("a listener steps for chunks it received and couldn't play, not for chunks Core never sent", async () => {
+  // The player's side of Web Audio: it makes each chunk a buffer, and starts it a batch later.
+  class Context {
+    state = "running";
+    sampleRate = 48_000;
+    createBuffer() {
+      return {};
+    }
+  }
+  class Source {
+    buffer?: object;
+    playbackRate = { value: 1 };
+    constructor(readonly context: Context) {}
+    start() {}
+  }
+  Object.assign(globalThis, { BaseAudioContext: Context, AudioBufferSourceNode: Source });
+  let now = 0;
+  const clock = spyOn(performance, "now").mockImplementation(() => now);
+  try {
+    const tick = await sampling(async () => {
+      listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150 });
+      await settle();
+    });
+    const player = players.at(-1)!,
+      context = new Context();
+    const start = (buffer: object) => Object.assign(new Source(context), { buffer }).start();
+    const second = async (chunks: number, played: boolean) => {
+      for (let chunk = 0; chunk < chunks; chunk++) {
+        context.createBuffer();
+        await settle();
+        // A chunk the player corrects by a sample plays as a copy.
+        if (played) start(chunk % 2 ? context.createBuffer() : {});
+      }
+      now += 1000;
+      tick(1);
+    };
+    for (let i = 0; i < 5; i++) await second(50, true);
+    // Core sends nothing (its input stalled, or what it had was already late).
+    for (let i = 0; i < 5; i++) await second(0, false);
+    expect(player.buffers).toEqual([62]);
+    // Every chunk that arrives is late and dropped: the listener plays nothing.
+    for (let i = 0; i < 5; i++) await second(50, false);
+    expect(player.buffers).toEqual([62, 87]);
+  } finally {
+    clock.mockRestore();
+  }
+});

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { declareLiveBuffer, keepsLosing, withLateSteps } from "../src/client/session/live-buffer";
+import { declareLiveBuffer, nextLateSteps, withLateSteps } from "../src/client/session/live-buffer";
 import { createLiveLead } from "../src/server/live-lead";
 
 const steady = (latency: number) => Array(5).fill(latency);
@@ -30,12 +30,35 @@ test("the declaration respects Core's 5000 ms timing limit", () => {
 });
 
 test("a listener asks for a step later only when most of five seconds lost sound", () => {
+  const steps = (lost: boolean[]) => nextLateSteps({ steps: 0 }, lost, 75, 150).steps;
   // One Wi-Fi hiccup, even across a second's edge, isn't enough.
-  expect(keepsLosing([true])).toBe(false);
-  expect(keepsLosing([false, true, true, false, false])).toBe(false);
-  expect(keepsLosing([true, false, true, false, true])).toBe(true);
-  expect(keepsLosing([false, false, true, true, true])).toBe(true);
-  expect(keepsLosing([true, true, true, false, false, false, false, false])).toBe(false);
+  expect(steps([true])).toBe(0);
+  expect(steps([false, true, true, false, false])).toBe(0);
+  expect(steps([true, false, true, false, true])).toBe(1);
+  expect(steps([false, false, true, true, true])).toBe(1);
+  expect(steps([true, true, true, false, false, false, false, false])).toBe(0);
+});
+
+test("past the room's delay, a step that didn't cut the loss is the last one", () => {
+  const lossy = [true, true, true, true, false];
+  // Still within the room's delay, a step may not have moved the listener: it steps again.
+  let late = nextLateSteps({ steps: 0 }, lossy, 75, 150);
+  late = nextLateSteps(late, lossy, 100, 150);
+  expect(late).toEqual({ steps: 2, lostBefore: 4 });
+  // Past it, a step that helped some allows another.
+  late = nextLateSteps(late, [true, true, true, false, false], 175, 150);
+  expect(late).toEqual({ steps: 3, lostBefore: 3 });
+  // One that didn't stops the listener stepping, however long it keeps losing.
+  late = nextLateSteps(late, [true, false, true, false, true], 200, 150);
+  expect(late).toEqual({ steps: 3, lostBefore: 3, stopped: true });
+  expect(nextLateSteps(late, Array(5).fill(true), 200, 150).steps).toBe(3);
+});
+
+test("a step that cured the loss judges nothing after it: a later loss steps again", () => {
+  let late = nextLateSteps({ steps: 0 }, Array(5).fill(true), 175, 150);
+  late = nextLateSteps(late, Array(5).fill(false), 200, 150);
+  expect(late).toEqual({ steps: 1 });
+  expect(nextLateSteps(late, Array(5).fill(true), 200, 150)).toEqual({ steps: 2, lostBefore: 5 });
 });
 
 test("each late step adds one step to the declaration, within Core's limit", () => {
