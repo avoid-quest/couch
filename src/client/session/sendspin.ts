@@ -35,6 +35,22 @@ const useOutputTimestamps = (use: boolean) => {
   const descriptor = use ? outputTimestamp : { ...outputTimestamp, value: undefined };
   Object.defineProperty(AudioContext.prototype, "getOutputTimestamp", descriptor);
 };
+// The player chains each chunk where the last one ended, between two frames. Chrome then renders the
+// frame where they meet without part of it: a one-frame notch per chunk that clicks on loud transients.
+// Starting a chunk on its nearest frame moves it by at most half a sample and joins it exactly.
+// A chunk the player speeds up or slows down has a fractional length, so it keeps its own start.
+let framesAligned = false;
+const alignStartsToFrames = () => {
+  if (framesAligned || typeof AudioBufferSourceNode === "undefined") return;
+  framesAligned = true;
+  const start = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function (this: AudioBufferSourceNode, when, ...rest) {
+    const rate = this.context.sampleRate;
+    const aligned =
+      when === undefined || this.playbackRate.value !== 1 ? when : Math.round(when * rate) / rate;
+    return start.call(this, aligned, ...rest);
+  };
+};
 let liveSettings: LiveAudioSettings | undefined;
 let bufferScope: string | undefined;
 let declaredBufferMs: number | undefined;
@@ -96,6 +112,7 @@ export function listen(
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = (player ??= import("@sendspin/sendspin-js")
     .then(async ({ SendspinPlayer }) => {
+      alignStartsToFrames();
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
       const created = new SendspinPlayer({
