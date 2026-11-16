@@ -159,6 +159,39 @@ test(
 );
 
 test(
+  "the Couch computer's own outputs play its Live audio input beside a listener",
+  { timeout: 15_000 },
+  async () => {
+    const f = await liveFixture();
+    try {
+      const host = await f.connect(-1);
+      assert.equal((await host.command(publication)).ok, true);
+      for (const device of [f.receiver, host])
+        assert.equal(
+          (
+            await device.command({
+              type: "playLive",
+              sourceId: "concert",
+              deviceId: device.id,
+              picture: false,
+              sound: true,
+            })
+          ).ok,
+          true,
+        );
+      await until(() =>
+        [host.id, f.receiver.id].every((id) =>
+          f.receiver.state.outputs?.some((output) => output.deviceId === id && output.sound),
+        ),
+      );
+      assert.equal(host.state.controls?.leave, true, "the Couch computer listens like any device");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
   "timestamped uploads require the current publication upload identity",
   { timeout: 15_000 },
   async () => {

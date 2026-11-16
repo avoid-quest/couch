@@ -685,8 +685,11 @@ export function createLiveSession(options: {
       starting = true;
       const attempt = ++generation;
       let capture: MediaStream | undefined, captureFormat: AudioCaptureFormat | undefined;
+      // The capture rate setting is an input's. Live System audio keeps the system's own rate (48 kHz on a Mac).
       const requestedRate =
-        selection.intent === "live" ? captureSampleRate(readCaptureRatePreference()) : undefined;
+        selection.intent === "live" && selection.kind === "microphone"
+          ? captureSampleRate(readCaptureRatePreference())
+          : undefined;
       const sourceId = crypto.randomUUID();
       const nativeAudioId =
         selection.intent === "live" && selection.kind === "microphone" && couchApp?.liveAudio

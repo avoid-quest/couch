@@ -8,15 +8,18 @@
   on.
 - **Publishing**: press **Share** in the header and choose **Screen**,
   **Window**, **System audio** or **Audio input**, optionally devices under
-  **Play on**, then **Start sharing**. Without a destination the source waits in
+  **Play on**, then **Start sharing**. On the Couch computer an **Audio input**
+  is always [Live audio](live-audio.md), and **System audio** is Live when
+  **Playback** is **Live**. Without a destination the source waits in
   Home's **Shared sources**. A browser without screen capture offers audio inputs
   only.
 - **Picture**: 1080p and 60 FPS by default, with 720p or original resolution and
   30/60/120 FPS targets, changeable while sharing. Targets are ceilings, not
   guarantees. Captured audio turns off echo cancellation, noise suppression and
   gain control so music isn't altered.
-- **The publisher never plays its own capture.** It stays a controller, listed
-  as **Sharing this source** in **Where it plays**.
+- **The publisher never plays its own capture**, except a Live audio input,
+  which the Couch computer's own outputs can play like any other device's.
+  Otherwise it stays a controller, listed as **Sharing this source** in **Where it plays**.
 - **Stop sharing** ends the source on every receiver. Closing the publishing
   window, disconnecting it or stopping capture through the OS does too.
 - macOS system audio needs 14.2+. Including system audio sends the whole mix,

@@ -18,6 +18,12 @@ export type LiveSource = {
   metadata?: LiveMetadata;
 };
 export const liveTitle = (source: LiveSource) => source.metadata?.title || source.name;
+/**
+ * The device held out of its own source: the publisher, which never sees or hears its share echoed back. A Live
+ * audio input has none, so the Couch computer's own outputs can play it like any other device's.
+ */
+export const heldOutOf = (source: LiveSource) =>
+  source.intent === "live" && source.kind === "microphone" ? undefined : source.deviceId;
 export type LiveVideoQuality = "720p" | "1080p" | "original";
 export type LiveVideoFrameRate = 30 | 60 | 120;
 export const defaultLiveFrameRate: LiveVideoFrameRate = 60;
