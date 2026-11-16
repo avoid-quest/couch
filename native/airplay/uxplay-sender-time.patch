@@ -1,0 +1,38 @@
+# Couch: keep the sender's timing in the decoded audio -artp exports, so Couch can play it when
+# the sender means it to be heard. Applies after uxplay-sender-address.patch.
+# For UxPlay d9e293da6d5276315af6820d10542a859bbc3424 (GPL-3.0-or-later); apply with git apply.
+
+diff --git a/renderers/audio_renderer.c b/renderers/audio_renderer.c
+index c33a0ce..d8eb4bd 100644
+--- a/renderers/audio_renderer.c
++++ b/renderers/audio_renderer.c
+@@ -192,7 +192,19 @@ void audio_renderer_init(logger_t *render_logger, const char* audiosink, const b
+             /* RTP path: send decoded PCM over RTP */
+             /* rtpL16pay requires S16BE (big-endian) format */
+             g_string_append (launch, "audioconvert ! audio/x-raw,format=S16BE,rate=44100,channels=2 ! ");
+-            g_string_append (launch, "rtpL16pay ");
++            /* Couch: -async (ALAC) and -vsync (AAC) keep the sender's timing here too, as they do for a
++             * local sink. Such a stream is payload type 97, and each packet's RTP timestamp is the time the
++             * sender means its first sample to be heard, on this computer's CLOCK_REALTIME, in units of
++             * 1/44100 s modulo 2^32: buffers carry that time as their PTS, without the pipeline's base time,
++             * and the payloader converts each packet's own PTS rather than counting samples, so a lost
++             * packet stays a gap. Any other stream is payload type 96, its timestamps the payloader's own. */
++            gboolean timed = (i == 1) ? *audio_sync : *video_sync;
++            if (i == 1) {
++                async = timed;
++            } else {
++                vsync = timed;
++            }
++            g_string_append (launch, timed ? "rtpL16pay pt=97 perfect-rtptime=false timestamp-offset=0 " : "rtpL16pay pt=96 ");
+             g_string_append (launch, artp_pipeline);
+         }
+         renderer_type[i]->pipeline  = gst_parse_launch(launch->str, &error);
+@@ -315,7 +327,7 @@ void audio_renderer_render_buffer(unsigned char* data, int *data_len, unsigned s
+ 
+     GstClockTime pts = (GstClockTime) *ntp_time ;    /* now in nsecs */
+     //GstClockTimeDiff latency = GST_CLOCK_DIFF(gst_element_get_current_clock_time (renderer->appsrc), pts);
+-    if (sync) {
++    if (sync && !audio_rtp) {    /* Couch: the RTP path keeps the absolute time (see audio_renderer_init) */
+         if (pts >= gst_audio_pipeline_base_time) {
+             pts -= gst_audio_pipeline_base_time;
+         } else {

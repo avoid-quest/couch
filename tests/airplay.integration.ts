@@ -70,10 +70,33 @@ const tone = ({ frequency, ssrc = 0x5eed }) => {
     }
   }, 5);
 };
+// Audio-only AirPlay through Couch's UxPlay patch: payload type 97, each timestamp when the sender
+// means that packet heard (start: the first one's, on the wall clock in 1/44100 s), 1.75 s after it
+// sends it. Each 10 ms packet holds one level, a step above the last.
+const steps = ({ start }) => {
+  clearInterval(timer);
+  const from = start / 44.1 - 1750;
+  let sent = 0;
+  timer = setInterval(() => {
+    for (; sent < Math.floor((Date.now() - from) / 10); sent++) {
+      const packet = Buffer.alloc(14 + 441 * 4);
+      packet.writeUInt16BE(packet.length - 2, 0);
+      packet[2] = 0x80; packet[3] = 97;
+      packet.writeUInt16BE(sent & 0xffff, 4);
+      packet.writeUInt32BE((start + sent * 441) % 2 ** 32, 6);
+      packet.writeUInt32BE(0x7e57, 10);
+      for (let i = 0; i < 441; i++) {
+        packet.writeInt16BE((sent % 300) * 100, 14 + i * 4); packet.writeInt16BE((sent % 300) * 100, 16 + i * 4);
+      }
+      fs.writeSync(3, packet);
+    }
+  }, 5);
+};
 const run = command => {
   if (command.log) console.log(command.log);
   if (command.stderr) console.error(command.stderr);
   if (command.tone) tone(command.tone);
+  if (command.steps) steps(command.steps);
   if (command.quiet) clearInterval(timer);
   if (command.exit !== undefined) process.exit(command.exit);
 };
@@ -257,7 +280,8 @@ async function fixture(t: TestContext, { uxplay: replacement }: { uxplay?: strin
     airplay,
     player,
     connect,
-    hear: async () => {
+    // listen: each chunk with its play time, on Core's clock (this process's performance.now()).
+    hear: async (listen?: (timestampUs: number, bytes: Buffer) => void) => {
       const chunks: Buffer[] = [];
       const speaker = new SendspinClient(receiverId, "AirPlay receiver", [Roles.PLAYER], {
         playerSupport: {
@@ -269,7 +293,10 @@ async function fixture(t: TestContext, { uxplay: replacement }: { uxplay?: strin
         },
       });
       speakers.push(speaker);
-      speaker.addAudioChunkListener((_time, bytes) => chunks.push(Buffer.from(bytes)));
+      speaker.addAudioChunkListener((time, bytes) => {
+        chunks.push(Buffer.from(bytes));
+        listen?.(time, Buffer.from(bytes));
+      });
       await speaker.connect(
         `${hub.origin.replace("http:", "ws:")}/api/audio/${receiverToken}/sendspin`,
         { timeoutMs: 3000 },
@@ -396,9 +423,11 @@ test(
     const option = (name: string) => fake.argv[fake.argv.indexOf(name) + 1];
     assert.equal(
       option("-artp"),
-      "pt=96 ! rtpstreampay ! fdsink fd=3 sync=false",
+      "! rtpstreampay ! fdsink fd=3 sync=false",
       "decoded sound goes only to Core's private pipe",
     );
+    assert.ok(fake.argv.includes("-async"), "audio-only AirPlay keeps the sender's timing");
+    assert.equal(option("-vsync"), "no", "mirroring's sound, whose picture is discarded, doesn't");
     // The code is UxPlay's password, which it requires before it sets up any sound. It is in a file
     // only Couch can read, not on a command line everyone on the computer can see.
     assert.ok(
@@ -583,6 +612,59 @@ test(
     assert.equal((await airplay()).sender, null);
     // A fresh UxPlay serves the next sender, so nothing the last one left behind reaches it.
     await ready(await next(2), airplay);
+  },
+);
+
+test(
+  "audio-only AirPlay plays when the sender means it heard, also on a speaker that joins later",
+  { skip: !linux || !hasFfmpeg, timeout: 60_000 },
+  async (t) => {
+    const { airplay, next, request, connect, hostToken, receiver, hear } = await fixture(t);
+    await request("/api/settings/airplay", { body: { enabled: true } });
+    const fake = await next(1);
+    await ready(fake, airplay);
+    const host = await connect(Identity.generate().peerId, hostToken),
+      device = await connect(receiver.id, receiver.token);
+    sender(fake, 32, "Mac");
+    const start = Math.round((Date.now() + 1750) * 44.1);
+    fake.send({ steps: { start } });
+    await until(() => !!device.state.liveSources?.length);
+    await until(() => scheduled(host)?.status === "playing", 5_000);
+    // The receiver joins a second into the sound.
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    assert.equal(
+      (
+        await device.command({
+          type: "playLive",
+          sourceId: device.state.liveSources![0]!.id,
+          deviceId: receiver.id,
+        })
+      ).ok,
+      true,
+    );
+    // Each step's first sample, at the time the speaker is told to play it, against the time the
+    // sender gave it (both in ms on Core's clock).
+    const offsetMs = Date.now() - performance.now();
+    const errors: number[] = [];
+    await hear((timestampUs, bytes) => {
+      const levels = Array.from({ length: bytes.length / 4 }, (_, index) =>
+        Math.round(bytes.readInt16LE(index * 4) / 100),
+      );
+      // A step holds 10 ms (480 samples): 2 ms either side of it keeps out the resampler's ringing.
+      for (let index = 96; index + 96 < levels.length; index++) {
+        const step = levels[index]!;
+        if (step !== levels[index - 1]! + 1 || levels[index - 96] !== step - 1) continue;
+        if (levels[index + 96] !== step) continue;
+        const heard = timestampUs / 1000 + (index * 1000) / 48_000;
+        // The packet with that level nearest the time heard.
+        const near = Math.round(((heard + offsetMs) * 44.1 - start) / 441);
+        const packet = near + ((((step - near) % 300) + 450) % 300) - 150;
+        errors.push(heard - ((start + packet * 441) / 44.1 - offsetMs));
+      }
+    });
+    await until(() => errors.length >= 200, 15_000);
+    const worst = Math.max(...errors.map(Math.abs));
+    assert.ok(worst < 3, `played within 3 ms of the sender's time (worst ${worst.toFixed(2)} ms)`);
   },
 );
 
@@ -1171,7 +1253,9 @@ test(
     );
     await play(stream);
     await until(() => host.state.liveSources?.[0]?.name === "AirPlay · No PIN sender", 5_000);
-    assert.equal(await player(), "playing");
+    // This sender doesn't answer UxPlay's clock requests, so UxPlay makes its sound due as it
+    // arrives, too late to have started; it still holds updates off.
+    assert.ok(["loading", "playing"].includes(await player()));
     known.socket.destroy();
     await until(() => !host.state.liveSources?.length, 10_000);
   },

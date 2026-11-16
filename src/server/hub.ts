@@ -580,7 +580,7 @@ export async function createHub(options: HubOptions) {
     log: (line) => log(line),
     changed: () => broadcast(),
     sessions: {
-      started: (id, sender) => {
+      started: (id, sender, timed) => {
         const source = {
           id,
           deviceId: AIRPLAY_PUBLISHER,
@@ -589,9 +589,10 @@ export async function createHub(options: HubOptions) {
           audio: true,
           video: false,
           audioDelivery: "pcm" as const,
+          ...(timed ? { senderTimed: true } : {}),
         };
         live.host(source);
-        sendspin.registerSource(id);
+        sendspin.registerSource(id, source);
         // The sender chose this Couch, regardless of the host controller's selected device.
         const playback = createPlayback();
         // A refused native audio preflight must leave the host's existing outputs alone.

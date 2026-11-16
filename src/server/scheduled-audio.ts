@@ -498,13 +498,19 @@ export function createScheduledAudio(options: {
           return;
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
-          const source = sources.get(current.liveSourceId)!.capture;
+          const { capture: source, details } = sources.get(current.liveSourceId)!;
           const live = current.captureIntent === "live";
+          // Sender-timed AirPlay plays at its capture times, the sender's, like a Live room with no
+          // delay: a speaker that joins doesn't move it, and one whose need doesn't fit plays a step later.
+          const lead = () =>
+            live
+              ? createLiveLead(current.liveDelayMs ?? 0)
+              : details?.senderTimed
+                ? createLiveLead(0)
+                : undefined;
           const next: Run = {
             fixed: true,
-            ...(live
-              ? { live: createLiveLead(current.liveDelayMs ?? 0) }
-              : { captureLead: sendAhead() }),
+            live: lead(),
             start: 0,
             anchored: true,
             speed: 1,
@@ -515,6 +521,7 @@ export function createScheduledAudio(options: {
             released: 0,
             timer: setInterval(() => tick(next), 50),
           };
+          if (!next.live) next.captureLead = sendAhead();
           run = next;
           next.dispose = source.subscribe((event) => {
             if (run !== next) return;
@@ -528,14 +535,14 @@ export function createScheduledAudio(options: {
               next.cursors.clear();
               next.base = undefined;
               next.released = 0;
-              if (live) next.live = createLiveLead(current.liveDelayMs ?? 0);
-              else next.captureLead = sendAhead();
+              next.live = lead();
+              if (!next.live) next.captureLead = sendAhead();
               each((session) => session.sendStreamClear());
               report();
               return;
             }
             next.live?.arrived(event.wire, event.at, serverNowUs());
-            if (!live) next.captureLead = Math.max(next.captureLead!, sendAhead());
+            if (!next.live) next.captureLead = Math.max(next.captureLead!, sendAhead());
             const at = event.at + (next.live?.roomMs ?? next.captureLead!) * 1000;
             if (next.base === undefined) {
               next.base = at;

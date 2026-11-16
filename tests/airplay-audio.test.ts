@@ -53,8 +53,14 @@ test("parses RTP L16 with CSRCs, an extension and padding, and refuses anything 
   expect(
     values(parseRtp(rtp(7, 100, 2, 5, { csrc: 2, extension: 1, padding: 4 }))!.payload),
   ).toEqual([5, 5]);
-  expect(parseRtp(rtp(7, 100, 2, 5))).toMatchObject({ sequence: 7, timestamp: 100, ssrc: 0x1234 });
-  expect(parseRtp(rtp(7, 100, 2, 5, { payloadType: 97 }))).toBeNull();
+  expect(parseRtp(rtp(7, 100, 2, 5))).toMatchObject({
+    sequence: 7,
+    timestamp: 100,
+    ssrc: 0x1234,
+    timed: false,
+  });
+  expect(parseRtp(rtp(7, 100, 2, 5, { payloadType: 97 }))).toMatchObject({ timed: true });
+  expect(parseRtp(rtp(7, 100, 2, 5, { payloadType: 98 }))).toBeNull();
   expect(parseRtp(Buffer.concat([rtp(7, 100, 2, 5), Buffer.from([1, 2])]))).toBeNull(); // Not whole stereo samples
   const version = rtp(7, 100, 2, 5);
   version[0] = 0x40;
@@ -85,12 +91,12 @@ test("plays the sender's samples in timestamp order on Core's clock, a quarter s
   ingress.push(framed(rtp(0, 1000, packet, 1)));
   // The first to arrive set the playout clock a quarter second behind it; the earlier one still plays first.
   time.advance(250);
-  const first = values(ingress.tick());
+  const first = values(ingress.tick().pcm);
   expect(first.length).toBe(sampleRate / 4);
   expect(first.slice(0, -packet).every((value) => value === 0)).toBe(true);
   expect(first.slice(-packet).every((value) => value === 1)).toBe(true);
   time.advance(10);
-  expect(values(ingress.tick()).every((value) => value === 2)).toBe(true);
+  expect(values(ingress.tick().pcm).every((value) => value === 2)).toBe(true);
   expect(ingress.stats.late).toBe(0);
 });
 
@@ -104,7 +110,7 @@ test("emits exactly the elapsed samples, filling loss and pauses with silence", 
     // Every tenth packet is lost.
     if (index % 10 !== 3) ingress.push(framed(rtp(index, index * packet, packet, 1000)));
     time.advance(10);
-    const pcm = ingress.tick();
+    const { pcm } = ingress.tick();
     emitted += pcm.length / bytesPerSample;
     nonzero += values(pcm).filter((value) => value !== 0).length;
   }
@@ -112,7 +118,7 @@ test("emits exactly the elapsed samples, filling loss and pauses with silence", 
   expect(nonzero).toBe((75 - 8) * packet);
   // A paused sender sends nothing: what was buffered plays, then Core's stream keeps its clock with silence.
   time.advance(1500);
-  const paused = values(ingress.tick());
+  const paused = values(ingress.tick().pcm);
   emitted += paused.length;
   expect(emitted).toBe(Math.floor((2500 * sampleRate) / 1000));
   expect(paused.filter((value) => value !== 0).length).toBe((25 - 2) * packet);
@@ -131,7 +137,7 @@ test("follows 32-bit timestamp wrap and a new stream from another pipeline", () 
   ingress.push(framed(rtp(0, 77, packet, 5, { ssrc: 0x9999 })));
   expect(ingress.stats.resyncs).toBe(1);
   time.advance(260);
-  expect(values(ingress.tick()).includes(5)).toBe(true);
+  expect(values(ingress.tick().pcm).includes(5)).toBe(true);
 });
 
 test("never buffers more than two seconds ahead, and skips a stalled event loop instead of catching up without limit", () => {
@@ -142,5 +148,75 @@ test("never buffers more than two seconds ahead, and skips a stalled event loop 
     ingress.push(framed(rtp(index, index * packet, packet, 1)));
   expect(ingress.buffered()).toBeLessThanOrEqual(sampleRate * 2);
   time.advance(60_000);
-  expect(ingress.tick().length).toBe(sampleRate * 2 * bytesPerSample);
+  expect(ingress.tick().pcm.length).toBe(sampleRate * 2 * bytesPerSample);
+});
+
+// Couch's UxPlay patch: payload type 97, each timestamp the sender's play time on the wall clock.
+const wallClock = (wallAtZero: number) => {
+  const time = clock();
+  return { ...time, wall: () => wallAtZero + time.now() };
+};
+const senderTime = (wallMs: number) => Math.round((wallMs * sampleRate) / 1000) % 2 ** 32;
+const end = ({ pcm, at }: { pcm: Buffer; at: number }) =>
+  at + (pcm.length / bytesPerSample / sampleRate) * 1000;
+
+test("hands a sender-timed stream on as it arrives, stamped when the sender means it heard", () => {
+  const time = wallClock(1_800_000_000_000),
+    ingress = createAudioIngress(time);
+  const first = senderTime(time.wall() + 1750); // About 1.75 s ahead, as a sender's ALAC is
+  // UxPlay rounds the sample period, so packets meet a sample early or late; the fourth is lost.
+  const starts = [0, packet - 1, 2 * packet, 4 * packet, 5 * packet + 1];
+  starts.forEach((start, index) =>
+    ingress.push(framed(rtp(index, first + start, packet, 1000, { payloadType: 97 }))),
+  );
+  expect(ingress.timed()).toBe(true);
+  const heard = ingress.tick();
+  expect(heard.at).toBeCloseTo(1750, 1);
+  const samples = values(heard.pcm);
+  // Contiguous across the seams; the lost packet is silence of its own length.
+  expect(samples.length).toBe(6 * packet);
+  expect(samples.filter((value) => value === 0).length).toBe(packet);
+  expect(samples.slice(3 * packet, 4 * packet).every((value) => value === 0)).toBe(true);
+  // A quiet sender: silence goes out a second ahead, continuing the sender's timeline.
+  time.advance(1000);
+  const quiet = ingress.tick();
+  expect(values(quiet.pcm).every((value) => value === 0)).toBe(true);
+  expect(quiet.at).toBeCloseTo(end(heard), 1);
+  expect(end(quiet)).toBeCloseTo(2000, 0);
+  // Its sound after a pause arrives ahead of that silence and continues it.
+  ingress.push(framed(rtp(9, senderTime(time.wall() + 1750), packet, 7, { payloadType: 97 })));
+  const resumed = ingress.tick();
+  expect(resumed.at).toBeCloseTo(end(quiet), 1);
+  expect(
+    values(resumed.pcm)
+      .slice(-packet)
+      .every((value) => value === 7),
+  ).toBe(true);
+  expect(end(resumed)).toBeCloseTo(2750 + (packet * 1000) / sampleRate, 0);
+});
+
+test("places a sender-timed timestamp at the time nearest now, across the 32-bit wrap", () => {
+  // A wall clock where the sender's time 1.75 s ahead is 50 samples before a wrap.
+  const time = wallClock(((2 ** 32 * 1000) / sampleRate) * 40_000 - 1750),
+    ingress = createAudioIngress(time);
+  const first = (senderTime(time.wall() + 1750) - 50 + 2 ** 32) % 2 ** 32;
+  ingress.push(framed(rtp(0, first, packet, 3, { payloadType: 97 })));
+  ingress.push(framed(rtp(1, (first + packet) % 2 ** 32, packet, 4, { payloadType: 97 })));
+  const { pcm, at } = ingress.tick();
+  expect(at).toBeCloseTo(1750 - (50 * 1000) / sampleRate, 1);
+  expect(values(pcm)).toEqual([...Array(packet).fill(3), ...Array(packet).fill(4)]);
+});
+
+test("never covers a sender-timed stream that keeps arriving with silence, however little ahead it is", () => {
+  const time = wallClock(1_800_000_000_000),
+    ingress = createAudioIngress(time);
+  const first = senderTime(time.wall() + 300); // Far less ahead than the quiet silence goes out
+  let nonzero = 0;
+  for (let index = 0; index < 100; index++) {
+    ingress.push(framed(rtp(index, first + index * packet, packet, 1, { payloadType: 97 })));
+    time.advance(10);
+    nonzero += values(ingress.tick().pcm).filter((value) => value !== 0).length;
+  }
+  expect(nonzero).toBe(100 * packet);
+  expect(ingress.stats.late).toBe(0);
 });
