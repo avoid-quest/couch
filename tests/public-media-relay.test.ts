@@ -33,7 +33,7 @@ function response(url: string, body: BodyInit, init: ResponseInit = {}) {
 
 function fixture() {
   const current = new Set(["playing"]);
-  const replies = new Map<string, () => Response>();
+  const replies = new Map<string, (init?: RequestInit) => Response>();
   const requests: Array<{ url: string; headers: Headers }> = [];
   const probes: Array<{ url: string; headers: Headers }> = [];
   // Only the pinned public-request boundary is synthetic. The production relay
@@ -44,7 +44,8 @@ function fixture() {
     const headers = new Headers(init?.headers);
     (headers.has("origin") ? probes : requests).push({ url, headers });
     return (
-      replies.get(url)?.() ?? response(url, "bytes", { headers: { "Content-Type": "video/mp4" } })
+      replies.get(url)?.(init) ??
+      response(url, "bytes", { headers: { "Content-Type": "video/mp4" } })
     );
   }) as typeof fetch;
   const relay = createPassThrough((id) => current.has(id), publicRequest);
@@ -84,7 +85,7 @@ test("a public file a Device may read over HTTPS goes direct; plain HTTP stays r
     audio = "http://media.example/audio.m4a";
   const media = await f.relay.prepare(
     "playing",
-    { source: video, audioSource: audio, publicNetwork: true, mpv: true },
+    { source: video, audioSource: audio, publicNetwork: true },
     providerHeaders,
     target,
     signal(),
@@ -102,6 +103,28 @@ test("a public file a Device may read over HTTPS goes direct; plain HTTP stays r
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
+test("public video and audio use protected relay even with permissive CORS and native playback", async () => {
+  const f = fixture();
+  const video = "https://media.example/video.mp4",
+    audio = "https://media.example/audio.m4a";
+  for (const url of [video, audio])
+    f.replies.set(url, () =>
+      response(url, "bytes", { headers: { "Access-Control-Allow-Origin": "*" } }),
+    );
+  const media = await f.relay.prepare(
+    "playing",
+    { source: video, audioSource: audio, publicNetwork: true, mpv: true },
+    {},
+    target,
+    signal(),
+  );
+  destination(media.source, "bytes", video);
+  destination(media.audioSource!, "bytes", audio);
+  expect(f.requests).toHaveLength(0);
+  expect(f.probes).toHaveLength(0);
+  expect(rawRequest).not.toHaveBeenCalled();
+});
+
 test("a public file stays relayed when the Device can't read it, when it is a playlist, or for a relay-only target", async () => {
   const f = fixture();
   const refused = "https://media.example/refused.mp4",
@@ -115,6 +138,21 @@ test("a public file stays relayed when the Device can't read it, when it is a pl
   );
   destination((await f.prepare(refused)).source, "bytes", refused);
   destination((await f.prepare(mislabelled)).source, "playlist", mislabelled);
+  // A hop to http:// that Core would upgrade, but the Device would follow and block as mixed content.
+  const downgraded = "https://media.example/downgraded.mp4";
+  // publicFetch upgrades that hop unless asked to stop at the redirect.
+  f.replies.set(downgraded, (init) =>
+    init?.redirect === "manual"
+      ? response(downgraded, "", {
+          status: 302,
+          headers: { Location: "http://media.example/video.mp4?requiressl=yes" },
+        })
+      : response("https://media.example/video.mp4?requiressl=yes", "bytes"),
+  );
+  destination((await f.prepare(downgraded)).source, "bytes", downgraded);
+  expect(f.probes.map((probe) => probe.url)).not.toContain(
+    "http://media.example/video.mp4?requiressl=yes",
+  );
   // mpegts.js reads with CORS, and this source doesn't share it.
   const transport = await f.relay.prepare(
     "playing",

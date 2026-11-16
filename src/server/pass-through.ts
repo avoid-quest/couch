@@ -193,12 +193,24 @@ async function probePublic(
   publicRequest: typeof fetch,
 ) {
   const named = playlistType(null, url);
-  if (!url.startsWith("https:")) return { direct: false, playlist: named };
-  const response = await publicRequest(url, {
-    headers: { origin: relay.target.origin, "user-agent": relay.target.userAgent },
-    signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-  }).catch(() => null);
-  if (!response?.ok) {
+  // Core follows each redirect itself: publicFetch upgrades a googlevideo hop to http://, which
+  // the Device would follow as it is and then block as mixed content. Every hop must be HTTPS.
+  const timeout = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+  let address: string | undefined = url,
+    response: Response | null = null;
+  for (let hops = 0; address?.startsWith("https:") && hops <= 20; hops++) {
+    response = await publicRequest(address, {
+      headers: { origin: relay.target.origin, "user-agent": relay.target.userAgent },
+      signal: timeout,
+      redirect: "manual",
+    }).catch(() => null);
+    const location: string | null | undefined = response?.headers.get("location");
+    if (!response || ![301, 302, 303, 307, 308].includes(response.status) || !location) break;
+    await response.body?.cancel().catch(() => {});
+    address = URL.parse(location, address)?.href;
+    response = null;
+  }
+  if (!response?.ok || !address) {
     await response?.body?.cancel().catch(() => {});
     return { direct: false, playlist: named };
   }
@@ -206,13 +218,12 @@ async function probePublic(
   const sniffed = await sniffPlaylist(response).catch(() => null);
   await sniffed?.response.body?.cancel().catch(() => {});
   const playlist =
-    !!sniffed?.playlist || playlistType(response.headers.get("content-type"), response.url || url);
+    !!sniffed?.playlist || playlistType(response.headers.get("content-type"), address);
   const shared = ["*", relay.target.origin].includes(
     response.headers.get("access-control-allow-origin") ?? "",
   );
   return {
-    direct:
-      !!sniffed && !playlist && (response.url || url).startsWith("https:") && (shared || !cors),
+    direct: !!sniffed && !playlist && (shared || !cors),
     playlist,
   };
 }
@@ -373,7 +384,8 @@ export function createPassThrough(
         id: randomBytes(16).toString("hex"),
         playbackId,
         credentialOrigin: new URL(media.credentialOrigin ?? media.source).origin,
-        target,
+        // A native player (mpv) would fetch outside Core's pinned request, so it reads only the relay.
+        target: media.mpv && media.publicNetwork ? { ...target, relay: true } : target,
         headers,
         publicNetwork: media.publicNetwork,
         audioCors,
