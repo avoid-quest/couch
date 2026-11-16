@@ -20,6 +20,7 @@ import { createHub } from "../src/server/hub";
 import { checkHelper, helper, startHelpers } from "../src/server/helpers";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 3_000;
@@ -215,7 +216,7 @@ async function fixture(raw = false) {
     let state: SessionState | undefined,
       sequence = 0;
     socket.on("message", (bytes) => {
-      const message = JSON.parse(String(bytes)) as ServerMessage;
+      const message = withState(socket, JSON.parse(String(bytes)) as ServerMessage);
       messages.push(message);
       if (message.type === "state") state = message.state;
       if (message.type === "result") {

@@ -227,6 +227,23 @@ export type SessionState = {
   systemAudio?: SoundRouteState;
 };
 
+// What every window shares, whichever Playback it looks at.
+type CouchState = Pick<
+  SessionState,
+  | "versions"
+  | "installationName"
+  | "setupStep"
+  | "appearance"
+  | "askEveryDevice"
+  | "administratorClaimed"
+  | "activeProfile"
+  | "preferences"
+  | "systemAudio"
+  | "playbacks"
+  | "devices"
+  | "liveSources"
+>;
+
 export type Action =
   | {
       type: "publishLive";
@@ -357,7 +374,10 @@ export type ServerMessage =
   | ({ type: "clock" } & PlaybackClock)
   // Core's Unix time in milliseconds, once per connection: elapsed Live times count on it.
   | { type: "time"; now: number }
-  | { type: "state"; state: SessionState }
+  // What a window sees, in three parts sent as each changes (session-parts.ts).
+  | { type: "couch"; couch: CouchState }
+  | { type: "playback"; playback: Omit<SessionState, keyof CouchState | "outputs"> }
+  | { type: "outputs"; outputs: Output[] }
   | { type: "navigation"; key: NavigationKey }
   | { type: "text"; requestId: string; token: string; text: string; submit: boolean }
   | { type: "player"; command: PlaybackCommand }

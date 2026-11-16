@@ -13,6 +13,7 @@ import type {
   ServerMessage,
   SessionState,
 } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
@@ -55,7 +56,7 @@ test(
       await new Promise<void>((resolve, reject) => {
         socket.once("error", reject);
         socket.onmessage = (event) => {
-          const message = JSON.parse(String(event.data)) as ServerMessage;
+          const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
           messages.push(message);
           if (message.type === "state") {
             state = message.state;

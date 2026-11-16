@@ -698,7 +698,10 @@ export async function createHub(options: HubOptions) {
   // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
   const failures = new WeakMap<Socket<SocketData>, Set<string>>();
-  const sentStates = new WeakMap<Socket<SocketData>, string>();
+  const sentStates = new WeakMap<
+    Socket<SocketData>,
+    Partial<Record<"couch" | "playback" | "outputs", string>>
+  >();
   const browserLoads = new WeakMap<
     Socket<SocketData>,
     Extract<PlaybackCommand, { type: "load" }>
@@ -2995,6 +2998,8 @@ export async function createHub(options: HubOptions) {
       liveSources: live.sources(),
     };
     const views = new Map<string, string>();
+    const couchMessage = JSON.stringify({ type: "couch", couch: shared } satisfies ServerMessage);
+    const outputMessages = new Map<Playback | undefined, string>();
     // A synchronous flush shares level reads, then discards them before the next change.
     const levels = new Map<Playback | undefined, Map<string, number>>();
     const levelAt = (playback: Playback | undefined, deviceId: string) => {
@@ -3041,13 +3046,13 @@ export async function createHub(options: HubOptions) {
             ? { ...entry, title: liveTitle(source), subtitle: source.metadata?.description }
             : entry;
         });
+        const { outputs: _outputs, ...session } = state;
         views.set(
           view,
           JSON.stringify({
-            type: "state",
-            state: {
-              ...state,
-              ...shared,
+            type: "playback",
+            playback: {
+              ...session,
               queue,
               player: { ...state.player, volume },
               controlling: device,
@@ -3056,16 +3061,30 @@ export async function createHub(options: HubOptions) {
               mixTrim: playback?.mixTrim ?? 100,
               compressor: playback?.compressor,
               controls: actions,
-              outputs: playback ? outputViews.get(playback) : [],
             },
           } satisfies ServerMessage),
         );
       }
-      const message = views.get(view)!;
-      if (sentStates.get(socket) !== message) {
-        sentStates.set(socket, message);
-        send(socket, message);
-      }
+      if (!outputMessages.has(playback))
+        outputMessages.set(
+          playback,
+          JSON.stringify({
+            type: "outputs",
+            outputs: playback ? outputViews.get(playback)! : [],
+          } satisfies ServerMessage),
+        );
+      // Each part goes only when it changed for this window.
+      const sent = sentStates.get(socket) ?? {};
+      sentStates.set(socket, sent);
+      for (const [part, message] of [
+        ["couch", couchMessage],
+        ["playback", views.get(view)!],
+        ["outputs", outputMessages.get(playback)!],
+      ] as const)
+        if (sent[part] !== message) {
+          sent[part] = message;
+          send(socket, message);
+        }
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket,
         watch = all().some((playback) => playback.screens.has(socket));

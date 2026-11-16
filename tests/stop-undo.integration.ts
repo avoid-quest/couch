@@ -8,6 +8,7 @@ import { Identity } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 const until = async (predicate: () => boolean, timeout = 3_000) => {
   const deadline = Date.now() + timeout;
@@ -44,7 +45,7 @@ test(
       (message: Extract<ServerMessage, { type: "result" }>) => void
     >();
     socket.onmessage = (event) => {
-      const message = JSON.parse(String(event.data)) as ServerMessage;
+      const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
       if (message.type === "state") state = message.state;
       if (message.type === "result") {
         pending.get(message.requestId)?.(message);
