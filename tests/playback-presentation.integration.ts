@@ -381,3 +381,41 @@ test("uploaded subtitles survive the retired Stop acknowledgement during expiry 
     store.close();
   }
 });
+
+test("Core sends a new position anchor only when where it plays or how it moves changes", async () => {
+  const store = openStore(":memory:");
+  let now = 1_000_000;
+  const clocks: { position: number; at: number; rate: number }[] = [];
+  const session = createSession(
+    { ...store, ...store.playback("anchor") },
+    () => {},
+    (_state, clock) => {
+      if (clock) clocks.push(clock);
+    },
+    { resolveSource: (entry) => ({ source: entry.source.replace(/^web:/, "") }), now: () => now },
+  );
+  const entry = { id: "film", title: "Film", source: "web:https://media.example/film.mp4" };
+  try {
+    session.command({ type: "enqueue", entry, playNow: true });
+    const playing = { ...session.state.player, status: "playing" as const, duration: 100 };
+    session.observe({ ...playing, position: 10 });
+    clocks.length = 0;
+    // A second later it is where the anchor says: nothing goes out.
+    now += 1000;
+    session.observe({ ...playing, position: 11.1 });
+    assert.deepEqual(clocks, []);
+    // A jump is a new anchor.
+    now += 1000;
+    session.observe({ ...playing, position: 40 });
+    assert.deepEqual(clocks.at(-1), {
+      playbackId: playing.playbackId,
+      position: 40,
+      duration: 100,
+      at: now,
+      rate: 1,
+    });
+  } finally {
+    session.close();
+    store.close();
+  }
+});

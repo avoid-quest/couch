@@ -108,7 +108,7 @@ export function PlaybackTimeline({
   compact = false,
   className,
 }: Props & { pageFirst?: boolean; compact?: boolean; className?: string }) {
-  const playbackClock = usePlaybackClock();
+  const playbackClock = usePlaybackClock(true);
   const player = state.player;
   const buffered = useBufferedEnd(player.playbackId);
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);

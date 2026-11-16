@@ -24,7 +24,7 @@ import {
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
-import { setCoreTime } from "../core-clock";
+import { coreNow, setCoreTime } from "../core-clock";
 import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
@@ -437,7 +437,14 @@ export function useSession(
           reportPlayback();
           const { position, duration, ...player } = message.state.player;
           setState({ ...message.state, player });
-          setClock({ playbackId: player.playbackId, position, duration });
+          // The state's position is where it is now: an anchor moving at its speed while it plays.
+          setClock({
+            playbackId: player.playbackId,
+            position,
+            duration,
+            at: coreNow(),
+            rate: player.status === "playing" && !player.buffering ? (player.speed ?? 1) : 0,
+          });
           setStatus("connected");
         } else if (message.type === "clock") {
           if (
@@ -447,7 +454,9 @@ export function useSession(
             !(
               message.duration === null ||
               (typeof message.duration === "number" && Number.isFinite(message.duration))
-            )
+            ) ||
+            !Number.isFinite(message.at) ||
+            !Number.isFinite(message.rate)
           ) {
             connection.close(4002, "Invalid response");
             return;
@@ -463,6 +472,8 @@ export function useSession(
             playbackId: message.playbackId,
             position: message.position,
             duration: message.duration,
+            at: message.at,
+            rate: message.rate,
           });
         } else if (message.type === "time") {
           if (typeof message.now !== "number" || !Number.isFinite(message.now)) {

@@ -94,6 +94,9 @@ export type PlaybackStore = Store & ReturnType<Store["playback"]>;
 // as people scroll, so a 500-item playlist loads in ten.
 const AUTOPLAY_PREVIEW = 10;
 const AUTOPLAY_PAGE = 50;
+// A position this close to where the last anchor says it is needs no new one: well under a second on any
+// timeline, and above the jitter of a once-a-second report.
+const clockTolerance = 0.25;
 export function createSession(
   store: PlaybackStore,
   sendPlayer: (command: PlaybackCommand) => void,
@@ -178,11 +181,19 @@ export function createSession(
       Object.keys({ ...published, ...rest }).every(
         (key) => Reflect.get(published!, key) === Reflect.get(rest, key),
       );
-    const clock = { playbackId: player.playbackId, position, duration };
+    const at = (options.now ?? Date.now)(),
+      rate = player.status === "playing" && !player.buffering ? (player.speed ?? 1) : 0;
+    const clock = { playbackId: player.playbackId, position, duration, at, rate };
+    // Clients move from the last anchor; one goes out only when where it is or how it moves changes.
+    const predicted =
+      publishedClock &&
+      publishedClock.position + ((at - publishedClock.at) / 1000) * publishedClock.rate;
     if (
       clockOnly &&
       (suppressClock ||
-        (position === publishedClock?.position && duration === publishedClock?.duration))
+        (rate === publishedClock?.rate &&
+          duration === publishedClock.duration &&
+          Math.abs(position - predicted!) < clockTolerance))
     )
       return;
     published = rest;

@@ -341,7 +341,12 @@ export type ClientMessage = {
 export type PlayerMessage = { type: "player"; state: PlayerState };
 // A receiver that can't keep up says so: its picture waits for data, or its speaker keeps losing late chunks.
 export type BehindMessage = { type: "behind"; picture: boolean; sound: boolean };
-export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
+// Where the Playback is, as an anchor: position at Core's wall time `at` (ms), moving `rate` seconds per
+// second (0 while paused or waiting). Core sends a new one only when it changes; clients move on their own.
+export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration"> & {
+  at: number;
+  rate: number;
+};
 export type ServerMessage =
   | { type: "liveIceServers"; iceServers: RTCIceServer[] }
   | LiveSignalMessage
