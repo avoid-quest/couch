@@ -6,7 +6,8 @@
 // Couch's UxPlay patch (native/airplay/uxplay-sender-time.patch) sends a stream that keeps the
 // sender's timing (audio-only AirPlay) as payload type 97: each RTP timestamp is when the sender
 // means that packet to be heard, on this computer's wall clock in units of 1/44100 s modulo 2^32.
-// Any other stream (mirroring) is 96, timed by its arrival.
+// Any other stream (mirroring) is 96, timed by its arrival, and so is a 97 stream whose times
+// Couch can't use (see lead below).
 export const sampleRate = 44_100;
 export const bytesPerSample = 4; // one stereo frame of two 16-bit samples
 const payloadType = 96;
@@ -24,6 +25,13 @@ const seam = sampleRate / 1000;
 // arrives about 1.75 s ahead (UxPlay's lib/raop_rtp.c), so silence doesn't take its place.
 const quietAfter = (prebuffer * 1000) / sampleRate,
   quietAhead = sampleRate;
+// How far ahead of now a sender's time may be for Couch to play at it. A Mac's ALAC arrives
+// 1.6-1.75 s ahead (77175 samples between a sync packet's RTP times); older RAOP senders state
+// 2 s (88200). 3 s keeps a second of margin above that and bounds what Core holds ahead of now.
+// Below a second, the silence a quiet sender gets would cover its sound; a sender that never answers
+// UxPlay's clock requests has its sound due as it arrives, about 0 ahead. Outside this, a stream
+// is timed by its arrival, and so a sender's time never runs Core's stream faster than real time.
+const lead = { min: quietAhead, max: sampleRate * 3 };
 
 export type RtpPacket = {
   sequence: number;
@@ -93,12 +101,14 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
   const wall = options.wall ?? (() => Date.now());
   const frame = createFramer();
   // Packets by their unwrapped timestamp, in order; `next` is the first sample not yet played.
+  // `latest` is the newest RTP sequence number placed: a packet after it is in order.
   let packets: { at: number; payload: Buffer }[] = [];
   let ssrc: number | undefined,
+    stamped = false,
     timed = false,
     last = 0,
+    latest: number | undefined,
     unwrapped = 0,
-    newest = -Infinity,
     next: number | undefined;
   let startedAt: number | undefined,
     emitted = 0;
@@ -116,30 +126,45 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
     next = timed ? at : at - prebuffer;
     stats.resyncs++;
   };
-  // A sender-timed timestamp is the sample time nearest now with those low 32 bits.
-  const unwrap = (timestamp: number) => {
-    const current = Math.round(((now() + wallOffset) * sampleRate) / 1000);
-    return current + ((timestamp - current) | 0);
+  // A sender-timed timestamp is the sample time nearest now with those low 32 bits; usable if its
+  // lead fits.
+  const sender = (timestamp: number, offset: number) => {
+    const current = Math.round(((now() + offset) * sampleRate) / 1000),
+      time = current + ((timestamp - current) | 0);
+    return { time, usable: time >= current + lead.min && time <= current + lead.max };
   };
 
+  // False: the packet belongs to a stream timed otherwise (the sender's time against arrival), which
+  // is another source; it isn't placed. A new pipeline decides its timing from its first packet;
+  // a sender-timed stream whose time leaves the lead window is timed by arrival from then on.
   const place = (packet: RtpPacket) => {
     const samples = packet.payload.length / bytesPerSample;
     // A new pipeline (UxPlay restarts it for another audio format) starts its own clock.
-    if (packet.ssrc !== ssrc || packet.timed !== timed) {
+    const pipeline = packet.ssrc !== ssrc || packet.timed !== stamped,
+      offset = pipeline ? wall() - now() : wallOffset,
+      time = packet.timed ? sender(packet.timestamp, offset) : undefined,
+      usable = !!time?.usable && (pipeline || timed);
+    if (ssrc !== undefined && usable !== timed) return false;
+    if (pipeline) {
       if (ssrc !== undefined) {
         packets = [];
         next = undefined;
-        newest = -Infinity;
         stats.resyncs++;
       }
       ssrc = packet.ssrc;
-      timed = packet.timed;
-      wallOffset = wall() - now();
+      stamped = packet.timed;
+      timed = usable;
+      latest = undefined;
+      wallOffset = offset;
       drift = 0;
       senderEnd = undefined;
-      unwrapped = timed ? unwrap(packet.timestamp) : packet.timestamp;
+      unwrapped = packet.timestamp;
     } else unwrapped += (packet.timestamp - last) | 0; // RTP timestamps wrap at 32 bits
+    if (timed) unwrapped = time!.time;
     last = packet.timestamp;
+    const step = latest === undefined ? 1 : (packet.sequence - latest) & 0xffff,
+      inOrder = step > 0 && step < 0x8000;
+    if (inOrder) latest = packet.sequence;
     if (timed) {
       arrivedAt = now();
       if (senderEnd !== undefined && Math.abs(unwrapped - senderEnd) <= seam)
@@ -150,19 +175,21 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
     const at = unwrapped - drift,
       end = at + samples;
     next ??= timed ? at : at - prebuffer;
-    // A pause or seek moves the sender's clock past what may be buffered, and a sender
-    // whose clock runs slower than Core's eventually arrives late in order: start again from it.
-    if (end > next + capacity || (!timed && end <= next && at > newest)) resync(at);
-    newest = Math.max(newest, at);
+    // A pause or seek moves the sender's clock past what may be buffered; a sender whose clock runs
+    // slower than Core's, or steps back, arrives late in order: start again from it. A sender-timed
+    // stream that steps back within the lead window drops only what overlaps what already went out,
+    // so speakers play on without a gap at the sender's time; further back, it's timed by arrival.
+    if (end > next + capacity || (!timed && end <= next && inOrder)) resync(at);
     if (end <= next) {
       stats.late++;
-      return;
+      return true;
     } // A straggler, after what already played
     let index = packets.length;
     while (index && packets[index - 1]!.at > at) index--;
-    if (packets[index - 1]?.at === at) return; // A repeat
+    if (packets[index - 1]?.at === at) return true; // A repeat
     packets.splice(index, 0, { at, payload: Buffer.from(packet.payload) });
     stats.packets++;
+    return true;
   };
   const pull = (samples: number) => {
     const output = Buffer.alloc(samples * bytesPerSample);
@@ -205,7 +232,8 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
 
   return {
     stats,
-    /** Bytes from the pipe, in any chunking. False when the framing is broken. */
+    /** Bytes from the pipe, in any chunking. False when the framing is broken. Packets timed unlike
+     * the stream are left out. */
     push(chunk: Buffer) {
       const framed = frame(chunk);
       if (!framed) return false;
@@ -213,9 +241,9 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
       for (const packet of framed.packets) place(packet);
       return true;
     },
-    /** A packet already taken from the pipe's framing. */
+    /** A packet already taken from the pipe's framing. False: it starts a stream timed otherwise. */
     place,
-    /** Whether the stream keeps the sender's timing. */
+    /** Whether the stream plays at the sender's time; false when timed by its arrival. */
     timed: () => timed,
     /** The PCM due since the last call, silence where nothing arrived in time, and its first sample's time. */
     tick() {

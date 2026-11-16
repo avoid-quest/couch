@@ -71,18 +71,18 @@ const tone = ({ frequency, ssrc = 0x5eed }) => {
   }, 5);
 };
 // Audio-only AirPlay through Couch's UxPlay patch: payload type 97, each timestamp when the sender
-// means that packet heard (start: the first one's, on the wall clock in 1/44100 s), 1.75 s after it
-// sends it. Each 10 ms packet holds one level, a step above the last.
-const steps = ({ start }) => {
+// means that packet heard (start: the first one's, on the wall clock in 1/44100 s), ahead (ms, 1.75 s
+// by default) after it sends it. Each 10 ms packet holds one level, a step above the last.
+const steps = ({ start, ahead = 1750, first = 0 }) => {
   clearInterval(timer);
-  const from = start / 44.1 - 1750;
+  const from = start / 44.1 - ahead;
   let sent = 0;
   timer = setInterval(() => {
     for (; sent < Math.floor((Date.now() - from) / 10); sent++) {
       const packet = Buffer.alloc(14 + 441 * 4);
       packet.writeUInt16BE(packet.length - 2, 0);
       packet[2] = 0x80; packet[3] = 97;
-      packet.writeUInt16BE(sent & 0xffff, 4);
+      packet.writeUInt16BE((first + sent) & 0xffff, 4);
       packet.writeUInt32BE((start + sent * 441) % 2 ** 32, 6);
       packet.writeUInt32BE(0x7e57, 10);
       for (let i = 0; i < 441; i++) {
@@ -97,6 +97,20 @@ const run = command => {
   if (command.stderr) console.error(command.stderr);
   if (command.tone) tone(command.tone);
   if (command.steps) steps(command.steps);
+  // One write holding a sender-timed packet, then the first of a tone: the sound changes timing
+  // within one read of the pipe.
+  if (command.mixed) {
+    const packet = (type, timestamp, ssrc) => {
+      const bytes = Buffer.alloc(14 + 441 * 4);
+      bytes.writeUInt16BE(bytes.length - 2, 0);
+      bytes[2] = 0x80; bytes[3] = type;
+      bytes.writeUInt32BE(timestamp % 2 ** 32, 6);
+      bytes.writeUInt32BE(ssrc, 10);
+      return bytes;
+    };
+    fs.writeSync(3, Buffer.concat([packet(97, command.mixed.start, 0x7e57), packet(96, 0, 0x5eed)]));
+    tone({ frequency: 440 });
+  }
   if (command.quiet) clearInterval(timer);
   if (command.exit !== undefined) process.exit(command.exit);
 };
@@ -665,6 +679,112 @@ test(
     await until(() => errors.length >= 200, 15_000);
     const worst = Math.max(...errors.map(Math.abs));
     assert.ok(worst < 3, `played within 3 ms of the sender's time (worst ${worst.toFixed(2)} ms)`);
+  },
+);
+
+test(
+  "a sender clock that steps back half a second plays on without a gap, at its new time",
+  { skip: !linux || !hasFfmpeg, timeout: 60_000 },
+  async (t) => {
+    const { airplay, next, request, connect, hostToken, receiver, hear } = await fixture(t);
+    await request("/api/settings/airplay", { body: { enabled: true } });
+    const fake = await next(1);
+    await ready(fake, airplay);
+    const host = await connect(Identity.generate().peerId, hostToken),
+      device = await connect(receiver.id, receiver.token);
+    sender(fake, 32, "Mac");
+    fake.send({ steps: { start: Math.round((Date.now() + 1750) * 44.1) } });
+    await until(() => !!device.state.liveSources?.length);
+    await until(() => scheduled(host)?.status === "playing", 5_000);
+    assert.equal(
+      (
+        await device.command({
+          type: "playLive",
+          sourceId: device.state.liveSources![0]!.id,
+          deviceId: receiver.id,
+        })
+      ).ok,
+      true,
+    );
+    const offsetMs = Date.now() - performance.now();
+    const errors: number[] = [],
+      chunks: { at: number; end: number }[] = [];
+    let start: number | undefined;
+    await hear((timestampUs, bytes) => {
+      chunks.push({ at: timestampUs, end: timestampUs + (bytes.length / 4 / 48_000) * 1e6 });
+      if (start === undefined) return;
+      const levels = Array.from({ length: bytes.length / 4 }, (_, index) =>
+        Math.round(bytes.readInt16LE(index * 4) / 100),
+      );
+      for (let index = 96; index + 96 < levels.length; index++) {
+        const step = levels[index]!;
+        if (step !== levels[index - 1]! + 1 || levels[index - 96] !== step - 1) continue;
+        if (levels[index + 96] !== step) continue;
+        const heard = timestampUs / 1000 + (index * 1000) / 48_000;
+        // Only the new time's sound: after the half second that overlaps what already went out.
+        if ((heard + offsetMs) * 44.1 < start + 22_050 + 441) continue;
+        const near = Math.round(((heard + offsetMs) * 44.1 - start) / 441);
+        const packet = near + ((((step - near) % 300) + 450) % 300) - 150;
+        errors.push(heard - ((start + packet * 441) / 44.1 - offsetMs));
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    // The sender's clock steps back: its next packet, in sequence, is meant heard half a second
+    // before the one it follows.
+    start = Math.round((Date.now() + 1250) * 44.1);
+    fake.send({ steps: { start, ahead: 1250, first: 10_000 } });
+    await until(() => errors.length >= 100, 15_000);
+    const worst = Math.max(...errors.map(Math.abs));
+    assert.ok(
+      worst < 3,
+      `played within 3 ms of the sender's new time (worst ${worst.toFixed(2)} ms)`,
+    );
+    // Each chunk the speaker is sent starts where the one before ends.
+    const gaps = chunks.slice(1).map((chunk, index) => Math.abs(chunk.at - chunks[index]!.end));
+    assert.ok(Math.max(...gaps) < 1_000, `no gap (largest ${Math.max(...gaps)} µs)`);
+    assert.equal(host.state.liveSources?.length, 1);
+    assert.equal(host.state.liveSources![0]!.senderTimed, true);
+    assert.equal(scheduled(host)?.status, "playing");
+  },
+);
+
+test(
+  "AirPlay sound whose sender time Couch can't use plays by its arrival",
+  { skip: !linux || !hasFfmpeg, timeout: 30_000 },
+  async (t) => {
+    const { airplay, next, request, connect, hostToken } = await fixture(t);
+    await request("/api/settings/airplay", { body: { enabled: true } });
+    const fake = await next(1);
+    await ready(fake, airplay);
+    const host = await connect(Identity.generate().peerId, hostToken);
+    sender(fake, 32, "Mac");
+    // A sender that never answers UxPlay's clock requests: its sound is due as it arrives.
+    fake.send({ steps: { start: Math.round(Date.now() * 44.1), ahead: 0 } });
+    await until(() => scheduled(host)?.status === "playing", 5_000);
+    assert.equal(host.state.liveSources?.length, 1);
+    assert.equal(host.state.liveSources![0]!.senderTimed, undefined);
+  },
+);
+
+test(
+  "a read of AirPlay sound that changes timing partway is two sources, split where it changes",
+  { skip: !linux || !hasFfmpeg, timeout: 30_000 },
+  async (t) => {
+    const { airplay, next, request, connect, hostToken } = await fixture(t);
+    await request("/api/settings/airplay", { body: { enabled: true } });
+    const fake = await next(1);
+    await ready(fake, airplay);
+    const host = await connect(Identity.generate().peerId, hostToken);
+    sender(fake, 32, "Mac");
+    fake.send({ mixed: { start: Math.round((Date.now() + 1750) * 44.1) } });
+    // The tone, timed by its arrival, is the source that plays.
+    await until(
+      () =>
+        host.state.liveSources?.length === 1 &&
+        !host.state.liveSources[0]!.senderTimed &&
+        scheduled(host)?.status === "playing",
+      5_000,
+    );
   },
 );
 

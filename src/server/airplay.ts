@@ -152,9 +152,11 @@ export function createAirPlay(options: {
     options.sessions.ended(id);
     options.changed();
   };
-  const begin = (timed: boolean) => {
+  const begin = (first: RtpPacket) => {
     const id = crypto.randomUUID(),
       ingress = createAudioIngress();
+    ingress.place(first);
+    const timed = ingress.timed();
     let position = 0,
       sequence = 0;
     const current = (session = {
@@ -192,18 +194,23 @@ export function createAirPlay(options: {
       }, 20),
     });
     current.timer.unref();
-    log(`airplay ${id.slice(0, 8)} receiving`);
+    log(
+      `airplay ${id.slice(0, 8)} receiving${first.timed && !timed ? ", timed by arrival: the sender's time isn't usable" : ""}`,
+    );
     options.sessions.started(id, current.sender, timed);
     options.changed();
   };
   const media = (packets: RtpPacket[]) => {
     // Sound is a sender's only on its authenticated connection, and only from the process that serves it.
     if (!packets.length || (!session && !(connected && authenticated))) return;
-    // A sender's sound that changes how it is timed (audio to mirroring) is another source.
-    if (session && session.ingress.timed() !== packets[0]!.timed) end();
-    if (!session) begin(packets[0]!.timed);
+    // A sender's sound that changes how it is timed (audio to mirroring, or a sender time Couch
+    // can't use) is another source, from the packet where it changes.
+    for (const packet of packets)
+      if (!session || !session.ingress.place(packet)) {
+        end();
+        begin(packet);
+      }
     session!.media = Date.now();
-    for (const packet of packets) session!.ingress.place(packet);
   };
   const line = (text: string) => {
     let match: RegExpExecArray | null;
