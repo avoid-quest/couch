@@ -1146,9 +1146,11 @@ export function createSession(
     },
     // The newest tab of an output Device took over, or an output came back online: the current
     // item loads there where it is (#644 Tabs, Offline).
+    // paused: the pause it had before this Device's tab reported, unless a Play or Pause came since.
     reload(
       media?: Pick<MediaSource, "source" | "audioSource" | "hls" | "mpegts" | "mpv">,
       retry = false,
+      paused?: boolean,
     ) {
       const { playbackId, status, position, speed } = state.player;
       if (
@@ -1172,7 +1174,7 @@ export function createSession(
       send({
         ...command,
         ...(live ? {} : { startPosition: position }),
-        paused: pendingPause ?? status === "paused",
+        paused: pendingPause ?? paused ?? status === "paused",
         subtitles: withAdded(command.subtitles),
         ...carried(state.player),
         ...(speed ? { preferences: { ...command.preferences!, speed } } : {}),

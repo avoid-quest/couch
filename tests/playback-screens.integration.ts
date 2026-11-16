@@ -185,3 +185,39 @@ test("a playing screen stays Playing when another output joins", { timeout: 20_0
     await f.close();
   }
 });
+
+// Back to Direct, the TV's follower loses the group's clock and pauses its picture before its own
+// load arrives: the Playback still plays on as it did.
+test(
+  "a film playing on two screens plays on when one of them leaves",
+  { timeout: 20_000 },
+  async () => {
+    const f = await liveFixture({ extraDevices: 1 });
+    try {
+      const tv = await f.connect(2, "&video=1"),
+        laptop = await f.connect(3, "&video=1");
+      await f.receiver.command({
+        type: "enqueue",
+        entry: { id: "film", title: "Film", source: `${f.hub.origin}/api/health` },
+        playNow: true,
+        deviceId: tv.id,
+      });
+      await until(() => !!tv.load());
+      tv.report();
+      await until(() => f.receiver.state.player.status === "playing");
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: true });
+      await until(
+        () => !!laptop.load() && !!f.receiver.state.playbacks?.some((p) => p.mode === "relaxed"),
+      );
+      const loads = tv.messages.length;
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: false });
+      tv.report({ playbackId: tv.load()!.playbackId, status: "paused", position: 12 });
+      await until(() =>
+        tv.messages.slice(loads).some((m) => m.type === "player" && m.command.type === "load"),
+      );
+      assert.notEqual(tv.load()!.paused, true);
+    } finally {
+      await f.close();
+    }
+  },
+);
