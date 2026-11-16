@@ -368,18 +368,13 @@ export function openStore(path: string, remoteControlEnabled = false) {
         )
         .get()?.settings;
       const value = saved ? JSON.parse(saved) : null;
-      return isLiveAudioSettings(value)
-        ? { codec: value.codec, minBufferMs: value.minBufferMs }
-        : defaultLiveAudioSettings;
+      return isLiveAudioSettings(value) ? { codec: value.codec } : defaultLiveAudioSettings;
     },
     saveLiveAudioSettings(value: unknown) {
-      if (!isLiveAudioSettings(value))
-        throw new ControllerError(
-          "Choose Automatic, PCM or Opus and a buffer between 0 and 5000 ms.",
-        );
+      if (!isLiveAudioSettings(value)) throw new ControllerError("Choose Automatic, PCM or Opus.");
       db.query(
         "INSERT INTO installation_live_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET settings = excluded.settings",
-      ).run(JSON.stringify({ codec: value.codec, minBufferMs: value.minBufferMs }));
+      ).run(JSON.stringify({ codec: value.codec }));
     },
     askEveryDevice() {
       return !!db

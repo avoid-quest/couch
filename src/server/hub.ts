@@ -1273,9 +1273,6 @@ export async function createHub(options: HubOptions) {
               ...(playback.media?.playbackId === command.playbackId ? playback.media : {}),
               ...groupSelection(playback),
               captureIntent: intentOf(playback) ?? "relaxed",
-              ...(intentOf(playback) === "live"
-                ? { liveDelayMs: store.liveAudioSettings().minBufferMs }
-                : {}),
             }
           : command,
       );

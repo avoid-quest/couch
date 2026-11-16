@@ -42,8 +42,6 @@ export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & {
   duration?: number;
   audioSelection?: AudioSelection;
   credentialOrigin?: string;
-  // Live audio: the room's delay, the host's setting.
-  liveDelayMs?: number;
 };
 export type Member = { deviceId: string; level: number };
 // Every run encodes both wires, so a speaker that joins never restarts everyone's sound for its format.
@@ -518,8 +516,8 @@ export function createScheduledAudio(options: {
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
           const { capture: source, details } = sources.get(current.liveSourceId)!;
           const live = current.captureIntent === "live";
-          // Sender-timed AirPlay plays at its capture times, the sender's, like a Live room with no
-          // delay: a speaker that joins doesn't move it, and one whose need doesn't fit plays a step later.
+          // Sender-timed AirPlay plays at its capture times, the sender's, as Live does: a speaker
+          // that joins doesn't move it, and each plays at its own step.
           const log = (line: string) =>
             console.log(
               `${new Date().toISOString()} ${id.slice(0, 8)} ${line}`.replace(
@@ -529,11 +527,7 @@ export function createScheduledAudio(options: {
             );
           const next: Run = {
             fixed: true,
-            live: live
-              ? createLiveLead(current.liveDelayMs ?? 0, log)
-              : details?.senderTimed
-                ? createLiveLead(0, log)
-                : undefined,
+            live: live || details?.senderTimed ? createLiveLead(log) : undefined,
             margins: live ? createLiveMarginLog(log) : undefined,
             start: 0,
             anchored: true,
@@ -567,7 +561,7 @@ export function createScheduledAudio(options: {
             }
             next.live?.arrived(event.wire, event.at, serverNowUs());
             if (!next.live) next.captureLead = Math.max(next.captureLead!, sendAhead());
-            const at = event.at + (next.live?.roomMs ?? next.captureLead!) * 1000;
+            const at = event.at + (next.live ? 0 : next.captureLead!) * 1000;
             if (next.base === undefined) {
               next.base = at;
               for (const member of members) begin(member.deviceId);
@@ -928,12 +922,12 @@ export function createScheduledAudio(options: {
           current.clock!.push({ at: current.base + offset, offset });
         }
       }
-      // How much later than the room the latest Live listener plays.
+      // How much later than its capture the latest Live listener plays.
       let latest = 0;
       for (const wire of wires) {
         const list = current.queues[wire],
           sent = current.sent[wire];
-        // A Live listener that doesn't fit the room's delay gets the same chunks, stamped later.
+        // Each Live listener gets the same chunks, stamped later by its own step.
         // Couch's own listener declares a buffer of 0 until it has measured its output: it has no
         // need yet, nor has a player that hasn't reported its state. One whose state declares no
         // buffer at all (another Sendspin player) needs at least Core's input side.
@@ -943,7 +937,7 @@ export function createScheduledAudio(options: {
             later.set(
               session,
               current.live
-                ? (current.live.leadMs(
+                ? current.live.leadMs(
                     session.getClientId()!,
                     wire,
                     session.getPlayerTiming().minBufferMs === 0 ||
@@ -951,9 +945,7 @@ export function createScheduledAudio(options: {
                       ? undefined
                       : playerLead(session, 0),
                     session.getClientName() ?? session.getClientId()!,
-                  ) -
-                    current.live.roomMs) *
-                    1000
+                  ) * 1000
                 : 0,
             );
         // Chunks stay until the latest listener on this wire has played them.

@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test";
 import {
   declareLiveBuffer,
+  nextEvidence,
   nextLateSteps,
   noLateSteps,
+  restoredLateSteps,
+  startingSteps,
   withLateSteps,
+  type Evidence,
   type LateSteps,
   type LossSecond,
 } from "../src/client/session/live-buffer";
@@ -13,7 +17,7 @@ const steady = (latency: number) => Array(5).fill(latency);
 
 test("a Receiver declares only its own need, from its first reading", () => {
   expect(declareLiveBuffer(undefined)).toBeUndefined();
-  // Need = reading + the player's 15 ms scheduling batch; the host's room delay isn't part of it.
+  // Need = reading + the player's 15 ms scheduling batch.
   expect(declareLiveBuffer(undefined, [40])).toBe(55);
   expect(declareLiveBuffer(undefined, steady(40))).toBe(55);
   expect(declareLiveBuffer(undefined, steady(0))).toBe(15);
@@ -78,19 +82,19 @@ test("a step counts as applied only when Core sends its chunks a step further ah
   late = run(late, [second(20, 120)]);
   expect(late).toMatchObject({
     steps: 1,
+    kept: 1,
     caused: { measure: "chunks", count: 4 },
     seconds: [],
     phase: { kind: "watching" },
   });
 });
 
-test("a step Core didn't apply, because the room's delay had slack, isn't judged: loss steps again", () => {
-  const late = run(noLateSteps, [...recurring(2), ...repeat(3, second(1))]);
-  expect(late).toMatchObject({
-    steps: 2,
-    unhelpful: 0,
-    phase: { kind: "moving" },
-  });
+test("a step Core didn't apply (at its limit) isn't judged or kept, and recurring loss steps again", () => {
+  let late = run(noLateSteps, [...recurring(2), ...repeat(3, second(1))]);
+  expect(late).toMatchObject({ steps: 1, kept: 0, phase: { kind: "watching" } });
+  expect(late.caused).toBeUndefined();
+  late = run(late, [second(1)]);
+  expect(late).toMatchObject({ steps: 2, kept: 0, phase: { kind: "moving" } });
 });
 
 test("a step after which loss doesn't recur is kept", () => {
@@ -257,14 +261,133 @@ test("each late step adds one step to the declaration, within Core's limit", () 
   expect(withLateSteps(4990, 1)).toBe(5000);
 });
 
-test("a declaration one step higher moves a listener at most one step later", () => {
-  const lead = createLiveLead(100);
+// One listen of `count` seconds from what the device stored, where Core applies each step the
+// listener declares by the next second. `at` gives each second, by the steps Core plays it at.
+const listenFor = (
+  saved: unknown,
+  count: number,
+  at: (index: number, applied: number) => LossSecond,
+) => {
+  let evidence: Evidence = startingSteps(JSON.parse(JSON.stringify(saved ?? null)));
+  let late = restoredLateSteps(evidence.steps);
+  let applied = late.steps,
+    highest = late.steps;
+  for (let index = 0; index < count; index++) {
+    const each = at(index, applied);
+    late = nextLateSteps(late, each);
+    evidence = nextEvidence(evidence, late, each);
+    // Core only moves a listener later while it listens.
+    applied = Math.max(applied, late.steps);
+    highest = Math.max(highest, late.steps);
+  }
+  // What storage keeps.
+  return { saved: { steps: evidence.steps, spare: evidence.spare }, late, highest };
+};
+const placed =
+  (lost: (index: number, applied: number) => number) => (index: number, applied: number) =>
+    second(lost(index, applied), 95 + 25 * applied);
+
+test("a device remembers the steps that cured its loss, and starts there next time", () => {
+  // Two spells of 4 chunks every ten seconds; one step halves them, two cure them.
+  const curedByTwo = placed((index, applied) =>
+    applied >= 2 || index % 5 !== 4 ? 0 : applied === 1 ? 1 : 4,
+  );
+  const first = listenFor(undefined, 180, curedByTwo);
+  expect(first.late.steps).toBe(2);
+  expect(first.saved.steps).toBe(2);
+  const again = listenFor(first.saved, 120, curedByTwo);
+  expect(again).toMatchObject({ highest: 2, saved: { steps: 2 } });
+  expect(again.late.unhelpful).toBe(0);
+  // A listen that ends before its last step held a minute remembers only the one before it.
+  expect(listenFor(undefined, 60, curedByTwo).saved.steps).toBe(1);
+});
+
+test("loss no step cures doesn't ratchet across joins beyond what one listen reaches", () => {
+  const steady = placed(() => 1);
+  // A spell of 2 chunks every 20 s, whatever the step: three in a minute.
+  const spells = placed((index) => (index % 20 === 19 ? 2 : 0));
+  for (const loss of [steady, spells])
+    for (const length of [12, 30, 90, 300]) {
+      const once = listenFor(undefined, length, loss);
+      let saved: unknown,
+        highest = 0;
+      for (let join = 0; join < 200; join++) {
+        const listened = listenFor(saved, length, loss);
+        saved = listened.saved;
+        highest = Math.max(highest, listened.highest);
+      }
+      expect(highest).toBeLessThanOrEqual(once.highest);
+      expect(saved).toEqual(once.saved);
+    }
+  // Spells of 1 to 5 chunks at random, one every 20 s on average. A step the halving rule judges
+  // helpful by chance is kept, in one listen as across joins; joins still climb less.
+  for (const length of [90, 300]) {
+    let seed = 7;
+    const random = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31;
+    const spell = placed(() => (random() < 1 / 20 ? 1 + Math.floor(random() * 5) : 0));
+    let saved: unknown,
+      highest = 0;
+    for (let join = 0; join < 100; join++) {
+      const listened = listenFor(saved, length, spell);
+      saved = listened.saved;
+      highest = Math.max(highest, listened.highest);
+    }
+    seed = 7;
+    const once = listenFor(undefined, 100 * length, spell).highest;
+    expect(highest).toBeLessThan(once);
+  }
+});
+
+test("a remembered step comes off only after a minute in which a step earlier would have lost nothing", () => {
+  // Each step adds 25 ms to every chunk's slack.
+  const slack =
+    (worstMs: (index: number) => number) =>
+    (index: number, applied: number): LossSecond => ({
+      ...second(0, 95 + 25 * applied),
+      slackMs: worstMs(index) + 25 * applied,
+    });
+  // Settled at two steps: once in 20 s a chunk starts with only 30 ms to spare, under a step's
+  // slack one step earlier. However many listens, it stays.
+  const tails = slack((index) => (index % 20 === 19 ? -20 : 30));
+  let saved: unknown = { steps: 2, spare: 0 };
+  for (let join = 0; join < 100; join++) saved = listenFor(saved, 45, tails).saved;
+  expect(saved).toMatchObject({ steps: 2 });
+  // Two steps' slack for every chunk: a minute of it over short listens starts the next listen a
+  // step earlier, once; there each chunk has 35 ms, so it stays.
+  const roomy = slack(() => 10);
+  saved = { steps: 2, spare: 0 };
+  for (let join = 0; join < 3; join++) saved = listenFor(saved, 20, roomy).saved;
+  expect(saved).toEqual({ steps: 2, spare: 60 });
+  expect(listenFor(saved, 1, roomy).highest).toBe(1);
+  for (let join = 0; join < 100; join++) saved = listenFor(saved, 20, roomy).saved;
+  expect(saved).toEqual({ steps: 1, spare: 0 });
+  // A lost chunk, or Core placing it elsewhere, starts the minute again.
+  const at = (sendAheadMs: number, lost = 0) => ({ ...second(lost, sendAheadMs), slackMs: 80 });
+  const counted = [at(145), at(145)].reduce(
+    (evidence: Evidence, each) => nextEvidence(evidence, restoredLateSteps(2), each),
+    { steps: 2, spare: 50 },
+  );
+  expect(counted).toEqual({ steps: 2, spare: 52, sendAheadMs: 145 });
+  expect(nextEvidence(counted, restoredLateSteps(2), at(145, 1))).toEqual({ steps: 2, spare: 0 });
+  expect(nextEvidence(counted, restoredLateSteps(2), at(170))).toEqual({ steps: 2, spare: 0 });
+  // Anything else stored counts as nothing learned.
+  for (const stored of [
+    null,
+    "2",
+    { steps: 2, quietSeconds: 60 },
+    { steps: -1, spare: 0 },
+    { steps: 1.5, spare: 0 },
+    { steps: 201, spare: 0 },
+  ])
+    expect(startingSteps(stored)).toEqual({ steps: 0, spare: 0 });
+});
+
+test("a declaration one step higher moves a listener one step later", () => {
+  const lead = createLiveLead();
   measure(lead, 15);
-  // In the room with slack: it stays until its need outgrows the room, then plays a step later.
+  expect(lead.leadMs("phone", "opus", withLateSteps(60, 0))).toBe(75);
   expect(lead.leadMs("phone", "opus", withLateSteps(60, 1))).toBe(100);
   expect(lead.leadMs("phone", "opus", withLateSteps(60, 2))).toBe(125);
-  // Already a step later: one more.
-  expect(lead.leadMs("phone", "opus", withLateSteps(60, 3))).toBe(150);
 });
 
 // Seconds of chunks on one wire that took `ms` from capture to Core, from the run's first second
@@ -280,33 +403,31 @@ const measure = (
     lead.arrived(wire, (second * 1000 + 500 - ms) * 1000, (second * 1000 + 500) * 1000);
 };
 
-test("no listener's declaration raises the room's delay; one that doesn't fit plays a step later", () => {
-  const lead = createLiveLead(100);
+test("one listener's need moves nobody else", () => {
+  const lead = createLiveLead();
   measure(lead, 12);
   expect(lead.leadMs("earbuds", "opus", 75)).toBe(100);
   expect(lead.leadMs("bluetooth", "opus", 200)).toBe(225);
   expect(lead.leadMs("earbuds", "opus", 75)).toBe(100);
-  expect(lead.roomMs).toBe(100);
 });
 
 test("Core's measured input-side time counts towards each listener's need", () => {
-  const lead = createLiveLead(100);
-  expect(lead.leadMs("phone", "opus", 80)).toBe(100);
+  const lead = createLiveLead();
   measure(lead, 30);
   expect(lead.leadMs("phone", "opus", 80)).toBe(125);
 });
 
-test("a listener waits in the room for the input side, then moves once, within two seconds", () => {
-  const lead = createLiveLead(50);
+test("a listener waits at 0 for the input side, then moves once, within two seconds", () => {
+  const lead = createLiveLead();
   // The encoder's start: its backlog arrives late and doesn't count.
   lead.arrived("opus", 0, 300_000);
-  expect(lead.leadMs("phone", "opus", 75)).toBe(50);
+  expect(lead.leadMs("phone", "opus", 75)).toBe(0);
   measure(lead, 15, 0, 2);
   expect(lead.leadMs("phone", "opus", 75)).toBe(100);
 });
 
 test("each wire has its own input-side time", () => {
-  const lead = createLiveLead(100);
+  const lead = createLiveLead();
   measure(lead, 40, 0, 6, "opus");
   measure(lead, 10, 0, 6, "pcm");
   expect(lead.leadMs("phone", "opus", 75)).toBe(125);
@@ -314,27 +435,27 @@ test("each wire has its own input-side time", () => {
 });
 
 test("a listener's step only rises while it listens, and resets when it leaves", () => {
-  const lead = createLiveLead(50);
+  const lead = createLiveLead();
   measure(lead, 0, 0, 2);
   expect(lead.leadMs("phone", "opus", 110)).toBe(125);
   expect(lead.leadMs("phone", "opus", 0)).toBe(125);
   lead.left("phone");
-  expect(lead.leadMs("phone", "opus", 0)).toBe(50);
+  expect(lead.leadMs("phone", "opus", 0)).toBe(0);
 });
 
 test("one slow second doesn't move the input-side time", () => {
-  const lead = createLiveLead(50);
+  const lead = createLiveLead();
   measure(lead, 10);
   lead.arrived("opus", 6_000_000, 6_900_000);
   measure(lead, 10, 7);
   expect(lead.leadMs("wired", "opus", 40)).toBe(50);
 });
 
-test("with no room delay, a listener waits for its need, and needs in the same step play together", () => {
+test("a listener waits for its need, and needs in the same step play together", () => {
   const lines: string[] = [];
-  const lead = createLiveLead(0, (line) => lines.push(line));
+  const lead = createLiveLead((line) => lines.push(line));
   measure(lead, 26);
-  // Not measured yet: it waits at the room's 0, where Core sends it nothing.
+  // Not measured yet: it waits at 0, where Core sends it nothing.
   expect(lead.leadMs("phone", "opus", undefined, "Phone")).toBe(0);
   // 55 + 26 and 70 + 26 both round up to 100.
   expect(lead.leadMs("phone", "opus", 55, "Phone")).toBe(100);
@@ -343,15 +464,15 @@ test("with no room delay, a listener waits for its need, and needs in the same s
   expect(lead.leadMs("phone", "opus", 55, "Phone")).toBe(100);
   expect(lines).toEqual([
     "live input side opus: 26 ms",
-    'live listener "Phone" opus: declares 55 ms, input side 26 ms, plays 100 ms after capture (room 0 ms)',
-    'live listener "Laptop" opus: declares 70 ms, input side 26 ms, plays 100 ms after capture (room 0 ms)',
-    'live listener "Wired" opus: declares 47 ms, input side 26 ms, plays 75 ms after capture (room 0 ms)',
+    'live listener "Phone" opus: declares 55 ms, input side 26 ms, plays 100 ms after capture',
+    'live listener "Laptop" opus: declares 70 ms, input side 26 ms, plays 100 ms after capture',
+    'live listener "Wired" opus: declares 47 ms, input side 26 ms, plays 75 ms after capture',
   ]);
 });
 
 test("a restarted capture keeps its input side until the new encoder's is measured", () => {
   const lines: string[] = [];
-  const lead = createLiveLead(0, (line) => lines.push(line));
+  const lead = createLiveLead((line) => lines.push(line));
   measure(lead, 26);
   expect(lead.leadMs("phone", "opus", 55, "Phone")).toBe(100);
   lead.restart();
@@ -367,7 +488,6 @@ test("a listener's log line comes at most every ten seconds unless its step rose
   const lines: string[] = [];
   let now = 0;
   const lead = createLiveLead(
-    0,
     (line) => lines.push(line),
     () => now,
   );

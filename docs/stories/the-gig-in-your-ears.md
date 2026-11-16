@@ -13,7 +13,7 @@ a talk, a silent disco or a listening party.
 
 1. **Share screen or sound** → **Audio input** → **Find audio inputs** → the
    **Device**.
-2. Optionally a **Title**, **Now playing** and **Playback buffer floor (ms)**.
+2. Optionally a **Title** and **Now playing**.
 3. **Start sharing**. The panel shows **Live** time, **Listeners**, their state,
    **Remove**, **Mute audio input** and **Codec**; native Mac inputs also offer
    **Capture buffer** and **Input channels**.
@@ -42,4 +42,4 @@ Behringer and phone rig). Content: a stereo mix.
 ## Known issues
 
 - Live starts only from the desktop app on the Couch computer.
-- No input level meter; lowering the shared delay needs a restart.
+- No input level meter.

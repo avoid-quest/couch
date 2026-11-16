@@ -119,7 +119,7 @@ test(
       async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
       (error) => errors.push(error),
     );
-    const lead = createLiveLead(0);
+    const lead = createLiveLead();
     const nowUs = () => (performance.timeOrigin + performance.now()) * 1000;
     let first: number | undefined;
     source.subscribe((event) => {

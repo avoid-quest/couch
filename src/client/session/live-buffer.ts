@@ -1,7 +1,7 @@
 import { liveStepMs, risenNeed } from "../../shared/live-need";
 
 // What a listener declares is its own output-side need; Core adds its measured input-side time and
-// decides whether that fits the room's delay. The need is what the player measures and what it
+// plays it at that need rounded up to a step. The need is what the player measures and what it
 // structurally takes, nothing more:
 // - syncInfo.outputLatencyMs: the device's reported output latency (SDK 6.0.0's raw reading). The
 //   player starts each chunk that much before its time, and drops it when that start has passed.
@@ -29,8 +29,9 @@ export function declareLiveBuffer(declaredMs: number | undefined, latencyMs: num
 //   twice in ten seconds, and 25 ms more would have cut most of it; three spells in a minute is a
 //   pattern, not a one-off.
 // - Core has applied a step when its chunks leave it half a step further ahead of their stamps
-//   (send_ahead, which Core writes as it sends, so the network can't move it). A step not seen within
-//   3 s fell in the room's slack: recurring loss steps again at once.
+//   (send_ahead, which Core writes as it sends, so the network can't move it). With no room delay
+//   Core applies every step a listener asks for, short of its 5 s limit; one not seen within 3 s
+//   wasn't applied, isn't judged, and isn't remembered.
 // - A step is judged when loss recurs after it: the chunks lost in the ten seconds that show it
 //   against those of the ten seconds that caused it. The same rule picked both, so neither is clean by
 //   construction. The player slews to a step for about 12 s, but a loss on the way places its next
@@ -43,7 +44,8 @@ export function declareLiveBuffer(declaredMs: number | undefined, latencyMs: num
 //   minute again. In a long listen, steps that don't help stay about four an hour, and loss a step
 //   would cure waits at most 16 minutes.
 // Steps only add up: Core never moves a listener earlier while it listens.
-export type LossSecond = { chunks: number; lost: number; sendAheadMs?: number };
+// slackMs: the least time a chunk the player started that second had before its start passed.
+export type LossSecond = { chunks: number; lost: number; sendAheadMs?: number; slackMs?: number };
 // Recurring loss: chunks lost in the ten seconds it recurred in, or spells in the minute.
 type Recurring = { measure: "chunks" | "spells"; count: number };
 type Phase =
@@ -52,6 +54,9 @@ type Phase =
   | { kind: "pausing"; left: number };
 export type LateSteps = {
   steps: number;
+  // Of those, the steps Core applied that weren't judged unhelpful, and those the listen started
+  // with, which are never doubted.
+  kept: number;
   unhelpful: number;
   // The loss that caused the last step Core applied, until it's judged.
   caused?: Recurring;
@@ -63,6 +68,7 @@ export type LateSteps = {
 };
 export const noLateSteps: LateSteps = {
   steps: 0,
+  kept: 0,
   unhelpful: 0,
   clean: 0,
   seconds: [],
@@ -102,9 +108,11 @@ function recurs(seconds: LossSecond[]): Recurring | undefined {
   return spells >= horizonSpells ? { measure: "spells", count: spells } : undefined;
 }
 
+// A step that's taken is past judging: the one before it helped, or was never judged.
 const step = (late: LateSteps, seconds: LossSecond[], caused: Recurring): LateSteps => ({
   ...late,
   steps: late.steps + 1,
+  caused: undefined,
   seconds,
   clean: 0,
   phase: {
@@ -124,11 +132,11 @@ function move(late: LateSteps, phase: Phase & { kind: "moving" }, second: LossSe
     second.sendAheadMs !== undefined &&
     second.sendAheadMs >= phase.sendAheadMs + liveStepMs / 2;
   // The second it lands in is its changeover.
-  if (applied) return { ...late, caused: phase.caused, seconds: [], phase: watching };
+  if (applied)
+    return { ...late, kept: late.kept + 1, caused: phase.caused, seconds: [], phase: watching };
   if (phase.waited + 1 < movingSeconds)
     return { ...late, seconds, phase: { ...phase, waited: phase.waited + 1 } };
-  const recurring = recurs(seconds);
-  return recurring ? step(late, seconds, recurring) : { ...late, seconds, phase: watching };
+  return { ...late, seconds, phase: watching };
 }
 
 export function nextLateSteps(late: LateSteps, second: LossSecond): LateSteps {
@@ -155,8 +163,10 @@ export function nextLateSteps(late: LateSteps, second: LossSecond): LateSteps {
     recurring.count * 2 <= caused.count
   )
     return step({ ...next, unhelpful: 0 }, seconds, recurring);
+  // Core never moves a listener earlier while it listens: the step stays until the listen ends.
   return {
     ...next,
+    kept: next.kept - 1,
     unhelpful: next.unhelpful + 1,
     caused: undefined,
     phase: {
@@ -167,3 +177,57 @@ export function nextLateSteps(late: LateSteps, second: LossSecond): LateSteps {
 }
 export const withLateSteps = (needMs: number, lateSteps: number) =>
   Math.min(limitMs, needMs + lateSteps * liveStepMs);
+
+// A device remembers, per Couch, the late steps a listen ended at that held, so a listener that
+// leaves and joins again, or reloads, starts there instead of losing chunks to find them again. A
+// step holds when Core applied it and it wasn't judged unhelpful: it helped, or the last minute,
+// all of it after the step, lost nothing. A listen that ends before its step is judged can't tell
+// whether loss would have recurred; only a lossless minute keeps that step, so loss no step cures
+// doesn't ratchet across joins. The next listen starts with them as steps never doubted, and
+// judges only its own.
+// A remembered step comes off only on evidence: a minute of listening at it (`spare`, over any
+// number of listens), at one placement, in which no chunk was lost and every chunk the player
+// started had two steps' slack. A step earlier each would still have had a step's slack. A device
+// that stepped because loss kept recurring sees that loss as chunks with less, so it stays.
+type Remembered = { steps: number; spare: number };
+// The placement the spare seconds were counted at: Core's send_ahead. Not stored: a listen that
+// joins again starts its own.
+export type Evidence = Remembered & { sendAheadMs?: number };
+const spareMs = 2 * liveStepMs;
+const isCount = (value: unknown) => Number.isInteger(value) && (value as number) >= 0;
+// What the next listen starts from; anything malformed counts as nothing learned.
+export function startingSteps(saved: unknown): Remembered {
+  const { steps, spare } = (saved ?? {}) as Remembered;
+  if (!isCount(steps) || !isCount(spare) || steps > limitMs / liveStepMs)
+    return { steps: 0, spare: 0 };
+  return steps > 0 && spare >= horizonSeconds ? { steps: steps - 1, spare: 0 } : { steps, spare };
+}
+export const restoredLateSteps = (steps: number): LateSteps => ({
+  ...noLateSteps,
+  steps,
+  kept: steps,
+});
+// The rule's seconds start again when Core applies a step, and keep the last minute.
+const heldSteps = (late: LateSteps) =>
+  late.kept -
+  (late.caused !== undefined && (late.seconds.length < horizonSeconds || lostIn(late.seconds) > 0)
+    ? 1
+    : 0);
+// After each counted second, with the rule's state after it.
+export function nextEvidence(evidence: Evidence, late: LateSteps, second: LossSecond): Evidence {
+  const steps = heldSteps(late);
+  if (steps !== evidence.steps) return { steps, spare: 0 };
+  const { sendAheadMs, slackMs } = second;
+  const placedAt = evidence.spare > 0 ? evidence.sendAheadMs : undefined;
+  const placed =
+    late.steps === steps &&
+    late.phase.kind !== "moving" &&
+    (placedAt === undefined ||
+      sendAheadMs === undefined ||
+      Math.abs(sendAheadMs - placedAt) < liveStepMs / 2);
+  if (!placed || second.lost > 0 || (slackMs !== undefined && slackMs < spareMs))
+    return { steps, spare: 0 };
+  // A second in which the player started or received nothing shows nothing either way.
+  if (slackMs === undefined || sendAheadMs === undefined) return evidence;
+  return { steps, spare: evidence.spare + 1, sendAheadMs: placedAt ?? sendAheadMs };
+}

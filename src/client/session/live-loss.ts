@@ -13,6 +13,13 @@ import type { LossSecond } from "./live-buffer";
 // counts only when its stamp follows on from the chunk before it (Core sent nothing in between) and
 // it was received before that chunk ended. A chunk the player dropped breaks that chain, so it
 // counts once. More lead cures both: the next batch has longer before the sound runs out.
+// Nor chunks the player discarded in a guarded cutover (scheduler.js performGuardedCutover, on a
+// sync recorrection or a Sync delay or clock change): it starts nothing in its 0.3 s guard and
+// drops what falls in it, however early it arrived. They're excused from the cutover on, so a
+// sample before the player starts its next chunk can't count them.
+// Each start also measures the chunk's slack: how long before it had to start (where the chunk
+// before it ended, when it follows on from it) the player started it. It covers the network,
+// decoding and the player's batch, so a step earlier takes exactly a step off it.
 // Couch wraps the SDK's exported AudioScheduler and Web Audio's prototypes; the SDK is unchanged.
 type Player = Sendspin.SendspinPlayer;
 
@@ -27,6 +34,12 @@ let chain: { end: number; stampEndUs: number } | undefined;
 // this, two chunks join. Well under a chunk (15 or 20 ms), so a chunk Core never sent never joins.
 const joinSec = 0.001;
 let dried = 0;
+// The least slack of the chunks started since the last sample (s).
+let slack = Infinity;
+// The stamps each recent guarded cutover may have discarded (µs).
+let cuts: { fromUs: number; toUs: number }[] = [];
+// RECORRECTION_CUTOVER_GUARD_SEC (recorrection-monitor.js), which the SDK doesn't export.
+const cutoverGuardUs = 300_000;
 let counting = false;
 let installed = false;
 let scheduler: Sendspin.AudioScheduler | undefined;
@@ -45,6 +58,8 @@ const interrupt = () => {
   interrupted = true;
   chain = undefined;
 };
+const leadUs = (listener: Player) =>
+  (listener.syncInfo.outputLatencyMs + (scheduler?.getSyncDelayMs() ?? 0)) * 1000;
 // A chunk whose start passed less than this ago may still be in the player's batch, which runs
 // 15 ms after a chunk arrives; the player's smoothed output latency also differs from the reading
 // by a few ms. Such a chunk is judged at the next sample instead.
@@ -92,6 +107,22 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
       decoding = undefined;
     }
   };
+  // A private method: wrapped only where the SDK still has it.
+  const cutting = scheduling as unknown as { performGuardedCutover?: (...args: unknown[]) => void };
+  const cutover = cutting.performGuardedCutover;
+  if (cutover)
+    cutting.performGuardedCutover = function (this: Sendspin.AudioScheduler, ...args) {
+      const listener = counting ? player() : null;
+      // From the first stamp whose start hadn't passed to the guard's end, plus the grace: the
+      // player's smoothed output latency differs a little from the reading, and the chunk the
+      // guard keeps playing may end up to a chunk past it.
+      if (listener?.timeSyncInfo.synced) {
+        const fromUs = listener.getCurrentServerTimeUs() + leadUs(listener);
+        cuts.push({ fromUs, toUs: fromUs + cutoverGuardUs + graceUs });
+      }
+      chain = undefined;
+      cutover.apply(this, args);
+    };
   const clear = scheduling.clearBuffers;
   scheduling.clearBuffers = function () {
     pending.clear();
@@ -122,13 +153,9 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
     if (chunk) {
       const [when = 0, offset = 0] = args,
         now = this.context.currentTime;
-      if (
-        chain &&
-        Math.abs(chunk.stampUs - chain.stampEndUs) <= joinSec * 1e6 &&
-        chunk.at <= chain.end &&
-        now > chain.end + joinSec
-      )
-        dried++;
+      const follows = chain && Math.abs(chunk.stampUs - chain.stampEndUs) <= joinSec * 1e6;
+      slack = Math.min(slack, (follows ? chain!.end : when) - now);
+      if (follows && chunk.at <= chain!.end && now > chain!.end + joinSec) dried++;
       chain = {
         end: Math.max(when, now) + (buffer.duration - offset) / this.playbackRate.value,
         stampEndUs: chunk.stampUs + buffer.duration * 1e6,
@@ -144,34 +171,39 @@ export function countingLiveLoss(on: boolean) {
   if (on) return;
   pending.clear();
   chain = undefined;
+  cuts = [];
   dried = 0;
+  slack = Infinity;
 }
 
 // Once a second: the chunks received since the last sample, those lost (dropped or started after a
-// silence), and how far ahead of their
-// stamps Core sent them (the median rises when Core moves this listener a step later). Undefined when
-// the second can't be counted: the listener wasn't playing on a context that ran throughout it.
+// silence), how far ahead of their stamps Core sent them (the median rises when Core moves this
+// listener a step later), and the least slack of those started. Undefined when the second can't be
+// counted: the listener wasn't playing on a context that ran throughout it.
 export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond | undefined {
   const context = scheduler?.getAudioContext();
   const sounding =
     counted && !interrupted && listener.timeSyncInfo.synced && context?.state === "running";
-  const leadUs = (listener.syncInfo.outputLatencyMs + (scheduler?.getSyncDelayMs() ?? 0)) * 1000;
+  const lead = leadUs(listener);
   // Infinity: what the player holds now can't be judged, so none of it counts.
   const passedUs = sounding ? listener.getCurrentServerTimeUs() - graceUs : Infinity;
   let lost = 0;
   for (const [buffer, stampUs] of pending)
-    if (stampUs - leadUs <= passedUs) {
+    if (stampUs - lead <= passedUs) {
       pending.delete(buffer);
-      lost++;
+      if (!cuts.some((cut) => stampUs >= cut.fromUs && stampUs < cut.toUs)) lost++;
     }
+  cuts = cuts.filter((cut) => cut.toUs - lead > passedUs);
   const sorted = sendAheads.sort((a, b) => a - b);
   const second = {
     chunks: received,
     lost: lost + dried,
     sendAheadMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
+    slackMs: Number.isFinite(slack) ? slack * 1000 : undefined,
   };
   received = 0;
   dried = 0;
+  slack = Infinity;
   sendAheads = [];
   interrupted = false;
   return sounding ? second : undefined;

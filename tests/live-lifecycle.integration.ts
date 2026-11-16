@@ -88,15 +88,6 @@ async function fixture(t: TestContext) {
       },
     };
   };
-  // The host's room delay: a floor an organiser may set (none by default).
-  const room = async (minBufferMs: number) => {
-    const saved = await fetch(`${f.hub.origin}/api/settings/live-audio`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${"h".repeat(64)}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ settings: { codec: "auto", minBufferMs } }),
-    });
-    assert.equal(saved.status, 200);
-  };
   return {
     ...f,
     get hub() {
@@ -104,17 +95,15 @@ async function fixture(t: TestContext) {
     },
     host,
     listener,
-    room,
   };
 }
 
 test(
-  "the room's delay is the host's; a Receiver that doesn't fit plays a step later on its own",
+  "each Receiver plays at its own step; one Receiver's need, or its leaving, moves nobody else",
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
       other = await f.connect(2);
-    await f.room(150);
     const fast = await f.listener(1, AudioCodec.PCM, 65),
       slow = await f.listener(2, AudioCodec.PCM, 150);
     await slow.client.sendPlayerState({ static_delay_ms: 10 });
@@ -126,29 +115,23 @@ test(
         true,
       );
     const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
-    // A listener plays in the room until Core has measured the input side, then moves once.
-    await until(() => {
-      const [moved] = moves(slow.frames);
-      return moved !== undefined && Math.min(fast.frames.length, slow.frames.length) > moved + 20;
-    });
-    // A room of 150 ms; 150 + 10 ms of Sync and the input side don't fit.
-    assert.equal(fast.frames[0]!.at, input.origin + 150_000);
-    assert.deepEqual(moves(fast.frames), [], "the one that fits stays in the room");
-    const [moved] = moves(slow.frames),
-      delay = delays(slow.frames, input.origin),
-      later = delay[moved!]! - 150_000;
-    assert.deepEqual(moves(slow.frames), [moved], "it moves once");
-    assert.ok(later > 0 && later % 25_000 === 0, `a whole step later, not ${later} µs`);
-    assert.deepEqual(
-      delay,
-      delay.map((_, i) => 150_000 + (i < moved! ? 0 : later)),
-      "the same samples, stamped a step later",
+    await until(() => Math.min(fast.frames.length, slow.frames.length) > 20);
+    // Each hears nothing until Core has measured the input side, then starts at its step.
+    assert.deepEqual(moves(fast.frames), []);
+    assert.deepEqual(moves(slow.frames), []);
+    const [fastStep] = delays(fast.frames, input.origin),
+      [slowStep] = delays(slow.frames, input.origin);
+    // 65 ms, and 150 + 10 ms of Sync, each with the input side, rounded up to a whole step.
+    assert.ok(fastStep! > 65_000 && fastStep! % 25_000 === 0, `its own step, not ${fastStep} µs`);
+    assert.ok(slowStep! >= fastStep! + 75_000 && slowStep! % 25_000 === 0, `not ${slowStep} µs`);
+    assert.ok(
+      [...fast.frames, ...slow.frames].every((frame) => frame.bytes.readInt16LE(0) === 8192),
+      "the same samples, stamped by each listener's step",
     );
-    assert.ok(slow.frames.every((frame) => frame.bytes.readInt16LE(0) === 8192));
 
     await fast.client.sendPlayerState({ min_buffer_ms: 205 });
     await until(() => moves(fast.frames).length > 0);
-    assert.deepEqual(moves(slow.frames), [moved], "one Receiver's need moves nobody else");
+    assert.deepEqual(moves(slow.frames), [], "one Receiver's need moves nobody else");
 
     assert.equal(
       (await f.receiver.command({ type: "leave", playbackId: f.receiver.state.player.playbackId! }))
@@ -157,7 +140,7 @@ test(
     );
     const before = slow.frames.length;
     await until(() => slow.frames.length > before + 20);
-    assert.deepEqual(moves(slow.frames), [moved], "leaving moves nobody else");
+    assert.deepEqual(moves(slow.frames), [], "leaving moves nobody else");
   },
 );
 
@@ -168,7 +151,6 @@ test(
     const f = await fixture(t),
       secondHost = await f.connect(-1),
       other = await f.connect(2);
-    await f.room(150);
     const first = await f.listener(1, AudioCodec.PCM, 100),
       second = await f.listener(2, AudioCodec.PCM, 400);
     assert.equal((await f.host.command(publication)).ok, true);
@@ -187,10 +169,7 @@ test(
     );
     const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
     const otherInput = await f.streamCapture(secondHost, "other-concert", -1, counted(-0.5));
-    await until(() => {
-      const [moved] = moves(second.frames);
-      return first.frames.length > 20 && moved !== undefined && second.frames.length > moved + 20;
-    });
+    await until(() => Math.min(first.frames.length, second.frames.length) > 20);
     assert.notEqual(f.receiver.state.playback, other.state.playback);
     assert.deepEqual(
       f.receiver.state.outputs?.map((output) => output.deviceId),
@@ -200,13 +179,10 @@ test(
       other.state.outputs?.map((output) => output.deviceId),
       [other.id],
     );
-    assert.equal(first.frames[0]!.at, input.origin + 150_000);
-    assert.deepEqual(
-      moves(first.frames),
-      [],
-      "another share's larger buffer does not delay this audience",
-    );
-    const step = delays(second.frames, otherInput.origin).at(-1)!;
+    const firstStep = delays(first.frames, input.origin)[0]!,
+      step = delays(second.frames, otherInput.origin).at(-1)!;
+    assert.deepEqual(moves(first.frames), []);
+    assert.ok(firstStep < 400_000, "another share's larger buffer does not delay this audience");
     assert.ok(step > 400_000 && step % 25_000 === 0, `its own step, not ${step} µs`);
     assert.ok(first.frames.every((frame) => frame.bytes.readInt16LE(0) === 8192));
     assert.ok(second.frames.every((frame) => frame.bytes.readInt16LE(0) === -16384));
@@ -244,7 +220,7 @@ test(
 );
 
 test(
-  "with no room delay, each listener plays at its own step and the Playback plays",
+  "a listener waits for its need, plays at its own step, and the Playback plays",
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
@@ -260,7 +236,7 @@ test(
         true,
       );
     const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
-    // Every chunk is late in the room itself, so the listener hears nothing until its own step.
+    // Every chunk is late at 0, so the listener hears nothing until its own step.
     await until(() => listener.frames.length > 20);
     assert.deepEqual(moves(listener.frames), []);
     const step = delays(listener.frames, input.origin)[0]!;
@@ -334,7 +310,6 @@ test(
   async (t) => {
     const f = await fixture(t),
       player = await f.listener(1);
-    await f.room(150);
     assert.equal((await f.host.command(publication)).ok, true);
     assert.equal(
       (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
@@ -348,12 +323,11 @@ test(
     const closed = once(first.upload, "close");
     first.upload.terminate();
     await closed;
-    const second = await f.streamCapture(f.host, "concert", -1, () => -0.5);
+    await f.streamCapture(f.host, "concert", -1, () => -0.5);
     await until(() => player.frames.filter((frame) => frame.clears > clears).length > 20);
     const resumed = player.frames.filter((frame) => frame.clears > clears);
     assert.equal(player.ends, 0, "replacing a transport does not end the publication");
     assert.equal(player.clears, clears + 1);
-    assert.equal(resumed[0]!.at, second.origin + 150_000);
     assert.ok(
       resumed.every(
         (frame) => frame.bytes.readInt16LE(0) === -16384 && frame.bytes.readInt16LE(2) === -16384,
@@ -365,7 +339,7 @@ test(
 );
 
 test(
-  "with no room delay, a player that declares no buffer plays at Core's input side",
+  "a player that declares no buffer plays at Core's input side",
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
@@ -384,7 +358,7 @@ test(
 );
 
 test(
-  "with no room delay, a replaced upload keeps each listener at its step while Core measures again",
+  "a replaced upload keeps each listener at its step while Core measures again",
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
@@ -405,7 +379,7 @@ test(
     const second = await f.streamCapture(f.host, "concert", -1, counted(-0.25));
     await until(() => player.frames.filter((frame) => frame.clears > clears).length > 20);
     const resumed = player.frames.filter((frame) => frame.clears > clears);
-    // At the room's 0 every chunk would be late: without the last input side it hears nothing
+    // At 0 every chunk would be late: without the last input side it hears nothing
     // until the new one is measured, about two seconds (133 chunks of 15 ms).
     assert.ok(resumed[0]!.bytes.readInt16LE(2) < 40, "it resumes with the new capture's start");
     assert.equal(delays(resumed, second.origin)[0], step);

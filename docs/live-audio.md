@@ -47,10 +47,10 @@ wrong clock still shows the right time.
 
 ## Timing
 
-- A relaxed share keeps at least one second of lead. A Live share's delay, the
-  room's, is the host's **Playback buffer floor** (Share dialog, 0 initially: no
-  floor), taken when each listener's playback loads. Every chunk is stamped
-  capture time plus that delay; nothing a listener declares moves it.
+- A relaxed share keeps at least one second of lead. Live has no shared delay:
+  every chunk is stamped at its capture time, and each listener plays it at its
+  own step (below). Settings saved with the old **Playback buffer floor** still
+  load; the floor is ignored.
 - Each Receiver declares only its own need through the SDK's `minBufferMs`: its
   once-a-second `syncInfo.outputLatencyMs` reading plus the player's 15 ms
   scheduling batch (`scheduler.js`), read only once its sound is unlocked (a
@@ -58,9 +58,8 @@ wrong clock still shows the right time.
   once the context reports an output latency (or reads the same twice, on a
   browser that reports none): just after `resume()` it may report only its base
   latency. Later, the median of the last five raises it only when it outgrows it
-  by more than 25 ms. Until then it declares 0 and Core keeps it in the room:
-  with no floor it hears nothing for its first second or two, then starts at
-  its step.
+  by more than 25 ms. Until then it declares 0 and Core sends it nothing: it
+  hears nothing for its first second or two, then starts at its step.
 - The SDK drops a late chunk silently, so Couch counts them chunk by chunk
   (`live-loss.ts`), wrapping the SDK's exported `AudioScheduler` and Web Audio's
   `createBuffer`, `getChannelData` and `start`. Each buffer the player makes of
@@ -76,6 +75,14 @@ wrong clock still shows the right time.
   only when its stamp follows on from that chunk's (Core sent nothing in between)
   and it was received before that chunk ended, so a late arrival or a gap in the
   stream doesn't; a dropped chunk breaks the chain, so nothing counts twice.
+  Chunks the player discards in a guarded cutover (its private
+  `performGuardedCutover`, on a sync recorrection or a Sync delay or clock
+  change, which starts nothing for 0.3 s) never count: from the cutover on,
+  stamps from the first whose start hadn't passed to the guard's end, plus the
+  100 ms grace, are excused, so a sample before the player's next start can't
+  count them. Each start also measures the chunk's slack: how long before it had
+  to start (where the chunk before it ended, when it follows on) the player
+  started it, network, decoding and the player's batch included.
 - A Receiver that keeps losing chunks declares one more 25 ms step
   (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
   separate spells, or three seconds running, or the last minute lost chunks in
@@ -83,8 +90,9 @@ wrong clock still shows the right time.
   on a phone). One stall doesn't step: a burst's late chunks fall within two
   samples. Core has applied a step when its chunks leave it half a step further
   ahead of their stamps (Sendspin's `send_ahead`, which Core writes as it sends,
-  so the network can't move it); a step not seen within three seconds fell in
-  the room's slack, and recurring loss steps again. An applied step is judged
+  so the network can't move it). Core applies every step a listener asks for,
+  short of its 5 s limit; one not seen within three seconds isn't judged or
+  remembered. An applied step is judged
   when loss recurs after it: the chunks lost in the ten seconds that show it
   against those of the ten seconds that caused it. Half as many or fewer: it
   helped, and the next step follows. Spells over a minute never show that a step
@@ -92,18 +100,34 @@ wrong clock still shows the right time.
   minute, then two, four, eight, then at most sixteen; after that, recurring
   loss steps again. A step that helped, or sixteen minutes with no recurring
   loss, starts the pauses from a minute again. A step after which loss doesn't
-  recur is never doubted. Each rise moves that listener at most one step later,
-  which the player takes by playing slightly slower for about 12 s.
+  recur is never doubted. Pauses last only as long as the listen. Each rise moves
+  that listener at most one step later, which the player takes by playing
+  slightly slower for about 12 s.
+- A device remembers one number per Couch (by origin), in the browser storage
+  the SDK keeps its Sync delay in (`couch.live-steps:<origin>`): the late steps
+  its last listen ended at that held. A step holds when Core applied it and it
+  wasn't judged unhelpful: it helped, or the last minute, all of it after the
+  step, lost nothing. A listen that ends before its step is judged can't tell
+  whether loss would have recurred, so only a lossless minute keeps it, and loss
+  no step cures doesn't climb across joins. The next listen declares them from
+  its first declaration as steps never doubted, with no pause, verdict or cause
+  carried over. A remembered step comes off only on evidence: a minute of
+  listening at it at one placement (the same `send_ahead`), over any number of
+  listens and from each listen's first declaration, in which no chunk was lost
+  and every chunk started had two steps' slack starts the next listen a step
+  earlier. There each would still have had a step's slack. The evidence is
+  stored as it changes, so a loss undoes it before a reload could use it.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second
   doesn't count: it holds what was captured while the encoder started.
-- A listener whose declaration, Sync delay and its wire's input-side time exceed
-  the room's delay plays on its own, at that need rounded up to the next 25 ms
-  step: the same chunks, stamped later for it. Listeners whose needs round up to
-  the same step play together. It plays in the room until the input-side time
-  and its own need are known (about two seconds), so it moves once. Its step only
-  rises while it listens and resets when it leaves or the input restarts. When
+- Each listener plays at its declaration, Sync delay and its wire's input-side
+  time, rounded up to the next 25 ms step: the same chunks, stamped later for
+  it. Listeners whose needs round up to the same step play together. It hears
+  nothing until the input-side time and its own need are known (about two
+  seconds), so it moves once. Its step only rises while it listens; Core forgets
+  it when it leaves or the input restarts, and the listener declares its
+  remembered steps again when it comes back. When
   the capture restarts, the last input-side time stands in until the new
   encoder's is measured, so listeners keep their steps. A player that reports
   its state without declaring a buffer (another Sendspin player) needs at least
@@ -115,7 +139,7 @@ wrong clock still shows the right time.
 - Couch's log gets one line each time a wire's input side changes
   (`live input side opus: 26 ms`) and one when a listener's declaration or step
   changes (`live listener "Name" opus: declares 55 ms, input side 26 ms, plays
-  100 ms after capture (room 0 ms)`), at most every ten seconds per listener
+  100 ms after capture`), at most every ten seconds per listener
   unless its step rose.
 - No admission limit or eviction: a listener that stops draining gets nothing
   more until it drains.

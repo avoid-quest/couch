@@ -29,13 +29,7 @@ import { couchApp } from "@/session/native-context";
 import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
-import {
-  CaptureBufferSelect,
-  CaptureChannelsSelect,
-  LiveSettingsStatus,
-  PlaybackBufferInput,
-  useLiveAudioSettings,
-} from "./LiveOperator";
+import { CaptureBufferSelect, CaptureChannelsSelect } from "./LiveOperator";
 import {
   nativeInputChannelMap,
   nativeInputChannelPreference,
@@ -178,7 +172,6 @@ function ShareForm({ onDone }: { onDone: () => void }) {
       (picked.inputs || (picked.capture === "system-audio" && systemLive)) &&
       shareKinds.find((item) => item.intent === "live" && item.capture === picked.capture)) ||
     picked;
-  const live = useLiveAudioSettings(kind.intent === "live");
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [sourceId, setSourceId] = useState("");
   const [inputs, setInputs] = useState<AudioInput[] | null>(null);
@@ -233,11 +226,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     available &&
     !reason &&
     !elsewhere &&
-    (kind.intent !== "live" ||
-      ((!kind.inputs || (!!audioDeviceId && audioDeviceId !== "default")) &&
-        !!live.settings &&
-        !live.save.isPending &&
-        !live.save.error)) &&
+    (kind.intent !== "live" || !kind.inputs || (!!audioDeviceId && audioDeviceId !== "default")) &&
     (!lists || !!(kind.pictures ? source : sources?.some((item) => item.kind === "screen")));
 
   const checkAccess = async (on = kind) => {
@@ -550,21 +539,6 @@ function ShareForm({ onDone }: { onDone: () => void }) {
           <AlertDescription>{nativeBuffer.error || nativeChannels.error}</AlertDescription>
         </Alert>
       )}
-      {kind.intent === "live" && (
-        <Row
-          label="Playback buffer floor (ms)"
-          htmlFor="share-live-buffer"
-          description="0 uses each listener's buffer."
-        >
-          <PlaybackBufferInput
-            id="share-live-buffer"
-            live={live}
-            disabled={pending}
-            className="ml-auto"
-          />
-        </Row>
-      )}
-      {kind.intent === "live" && <LiveSettingsStatus live={live} />}
       {devices.length > 0 && (
         <Row label="Play on">
           <ToggleGroup

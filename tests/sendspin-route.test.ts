@@ -29,6 +29,8 @@ class FixturePlayer {
 // next batch, starts it (as a copy when it corrects it by a sample) or drops it if its start passed.
 class FixtureScheduler {
   queue: { buffer: AudioBuffer; stampUs: number }[] = [];
+  // A guarded cutover: the player starts nothing whose start falls before this (server time, µs).
+  guardUs = 0;
   constructor(readonly context: BaseAudioContext) {}
   initAudioContext() {}
   getAudioContext() {
@@ -47,14 +49,19 @@ class FixtureScheduler {
   }
   processAudioQueue(outputUs: number) {
     for (const [index, { buffer, stampUs }] of this.queue.splice(0).entries()) {
-      if (stampUs - outputUs < serverNowUs) continue;
+      if (stampUs - outputUs < Math.max(serverNowUs, this.guardUs)) continue;
       let played = buffer;
       if (index % 2) {
         played = this.context.createBuffer(2, 961, 48_000);
         played.getChannelData(0).set(buffer.getChannelData(0));
       }
-      Object.assign(new AudioBufferSourceNode(this.context), { buffer: played }).start();
+      Object.assign(new AudioBufferSourceNode(this.context), { buffer: played }).start(
+        (stampUs - outputUs) / 1e6,
+      );
     }
+  }
+  performGuardedCutover() {
+    this.guardUs = serverNowUs + 300_000;
   }
 }
 // Web Audio, as far as the player and Couch use it. Couch wraps its prototypes once, so every test
@@ -112,8 +119,10 @@ mock.module("@sendspin/sendspin-js", () => ({
 mock.module("../src/client/api/client", () => ({ apiFetch: async () => {} }));
 mock.module("../src/client/toasts", () => ({ failed: () => {} }));
 mock.module("../src/client/session/renderer", () => ({ waitForTap: () => {} }));
+// This browser's storage, as Couch and the SDK share it.
+const stored = new Map<string, string>();
 mock.module("../src/client/session/device-id", () => ({
-  storage: null,
+  storage: { getItem: (key: string) => stored.get(key) ?? null, setItem: stored.set.bind(stored) },
   deviceId: () => "opaque-device",
 }));
 const { listen } = await import("../src/client/session/sendspin");
@@ -122,19 +131,20 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 afterEach(async () => {
   listen(false, false, credentials, "Fixture");
   await settle();
+  stored.clear();
 });
 
-test("clock-only watch reuses the player; the room's delay is never declared", async () => {
-  listen(true, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 });
+test("clock-only watch reuses the player and declares nothing before it has measured", async () => {
+  listen(true, true, credentials, "Fixture", { codec: "pcm" });
   await settle();
   const player = players.at(-1)!;
   expect(player.options.codecs).toEqual(["pcm"]);
-  listen(false, true, credentials, "Fixture", { codec: "pcm", minBufferMs: 400 });
+  listen(false, true, credentials, "Fixture", { codec: "pcm" });
   await settle();
   expect(players.at(-1)).toBe(player);
   expect(player.options.minBufferMs).toBe(0);
   expect(player.buffers).toEqual([]);
-  listen(true, true, credentials, "Fixture", { codec: "opus", minBufferMs: 400 });
+  listen(true, true, credentials, "Fixture", { codec: "opus" });
   await settle();
   expect(player.disconnected).toBe(true);
   expect(players.at(-1)!.options.codecs).toEqual(["opus", "pcm"]);
@@ -156,7 +166,7 @@ async function sampling(run: () => Promise<void>) {
 }
 
 test("a new Live source or a new Join starts its own need again", async () => {
-  const settings = { codec: "pcm", minBufferMs: 150, sourceId: "first" } as const;
+  const settings = { codec: "pcm", sourceId: "first" } as const;
   const tick = await sampling(async () => {
     listen(true, false, credentials, "Fixture", settings);
     await settle();
@@ -178,7 +188,7 @@ test("a new Live source or a new Join starts its own need again", async () => {
 
 test("the first declaration waits for a settled reading, not a context's base latency alone", async () => {
   const tick = await sampling(async () => {
-    listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 0 });
+    listen(true, false, credentials, "Fixture", { codec: "pcm" });
     await settle();
   });
   const player = players.at(-1)!;
@@ -203,12 +213,12 @@ test("a codec change keeps the Media Session that Couch set when the SDK's destr
   };
   Object.defineProperty(navigator, "mediaSession", { configurable: true, value: mediaSession });
   try {
-    listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 250 });
+    listen(true, false, credentials, "Fixture", { codec: "pcm" });
     await settle();
     const first = players.at(-1)!;
     const metadata = { title: "Concert" };
     Object.assign(mediaSession, { metadata, playbackState: "playing" });
-    listen(true, false, credentials, "Fixture", { codec: "opus", minBufferMs: 250 });
+    listen(true, false, credentials, "Fixture", { codec: "opus" });
     await settle();
     expect(first.disconnected).toBe(true);
     expect(players.at(-1)).not.toBe(first);
@@ -222,7 +232,7 @@ test("a codec change keeps the Media Session that Couch set when the SDK's destr
 test("a listener steps for chunks it received and couldn't play, not for chunks Core never sent", async () => {
   useWebAudio();
   const tick = await sampling(async () => {
-    listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150 });
+    listen(true, false, credentials, "Fixture", { codec: "pcm" });
     await settle();
   });
   const player = players.at(-1)!,
@@ -289,7 +299,7 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
 test("a listener steps when its player runs dry holding chunks, not for a gap Core left or a late arrival", async () => {
   useWebAudio();
   const tick = await sampling(async () => {
-    listen(true, false, credentials, "Fixture", { codec: "pcm", minBufferMs: 150 });
+    listen(true, false, credentials, "Fixture", { codec: "pcm" });
     await settle();
   });
   const player = players.at(-1)!,
@@ -339,4 +349,106 @@ test("a listener steps when its player runs dry holding chunks, not for a gap Co
   expect(player.buffers).toEqual([42]);
   second("dry");
   expect(player.buffers).toEqual([42, 67]);
+});
+
+const key = "couch.live-steps:http://localhost";
+const join = (origin = credentials.origin) =>
+  sampling(async () => {
+    listen(true, false, { ...credentials, origin }, "Fixture", { codec: "pcm" });
+    await settle();
+  });
+const leave = async () => {
+  listen(false, false, credentials, "Fixture");
+  await settle();
+};
+
+test("a listener that joins again starts at the steps it remembered with that Couch", async () => {
+  stored.set(key, JSON.stringify({ steps: 2, spare: 0 }));
+  let tick = await join();
+  tick(2);
+  // Its own need, 27 + 15, and two steps.
+  expect(players.at(-1)!.buffers).toEqual([92]);
+  await leave();
+  // Another Couch starts from its own.
+  tick = await join("http://elsewhere");
+  tick(2);
+  expect(players.at(-1)!.buffers).toEqual([42]);
+  await leave();
+  // What storage holds that isn't what a device remembers counts as nothing.
+  stored.set(key, "not steps");
+  tick = await join();
+  tick(2);
+  expect(players.at(-1)!.buffers).toEqual([42]);
+});
+
+test("a minute with two steps' slack starts the next listen a step earlier; a lost chunk undoes it at once", async () => {
+  useWebAudio();
+  stored.set(key, JSON.stringify({ steps: 1, spare: 0 }));
+  const tick = await join();
+  const player = players.at(-1)!,
+    context = new Context(),
+    scheduler = new FixtureScheduler(context as unknown as BaseAudioContext),
+    core = new FixtureCore(),
+    outputUs = player.syncInfo.outputLatencyMs * 1000;
+  scheduler.initAudioContext();
+  // The context's clock is the synced clock. Each chunk is sent 95 ms and received 100 ms before
+  // its stamp, so the player starts it 73 ms before its start passes. `late` arrives after it.
+  const second = (late?: number) => {
+    for (let chunk = 0; chunk < 50; chunk++) {
+      serverNowUs += 20_000;
+      context.currentTime = serverNowUs / 1e6;
+      const header = new DataView(new ArrayBuffer(13));
+      header.setUint8(0, 4);
+      header.setUint32(9, 95_000);
+      core.handleBinaryMessage(header.buffer);
+      scheduler.handleDecodedChunk({ serverTimeUs: serverNowUs + (chunk === late ? 0 : 100_000) });
+      scheduler.processAudioQueue(outputUs);
+    }
+    tick(1);
+  };
+  for (let i = 0; i < 40; i++) second();
+  expect(player.buffers).toEqual([67]);
+  // Counted from the first declaration, which takes the first two seconds.
+  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 38 });
+  // A lost chunk: what storage holds is undone that second, so a reload can't use it.
+  second(10);
+  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 0 });
+  for (let i = 0; i < 60; i++) second();
+  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 60 });
+  await leave();
+  const again = await join();
+  again(2);
+  expect(players.at(-1)!.buffers).toEqual([42]);
+  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 0, spare: 0 });
+});
+
+test("chunks a guarded cutover discards never count, even when a sample comes before the next start", async () => {
+  useWebAudio();
+  const tick = await join();
+  const player = players.at(-1)!,
+    context = new Context(),
+    scheduler = new FixtureScheduler(context as unknown as BaseAudioContext),
+    outputUs = player.syncInfo.outputLatencyMs * 1000;
+  scheduler.initAudioContext();
+  // Chunks received 100 ms before their stamps, so each starts 73 ms after it arrives. A cutover
+  // ten chunks before the sample discards them all, the first one's start over 100 ms before the
+  // sample; the player starts its next chunk only in the next second.
+  const second = (cutoverAt?: number) => {
+    for (let chunk = 0; chunk < 50; chunk++) {
+      serverNowUs += 20_000;
+      context.currentTime = serverNowUs / 1e6;
+      scheduler.handleDecodedChunk({ serverTimeUs: serverNowUs + 100_000 });
+      if (chunk === cutoverAt) scheduler.performGuardedCutover();
+      scheduler.processAudioQueue(outputUs);
+    }
+    tick(1);
+  };
+  for (let i = 0; i < 10; i++) second();
+  expect(player.buffers).toEqual([42]);
+  // Two cutovers in ten seconds: two spells, were their discards lost.
+  second(40);
+  for (let i = 0; i < 4; i++) second();
+  second(40);
+  for (let i = 0; i < 60; i++) second();
+  expect(player.buffers).toEqual([42]);
 });
